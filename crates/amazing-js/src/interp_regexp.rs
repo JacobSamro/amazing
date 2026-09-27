@@ -370,6 +370,35 @@ fn legacy_regexp_receiver_ok(i: &Interpreter, this: &JsValue) -> bool {
     };
     matches!(this, JsValue::Object(actual) if Rc::ptr_eq(&actual.0, &expected.0))
 }
+/// `RegExp.prototype.compile`'s own Annex B receiver check (proposal
+/// "regexp-legacy-features", tracked by test262 under `annexB`, not yet
+/// shipped in V8/Node -- this is spec-correct even though it makes us
+/// diverge from Node's observed behavior): a RegExp instance's
+/// `[[LegacyFeaturesEnabled]]` is set at construction time, true only when
+/// `NewTarget` was the current realm's own `%RegExp%` (never a subclass),
+/// and `[[Realm]]` is fixed to whichever realm actually constructed it.
+/// Both conditions collapse into one live check here, the same way
+/// `legacy_regexp_receiver_ok` above already does for the static
+/// accessors: a same-realm, non-subclass instance's *own* `[[Prototype]]`
+/// is always identically the CURRENT `regexp_proto` (a subclass gets its
+/// own distinct prototype object instead, and a foreign realm's instance
+/// carries that other realm's own distinct `regexp_proto` -- swapped in as
+/// `i.regexp_proto` only while code from that realm is actually running).
+/// This is why `RegExp.prototype.compile.call(otherRealm_regexp)` throws
+/// (checked against *this* realm's `regexp_proto` while `otherRealm_regexp`
+/// carries the other one) while `otherRealm_regexp.compile()` -- dispatched
+/// through and running as the other realm's own method -- does not
+/// (annexB/built-ins/RegExp/prototype/compile/this-cross-realm-instance.js
+/// requires exactly this asymmetry;
+/// annexB/.../compile/this-subclass-instance.js is the same check's other
+/// half, with no realm involved at all).
+fn legacy_regexp_instance_ok(i: &Interpreter, this: &JsValue) -> bool {
+    matches!(
+        this,
+        JsValue::Object(o)
+            if o.borrow().proto.as_ref().is_some_and(|p| Rc::ptr_eq(&p.0, &i.regexp_proto.0))
+    )
+}
 fn native_regexp_legacy_getter(
     i: &mut Interpreter,
     this: JsValue,
@@ -464,6 +493,11 @@ fn native_regexp_compile(
             "RegExp.prototype.compile called on incompatible receiver",
         ));
     }
+    if !legacy_regexp_instance_ok(i, &this) {
+        return Err(Throw::type_error(
+            "RegExp.prototype.compile requires a same-realm, non-subclass RegExp receiver",
+        ));
+    }
     let pattern_arg = args.first().cloned().unwrap_or(JsValue::Undefined);
     let flags_arg = args.get(1).cloned().unwrap_or(JsValue::Undefined);
     let (pattern_units, flags_string) = if let Some(other) = regexp_data(&pattern_arg) {
@@ -488,6 +522,24 @@ fn native_regexp_compile(
     };
     let regex = amazing_regex::Regex::new_utf16(&pattern_units, &flags_string).map_err(regexp_error)?;
     object.borrow_mut().exotic = Exotic::RegExp(Rc::new(regex));
+    // RegExpInitialize's final step is `Set(obj, "lastIndex", +0, true)` --
+    // Throw=true unconditionally, independent of strict mode -- so a
+    // non-writable "lastIndex" (installed via `Object.defineProperty`, e.g.
+    // annexB/.../compile/pattern-regexp-immutable-lastindex.js) must throw
+    // TypeError here rather than silently overwriting it the way
+    // `Property::define` (a raw descriptor replacement, not a `[[Set]]`)
+    // would. Only the value changes on the ordinary, writable path; the
+    // pre-existing enumerable/configurable shape from `make_regexp` is kept.
+    let writable = object
+        .borrow()
+        .own_prop("lastIndex")
+        .map(|p| p.writable)
+        .unwrap_or(true);
+    if !writable {
+        return Err(Throw::type_error(
+            "cannot set non-writable lastIndex during RegExp.prototype.compile",
+        ));
+    }
     let mut last_index = regexp_property(JsValue::num(0.0), true);
     last_index.configurable = false;
     let _ = object.borrow_mut().define("lastIndex", last_index);
