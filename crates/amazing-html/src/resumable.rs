@@ -215,6 +215,50 @@ mod tests {
         assert_eq!(parser.run(), ParseSignal::Eof);
     }
 
+    /// HTML-34: the iframe counterpart of `run_pauses_right_after_a_blocking_
+    /// script_with_only_prior_siblings_built` above, but grafted into a
+    /// *different*, pre-existing arena (`amazing_dom::markup::
+    /// IncrementalDocumentImport`) rather than swapped in place -- proves the
+    /// graft sees exactly the document-so-far at each pause, that an
+    /// already-grafted node's destination identity survives the next
+    /// `sync`, and that the destination document's own pre-existing content
+    /// (standing in for a parent page's own nodes elsewhere in the same
+    /// arena) is completely undisturbed throughout.
+    #[test]
+    fn incremental_import_grafts_document_so_far_at_each_pause_into_a_shared_arena() {
+        use amazing_dom::markup::IncrementalDocumentImport;
+
+        let mut host = Dom::new();
+        let parent_marker = host.create_element(NodeIdx(0), "parent-page-marker");
+        let iframe_document = host.create_document();
+        let mut import = IncrementalDocumentImport::new(iframe_document);
+
+        let mut parser = ResumableParser::new(Dom::new());
+        parser.push_source("<body><div id=a></div><script>x</script><div id=b></div></body>");
+        let ParseSignal::Script(_) = parser.run() else { panic!("expected a script pause") };
+        import.sync(&mut host, parser.dom()).unwrap();
+        let dump = host.dump(iframe_document);
+        assert!(dump.contains("id=\"a\""), "prior sibling missing:\n{dump}");
+        assert!(!dump.contains("id=\"b\""), "later sibling grafted before its script paused:\n{dump}");
+        // The script pause runs against `host`, exactly like a real script
+        // would; grab the already-grafted `<div id=a>`'s destination NodeIdx
+        // now, to confirm below that resuming does not recreate it.
+        let source_a = parser.dom().tree_order(NodeIdx(0)).into_iter()
+            .find(|&n| parser.dom().get_attribute_ns(n, None, "id") == Some("a")).unwrap();
+        let dest_a_before = import.imported(source_a).unwrap();
+        assert!(host.dump(NodeIdx(0)).contains("parent-page-marker"),
+            "unrelated parent-page content must survive the graft untouched");
+
+        assert_eq!(parser.run(), ParseSignal::Eof);
+        import.sync(&mut host, parser.dom()).unwrap();
+        let dump = host.dump(iframe_document);
+        assert!(dump.contains("id=\"b\""), "later sibling missing after resuming:\n{dump}");
+        assert_eq!(import.imported(source_a), Some(dest_a_before),
+            "already-grafted node must keep its destination identity across the resume");
+        assert!(host.dump(NodeIdx(0)).contains("parent-page-marker"), "parent-page content survives to Eof");
+        let _ = parent_marker;
+    }
+
     #[test]
     fn fragment_parsing_never_pauses_for_scripts() {
         let dom = crate::parse_fragment("div", "<script>x</script>").expect("fragment");

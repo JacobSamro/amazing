@@ -1,5 +1,6 @@
 //! HTML fragment serialization and transfer from a parser-owned arena.
 use crate::{Dom, DomError, NodeIdx, NodeKind};
+use std::collections::HashMap;
 
 fn append(out: &mut Vec<u16>, value: &str) { out.extend(value.encode_utf16()); }
 
@@ -232,5 +233,181 @@ impl Dom {
             for child in source.children(node) { self.import_node_into(source, child, document, created)?; }
         }
         Ok(())
+    }
+}
+
+/// HTML-34: incrementally imports a script-interleaved `ResumableParser`'s
+/// private arena into an existing, otherwise-empty document node already
+/// living in a *different* arena (an iframe's document inside its parent
+/// page's shared `host.dom`), preserving the identity of every
+/// already-imported node across repeated calls.
+///
+/// This exists because `import_inert_document`/`import_node_into` above are
+/// one-shot: they assume the whole source tree is already finished and copy
+/// it once. A live, interleaved parse (HTML-31/32's `ResumableParser`, which
+/// pauses at each parser-blocking `<script>` so it can run against the
+/// document-so-far) needs the destination side of that copy to happen
+/// incrementally too, or a script would still only ever see whatever was
+/// imported at the *start* of the pause -- the same "sees the finished
+/// document" bug HTML-31 fixed for the top-level page, just moved one layer
+/// down into the import step instead of being fixed by it.
+///
+/// It cannot reuse `ResumableParser::swap_dom` directly (see
+/// `docs/lanes/html_TODO.md`'s HTML-32/HTML-34 notes): that swaps an entire
+/// `Dom` value, which only works when the parser's target arena has nothing
+/// else in it. An iframe's document has to end up inside the same arena as
+/// its parent page and every sibling frame, so it is still parsed into its
+/// own private, ordinary `Dom::new()`-based arena (completely unmodified
+/// `ResumableParser`/`TreeBuilder`, which only knows how to build starting
+/// from that shape) and *grafted* into the shared arena at each pause, this
+/// time keeping already-grafted nodes' destination identity stable instead
+/// of re-copying the whole tree.
+///
+/// Known limitation: HTML tree construction can *move* an already-open node
+/// to a new parent mid-parse (the adoption agency algorithm reconstructing
+/// active formatting elements; table foster parenting). If such a move
+/// happens to a node already imported in an earlier `sync` call, this does
+/// not re-parent its destination counterpart to match -- a real but narrow
+/// gap (mis-nested formatting elements or foster-parented content that also
+/// straddles a parser-blocking script pause), left undone rather than
+/// silently assumed away; see the module-level test covering it.
+pub struct IncrementalDocumentImport {
+    dest_document: NodeIdx,
+    /// Every source node already copied, mapping to its destination
+    /// counterpart -- never removed, so `sync` can always tell an
+    /// already-imported node from a newly appended one. Also covers a
+    /// shadow root's own source `NodeIdx` (not reachable via `children`,
+    /// so `sync_special_containers` below re-descends into it explicitly)
+    /// and a template's contents fragment, the same way.
+    map: HashMap<NodeIdx, NodeIdx>,
+}
+
+impl IncrementalDocumentImport {
+    /// `dest_document` must be an otherwise-empty document node this arena
+    /// already created (`Dom::create_document`). The source arena's own
+    /// document root is always `NodeIdx(0)` (every `Dom::new()`'s first
+    /// allocation, per `ResumableParser`'s own contract).
+    pub fn new(dest_document: NodeIdx) -> Self {
+        let mut map = HashMap::new();
+        map.insert(NodeIdx(0), dest_document);
+        Self { dest_document, map }
+    }
+
+    /// The destination document node passed to `new`.
+    pub fn dest_document(&self) -> NodeIdx {
+        self.dest_document
+    }
+
+    /// Maps an already-imported source node to its destination counterpart.
+    pub fn imported(&self, source_node: NodeIdx) -> Option<NodeIdx> {
+        self.map.get(&source_node).copied()
+    }
+
+    /// Imports every source node not yet copied since the last call,
+    /// preserving previously imported nodes' destination identity. Safe to
+    /// call repeatedly (at every parser pause, and once more after `Eof`);
+    /// a call with nothing new to copy is a no-op.
+    pub fn sync(&mut self, dest: &mut Dom, source: &Dom) -> Result<(), DomError> {
+        self.sync_children(dest, source, NodeIdx(0), self.dest_document)
+    }
+
+    /// Imports every not-yet-copied direct child of `source_parent`, then
+    /// recurses into EVERY child (freshly imported or not) -- an
+    /// already-open element can gain more children between two `sync`
+    /// calls, so this must walk the whole subtree every time, not just
+    /// the newly created part of it, to find them. `sync_special_containers`
+    /// handles the two cases a child's own children are not enough for: a
+    /// shadow root (attached to its host via a side table, not a `Dom`
+    /// child at all) and a template's contents fragment (same).
+    fn sync_children(&mut self, dest: &mut Dom, source: &Dom,
+        source_parent: NodeIdx, dest_parent: NodeIdx) -> Result<(), DomError> {
+        for child in source.children(source_parent) {
+            let dest_child = match self.map.get(&child) {
+                Some(existing) => *existing,
+                None => {
+                    let created = self.import_one(dest, source, child, dest_parent)?;
+                    self.map.insert(child, created);
+                    created
+                }
+            };
+            self.sync_children(dest, source, child, dest_child)?;
+            self.sync_special_containers(dest, source, child)?;
+        }
+        Ok(())
+    }
+
+    /// `child`/`dest_child`'s shadow root and/or (if `child` is a
+    /// `<template>`) contents fragment, if it has either -- both created
+    /// once, at `import_one` time (below), the FIRST time `child` itself was
+    /// imported, but their own children still need the same incremental
+    /// treatment `sync_children` gives every ordinary node, on every call,
+    /// whether `child` was imported just now or several `sync`s ago.
+    fn sync_special_containers(&mut self, dest: &mut Dom, source: &Dom,
+        node: NodeIdx) -> Result<(), DomError> {
+        if let Some(root) = source.shadow_root_of_host(node) {
+            let dest_root = *self.map.get(&root).expect("shadow root mapped at host's own import_one");
+            self.sync_children(dest, source, root, dest_root)?;
+        }
+        if source.is_html_template(node) {
+            if let Some(contents) = source.template_contents(node) {
+                let dest_contents = *self.map.get(&contents)
+                    .expect("template contents mapped at template's own import_one");
+                self.sync_children(dest, source, contents, dest_contents)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn import_one(&mut self, dest: &mut Dom, source: &Dom, node: NodeIdx, dest_parent: NodeIdx)
+        -> Result<NodeIdx, DomError> {
+        let dest_document = self.dest_document;
+        let created = match &source.get(node).kind {
+            NodeKind::Element { .. } => {
+                let created = dest.create_element_expanded_in(dest_document, source.namespace_uri(node),
+                    source.prefix(node), source.local_name(node).unwrap())?;
+                for attr in source.attributes_expanded(node).unwrap() {
+                    dest.set_attribute_expanded(created, attr.namespace_uri, attr.prefix,
+                        attr.local_name, attr.value)?;
+                }
+                created
+            }
+            NodeKind::Text { .. } | NodeKind::CDATASection { .. } | NodeKind::Comment { .. } => {
+                let kind = match &source.get(node).kind {
+                    NodeKind::Text { .. } => NodeKind::Text { data: String::new() },
+                    NodeKind::CDATASection { .. } => NodeKind::CDATASection { data: String::new() },
+                    _ => NodeKind::Comment { data: String::new() },
+                };
+                let created = dest.create_node_in(dest_document, kind)?;
+                let units = source.character_data_utf16(node).unwrap_or_default();
+                dest.replace_character_data(created, 0, 0, &units)?;
+                created
+            }
+            NodeKind::ProcessingInstruction { target, data } =>
+                dest.create_node_in(dest_document, NodeKind::ProcessingInstruction { target: target.clone(), data: data.clone() })?,
+            NodeKind::DocumentType { name, public_id, system_id } =>
+                dest.create_node_in(dest_document, NodeKind::DocumentType {
+                    name: name.clone(), public_id: public_id.clone(), system_id: system_id.clone(),
+                })?,
+            NodeKind::Document | NodeKind::DocumentFragment | NodeKind::Attr { .. } =>
+                return Err(DomError::NotSupportedError),
+        };
+        dest.pre_insert(created, dest_parent, None)?;
+        if let Some(root) = source.shadow_root_of_host(node) {
+            let source_data = source.shadow_data(root).expect("attached parser shadow root").clone();
+            let copied_root = dest.attach_shadow(created, source_data.options)?;
+            let copied_data = dest.shadow_roots.iter_mut().find(|data| data.root == copied_root)
+                .expect("new imported shadow root");
+            copied_data.declarative = source_data.declarative;
+            copied_data.available_to_element_internals = source_data.available_to_element_internals;
+            copied_data.keep_custom_element_registry_null = source_data.keep_custom_element_registry_null;
+            self.map.insert(root, copied_root);
+        }
+        if source.is_html_template(node) {
+            let destination = dest.ensure_template_contents(created)?;
+            if let Some(contents) = source.template_contents(node) {
+                self.map.insert(contents, destination);
+            }
+        }
+        Ok(created)
     }
 }
