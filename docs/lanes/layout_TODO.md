@@ -2481,3 +2481,83 @@ CSS (`width:100px; border-right:100px solid red`) and the reference
 
 Filed in `questions.md` for replaced-content with the exact pixel evidence
 above.
+
+## LAYOUT-32 (1) — CSS Sizing 3 keywords on ordinary block boxes (base `72870144`)
+
+Coordinator brief: sweep the layout-heavy WPT dirs not yet swept
+(`css/css-tables`, `css/CSS2/floats`, `css/CSS2/normal-flow`, `css/css-sizing`,
+`css/css-display`), rank clusters by count, fix the largest two or three.
+
+**Sweep.** `scripts/linux-render-wpt.sh layout css/css-tables css/CSS2/floats
+css/CSS2/normal-flow css/css-sizing css/css-display --baseline auto --release
+--jobs 8`, one call, sharing a single build. `css/css-tables` and
+`css/css-display` already had checked-in baselines (from `SHELL-L4`); the other
+three were first-time sweeps. Full `clusters.json` per dir (not just the
+truncated "e.g." samples) gave the true per-cluster counts: css-sizing's top 3
+(15, 13, 9) dwarfed every other directory's largest cluster (4), so css-sizing
+alone was "the largest two or three."
+
+**Root cause (top 2 clusters, 15+13 of 85 css-sizing mismatches, one
+architectural gap).** CSS Sizing 3 lets `width`/`min-width`/`max-width`/
+`height`/`min-height`/`max-height` take `min-content`/`max-content`/
+`fit-content` as bare keywords on **any** block-level box. The codebase's
+`values::calc_size_basis(source)` only recognizes these keywords wrapped in a
+literal `calc-size(...)` call and returns `None` for a bare keyword; the only
+place that handled a bare keyword directly was ruby text's width resolution
+(gated on `ruby_intrinsic.is_some()`). An ordinary block with e.g.
+`min-height: max-content` fell through to the wrong default (0 for
+`min-height`, unconstrained for `max-height`, "fill available" for bare
+`width`).
+
+**Fix**, all in `crates/amazing-layout/src/block.rs`:
+- `width`'s bare-keyword match no longer gates on `ruby_intrinsic.is_some()` —
+  it always resolves `min-content`/`max-content`/`fit-content` via the
+  `intrinsic()` closure, which already knows how to fall back correctly.
+- `calc_size_width_limit` (used for `min-width`/`max-width`) resolves a bare
+  keyword directly, before falling back to the `calc-size()`-only
+  `calc_size_basis` path.
+- `calc_height` (used for `height`/`min-height`/`max-height`) treats
+  `min-content`/`max-content`/`fit-content` as equal to `intrinsic_height`
+  (the box's own content-based height) — CSS Sizing 3 has no block-axis
+  wrapping analogous to inline width-wrapping, so for ordinary block layout
+  min-content block size == max-content block size == the auto/content-based
+  size. Bare `height: auto` itself is excluded from this shortcut and keeps
+  its existing trailing-margin-escape/BFC-establishing logic; including it
+  broke `bfc_auto_height_includes_a_negative_trailing_margin` and
+  `min_height_below_content_allows_the_trailing_margin_to_escape`, fixed by
+  narrowing the match arm to exclude `"auto"`.
+
+**Regression found and fixed along the way.** After the width-keyword fix
+alone, `css-sizing/slice-nowrap-intrinsic-size.html` (11 span/whitespace/
+box-decoration-break combinations under `white-space:nowrap` + `width:
+max-content`/`min-content`) went from pass to mismatch: resolving a bare
+width keyword on an ordinary block now used the coarse, non-shaped
+`crate::flex::max_content_width`/`min_content_width` fallback instead of the
+precise HarfRust-based `crate::inline::intrinsic_widths_shaped` that ruby
+already prefers. Fixed by widening `shaped_intrinsic`'s trigger condition
+(renamed `ruby_intrinsic` -> `keyword_shaped_intrinsic`) to also cover
+`width: min-content|max-content|fit-content` boxes, not just ruby/floating/
+atomic/vertical-text ones.
+
+**Gate.** Crate: 382 passed, 1 skipped, 0 failed (twice, after each fix
+iteration). `css/css-sizing`: pass 51->76, mismatch 85->62, gained=25 lost=0.
+Combined re-sweep of all 5 directories confirmed no other regressions:
+`css/css-tables` unchanged (gained=3 lost=1, same pre-existing
+`th-text-align.html` loss); `css/CSS2/floats` unchanged (pass=23/mismatch=16,
+no prior baseline); `css/CSS2/normal-flow` first sweep (pass=24/mismatch=5);
+`css/css-display` unchanged (gained=0 lost=1, same pre-existing
+`display-flow-root-002.html` loss). Both "LOST" entries were independently
+verified as pre-existing baseline drift (not caused by this ticket) by
+rendering fixture+reference at HEAD and at LAYOUT-30's tip (`eccee5d3`) and
+comparing sha256 — identical at both commits.
+
+Checked-in evidence refreshed in a separate, code-free commit: `css-sizing`'s
+baseline updated to the new (correct, improved) counts; `css/CSS2/floats` and
+`css/CSS2/normal-flow` got their first checked-in baseline; `css-tables` and
+`css-display` were left untouched (no change from their existing baseline).
+
+css-sizing's remaining smaller clusters (9 "large-region, center, darker" —
+orthogonal writing-mode auto-margin tests; 7 "small-region, lighter"; 5
+"medium-region, darker"; 4 "large-region, top, darker", mostly
+`contain-intrinsic-size`) and the smaller clusters in the other 4 directories
+(all <=4, dwarfed by css-sizing's) are next per "continue down the ranking."
