@@ -305,7 +305,20 @@ fn std_temporal_now_datetime(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>
     std_temporal_make(i, StdTemporalKind::PlainDateTime, fields)
 }
 
-fn std_temporal_make(i: &Interpreter, kind: StdTemporalKind, fields: [i64; 10]) -> Result<JsValue, Throw> {
+fn std_temporal_make(i: &Interpreter, kind: StdTemporalKind, mut fields: [i64; 10]) -> Result<JsValue, Throw> {
+    // Every Duration Record field is spec-constrained to a float64-
+    // representable integer (Number, not an exact big integer), so the
+    // internal representation must be canonicalized here -- the single
+    // choke point every Duration passes through on creation (constructor,
+    // add/subtract/round/negated/abs/with/from) -- not just at the getter.
+    // Confirmed by float64-representable-integer.js: an add() result that
+    // overflows 2**53 loses precision, and a LATER add()/toString()/compare
+    // must see that already-lossy value, not a hidden exact one.
+    if kind == StdTemporalKind::Duration {
+        for field in fields.iter_mut() {
+            *field = (*field as f64) as i64;
+        }
+    }
     std_temporal_validate(kind, &fields)?;
     let prototype = STD_TEMPORAL_PROTOS.with(|registry| registry.borrow().get(&std_weak_id(&i.global_obj))
         .filter(|entry| std_weak_same(&entry.owner, &i.global_obj))
@@ -865,28 +878,6 @@ fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<[i64; 10], Th
     Ok(values)
 }
 
-// ToRelativeTemporalObject (used only by Duration.prototype.{round,total,compare}'s
-// relativeTo handling) additionally requires a string relativeTo carrying both a
-// bracketed time zone annotation and an explicit numeric UTC offset to be
-// internally consistent, even though the plain date/time fields end up all that
-// gets kept. General Temporal string parsing (Plain*.from, .compare, etc.) must
-// NOT run this check: a mismatched offset there is simply ignored per spec, and
-// applying it unconditionally in std_temporal_parse regressed a wide swath of
-// otherwise-valid Plain-type parsing (e.g. PlainDate.from with a UTC-offset or
-// zone-annotation suffix).
-fn std_temporal_validate_relative_to_offset(text: &str) -> Result<(), Throw> {
-    let original = text;
-    let (text, _calendar, zone) = std_temporal_parse_annotations(text)?;
-    if zone.is_none() || text.ends_with('Z') || text.ends_with('z') { return Ok(()); }
-    let has_offset = text.find('T').or_else(|| text.find('t')).or_else(|| text.find(' '))
-        .is_some_and(|time_start| text[time_start + 1..].char_indices()
-            .any(|(index, c)| index > 0 && (c == '+' || c == '-')));
-    if has_offset {
-        std_epoch_parse(original, StdEpochKind::ZonedDateTime, "reject", "compatible")?;
-    }
-    Ok(())
-}
-
 fn std_temporal_from_fields(i: &mut Interpreter, kind: StdTemporalKind, value: JsValue, reject: bool) -> Result<[i64; 10], Throw> {
     if let Ok(data) = std_temporal_record(&value, Some(kind)) { return Ok(data.fields); }
     if let Ok(data) = std_temporal_record(&value, None) {
@@ -972,21 +963,7 @@ fn std_temporal_compare(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTempor
         // the parsed relativeTo would otherwise go unused.
         let options = std_reflect_arg(&args, 2);
         let relative = std_temporal_option_value(i, &options, "relativeTo")?;
-        // Same two relativeTo checks as Duration.prototype.round/total: a
-        // property bag's `timeZone` must still be resolved (and can still
-        // throw) even though only the local date is kept, and a relativeTo
-        // string carrying both a bracketed zone annotation and an explicit
-        // numeric UTC offset must be internally consistent.
-        if relative.is_object() {
-            let time_zone = i.get_prop(&relative, "timeZone")?;
-            if !time_zone.is_undefined() { std_epoch_zone_value(i, &time_zone)?; }
-        }
-        if let JsValue::Str(text) = &relative {
-            std_temporal_validate_relative_to_offset(&text.to_utf8_lossy())?;
-        }
-        let relative_base = if relative.is_undefined() { None } else {
-            Some(std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative, false)?)
-        };
+        let relative_base = std_temporal_resolve_relative_to(i, &relative)?;
         if left == right {
             // Identical Duration Records (spec step 5): equal even when a
             // calendar unit is non-zero and relativeTo was never resolved.

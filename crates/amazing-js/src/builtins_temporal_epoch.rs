@@ -382,14 +382,23 @@ fn std_epoch_parse_syntax(text: &str, kind: StdEpochKind) -> Result<StdEpochPars
     } else {
         "UTC".into()
     };
-    let time_start = body.find('T').or_else(|| body.find('t')).or_else(|| body.find(' ')).ok_or_else(invalid)?;
-    let time = &body[time_start + 1..];
+    let time_start = body.find('T').or_else(|| body.find('t')).or_else(|| body.find(' '));
+    // A TemporalZonedDateTimeString may be just `Date TimeZoneAnnotation`,
+    // with no time-of-day at all -- "2000-01-01[UTC]" is valid and means
+    // wall-clock midnight in that zone, resolved through disambiguation like
+    // any other offset-absent wall-clock time. Every other kind (Instant,
+    // and ZonedDateTime strings that do carry a time) still requires the
+    // `T`/`t`/` ` separator.
+    if time_start.is_none() && kind != StdEpochKind::ZonedDateTime { return Err(invalid()); }
+    let time = time_start.map_or("", |start| &body[start + 1..]);
     // A ZonedDateTime string may omit both `Z` and a numeric UTC offset when a
     // bracketed time zone annotation supplies the zone (OffsetBehaviour
     // "wall" in the spec's ParseISODateTime): the wall-clock local time is
     // then resolved through disambiguation alone. Instant strings have no
     // annotation fallback and must always carry `Z` or a numeric offset.
-    let (clock, offset, exact, offset_absent) = if let Some(clock) = time.strip_suffix('Z').or_else(|| time.strip_suffix('z')) {
+    let (clock, offset, exact, offset_absent) = if time.is_empty() {
+        ("", 0, false, true)
+    } else if let Some(clock) = time.strip_suffix('Z').or_else(|| time.strip_suffix('z')) {
         (clock, 0, true, false)
     } else if let Some(start) = time.char_indices().find(|(index, c)| *index > 0 && (*c == '+' || *c == '-')).map(|(index, _)| index) {
         (&time[..start], std_epoch_parse_offset(&time[start..])?, false, false)
@@ -398,14 +407,27 @@ fn std_epoch_parse_syntax(text: &str, kind: StdEpochKind) -> Result<StdEpochPars
     } else {
         return Err(invalid());
     };
-    let date = &body[..time_start];
+    let date = &body[..time_start.unwrap_or(body.len())];
     let (year, month, day, tail) = std_temporal_parse_date(date, true)?;
     if !tail.is_empty() { return Err(invalid()); }
+    if kind == StdEpochKind::ZonedDateTime && !exact && !offset_absent {
+        // InterpretISODateTimeOffset's ~option~/~reject~ branch (an explicit
+        // non-"Z" numeric offset, resolved against a zone) runs
+        // CheckISODaysRange on the *unadjusted local* ISO date before ever
+        // computing an epoch instant -- rejecting a local date more than
+        // 10^8 days from the epoch even when the offset would shift the
+        // final instant back into Instant's own +-nsMaxInstant range.
+        // "-271821-04-19T23:00-01:00[-01:00]" resolves to exactly
+        // nsMinInstant (valid on its own), but its *local* date
+        // "-271821-04-19" is one day past the 10^8-day boundary and must
+        // still throw -- confirmed by relativeto-string-limits.js.
+        if std_temporal_epoch_day(year, month, day).abs() > 100_000_000 { return Err(invalid()); }
+    }
     let mut fields = [0; 10];
     fields[0] = year; fields[1] = month; fields[2] = day;
-    std_temporal_parse_time(clock, &mut fields)?;
+    if !time.is_empty() { std_temporal_parse_time(clock, &mut fields)?; }
     std_temporal_validate(StdTemporalKind::PlainDateTime, &fields)?;
-    let minute_precision = time[clock.len()..].matches(':').count() == 1;
+    let minute_precision = !time.is_empty() && time[clock.len()..].matches(':').count() == 1;
     Ok(StdEpochParsed { fields, zone, offset_absent, exact, offset, minute_precision })
 }
 

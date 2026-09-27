@@ -65,6 +65,77 @@ fn std_temporal_overflow(i: &mut Interpreter, option: JsValue) -> Result<bool, T
     }
 }
 
+// ToRelativeTemporalObject (spec): resolves Duration.prototype.{compare,
+// round,total}'s `relativeTo` into a plain calendar date. A value naming a
+// time zone (a ZonedDateTime instance/record, a zone-annotated string, or a
+// property bag with a `timeZone` property) first resolves as a full
+// ZonedDateTime -- reusing std_epoch_from_value_with_options's validation
+// and range checks (the offset-field type gate, disambiguation/overflow
+// enum checks, the +-8.64e21ns instant bound) -- then keeps only its local
+// date. Anything else resolves as a PlainDateTime bag/string (so a discarded
+// time-of-day is still read and range-checked, e.g. an Infinity hour, and a
+// bag missing year/month/day still throws) and keeps only the date portion.
+// round/total/compare each used to have their own partial, ad-hoc version of
+// this that duplicated none of that validation -- see
+// docs/lanes/js-stdlib_TODO.md, JSS-temporal-port item 2.
+fn std_temporal_resolve_relative_to(i: &mut Interpreter, relative: &JsValue) -> Result<Option<[i64; 10]>, Throw> {
+    if relative.is_undefined() { return Ok(None); }
+    if let Ok(data) = std_temporal_record(relative, None) {
+        let mut fields = data.fields;
+        return match data.kind {
+            StdTemporalKind::PlainDate => Ok(Some(fields)),
+            StdTemporalKind::PlainDateTime => { fields[3..9].fill(0); Ok(Some(fields)) }
+            _ => Err(Throw::type_error("relativeTo must name a PlainDate, PlainDateTime, or ZonedDateTime")),
+        };
+    }
+    if let Ok(data) = std_epoch_record(relative, Some(StdEpochKind::ZonedDateTime)) {
+        let mut fields = std_epoch_local_fields(&data)?;
+        fields[3..9].fill(0);
+        return Ok(Some(fields));
+    }
+    match relative {
+        JsValue::Str(text) => {
+            let text = text.to_utf8_lossy();
+            let (_, zone_annotation) = std_epoch_validate_annotations(&text)?;
+            let mut fields = if zone_annotation.is_some() {
+                let (epoch_ns, zone) = std_epoch_parse(&text, StdEpochKind::ZonedDateTime, "reject", "compatible")?;
+                let mut f = [0i64; 10];
+                std_temporal_set_epoch_ns(&mut f, epoch_ns + tz_offset_ns(&zone, epoch_ns))?;
+                f
+            } else {
+                // No zone annotation: ToRelativeTemporalObject discards any
+                // time-of-day the string carries and resolves as a PlainDate
+                // (ParseISODateTime still validates a present time's syntax
+                // and ranges, it is just not kept). Parsing as PlainDateTime
+                // here would wrongly *require* a time-of-day component --
+                // confirmed by relativeto-hour.js and largestunit-correct-
+                // rebalancing.js, which pass bare date strings like
+                // "2023-02-21".
+                std_temporal_parse(StdTemporalKind::PlainDate, &text)?
+            };
+            fields[3..9].fill(0);
+            Ok(Some(fields))
+        }
+        JsValue::Object(_) => {
+            let time_zone = i.get_prop(relative, "timeZone")?;
+            let mut fields = if !time_zone.is_undefined() {
+                let (epoch_ns, zone) = std_epoch_from_value_with_options(i, relative.clone(), StdEpochKind::ZonedDateTime, JsValue::Undefined)?;
+                let mut f = [0i64; 10];
+                std_temporal_set_epoch_ns(&mut f, epoch_ns + tz_offset_ns(&zone, epoch_ns))?;
+                f
+            } else {
+                let mut f = std_temporal_bag(i, StdTemporalKind::PlainDateTime, relative)?;
+                std_temporal_regulate(StdTemporalKind::PlainDateTime, &mut f, false);
+                std_temporal_validate(StdTemporalKind::PlainDateTime, &f)?;
+                f
+            };
+            fields[3..9].fill(0);
+            Ok(Some(fields))
+        }
+        _ => Err(Throw::type_error("relativeTo must be a Temporal object, string, or property bag")),
+    }
+}
+
 fn std_temporal_option_string(i: &mut Interpreter, option: &JsValue, key: &str) -> Result<Option<String>, Throw> {
     if option.is_undefined() { return Ok(None); }
     if !option.is_object() { return Err(Throw::type_error("Temporal options must be an object")); }
@@ -791,29 +862,20 @@ fn std_temporal_unit_ns(name: &str) -> Option<i128> {
 fn std_temporal_duration_total(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let fields = std_temporal_record(&this, Some(StdTemporalKind::Duration))?.fields;
     let option = std_reflect_arg(&args, 0);
+    // relativeTo is read (and, per ToRelativeTemporalObject, fully resolved
+    // -- so a malformed value must throw here) BEFORE `unit`, confirmed by
+    // options-read-before-algorithmic-validation.js's exact property-read
+    // order. Same two checks as Duration.prototype.round: a relativeTo
+    // property bag naming a `timeZone` must still have that value resolved
+    // even though only the local date ends up kept, and a relativeTo string
+    // carrying both a bracketed zone annotation and an explicit numeric UTC
+    // offset must be internally consistent.
+    let relative = if option.is_object() { std_temporal_option_value(i, &option, "relativeTo")? }
+        else { JsValue::Undefined };
+    let base = std_temporal_resolve_relative_to(i, &relative)?;
     let unit = if let JsValue::Str(value) = &option { value.to_utf8_lossy() }
         else { std_temporal_option_string(i, &option, "unit")?
             .ok_or_else(|| Throw::range_error("unit is required"))? };
-    let relative = if option.is_object() { std_temporal_option_value(i, &option, "relativeTo")? }
-        else { JsValue::Undefined };
-    // ToRelativeTemporalObject (spec) resolves relativeTo -- and so must
-    // throw on a malformed value -- whenever it is present, not only when a
-    // calendar unit ends up actually needing it. Same two checks as
-    // Duration.prototype.round: a relativeTo property bag naming a
-    // `timeZone` must still have that value resolved even though only the
-    // local date ends up kept, and a relativeTo string carrying both a
-    // bracketed zone annotation and an explicit numeric UTC offset must be
-    // internally consistent.
-    if relative.is_object() {
-        let time_zone = i.get_prop(&relative, "timeZone")?;
-        if !time_zone.is_undefined() { std_epoch_zone_value(i, &time_zone)?; }
-    }
-    if let JsValue::Str(text) = &relative {
-        std_temporal_validate_relative_to_offset(&text.to_utf8_lossy())?;
-    }
-    let base = if relative.is_undefined() { None } else {
-        Some(std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative, false)?)
-    };
     // relativeTo is required whenever a calendar unit is in play at all: the
     // requested `unit` is year/month/week (unconditionally -- even a
     // fixed-length duration like a single day needs it to convert into
@@ -1137,12 +1199,33 @@ fn std_temporal_round_to_calendar_unit(base: &[i64; 10], target_ns: i128, smalle
 // `relativeTo` and real calendar arithmetic instead of a flat nanosecond
 // count.
 fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], option: &JsValue) -> Result<JsValue, Throw> {
-    let (smallest_raw, largest_raw) = if let JsValue::Str(value) = option {
-        (Some(std_temporal_singular_unit(&value.to_utf8_lossy())), None)
+    // Every option property is read (and, for relativeTo, fully resolved --
+    // so a malformed value must throw here) in this exact order --
+    // largestUnit, relativeTo, roundingIncrement, roundingMode,
+    // smallestUnit -- before ANY algorithmic validation (unit legality,
+    // smallestUnit/largestUnit ordering, "one of the two is required",
+    // rounding-increment divisibility, or "calendar units require
+    // relativeTo"), confirmed by options-read-before-algorithmic-
+    // validation.js's exact property-read trace. This also means
+    // relativeTo is resolved unconditionally whenever given, even for a
+    // duration/largestUnit combination that turns out not to need calendar
+    // units at all -- confirmed by relativeto-required-properties.js.
+    let largest_raw = if option.is_object() {
+        std_temporal_option_string(i, option, "largestUnit")?.map(|u| std_temporal_singular_unit(&u))
+    } else { None };
+    let relative = if option.is_object() { std_temporal_option_value(i, option, "relativeTo")? } else { JsValue::Undefined };
+    let base = std_temporal_resolve_relative_to(i, &relative)?;
+    let (increment, mode) = if option.is_object() {
+        let increment = std_temporal_property(i, option, "roundingIncrement")?.unwrap_or(1);
+        let mode = std_temporal_option_string(i, option, "roundingMode")?.unwrap_or_else(|| "halfExpand".to_string());
+        (increment, mode)
+    } else { (1, "halfExpand".to_string()) };
+    let smallest_raw = if let JsValue::Str(value) = option {
+        Some(std_temporal_singular_unit(&value.to_utf8_lossy()))
     } else {
-        (std_temporal_option_string(i, option, "smallestUnit")?.map(|u| std_temporal_singular_unit(&u)),
-            std_temporal_option_string(i, option, "largestUnit")?.map(|u| std_temporal_singular_unit(&u)))
+        std_temporal_option_string(i, option, "smallestUnit")?.map(|u| std_temporal_singular_unit(&u))
     };
+
     // The "at least one of largestUnit/smallestUnit is required" check is on
     // whether the option was given at all, not on its resolved value -- an
     // explicit largestUnit: "auto" still counts as present, unlike an absent
@@ -1150,6 +1233,7 @@ fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], option: &
     if smallest_raw.is_none() && largest_raw.is_none() {
         return Err(Throw::range_error("one of largestUnit or smallestUnit is required"));
     }
+    if !std_temporal_round_mode_valid(&mode) { return Err(Throw::range_error("invalid roundingMode")); }
     let largest_opt = largest_raw.filter(|u| u != "auto");
     for unit in smallest_raw.iter().chain(largest_opt.iter()) {
         if std_temporal_unit_rank(unit).is_none() { return Err(Throw::range_error("invalid Temporal unit")); }
@@ -1161,12 +1245,6 @@ fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], option: &
     if largest_index > smallest_index {
         return Err(Throw::range_error("largestUnit is smaller than smallestUnit"));
     }
-    let (increment, mode) = if option.is_object() {
-        let increment = std_temporal_property(i, option, "roundingIncrement")?.unwrap_or(1);
-        let mode = std_temporal_option_string(i, option, "roundingMode")?.unwrap_or_else(|| "halfExpand".to_string());
-        (increment, mode)
-    } else { (1, "halfExpand".to_string()) };
-    if !std_temporal_round_mode_valid(&mode) { return Err(Throw::range_error("invalid roundingMode")); }
     // Time units additionally cannot exceed (or fail to evenly divide) the
     // next-largest unit, matching std_temporal_validate_rounding_increment.
     std_temporal_validate_rounding_increment(&smallest, increment)?;
@@ -1195,24 +1273,7 @@ fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], option: &
         }
         return std_temporal_make(i, StdTemporalKind::Duration, split);
     }
-    let relative = if option.is_object() { std_temporal_option_value(i, option, "relativeTo")? } else { JsValue::Undefined };
-    if relative.is_undefined() {
-        return Err(Throw::range_error("calendar units require relativeTo"));
-    }
-    if relative.is_object() {
-        // A relativeTo property bag naming a `timeZone` is conceptually a
-        // ZonedDateTime-relative computation; this implementation only ever
-        // keeps the local date, but the timeZone value must still be
-        // resolved (and can still throw, e.g. a malformed date-time string
-        // used as a time zone identifier) even though its result goes
-        // unused below.
-        let time_zone = i.get_prop(&relative, "timeZone")?;
-        if !time_zone.is_undefined() { std_epoch_zone_value(i, &time_zone)?; }
-    }
-    if let JsValue::Str(text) = &relative {
-        std_temporal_validate_relative_to_offset(&text.to_utf8_lossy())?;
-    }
-    let base = std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative, false)?;
+    let base = base.ok_or_else(|| Throw::range_error("calendar units require relativeTo"))?;
     let target_ns = std_temporal_duration_apply(&base, &fields)?;
     let result = if smallest_index <= 2 {
         std_temporal_round_to_calendar_unit(&base, target_ns, &smallest, &largest, increment, &mode)?
