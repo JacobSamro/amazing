@@ -2367,20 +2367,28 @@ impl Interpreter {
                         getter: None, setter: None,
                     }).unwrap();
                 }
-                // 10.4.4.7 CreateUnmappedArgumentsObject step 8 (strict functions get the
-                // unmapped arguments exotic object): "callee" is a poison-pill accessor
+                // 10.4.4.7 CreateUnmappedArgumentsObject step 8 (strict functions, OR sloppy
+                // functions with a non-simple parameter list -- 10.2.11 FunctionDeclaration
+                // Instantiation step 19's own ArgumentsObjectNeeded/simpleParameterList check
+                // routes both to the unmapped object): "callee" is a poison-pill accessor
                 // sharing the realm's single %ThrowTypeError% intrinsic -- the SAME function
                 // object already installed as Function.prototype's "caller"/"arguments"
                 // getter/setter (JS-18's AddRestrictedFunctionProperties), fetched live from
                 // its descriptor rather than re-created, so `built-ins/ThrowTypeError/
                 // unique-per-realm-function-proto.js`'s cross-check (`arguments.callee.get
-                // === Function.prototype.arguments.get`) holds.
+                // === Function.prototype.arguments.get`) holds. `has_simple_params` mirrors
+                // 10.2.10 IsSimpleParameterList: every parameter is a plain identifier, no
+                // rest, no default -- found chasing a JS-19 zero-loss regression
+                // (built-ins/ThrowTypeError/unique-per-realm-non-simple.js checks a sloppy
+                // function with a default parameter gets the SAME poison-pill callee as a
+                // strict function, not the mapped data-property one below).
                 //
-                // 10.4.4.6 CreateMappedArgumentsObject step 15 (sloppy functions get the mapped
-                // arguments exotic object instead): "callee" is a plain, writable, configurable
-                // data property pointing at the function itself -- found while chasing a JS-19
-                // zero-loss regression (language/arguments-object/10.6-13-a-{2,3}.js): those
-                // tests read `arguments.callee.caller` and, if `arguments.callee` is undefined,
+                // 10.4.4.6 CreateMappedArgumentsObject step 15 (sloppy functions with a simple
+                // parameter list get the mapped arguments exotic object instead): "callee" is a
+                // plain, writable, configurable data property pointing at the function itself --
+                // found while chasing a separate JS-19 zero-loss regression
+                // (language/arguments-object/10.6-13-a-{2,3}.js): those tests read
+                // `arguments.callee.caller` and, if `arguments.callee` is undefined,
                 // deliberately fall back to "extension not supported, fake it" by comparing
                 // `.caller` against `undefined` -- which used to accidentally succeed only
                 // because `undefined.caller` silently evaluated to `undefined` instead of
@@ -2389,7 +2397,10 @@ impl Interpreter {
                 // current call's own function object is `self.frames.last()`'s `own_function`:
                 // a fresh frame for THIS call was pushed before `bind_params` runs (see the
                 // call dispatch above), so it's always present here.
-                if strict {
+                let has_simple_params = ps.iter().all(|p| {
+                    !p.rest && p.default.is_none() && matches!(p.binding, Binding::Ident(_))
+                });
+                if strict || !has_simple_params {
                     let thrower = self.function_proto.borrow().own_prop("arguments").and_then(|p| p.getter.clone());
                     if let Some(thrower) = thrower {
                         object.borrow_mut().define("callee", Property {
