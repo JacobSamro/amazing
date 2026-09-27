@@ -3,13 +3,16 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::ast::{
-    Binding, Declarator, Expr, ExprKind, Ident, Module, ModuleItem, Program, Stmt, StmtKind,
-    VarDecl, VarKind,
+    Binding, Block, Declarator, Expr, ExprKind, Ident, Module, ModuleItem, Program, Stmt,
+    StmtKind, VarDecl, VarKind,
 };
 use crate::env::{BindingCell, EnvHandle, EnvKind};
 use crate::interp::Interpreter;
 use crate::tokens::Span;
-use crate::value::{Exotic, JsObject, JsValue, Property, Throw, WellKnownSymbol};
+use crate::value::{
+    Exotic, FunctionBody, JsObject, JsValue, PromiseFate, PromiseState, Property, Throw,
+    WellKnownSymbol,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModulePhase {
@@ -365,22 +368,20 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             ModuleState::Evaluated | ModuleState::Evaluating => return Ok(()),
             ModuleState::Linked => {}
         }
-        if self.records[id].module.has_top_level_await {
-            return Err(ModuleFailure::new(
-                ModulePhase::Async,
-                "top-level await requires async module evaluation",
-            ));
-        }
         instances.get_mut(id).unwrap().state = ModuleState::Evaluating;
         for dependency in self.records[id].dependencies.values() {
             self.evaluate_instance(dependency, root, instances)?;
         }
-        let instance = instances.get_mut(id).unwrap();
+        let instance = &instances[id];
         let previous = std::mem::replace(&mut root.global_env, instance.env.clone());
-        let evaluated = root.run_program(&instance.program);
+        let evaluated = if self.records[id].module.has_top_level_await {
+            evaluate_async_module_body(root, instance)
+        } else {
+            root.run_program(&instance.program).map(|_| ()).map_err(ModuleFailure::runtime)
+        };
         root.global_env = previous;
-        evaluated.map_err(ModuleFailure::runtime)?;
-        instance.state = ModuleState::Evaluated;
+        evaluated?;
+        instances.get_mut(id).unwrap().state = ModuleState::Evaluated;
         Ok(())
     }
 
@@ -522,6 +523,77 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             }
         }
         Ok(first)
+    }
+}
+
+/// ExecuteAsyncModule (16.2.1.5.2), simplified for a host with no genuine
+/// cross-module concurrency: the module's top-level statements run on a
+/// coroutine exactly like an ordinary async function body (via
+/// `start_thread_async_function`, the same machinery `interp_coroutine.rs`
+/// uses for `async function` bodies the bytecode VM didn't compile), so a
+/// top-level `await` genuinely suspends until its operand settles rather
+/// than degrading to `undefined` immediately.
+///
+/// A real engine lets an async module's own dependents keep making progress
+/// while it's pending (its `[[AsyncEvaluatingOrder]]`); this host instead
+/// blocks by draining the job queue once the coroutine parks, since
+/// `ModuleLinker::evaluate` is an ordinary synchronous Rust call with
+/// nowhere to return control to in the meantime. This is transparent for the
+/// overwhelmingly common case (a linear or tree-shaped module graph: each
+/// module either has no top-level await or awaits something that itself
+/// resolves once the job queue is pumped -- a resolved/rejected Promise, a
+/// `setTimeout`-free microtask chain, another module's already-evaluated
+/// export). It is observably different only for a module explicitly written
+/// to prove non-blocking concurrency between unrelated sibling modules
+/// (e.g. `top-level-await/async-module-does-not-block-sibling-modules.js`),
+/// and for genuine import cycles between async modules, which need the full
+/// `[[AsyncEvaluatingOrder]]` bookkeeping this does not implement.
+fn evaluate_async_module_body(root: &mut Interpreter, instance: &ModuleInstance) -> Result<(), ModuleFailure> {
+    let body = FunctionBody::Block(Block {
+        body: instance.program.body.clone(),
+        span: instance.program.span,
+    });
+    // All module code is strict (10.2.1 IsStrict for a Module ScriptOrModule).
+    let Some(promise) = root.start_thread_async_function(body, instance.env.clone(), true) else {
+        return Err(ModuleFailure::new(
+            ModulePhase::Async,
+            "top-level await requires OS thread support, unavailable in this host",
+        ));
+    };
+    if promise_fate(&promise).is_none() {
+        // The coroutine already ran up to its first `await` (or finished) by the
+        // time `start_thread_async_function` returned; draining the job queue
+        // once runs every reaction that first `await` unblocked, including the
+        // module's own resumption(s), to a fixpoint. If the promise is still
+        // pending after that, nothing left in the queue can ever settle it
+        // synchronously (no real host-level concurrency here), so this reports
+        // that as a failure rather than looping forever.
+        if root.drain_microtasks().is_err() {
+            return Err(ModuleFailure::new(
+                ModulePhase::Async,
+                "top-level await needs the job queue, unavailable under external scheduling",
+            ));
+        }
+    }
+    match promise_fate(&promise) {
+        Some(PromiseFate::Fulfilled(_)) => Ok(()),
+        Some(PromiseFate::Rejected(error)) => Err(ModuleFailure::runtime(Throw(error))),
+        _ => Err(ModuleFailure::new(
+            ModulePhase::Async,
+            "top-level await did not settle synchronously (no real host-level module concurrency)",
+        )),
+    }
+}
+
+fn promise_fate(value: &JsValue) -> Option<PromiseFate> {
+    match value {
+        JsValue::Object(o) => match &o.borrow().exotic {
+            Exotic::Promise(PromiseState { state, .. }) if !matches!(state, PromiseFate::Pending) => {
+                Some(state.clone())
+            }
+            _ => None,
+        },
+        _ => None,
     }
 }
 

@@ -1447,6 +1447,56 @@ mod class_name_tests {
     }
 
     #[test]
+    fn top_level_await_suspends_for_real_and_propagates_rejection() {
+        // A resolved-value await must be observable in module-scope code that runs
+        // after it -- if `await` degraded to a synchronous `undefined` (the
+        // tree-walker's ordinary, non-coroutine fallback), `x` would still be 0.
+        let resolver = |_: &str, _: &str| Err("no imports".to_owned());
+        let mut linker = crate::module::ModuleLinker::new(resolver);
+        linker.link("root", "export let x = 0; x = await Promise.resolve(1); export let y = x + 1;").unwrap();
+        let mut i = Interpreter::new();
+        let namespace = linker.evaluate("root", &mut i).unwrap();
+        assert_eq!(namespace["x"], JsValue::num(1.0));
+        assert_eq!(namespace["y"], JsValue::num(2.0));
+
+        // A rejected await must surface as this module's evaluation failure, not a
+        // silently-swallowed one.
+        let resolver = |_: &str, _: &str| Err("no imports".to_owned());
+        let mut linker = crate::module::ModuleLinker::new(resolver);
+        linker.link("root", "await Promise.reject(new TypeError('boom'));").unwrap();
+        let mut i = Interpreter::new();
+        let failure = linker.evaluate("root", &mut i).expect_err("a rejected top-level await must fail evaluation");
+        assert!(failure.message.contains("boom"), "{}", failure.message);
+
+        // A module with no top-level await at all is unaffected (still the plain,
+        // non-coroutine synchronous path).
+        let resolver = |_: &str, _: &str| Err("no imports".to_owned());
+        let mut linker = crate::module::ModuleLinker::new(resolver);
+        linker.link("root", "export let z = 5;").unwrap();
+        let mut i = Interpreter::new();
+        let namespace = linker.evaluate("root", &mut i).unwrap();
+        assert_eq!(namespace["z"], JsValue::num(5.0));
+    }
+
+    #[test]
+    fn top_level_await_in_a_dependency_completes_before_its_importer_evaluates() {
+        // The dependency's top-level await must fully settle before the importer's
+        // body runs, so the imported binding already has its post-await value.
+        let resolver = |specifier: &str, _: &str| {
+            if specifier == "./dep.js" {
+                Ok(("dep".to_owned(), "export let value = 0; value = await Promise.resolve(42);".to_owned()))
+            } else {
+                Err(format!("unknown specifier {specifier}"))
+            }
+        };
+        let mut linker = crate::module::ModuleLinker::new(resolver);
+        linker.link("root", "import { value } from './dep.js'; export let seen = value;").unwrap();
+        let mut i = Interpreter::new();
+        let namespace = linker.evaluate("root", &mut i).unwrap();
+        assert_eq!(namespace["seen"], JsValue::num(42.0));
+    }
+
+    #[test]
     fn bytecode_class_names_cover_compiled_expression_contexts() {
         for source in [
             "var C=class {}; C.name==='C'",
