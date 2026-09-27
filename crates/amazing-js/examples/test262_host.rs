@@ -253,43 +253,23 @@ fn run_module_request() -> io::Result<()> {
         Ok((canonical.to_string_lossy().into_owned(), source))
     };
     let linker = Rc::new(RefCell::new(ModuleLinker::new(resolve_specifier)));
-    // JS-19 item 1: install the dynamic-import loader hook onto the SAME linker the static
-    // graph below links/evaluates through, so `import()` from inside a Test262 module test
-    // resolves through the identical module registry (per-realm singleton instances,
-    // `ModuleLinker::instances` now persists across `evaluate` calls -- see module.rs) instead
-    // of unconditionally rejecting with "dynamic import is not supported by this host". This
-    // was the harness gap named in questions.md for
-    // `top-level-await/await-dynamic-import-resolution.js`,
-    // `top-level-await/dynamic-import-of-waiting-module.js` and
-    // `top-level-await/module-graphs-does-not-hang.js`.
-    let linker_for_hook = Rc::clone(&linker);
-    let root_path_for_hook = root_path.clone();
-    let path_for_hook = path.clone();
-    i.binding_set_module_loader_hook(Rc::new(
-        move |interp: &mut amazing_js::Interpreter, specifier: &str, referrer: &str| -> Result<JsValue, String> {
-            // The root module's own "\0module.id" is the raw (possibly non-canonical) `path`
-            // the protocol sent, exactly like the static resolver above special-cases; every
-            // other module's id is already the canonical path the resolver returned.
-            let referrer_path = if referrer.is_empty() || referrer == path_for_hook {
-                root_path_for_hook.join(&path_for_hook)
-            } else {
-                std::path::PathBuf::from(referrer)
-            };
-            let candidate = referrer_path.parent().unwrap_or(&root_path_for_hook).join(specifier);
-            let canonical = candidate.canonicalize().map_err(|error| error.to_string())?;
-            if !canonical.starts_with(&root_path_for_hook) {
-                return Err(format!("module specifier escapes Test262 checkout: {specifier}"));
-            }
-            let id = canonical.to_string_lossy().into_owned();
-            let source = std::fs::read_to_string(&canonical).map_err(|error| error.to_string())?;
-            let mut linker = linker_for_hook.borrow_mut();
-            linker.link(&id, &source).map_err(|failure| failure.message)?;
-            linker.evaluate(&id, interp).map_err(|failure| failure.message)?;
-            Ok(linker
-                .namespace_object(&id)
-                .expect("just-evaluated module has an instance"))
-        },
-    ));
+    // JS-19 item 1 (2026-09-27): NOT installing a dynamic-import loader hook here yet, on
+    // purpose, after measuring it as a net regression. The natural implementation -- borrow
+    // `linker_for_hook` mutably, `link` + `evaluate` + `namespace_object`, matching the static
+    // graph below -- panics ("RefCell already borrowed") the moment ANY module's own top-level
+    // code calls `import()`, not just a deeply nested case: the static-graph evaluation a few
+    // lines below already holds `linker.borrow_mut()` for the ENTIRE synchronous duration of
+    // evaluating the root module's top-level statements (that's what a Rust method call does),
+    // so a same-realm `import()` reached from inside those statements always re-enters the same
+    // RefCell while that outer borrow is still alive. This is not a borrow-scoping mistake in
+    // the hook closure -- no amount of narrowing which lines hold the guard fixes a genuine
+    // reentrant call into a method that itself holds `&mut self` for its whole body. The actual
+    // fix is architectural: `import()` must defer its real work to a microtask/job queued after
+    // the current synchronous call stack unwinds (13.3.10.1's HostLoadImportedModule really is
+    // meant to run as a later job, never inline), not call straight into the loader hook the
+    // moment the expression evaluates. Filed to questions.md for a follow-up ticket; until then,
+    // `dynamic_import` in interp_module_host.rs falls back to its `None` case ("dynamic import
+    // is not supported by this host"), which is what the corpus's zero-loss baseline measured.
     let evaluation = {
         let mut linker = linker.borrow_mut();
         linker.link(&path, &source).and_then(|_| linker.evaluate(&path, &mut i).map(|_| ()))
