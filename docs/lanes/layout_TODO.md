@@ -2195,3 +2195,130 @@ port taffy's `resolve_flexible_lengths`/cross-size stretch-with-wrap handling
 (`src/compute/flexbox.rs` @ `e661b35980d9644ad8f1df64e183d27e5884533b`, MIT)
 for the multi-line-wrap/shrink-to-fit-cross-size mechanism `align-self-016.html`
 exercises, then re-cluster to see how much of the 37-test cluster it closes.
+
+## LAYOUT-30 (1) -- flex column cross-size vs. line cross-size (base `596993d5`)
+
+Followed up on `align-self-016.html` (the pixel-verified case from the top
+"37 medium-region top-left lighter" cluster). Checked taffy's
+`src/compute/flexbox.rs` for a matching cross-size-determination routine to
+port verbatim; nothing lines up closely enough to copy (taffy's structure is
+organized very differently around its `FlexLine`/`AlgoConstants` types), so
+this is an **original implementation against CSS Flexbox 9.4 step 7
+directly**, not a literal taffy port -- no attribution header/notices row,
+per the porting policy (that's only for code actually copied).
+
+**Root cause (two, compounding, both in `layout_column`, `flex.rs`):**
+
+1. Cross-axis (width, for `flex-direction:column`) sizing computed each
+   item's used width *independently* against the raw container `content_w`,
+   never considering other items in the line. Spec (9.4 step 7): a
+   non-stretch, auto-cross-size item's used cross size is its fit-content,
+   clamped against the flex *line's* cross size -- and a sibling with a
+   definite (non-auto) cross size is part of what determines that line's
+   cross size, which can exceed the container's own specified size. Fixed
+   by computing `line_cross` (container width, widened by any item's own
+   definite outer width) up front, and clamping fit-content/stretch against
+   `line_cross` instead of `content_w`.
+2. That widened cross size must only feed the item's *final* box, not the
+   earlier main-size (height) measurement pass that happens before flexible
+   lengths are resolved (9.2 step 3: an auto-height item's flex base size is
+   measured against its own cross size if definite, else the *container's*
+   inner cross size -- not the line's). Using the widened width for that
+   measurement too shrank the item's settled height back down once its
+   floats no longer needed to stack. Split into `w_measure` (content_w-based,
+   feeds the height measurement) and the final `layout_widths[i]`
+   (line_cross-based, feeds the real box) via a shared `cross_size` closure.
+
+Along the way, found and fixed a related bug in `max_content_inner_width`'s
+`Flow::Blocks` branch: it folded every child through `f32::max` as if none
+could ever sit beside another, undercounting a max-content contribution
+from a *run of same-context floats* (which pack side by side with no forced
+line break, per CSS Intrinsic Sizing 3) -- summed consecutive floated
+children's widths as one "shelf" instead. **First attempt applied this to
+`Flow::Flex`/`Flow::Grid` too and caused a real regression**
+(`css-flexbox-test1.html`: `float` on an actual flex item is spec-ignored --
+items are always flex-formatted, never really floated -- so treating a
+`float:right` flex item as shelf-summable inflated the container's own
+max-content width). Caught by a full css-flexbox render-corpus run before
+committing; scoped the float-shelf logic to `Flow::Blocks` only, Flex/Grid
+kept their original per-child `max`.
+
+New regression test: `align_self_start_item_grows_to_sibling_cross_size_without_shrinking_its_settled_main_size`
+(`flex.rs`), reproducing `align-self-016.html`'s exact markup/CSS and
+asserting the item ends up 200x200 and the sibling 200 wide, matching the
+fixture's own `<meta assert>`.
+
+### Measured evidence
+
+- `cargo test -p amazing-layout --locked`: 382 passed (+1 new test), 1
+  ignored, 0 failed.
+- css/css-flexbox render corpus (worker-2, base `596993d5`), before vs.
+  after both fixes (float-shelf scoped to `Blocks` only): **pass 331->332,
+  mismatch 192->191**; baseline compare **gained=6 lost=15** (same 15
+  evidence-drift losses as before, zero new regressions after the scoping
+  fix -- the unscoped first attempt showed gained=6 lost=16, the extra loss
+  being `css-flexbox-test1.html`, before the fix was narrowed to `Blocks`).
+- The 6 newly-passing tests: `flex-direction.html`, `flexible-order.html`,
+  `flexbox-flex-wrap-horiz-002.html`, `flex-direction-row-reverse.html`,
+  `gap-007-rl.html`, `gap-007-lr.html`.
+
+**`align-self-016.html` itself is still `mismatch`** (same 20000 differing
+pixels as before this change) despite a scratch unit test confirming the
+*layout* geometry now comes out exactly as the fixture's own assert
+describes (item 200x200, sibling 200 wide). The remaining gap is downstream
+of layout -- most likely whether the item's content is actually painted over
+the container's own `border-right` when it overflows the container's
+specified width (this fix makes the item's box do that; whether paint
+honors it wasn't verified with real pixels, only geometry) -- not chased
+further this ticket; the mechanism fix still measurably helped six other
+real tests and is worth keeping regardless of this one case's final pixel
+proof. If revisited: render `align-self-016.html` directly with
+`render-wpt` and inspect the PNG for whether the border-right red is still
+visible at x:100-200.
+
+## LAYOUT-30 (2) -- css-position/abspos: the 4 pre-existing grid abspos losses (partial)
+
+Investigated the 4 losses named in the LAYOUT-29/LAYOUT-30 tickets
+(`abspos/positioned-grid-items-{008,016}`,
+`abspos/orthogonal-positioned-grid-items-008`,
+`grid-lanes/.../row-auto-placed-subgrid-inherited-tracks-003`).
+
+**These are real regressions, not evidence drift** -- confirmed by the same
+actual/reference-sha comparison used for the css-flexbox 15 (see item 3
+below): all 4 have `actual_sha256` **different** from the checked-in
+baseline (not matching), so this is not the "reference rendering drifted"
+pattern; the code's own output for these tests has genuinely changed since
+that baseline was captured. Per the base-commit checks earlier in LAYOUT-28
+and LAYOUT-29, they already failed identically at `8fccf8a4^` (the dev base
+before this lane's own work started), so the regression predates
+LAYOUT-28/29/30 -- somewhere further back in the project's history, not
+introduced by this lane's recent commits.
+
+Reproduced `positioned-grid-items-008.html` in isolation (`amazing-layout`'s
+own `layout_document_with_text` plus the test's and reference's real CSS,
+same corrected-diagnostic methodology as LAYOUT-29): **the layout geometry
+comes out byte-identical between the abspos test and its plain in-flow
+reference** -- all four items land at the same `border_box` in both (e.g.
+`(23,37,84,150)`, `(223,37,92.8,150)`, ...), meaning `amazing-layout`'s
+`position.rs` grid-area-as-containing-block machinery
+(`grid_generates_cb`/`grid_area_containing_block`/`grid_child_static_anchor`)
+already gets this case right when driven directly. Yet the real
+`render-wpt` corpus run reports a genuine pixel mismatch (3681 differing
+pixels for -008). The discrepancy is something the isolated
+`layout_document_with_text` path doesn't reach -- `render-wpt`'s pipeline
+differs (fixed viewport height via `crates/amazing/src/page.rs`'s real
+document flow vs. this diagnostic's unbounded height; possibly something in
+paint) and reproducing that gap needs the real pipeline, not another
+layout-only unit test.
+
+**Not resolved this ticket** -- budget went to item 1's fix and item 3's
+evidence work. Correctly did NOT refresh the checked-in evidence for these
+4 (see item 3): that would hide a real bug behind evidence that no longer
+reflects a real pass. Next step for whoever picks this back up: render
+`positioned-grid-items-008.html` with the real `render-wpt` binary (not a
+layout-only diagnostic) and diff its display list/PPM against the
+isolated-diagnostic's expected geometry to find where the real pipeline
+diverges from what `amazing-layout` alone produces.
+
+The broader "css-position/abspos" sweep beyond these 4 named cases was not
+started this ticket.
