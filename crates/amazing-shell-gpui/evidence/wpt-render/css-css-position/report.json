@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "wpt_revision": "unknown",
   "subdir": "css/css-position",
   "viewport": {
     "width": 800,
@@ -8,9 +8,9 @@
     "device_scale": 1
   },
   "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
-  "host": "box-node-0833a32b11cde471",
-  "generated": "2026-09-26T16:07:24Z",
-  "run_directory": "/home/user/amazing/out/shell/wpt-render/css-css-position/run-20260926T160713Z-90153",
+  "host": "worker-2",
+  "generated": "2026-09-27T12:35:31Z",
+  "run_directory": "/root/amazing/out/layout/wpt-render/css-css-position/run-20260927T123512Z-2183894",
   "inventory": {
     "document_files": 485,
     "testharness_files": 111,
@@ -19,16 +19,16 @@
     "selected": 54,
     "excluded": {
       "not-reftest": 234,
-      "scripted": 96,
+      "scripted": 105,
       "xml-reference-mode": 47,
       "external-stylesheet": 38,
       "embedded-resource": 6,
-      "flagged-environment": 10
+      "flagged-environment": 1
     }
   },
   "counts": {
-    "pass": 35,
-    "mismatch": 19,
+    "pass": 41,
+    "mismatch": 13,
     "error": 0,
     "timeout": 0,
     "unsupported": 0,
@@ -37,17 +37,17 @@
   "tests": [
     {
       "id": "css__css-position__static-position__inline-level-absolute-in-block-level-context-009.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 5000,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "f3768057fb46a5fcfcaec127e63a3d3106f73e5c895d8442061b8f8474a49aa6",
+      "actual_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "b5daf68382e8f7d35421d6ba16d2b35ccf650fe2ab1c901be81b8257d4c29438",
-      "detail": "maxDifference=255/0; totalPixels=5000/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__css-position__position-absolute-semi-replaced-stretch-button.html",
@@ -58,8 +58,8 @@
       "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "6c690cafffb2f1bf53527459057da27b0065c5a302ad8892f449043f62d3fda2",
-      "reference_sha256": "6c690cafffb2f1bf53527459057da27b0065c5a302ad8892f449043f62d3fda2",
+      "actual_sha256": "0a4a7f2cc30a7fab7724a238dbe2bc4d23dedf5e709bbeba8c9ecadec1cef898",
+      "reference_sha256": "0a4a7f2cc30a7fab7724a238dbe2bc4d23dedf5e709bbeba8c9ecadec1cef898",
       "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
       "detail": "maxDifference=0/0; totalPixels=0/0"
     },
@@ -124,14 +124,14 @@
       "classification": "mismatch",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 5000,
+      "differing_pixels": 2500,
       "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "f3768057fb46a5fcfcaec127e63a3d3106f73e5c895d8442061b8f8474a49aa6",
+      "actual_sha256": "6f0a9c4a1c335f1b3a62cc2ff0b919517c8ad17db340b758ea0e91da6af30022",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "b5daf68382e8f7d35421d6ba16d2b35ccf650fe2ab1c901be81b8257d4c29438",
-      "detail": "maxDifference=255/0; totalPixels=5000/0"
+      "diff_sha256": "a357bdfc45a57afb3650f3198b0f867b80656b5b5597163d4339beea3a87ba24",
+      "detail": "maxDifference=255/0; totalPixels=2500/0"
     },
     {
       "id": "css__css-position__position-relative-011.html",
@@ -254,8 +254,8 @@
       "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "reference_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "actual_sha256": "4686d509282af70263c44db064689f6b596cf39d6be0b4e3449f86586af3acea",
+      "reference_sha256": "4686d509282af70263c44db064689f6b596cf39d6be0b4e3449f86586af3acea",
       "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
       "detail": "maxDifference=0/0; totalPixels=0/0"
     },
@@ -275,31 +275,31 @@
     },
     {
       "id": "css__css-position__static-position__inline-level-absolute-in-block-level-context-004.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 5000,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "f0801c955db3c3e0d1a260f0c25666da3fbf979eab8c9549d5bd4011b2c15b50",
+      "actual_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "5f3f614532aa3e94e8854c23873f258700867fd2fab76d43b34a864978185067",
-      "detail": "maxDifference=255/0; totalPixels=5000/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__css-position__static-position__inline-level-absolute-in-block-level-context-012.html",
       "classification": "mismatch",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 5000,
+      "differing_pixels": 2500,
       "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "f0801c955db3c3e0d1a260f0c25666da3fbf979eab8c9549d5bd4011b2c15b50",
+      "actual_sha256": "27a7e8148642b2700e3995ad704cb5ec5bbe2210519aa4d1322125986d6bc152",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "5f3f614532aa3e94e8854c23873f258700867fd2fab76d43b34a864978185067",
-      "detail": "maxDifference=255/0; totalPixels=5000/0"
+      "diff_sha256": "e3912f5ba414f7610eb4c8813baabc2c835e2e51a04a6af953049eb59f58a8f3",
+      "detail": "maxDifference=255/0; totalPixels=2500/0"
     },
     {
       "id": "css__css-position__nested-inline-abspos-child.html",
@@ -404,14 +404,14 @@
       "classification": "mismatch",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 5000,
+      "differing_pixels": 2500,
       "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "f0801c955db3c3e0d1a260f0c25666da3fbf979eab8c9549d5bd4011b2c15b50",
+      "actual_sha256": "27a7e8148642b2700e3995ad704cb5ec5bbe2210519aa4d1322125986d6bc152",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "5f3f614532aa3e94e8854c23873f258700867fd2fab76d43b34a864978185067",
-      "detail": "maxDifference=255/0; totalPixels=5000/0"
+      "diff_sha256": "e3912f5ba414f7610eb4c8813baabc2c835e2e51a04a6af953049eb59f58a8f3",
+      "detail": "maxDifference=255/0; totalPixels=2500/0"
     },
     {
       "id": "css__css-position__position-relative-010.html",
@@ -446,28 +446,28 @@
       "classification": "mismatch",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 5000,
+      "differing_pixels": 2500,
       "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "f0801c955db3c3e0d1a260f0c25666da3fbf979eab8c9549d5bd4011b2c15b50",
+      "actual_sha256": "27a7e8148642b2700e3995ad704cb5ec5bbe2210519aa4d1322125986d6bc152",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "5f3f614532aa3e94e8854c23873f258700867fd2fab76d43b34a864978185067",
-      "detail": "maxDifference=255/0; totalPixels=5000/0"
+      "diff_sha256": "e3912f5ba414f7610eb4c8813baabc2c835e2e51a04a6af953049eb59f58a8f3",
+      "detail": "maxDifference=255/0; totalPixels=2500/0"
     },
     {
       "id": "css__css-position__static-position__inline-level-absolute-in-block-level-context-007.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 5000,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "f3768057fb46a5fcfcaec127e63a3d3106f73e5c895d8442061b8f8474a49aa6",
+      "actual_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "b5daf68382e8f7d35421d6ba16d2b35ccf650fe2ab1c901be81b8257d4c29438",
-      "detail": "maxDifference=255/0; totalPixels=5000/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__css-position__position-absolute-semi-replaced-stretch-other.html",
@@ -478,8 +478,8 @@
       "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "4cfdd436e1eca6d4f5e3519855ddc60d932a9fc137c2243c223cb01de4b9cbdc",
-      "reference_sha256": "4cfdd436e1eca6d4f5e3519855ddc60d932a9fc137c2243c223cb01de4b9cbdc",
+      "actual_sha256": "3afe2dea1f8098d389a410595173840c392b3d6a1227042f2bca5cc396608971",
+      "reference_sha256": "3afe2dea1f8098d389a410595173840c392b3d6a1227042f2bca5cc396608971",
       "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
       "detail": "maxDifference=0/0; totalPixels=0/0"
     },
@@ -544,14 +544,14 @@
       "classification": "mismatch",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 5000,
+      "differing_pixels": 2500,
       "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "f3768057fb46a5fcfcaec127e63a3d3106f73e5c895d8442061b8f8474a49aa6",
+      "actual_sha256": "6f0a9c4a1c335f1b3a62cc2ff0b919517c8ad17db340b758ea0e91da6af30022",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "b5daf68382e8f7d35421d6ba16d2b35ccf650fe2ab1c901be81b8257d4c29438",
-      "detail": "maxDifference=255/0; totalPixels=5000/0"
+      "diff_sha256": "a357bdfc45a57afb3650f3198b0f867b80656b5b5597163d4339beea3a87ba24",
+      "detail": "maxDifference=255/0; totalPixels=2500/0"
     },
     {
       "id": "css__css-position__position-relative-table-td-top.html",
@@ -639,17 +639,17 @@
     },
     {
       "id": "css__css-position__static-position__inline-level-absolute-in-block-level-context-006.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 5000,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "f0801c955db3c3e0d1a260f0c25666da3fbf979eab8c9549d5bd4011b2c15b50",
+      "actual_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "5f3f614532aa3e94e8854c23873f258700867fd2fab76d43b34a864978185067",
-      "detail": "maxDifference=255/0; totalPixels=5000/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__css-position__position-relative-table-tbody-left-absolute-child.html",
@@ -667,17 +667,17 @@
     },
     {
       "id": "css__css-position__static-position__inline-level-absolute-in-block-level-context-008.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 5000,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "f3768057fb46a5fcfcaec127e63a3d3106f73e5c895d8442061b8f8474a49aa6",
+      "actual_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "b5daf68382e8f7d35421d6ba16d2b35ccf650fe2ab1c901be81b8257d4c29438",
-      "detail": "maxDifference=255/0; totalPixels=5000/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__css-position__position-relative-012.html",
@@ -709,31 +709,31 @@
     },
     {
       "id": "css__css-position__static-position__inline-level-absolute-in-block-level-context-005.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 5000,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "f0801c955db3c3e0d1a260f0c25666da3fbf979eab8c9549d5bd4011b2c15b50",
+      "actual_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "5f3f614532aa3e94e8854c23873f258700867fd2fab76d43b34a864978185067",
-      "detail": "maxDifference=255/0; totalPixels=5000/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__css-position__static-position__inline-level-absolute-in-block-level-context-001.html",
       "classification": "mismatch",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 5000,
+      "differing_pixels": 2500,
       "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "f3768057fb46a5fcfcaec127e63a3d3106f73e5c895d8442061b8f8474a49aa6",
+      "actual_sha256": "6f0a9c4a1c335f1b3a62cc2ff0b919517c8ad17db340b758ea0e91da6af30022",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "b5daf68382e8f7d35421d6ba16d2b35ccf650fe2ab1c901be81b8257d4c29438",
-      "detail": "maxDifference=255/0; totalPixels=5000/0"
+      "diff_sha256": "a357bdfc45a57afb3650f3198b0f867b80656b5b5597163d4339beea3a87ba24",
+      "detail": "maxDifference=255/0; totalPixels=2500/0"
     },
     {
       "id": "css__css-position__position-absolute-root-element-grid.html",
@@ -772,8 +772,8 @@
       "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "3dc5a0cf978ea9eaec2ac39087c91be2e73bf14c0ec1f4d6397cb38c874eb225",
-      "reference_sha256": "3dc5a0cf978ea9eaec2ac39087c91be2e73bf14c0ec1f4d6397cb38c874eb225",
+      "actual_sha256": "2882b23d0bb45a2919ce03c25a4ef3e8588cbae11de02b984108f93eaae9c20e",
+      "reference_sha256": "2882b23d0bb45a2919ce03c25a4ef3e8588cbae11de02b984108f93eaae9c20e",
       "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
       "detail": "maxDifference=0/0; totalPixels=0/0"
     },
@@ -786,10 +786,75 @@
       "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "03e81a7a013b38f1d6463abd0611bffe91c6901022a0003c97194e88d56fc9f4",
-      "reference_sha256": "03e81a7a013b38f1d6463abd0611bffe91c6901022a0003c97194e88d56fc9f4",
+      "actual_sha256": "e621ef75d7a44f9dc97a74e28429c46456a34aa6f24182958bb910378e9a219f",
+      "reference_sha256": "e621ef75d7a44f9dc97a74e28429c46456a34aa6f24182958bb910378e9a219f",
       "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
       "detail": "maxDifference=0/0; totalPixels=0/0"
     }
-  ]
+  ],
+  "baseline_compare": {
+    "baseline": "/root/amazing/wt/layout/crates/amazing-shell-gpui/evidence/wpt-render/css-css-position/report.json",
+    "gained": [
+      "css__css-position__static-position__inline-level-absolute-in-block-level-context-004.html",
+      "css__css-position__static-position__inline-level-absolute-in-block-level-context-005.html",
+      "css__css-position__static-position__inline-level-absolute-in-block-level-context-006.html",
+      "css__css-position__static-position__inline-level-absolute-in-block-level-context-007.html",
+      "css__css-position__static-position__inline-level-absolute-in-block-level-context-008.html",
+      "css__css-position__static-position__inline-level-absolute-in-block-level-context-009.html"
+    ],
+    "lost": [],
+    "changed": [],
+    "unchanged": [
+      "css__css-position__nested-inline-abspos-child-with-siblings.html",
+      "css__css-position__nested-inline-abspos-child.html",
+      "css__css-position__position-absolute-large-negative-inset.html",
+      "css__css-position__position-absolute-multicol-001.html",
+      "css__css-position__position-absolute-root-element-flex.html",
+      "css__css-position__position-absolute-root-element-grid.html",
+      "css__css-position__position-absolute-semi-replaced-stretch-button.html",
+      "css__css-position__position-absolute-semi-replaced-stretch-input.html",
+      "css__css-position__position-absolute-semi-replaced-stretch-other.html",
+      "css__css-position__position-fixed-overflow-print.html",
+      "css__css-position__position-fixed-root-element-flex.html",
+      "css__css-position__position-fixed-root-element-grid.html",
+      "css__css-position__position-relative-008.html",
+      "css__css-position__position-relative-009.html",
+      "css__css-position__position-relative-010.html",
+      "css__css-position__position-relative-011.html",
+      "css__css-position__position-relative-012.html",
+      "css__css-position__position-relative-013.html",
+      "css__css-position__position-relative-table-caption.html",
+      "css__css-position__position-relative-table-tbody-left-absolute-child.html",
+      "css__css-position__position-relative-table-tbody-left.html",
+      "css__css-position__position-relative-table-tbody-top-absolute-child.html",
+      "css__css-position__position-relative-table-tbody-top.html",
+      "css__css-position__position-relative-table-td-left.html",
+      "css__css-position__position-relative-table-td-top.html",
+      "css__css-position__position-relative-table-tfoot-left-absolute-child.html",
+      "css__css-position__position-relative-table-tfoot-left.html",
+      "css__css-position__position-relative-table-tfoot-top-absolute-child.html",
+      "css__css-position__position-relative-table-tfoot-top.html",
+      "css__css-position__position-relative-table-thead-left-absolute-child.html",
+      "css__css-position__position-relative-table-thead-left.html",
+      "css__css-position__position-relative-table-thead-top-absolute-child.html",
+      "css__css-position__position-relative-table-thead-top.html",
+      "css__css-position__position-relative-table-tr-left-absolute-child.html",
+      "css__css-position__position-relative-table-tr-left.html",
+      "css__css-position__position-relative-table-tr-top-absolute-child.html",
+      "css__css-position__position-relative-table-tr-top.html",
+      "css__css-position__position-static-001.html",
+      "css__css-position__static-position__inline-level-absolute-in-block-level-context-001.html",
+      "css__css-position__static-position__inline-level-absolute-in-block-level-context-002.html",
+      "css__css-position__static-position__inline-level-absolute-in-block-level-context-003.html",
+      "css__css-position__static-position__inline-level-absolute-in-block-level-context-010.html",
+      "css__css-position__static-position__inline-level-absolute-in-block-level-context-011.html",
+      "css__css-position__static-position__inline-level-absolute-in-block-level-context-012.html",
+      "css__css-position__sticky__position-sticky-in-fixed-container.html",
+      "css__css-position__sticky__position-sticky-rtl.html",
+      "css__css-position__sticky__position-sticky-table-pixel-rounding.html",
+      "css__css-position__sticky__position-sticky-table-td-subpixel-zoom.html"
+    ],
+    "new": [],
+    "removed": []
+  }
 }
