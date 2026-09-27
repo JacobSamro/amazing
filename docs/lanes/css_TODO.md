@@ -2462,6 +2462,24 @@ workspace gate (win-001-equivalent, `linux-run.sh`): `cargo nextest run
 --workspace --locked` 3305/3305, `cargo test --workspace --locked --doc`
 4/4. Commit `55657df3`.
 
+## Cross-lane: bare `stretch`/`-webkit-fill-available` sizing keyword (2026-09-27, authorized by integrator, css lane idle)
+
+`values.rs`'s `parse()` accepted `min-content`/`max-content`/`fit-content`
+as bare keywords for `width`/`height`/`min-width`/`min-height`/`max-width`/
+`max-height`/`flex-basis` but had no arm for CSS Sizing 4's `stretch`
+(née `-webkit-fill-available`), so `expand_declaration` dropped every such
+declaration as invalid before `amazing-layout` ever saw it -- root-caused by
+the layout lane (LAYOUT-32) via `css/css-sizing/stretch/min-width-1.html`'s
+exact 5000px/50x100 shortfall. Added a `Keyword::Stretch` variant and one new
+match arm, `"stretch" | "-webkit-fill-available" if size => Some(Keyword::Stretch)`,
+mirroring the three existing size keywords exactly (`crates/amazing-css/src/values.rs`,
+~9 lines). `math.rs`'s separate `calc_size_basis` (the `calc-size()` basis
+grammar) already accepted `stretch`; this only closes the bare-keyword path.
+No exhaustive match over `Keyword` exists outside `values.rs`, so the new
+variant is additive. Applied and gated by the layout lane as part of
+LAYOUT-33 (amazing-css + amazing-layout crate tests, workspace gate); see
+`docs/lanes/layout_TODO.md`'s LAYOUT-33 section for the corpus numbers.
+
 ## Next
 
 Biggest clusters first (post-CSS-30): css-text (253 failing, unimplemented

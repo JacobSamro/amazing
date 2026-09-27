@@ -189,6 +189,7 @@ pub enum Keyword {
     MaxContent,
     FitContent,
     Content,
+    Stretch,
 }
 
 /// A subgridded axis adopts track sizes from its parent. Names are kept in
@@ -843,6 +844,14 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         "min-content" if size => Some(Keyword::MinContent),
         "max-content" if size => Some(Keyword::MaxContent),
         "fit-content" if size => Some(Keyword::FitContent),
+        // CSS Sizing 4 `stretch` (formerly `-webkit-fill-available`): accept
+        // the bare keyword for the same sizing properties as the three
+        // keywords above. `math.rs`'s `calc_size_basis` already accepted
+        // `stretch` as a `calc-size()` basis; this is the separate bare-
+        // keyword grammar path every `width: stretch` (no wrapper) fixture
+        // uses -- amazing-layout already resolves it once it survives the
+        // cascade (LAYOUT-32/33).
+        "stretch" | "-webkit-fill-available" if size => Some(Keyword::Stretch),
         "content" if property == "flex-basis" => Some(Keyword::Content),
         _ => None,
     };
