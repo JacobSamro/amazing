@@ -400,10 +400,20 @@ fn get_worker() -> std::io::Result<Sender<CoroutineJob>> {
     Ok(job_tx)
 }
 
+/// Most idle workers kept parked for reuse. A burst of concurrently suspended coroutines needs
+/// one OS thread each; once they finish, only this many stay parked and the rest exit, so a
+/// burst's threads are not retained for the life of the process (JSVM-9 measured 5000 in-flight
+/// async functions leaving 5000 idle workers behind before this cap).
+const MAX_IDLE_WORKERS: usize = 16;
+
 fn worker_loop(job_rx: Receiver<CoroutineJob>, self_tx: Sender<CoroutineJob>) {
     while let Ok(job) = job_rx.recv() {
         run_job(job);
-        IDLE.lock().unwrap().push(self_tx.clone());
+        let mut idle = IDLE.lock().unwrap();
+        if idle.len() >= MAX_IDLE_WORKERS {
+            return;
+        }
+        idle.push(self_tx.clone());
     }
 }
 
