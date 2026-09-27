@@ -70,6 +70,7 @@ impl Interpreter {
         intl_method(self, function, "supportedLocalesOf", 1, intl_number_supported_locales);
         let _ = prototype.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
             binary_property(JsValue::str("Intl.DateTimeFormat")));
+        intl_register_intrinsic(self, "DateTimeFormat", function, &prototype);
         let _ = namespace.borrow_mut().define("DateTimeFormat", binary_writable_property(constructor));
     }
 }

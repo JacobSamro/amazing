@@ -25,6 +25,7 @@ impl Interpreter {
         intl_method(self, function, "supportedLocalesOf", 1, intl_number_supported_locales);
         let _ = prototype.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
             binary_property(JsValue::str("Intl.Segmenter")));
+        intl_register_intrinsic(self, "Segmenter", function, &prototype);
         let _ = namespace.borrow_mut().define("Segmenter", binary_writable_property(constructor));
     }
 }

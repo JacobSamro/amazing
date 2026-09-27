@@ -242,3 +242,67 @@ fn form_control_text_is_not_container_content() {
         "Save"
     );
 }
+
+/// A11Y-15: an embedded `<textarea>`'s value substitution must read its live
+/// text (`Dom::textarea_value`) — before this ticket, `control_value` had no
+/// `<textarea>` branch at all, so a labelled textarea contributed nothing.
+/// Uses `aria-labelledby` to a `<label>` from a *third*, unrelated element
+/// (rather than implicit `<label>` wrapping) so the textarea's own value
+/// isn't subject to the self-reference exclusion a control's *own* name
+/// computation applies to its associated label — this exercises
+/// `collect_content`'s `embed_control_values: true` path for a `<label>`
+/// directly, the same one HTML's real label-association step uses for a
+/// *different* labelled control than the one carrying the value.
+#[test]
+fn embedded_textarea_value_substitution_reads_live_text() {
+    use crate::test_support::{ax_of_tag, dom_of_tag, document, rebuild};
+
+    let mut doc = document(
+        "<label id=\"lbl\">Bio <textarea>original</textarea></label>\
+         <div aria-labelledby=\"lbl\">x</div>",
+    );
+    let name = ax_of_tag(&doc, "div").unwrap().name.clone();
+    assert!(name.contains("original"), "expected the textarea's parsed text in the name, got {name:?}");
+
+    let node = dom_of_tag(&doc, "textarea").unwrap();
+    doc.dom.set_textarea_value(node, "updated".encode_utf16().collect()).unwrap();
+    rebuild(&mut doc);
+
+    let name = ax_of_tag(&doc, "div").unwrap().name.clone();
+    assert!(name.contains("updated"), "expected the live textarea value in the name, got {name:?}");
+    assert!(!name.contains("original"), "the stale parsed text must not still show, got {name:?}");
+}
+
+/// A11Y-15: an embedded `<select>`'s value substitution must read its live
+/// selectedness (`Dom::option_selected`, via `selected_native_option_text`)
+/// rather than the `selected` content attribute — picking a different
+/// option never touches the attribute. See the textarea test above for why
+/// `aria-labelledby` from a third element is used instead of implicit
+/// `<label>` wrapping.
+#[test]
+fn embedded_select_value_substitution_reads_live_selection() {
+    use crate::test_support::{ax_of_tag, document, rebuild};
+    use amazing_dom::NodeIdx;
+
+    let mut doc = document(
+        "<label id=\"lbl\">Choice <select><option>A</option><option>B</option></select></label>\
+         <div aria-labelledby=\"lbl\">x</div>",
+    );
+    let name = ax_of_tag(&doc, "div").unwrap().name.clone();
+    assert!(name.contains('A'), "HTML default: first option selected, got {name:?}");
+
+    let option_b = doc
+        .dom
+        .tree_order(NodeIdx(0))
+        .into_iter()
+        .find(|n| {
+            doc.dom.name(*n) == Some("option")
+                && crate::host::child_text(&doc.dom, *n).trim() == "B"
+        })
+        .unwrap();
+    doc.dom.set_option_selected(option_b, true).unwrap();
+    rebuild(&mut doc);
+
+    let name = ax_of_tag(&doc, "div").unwrap().name.clone();
+    assert!(name.contains('B'), "expected the live selection in the name, got {name:?}");
+}

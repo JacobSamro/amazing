@@ -1,0 +1,54 @@
+{
+  "ticket": "JSRT-17 %AsyncFunction% intrinsic, using/await-using disposal, DisposableStack/AsyncDisposableStack",
+  "base_sha": "2248f9bd",
+  "implementation_sha": "53194dee",
+  "items": [
+    {
+      "item": "%AsyncFunction%/%GeneratorFunction%/%AsyncGeneratorFunction% intrinsics",
+      "files": ["crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs",
+                "crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_realms.rs"],
+      "root_cause": "These three constructors did not exist at all: async/generator/async-generator functions had no CreateDynamicFunction-style constructor, no correct [[Prototype]] linkage to a shared %XFunction.prototype%, and make_function gave every function (not just these three) the wrong own \"prototype\"-property attributes; plain async functions incorrectly had both an own \"prototype\" property and a working [[Construct]].",
+      "fix": "Added native_{async_function,generator_function,async_generator_function}_constructor (all delegating to a shared native_dynamic_function helper) as non-global natives whose own [[Prototype]] is %Function% and whose own .prototype is {writable:false,enumerable:false,configurable:false}; new generator_proto/async_generator_proto shared singletons (%GeneratorPrototype%/%AsyncGeneratorPrototype%) with correct constructor/@@toStringTag; make_function now sets constructible = !(is_async||is_generator), skips the per-function \"prototype\" object entirely for plain async functions, and gives every function's own \"prototype\" property the correct {writable:true,enumerable:false,configurable:false} attributes (was wrong for ordinary functions too, not just generators). capture_intrinsic_constructors additionally registers these three deliberately-non-global constructors by name (read off each shared prototype's own \"constructor\" property) so construct_with_new_target's cross-realm GetPrototypeFromConstructor resolves them correctly.",
+      "target_tests": "built-ins/AsyncFunction, built-ins/GeneratorFunction, built-ins/AsyncGeneratorFunction, language/expressions/async-arrow-function"
+    },
+    {
+      "item": "using / await using runtime disposal",
+      "files": ["crates/amazing-js/src/interp.rs"],
+      "root_cause": "Parsing already tagged using/await-using declarations with resource_kind, but nothing at runtime ever looked up or called [Symbol.dispose]/[Symbol.asyncDispose]; StmtKind::Var treated them exactly like const.",
+      "fix": "Ported and adapted from lucid-softworks/lumen (crates/lumen/src/{eval,interpreter}.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT: a using_stack: Vec<Vec<Disposable>> of disposal frames on Interpreter. StmtKind::Var registers a resource via add_disposable (looks up @@asyncDispose falling back to @@dispose for await-using, else @@dispose only; throws TypeError immediately unless the value is null/undefined, which is skipped). Disposal boundaries: StmtKind::Block (only when it directly declares a resource), a function body's own top level (FunctionBody::Block, sync functions only -- async-function bodies compile through amazing-js/src/vm, out of this lane's scope, see Known Gaps), a for-head declaration (loop_for/loop_for_inner split, disposed once at loop exit), and a for-of per-iteration resource (exec_for_of's for_of_iteration_body/for_of_iteration_step, disposed at the end of every iteration). dispose_frame runs a frame's resources in reverse, folding multiple disposal errors into a SuppressedError chain (a single disposal error, with nothing already pending, propagates as-is) via a new make_suppressed_error helper matching the existing SuppressedError constructor's own shape. await_value was factored out of the pre-existing UnOp::Await stub (only unwraps an already-settled promise; a pending one degrades to undefined, since this tree-walking interpreter has no coroutine/suspension machinery) and reused for awaited disposal.",
+      "target_tests": "language/statements/using, language/statements/await-using"
+    },
+    {
+      "item": "DisposableStack / AsyncDisposableStack",
+      "files": ["crates/amazing-js/src/interp_disposable.rs (new)", "crates/amazing-js/src/value.rs",
+                "crates/amazing-js/src/builtins_std_collections.rs"],
+      "root_cause": "Neither builtin existed (0/93 and 0/104 in their Test262 directories).",
+      "fix": "New Exotic::DisposableStack(DisposableStackState) internal-slot variant (design adapted from lumen's Disposable/stack-entry shape onto this codebase's Exotic-variant convention rather than lumen's own string-keyed-property storage). use/adopt/defer/dispose/disposeAsync/move/disposed implemented per spec 11.4; disposeAsync always returns a promise (rejecting rather than throwing on a brand failure), computed synchronously then wrapped via new_promise since this interpreter has no real async suspension. Cross-brand method borrowing (e.g. DisposableStack.prototype.use.call(anAsyncDisposableStack)) is brand-checked and throws TypeError, since the two kinds have distinct internal slots per spec ([[DisposableState]] vs [[AsyncDisposableState]]) -- found via a first Test262 run showing 6+8 unexpected-success failures, fixed by threading want_async through require_disposable_state and splitting use/adopt/defer/move/disposed into sync/async native-fn pairs (dispose/disposeAsync were already separate). New Symbol.asyncDispose well-known symbol (value.rs) backs both the statement-level and stack-level asyncDispose lookups.",
+      "target_tests": "built-ins/DisposableStack, built-ins/AsyncDisposableStack"
+    }
+  ],
+  "known_gaps": [
+    "Generator/async-generator function BODIES still cannot execute on the tree-walk path (separate, previously-escalated js-vm blocker) -- caps GeneratorFunction/AsyncGeneratorFunction Test262 pass rates and the 'generators are not implemented' / 'value is not callable' failures seen in using/await-using's own directories.",
+    "await-using disposal at the end of an async-function-body / async-generator-body cannot be implemented in this lane: async (non-generator) function bodies compile and run through amazing-js/src/vm's compile_async_body/call_async_with_env (js-vm-owned; amazing-js/src/vm and gc are out of scope for js-runtime per AGENTS.md). Filed in questions.md for js-vm.",
+    "await_value only unwraps an already-settled promise; a genuinely-pending disposal promise degrades to undefined instead of truly suspending (no coroutine machinery on the tree-walk path). This underlies the residual await-using failures around real microtask-tick ordering (e.g. 'Expected statements ... to evaluate in a different microtask', AsyncDisposableStack's '[dispose, job 1, job 2] vs [job 1, dispose, job 2]' ordering) and is the same class of limitation as the pre-existing UnOp::Await stub.",
+    "await-using's 'tagged templates are not implemented' and module-top-level disposal (initializer-disposed-at-end-of-module.js et al) were not addressed in this ticket."
+  ],
+  "gates": {
+    "crate_amazing_js": "406 pass, 1 skip (cargo nextest -p amazing-js --locked)",
+    "workspace_nextest": "3381 pass, 0 fail, 17 skip, 125.850s (cargo nextest run --workspace --locked)",
+    "workspace_doctests": "all ok, 0 failed (cargo test --workspace --locked --doc)",
+    "test262_before_after": {
+      "note": "Directory-scoped scripts/test262.py --only runs, before (base_sha 2248f9bd) vs after (implementation_sha), per the coordinator's reduced JSRT-17 gate (full sharded sweep explicitly skipped -- the integrator runs that at merge).",
+      "built-ins/AsyncFunction": {"before": "11 pass / 7 fail", "after": "18 pass / 0 fail"},
+      "built-ins/AsyncGeneratorFunction": {"before": "10 pass / 13 fail", "after": "16 pass / 7 fail"},
+      "built-ins/GeneratorFunction": {"before": "10 pass / 13 fail", "after": "17 pass / 6 fail"},
+      "built-ins/DisposableStack": {"before": "0 pass / 93 fail", "after": "93 pass / 0 fail"},
+      "built-ins/AsyncDisposableStack": {"before": "0 pass / 104 fail", "after": "100 pass / 4 fail"},
+      "built-ins/SuppressedError": {"before": "22 pass / 0 fail", "after": "22 pass / 0 fail (unchanged, reused as-is)"},
+      "language/statements/using": {"before": "52 pass / 28 fail", "after": "68 pass / 12 fail"},
+      "language/statements/await-using": {"before": "43 pass / 49 fail / 6 unsupported", "after": "47 pass / 45 fail / 6 unsupported"},
+      "language/expressions/async-arrow-function": {"before": "55 pass / 5 fail", "after": "56 pass / 4 fail"},
+      "result": "Every directory's pass count is >= its before count; no directory lost a previously-passing file. Net across these 9 directories: +7, +6, +7, +93, +100, +0, +16, +4, +1."
+    }
+  }
+}

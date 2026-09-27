@@ -5,6 +5,7 @@
 //! wraps the same Document/Element prototypes as the top realm rather than a
 //! fully independent intrinsic set.
 use super::*;
+use crate::dom_host::BrowserDomHost;
 use amazing_dom::document_surface::ReadyState;
 use amazing_net::url::{ParsedUrl, UrlOrigin};
 use amazing_fetch::{HttpUrl, HeaderList, check_frame_embedding,
@@ -33,6 +34,16 @@ struct FrameDocument {
     document: Option<NodeIdx>,
     url: String,
     sandbox: SandboxFlags,
+    /// HTML-34: the decoded HTML source still waiting to be parsed, for an
+    /// HTML (never XML/XHTML) child document -- `navigate_iframes` only
+    /// creates an *empty* document node and stashes this; `setup_iframe_
+    /// window`'s deferred tick does the actual script-interleaved parse
+    /// (`run_interleaved_iframe_parse`), so a script sees the document
+    /// built so far, not the finished tree. `None` for an XML/XHTML child
+    /// (still built eagerly and fully in `navigate_iframes`, since
+    /// `ResumableParser` is HTML-only) or once this document's interleaved
+    /// parse has already consumed it.
+    html: Option<String>,
 }
 
 /// The `sandbox` attribute's recognized tokens, ASCII-case-insensitive and
@@ -237,6 +248,28 @@ fn content_type(response: &amazing_net::Response, logical_url: &str,
     }
 }
 
+/// HTML-34: `navigate_iframes`'s fetch/decide-mime step hands back either an
+/// HTML source string (deferred to `setup_iframe_window`'s interleaved
+/// parse, `setup_iframe_window`'s job) or an already-fully-parsed tree
+/// (`navigate_iframes` imports it immediately, one-shot, as before).
+enum LoadedChildDocument {
+    /// `srcdoc`, and any fetched `text/html` response -- both can contain
+    /// scripts, which is the entire reason to interleave: a script sees the
+    /// document built so far, not (as `import_inert_document` alone would
+    /// give it) the whole thing already finished.
+    Deferred { source: String, url: String, mime: String, encoding: &'static str },
+    /// XML/XHTML (`ResumableParser` is HTML-only, so these still parse
+    /// one-shot, exactly as before this ticket) -- and the canned
+    /// `about:blank` skeleton, which is *never* going to have a script (it's
+    /// a fixed, three-element constant, not fetched or user-supplied
+    /// content), so deferring it would only cost every caller the
+    /// spec-required synchronous availability of a bare iframe's
+    /// `contentDocument.documentElement`/`.body` right after insertion, for
+    /// no benefit at all: see `removing_a_freshly_appended_iframe_before_
+    /// its_load_dispatch_does_not_panic`'s regression test below.
+    Eager { parsed: Dom, url: String, mime: String, encoding: &'static str },
+}
+
 fn parse_response(body: &[u8], mime: &str, charset: Option<&str>) -> Result<(Dom, &'static str), String> {
     if mime == "text/html" {
         let decoded = amazing_html::encoding::decode(body, charset);
@@ -439,12 +472,35 @@ impl RuntimeBindings {
             let mut adapter = RuntimeBindingHost { js: i, state: state.clone() };
             // A real Document/Element/Array/... surface for this realm, not
             // the top realm's: `frame.contentWindow.Array !== window.Array`
-            // and `frame.contentWindow.Document !== window.Document`. Storage,
-            // messaging, canvas and net stay top-only for this slice.
+            // and `frame.contentWindow.Document !== window.Document`.
+            // NET-42: `install_net()` was missing here entirely, so every
+            // net-backed global (starting with `document.cookie`, which is
+            // what surfaced this) was simply absent from every child realm.
+            // `install_storage_interfaces`/`install_messaging` had the exact
+            // same gap -- both only install classes/constructors onto
+            // *this* realm's own global object (mirroring the top-level
+            // realm's install sequence in `runtime_binding_host.rs`), so
+            // both are safe to add the same way. Canvas stays top-only too,
+            // unrequested and unrelated to this fix.
+            //
+            // HTML-34: this alone did NOT give a frame a real, working,
+            // origin-scoped `localStorage`/`sessionStorage` -- fixed below,
+            // together with `document_url` becoming realm-scoped for the
+            // duration of a child realm's own script execution (`setup_
+            // iframe_window`/`run_interleaved_iframe_parse`): `Storage`'s
+            // own read/write path (`runtime_host_storage.rs::storage_key`)
+            // resolves the CURRENT document's origin from that one shared
+            // field, so a correctly-scoped `document_url` is what actually
+            // makes `install_storage_interfaces`'s accessor-based getter
+            // (installed above) key its data to THIS frame's origin instead
+            // of the top-level page's. See docs/lanes/html_TODO.md.
             install_interfaces(&mut adapter)?;
             adapter.install_dom_unscopables()?;
             adapter.install_window_event_target()?;
             adapter.install_selection_global()?;
+            adapter.install_net()?;
+            adapter.install_storage_interfaces()?;
+            adapter.install_messaging()?;
             adapter.install_iframe_members()?;
             adapter.install_html_form_globals()?;
             adapter.install_document_write_globals()?;
@@ -457,6 +513,14 @@ impl RuntimeBindings {
             let wrapped = adapter.wrap_node(document)?;
             let fresh = EnvHandle::new(EnvKind::Global, Some(adapter.js.global_env.clone()));
             fresh.declare_lexical("document", wrapped.clone(), false)?;
+            // HTML-34: same stable-identity shadowing as `document` above,
+            // now that this realm's own `document_url` scoping (set around
+            // its actual script execution, not here at realm-creation time)
+            // makes the underlying `Storage` area resolve to this frame's
+            // own origin instead of the top-level page's.
+            let (local_storage, session_storage) = adapter.storage_lexical_areas()?;
+            fresh.declare_lexical("localStorage", local_storage, false)?;
+            fresh.declare_lexical("sessionStorage", session_storage, false)?;
             adapter.js.global_env = fresh;
             adapter.js.global_obj.borrow_mut().set_own("document", wrapped);
             Ok(())
@@ -492,16 +556,18 @@ impl RuntimeBindings {
                 .is_some_and(|old| old.src == src && old.srcdoc == srcdoc) {
                 continue;
             }
-            let loaded = (|| -> Result<(Dom, String, String, &'static str), String> {
+            let loaded = (|| -> Result<LoadedChildDocument, String> {
                 // `srcdoc` takes priority over `src` per spec: its content is
                 // used verbatim and the navigable's URL becomes "about:srcdoc"
                 // rather than being resolved/fetched.
                 if let Some(html) = srcdoc.as_deref() {
-                    return Ok((amazing_html::parse(html), "about:srcdoc".into(), "text/html".into(), "UTF-8"));
+                    return Ok(LoadedChildDocument::Deferred { source: html.to_owned(),
+                        url: "about:srcdoc".into(), mime: "text/html".into(), encoding: "UTF-8" });
                 }
                 let Some(source) = src.as_deref().filter(|source| !source.is_empty()) else {
-                    return Ok((amazing_html::parse("<!doctype html><html><head></head><body></body></html>"),
-                        "about:blank".into(), "text/html".into(), "UTF-8"));
+                    return Ok(LoadedChildDocument::Eager {
+                        parsed: amazing_html::parse("<!doctype html><html><head></head><body></body></html>"),
+                        url: "about:blank".into(), mime: "text/html".into(), encoding: "UTF-8" });
                 };
                 let logical_url = ParsedUrl::parse(&base).and_then(|base| base.resolve(source))
                     .map_err(|error| format!("iframe URL: {error:?}"))?.serialize();
@@ -517,22 +583,48 @@ impl RuntimeBindings {
                             .then(|| value.trim().trim_matches('"'))
                     })
                 });
+                let document_url = if resolver.is_none() { response.url.clone() } else { logical_url.clone() };
+                // HTML-34: only the HTML case defers to a script-interleaved
+                // parse (`ResumableParser` is HTML-only); XML/XHTML iframe
+                // documents keep the pre-HTML-34 one-shot parse-then-import,
+                // same as before.
+                if mime == "text/html" {
+                    let decoded = amazing_html::encoding::decode(&response.body, charset);
+                    return Ok(LoadedChildDocument::Deferred { source: decoded.text,
+                        url: document_url, mime, encoding: decoded.encoding.name() });
+                }
                 let (parsed, encoding) = parse_response(&response.body, &mime, charset)?;
-                let document_url = if resolver.is_none() { response.url } else { logical_url };
-                Ok((parsed, document_url, mime, encoding))
+                Ok(LoadedChildDocument::Eager { parsed, url: document_url, mime, encoding })
             })();
-            let (document, url) = match loaded {
-                Ok((parsed, url, mime, encoding)) => {
+            let (document, url, html) = match loaded {
+                Ok(LoadedChildDocument::Deferred { source, url, mime, encoding }) => {
+                    // Created empty; `setup_iframe_window`'s deferred tick
+                    // does the actual (interleaved) parse into it, so its
+                    // own top-level scripts run as their own task and see
+                    // the document built so far at each pause, not the
+                    // whole thing already finished. `ready_state` defaults
+                    // to `Loading` (`Dom::create_document`'s own default),
+                    // flipped to `Complete` only once that parse reaches
+                    // `Eof` -- more accurate than the old one-shot path's
+                    // immediate `Complete`, not less.
+                    let document = host.borrow_mut().dom.create_document();
+                    let _ = host.borrow_mut().dom.set_document_metadata(document,
+                        amazing_dom::document_surface::DocumentMetadata {
+                            url: url.clone(), content_type: mime, character_set: encoding.into(),
+                        });
+                    (Some(document), url, Some(source))
+                }
+                Ok(LoadedChildDocument::Eager { parsed, url, mime, encoding }) => {
                     let imported = host.borrow_mut().dom.import_inert_document(&parsed, &url, &mime, encoding);
                     match imported {
                         Ok(document) => {
                             let _ = host.borrow_mut().dom.set_document_ready_state(document, ReadyState::Complete);
-                            (Some(document), url)
+                            (Some(document), url, None)
                         }
-                        Err(_) => (None, url),
+                        Err(_) => (None, url, None),
                     }
                 }
-                Err(_) => (None, String::new()),
+                Err(_) => (None, String::new(), None),
             };
             // Per spec, a `load` event is only queued for this navigation
             // when the element has a `src` or `srcdoc` attribute at all
@@ -552,7 +644,7 @@ impl RuntimeBindings {
             let mut state = self.state.borrow_mut();
             let navigation = ChildNavigation { frame: node, requested_src: src.clone(),
                 committed_url: url.clone(), document };
-            state.frames.documents.insert(node, FrameDocument { src, srcdoc, document, url, sandbox });
+            state.frames.documents.insert(node, FrameDocument { src, srcdoc, document, url, sandbox, html });
             state.frames.pending_loads.push_back((node, document, fire_load_events));
             let hook = state.frames.navigation_hook.clone();
             drop(state);
@@ -569,11 +661,14 @@ impl RuntimeBindings {
     /// script reads them before or after this tick runs.
     pub(crate) fn setup_iframe_window(&self, js: &mut Interpreter, frame: NodeIdx,
         document: NodeIdx) -> Result<(), Throw> {
-        let (child_url, sandbox) = {
-            let state = self.state.borrow();
-            let entry = state.frames.documents.get(&frame);
-            (entry.map(|entry| entry.url.clone()).unwrap_or_default(),
-                entry.map(|entry| entry.sandbox).unwrap_or_default())
+        let (child_url, sandbox, html) = {
+            let mut state = self.state.borrow_mut();
+            let entry = state.frames.documents.get_mut(&frame);
+            (entry.as_ref().map(|entry| entry.url.clone()).unwrap_or_default(),
+                entry.as_ref().map(|entry| entry.sandbox).unwrap_or_default(),
+                // `take`n, not cloned: this document's interleaved parse
+                // consumes its stashed source exactly once.
+                entry.and_then(|entry| entry.html.take()))
         };
         // Normally already created by `navigate_iframes`; this fallback
         // only matters for a direct call with no prior navigation commit
@@ -590,46 +685,168 @@ impl RuntimeBindings {
             Some(realm) => realm,
             None => self.ensure_realm(js, frame, document, &child_url, sandbox)?,
         };
-        // `sandbox` without `allow-scripts` disables script execution in the
-        // child browsing context entirely (its own scripting flag is
-        // unset), so nothing runs at all -- not even collecting scripts.
-        if sandbox.sandboxed && !sandbox.allow_scripts { return Ok(()); }
         let state = self.state.clone();
-        let scripts = {
-            let state = state.borrow();
-            let host = state.host.borrow();
-            let mut scripts = Vec::new();
-            collect_classic_scripts(&host.dom, document, &mut scripts);
-            scripts
-        };
-        let resolver = state.borrow().frames.resolver.clone();
-        js.binding_with_realm(realm, |i| {
-            let mut adapter = RuntimeBindingHost { js: i, state: state.clone() };
-            for script in &scripts {
-                // HTML-29: narrows the child document's write insertion
-                // point to right after this script (its own tree position)
-                // before running it, matching the top-level page's own
-                // begin/narrow/end_document_parsing bracketing
-                // (`dispatch_pending_iframe_loads`) -- so a `document.write`
-                // call from an iframe's own top-level script inserts
-                // exactly where a parser would, not at the end of the body.
-                narrow_write_insertion_point_state(&state, document, script.node);
-                match &script.src {
-                    None => { adapter.js.run_script(&script.body)?; }
-                    Some(src) => {
-                        if let Some(text) = fetch_child_script(src, &child_url, resolver.as_ref()) {
-                            adapter.js.run_script(&text)?;
+        // HTML-34: `document_url` is one field shared by the whole host,
+        // not realm-scoped (`fetch_base`/`storage_key`/... all read it
+        // directly) -- see docs/lanes/html_TODO.md's HTML-34 notes. Every
+        // synchronous entry into this child's own script execution below
+        // (whether the new interleaved path or the old post-hoc one) needs
+        // it pointed at the CHILD's URL for that duration, restored right
+        // after, so `document.cookie`/`fetch()`/`localStorage` resolve
+        // against the iframe's own origin instead of the top-level page's.
+        // This covers every script that runs synchronously from here, but
+        // not a callback that fires later, asynchronously, still inside
+        // this realm (a timer an iframe's own script registered) -- a real,
+        // narrower residual gap than the one this fix closes, flagged
+        // rather than silently assumed solved.
+        let previous_document_url = state.borrow_mut().document_url.replace(child_url.clone());
+        let result = if let Some(html) = html {
+            self.run_interleaved_iframe_parse(js, realm, document, &child_url, sandbox, &html)
+        } else {
+            // No stashed source: an XML/XHTML child (already fully built,
+            // one-shot, by `navigate_iframes`) or a direct test call with
+            // no prior navigation at all. `sandbox` without `allow-scripts`
+            // disables script execution in the child browsing context
+            // entirely (its own scripting flag is unset), so nothing runs
+            // at all here -- not even collecting scripts. (An HTML child
+            // never takes this branch, sandboxed or not: it always has a
+            // stashed source, and `run_interleaved_iframe_parse` builds its
+            // tree regardless, only skipping script execution itself.)
+            (|| -> Result<(), Throw> {
+                if sandbox.sandboxed && !sandbox.allow_scripts { return Ok(()); }
+                let scripts = {
+                    let state = state.borrow();
+                    let host = state.host.borrow();
+                    let mut scripts = Vec::new();
+                    collect_classic_scripts(&host.dom, document, &mut scripts);
+                    scripts
+                };
+                let resolver = state.borrow().frames.resolver.clone();
+                js.binding_with_realm(realm, |i| {
+                    let mut adapter = RuntimeBindingHost { js: i, state: state.clone() };
+                    for script in &scripts {
+                        // HTML-29: narrows the child document's write
+                        // insertion point to right after this script (its
+                        // own tree position) before running it, matching
+                        // the top-level page's own begin/narrow/end_
+                        // document_parsing bracketing (`dispatch_pending_
+                        // iframe_loads`) -- so a `document.write` call from
+                        // an iframe's own top-level script inserts exactly
+                        // where a parser would, not at the end of the body.
+                        narrow_write_insertion_point_state(&state, document, script.node);
+                        match &script.src {
+                            None => { adapter.js.run_script(&script.body)?; }
+                            Some(src) => {
+                                if let Some(text) = fetch_child_script(src, &child_url, resolver.as_ref()) {
+                                    adapter.js.run_script(&text)?;
+                                }
+                                // A fetch failure or unresolvable URL is
+                                // silently skipped, matching how a real
+                                // load-error listener would observe it
+                                // without one installed here.
+                            }
                         }
-                        // A fetch failure or unresolvable URL is silently
-                        // skipped, matching how a real load-error listener
-                        // would observe it without one installed here.
+                    }
+                    Ok(())
+                })
+            })()
+        };
+        state.borrow_mut().document_url = previous_document_url;
+        result
+    }
+
+    /// HTML-34: the iframe counterpart of `cmd/js.rs::run_interleaved_parse`
+    /// for the top-level page -- parses `html` with a script-interleaved
+    /// `ResumableParser`, grafting the document built so far into `document`
+    /// (already created, empty, by `navigate_iframes`) at each pause via
+    /// `amazing_dom::markup::IncrementalDocumentImport`, and running each
+    /// parser-blocking classic script against that already-grafted,
+    /// connected subtree of the shared `host.dom` -- exactly like a
+    /// top-level script does, instead of `setup_iframe_window`'s old
+    /// `collect_classic_scripts` walk over the already-fully-built tree
+    /// (the same "sees the finished document, not the document-so-far" bug
+    /// HTML-31 fixed for the top level, still present for every iframe until
+    /// now). It cannot reuse `ResumableParser::swap_dom` directly, since
+    /// that swaps an entire `Dom` and the iframe's document must live inside
+    /// the SAME arena as its parent page and every sibling frame -- see
+    /// `docs/lanes/html_TODO.md`'s HTML-32/HTML-34 notes and `markup.rs`'s
+    /// `IncrementalDocumentImport` doc comment for the full design.
+    ///
+    /// `sandbox` without `allow-scripts` still builds the tree (parsing
+    /// itself is unconditional) but never runs any script, matching the old
+    /// path's own behavior for that case.
+    fn run_interleaved_iframe_parse(&self, js: &mut Interpreter, realm: RealmHandle, document: NodeIdx,
+        child_url: &str, sandbox: SandboxFlags, html: &str) -> Result<(), Throw> {
+        let state = self.state.clone();
+        let host = state.borrow().host.clone();
+        let resolver = state.borrow().frames.resolver.clone();
+        let can_run_scripts = !(sandbox.sandboxed && !sandbox.allow_scripts);
+        let import = amazing_dom::markup::IncrementalDocumentImport::new(document);
+        let mut parser = amazing_html::ResumableParser::new(Dom::new());
+        parser.push_source(html);
+        let parser = Rc::new(RefCell::new(parser));
+        self.register_active_parser(document, parser.clone());
+        let mut deferred_events = Vec::new();
+        // No `narrow_write_insertion_point`/`write_insertion_points` upkeep
+        // here, unlike the old post-hoc path below: `register_active_parser`
+        // (above) makes `document_write` route straight into `parser.write`,
+        // which already inserts at the tokenizer's own paused cursor -- the
+        // real WHATWG insertion point -- with no external bookkeeping,
+        // exactly like `cmd/js.rs::run_interleaved_parse` for the top level.
+        let run_one = |js: &mut Interpreter, host: &Rc<RefCell<BrowserDomHost>>, source_node: NodeIdx,
+            import: &IncrementalImportRef, child_url: &str,
+            resolver: Option<&FrameResourceResolver>| -> Result<(), Throw> {
+            let Some(dest_node) = import.borrow().imported(source_node) else {
+                // The graft right before this call always maps the node a
+                // pause/deferred signal just named; defensive only.
+                return Ok(());
+            };
+            let script = { let host = host.borrow(); crate::cmd::js::script_source_from_node(&host.dom, dest_node) };
+            let Some(script) = script else { return Ok(()) };
+            match &script.src {
+                None => js.binding_with_realm(realm, |i| i.run_script(&script.body).map(|_| ())),
+                Some(src) => {
+                    if let Some(text) = fetch_child_script(src, child_url, resolver) {
+                        js.binding_with_realm(realm, |i| i.run_script(&text).map(|_| ()))
+                    } else { Ok(()) }
+                }
+            }
+        };
+        let import = Rc::new(RefCell::new(import));
+        let outcome: Result<(), Throw> = loop {
+            let signal = parser.borrow_mut().run();
+            deferred_events.extend(parser.borrow_mut().take_deferred_or_async());
+            {
+                let mut host_ref = host.borrow_mut();
+                import.borrow_mut().sync(&mut host_ref.dom, parser.borrow().dom())
+                    .map_err(|error| Throw::type_error(format!("iframe graft: {error:?}")))?;
+            }
+            match signal {
+                amazing_html::ParseSignal::Eof => break Ok(()),
+                amazing_html::ParseSignal::Script(source_node) => {
+                    if !can_run_scripts { continue; }
+                    if let Err(error) = run_one(js, &host, source_node, &import, child_url, resolver.as_ref()) {
+                        break Err(error);
                     }
                 }
             }
-            Ok(())
-        })
+        };
+        self.unregister_active_parser(document);
+        outcome?;
+        if can_run_scripts {
+            for (source_node, _mode) in deferred_events {
+                run_one(js, &host, source_node, &import, child_url, resolver.as_ref())?;
+            }
+        }
+        let _ = host.borrow_mut().dom.set_document_ready_state(document, ReadyState::Complete);
+        Ok(())
     }
 }
+
+/// A `Rc<RefCell<IncrementalDocumentImport>>` alias, purely so `run_one`'s
+/// closure signature above (already long with every other captured piece of
+/// per-frame context) does not also spell out the full generic path.
+type IncrementalImportRef = Rc<RefCell<amazing_dom::markup::IncrementalDocumentImport>>;
 
 impl RuntimeBindingHost<'_> {
     /// `[LegacyFactoryFunction=Option]` from the HTML standard: builds a
@@ -1278,6 +1495,75 @@ mod tests {
              frame.contentWindow.document === frame.contentDocument && \
              frame.contentDocument.URL === 'about:blank'"
         ).unwrap(), JsValue::Bool(true), "bare iframe's contentWindow is reachable and about:blank");
+    }
+
+    /// HTML-34: the actual bug this ticket's item 1 fixes -- before, an
+    /// iframe's document was fully built (`import_inert_document`, one-shot)
+    /// BEFORE any of its own scripts ran, so a script could always see its
+    /// own later siblings already in the tree. With `run_interleaved_iframe_
+    /// parse`, a script must see only what a real parser would have built
+    /// by the time it reaches that `<script>` tag: `<div id=a>` yes,
+    /// `<div id=b>` no (not parsed yet).
+    #[test]
+    fn iframe_interleaved_script_sees_document_so_far_not_the_finished_tree() {
+        let path = std::env::temp_dir()
+            .join(format!("amazing-iframe-interleave-{}.html", std::process::id()));
+        std::fs::write(&path,
+            "<body><div id=a></div><script>\
+             window.sawBBeforeItExisted = (document.getElementById('b') === null);\
+             </script><div id=b></div></body>").unwrap();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body><iframe src='child.html'></iframe></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        let resolved = path.clone();
+        scheduler.set_frame_resource_resolver(Rc::new(move |_| Some(resolved.to_string_lossy().into_owned())));
+        scheduler.set_location_url("https://example.test/main.html");
+        scheduler.run_script("void document.querySelector('iframe')").unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script(
+            "var frame = document.querySelector('iframe'); frame.contentWindow.sawBBeforeItExisted"
+        ).unwrap(), JsValue::Bool(true), "script ran before its own later sibling was parsed");
+        // And by the time the (now finished) parse reached `Eof`, `#b` exists.
+        assert_eq!(scheduler.run_script(
+            "frame.contentDocument.getElementById('b') !== null"
+        ).unwrap(), JsValue::Bool(true), "later sibling exists once parsing has finished");
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    /// HTML-34 item 2: `localStorage`/`sessionStorage` must be keyed by the
+    /// CALLING realm's own origin, not the top-level page's -- before this
+    /// ticket's `document_url` scoping fix, `Storage::storage_key()` always
+    /// read the single, host-wide `document_url` field, so a cross-origin
+    /// iframe's own script would have silently written into the PARENT's
+    /// storage area instead of its own. A same-origin case can't tell the
+    /// fix apart from the bug (both resolve to the same origin either way),
+    /// so this uses a genuinely cross-origin `src` and checks for the
+    /// absence of cross-contamination from the parent's own script, which
+    /// needs no cross-origin `contentWindow` property access at all (that
+    /// stays gated, correctly, by JSRT-9 -- unrelated to this fix).
+    #[test]
+    fn iframe_localstorage_is_keyed_by_the_frames_own_origin_not_the_parents() {
+        let path = std::env::temp_dir()
+            .join(format!("amazing-iframe-storage-origin-{}.html", std::process::id()));
+        std::fs::write(&path,
+            "<body><script>localStorage.setItem('cross-origin-leak', 'leaked');</script></body>").unwrap();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body><iframe src='https://other.test/child.html'></iframe></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        let resolved = path.clone();
+        scheduler.set_frame_resource_resolver(Rc::new(move |_| Some(resolved.to_string_lossy().into_owned())));
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script("localStorage.getItem('cross-origin-leak')").unwrap(),
+            JsValue::Null, "baseline: nothing there yet");
+        scheduler.run_script("void document.querySelector('iframe')").unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script("localStorage.getItem('cross-origin-leak')").unwrap(),
+            JsValue::Null, "a cross-origin child's write must not land in the parent's own storage area");
+        std::fs::remove_file(&path).unwrap();
     }
 
     #[test]

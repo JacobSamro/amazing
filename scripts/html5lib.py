@@ -62,6 +62,19 @@ def canonical_actual(output: str) -> list[tuple[int, str]]:
         return [(-1, output.strip())]
     result: list[tuple[int, str]] = []
     for line in lines[1:]:
+        # HTML-33: `canonical_expected` (above) has always skipped a
+        # `<!DOCTYPE` line because Amazing's dump CLI didn't emit one at the
+        # time this comparison was written ("Amazing stores the doctype
+        # separately from the arena tree"). Some later ticket's dump-fidelity
+        # work started emitting a `<!DOCTYPE html>` line as the tree's first
+        # child, but this side of the comparison was never updated to match
+        # -- every one of the corpus's 69 "failures" was this same single
+        # spurious leading line, not a real tree-construction mismatch
+        # (confirmed: every other line in every failing case's actual output
+        # matched its expected output exactly).
+        stripped = line.lstrip(" ")
+        if stripped.startswith("<!DOCTYPE"):
+            continue
         if result and result[-1][1].startswith("<!--") and not result[-1][1].endswith("-->"):
             depth, content = result[-1]
             result[-1] = (depth, content + "\n" + line)
