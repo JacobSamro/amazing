@@ -2723,11 +2723,40 @@ counterparts, which already resolve correctly on their own). Not attempted
 here: outside this lane's prior narrow stretch-keyword authorization,
 per AGENTS.md's escalation rule.
 
-**Gate.** `crates/amazing-layout` crate tests: 382 passed, 1 skipped, 0
-failed, stable across every iteration of item 2. `css/css-sizing` render
-corpus (worker-2, `--baseline auto`): pass 76→87 across items 1+2 combined
-(gained=11, lost=0 net). Full-workspace gate deferred to the end of this
-lane's LAYOUT-33 scope (after the next cluster), per "gate once" — not yet
+**(4) css-tables' second-largest cluster — fixed.** With item 3's cluster
+blocked on the css lane, moved to the next-largest css-tables cluster:
+`min-height-table.html`/`min-height-table-2.html`/`col-definite-min-size-001.html`
+(3 tests). `table.rs` never read `min-height`/`max-height` on the table box
+at all — only the specified `height` participated in the desired-height
+distribution that can grow row heights past their intrinsic sizes. Fixed by
+having `min-height`/`max-height` feed into that same `desired` target,
+converting from the wrapper box (padding/border edge, per
+css-tables/#computing-the-table-height) to a grid-box value by subtracting
+the table's own vertical padding+border; `max-height` only caps the target
+downward (never shrinks already-natural-sized rows, matching every other
+min/max clamp in this file) and `min-height` is applied after, so it wins
+when it exceeds `max-height` (`min-height-table-2.html`'s explicit "min
+trumps max, like everywhere else" assertion). Added two crate regression
+tests. Did not attempt `col-definite-min-size-001.html` (a separate,
+`<col>`-min-width/missing-cell-fixup bug per its own `#help` links) in the
+same pass — different mechanism, left for the next cluster pass.
+
+A first corpus re-sweep showed `gained=5 lost=1`; before assuming a
+regression, isolated it by reverting just this fix (`git checkout --` the
+file, patch saved) and re-sweeping on the same build: `th-text-align.html`
+was **already** lost with the fix absent too (byte-different actual render
+`sha256` from the checked-in baseline either way), proving it's pre-existing
+render nondeterminism on this corpus (the same pattern LAYOUT-32 already
+documented for `css-tables`), not caused by this change. Re-applied the fix;
+a clean re-sweep landed `gained=2 lost=0` with no drift test appearing at
+all that run.
+
+**Gate.** `crates/amazing-layout` crate tests: 384 passed, 1 skipped, 0
+failed (382 before items 3/4's two new tests), stable across every
+iteration. `css/css-sizing` render corpus (worker-2, `--baseline auto`):
+pass 76→87 across items 1+2 combined (gained=11, lost=0 net). `css/css-tables`:
+pass 51→53, mismatch 31→29 (gained=2 lost=0, item 4). Full-workspace gate
+deferred to the end of this lane's LAYOUT-33 scope, per "gate once" — not yet
 re-run since LAYOUT-32's 3466-passed baseline.
 
 **Aside.** One remote-tooling incident during this ticket: a
