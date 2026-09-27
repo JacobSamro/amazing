@@ -400,7 +400,8 @@ impl TreeBuilder {
     }
 
     /// Returns the finished tree, consuming the builder.
-    pub fn into_dom(self) -> Dom {
+    pub fn into_dom(mut self) -> Dom {
+        self.apply_selectedcontent_mirroring();
         self.dom
     }
 
@@ -546,6 +547,52 @@ impl TreeBuilder {
             Some(self.fragment_context_namespace)
         } else {
             self.current().and_then(|idx| self.dom.namespace(idx))
+        }
+    }
+
+    /// The spec's "adjusted current node" as a (namespace, local name) pair
+    /// rather than a `NodeIdx`: for a fragment parse where `open` still
+    /// holds only the synthetic (always-HTML) root -- never a real stack
+    /// member, see `build_fragment`'s own doc comment -- this is the
+    /// fragment context element itself, which exists only as this name/
+    /// namespace pair and never gets a real `NodeIdx` of its own.
+    /// Otherwise it's simply the current node's own identity. Used by
+    /// `foreign.rs`'s foreign-content dispatch, which otherwise keyed off
+    /// `current()` directly and so treated a foreign (svg/math) fragment
+    /// context, with nothing else yet on the stack, as HTML (html5lib/WPT
+    /// `foreign-fragment.dat`).
+    pub(super) fn adjusted_current(&self) -> Option<(Namespace, &str)> {
+        if self.fragment && self.open.len() == 1 {
+            self.fragment_context.as_deref().map(|name| {
+                // The context string (e.g. from `parse-fragment`'s CLI
+                // argument) is lowercased on the way in
+                // (`parse_fragment_inner`), unlike a real inserted SVG
+                // element's name, which goes through `adjusted_svg_tag_name`
+                // to restore camelCase spellings such as "foreignObject".
+                // Without the same adjustment here, an SVG `foreignObject`
+                // fragment context would fail the case-sensitive HTML-
+                // integration-point name match below.
+                let name = if self.fragment_context_namespace == Namespace::Svg {
+                    Self::adjusted_svg_tag_name(name)
+                } else {
+                    name
+                };
+                (self.fragment_context_namespace, name)
+            })
+        } else {
+            let idx = self.current()?;
+            Some((self.dom.namespace(idx)?, self.dom.name(idx)?))
+        }
+    }
+
+    /// The adjusted current node's attributes -- `None` for the synthetic
+    /// fragment-context case (see `adjusted_current`), since the fragment
+    /// context has no real `NodeIdx` to look attributes up on.
+    pub(super) fn adjusted_current_attrs(&self) -> Option<&[(String, String)]> {
+        if self.fragment && self.open.len() == 1 {
+            None
+        } else {
+            self.current().and_then(|idx| self.dom.attrs_of(idx))
         }
     }
 

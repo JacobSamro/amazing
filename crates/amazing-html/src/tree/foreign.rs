@@ -22,51 +22,65 @@ const FOREIGN_BREAKOUT_START_TAGS: &[&str] = &[
 ];
 
 impl TreeBuilder {
-    fn is_mathml_text_integration_point(&self, idx: NodeIdx) -> bool {
-        self.dom.namespace(idx) == Some(Namespace::MathMl)
-            && matches!(self.dom.name(idx), Some("mi" | "mo" | "mn" | "ms" | "mtext"))
+    fn is_mathml_text_integration_point_ns(namespace: Namespace, name: &str) -> bool {
+        namespace == Namespace::MathMl && matches!(name, "mi" | "mo" | "mn" | "ms" | "mtext")
     }
 
-    fn is_html_integration_point(&self, idx: NodeIdx) -> bool {
-        match (self.dom.namespace(idx), self.dom.name(idx)) {
-            (Some(Namespace::Svg), Some("foreignObject" | "desc" | "title")) => true,
-            (Some(Namespace::MathMl), Some("annotation-xml")) => self
-                .dom
-                .attrs_of(idx)
-                .is_some_and(|attrs| {
-                    attrs.iter().any(|(name, value)| {
-                        name == "encoding"
-                            && (value.eq_ignore_ascii_case("text/html")
-                                || value.eq_ignore_ascii_case("application/xhtml+xml"))
-                    })
-                }),
+    /// `attrs` is `None` for the synthetic fragment-context identity (no
+    /// tested fixture combines a foreign fragment context with
+    /// `annotation-xml`'s `encoding`-attribute breakout, so that case is
+    /// conservatively not an HTML integration point).
+    fn is_html_integration_point_ns(
+        namespace: Namespace,
+        name: &str,
+        attrs: Option<&[(String, String)]>,
+    ) -> bool {
+        match (namespace, name) {
+            (Namespace::Svg, "foreignObject" | "desc" | "title") => true,
+            (Namespace::MathMl, "annotation-xml") => attrs.is_some_and(|attrs| {
+                attrs.iter().any(|(name, value)| {
+                    name == "encoding"
+                        && (value.eq_ignore_ascii_case("text/html")
+                            || value.eq_ignore_ascii_case("application/xhtml+xml"))
+                })
+            }),
             _ => false,
         }
     }
 
+    fn is_mathml_text_integration_point(&self, idx: NodeIdx) -> bool {
+        let Some(ns) = self.dom.namespace(idx) else { return false };
+        let Some(name) = self.dom.name(idx) else { return false };
+        Self::is_mathml_text_integration_point_ns(ns, name)
+    }
+
+    fn is_html_integration_point(&self, idx: NodeIdx) -> bool {
+        let Some(ns) = self.dom.namespace(idx) else { return false };
+        let Some(name) = self.dom.name(idx) else { return false };
+        Self::is_html_integration_point_ns(ns, name, self.dom.attrs_of(idx))
+    }
+
     pub(super) fn should_process_in_foreign_content(&self, tok: &Token) -> bool {
-        let Some(current) = self.current() else { return false };
-        if self.dom.namespace(current) == Some(Namespace::Html) {
+        let Some((namespace, name)) = self.adjusted_current() else { return false };
+        if namespace == Namespace::Html {
             return false;
         }
         match tok {
             Token::Eof => false,
-            Token::Characters(_) if self.is_mathml_text_integration_point(current) => false,
-            Token::StartTag { name, .. }
-                if self.is_mathml_text_integration_point(current)
-                    && !matches!(name.as_str(), "mglyph" | "malignmark") =>
+            Token::Characters(_) if Self::is_mathml_text_integration_point_ns(namespace, name) => false,
+            Token::StartTag { name: tag_name, .. }
+                if Self::is_mathml_text_integration_point_ns(namespace, name)
+                    && !matches!(tag_name.as_str(), "mglyph" | "malignmark") =>
             {
                 false
             },
-            Token::StartTag { name, .. }
-                if self.dom.namespace(current) == Some(Namespace::MathMl)
-                    && self.dom.name(current) == Some("annotation-xml")
-                    && name == "svg" =>
+            Token::StartTag { name: tag_name, .. }
+                if namespace == Namespace::MathMl && name == "annotation-xml" && tag_name == "svg" =>
             {
                 false
             },
             Token::Characters(_) | Token::StartTag { .. }
-                if self.is_html_integration_point(current) =>
+                if Self::is_html_integration_point_ns(namespace, name, self.adjusted_current_attrs()) =>
             {
                 false
             },
@@ -106,9 +120,14 @@ impl TreeBuilder {
                     });
                     return;
                 }
+                // Also the adjusted current node's own namespace (not just
+                // `current()`'s): a foreign fragment context with nothing
+                // else yet on the stack must still parent new top-level
+                // elements into its own namespace, not HTML (html5lib/WPT
+                // `foreign-fragment.dat`, e.g. context "svg g" + `<g>`).
                 let namespace = self
-                    .current()
-                    .and_then(|idx| self.dom.namespace(idx))
+                    .adjusted_current()
+                    .map(|(ns, _)| ns)
                     .unwrap_or(Namespace::Html);
                 let node = self.insert_foreign_element(&name, attrs, namespace);
                 if self_closing {

@@ -1669,8 +1669,18 @@ impl Tokenizer {
             },
             State::CdataBracket => self.text_buf.push(']'),
             State::CdataEnd => self.text_buf.push_str("]]"),
-            State::EndTagOpen
-            | State::TagName
+            State::EndTagOpen => {
+                // "End tag open state" EOF (spec 13.2.5.7): an eof-in-tag
+                // parse error that emits a literal '<' and '/' character
+                // token pair before the EOF token -- the only tag-parsing
+                // state (besides tag open state itself, resolved inline in
+                // `tag_open_dispatch` before ever reaching a persistent
+                // state) whose EOF handling re-emits any source text.
+                let start = self.tag_start.min(self.pos);
+                let lit: String = self.input[start..self.pos].iter().collect();
+                self.text_buf.push_str(&lit);
+            },
+            State::TagName
             | State::BeforeAttrName
             | State::AttrName
             | State::AfterAttrName
@@ -1680,16 +1690,14 @@ impl Tokenizer {
             | State::AttrValueUnquoted
             | State::AfterAttrValueQuoted
             | State::SelfClosingStart => {
-                // EOF in tag: emit the literal source text back. Attributes
-                // survive because we replay the source slice from '<'. An
-                // appropriate RAWTEXT/RCDATA/script end tag has already
-                // entered tag parsing after its name; at EOF the partial end
-                // tag is discarded, rather than becoming text in its element.
-                if !(self.is_end_tag && !self.raw_end.is_empty() && self.raw_end_matches()) {
-                    let start = self.tag_start.min(self.pos);
-                    let lit: String = self.input[start..self.pos].iter().collect();
-                    self.text_buf.push_str(&lit);
-                }
+                // EOF in tag (spec 13.2.5.8 onward): an eof-in-tag parse
+                // error. The spec emits an end-of-file token and nothing
+                // else -- the partial tag (name, attributes, everything
+                // consumed since '<') is discarded outright, not replayed
+                // as character tokens. (Previously this replayed the source
+                // slice from '<' as literal text; html5lib's
+                // webkit01.dat "<di" case pins the correct, empty-document
+                // behavior.)
             },
             State::RawTextLessThan | State::RcLessThan | State::ScriptLessThan
             | State::ScriptEscapedLessThan => {
@@ -2180,12 +2188,30 @@ mod tests {
     }
 
     #[test]
-    fn eof_mid_tag_falls_back_to_literal_text() {
+    fn eof_mid_tag_is_an_eof_in_tag_parse_error_and_emits_nothing() {
+        // Spec 13.2.5.8 onward ("eof-in-tag"): once at least the tag name
+        // has started, EOF discards the whole partial tag -- no character
+        // tokens, no tag token. Only preceding text already in the run
+        // survives (webkit01.dat's "<di" case pins the empty-document
+        // behavior for a bare start tag).
         assert_eq!(
             tokenize("hello<div class='x"),
-            vec![Token::Characters("hello<div class='x".into())]
+            vec![Token::Characters("hello".into())]
         );
-        assert_eq!(tokenize("</scr"), vec![Token::Characters("</scr".into())]);
+        assert_eq!(tokenize("</scr"), vec![]);
+        assert_eq!(tokenize("<di"), vec![]);
+    }
+
+    #[test]
+    fn eof_in_end_tag_open_state_emits_literal_slash() {
+        // Spec 13.2.5.7 ("End tag open state"): EOF here (before any tag
+        // name character) is the one tag-parsing state that still emits
+        // literal source text -- a '<' and '/' character token pair.
+        assert_eq!(tokenize("</"), vec![Token::Characters("</".into())]);
+        assert_eq!(
+            tokenize("hi</"),
+            vec![Token::Characters("hi</".into())]
+        );
     }
 
     #[test]
