@@ -431,6 +431,28 @@ impl Interpreter {
             symbol_method_length(&method, length);
             self.function_proto.borrow_mut().define(name, symbol_data(method, true, true)).unwrap();
         }
+        {
+            // 9.2.7 AddRestrictedFunctionProperties, applied here to
+            // %Function.prototype% itself (steps 2-4): `caller` and
+            // `arguments` are accessor properties sharing one %ThrowTypeError%
+            // getter/setter, {enumerable: false, configurable: true}. Built via
+            // symbol_method (name "", length 0, non-constructible, no own
+            // "prototype") so it matches the anonymous, poison-pill shape
+            // every other well-known-intrinsic check in the corpus expects.
+            //
+            // Re-landed here (2026-09-27) after cd669e67's original installation was
+            // reverted (c0de6390) along with the getter/setter that made every function
+            // throw unconditionally; make_function (interp_stmt.rs) now installs an OWN,
+            // non-throwing "caller" on plain sloppy functions that shadows this inherited
+            // pill, so the two no longer collide.
+            let thrower = symbol_method(self, "", native_throw_type_error_intrinsic);
+            for name in ["caller", "arguments"] {
+                self.function_proto.borrow_mut().define(name, Property {
+                    value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
+                    getter: Some(thrower.clone()), setter: Some(thrower.clone()),
+                }).unwrap();
+            }
+        }
         for (n, f) in [
             ("toString", native_array_to_string as crate::value::NativeFn),
             ("push", native_array_push as crate::value::NativeFn),
