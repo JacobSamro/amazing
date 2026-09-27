@@ -18,6 +18,7 @@ impl Interpreter {
         intl_method(self, function, "supportedLocalesOf", 1, intl_number_supported_locales);
         let _ = prototype.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
             binary_property(JsValue::str("Intl.DisplayNames")));
+        intl_register_intrinsic(self, "DisplayNames", function, &prototype);
         let _ = namespace.borrow_mut().define("DisplayNames", binary_writable_property(constructor));
     }
 }
@@ -85,7 +86,12 @@ fn intl_display_of(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Re
     }
     if state.kind == "currency" {
         let index = INTL_NUMBER_DATA.iter().position(|data| data.locale == state.locale).unwrap_or(0);
-        name = INTL_CURRENCY_DATA.iter().find(|entry| entry.code == code).map(|entry| entry.names[index].to_string());
+        // `.get(index)` rather than `[index]`: INTL_CURRENCY_DATA's `names` is
+        // aligned to INTL_NUMBER_DATA's position, and a locale appended after
+        // an existing currency's array was generated (e.g. en-IN, pt-PT) has
+        // no slot of its own -- fall back to index 0 ("en") instead of a panic.
+        name = INTL_CURRENCY_DATA.iter().find(|entry| entry.code == code)
+            .map(|entry| entry.names.get(index).copied().unwrap_or(entry.names[0]).to_string());
     }
     if name.is_none() && state.fallback == "none" { Ok(JsValue::Undefined) }
     else { Ok(JsValue::str(name.unwrap_or(code))) }

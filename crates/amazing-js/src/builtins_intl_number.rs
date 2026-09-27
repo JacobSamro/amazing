@@ -78,6 +78,7 @@ impl Interpreter {
         intl_method(self, function, "supportedLocalesOf", 1, intl_number_supported_locales);
         let _ = prototype.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
             binary_property(JsValue::str("Intl.NumberFormat")));
+        intl_register_intrinsic(self, "NumberFormat", function, &prototype);
         let _ = namespace.borrow_mut().define("NumberFormat", binary_writable_property(constructor));
     }
 }
@@ -760,9 +761,9 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
         let index = INTL_NUMBER_DATA.iter().position(|data| data.locale == state.locale).unwrap_or(0);
         match state.currency_display.as_str() {
             "code" => code.clone(),
-            "name" => currency.map_or(code.clone(), |entry| entry.names[index].to_string()),
-            "narrowSymbol" => currency.map_or(code.clone(), |entry| entry.narrow_symbols[index].to_string()),
-            _ => currency.map_or(code.clone(), |entry| entry.symbols[index].to_string()),
+            "name" => currency.map_or(code.clone(), |entry| entry.names.get(index).copied().unwrap_or(entry.names[0]).to_string()),
+            "narrowSymbol" => currency.map_or(code.clone(), |entry| entry.narrow_symbols.get(index).copied().unwrap_or(entry.narrow_symbols[0]).to_string()),
+            _ => currency.map_or(code.clone(), |entry| entry.symbols.get(index).copied().unwrap_or(entry.symbols[0]).to_string()),
         }
     });
     let currency_before = data.currency_pattern.find('¤').unwrap_or(0) < data.currency_pattern.find('0').unwrap_or(0);
@@ -878,9 +879,9 @@ fn intl_format_bigint(state: &IntlNumberState, input: &str) -> String {
         let currency = INTL_CURRENCY_DATA.iter().find(|entry| entry.code == code);
         let symbol = match state.currency_display.as_str() {
             "code" => code.to_string(),
-            "name" => currency.map_or(code.to_string(), |entry| entry.names[index].to_string()),
-            "narrowSymbol" => currency.map_or(code.to_string(), |entry| entry.narrow_symbols[index].to_string()),
-            _ => currency.map_or(code.to_string(), |entry| entry.symbols[index].to_string()),
+            "name" => currency.map_or(code.to_string(), |entry| entry.names.get(index).copied().unwrap_or(entry.names[0]).to_string()),
+            "narrowSymbol" => currency.map_or(code.to_string(), |entry| entry.narrow_symbols.get(index).copied().unwrap_or(entry.narrow_symbols[0]).to_string()),
+            _ => currency.map_or(code.to_string(), |entry| entry.symbols.get(index).copied().unwrap_or(entry.symbols[0]).to_string()),
         };
         if data.currency_pattern.find('¤').unwrap_or(0) < data.currency_pattern.find('0').unwrap_or(0) {
             result = format!("{symbol}{result}");
