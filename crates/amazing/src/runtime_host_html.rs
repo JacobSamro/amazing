@@ -1570,6 +1570,63 @@ impl RuntimeBindingHost<'_> {
             }
             let mutated_parent = self.operation_mutated_parent(operation, &receiver_for_scripts, &pre_inserted);
             bindings.run_pending_scripts(self.js, mutated_parent, &pre_inserted);
+            // Follow-up from HTML-35's own write-up: `template.innerHTML`'s
+            // fragment-parsing result lands in the template's *own*
+            // `.content` (a permanently detached `DocumentFragment`, per
+            // WHATWG HTML's "template contents owner document"), which
+            // `connected_script_nodes()` above can never see -- it only
+            // walks known, live document roots -- so the before/after diff
+            // just above never marks scripts placed there. There is no
+            // "before" to diff against anyway (a template's `.content` is
+            // replaced wholesale on every `innerHTML` set, per `markup_
+            // bindings.rs`), so mark every script inside it already-started
+            // directly, unconditionally, the same way the diff marks a live
+            // root's newly-parsed scripts.
+            if matches!(operation, Operation::ElementSetInnerHTML) {
+                if let Some(node) = self.node_from_value(&receiver_for_scripts) {
+                    let scripts = {
+                        let state = self.state.borrow();
+                        let host = state.host.borrow();
+                        host.dom.template_contents(node).map(|content| {
+                            host.dom.tree_order(content).into_iter()
+                                .filter(|&n| matches!(host.dom.namespace(n), Some(Namespace::Html) | Some(Namespace::Svg))
+                                    && host.dom.local_name(n) == Some("script"))
+                                .collect::<Vec<_>>()
+                        })
+                    };
+                    if let Some(scripts) = scripts {
+                        let mut state = self.state.borrow_mut();
+                        for script in scripts { state.frames.already_started_scripts.insert(script); }
+                    }
+                }
+            }
+        }
+        // Follow-up from HTML-35's own write-up: `DOMParser.parseFromString`'s
+        // result document has no browsing context (WHATWG: parsed "with
+        // scripting disabled"), which `has_active_document_root` already
+        // keeps from ever running *while the document stays orphaned* -- but
+        // a script it produced can still be moved into a real, connected
+        // document later (e.g. `document.adoptNode`), at which point it
+        // would wrongly look like a fresh, runnable candidate. Marked
+        // already-started unconditionally at creation time instead, exactly
+        // like every other script a fragment/document-parsing algorithm
+        // produces (`Range.createContextualFragment` isn't implemented by
+        // this engine at all yet, so there is nothing to cover there).
+        if matches!(operation, Operation::DOMParserParseFromString) {
+            if let Ok(value) = &result {
+                if let Some(document) = self.node_from_value(value) {
+                    let scripts = {
+                        let state = self.state.borrow();
+                        let host = state.host.borrow();
+                        host.dom.tree_order(document).into_iter()
+                            .filter(|&n| matches!(host.dom.namespace(n), Some(Namespace::Html) | Some(Namespace::Svg))
+                                && host.dom.local_name(n) == Some("script"))
+                            .collect::<Vec<_>>()
+                    };
+                    let mut state = self.state.borrow_mut();
+                    for script in scripts { state.frames.already_started_scripts.insert(script); }
+                }
+            }
         }
         result
     }
@@ -2275,6 +2332,51 @@ mod tests {
              document.body.appendChild(s); \
              window.ran"
         ).unwrap(), JsValue::num(0.0), "already-started must stick even once moved out and back in");
+    }
+
+    #[test]
+    fn template_inner_html_produced_scripts_never_execute_even_after_moving_content_out() {
+        // Follow-up from HTML-35: `template.innerHTML`'s fragment-parsing
+        // result lands in the template's own `.content`, a detached
+        // fragment `connected_script_nodes`'s before/after diff never
+        // walks -- must still be marked already-started, or moving the
+        // content into a real, connected document later would wrongly run
+        // it.
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body><template id=t></template></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(
+            "window.ran = 0; \
+             document.getElementById('t').innerHTML = '<script>window.ran = 1;<\\/script>'; \
+             document.body.appendChild(document.getElementById('t').content); \
+             window.ran"
+        ).unwrap(), JsValue::num(0.0), "template content scripts must not execute once moved into a live document");
+    }
+
+    #[test]
+    fn dom_parser_parse_from_string_produced_scripts_never_execute_even_after_adoption() {
+        // Follow-up from HTML-35: a `DOMParser`-produced document has no
+        // browsing context (already blocked from running while it stays
+        // orphaned by `has_active_document_root`), but a script from it
+        // can still be adopted into a real, connected document -- must be
+        // marked already-started at creation time so it never runs even
+        // then.
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(
+            "window.ran = 0; \
+             var doc = new DOMParser().parseFromString('<script>window.ran = 1;<\\/script>', 'text/html'); \
+             var s = doc.querySelector('script'); \
+             document.adoptNode(s); \
+             document.body.appendChild(s); \
+             window.ran"
+        ).unwrap(), JsValue::num(0.0), "DOMParser-produced scripts must not execute even once adopted and connected");
     }
 
     #[test]

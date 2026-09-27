@@ -2197,3 +2197,63 @@ Workspace nextest: **3,395/3,395 passed, 17 skipped** (was 3,389/3,389 at
 HTML-34). Doctests: **31 crates, 0 FAILED**.
 
 Status: done.
+
+## HTML-36 -- already-started marking for detached-fragment-produced scripts
+
+Follow-up the coordinator took directly from HTML-35's own "what this does
+and doesn't cover" list (its first in-lane, actually-fixable item -- the
+`type=module`/`.async` bullets ahead of it in that list are filed for
+js-lang/js-runtime and dom-bindings respectively, not the html lane's own
+work). Two real, currently-reachable gaps, both in
+`invoke_operation_with_html_hooks` (`runtime_host_html.rs`), no cross-lane
+edit needed (confirmed `Range.createContextualFragment` isn't implemented
+by this engine at all yet, so there is nothing to cover for that one):
+
+1. **`template.innerHTML`**: its fragment-parsing result lands in the
+   template's own `.content` (`markup_bindings.rs`'s `O::ElementSetInnerHTML`
+   special-cases a template target to `ensure_template_contents` instead of
+   the element's own children) -- a permanently detached `DocumentFragment`
+   that `connected_script_nodes()`'s before/after diff (HTML-35's mechanism
+   for catching `innerHTML`/`insertAdjacentHTML`-produced scripts) can never
+   see, since that diff only walks known, live document roots. Fixed by
+   reaching `template_contents(node)` directly after any `ElementSetInnerHTML`
+   op on a template and marking every script inside it already-started
+   unconditionally (there is no "before" to diff against anyway -- a
+   template's `.content` is replaced wholesale on every set).
+2. **`DOMParser.parseFromString`**: its result document has no browsing
+   context (WHATWG: parsed "with scripting disabled"), which HTML-35's
+   `has_active_document_root` already keeps from ever running *while the
+   document stays orphaned* -- but a script it produced can still be moved
+   into a real, connected document later (`document.adoptNode` + `append
+   Child`), at which point it would wrongly look like a fresh, runnable
+   candidate. `DOMParserParseFromString` already funnels through `invoke_
+   operation_with_html_hooks` like every other `Operation` (confirmed via
+   `runtime_binding_host.rs`'s single `NativeEntry::Operation(operation) =>
+   adapter.invoke_operation_with_html_hooks(...)` dispatch line -- every
+   `Operation` variant reaches this function, not just the ones the existing
+   `matches!` list runs the extra script/iframe side effects for), so no new
+   hook point was needed here either. Marked every script in the result
+   document already-started unconditionally at creation time, matching
+   every other script a fragment/document-parsing algorithm produces.
+
+Neither gap had a dedicated WPT anchor in this lane's own pinned 1,132-file
+selection (confirmed via a strict per-test status-map diff: 0 lost, 0
+gained -- this fix is a pure correctness improvement invisible to that
+selection, not a regression or an untested no-op). Verified instead with two
+new targeted unit tests mirroring HTML-35's own
+`dynamic_script_inserted_via_inner_html_never_executes_even_if_moved_out_
+afterward` pattern: `template_inner_html_produced_scripts_never_execute_
+even_after_moving_content_out` and `dom_parser_parse_from_string_produced_
+scripts_never_execute_even_after_adoption`.
+
+### Gate
+
+`amazing` crate nextest: **355/355 passed, 6 skipped** (2 new unit tests
+added; was 353/353 at HTML-35). WPT (same 1,132-file pinned selection,
+before = `e8122745`, after = this diff, strict per-test status-map diff):
+**0 lost passes, 0 gained** (see above -- expected, no anchor in this
+selection exercises either fixed path). Workspace nextest: **3,407/3,407
+passed, 17 skipped** (dev moved since HTML-35's own 3,395/3,395 gate; no
+loss). Doctests: **31 crates, 0 FAILED**.
+
+Status: done.
