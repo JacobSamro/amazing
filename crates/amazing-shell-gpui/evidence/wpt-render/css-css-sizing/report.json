@@ -9,8 +9,8 @@
   },
   "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
   "host": "worker-2",
-  "generated": "2026-09-27T16:18:20Z",
-  "run_directory": "/root/amazing/out/layout/wpt-render/css-css-sizing/run-20260927T161733Z-2290416",
+  "generated": "2026-09-27T18:04:18Z",
+  "run_directory": "/root/amazing/out/layout/wpt-render/css-css-sizing/run-20260927T180328Z-2324126",
   "inventory": {
     "document_files": 887,
     "testharness_files": 178,
@@ -28,8 +28,8 @@
     }
   },
   "counts": {
-    "pass": 88,
-    "mismatch": 50,
+    "pass": 90,
+    "mismatch": 48,
     "error": 0,
     "timeout": 0,
     "unsupported": 0,
@@ -178,17 +178,17 @@
     },
     {
       "id": "css__css-sizing__stretch__positioned-non-replaced-1.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 12500,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "62a366022901a953d40b093c1075076d6b148c2b9f9393af1bf1a1c7be3d3529",
+      "actual_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "75387468c4b5f38597a2cbea5af7f615eb6947479500b353b49d61065662fc3e",
-      "detail": "maxDifference=255/0; totalPixels=12500/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__css-sizing__intrinsic-height-abspos-stretch-percentage-child.html",
@@ -1368,17 +1368,17 @@
     },
     {
       "id": "css__css-sizing__stretch__fixed-table-1.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "../../reference/ref-filled-green-100px-square-only.html",
-      "differing_pixels": 10000,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "d187e49ca84f3a8dbd8ae95c42c45e7d950eca187c28cd6405afb2cdcb4d6cf9",
+      "actual_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
       "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
-      "diff_sha256": "6d1d776c83667070ea022b8a23cd3083a8f8ed1de629ce0d97803b4649a34a99",
-      "detail": "maxDifference=255/0; totalPixels=10000/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__css-sizing__block-size-with-min-or-max-content-4.html",
@@ -1972,7 +1972,8 @@
   "baseline_compare": {
     "baseline": "/root/amazing/wt/layout/crates/amazing-shell-gpui/evidence/wpt-render/css-css-sizing/report.json",
     "gained": [
-      "css__css-sizing__stretch__min-width-1.html"
+      "css__css-sizing__stretch__fixed-table-1.html",
+      "css__css-sizing__stretch__positioned-non-replaced-1.html"
     ],
     "lost": [],
     "changed": [],
@@ -2101,10 +2102,9 @@
       "css__css-sizing__slice-nowrap-intrinsic-size-bidi.html",
       "css__css-sizing__slice-nowrap-intrinsic-size.html",
       "css__css-sizing__stretch__block-height-003.html",
-      "css__css-sizing__stretch__fixed-table-1.html",
       "css__css-sizing__stretch__flexbox-stretch-minimum-001.html",
       "css__css-sizing__stretch__flexbox-stretch-minimum-002.html",
-      "css__css-sizing__stretch__positioned-non-replaced-1.html",
+      "css__css-sizing__stretch__min-width-1.html",
       "css__css-sizing__stretch__stretch-float-with-sibling.html",
       "css__css-sizing__stretch__stretch-float.html",
       "css__css-sizing__svg-intrinsic-size-005.html",
