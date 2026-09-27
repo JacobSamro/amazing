@@ -1,10 +1,10 @@
 # JS language conformance decision map
 
-Frontier: **JS-7 — WPT `dom/` parse barriers**. JS-6 is merged as `0244456`;
-unmodified upstream WPT testharness.js parses and completes.
+Frontier: **JS-17 — class named evaluation and for-await-of contexts**.
+JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
-`amazing-regex`. `ast.rs` is the front-end-owned contract consumed by js-runtime;
+`amazing-regex` historically; RegExp moved to js-date/JSD-2 on 2026-09-26. `ast.rs` is the front-end-owned contract consumed by js-runtime;
 AST change requests come back to this lane. Execution, builtins, values,
 environments, VM and GC belong to js-runtime. JS-3 finishes its explicitly
 granted runner and host work before the next language ticket.
@@ -1337,3 +1337,158 @@ timeouts. The 120-second pair had one staging string timeout only; that test's
 two variants both passed when selected alone. Win-002 ran 295 JS and 2,279
 workspace nextest cases; both commands and separate JS/workspace doctests
 passed.
+
+## JS-11 — class methods, binding patterns, and async iteration
+
+Code head `f9a7eba640d45f23eece100347b0ca22a841b898`, frozen JS base
+`59492359e4a267885e8822f0f66941fa60720f9a`. The later scripts-only merge
+`6e01e7b2` does not change engine inputs. Local commits only; no push.
+
+The implementation adds private class elements and field initialization,
+compiles method/generator bodies through the VM function path, binds default
+and destructured parameters, advances array binding iterators lazily, and keeps
+`for await` state in suspended VM frames with iterator closing. Merge corrections
+preserve class method names/descriptors, inherited strictness and generator
+function name descriptors. Direct eval (including parameter initializers) and
+unsupported class elements retain atomic interpreter fallback.
+
+Full pinned Test262 `3655e7464de3d52643ecddd4b5f9f4f3e7f62398` on
+venus-001 Linux: 53,872 sources, 102,918 variants, release hosts, 10 workers,
+60-second deadline, identical input and runner hashes before/after:
+
+| Mode | Passing files before → after | Passing variants before → after | Lost passes |
+| --- | ---: | ---: | ---: |
+| Treewalk | 30,379 → 38,065 | 58,728 → 73,918 | 0 files, 0 variants |
+| `AMAZING_JS_VM=1` | 30,344 → 38,047 | 58,687 → 73,885 | 0 files, 0 variants |
+
+Treewalk target directories: `statements/class` 1,127 → 3,625 passes;
+`expressions/class` 951 → 3,384; `for-await-of` 94 → 893. The first merged
+sweep exposed 16 file / 19 variant losses in eval scope, strict method execution,
+and function name descriptors; all were fixed and all 16 files / 19 variants
+passed a focused replay before the corrected full zero-loss sweeps.
+
+Final Windows gate on **win-001**, explicitly authorized as the win-002 outage
+fallback: owned nextest **331 passed, 1 skipped** (318 JS, 13 regex); separate
+owned doctests **1 passed**. Full workspace nextest completed with
+**2,447 passed, 2 failed, 7 skipped**. The two failures are the known compositor
+`paint_view_owner_mapping_binds_dom_properties_to_tree_nodes` and
+`retained_real_page_property_trace` base failures, fixed in local dev `fba3b71`
+and explicitly accepted for frozen-base reporting by the user. Separate workspace
+doctests completed **28 suites, 2 passed, 0 failed**. All 574 Rust sources,
+Cargo manifests and lockfiles checked on Windows match the exact gated commit.
+This is not a claim of an all-green workspace.
+
+Machine-readable provenance, full classification and binary hashes, per-directory
+counts and zero-loss comparisons are in [js-lang_JS11-evidence.json](js-lang_JS11-evidence.json).
+Full records remain `/tmp/js11-final-before-{tree,vm}.json` and
+`/tmp/js11-corrected-after-{tree,vm}.json`, mirrored under `~/amazing/out` on
+venus-001. Logs and the 16-file replay are in lane scratch. Remaining target
+nonpasses include iterator error identity, class element edge cases and async
+job ordering; these measurements do not claim complete class or async conformance.
+
+## JS-12 — bounded character-class folding
+
+Fixed base `063a0105b018735550b64c844f55f174cd3be163`. The JSB-6 Intl helper
+blocker reproduces with 32 consecutive `[a-z]` classes under ignore-case flags:
+the compiler charges a complete Unicode folding-table scan for each class and
+exhausts its instruction/work budget. A shared sorted index of the same table
+endpoints lets each range visit only relevant entries. Class members, range
+lookups and visited endpoints remain budgeted; no resource limit is raised.
+
+The regression covers legacy/Unicode/UnicodeSets class sequences, non-ASCII
+folding, inversion, predefined classes, lookaheads, and rejection of expensive
+wide-range sequences. Code `7e7edf84`, Linux gate head `1de643c8` (the merge changes only gate
+instructions/scripts). Boat owned nextest: **345 passed, 1 skipped**; owned
+doctests: **1 passed**. Workspace: **2,530 passed, 10 skipped**; separate
+workspace doctests: **31 suites, 2 passed, 0 failed**. Windows is deferred.
+
+Full pinned Test262 (53,872 files / 102,918 variants, 4 workers, 60-second
+variant deadline): **39,938 → 39,953 passing files**, **77,661 → 77,691 passing
+variants**, **zero passing file or variant losses**. All 33 files previously
+blocked by class-compilation limits advance; 15 now pass and 18 expose other
+failures. The input and runner hashes match. Baseline/after classification
+hashes are `dc657e09` / `57200b23`. Evidence and exact hashes are in
+[js-lang_JS12-evidence.json](js-lang_JS12-evidence.json); compressed full
+records and gate logs are retained in lane scratch.
+
+Next: the measured frontier contains 64 front-end failures, including 15 missed
+parse-negative tests. JS-13 handles parser context, strictness and template
+escape errors; decorator and Annex B RegExp clusters remain separate areas.
+
+## JS-13 — callable grammar contexts and early errors
+
+Parser source `e0e9d64a`, fixed base `bbe7bec9`, integration repair `1de87f21`. Function and method
+parameter/body parsing now replaces enclosing Yield/Await/control contexts;
+function-body directives apply strict early errors during parsing. Assignment
+expressions own Yield parsing, argument expressions permit `in`, and contextual
+`await using`, `let yield`, labels and bare `async` for-of heads follow their
+productions. Tagged templates preserve invalid cooked entries through
+`TemplateLit.cooked_valid`; untagged templates reject them. Runtime consumers
+must turn invalid tagged cooked entries into `undefined`.
+
+Owned Linux nextest: **348 passed, 1 skipped**; doctests: **1 passed**.
+Full pinned Test262, 53,872 files / 102,918 variants: **39,953 → 39,999 passing
+files**, **77,691 → 77,762 passing variants**, **zero passing file or variant
+losses**. Input/runner hashes match; four workers and 60-second deadline.
+Of the 64 measured front-end failures, 32 now pass and four advance to runtime
+failures; remaining parser failures are 20 decorators and eight RegExp cases.
+The runtime merge activated the async-body VM bridge; repair `1de87f21`
+preserves the original loop-body throw across iterator return-method failures,
+including rejected awaits. Twenty backend/case combinations cover throw/return
+completion precedence.
+
+The retained pooled target was stale and its 2,740-test result was discarded.
+Final joint Linux gate at source `04f89683` (also includes JS-14): **2,750 passed,
+10 skipped**, **31 doctest suites / 4 passed**. Full Test262 from the parser-only
+head to this merged source: **39,999 → 40,132 files**, **77,762 → 77,958 variants**,
+zero losses. Those additional gains include incoming runtime and handler work;
+the parser-only improvement remains the 46 files / 71 variants reported above.
+Evidence: [js-lang_JS13-evidence.json](js-lang_JS13-evidence.json).
+
+Next, user-routed JS-14: public event-handler FunctionBody compiler with live
+object environments ordered document → optional form → element. The caller
+keeps lazy compilation, event registration and forwarding. RegExp Annex B and
+named-capture parsing remain queued after this cross-lane dependency.
+
+
+## JS-14 — public event-handler compilation and live object environments
+
+Source `04f89683` exposes `Interpreter::compile_event_handler(name, parameters,
+body, scope_chain)` and `parser::parse_event_handler`. The body has an independent
+FunctionBody goal; scope objects are supplied outermost first (document, optional
+form, element). The function is nonconstructible, uses its own `this`, and starts
+non-strict unless its directive prologue enables strictness. Window handlers use
+an empty scope slice; Window onerror accepts its five named parameters.
+
+Live object lookup, accessors, unscopables, nested closures, identifier-call
+receivers, deletion and setter-only assignments work through interpreter and VM
+paths. Direct parsing prevents wrapper injection and rejects hashbang prefixes.
+DOM retains lazy compilation, listener registration and event-return semantics.
+The runtime has no per-function ScriptOrModule field or dynamic import execution;
+the required null provenance is documented for that future implementation.
+
+Final Linux source `04f89683`, fresh dedicated target: **2,750 workspace passed,
+10 skipped**, **369 owned passed / 1 skipped**, **4 workspace doctests** (1 owned).
+Pinned full Test262: **40,096 → 40,132 passing files**, **77,919 → 77,958 variants**,
+**zero lost file or variant passes**. This comparison also includes the separately
+committed async-close repair and deadline recoveries, listed in the evidence;
+it is not an isolated count of new HTML API cases.
+
+[Interface](js-lang_JS14-interface.md) · [Evidence](js-lang_JS14-evidence.json).
+Next: Annex B decimal/octal and identity escapes, legacy class-range fallbacks,
+and quantified lookahead/group boundaries; then Unicode property escape tables.
+
+## JS-15 — Annex B RegExp grammar
+
+Source `bcdd8fa0` implements decimal backreference versus legacy octal selection,
+incomplete hex and control escapes, identity escapes, legacy class-range unions,
+and quantified lookahead with noncapturing-group Atom boundaries. Capture counts
+include forward references and exclude escaped parentheses and class contents.
+
+Linux: **2,753 workspace passed / 10 skipped**, **372 owned passed / 1 skipped**,
+**4 doctests** (1 owned). Full pinned Test262: **40,132 → 40,146 files**,
+**77,958 → 77,986 variants**, **zero lost passes**. All 14 file gains belong to
+the targeted RegExp grammar area. [Evidence](js-lang_JS15-evidence.json).
+
+Next: Unicode property escapes, exact aliases, categories/scripts/extensions,
+and Unicode mode complement/case-fold semantics.

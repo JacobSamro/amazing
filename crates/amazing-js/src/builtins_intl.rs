@@ -57,6 +57,22 @@ fn intl_fallback_symbol() -> JsSymbol {
     })
 }
 
+// Registers a service constructor (Collator, NumberFormat, DateTimeFormat, ...)
+// as an %X%-style intrinsic, the same table `capture_intrinsic_constructors`
+// (interp_realms.rs) builds for ordinary globals like Array/RegExp. Each Intl
+// service constructor lives under the `Intl` namespace object rather than as a
+// direct global property, so that generic top-level scan never finds it; every
+// `install_intl_*` function below calls this once so two things that consult
+// this same table start working for Intl too: (1) `constructor_fallback_prototype`,
+// which GetPrototypeFromConstructor uses when `Reflect.construct(Intl.X, [],
+// newTarget)` is given a newTarget whose own `.prototype` isn't an object
+// (falls back to newTarget's realm's %XPrototype%, not %ObjectPrototype%), and
+// (2) `intl_construct_service` below, which uses it to reach the intrinsic
+// constructor directly instead of a mutable `Intl.X` property lookup.
+fn intl_register_intrinsic(i: &mut Interpreter, name: &str, function: &Obj, prototype: &Obj) {
+    i.intrinsic_constructors.insert(name.to_string(), (function.clone(), prototype.clone()));
+}
+
 // ChainDateTimeFormat / ChainNumberFormat (ECMA-402 sec-Intl.DateTimeFormat /
 // sec-Intl.NumberFormat "Abstract Operations"): build the internal state-bearing
 // object and either hand it back directly (the `new` case, and the plain
@@ -73,9 +89,13 @@ fn intl_chain_construct(i: &mut Interpreter, this: JsValue, ctor_key: &str, stat
         intl_register(&object, state);
         return Ok(JsValue::Object(object));
     }
-    let intl = i.global_env.resolve("Intl").unwrap();
-    let constructor = i.get_prop(&intl, ctor_key)?;
-    let JsValue::Object(proto) = i.get_prop(&constructor, "prototype")? else { unreachable!() };
+    // ECMA-402's Chain* abstract operations name the %DateTimeFormat%/%NumberFormat%
+    // intrinsic directly here, not a `Get(Intl, ctor_key)` lookup on the (mutable,
+    // taint-able) `Intl` namespace object.
+    let (constructor, proto) = i.intrinsic_constructors.get(ctor_key)
+        .map(|(constructor, prototype)| (constructor.clone(), prototype.clone()))
+        .ok_or_else(|| Throw::type_error("Intl service unavailable"))?;
+    let constructor = JsValue::Object(constructor);
     let mut raw = JsObject::ordinary();
     raw.proto = Some(proto);
     let internal = Obj(Rc::new(RefCell::new(raw)));
@@ -136,7 +156,14 @@ fn intl_is_well_formed_type(value: &str) -> bool {
 }
 
 fn intl_unicode_keyword(tag: &str, wanted: &str) -> Option<String> {
-    let extension = tag.split("-u-").nth(1)?;
+    // A private-use singleton ("-x-...") always comes last and everything
+    // after it is opaque private-use subtags, never a real "-u-" extension --
+    // "de-x-u-co-phonebk" has no Unicode extension at all, just a private-use
+    // sequence that happens to contain the substring "u-co-phonebk". Truncate
+    // there first so a naive substring search doesn't reach into it
+    // (Collator/unicode-ext-seq-in-private-tag.js).
+    let before_private_use = tag.split("-x-").next().unwrap_or(tag);
+    let extension = before_private_use.split("-u-").nth(1)?;
     let subtags: Vec<&str> = extension.split('-').take_while(|part| part.len() != 1).collect();
     let mut index = 0;
     while index < subtags.len() {
@@ -738,6 +765,7 @@ impl Interpreter {
             ] { intl_method(self, &proto, name, 0, method); }
             let _ = proto.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
                 binary_property(JsValue::str("Intl.Locale")));
+            intl_register_intrinsic(self, "Locale", ctor, &proto);
             let _ = namespace.borrow_mut().define("Locale", binary_writable_property(locale));
         }
         self.install_intl_number(&namespace);

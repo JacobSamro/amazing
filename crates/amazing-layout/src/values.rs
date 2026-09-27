@@ -81,11 +81,15 @@ pub(crate) struct FontRelativeUnits {
     pub ic: f32,
     pub ex: f32,
     pub cap: f32,
+    /// `lh` (css-values-4 6.2): the element's own used line-height.
+    pub lh: f32,
     pub root_em: f32,
     pub root_ch: f32,
     pub root_ic: f32,
     pub root_ex: f32,
     pub root_cap: f32,
+    /// `rlh`: the root element's own used line-height.
+    pub root_lh: f32,
 }
 
 impl FontRelativeUnits {
@@ -96,12 +100,28 @@ impl FontRelativeUnits {
             ic: em,
             ex: em * 0.5,
             cap: em * 0.8,
+            // `font.rs`'s `ScaledMetrics` floors "normal" line-height at
+            // 1.2 x the font's pixel size; callers without a real per-box
+            // used line-height (or a text provider) fall back to the same
+            // convention here.
+            lh: em * 1.2,
             root_em: ROOT_FONT_SIZE,
             root_ch: ROOT_FONT_SIZE * 0.5,
             root_ic: ROOT_FONT_SIZE,
             root_ex: ROOT_FONT_SIZE * 0.5,
             root_cap: ROOT_FONT_SIZE * 0.8,
+            root_lh: ROOT_FONT_SIZE * 1.2,
         }
+    }
+
+    /// Overrides the `lh`/`rlh` fallback with the caller's real used
+    /// line-height (already resolved from the CSS `line-height` property at
+    /// box-tree build time, per element -- `font_relative_metrics` only
+    /// covers font-intrinsic metrics, not the used line-height).
+    pub(crate) fn with_line_heights(mut self, lh: f32, root_lh: f32) -> Self {
+        self.lh = lh;
+        self.root_lh = root_lh;
+        self
     }
 
     pub(crate) fn from_text_system(
@@ -134,9 +154,11 @@ impl FontRelativeUnits {
         Self {
             em: self.em / factor, ch: self.ch / factor,
             ic: self.ic / factor, ex: self.ex / factor, cap: self.cap / factor,
+            lh: self.lh / factor,
             root_em: self.root_em / factor, root_ch: self.root_ch / factor,
             root_ic: self.root_ic / factor, root_ex: self.root_ex / factor,
             root_cap: self.root_cap / factor,
+            root_lh: self.root_lh / factor,
         }
     }
 }
@@ -290,6 +312,8 @@ impl<'a> CalcParser<'a> {
             "rex" => Some(number * self.units.root_ex),
             "cap" => Some(number * self.units.cap),
             "rcap" => Some(number * self.units.root_cap),
+            "lh" => Some(number * self.units.lh),
+            "rlh" => Some(number * self.units.root_lh),
             _ => None,
         };
         if unit == "%" {
@@ -931,13 +955,23 @@ mod tests {
     #[test]
     fn font_relative_units_keep_element_and_root_metrics_separate() {
         let units = FontRelativeUnits {
-            em: 20.0, ch: 9.0, ic: 20.0, ex: 8.0, cap: 15.0,
-            root_em: 16.0, root_ch: 7.0, root_ic: 16.0, root_ex: 6.0, root_cap: 12.0,
+            em: 20.0, ch: 9.0, ic: 20.0, ex: 8.0, cap: 15.0, lh: 24.0,
+            root_em: 16.0, root_ch: 7.0, root_ic: 16.0, root_ex: 6.0, root_cap: 12.0, root_lh: 19.2,
         };
         let length = parse_length_percentage_with_units(
             "calc(1ch + 1ic + 1ex + 1cap + 1rch + 1ric + 1rex + 1rcap)", units,
         ).unwrap();
         assert_eq!(length.resolve(None), Some(93.0));
+    }
+
+    #[test]
+    fn lh_and_rlh_units_use_the_used_line_height() {
+        let units = FontRelativeUnits {
+            em: 20.0, ch: 9.0, ic: 20.0, ex: 8.0, cap: 15.0, lh: 24.0,
+            root_em: 16.0, root_ch: 7.0, root_ic: 16.0, root_ex: 6.0, root_cap: 12.0, root_lh: 19.2,
+        };
+        let length = parse_length_percentage_with_units("calc(2lh + 1rlh)", units).unwrap();
+        assert_eq!(length.resolve(None), Some(2.0 * 24.0 + 19.2));
     }
 
     #[test]

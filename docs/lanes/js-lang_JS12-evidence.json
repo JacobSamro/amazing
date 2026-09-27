@@ -1,0 +1,233 @@
+{
+  "ticket": "JS-12",
+  "status": "done",
+  "base": "063a0105b018735550b64c844f55f174cd3be163",
+  "code_commit": "7e7edf84",
+  "gate_head": "1de643c8",
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+  "jobs": 4,
+  "timeout_seconds": 60.0,
+  "files": 53872,
+  "variants": 102918,
+  "comparison": {
+    "before": {
+      "classification_sha256": "dc657e09cbffd3ffe110bddb52bafddedf9112223beb089bec29a6af95eec4b5",
+      "host_sha256": "fc96ac0651da90d63d716e43583e0e058b2941707fa46ffabd81d4b398430529"
+    },
+    "after": {
+      "classification_sha256": "57200b2353e2d10897783fe02654ab4c6307e8293794eb95712289be624d8c97",
+      "host_sha256": "09db566cdc2a494411ac73e64966552530af5aa4dd784e0ee597bd1eca29f93a"
+    },
+    "file_passes": [
+      39938,
+      39953
+    ],
+    "variant_passes": [
+      77661,
+      77691
+    ],
+    "file_gains": 15,
+    "variant_gains": 30,
+    "file_losses": [],
+    "variant_losses": [],
+    "gains_by_directory": {
+      "intl402/Intl/getCanonicalLocales": 2,
+      "intl402/Collator/prototype": 1,
+      "intl402/Collator/taint-Object-prototype.js": 1,
+      "intl402/DateTimeFormat/taint-Object-prototype-date-time-components.js": 1,
+      "intl402/DateTimeFormat/taint-Object-prototype-dayPeriod.js": 1,
+      "intl402/DateTimeFormat/taint-Object-prototype-fractionalSecondDigits.js": 1,
+      "intl402/DateTimeFormat/taint-Object-prototype.js": 1,
+      "intl402/Locale/invalid-tag-throws.js": 1,
+      "intl402/NumberFormat/prototype": 1,
+      "intl402/NumberFormat/taint-Object-prototype.js": 1,
+      "intl402/constructors-taint-Object-prototype-2.js": 1,
+      "intl402/constructors-taint-Object-prototype.js": 1,
+      "intl402/default-locale-is-canonicalized.js": 1,
+      "intl402/language-tags-invalid.js": 1
+    }
+  },
+  "owned_gate": {
+    "passed": 345,
+    "skipped": 1,
+    "doctests_passed": 1
+  },
+  "platform": "Linux Boat",
+  "windows": "deferred by user",
+  "compiler_limit_moves": [
+    {
+      "path": "intl402/Collator/prototype/resolvedOptions/basic.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/Collator/taint-Object-prototype.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/DateTimeFormat/prototype/resolvedOptions/basic.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/DateTimeFormat/taint-Object-prototype-date-time-components.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/DateTimeFormat/taint-Object-prototype-dayPeriod.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/DateTimeFormat/taint-Object-prototype-fractionalSecondDigits.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/DateTimeFormat/taint-Object-prototype.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/canonicalized-tags.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/complex-language-subtag-replacement.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/complex-region-subtag-replacement.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/invalid-tags.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/preferred-grandfathered.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/preferred-variant.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/transformed-ext-canonical.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/transformed-ext-invalid.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/transformed-ext-valid.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/unicode-ext-canonicalize-calendar.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/unicode-ext-canonicalize-col-strength.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/unicode-ext-canonicalize-measurement-system.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/unicode-ext-canonicalize-region.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/unicode-ext-canonicalize-subdivision.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/unicode-ext-canonicalize-timezone.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/unicode-ext-canonicalize-yes-to-true.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Intl/getCanonicalLocales/unicode-ext-key-with-digit.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/Locale/invalid-tag-throws.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/NumberFormat/prototype/resolvedOptions/basic.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/NumberFormat/taint-Object-prototype.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/PluralRules/prototype/resolvedOptions/properties.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/constructors-taint-Object-prototype-2.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/constructors-taint-Object-prototype.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/default-locale-is-canonicalized.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    },
+    {
+      "path": "intl402/language-tags-canonicalized.js",
+      "after_status": "fail",
+      "after_reason": "runtime:Test262Error"
+    },
+    {
+      "path": "intl402/language-tags-invalid.js",
+      "after_status": "pass",
+      "after_reason": "completed"
+    }
+  ],
+  "workspace_gate": {
+    "passed": 2530,
+    "skipped": 10,
+    "doctest_suites": 31,
+    "doctests_passed": 2,
+    "failed": 0
+  }
+}

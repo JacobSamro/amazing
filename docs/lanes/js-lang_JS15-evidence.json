@@ -1,0 +1,58 @@
+{
+  "ticket": "JS-15",
+  "source_commit": "bcdd8fa0b0291afb1f3fc06afdb4a8468b22e8cf",
+  "base_commit": "ee29a551ae5bcfca81773281c38b63e743d2a856",
+  "platform": "Linux Boat",
+  "target": "$HOME/amazing/target-js-lang-86c44031",
+  "workspace_gate": {
+    "nextest_passed": 2753,
+    "nextest_skipped": 10,
+    "nextest_seconds": 59.413,
+    "owned_nextest_passed": 372,
+    "doctest_suites": 31,
+    "doctests_passed": 4,
+    "doctests_failed": 0
+  },
+  "corpus": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "timeout_seconds": 60.0,
+    "jobs": 4,
+    "filter": "",
+    "limit": 0,
+    "elapsed_seconds": 770.751
+  },
+  "comparison": {
+    "before": {
+      "classification_sha256": "33391817b044086b55a71812139ff54058ddbb033bfd115e0111834fb3219486",
+      "host_sha256": "6b610b00f0525ebbe01ecc4d4b177b446be709831845b94186bc8111411d24eb"
+    },
+    "after": {
+      "classification_sha256": "b257cb262c8aed0d6fc6736f51427d651ea4e28e9196d24a00a8d2c7c1944330",
+      "host_sha256": "a008674688c243d1561c65ed6a9f47515a42f5330ae71a3bda27dc09e376365d"
+    },
+    "file_passes": [
+      40132,
+      40146
+    ],
+    "variant_passes": [
+      77958,
+      77986
+    ],
+    "file_gains": 14,
+    "variant_gains": 28,
+    "file_losses": [],
+    "variant_losses": [],
+    "gains_by_directory": {
+      "annexB/language/literals": 7,
+      "annexB/built-ins/RegExp": 6,
+      "built-ins/RegExp/lookahead-quantifier-match-groups.js": 1
+    }
+  },
+  "source_sha256": {
+    "crates/amazing-regex/src/parser.rs": "9e50419ee22e031a1d8d2c658750e8ce684d39fbd116f814b50ec460a0fd570d",
+    "crates/amazing-regex/src/tests.rs": "aab2838ad795bbfff9536aa1393c8687f5647cdcd74be8a3d851ed4be4a8e339",
+    "crates/amazing-regex/README.md": "0a117cfe9442698f59a0cc6060d1043407baf7a52d2f7571430ebdf39f2e0a6c"
+  }
+}

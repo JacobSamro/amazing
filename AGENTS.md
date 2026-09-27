@@ -23,8 +23,48 @@ Speed comes from doing a lot per cycle, not from many small cycles.
 - **Never `git stash`.** The stash is one stack shared by every lane worktree of this repo; on
   2026-09-27 a lane's `git stash pop` applied another lane's concurrently pushed stash. Park
   work-in-progress as a WIP commit on your own lane branch, or `git diff > $OUT/wip.patch`.
+- **Never `nohup … &` a run.** Start long `linux-run.sh` / `test262-boat.sh` commands with your
+  shell tool's background mode, which notifies you when they exit. A detached `nohup` job exits
+  silently and the lane waits forever (2026-09-27: layout and js-date each sat idle 20+ minutes
+  after their run had already finished).
 - **Sandbox time is money.** Sandboxes are shared and billed while running. Batch your work so each
   `linux-run.sh` call does a lot; do not hold a sandbox with polling or sleeps.
+- **Port, don't reinvent (2026-09-27).** When a spec area is already solved in a permissively
+  licensed Rust engine, port the algorithm instead of re-deriving it. See "Porting from other
+  engines" below.
+
+## Porting from other engines (2026-09-27, user-approved, ADR 0013)
+
+Amazing stays our own architecture (value model, VM, bindings) and std-only in the engine cores,
+but lanes may **port code** from other open-source engines to close spec gaps faster. Ports are
+code copied and adapted into our crates, never new crate dependencies.
+
+- **Allowed sources: MIT or Apache-2.0 only.** MPL-2.0 (Servo, Stylo, Nova) and GPL/LGPL code
+  is read-only reference: study it, do not copy it.
+- **Attribution is mandatory.** Every file containing ported code starts with a header comment
+  naming the upstream repo, path, commit and license, e.g.
+  `// Portions ported from boa-dev/boa (core/engine/src/builtins/...) @ <sha>, MIT.`
+  and the lane appends a line for that upstream to `THIRD_PARTY_NOTICES.md` (repo, license,
+  copyright line, which of our files use it) in the same commit. **Append a new row; never
+  edit an existing one** (the file is union-merged, so an edited row comes back as a duplicate).
+  The integrator consolidates rows.
+- **Ports obey every other rule:** std-only, under 4000 lines per file, zero lost passes on the
+  lane's Test262/WPT gate. Rewrite upstream dependencies (ICU4X, temporal_rs types, `gc` crates)
+  onto our own types; do not pull them in.
+- Port whole areas in bulk (a builtin, a parser section), not line-by-line snippets, and record
+  the upstream commit in the lane's `docs/lanes/` decision map.
+
+Suggested sources per lane (verify the license at the commit you port from):
+
+| Lane | Source | License |
+|------|--------|---------|
+| js-lang, js-runtime, js-vm | `boa-dev/boa`, `Hans-Halverson/brimstone`, `lucid-softworks/lumen` (std-only, claims full Test262) | MIT |
+| js-date (RegExp) | `ridiculousfish/regress`, `lucid-softworks/lumen` | Apache-2.0 / MIT |
+| js-stdlib (Temporal) | `boa-dev/temporal` (temporal_rs), `lucid-softworks/lumen` | Apache-2.0 / MIT |
+| js-intl | `lucid-softworks/lumen` (std-only Intl/CLDR tables) | MIT |
+| layout, layout-flexgrid | `DioxusLabs/taffy` | MIT |
+| html | `servo/html5ever` tree builder (check its per-crate license: MIT/Apache) | MIT / Apache-2.0 |
+| css, compositor, paint | Servo/Stylo/WebRender are MPL-2.0: reference only | — |
 
 ## Linux-first (2026-09-26, overrides the Windows gate rules below until lifted)
 

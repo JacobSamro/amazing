@@ -1,4 +1,5 @@
 use crate::{Dom, NodeIdx, NodeKind};
+use crate::markup::IncrementalDocumentImport;
 use crate::shadow::{ShadowMode, ShadowOptions, SlotAssignment};
 
 fn markup(dom: &Dom, node: NodeIdx) -> String {
@@ -166,4 +167,100 @@ fn document_import_clones_into_target_with_clonable_shadow() {
     assert_eq!(dom.import_node(other, NodeIdx(0), false), Err(crate::DomError::NotSupportedError));
     assert_eq!(dom.import_node(other, root, true), Err(crate::DomError::NotSupportedError));
     assert_eq!(dom.adopt(root, other), Err(crate::DomError::HierarchyRequestError));
+}
+
+// HTML-34: `IncrementalDocumentImport` grafts a script-interleaved parser's
+// private arena into an existing document node incrementally, preserving
+// already-imported nodes' destination identity -- see markup.rs's doc
+// comment for why this exists (the iframe counterpart of HTML-31/32's
+// top-level `swap_dom` interleaving).
+
+#[test]
+fn incremental_import_preserves_identity_of_already_imported_nodes_across_syncs() {
+    let mut source = Dom::new();
+    let html = source.create_element(NodeIdx(0), "html");
+    let body = source.create_element(html, "body");
+    let first = source.create_element(body, "p");
+    source.create_text(first, "one");
+
+    let mut dest = Dom::new();
+    let document = dest.create_document();
+    let mut import = IncrementalDocumentImport::new(document);
+    import.sync(&mut dest, &source).unwrap();
+    let dest_first = import.imported(first).expect("first <p> imported");
+    assert_eq!(markup(&dest, document), "<html><body><p>one</p></body></html>");
+
+    // A still-open element (here, `body`) gains a sibling of `first` after
+    // the "pause" above -- the incremental import must pick it up on the
+    // next `sync` without disturbing `first`'s already-assigned identity.
+    let second = source.create_element(body, "p");
+    source.create_text(second, "two");
+    import.sync(&mut dest, &source).unwrap();
+    assert_eq!(import.imported(first), Some(dest_first), "already-imported node kept its identity");
+    let dest_second = import.imported(second).expect("second <p> imported");
+    assert_ne!(dest_first, dest_second);
+    assert_eq!(markup(&dest, document), "<html><body><p>one</p><p>two</p></body></html>");
+
+    // And a THIRD sync with nothing new is a clean no-op.
+    import.sync(&mut dest, &source).unwrap();
+    assert_eq!(markup(&dest, document), "<html><body><p>one</p><p>two</p></body></html>");
+}
+
+#[test]
+fn incremental_import_discovers_new_grandchildren_of_an_already_open_node() {
+    let mut source = Dom::new();
+    let div = source.create_element(NodeIdx(0), "div");
+    let mut dest = Dom::new();
+    let document = dest.create_document();
+    let mut import = IncrementalDocumentImport::new(document);
+    import.sync(&mut dest, &source).unwrap();
+    assert_eq!(markup(&dest, document), "<div></div>");
+
+    // `div` is still open (no closing tag has been seen by a real parser
+    // yet); a real interleaved parse would keep appending to it across
+    // several pauses before it closes. Each new grandchild must still be
+    // found even though `div` itself was already imported.
+    let span = source.create_element(div, "span");
+    source.create_text(span, "x");
+    import.sync(&mut dest, &source).unwrap();
+    assert_eq!(markup(&dest, document), "<div><span>x</span></div>");
+
+    source.create_text(span, "y");
+    import.sync(&mut dest, &source).unwrap();
+    assert_eq!(markup(&dest, document), "<div><span>xy</span></div>");
+}
+
+#[test]
+fn incremental_import_carries_shadow_roots_and_template_contents() {
+    // A `Document` node allows only one `Element` child (the document
+    // element) -- both `host` and `template` nest under it, matching what a
+    // real interleaved parse would actually produce (never two independent
+    // top-level elements), unlike an early version of this test.
+    let mut source = Dom::new();
+    let container = source.create_element(NodeIdx(0), "div");
+    let host = source.create_element(container, "div");
+    let options = ShadowOptions { mode: ShadowMode::Open, delegates_focus: false,
+        slot_assignment: SlotAssignment::Named, clonable: false, serializable: true };
+    let root = source.attach_declarative_shadow(host, options, false).unwrap();
+    let template = source.create_element(container, "template");
+    let contents = source.ensure_template_contents(template).unwrap();
+
+    let mut dest = Dom::new();
+    let document = dest.create_document();
+    let mut import = IncrementalDocumentImport::new(document);
+    import.sync(&mut dest, &source).unwrap();
+    let dest_host = import.imported(host).unwrap();
+    let dest_root = dest.shadow_root_of_host(dest_host).unwrap();
+    assert!(dest.shadow_data(dest_root).unwrap().declarative);
+
+    // A pause with the shadow root/template already opened but still empty,
+    // then more content arriving inside each on the next sync -- both are
+    // tracked as ordinary containers, not just copied once at creation time.
+    source.create_text(root, "shadow");
+    let dest_template = import.imported(template).unwrap();
+    source.create_element(contents, "br");
+    import.sync(&mut dest, &source).unwrap();
+    assert_eq!(String::from_utf16(&dest.serialize_children(dest_root).unwrap()).unwrap(), "shadow");
+    let dest_contents = dest.template_contents(dest_template).unwrap();
+    assert_eq!(markup(&dest, dest_contents), "<br>");
 }

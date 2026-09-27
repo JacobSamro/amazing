@@ -666,6 +666,16 @@ fn control_value(dom: &Dom, ids: &HashMap<String, NodeIdx>, node: NodeIdx) -> Op
         return None;
     }
     if let Some(value) = non_empty(dom.get_attribute_ns(node, None, "aria-valuetext"))
+        // A11Y-15: `<input>`'s live value (dirty-value-flag-aware —
+        // `Dom::input_value`, not the `value` **content** attribute, which
+        // stays at its parse-time default once the user types/drags/picks a
+        // new one) takes the `value` content attribute's old place for
+        // `<input>` specifically. The plain attribute read stays as the
+        // fallback right after for anything else that reaches here with a
+        // literal `value` attribute (`<progress>`/`<meter>`/a custom ARIA
+        // widget) — those have no separate live/dirty state, so the
+        // attribute was never stale for them.
+        .or_else(|| native_input_value(dom, node))
         .or_else(|| non_empty(dom.get_attribute_ns(node, None, "value")))
         // `aria-valuetext` is a human-readable override of `aria-valuenow`;
         // absent that, the plain numeric `aria-valuenow` is the value
@@ -673,6 +683,19 @@ fn control_value(dom: &Dom, ids: &HashMap<String, NodeIdx>, node: NodeIdx) -> Op
         .or_else(|| non_empty(dom.get_attribute_ns(node, None, "aria-valuenow")))
     {
         return Some(value);
+    }
+    // A11Y-15: `<textarea>`'s value is its live text-entry content
+    // (`Dom::textarea_value`) — previously not substituted at all here
+    // (only `<input>`'s `value` attribute was ever read above), so a
+    // `<textarea>` used as a name-from-content target produced no value
+    // contribution whatsoever, live or otherwise.
+    if dom.name(node) == Some("textarea") {
+        if let Ok(value) = dom.textarea_value(node) {
+            let text = flatten(&String::from_utf16_lossy(&value));
+            if !text.is_empty() {
+                return Some(text);
+            }
+        }
     }
     // `<select>`'s value is its selected `<option>`'s text — unlike
     // `<input>`, there is no `value` attribute on the select itself.
@@ -697,13 +720,33 @@ fn control_value(dom: &Dom, ids: &HashMap<String, NodeIdx>, node: NodeIdx) -> Op
     None
 }
 
+/// `<input>`'s live value (`Dom::input_value`) as a name-from-content
+/// value-substitution string. `Dom::input_value` covers every input type
+/// itself (a `checkbox`/`radio`'s `value` is excluded earlier in
+/// `control_value` by role, before this is ever called for one) — this just
+/// converts and non-empties the result.
+fn native_input_value(dom: &Dom, node: NodeIdx) -> Option<String> {
+    if dom.name(node) != Some("input") {
+        return None;
+    }
+    let value = dom.input_value(node).ok()?;
+    let text = flatten(&String::from_utf16_lossy(&value));
+    if text.is_empty() { None } else { Some(text) }
+}
+
 /// The text of a `<select>`'s selected `<option>`, or its first option per
 /// the HTML default when none carries `selected`.
+///
+/// A11Y-15: `Dom::option_selected` (live selectedness, which itself already
+/// resolves the "first non-disabled option" default) replaces a raw
+/// `selected` **content**-attribute scan — the attribute only reflects
+/// *default* selectedness and is never touched by a real selection change
+/// (picking a different option, or `select.value = ...`).
 fn selected_native_option_text(dom: &Dom, select: NodeIdx) -> Option<String> {
     let options: Vec<NodeIdx> = dom.children(select).filter(|child| dom.name(*child) == Some("option")).collect();
     let selected = options
         .iter()
-        .find(|option| dom.get_attribute_ns(**option, None, "selected").is_some())
+        .find(|option| dom.option_selected(**option).unwrap_or(false))
         .or_else(|| options.first())
         .copied()?;
     let text = flatten(&host::child_text(dom, selected));

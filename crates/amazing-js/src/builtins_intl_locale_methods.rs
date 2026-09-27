@@ -15,8 +15,17 @@ impl Interpreter {
 }
 
 fn intl_construct_service(i: &mut Interpreter, name: &str, locales: JsValue, options: JsValue) -> Result<JsValue, Throw> {
-    let intl = i.global_env.resolve("Intl").ok_or_else(|| Throw::type_error("Intl unavailable"))?;
-    let constructor = i.get_prop(&intl, name)?;
+    // These language-builtin bridges (String.prototype.localeCompare,
+    // Number/BigInt.prototype.toLocaleString, Date.prototype.toLocaleString) use
+    // the %Collator%/%NumberFormat%/%DateTimeFormat% intrinsics directly per
+    // ECMA-402, not whatever value the mutable `Intl.<name>` property currently
+    // holds -- testIntl.js's taintDataProperty helper replaces that property
+    // with a throwing/undefined accessor and expects these methods to be
+    // unaffected (taint-Intl-Collator.js, taint-Intl-NumberFormat.js,
+    // taint-Intl-DateTimeFormat.js).
+    let constructor = i.intrinsic_constructors.get(name)
+        .map(|(constructor, _)| JsValue::Object(constructor.clone()))
+        .ok_or_else(|| Throw::type_error("Intl service unavailable"))?;
     i.construct(&constructor, vec![locales, options])
 }
 

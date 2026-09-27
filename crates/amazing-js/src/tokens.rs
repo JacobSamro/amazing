@@ -152,6 +152,8 @@ pub struct Token {
     pub cooked_utf16: Option<Vec<u16>>,
     /// Source spelling of a template chunk, excluding its delimiters.
     pub raw_utf16: Option<Vec<u16>>,
+    /// A template chunk beginning at a substitution's closing brace.
+    pub template_continuation: bool,
 }
 
 impl Token {
@@ -164,6 +166,7 @@ impl Token {
             legacy_escape: false,
             cooked_utf16: None,
             raw_utf16: None,
+            template_continuation: false,
         }
     }
 }

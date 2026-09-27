@@ -262,7 +262,7 @@ fn font_units(box_: &LayoutBox, text: Option<&dyn TextSystem>) -> values::FontRe
         box_.font_metric_style.as_ref(),
         box_.root_font_metric_style.as_ref(),
         box_.font_size,
-    )
+    ).with_line_heights(box_.line_height, box_.root_line_height)
 }
 
 fn padding_box(box_: &LayoutBox) -> Rect {
@@ -512,6 +512,38 @@ fn shaped_intrinsic_width(
                     + margin.right.unwrap_or(0.0)
             })
             .fold(0.0f32, f32::max);
+    }
+    // A plain (non-table) inline-containing leaf found while descending: an
+    // unstyled auto-sized box's own contribution is exactly its shaped-text
+    // content width plus its chrome, same as `intrinsic_content_widths`'s
+    // top-level `Flow::Inlines` special case already applies to `box_`
+    // itself. Guarded to boxes with no width/min-width/max-width override so
+    // this never has to re-implement `intrinsic_width_constraints`' clamping
+    // -- those fall through unchanged to `flex::min/max_content_width`. A
+    // broader version of this (shaping every inline run unconditionally) was
+    // tried in LAYOUT-24 and reverted: it also changed measurement for table
+    // *cells'* own short inline runs reached the same way, tipping some
+    // previously-fitting lines into wrapping (17 corpus regressions). The
+    // guard here keeps this leaf path from firing on anything with its own
+    // sizing already pinned by CSS, which is the pattern those regressions
+    // shared and this fix's target case (a bare `<div>` of plain text) does
+    // not.
+    let auto_sized = ["width", "min-width"]
+        .into_iter()
+        .all(|property| box_.style.get(property).is_none_or(|v| v.eq_ignore_ascii_case("auto")))
+        && box_.style.get("max-width").is_none_or(|v| v.eq_ignore_ascii_case("none"));
+    if let (Flow::Inlines(items), Some(text_system)) = (&box_.flow, text)
+        && auto_sized
+        && let Some((mn, mx)) = crate::inline::intrinsic_widths_shaped(
+            items,
+            box_.font_metric_style.as_ref().map(|style| style.direction).unwrap_or_default(),
+            text_system,
+        )
+    {
+        let padding = values::resolve_padding(&box_.style, box_.font_size, 0.0);
+        let border = values::resolve_borders(&box_.style, box_.font_size);
+        let chrome = padding.left + padding.right + border.left + border.right;
+        return chrome + if minimum { mn } else { mx };
     }
     if minimum {
         crate::flex::min_content_width(box_, fonts)

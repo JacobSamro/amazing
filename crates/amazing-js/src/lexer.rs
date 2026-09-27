@@ -379,7 +379,7 @@ impl Lexer {
             start,
             newline_before,
         );
-        token.cooked_utf16 = Some(cooked_utf16);
+        token.cooked_utf16 = cooked_utf16;
         token.raw_utf16 = Some(raw_utf16);
         toks.push(token);
         if !tail {
@@ -405,8 +405,9 @@ impl Lexer {
                 start,
                 newline_before,
             );
-            token.cooked_utf16 = Some(cooked_utf16);
+            token.cooked_utf16 = cooked_utf16;
             token.raw_utf16 = Some(raw_utf16);
+            token.template_continuation = true;
             toks.push(token);
             if tail {
                 self.template_bases.pop();
@@ -424,9 +425,10 @@ impl Lexer {
 
     /// Scans cooked template text up to the closing backtick (returns
     /// `tail = true`) or up to `${` (consumes it, returns `tail = false`).
-    fn scan_template_part(&mut self) -> Result<(String, Vec<u16>, Vec<u16>, bool), SyntaxError> {
+    fn scan_template_part(&mut self) -> Result<(String, Option<Vec<u16>>, Vec<u16>, bool), SyntaxError> {
         let raw_start = self.idx;
         let mut cooked_utf16 = Vec::new();
+        let mut valid = true;
         loop {
             match self.cur() {
                 None => return Err(syntax_error("unterminated template literal", self.loc())),
@@ -434,19 +436,29 @@ impl Lexer {
                     let raw_utf16 = self.raw_template_units(raw_start);
                     self.advance();
                     let cooked = String::from_utf16_lossy(&cooked_utf16);
-                    return Ok((cooked, cooked_utf16, raw_utf16, true));
+                    return Ok((cooked, valid.then_some(cooked_utf16), raw_utf16, true));
                 }
                 Some('$') if self.peek(1) == Some('{') => {
                     let raw_utf16 = self.raw_template_units(raw_start);
                     self.advance();
                     self.advance();
                     let cooked = String::from_utf16_lossy(&cooked_utf16);
-                    return Ok((cooked, cooked_utf16, raw_utf16, false));
+                    return Ok((cooked, valid.then_some(cooked_utf16), raw_utf16, false));
                 }
                 Some('\\') => {
                     self.advance();
-                    if let Some(code_point) = self.read_escape()? {
-                        push_code_point(&mut cooked_utf16, code_point, self.loc())?;
+                    if matches!(self.cur(), Some('1'..='9'))
+                        || self.cur() == Some('0') && self.peek(1).is_some_and(|c| c.is_ascii_digit()) {
+                        valid = false;
+                    }
+                    match self.read_escape() {
+                        Ok(Some(code_point)) => {
+                            if push_code_point(&mut cooked_utf16, code_point, self.loc()).is_err() {
+                                valid = false;
+                            }
+                        }
+                        Ok(None) => {},
+                        Err(_) => valid = false,
                     }
                 }
                 Some(c) => {

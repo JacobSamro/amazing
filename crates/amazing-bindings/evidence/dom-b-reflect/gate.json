@@ -1,0 +1,51 @@
+{
+  "fixed_base": "0654b5d3",
+  "measured_at": "2026-09-27T06:50:33Z",
+  "platform": "Linux k-test (root@159.69.124.56), dom-bindings lane tree",
+  "workspace_pass": 3378,
+  "workspace_skip": 17,
+  "workspace_fail": 0,
+  "doctests": "all crate doc-test suites ok (amazing_js 1 passed, amazing_html 1 passed, amazing-dom and amazing-bindings each 0 -- no doc examples)",
+  "crate_pass": {
+    "amazing-bindings": 122,
+    "amazing-dom_amazing-bindings_amazing_combined": 707
+  },
+  "corpus": {
+    "directories": ["html/dom", "wai-aria", "web-animations/interfaces/Animatable"],
+    "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "before_pass_subtests": 10902,
+    "before_fail_subtests": 3561,
+    "after_pass_subtests": 10946,
+    "after_fail_subtests": 3380,
+    "gained_subtests": 178,
+    "lost_subtests": 134,
+    "lost_subtests_note": "Every LOST subtest is in a pre-existing, untouched legacy html/dom/reflection-*.html page (img.decoding, input.size, legend.lang, blockquote.title, pre.width, noscript.className and similar -- none are ARIA/switch/animate/clipboard). Each such file's fail count is IDENTICAL between before and after; only its pass count drops, and both runs report status 'timeout' with detail 'worker deadline exceeded; completed subtests retained'. These files are auto-generated reflection.js harnesses with thousands of subtests run under the WPT harness's 20s per-page wall-clock budget: the run that happens to get less machine time before the deadline fires completes fewer of them, which this run-corpus.py counts as newly-missing passes. 178 GAINED subtests show the identical pattern in the other direction on different reflection-*.html pages (frameset.accessKey, colgroup.hidden, etc: unaffected by this ticket). Zero LOST subtests touch anything this ticket changed; 158 of 178 GAINED do (aria/switch/animate/clipboard). See README.md for the per-file counts confirming this.",
+    "gained_subtests_on_target": 158,
+    "lost_subtests_on_target": 0,
+    "file_status_changes": [
+      "html/dom/aria-attribute-reflection.html fail -> pass",
+      "html/dom/aria-attribute-reflection.tentative.html fail -> pass"
+    ],
+    "before_binary": "dom-b-audit-reflect-before (built at fixed_base 0654b5d3, --ref)",
+    "after_binary_sha256": "12bec39b1cc924af7b152feda88834c480072600989ad75633a9c06c55048ecd",
+    "before_results": "before.json",
+    "after_results": "after.json",
+    "compare_script": "compare-corpus.py",
+    "unautomated_note": "input.switch and navigator.clipboard have no automated coverage in this pinned WPT checkout (wai-aria/manual/switch_*-manual.html are ARIA-role manual tests, unrelated to the IDL attribute); both are covered instead by native tests in crates/amazing-bindings/src/tests_dom_b_reflect.rs. web-animations/interfaces/Animatable mostly fails/errors on missing shared resources (easing-tests.js, css-animations/support/testcommon.js not vendored in this sparse checkout) or on the full timing model (getAnimations, getAnimations-iframe) this ticket does not implement -- unchanged before/after, not a regression."
+  },
+  "tested_source_sha256": {
+    "crates/amazing-dom/src/lib.rs": "b4e9fec7f7eb322323187f03e83da057be9847ff391f986b90fa867fe213460d",
+    "crates/amazing-dom/src/animation.rs": "599c721e92dd74ead47306d38659107719e2e658e5ac254ecfdacc2537779257",
+    "crates/amazing-bindings/src/host.rs": "629d44a0403cec5fca0f1e12588045d62363a0efac33b833a6d40bf24edc1398",
+    "crates/amazing-bindings/src/interfaces.rs": "b2798dada0f686fb92466b5a2c609a60f088cf72897bec26171dfaaadf377086",
+    "crates/amazing-bindings/src/invoke.rs": "e4a514f2f697cac7bb347c88ed44df05097fb34067a53f39a611f31ea0c8cc71",
+    "crates/amazing-bindings/src/lib.rs": "32bf6862d5402273dd6eae4212d5f520ef1f0d230be2806bb6bdd32f645f389c",
+    "crates/amazing-bindings/src/aria_reflection.rs": "50bf60b27ec2fda5c645b968d3616408c355d07a7000ee972a34ebaed9e58206",
+    "crates/amazing-bindings/src/animation_bindings.rs": "28d05990905d715f955e678f0347e5702d8ed5528b0ac4dde6a5b5245979a8cc",
+    "crates/amazing-bindings/src/clipboard_bindings.rs": "c5a2bad60817cd4f5a526cf3518e0afbd2d814762e71cce9ee0843fe1f924b51",
+    "crates/amazing-bindings/src/tests_dom_b_reflect.rs": "5ab14d0ad09b663536249e18dd7b269f862401336704bb3e72fcb7f199e41a4e",
+    "crates/amazing-bindings/src/tests.rs": "a9b3efa514ad38da70badb7a2fdf015f2a91d33ce87062b59f557b9e917d00e0",
+    "crates/amazing/src/runtime_binding_host.rs": "ebb0bf00e856892df0ade5d7cbcaf62bc0d17b3dba8f47dc472cef87885cc4a2",
+    "crates/amazing/src/runtime_host_dom_bindings.rs": "bc283707305a22ea506f8805429e00482b34492d401c433abffb4d630c9af201"
+  }
+}

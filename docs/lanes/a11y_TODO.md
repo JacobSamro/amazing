@@ -51,6 +51,21 @@ available on the build hosts; add one when the WPT corpus lands.
   (`Operation`/`InterfaceDefinition::members`) lives in `amazing-bindings`
   (dom-bindings-owned) — filed in `.agents/a11y/questions.md`, not
   implemented here.
+- **A11Y-15: native state readers use `amazing-dom`'s live accessors, not
+  content attributes, for anything with a spec "dirty" IDL state.**
+  `checked`/`selected`/an input's `value` each have a live/current state
+  distinct from their parse-time content attribute (a real click/selection/
+  edit never touches the attribute) — `host::native_checked`/
+  `native_selected`/`accname::control_value`/`selected_native_option_text`
+  read `Dom::input_checked`/`option_selected`/`input_value`/`textarea_value`
+  accordingly. `disabled`/`required`/`readonly`/`open` (details) have no such
+  divergence — they're plain reflected attributes with no separate live
+  state — so those stayed attribute reads after an explicit audit (see
+  `host.rs`'s own doc comments on each). `<input type=range>`'s ARIA
+  `valuenow` fallback needs the live `Dom::input_value_as_number` for the
+  same reason; `<progress>`/`<meter>` don't (their `value`/`max` reflect
+  straight back to the attribute per spec), so `host::native_range_value`
+  treats the three differently on purpose, not inconsistently.
 
 ## TODO
 

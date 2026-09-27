@@ -2568,3 +2568,6 @@ mod tests_event_types;
 
 #[path = "tests_error_events.rs"]
 mod error_events;
+
+#[path = "tests_dom_b_reflect.rs"]
+mod tests_dom_b_reflect;

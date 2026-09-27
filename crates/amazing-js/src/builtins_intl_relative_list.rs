@@ -20,6 +20,7 @@ impl Interpreter {
         intl_method(self, function, "supportedLocalesOf", 1, intl_number_supported_locales);
         let _ = prototype.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
             binary_property(JsValue::str("Intl.RelativeTimeFormat")));
+        intl_register_intrinsic(self, "RelativeTimeFormat", function, &prototype);
         let _ = namespace.borrow_mut().define("RelativeTimeFormat", binary_writable_property(relative));
 
         let list = Self::native("ListFormat", intl_list_ctor, &self.function_proto);
@@ -34,6 +35,7 @@ impl Interpreter {
         intl_method(self, function, "supportedLocalesOf", 1, intl_number_supported_locales);
         let _ = prototype.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
             binary_property(JsValue::str("Intl.ListFormat")));
+        intl_register_intrinsic(self, "ListFormat", function, &prototype);
         let _ = namespace.borrow_mut().define("ListFormat", binary_writable_property(list));
     }
 }

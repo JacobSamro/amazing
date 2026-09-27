@@ -37,6 +37,9 @@ impl Parser {
     /// `AssignmentExpression`: conditional, or an assignment whose left side
     /// is validated as assignable (right-associative).
     pub(super) fn parse_assignment_expr(&mut self) -> Result<Expr, SyntaxError> {
+        if self.in_generator > 0 && self.at_kw(crate::tokens::Keyword::Yield) {
+            return self.parse_yield_expr();
+        }
         let start = self.cur_loc();
         let left = self.parse_conditional_expr()?;
         let op = match self.cur().kind {
@@ -260,7 +263,7 @@ impl Parser {
 
     pub(super) fn parse_unary(&mut self) -> Result<Expr, SyntaxError> {
         if self.cur().escaped_identifier && matches!(self.cur().kind, TokenKind::Keyword(_))
-            && !(self.at_kw(crate::tokens::Keyword::Yield) && !self.strict_script && self.in_generator == 0) {
+            && !(matches!(self.cur().kind, TokenKind::Keyword(crate::tokens::Keyword::Yield)) && !self.strict_script && self.in_generator == 0) {
             return Err(self.err("escaped reserved word"));
         }
         let start = self.cur_loc();
@@ -306,7 +309,7 @@ impl Parser {
             if op == UnOp::Delete && is_private_reference(&operand) {
                 return Err(self.err_at(start, "cannot delete a private name"));
             }
-            if op == UnOp::Delete && self.strict_script && matches!(operand.kind, ExprKind::Ident(_)) {
+            if op == UnOp::Delete && self.strict_script && is_identifier_reference(&operand) {
                 return Err(self.err_at(start, "cannot delete an identifier in strict mode"));
             }
             return Ok(Expr::new(
@@ -515,7 +518,7 @@ impl Parser {
                     span,
                 );
             } else if matches!(self.cur().kind, TokenKind::TemplatePart { .. }) {
-                if self.template_depth == 0 {
+                if !self.cur().template_continuation {
                     if has_unparenthesized_optional_chain(&e) {
                         return Err(self.err("optional chain cannot be a tagged template tag"));
                     }
@@ -544,13 +547,13 @@ impl Parser {
             loop {
                 let arg_start = self.cur_loc();
                 if self.eat_punct(Punct::Ellipsis) {
-                    let inner = self.parse_assignment_expr()?;
+                    let inner = self.parse_assignment_with_in()?;
                     args.push(Expr::new(
                         ExprKind::Spread(Box::new(inner)),
                         self.span_from(arg_start),
                     ));
                 } else {
-                    args.push(self.parse_assignment_expr()?);
+                    args.push(self.parse_assignment_with_in()?);
                 }
                 if !self.eat_punct(Punct::Comma) {
                     break;
@@ -570,7 +573,7 @@ impl Parser {
         let start = self.cur_loc();
         use crate::tokens::Keyword as K;
         if self.cur().escaped_identifier && matches!(self.cur().kind, TokenKind::Keyword(_))
-            && !(self.at_kw(crate::tokens::Keyword::Yield) && !self.strict_script && self.in_generator == 0) {
+            && !(matches!(self.cur().kind, TokenKind::Keyword(crate::tokens::Keyword::Yield)) && !self.strict_script && self.in_generator == 0) {
             return Err(self.err("escaped reserved word"));
         }
         if self.at_punct(Punct::Slash) || self.at_punct(Punct::SlashEq) {
@@ -613,6 +616,9 @@ impl Parser {
             }
             TokenKind::TemplatePart { .. } => {
                 let lit = self.parse_template_lit()?;
+                if lit.cooked_valid.iter().any(|valid| !valid) {
+                    return Err(self.err_at(start, "invalid escape in untagged template"));
+                }
                 Ok(Expr::new(ExprKind::Template(lit), self.span_from(start)))
             }
             TokenKind::Keyword(K::This) => {
@@ -643,7 +649,7 @@ impl Parser {
                 Ok(Expr::new(ExprKind::Bool(false), self.span_from(start)))
             }
             TokenKind::Keyword(K::Function) => {
-                let f = self.parse_function_rest(false)?;
+                let f = self.parse_function_rest(false, false)?;
                 Ok(Expr::new(
                     ExprKind::Function(Box::new(f)),
                     self.span_from(start),
@@ -687,8 +693,7 @@ impl Parser {
                 self.bump();
                 Ok(Expr::new(ExprKind::ImportMeta, self.span_from(start)))
             }
-            TokenKind::Keyword(K::Yield) if self.in_generator > 0 => self.parse_yield_expr(),
-            TokenKind::Keyword(K::Yield) if !self.strict_script => {
+            TokenKind::Keyword(K::Yield) if !self.strict_script && self.in_generator == 0 => {
                 let token = self.bump();
                 if self.at_punct(Punct::Arrow) && !self.cur().newline_before {
                     self.bump();
@@ -712,7 +717,7 @@ impl Parser {
         // async function expression
         if self.word("async") && self.nth_is_function(1) {
             self.bump(); // async
-            let f = self.parse_function_rest(true)?;
+            let f = self.parse_function_rest(true, false)?;
             return Ok(Expr::new(
                 ExprKind::Function(Box::new(f)),
                 self.span_from(start),
@@ -862,7 +867,7 @@ impl Parser {
 
     pub(super) fn parse_arrow_body(&mut self) -> Result<ArrowBody, SyntaxError> {
         if self.at_punct(Punct::Lbrace) {
-            Ok(ArrowBody::Block(self.parse_block()?))
+            Ok(ArrowBody::Block(self.parse_function_block()?))
         } else {
             Ok(ArrowBody::Expr(Box::new(self.parse_assignment_expr()?)))
         }
@@ -896,6 +901,7 @@ impl Parser {
 
     pub(super) fn parse_template_lit(&mut self) -> Result<TemplateLit, SyntaxError> {
         let t0 = self.bump();
+        let mut cooked_valid = vec![t0.cooked_utf16.is_some()];
         let first_utf16 = t0.cooked_utf16.unwrap_or_default();
         let first_raw_utf16 = t0.raw_utf16.unwrap_or_default();
         let (first, tail0) = match t0.kind {
@@ -916,6 +922,7 @@ impl Parser {
             // The closing `}` was absorbed by the lexer together with the
             // next chunk, so a TemplatePart must follow directly.
             let t = self.bump();
+            cooked_valid.push(t.cooked_utf16.is_some());
             let cooked_utf16 = t.cooked_utf16.unwrap_or_default();
             let raw_utf16 = t.raw_utf16.unwrap_or_default();
             match t.kind {
@@ -937,6 +944,7 @@ impl Parser {
             quasis,
             quasis_utf16,
             raw_quasis_utf16,
+            cooked_valid,
             exprs,
         })
     }
@@ -1048,14 +1056,16 @@ impl Parser {
         if self.at_punct(Punct::LParen) {
             let saved_super_property = self.super_property_allowed;
             self.super_property_allowed = true;
-            self.in_async += usize::from(is_async);
-            self.in_generator += usize::from(is_generator);
+            let saved_async = self.in_async;
+            let saved_generator = self.in_generator;
+            self.in_async = usize::from(is_async);
+            self.in_generator = usize::from(is_generator);
             self.in_new_target += 1;
             let saved_static_block = self.in_static_block;
             self.in_static_block = 0;
             let params = self.parse_params();
-            self.in_generator -= usize::from(is_generator);
-            self.in_async -= usize::from(is_async);
+            self.in_generator = saved_generator;
+            self.in_async = saved_async;
             let params = match params {
                 Ok(params) => params,
                 Err(error) => {
@@ -1066,7 +1076,7 @@ impl Parser {
                 }
             };
             self.validate_accessor_arity(kind, &params, start)?;
-            let body = self.with_fn_context(is_async, is_generator, |p| p.parse_block());
+            let body = self.with_fn_context(is_async, is_generator, |p| p.parse_function_block());
             self.in_new_target -= 1;
             self.in_static_block = saved_static_block;
             self.super_property_allowed = saved_super_property;

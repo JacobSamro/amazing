@@ -86,6 +86,8 @@ impl InterfaceBrand {
     pub const DOM_STRING_MAP: Self = Self(38);
     pub const OBSERVABLE: Self = Self(39);
     pub const SUBSCRIBER: Self = Self(40);
+    pub const ANIMATION: Self = Self(41);
+    pub const CLIPBOARD: Self = Self(42);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -230,6 +232,8 @@ pub enum Interface {
     DOMParser,
     Observable,
     Subscriber,
+    Animation,
+    Clipboard,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -783,6 +787,29 @@ pub enum Operation {
     /// generation, and for the promise pair which settlement branch) so one
     /// thunk shape covers relay/teardown/event-listener/promise-reaction use.
     ObservableInternalThunk(u64),
+    /// ARIAMixin reflection (DOM-B-REFLECT): `role` plus the whole aria-*
+    /// string-attribute set, all `DOMString?` reflections of the named
+    /// content attribute, applying to every Element regardless of namespace
+    /// or tag -- unlike `LegacyReflectGet`/`Set`, which gate on a specific
+    /// tag/interface. See `aria_reflection.rs`.
+    AriaGet(&'static str),
+    AriaSet(&'static str),
+    /// `Element.prototype.animate()` (Animatable mixin) and the minimal
+    /// `Animation` object it returns. See `animation_bindings.rs`.
+    ElementAnimate,
+    AnimationFinished,
+    AnimationReady,
+    AnimationCancel,
+    AnimationFinish,
+    AnimationPlay,
+    AnimationPause,
+    AnimationOnFinish,
+    AnimationSetOnFinish,
+    /// `navigator.clipboard` and `Clipboard.readText`/`writeText`, backed by
+    /// an in-memory clipboard (`Dom::clipboard_text`). See `clipboard_bindings.rs`.
+    NavigatorClipboard,
+    ClipboardReadText,
+    ClipboardWriteText,
 }
 
 /// Context passed to the embedding's HTML fragment parser after the DOM borrow

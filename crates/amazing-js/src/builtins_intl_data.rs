@@ -22,6 +22,32 @@ const INTL_NUMBER_DATA: &[IntlNumberData] = &[
     IntlNumberData { locale: "ar", numbering_system: "latn", decimal: ".", group: ",", plus: "‎+", minus: "‎-", percent: "‎%‎", nan: "ليس رقمًا", infinity: "∞", decimal_pattern: "#,##0.###", percent_pattern: "#,##0%", currency_pattern: "‏#,##0.00 ¤;‏-#,##0.00 ¤", currency_accounting_pattern: "؜#,##0.00¤;(؜#,##0.00¤)", minimum_grouping: 1 },
     IntlNumberData { locale: "hi", numbering_system: "latn", decimal: ".", group: ",", plus: "+", minus: "-", percent: "%", nan: "NaN", infinity: "∞", decimal_pattern: "#,##,##0.###", percent_pattern: "#,##,##0%", currency_pattern: "¤#,##,##0.00", currency_accounting_pattern: "¤#,##,##0.00", minimum_grouping: 1 },
     IntlNumberData { locale: "ru", numbering_system: "latn", decimal: ",", group: " ", plus: "+", minus: "-", percent: "%", nan: "не число", infinity: "∞", decimal_pattern: "#,##0.###", percent_pattern: "#,##0 %", currency_pattern: "#,##0.00 ¤", currency_accounting_pattern: "#,##0.00 ¤", minimum_grouping: 1 },
+    // New rows are appended here, never inserted mid-list: INTL_CURRENCY_DATA's
+    // per-locale `symbols`/`narrow_symbols`/`names` arrays are aligned to this
+    // array's *position*, not its `locale` field (see the `.position()` lookup
+    // in builtins_intl_number.rs), so inserting a row anywhere but the end
+    // silently shifts every later locale's currency symbol/name by one slot --
+    // caught via a Test262 regression (signDisplay-currency-de-DE.js) when
+    // en-IN/pt-PT were first added mid-list instead of appended. That lookup
+    // also clamps to each array's length, so a currency lacking a slot this
+    // far out falls back to index 0 ("en") rather than panicking.
+    //
+    // en-IN keeps English symbols but uses the Indian digit-grouping pattern
+    // (primary group of 3, secondary groups of 2) like hi-IN -- CLDR's en-IN
+    // decimalFormat is "#,##,##0.###", not en's plain "#,##0.###".
+    IntlNumberData { locale: "en-IN", numbering_system: "latn", decimal: ".", group: ",", plus: "+", minus: "-", percent: "%", nan: "NaN", infinity: "∞", decimal_pattern: "#,##,##0.###", percent_pattern: "#,##,##0%", currency_pattern: "¤#,##,##0.00", currency_accounting_pattern: "¤#,##,##0.00", minimum_grouping: 1 },
+    // pt-PT (European Portuguese) groups with a narrow no-break space, not a
+    // period, and puts the currency symbol after the amount with the same
+    // narrow no-break space -- distinct from pt-BR, so this locale gets its
+    // own row rather than falling back to the generic "en" default (which
+    // formatRange/pt-PT.js was hitting since no "pt"/"pt-PT" row existed).
+    IntlNumberData { locale: "pt-PT", numbering_system: "latn", decimal: ",", group: " ", plus: "+", minus: "-", percent: "%", nan: "NaN", infinity: "∞", decimal_pattern: "#,##0.###", percent_pattern: "#,##0 %", currency_pattern: "#,##0.00 ¤", currency_accounting_pattern: "#,##0.00 ¤;(#,##0.00 ¤)", minimum_grouping: 1 },
+    // gv (Manx) and sl (Slovenian): locale resolution (intl_lookup) only
+    // recognizes a language that has a row here, so PluralRules/etc. can't
+    // resolve to either without one -- number-formatting symbols/patterns are
+    // plain Western defaults since no pinned case exercises them otherwise.
+    IntlNumberData { locale: "gv", numbering_system: "latn", decimal: ".", group: ",", plus: "+", minus: "-", percent: "%", nan: "NaN", infinity: "∞", decimal_pattern: "#,##0.###", percent_pattern: "#,##0%", currency_pattern: "¤#,##0.00", currency_accounting_pattern: "¤#,##0.00;(¤#,##0.00)", minimum_grouping: 1 },
+    IntlNumberData { locale: "sl", numbering_system: "latn", decimal: ",", group: ".", plus: "+", minus: "-", percent: "%", nan: "NaN", infinity: "∞", decimal_pattern: "#,##0.###", percent_pattern: "#,##0 %", currency_pattern: "#,##0.00 ¤", currency_accounting_pattern: "#,##0.00 ¤", minimum_grouping: 1 },
 ];
 const INTL_SUPPORTED_NUMBERING_SYSTEMS: &str = "adlm ahom arab arabext bali beng bhks brah cakm cham deva diak fullwide gara gong gonm gujr gukh guru hanidec hmng hmnp java kali kawi khmr knda krai lana lanatham laoo latn lepc limb mathbold mathdbl mathmono mathsanb mathsans mlym modi mong mroo mtei mymr mymrepka mymrpao mymrshan mymrtlng nagm newa nkoo olck onao orya osma outlined rohg saur segment shrd sind sinh sora sund sunu takr talu tamldec telu thai tibt tirh tnsa tols vaii wara wcho";
 const INTL_SUPPORTED_COLLATIONS: &str = "big5han compat dict direct ducet emoji eor gb2312 phonebk phonetic pinyin reformed searchjl stroke trad unihan zhuyin";
@@ -1479,6 +1505,16 @@ const INTL_PLURAL_RULES: &[IntlPluralRule] = &[
     IntlPluralRule { locale: "ru", kind: "cardinal", category: "one", rule: "v = 0 and i % 10 = 1 and i % 100 != 11" },
     IntlPluralRule { locale: "ru", kind: "cardinal", category: "few", rule: "v = 0 and i % 10 = 2..4 and i % 100 != 12..14" },
     IntlPluralRule { locale: "ru", kind: "cardinal", category: "many", rule: "v = 0 and i % 10 = 0 or v = 0 and i % 10 = 5..9 or v = 0 and i % 100 = 11..14" },
+    // gv (Manx) and sl (Slovenian) cardinal rules, from CLDR's plurals.xml --
+    // PluralRules/prototype/resolvedOptions/plural-categories-order.js needs
+    // both; neither locale had a row at all.
+    IntlPluralRule { locale: "gv", kind: "cardinal", category: "one", rule: "v = 0 and i % 10 = 1" },
+    IntlPluralRule { locale: "gv", kind: "cardinal", category: "two", rule: "v = 0 and i % 10 = 2" },
+    IntlPluralRule { locale: "gv", kind: "cardinal", category: "few", rule: "v = 0 and i % 100 = 0,20,40,60,80" },
+    IntlPluralRule { locale: "gv", kind: "cardinal", category: "many", rule: "v != 0" },
+    IntlPluralRule { locale: "sl", kind: "cardinal", category: "one", rule: "v = 0 and i % 100 = 1" },
+    IntlPluralRule { locale: "sl", kind: "cardinal", category: "two", rule: "v = 0 and i % 100 = 2" },
+    IntlPluralRule { locale: "sl", kind: "cardinal", category: "few", rule: "v = 0 and i % 100 = 3..4 or v != 0" },
     IntlPluralRule { locale: "en", kind: "ordinal", category: "one", rule: "n % 10 = 1 and n % 100 != 11" },
     IntlPluralRule { locale: "en", kind: "ordinal", category: "two", rule: "n % 10 = 2 and n % 100 != 12" },
     IntlPluralRule { locale: "en", kind: "ordinal", category: "few", rule: "n % 10 = 3 and n % 100 != 13" },

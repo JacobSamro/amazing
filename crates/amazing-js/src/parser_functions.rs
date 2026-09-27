@@ -6,21 +6,25 @@ impl Parser {
 
     /// Parses everything after `async`?/`function` — the keyword itself is
     /// consumed here. Callers fix up `is_async`.
-    pub(super) fn parse_function_rest(&mut self, is_async: bool) -> Result<FunctionItem, SyntaxError> {
+    pub(super) fn parse_function_rest(&mut self, is_async: bool, declaration: bool) -> Result<FunctionItem, SyntaxError> {
         self.bump(); // function
         let is_generator = self.eat_punct(Punct::Star);
-        let name = if matches!(self.cur().kind, TokenKind::Keyword(crate::tokens::Keyword::Yield))
-            && !self.strict_script && !is_generator {
-            let token = self.bump();
-            Some(Ident::new("yield", token.span))
-        } else if matches!(self.cur().kind, TokenKind::Ident(_)) {
-            Some(self.expect_ident()?)
-        } else {
-            None
-        };
         let saved_async = self.in_async;
         let saved_generator = self.in_generator;
         let saved_static_block = self.in_static_block;
+        if !declaration {
+            self.in_async = usize::from(is_async);
+            self.in_generator = usize::from(is_generator);
+            self.in_static_block = 0;
+        }
+        let name = if matches!(self.cur().kind, TokenKind::Ident(_)
+            | TokenKind::Keyword(crate::tokens::Keyword::Yield)) {
+            self.expect_ident().map(Some)
+        } else { Ok(None) };
+        self.in_async = saved_async;
+        self.in_generator = saved_generator;
+        self.in_static_block = saved_static_block;
+        let name = name?;
         self.in_static_block = 0;
         self.in_async = usize::from(is_async);
         self.in_generator = usize::from(is_generator);
@@ -42,7 +46,11 @@ impl Parser {
         self.super_call_allowed = false;
         self.super_property_allowed = false;
         self.in_formal_params = 0;
-        let body = self.parse_block();
+        let saved_control = (std::mem::take(&mut self.labels),
+            std::mem::replace(&mut self.loop_depth, 0),
+            std::mem::replace(&mut self.switch_depth, 0));
+        let body = self.parse_function_block();
+        (self.labels, self.loop_depth, self.switch_depth) = saved_control;
         self.in_formal_params = saved_formals;
         self.super_call_allowed = saved_super;
         self.super_property_allowed = saved_super_property;
@@ -219,15 +227,19 @@ impl Parser {
         is_generator: bool,
         f: impl FnOnce(&mut Self) -> Result<T, SyntaxError>,
     ) -> Result<T, SyntaxError> {
+        let saved = (self.in_async, self.in_generator, self.in_static_block,
+            self.in_formal_params, self.loop_depth, self.switch_depth,
+            std::mem::take(&mut self.labels));
         self.in_function += 1;
-        self.in_async += usize::from(is_async);
-        self.in_generator += usize::from(is_generator);
-        let saved_static_block = self.in_static_block;
+        self.in_async = usize::from(is_async);
+        self.in_generator = usize::from(is_generator);
         self.in_static_block = 0;
+        self.in_formal_params = 0;
+        self.loop_depth = 0;
+        self.switch_depth = 0;
         let r = f(self);
-        self.in_static_block = saved_static_block;
-        self.in_generator -= usize::from(is_generator);
-        self.in_async -= usize::from(is_async);
+        (self.in_async, self.in_generator, self.in_static_block,
+            self.in_formal_params, self.loop_depth, self.switch_depth, self.labels) = saved;
         self.in_function -= 1;
         r
     }
@@ -397,14 +409,16 @@ impl Parser {
             }
             let saved_super_property = self.super_property_allowed;
             self.super_property_allowed = true;
-            self.in_async += usize::from(is_async);
-            self.in_generator += usize::from(is_generator);
+            let saved_async = self.in_async;
+            let saved_generator = self.in_generator;
+            self.in_async = usize::from(is_async);
+            self.in_generator = usize::from(is_generator);
             self.in_new_target += 1;
             let saved_static_block = self.in_static_block;
             self.in_static_block = 0;
             let params = self.parse_params();
-            self.in_generator -= usize::from(is_generator);
-            self.in_async -= usize::from(is_async);
+            self.in_generator = saved_generator;
+            self.in_async = saved_async;
             let params = match params {
                 Ok(params) => params,
                 Err(error) => {
@@ -429,7 +443,7 @@ impl Parser {
             self.in_class_field_initializer = 0;
             self.super_call_allowed = actual_kind == MethodKind::Constructor
                 && self.class_heritage.last().copied().unwrap_or(false);
-            let body = self.with_fn_context(is_async, is_generator, |p| p.parse_block());
+            let body = self.with_fn_context(is_async, is_generator, |p| p.parse_function_block());
             self.in_new_target -= 1;
             self.in_static_block = saved_static_block;
             self.super_call_allowed = saved_super;

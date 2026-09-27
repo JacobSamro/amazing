@@ -31,6 +31,14 @@ pub fn document_with_focus(html: &str, focus_tag: &str) -> AxDocument {
     doc
 }
 
+/// A11Y-15: rebuilds `doc.tree` after mutating `doc.dom`'s live form-control
+/// state directly (`set_input_checked`, `set_option_selected`, ...) —
+/// mirrors `document_with_focus`'s own rebuild step, generalized for tests
+/// that mutate live state other than focus.
+pub fn rebuild(doc: &mut AxDocument) {
+    doc.tree = crate::build(&doc.dom, &doc.styled, &doc.layout);
+}
+
 /// The first DOM node with the given tag name.
 pub fn dom_of_tag(doc: &AxDocument, tag: &str) -> Option<NodeIdx> {
     doc.dom

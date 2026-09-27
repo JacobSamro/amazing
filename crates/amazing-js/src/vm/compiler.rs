@@ -39,6 +39,37 @@ pub fn compile(ast: &ast::Program, is_module: bool) -> Result<Program, CompileEr
     Ok(c.program)
 }
 
+/// Compile a method body with the same path used for function declarations.
+/// Callers retain the AST body when an instruction is not yet supported.
+/// The sole caller is the tree walker's `method_value`, for both object-literal
+/// methods and (non-VM-compiled-class) class methods; either way the result is
+/// a method, not an ordinary function, so `is_method` must be set here --
+/// `instantiate`'s own `!is_method || is_generator` guard is what actually
+/// keeps a non-generator method from getting an own `prototype`. Relying on
+/// deleting it afterward does not work now that `instantiate` gives that
+/// property the spec-correct `configurable: false` descriptor.
+pub(crate) fn compile_class_method(method: &ast::ClassMethod, strict: bool) -> Result<FunctionCode, CompileError> {
+    let mut compiler = Compiler::new(false);
+    compiler.strict = strict;
+    let mut code = compiler.compile_function(&ast::FunctionItem {
+        name: None,
+        params: method.params.clone(),
+        body: method.body.clone(),
+        is_async: method.is_async,
+        is_generator: method.is_generator,
+    }, method.span)?;
+    Rc::get_mut(&mut code.0).expect("new method code").is_method = true;
+    Ok(code)
+}
+
+pub(crate) fn compile_function_item(function: &ast::FunctionItem, span: Span, strict: bool)
+    -> Result<FunctionCode, CompileError>
+{
+    let mut compiler = Compiler::new(false);
+    compiler.strict = strict;
+    compiler.compile_function(function, span)
+}
+
 /// Compile an async AST body whose parameters have already been bound by the
 /// interpreter. Compilation is atomic and does not execute JavaScript.
 ///
@@ -116,6 +147,7 @@ impl Compiler {
                 hoisted: vec![],
                 functions: vec![],
                 is_function,
+                async_iterator_slots: 0,
             },
             depth: 0,
             is_generator: false,
@@ -124,21 +156,47 @@ impl Compiler {
         }
     }
 
+    // Parameter initializers currently execute in the shared evaluator. Require
+    // the same supported expression subset so direct eval cannot silently use
+    // a different environment at the bytecode function boundary.
+    fn validate_parameters(&self, params: &[ast::Param]) -> Result<(), CompileError> {
+        let mut probe = Self::new(true);
+        probe.strict = self.strict;
+        for param in params {
+            probe.validate_binding_expressions(&param.binding)?;
+            if let Some(default) = &param.default { probe.expression(default)?; }
+        }
+        Ok(())
+    }
+
+    fn validate_binding_expressions(&mut self, binding: &Binding) -> Result<(), CompileError> {
+        match binding {
+            Binding::Ident(_) => {}
+            Binding::Array(elements) => {
+                for element in elements.iter().flatten() { self.validate_binding_expressions(element)?; }
+            }
+            Binding::Object(properties) => {
+                for (key, value) in properties {
+                    if let ast::BindingKey::Computed(key) = key { self.expression(key)?; }
+                    self.validate_binding_expressions(value)?;
+                }
+            }
+            Binding::Rest(binding) => self.validate_binding_expressions(binding)?,
+            Binding::Default(binding, default) => {
+                self.validate_binding_expressions(binding)?;
+                self.expression(default)?;
+            }
+        }
+        Ok(())
+    }
+
     fn compile_function(
         &self,
         function: &ast::FunctionItem,
         span: Span,
     ) -> Result<FunctionCode, CompileError> {
-        let mut params = Vec::new();
-        for param in &function.params {
-            if param.default.is_some() || param.rest {
-                return Err(self.error(param.span, "parameter pattern"));
-            }
-            let Binding::Ident(name) = &param.binding else {
-                return Err(self.error(param.span, "parameter pattern"));
-            };
-            params.push(name.name.clone());
-        }
+        self.validate_parameters(&function.params)?;
+        let params = function.params.clone();
         let mut child = Self::new(true);
         child.strict = self.strict || has_use_strict_directive(&function.body.body);
         child.is_generator = function.is_generator;
@@ -174,16 +232,8 @@ impl Compiler {
         if arrow.is_generator {
             return Err(self.error(span, "generator arrow"));
         }
-        let mut params = Vec::new();
-        for param in &arrow.params {
-            if param.default.is_some() || param.rest {
-                return Err(self.error(param.span, "parameter pattern"));
-            }
-            let Binding::Ident(name) = &param.binding else {
-                return Err(self.error(param.span, "parameter pattern"));
-            };
-            params.push(name.name.clone());
-        }
+        self.validate_parameters(&arrow.params)?;
+        let params = arrow.params.clone();
         let mut child = Self::new(true);
         child.strict = self.strict || matches!(&arrow.body, ast::ArrowBody::Block(block) if has_use_strict_directive(&block.body));
         child.is_async = arrow.is_async;
@@ -244,6 +294,11 @@ impl Compiler {
         )) {
             return Err(self.error(span, "class field or static block"));
         }
+        // A static method now compiles (installed on the constructor via
+        // `is_static` below, not the prototype); a private method still
+        // fails through `object_key`'s own `PropKey::Private` rejection per
+        // member, which has the same whole-class-falls-back-to-tree-walker
+        // effect as an upfront check without a separate one to keep in sync.
         // The super-class expression is compiled in the enclosing scope,
         // before the constructor: base and derived classes otherwise share
         // this compiler, and `super()`/`super.prop` inside the constructor
@@ -290,7 +345,7 @@ impl Compiler {
             }
         }
         let super_class = super_class.map(|register| ClassSuper { register, implicit: implicit_derived_ctor });
-        Ok(ClassCode { constructor, methods, super_class })
+        Ok(ClassCode { constructor, methods, super_class, inferred_name: None })
     }
 
     fn hoist_functions(&mut self, statements: &[Stmt]) -> Result<(), CompileError> {
@@ -400,7 +455,7 @@ impl Compiler {
                         return Err(self.error(binding.span, "const requires an initializer"));
                     }
                     let value = match &binding.init {
-                        Some(expression) => self.expression(expression)?,
+                        Some(expression) => self.named_class_expression(expression, KeyOperand::Static(super::Interpreter::class_binding_name(&name.name)))?,
                         None => 0, // Register zero is immutable undefined.
                     };
                     self.emit(Instruction::Declare(
@@ -491,11 +546,52 @@ impl Compiler {
                     self.patch(end);
                 }
             }
+            StmtKind::ForAwaitOf { left, right, body } if self.is_async => {
+                self.emit(Instruction::Complete(0));
+                let iterable = self.expression(right)?;
+                let slot = self.program.async_iterator_slots;
+                self.program.async_iterator_slots += 1;
+                self.emit(Instruction::AsyncIteratorStart(slot, iterable));
+                let handler = self.emit(Instruction::PushTry { catch: None, finally: None, end: 0 });
+                let start = self.program.code.len();
+                let next = self.register(statement.span)?;
+                self.emit(Instruction::AsyncIteratorNext(next, slot));
+                let result = self.register(statement.span)?;
+                self.emit(Instruction::Await(result, next));
+                let done = self.register(statement.span)?;
+                self.emit(Instruction::AsyncIteratorDone(done, slot, result));
+                let end = self.emit(Instruction::Branch(done, Condition::Truthy, 0));
+                let value = self.register(statement.span)?;
+                self.emit(Instruction::AsyncIteratorValue(value, result));
+                let awaited = self.register(statement.span)?;
+                self.emit(Instruction::Await(awaited, value));
+                self.emit(Instruction::BindFor(left.clone(), awaited));
+                self.statement(body)?;
+                self.emit(Instruction::LeaveScope);
+                self.emit(Instruction::Jump(start));
+                self.patch(end);
+                self.emit(Instruction::TryNormal);
+                let finally = self.program.code.len();
+                let closed = self.register(statement.span)?;
+                self.emit(Instruction::AsyncIteratorClose(closed, slot));
+                let result = self.register(statement.span)?;
+                self.emit(Instruction::Await(result, closed));
+                self.emit(Instruction::AsyncIteratorCloseCheck(result));
+                self.emit(Instruction::EndFinally);
+                let end = self.program.code.len();
+                self.program.code[handler] = Instruction::PushTry {
+                    catch: None, finally: Some(finally), end,
+                };
+            }
             StmtKind::Throw(expression) => {
                 let value = self.expression(expression)?;
                 self.emit(Instruction::Throw(value));
             }
             StmtKind::Try(statement) => {
+                if statement.catch.as_ref().is_some_and(|catch|
+                    catch.binding.as_ref().is_some_and(|binding| !matches!(binding, Binding::Ident(_)))) {
+                    return Err(self.error(statement.block.span, "catch binding pattern"));
+                }
                 self.emit(Instruction::Complete(0));
                 let handler = self.emit(Instruction::PushTry {
                     catch: None,
@@ -554,6 +650,27 @@ impl Compiler {
             _ => return Err(self.error(statement.span, unsupported_statement(&statement.kind))),
         }
         Ok(())
+    }
+
+    fn named_class_expression(&mut self, expression: &Expr, name: KeyOperand) -> Result<Register, CompileError> {
+        self.enter(expression.span)?;
+        let result = self.named_class_expression_inner(expression, name);
+        self.depth -= 1;
+        result
+    }
+
+    fn named_class_expression_inner(&mut self, expression: &Expr, name: KeyOperand) -> Result<Register, CompileError> {
+        match &expression.kind {
+            ExprKind::Paren(inner) => self.named_class_expression(inner, name),
+            ExprKind::Class(class) if class.name.is_none() => {
+                let mut code = self.compile_class(class, expression.span)?;
+                code.inferred_name = Some(name);
+                let dst = self.register(expression.span)?;
+                self.emit(Instruction::MakeClass(dst, code));
+                Ok(dst)
+            }
+            _ => self.expression(expression),
+        }
     }
 
     fn expression(&mut self, expression: &Expr) -> Result<Register, CompileError> {
@@ -662,7 +779,12 @@ impl Compiler {
                             self.emit(Instruction::LoadName(value, name.name.clone(), false));
                             value
                         }
-                        ast::PropValue::Init(value) => self.expression(value)?,
+                        ast::PropValue::Init(value) => {
+                            if !matches!(&property.key, ast::PropKey::Computed(_))
+                                && matches!(&key, KeyOperand::Static(name) if *name == "__proto__") {
+                                self.expression(value)?
+                            } else { self.named_class_expression(value, key.clone())? }
+                        },
                         ast::PropValue::CoverInitializedName { .. } => {
                             return Err(self.error(property.span, "cover initialized name"));
                         }
@@ -774,6 +896,10 @@ impl Compiler {
                 args,
                 optional: false,
             } => {
+                if matches!(&callee.kind,
+                    ExprKind::Ident(name) if name.name == "eval") {
+                    return Err(self.error(expression.span, "direct eval"));
+                }
                 let (callee, this) = match &callee.kind {
                     ExprKind::Member {
                         obj,
@@ -796,6 +922,13 @@ impl Compiler {
                             object
                         };
                         (function, this)
+                    }
+                    _ if super::super::event_handler::identifier_name(callee).is_some() => {
+                        let name = super::super::event_handler::identifier_name(callee).unwrap();
+                        let function = self.register(callee.span)?;
+                        let receiver = self.register(callee.span)?;
+                        self.emit(Instruction::LoadCallName(function, receiver, name.to_owned()));
+                        (function, receiver)
                     }
                     _ => (self.expression(callee)?, 0),
                 };
@@ -854,8 +987,15 @@ impl Compiler {
                 target,
                 value,
             } => {
-                let (slot, _) = self.reference(target)?;
-                let value = self.expression(value)?;
+                let slot = if let Some(name) = super::super::event_handler::identifier_name(target) {
+                    let slot = self.program.references;
+                    self.program.references += 1;
+                    self.emit(Instruction::ResolveWriteName(slot, name.to_owned()));
+                    slot
+                } else { self.reference(target)?.0 };
+                let value = if let Some(name) = super::super::event_handler::identifier_name(target) {
+                    self.named_class_expression(value, KeyOperand::Static(name.into()))?
+                } else { self.expression(value)? };
                 self.emit(Instruction::StoreReference(slot, value));
                 return Ok(value);
             }
@@ -892,7 +1032,9 @@ impl Compiler {
                     let rhs = self.emit(Instruction::Branch(old, condition, 0));
                     let end = self.emit(Instruction::Jump(0));
                     self.patch(rhs);
-                    let right = self.expression(value)?;
+                    let right = if let Some(name) = super::super::event_handler::identifier_name(target) {
+                        self.named_class_expression(value, KeyOperand::Static(name.into()))?
+                    } else { self.expression(value)? };
                     self.emit(Instruction::Move(dst, right));
                     self.emit(Instruction::StoreReference(slot, dst));
                     self.patch(end);

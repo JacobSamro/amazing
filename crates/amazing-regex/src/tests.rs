@@ -530,6 +530,108 @@ fn shared_budget_and_compile_limits_fail_closed() {
 }
 
 #[test]
+fn case_insensitive_class_sequences_fit_the_compiler_budget() {
+    let pattern = format!("^{}$", "[a-z]".repeat(32));
+    for flags in ["i", "iu", "iv"] {
+        let regex = Regex::new(&pattern, flags).unwrap();
+        assert!(regex.exec(&"A".repeat(32), 0).unwrap().is_some());
+        assert!(regex.exec(&format!("{}0", "A".repeat(31)), 0).unwrap().is_none());
+    }
+}
+
+#[test]
+fn indexed_class_folding_preserves_unicode_and_legacy_membership() {
+    for flags in ["i", "iu"] {
+        for (pattern, input, expected) in [
+            ("^[a-z]+$", "AZaz", true),
+            ("^[a-z]+$", "Kſ", flags == "iu"),
+            ("^[^a-z]+$", "Kſ", flags == "i"),
+            ("^[Σ]+$", "Σσς", true),
+            ("^[\\uD800]+$", "A", false),
+            ("^[a-zA-Z\\d]+$", "aA0", true),
+            ("^[\\D]+$", "A", true),
+            ("^[\\D]+$", "0", false),
+            ("^(?=[a-z])[a-z]$", "A", true),
+        ] {
+            let regex = Regex::new(pattern, flags).unwrap();
+            assert_eq!(
+                regex.exec(input, 0).unwrap().is_some(),
+                expected,
+                "{pattern:?} / {flags} / {input:?}"
+            );
+        }
+    }
+    // Large repeated ranges still consume a bounded compilation budget.
+    let expensive = "[\\u0000-\\uFFFF]".repeat(32);
+    assert!(matches!(Regex::new(&expensive, "iu"), Err(Error::Limit(_))));
+}
+
+#[test]
+fn annex_b_numeric_escapes_choose_backrefs_before_octal() {
+    for (pattern, text) in [(r"\1", "\x01"), (r"\07", "\x07"), (r"\377", "\u{ff}"),
+        (r"\400", " 0"), (r"\770", "?0"), (r"\0111", "\t1"), (r"\8", "8"), (r"\90", "90"),
+        (r"[\1]", "\x01"), (r"[\8]", "8")] {
+        assert_eq!(captures(pattern, "", text)[0], Some(text.into()), "{pattern}");
+    }
+    assert_eq!(captures(r"(.)\1", "", "aa")[0], Some("aa".into()));
+    assert_eq!(captures(r"\1(a)", "", "a")[0], Some("a".into()));
+    assert_eq!(captures(r"(.)(.)(.)(.)(.)(.)(.)(.)\8", "", "123456788")[0], Some("123456788".into()));
+    assert_eq!(captures(r"\1[(]", "", "\x01(")[0], Some("\x01(".into()));
+    assert_eq!(captures(r"\1\(", "", "\x01(")[0], Some("\x01(".into()));
+    for flags in ["u", "v"] {
+        for pattern in [r"\1", r"\07", r"\8", r"[\1]", r"[\8]"] {
+            assert!(Regex::new(pattern, flags).is_err(), "{pattern}/{flags}");
+        }
+        assert_eq!(captures(r"\1(a)", flags, "a")[0], Some("a".into()));
+    }
+    let long_identity = format!("\\{}", "9".repeat(100));
+    assert!(Regex::new(&long_identity, "").is_ok());
+}
+
+#[test]
+fn annex_b_identity_control_and_class_range_fallbacks() {
+    for (pattern, text) in [(r"\xQ", "xQ"), (r"\u12Q", "u12Q"), (r"\p\P\k", "pPk"),
+        (r"\c0", r"\c0"), (r"\c_", r"\c_"), (r"[\c0]", "\x10"), (r"[\c_]", "\x1f"),
+        (r"[\c!]", "\\"), (r"[\c!]", "c"), (r"[\c!]", "!")] {
+        assert_eq!(captures(pattern, "", text)[0], Some(text.into()), "{pattern}");
+    }
+    for pattern in [r"[\d-%]+", r"[%-\d]+", r"[\s-\d]+", r"[--\d]+"] {
+        assert!(Regex::new(pattern, "").is_ok(), "{pattern}");
+        assert!(Regex::new(pattern, "u").is_err(), "{pattern}");
+    }
+    assert_eq!(captures(r"[\s-\d]+", "", "x \t-012x")[0], Some(" \t-012".into()));
+    for flags in ["", "u", "v"] { assert!(Regex::new("[z-a]", flags).is_err()); }
+    for pattern in [r"\xQ", r"\u12Q", r"\c0", r"[\c0]", r"[\c_]", r"[\c!]"] {
+        assert!(Regex::new(pattern, "u").is_err(), "{pattern}");
+    }
+}
+
+#[test]
+fn annex_b_quantified_assertions_preserve_zero_width_semantics() {
+    for quantifier in ["*", "+", "?", "{2}", "{2,}", "{2,3}", "*?", "+?", "??", "{2}?", "{2,}?", "{2,3}?"] {
+        let optional = quantifier.starts_with('*') || quantifier.starts_with('?');
+        let positive = format!(".(?=Z){quantifier}");
+        let negative = format!("[a-e](?!Z){quantifier}");
+        assert_eq!(captures(&positive, "", "a bZ cZZ")[0], Some(if optional { "a" } else { "b" }.into()));
+        assert_eq!(captures(&negative, "", "aZZ bZ e")[0], Some(if optional { "a" } else { "e" }.into()));
+        assert!(Regex::new(&positive, "u").is_err());
+        assert!(Regex::new(&negative, "v").is_err());
+    }
+    assert_eq!(captures(r"(?=(a))?a", "", "a"), vec![Some("a".into()), None]);
+    assert_eq!(captures(r"(?=(a)){2}a", "", "a"), vec![Some("a".into()), Some("a".into())]);
+    assert_eq!(captures(r"(a)(?=(b))+b", "", "ab"),
+        vec![Some("ab".into()), Some("a".into()), Some("b".into())]);
+    // A noncapturing group is an Atom even when its contents are assertions.
+    for flags in ["", "u", "v"] {
+        assert_eq!(captures(r"(?:(?=(a)))+a", flags, "a"),
+            vec![Some("a".into()), Some("a".into())]);
+        assert_eq!(captures(r"(?:^){2}a", flags, "a")[0], Some("a".into()));
+        assert_eq!(captures(r"(?:\b){2}a", flags, "a")[0], Some("a".into()));
+    }
+    for pattern in ["^*", "$+", r"\b?", r"\B{2}"] { assert!(Regex::new(pattern, "").is_err()); }
+}
+
+#[test]
 fn lookbehind_assertions() {
     assert_eq!(captures(r"(?<=\$)\d+", "", "$100")[0], Some("100".into()));
     assert!(Regex::new(r"(?<=\$)\d+", "").unwrap().exec("100", 0).unwrap().is_none());
@@ -600,117 +702,11 @@ fn many_ignorecase_classes_stay_well_under_the_compile_budget() {
     assert!(regex.exec(&"a1B".repeat(20), 0).unwrap().is_some());
 }
 
-#[test]
-fn annex_b_class_escape_extends_control_letter_to_digits_and_underscore() {
-    // `\cX` outside a class only accepts a real ControlLetter; `\c0`
-    // doesn't form a control escape there, so it falls back to literal
-    // "c0" (matching neither of the non-'c'/'0' bytes below).
-    assert!(Regex::new(r"\c0", "").unwrap().exec("\x0f\x10\x11", 0).unwrap().is_none());
-    // Inside a class, Annex B's `ClassControlLetter` also accepts a decimal
-    // digit or `_`, yielding `chr(code % 32)`.
-    assert_eq!(captures(r"[\c0]", "", "\x0f\x10\x11")[0], Some("\x10".into()));
-    assert_eq!(captures(r"[\c9]", "", "\x18\x19\x1a")[0], Some("\x19".into()));
-    assert_eq!(captures(r"[\c_]", "", "\x1e\x1f\x20")[0], Some("\x1f".into()));
-    // In unicode mode neither extension applies: `\c` not followed by a
-    // real ControlLetter is always a Syntax Error.
-    assert!(matches!(Regex::new(r"[\c0]", "u"), Err(Error::Syntax(_))));
-    assert!(matches!(Regex::new(r"\c0", "u"), Err(Error::Syntax(_))));
-}
-
-#[test]
-fn annex_b_identity_escape_covers_p_and_out_of_range_digit_escapes() {
-    // `\P`/`\p` aren't recognized outside unicode mode, so they fall back
-    // to a literal identity escape instead of erroring.
-    assert_eq!(captures(r"O\PQ", "", "MNOPQRS")[0], Some("OPQ".into()));
-    // A `\N` with no matching capture group falls back through legacy
-    // octal (8/9 aren't octal digits) to a plain literal digit, rather than
-    // a Syntax Error.
-    assert_eq!(captures(r"\8", "", "789")[0], Some("8".into()));
-    assert_eq!(captures(r"7\89", "", "67890")[0], Some("789".into()));
-    // DecimalEscape (backreference) still takes precedence once enough
-    // capturing groups exist.
-    assert_eq!(
-        captures(r"(.)(.)(.)(.)(.)(.)(.)(.)\8\8", "", "0123456777")[0],
-        Some("0123456777".into())
-    );
-    // In unicode mode there's no Annex B fallback: an out-of-range `\N` is
-    // always a Syntax Error.
-    assert!(matches!(Regex::new(r"\8", "u"), Err(Error::Syntax(_))));
-}
-
-#[test]
-fn annex_b_legacy_octal_escape_sequence() {
-    for (pattern, byte) in [
-        (r"\1", 0x01u32),
-        (r"\7", 0x07),
-        (r"\00", 0x00),
-        (r"\07", 0x07),
-        (r"\40", 0x20),
-        (r"\77", 0x3f),
-        (r"\000", 0x00),
-        (r"\007", 0x07),
-        (r"\300", 0xc0),
-        (r"\377", 0xff),
-    ] {
-        let ch = char::from_u32(byte).unwrap();
-        assert_eq!(
-            captures(pattern, "", &ch.to_string())[0],
-            Some(ch.to_string()),
-            "{pattern}"
-        );
-    }
-    // Bounded to 3 digits including leading zeros: the trailing digit is a
-    // separate literal-digit atom.
-    assert_eq!(captures(r"\0111", "", "\x091")[0], Some("\x091".into()));
-    // Sequence is bounded according to the resulting String Value, not the
-    // number of digits written: `\400` is `\40` (0x20) followed by a
-    // literal `0`.
-    assert_eq!(captures(r"\400", "", "\x200")[0], Some("\x200".into()));
-    // DecimalEscape still takes precedence when the referenced group exists.
-    assert_eq!(captures(r"(.)\1", "", "a\x01 aa")[0], Some("aa".into()));
-}
-
-#[test]
-fn annex_b_non_empty_class_ranges_fall_back_to_union() {
-    // Neither side of a `-` is a single character (`\d` is a character
-    // *class*), so Annex B's CharacterRangeOrUnion makes `-` a literal
-    // member instead of a range operator.
-    assert_eq!(captures(r"[--\d]+", "", ".-0123456789-.")[0], Some("-0123456789-".into()));
-    assert_eq!(captures(r"[\d-a]+", "", ":a0123456789-:")[0], Some("a0123456789-".into()));
-    assert_eq!(captures(r"[\s-\d]+", "", "& \t0123456789-&")[0], Some(" \t0123456789-".into()));
-    // Both sides single characters, in order: an ordinary range, unaffected.
-    assert_eq!(captures(r"[a-z]+", "", "!abc!")[0], Some("abc".into()));
-    // Both sides single characters, reversed: always a Syntax Error, in
-    // every mode -- this early error isn't one of the Annex B fallbacks.
-    assert!(matches!(Regex::new(r"[z-a]", ""), Err(Error::Syntax(_))));
-    assert!(matches!(Regex::new(r"[z-a]", "u"), Err(Error::Syntax(_))));
-    // Not both single characters, but in unicode mode: still a Syntax Error.
-    assert!(matches!(Regex::new(r"[--\d]", "u"), Err(Error::Syntax(_))));
-}
-
-#[test]
-fn annex_b_quantifiable_lookahead_assertion() {
-    // `(?=...)`/`(?!...)` may be quantified in non-unicode mode only; the
-    // VM's existing zero-width no-progress guard makes each repetition
-    // after the first (which makes no position progress) fail cleanly.
-    assert_eq!(
-        captures(r".(?=Z)*", "", "a bZ cZZ dZZZ eZZZZ")[0],
-        Some("a".into())
-    );
-    assert_eq!(
-        captures(r".(?=Z)+", "", "a bZ cZZ dZZZ eZZZZ")[0],
-        Some("b".into())
-    );
-    assert_eq!(
-        captures(r".(?=Z){2,3}", "", "a bZ cZZ dZZZ eZZZZ")[0],
-        Some("b".into())
-    );
-    assert_eq!(
-        captures(r"[a-e](?!Z)+", "", "aZZZZ bZZZ cZZ dZ e")[0],
-        Some("e".into())
-    );
-    // Lookbehind is never quantifiable, in either mode (unchanged).
-    assert!(matches!(Regex::new(r"(?<=a)+", ""), Err(Error::Syntax(_))));
-    // In unicode mode, quantifying a lookahead is still a Syntax Error.
-    assert!(matches!(Regex::new(r"(?=a)+", "u"), Err(Error::Syntax(_))));
-}
+// The remaining Annex B fallback/quantifier/class-range regression coverage
+// this ticket (JSD-4) added is superseded by dev's own, independently
+// written and now-adopted Annex B implementation (bcdd8fa0) and its tests
+// above (`annex_b_numeric_escapes_choose_backrefs_before_octal`,
+// `annex_b_identity_control_and_class_range_fallbacks`,
+// `annex_b_quantified_assertions_preserve_zero_width_semantics`), which
+// cover the same escape/quantifier/class-range grammar; kept once, here, to
+// avoid doubling up near-duplicate coverage after merging dev into this lane.

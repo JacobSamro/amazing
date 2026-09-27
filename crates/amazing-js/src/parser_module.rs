@@ -233,7 +233,7 @@ impl Parser {
                     if async_ {
                         self.bump();
                     }
-                    StmtKind::Function(Box::new(self.parse_function_rest(async_)?))
+                    StmtKind::Function(Box::new(self.parse_function_rest(async_, true)?))
                 };
                 return Ok(ModuleItem::ExportDefaultDeclaration(Stmt::new(
                     kind,
