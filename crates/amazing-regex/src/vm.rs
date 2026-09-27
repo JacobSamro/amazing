@@ -215,13 +215,14 @@ impl FoldedClass {
     fn new(class: &Class, flags: Flags) -> Self {
         let mut folded = Vec::new();
         if flags.ignore_case {
-            for &(a, b) in crate::unicode_casefold::PAIRS {
-                for c in [a, b] {
-                    if class
-                        .members
-                        .iter()
-                        .any(|m| matches!(m,Member::Range(lo,hi) if (*lo..=*hi).contains(&c)))
-                    {
+            // For each of the class's own (few, usually narrow) ranges, find
+            // just the code points in that range that have a case-fold
+            // partner via two binary searches, rather than scanning the
+            // whole case-fold table once per range -- see
+            // `unicode_casefold::keys_in_range`'s doc for why this matters.
+            for m in &class.members {
+                if let Member::Range(lo, hi) = m {
+                    for c in crate::unicode_casefold::keys_in_range(*lo, *hi) {
                         folded.push(canonical(c, flags));
                     }
                 }
@@ -337,17 +338,21 @@ impl Compiler {
                 let prepared = if let Some(cached) = self.classes.get(&key) {
                     cached.clone()
                 } else {
-                    let cost = c.members.len()
-                        + if self.flags.ignore_case {
-                            crate::unicode_casefold::PAIRS.len() * 2
-                        } else {
-                            0
-                        };
+                    // Build the folded class first, then charge for the work
+                    // actually done (member scan + fold entries found) instead
+                    // of a flat, table-sized charge per class node regardless
+                    // of content. A `[0-9]` class now costs next to nothing
+                    // (digits have no case-fold partners); only a class whose
+                    // ranges genuinely cover a large share of the case-fold
+                    // table's key space costs close to what every ignoreCase
+                    // class used to cost unconditionally.
+                    let prepared = FoldedClass::new(c, self.flags);
+                    let cost = c.members.len() + prepared.folded.len();
                     self.remaining = self
                         .remaining
                         .checked_sub(cost)
                         .ok_or(Error::Limit("class compilation work"))?;
-                    let prepared = Rc::new(FoldedClass::new(c, self.flags));
+                    let prepared = Rc::new(prepared);
                     self.classes.insert(key, prepared.clone());
                     prepared
                 };

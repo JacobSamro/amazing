@@ -79,10 +79,12 @@ pub(crate) fn parse_utf16(
     } else {
         pattern.iter().copied().map(u32::from).collect()
     };
-    // `\k<name>` may reference a group declared later in the pattern, so the
-    // set of names is collected with a throwaway pre-pass before the real
-    // parse resolves each reference to its (stable, deterministic) index.
-    let known_names = {
+    // `\k<name>` may reference a group declared later in the pattern, and a
+    // bare `\N` digit escape's meaning (backreference vs. Annex B legacy
+    // octal/identity fallback) depends on the pattern's TOTAL capturing-group
+    // count, which isn't known until the whole pattern has been scanned. Both
+    // are resolved with one throwaway pre-pass before the real parse.
+    let (known_names, known_captures) = {
         let mut scan = Parser {
             chars: chars.clone(),
             pos: 0,
@@ -93,6 +95,7 @@ pub(crate) fn parse_utf16(
             scanning: true,
             names: Vec::new(),
             known_names: Vec::new(),
+            known_captures: 0,
             disjunction_seq: 0,
             path: Vec::new(),
             name_paths: Vec::new(),
@@ -101,7 +104,7 @@ pub(crate) fn parse_utf16(
         if scan.pos != scan.chars.len() {
             return scan.error("unmatched closing parenthesis");
         }
-        scan.names
+        (scan.names, scan.captures)
     };
     let mut p = Parser {
         chars,
@@ -113,6 +116,7 @@ pub(crate) fn parse_utf16(
         scanning: false,
         names: Vec::new(),
         known_names,
+        known_captures,
         disjunction_seq: 0,
         path: Vec::new(),
         name_paths: Vec::new(),
@@ -152,6 +156,11 @@ struct Parser {
     /// Names available to `\k<name>` (from the pre-pass); empty while
     /// `scanning`.
     known_names: GroupNames,
+    /// Total capturing-group count for the whole pattern (from the
+    /// pre-pass); `0` and unused while `scanning`. A bare `\N` digit escape
+    /// is a backreference only if `N` doesn't exceed this; otherwise (Annex
+    /// B, non-unicode mode only) it falls back to `legacy_octal_tail`.
+    known_captures: usize,
     /// Next fresh id handed to each `disjunction()` call, for `path`.
     disjunction_seq: usize,
     /// The chain of (disjunction id, chosen alternative index) ancestors at
@@ -364,10 +373,23 @@ impl Parser {
             None
         };
         if let Some((min, max)) = q {
-            if matches!(
-                atom,
-                Node::Start | Node::End | Node::Boundary(_) | Node::Look(..) | Node::LookBehind(..)
-            ) {
+            // Annex B's `Term[~U] :: QuantifiableAssertion Quantifier` lets a
+            // lookahead assertion (only `(?=...)`/`(?!...)`, never
+            // lookbehind) be quantified in non-unicode mode; the VM's
+            // existing zero-width no-progress guard (`Op::Progress`, shared
+            // with every other quantified body) already makes this safe to
+            // compile like any other atom.
+            let quantifiable_lookahead = !self.flags.unicode_mode() && matches!(atom, Node::Look(..));
+            if !quantifiable_lookahead
+                && matches!(
+                    atom,
+                    Node::Start
+                        | Node::End
+                        | Node::Boundary(_)
+                        | Node::Look(..)
+                        | Node::LookBehind(..)
+                )
+            {
                 return self.error("quantified assertions are unsupported");
             }
             let greedy = !self.eat('?');
@@ -404,11 +426,38 @@ impl Parser {
             {
                 self.pos += 1;
                 let b = self.class_atom()?;
-                match (a, b) {
-                    (Member::Range(a, _), Member::Range(b, _)) if a <= b => {
-                        members.push(Member::Range(a, b))
+                // A `ClassAtom` is only ever a single character from this
+                // parser (`\d`/`\w`/`\s` and friends produce a
+                // `Digit`/`Word`/`Space` member instead of a `Range`), so
+                // "IsCharacterClass" reduces to "is this member a `Range`".
+                match (&a, &b) {
+                    // Both single characters, in order: an ordinary range.
+                    (Member::Range(a0, a1), Member::Range(b0, b1))
+                        if a0 == a1 && b0 == b1 && a0 <= b0 =>
+                    {
+                        members.push(Member::Range(*a0, *b0));
                     }
-                    _ => return self.error("invalid character class range"),
+                    // Both single characters, but reversed (`[z-a]`): always
+                    // a Syntax Error, in every mode -- this early error isn't
+                    // one of Annex B's CharacterRangeOrUnion fallbacks.
+                    (Member::Range(a0, a1), Member::Range(b0, b1))
+                        if a0 == a1 && b0 == b1 =>
+                    {
+                        return self.error("invalid character class range");
+                    }
+                    // At least one side is `\d`/`\w`/`\s` (or their negation):
+                    // in Annex B (non-unicode) mode, `-` stops being a range
+                    // operator and becomes a literal member instead, per
+                    // B.1.4.1.1 CharacterRangeOrUnion; in unicode mode this
+                    // remains a Syntax Error.
+                    _ if self.flags.unicode_mode() => {
+                        return self.error("invalid character class range");
+                    }
+                    _ => {
+                        members.push(a);
+                        members.push(Member::Range('-' as u32, '-' as u32));
+                        members.push(b);
+                    }
                 }
             } else {
                 members.push(a);
@@ -754,6 +803,46 @@ impl Parser {
         }
         Ok(n)
     }
+    /// Annex B `LegacyOctalEscapeSequence`, called with its first digit `d1`
+    /// (0-9) already consumed from the pattern (position now points just
+    /// after it). Extends into a second and, if `d1` is `0`-`3`, third octal
+    /// digit when available:
+    ///
+    /// ```text
+    /// LegacyOctalEscapeSequence ::
+    ///     OctalDigit [lookahead ∉ OctalDigit]
+    ///     ZeroToThree OctalDigit [lookahead ∉ OctalDigit]
+    ///     FourToSeven OctalDigit
+    ///     ZeroToThree OctalDigit OctalDigit
+    /// ```
+    ///
+    /// `d1` outside `0..=7` (i.e. `8`/`9`) isn't an `OctalDigit` at all, so no
+    /// production above applies; like a `d1` with no octal digit following,
+    /// this falls back further to a plain `IdentityEscape` for `d1` alone,
+    /// leaving whatever follows for the next atom (e.g. `\89` is literal `8`
+    /// then literal `9`).
+    fn legacy_octal_tail(&mut self, d1: u32) -> Node {
+        let is_octal = |c: Option<u32>| c.is_some_and(|c| (48..=55).contains(&c));
+        if d1 > 7 {
+            return Node::Char(d1 + '0' as u32);
+        }
+        if d1 <= 3
+            && is_octal(self.chars.get(self.pos).copied())
+            && is_octal(self.chars.get(self.pos + 1).copied())
+        {
+            let d2 = self.take().unwrap() - '0' as u32;
+            let d3 = self.take().unwrap() - '0' as u32;
+            return Node::Char(d1 * 64 + d2 * 8 + d3);
+        }
+        if is_octal(self.chars.get(self.pos).copied()) {
+            let d2 = self.take().unwrap() - '0' as u32;
+            return Node::Char(d1 * 8 + d2);
+        }
+        // `OctalDigit [lookahead ∉ OctalDigit]`: `d1` (0-7) is itself a
+        // complete single-digit LegacyOctalEscapeSequence, evaluating to its
+        // numeric value -- not the literal digit character.
+        Node::Char(d1)
+    }
     fn escape(&mut self, in_class: bool) -> Result<Node, Error> {
         let Some(c) = self.take() else {
             return self.error("trailing escape");
@@ -782,25 +871,70 @@ impl Parser {
             Some('t') => Ok(Node::Char(9)),
             Some('v') => Ok(Node::Char(11)),
             Some('f') => Ok(Node::Char(12)),
-            Some('0') => {
-                if self.peek().is_some_and(|c| (48..=57).contains(&c)) {
-                    return self.error("legacy octal escapes are unsupported");
+            // `0 [lookahead ∉ DecimalDigit]` is the NUL escape; `0` followed
+            // by an octal digit (Annex B, non-unicode only) continues into a
+            // `LegacyOctalEscapeSequence` (`\07`, `\070`, ...); `0` followed
+            // by a non-octal decimal digit (`\08`, `\09`) matches neither
+            // production, so Annex B falls back to a plain IdentityEscape for
+            // `0` alone (the trailing 8/9 becomes its own atom).
+            Some('0') => match self.peek() {
+                Some(next) if (48..=55).contains(&next) && !self.flags.unicode_mode() => {
+                    Ok(self.legacy_octal_tail(0))
                 }
-                Ok(Node::Char(0))
-            }
-            Some('1'..='9') if !in_class => {
+                Some(next) if (48..=57).contains(&next) => {
+                    if self.flags.unicode_mode() {
+                        self.error("octal escapes are unsupported in Unicode mode")
+                    } else {
+                        Ok(Node::Char('0' as u32))
+                    }
+                }
+                _ => Ok(Node::Char(0)),
+            },
+            // A bare `\N` (N a nonzero digit) is a backreference only if `N`
+            // doesn't exceed the pattern's total capture count (known from
+            // the pre-pass) and it isn't inside a character class
+            // (backreferences never occur there). Otherwise, in Annex B
+            // (non-unicode) mode, it falls back to `legacy_octal_tail`;
+            // outside Annex B this is a hard error, matching a bad
+            // backreference number under `u`/`v`.
+            Some('1'..='9') => {
                 self.pos -= 1;
+                let start = self.pos;
                 let n = self.decimal()?.unwrap();
-                self.refs.push(n);
-                Ok(Node::Backref(vec![n]))
-            }
-            Some('1'..='9') => self.error("legacy decimal class escapes are unsupported"),
-            Some('c') => {
-                let c = self.take().unwrap_or(0);
-                if !(65..=90).contains(&c) && !(97..=122).contains(&c) {
-                    return self.error("invalid control escape");
+                if !in_class && (self.scanning || n <= self.known_captures) {
+                    self.refs.push(n);
+                    Ok(Node::Backref(vec![n]))
+                } else if self.flags.unicode_mode() {
+                    self.error("invalid backreference (legacy decimal/octal escapes are unsupported)")
+                } else {
+                    let d1 = self.chars[start] - '0' as u32;
+                    self.pos = start + 1;
+                    Ok(self.legacy_octal_tail(d1))
                 }
-                Ok(Node::Char(c % 32))
+            }
+            Some('c') => {
+                let next = self.peek();
+                let is_control_letter =
+                    next.is_some_and(|c| (65..=90).contains(&c) || (97..=122).contains(&c));
+                // Annex B's `ClassEscape` extends `c ControlLetter` to also
+                // accept a decimal digit or `_` as the "control letter" when
+                // inside a class (`ClassControlLetter :: DecimalDigit | _`);
+                // outside a class only a real letter counts.
+                let is_class_control_letter = in_class
+                    && !self.flags.unicode_mode()
+                    && next.is_some_and(|c| (48..=57).contains(&c) || c == '_' as u32);
+                if is_control_letter || is_class_control_letter {
+                    let c = self.take().unwrap();
+                    Ok(Node::Char(c % 32))
+                } else if self.flags.unicode_mode() {
+                    self.error("invalid control escape")
+                } else {
+                    // Annex B: `\c` not forming a valid ControlEscape/
+                    // ClassEscape falls back to a literal `c` (IdentityEscape);
+                    // whatever follows (if anything) is left for the next
+                    // atom, e.g. `/\c0/` matches the literal text "c0".
+                    Ok(Node::Char('c' as u32))
+                }
             }
             Some('x') => Ok(Node::Char(self.hex(2)?)),
             Some('u') => {
@@ -848,7 +982,10 @@ impl Parser {
             Some('p' | 'P') if self.flags.unicode_mode() => {
                 Ok(Node::Set(self.property(c == 'P' as u32)?))
             }
-            Some('p' | 'P') => self.error("Unicode properties are unsupported"),
+            // Outside unicode mode, `\p`/`\P` aren't a recognized escape at
+            // all (property escapes only exist under `u`/`v`), so Annex B's
+            // IdentityEscape[~U] takes over: `\P` is just a literal `P`.
+            // Falls through to the final catch-all below.
             // Outside unicode mode, `\k<...>` is only GroupName syntax when
             // the pattern has a named group somewhere (Annex B); otherwise
             // it is a plain identity escape for `k`, and `<name>` that
