@@ -1545,9 +1545,18 @@ impl TreeBuilder {
         self.close_p_element();
     }
 
+    // Per spec, each of these three "clear the stack back to a ... context"
+    // algorithms stops at a `template` element as well as its own named
+    // targets and `html` -- not just when a `table` is present. Without a
+    // `<table>` on the open-elements stack (e.g. a `<tbody>`/`<tr>`/`<td>`
+    // start tag reached via the "in template" insertion mode's own table-
+    // context redirect, with no enclosing `<table>`), omitting `template`
+    // here popped the template element itself (and anything above it) off
+    // the stack, so the element then inserted outside `template.content`
+    // entirely instead of inside it.
     fn clear_back_to_table(&mut self) {
         while let Some(&cur) = self.open.last() {
-            if matches!(self.dom.name(cur), Some("table" | "html")) {
+            if matches!(self.dom.name(cur), Some("table" | "template" | "html")) {
                 break;
             }
             self.open.pop();
@@ -1558,7 +1567,8 @@ impl TreeBuilder {
         while let Some(&cur) = self.open.last() {
             if matches!(
                 self.dom.name(cur),
-                Some("tbody") | Some("tfoot") | Some("thead") | Some("table") | Some("html")
+                Some("tbody") | Some("tfoot") | Some("thead") | Some("table")
+                    | Some("template") | Some("html")
             ) {
                 break;
             }
@@ -1568,7 +1578,7 @@ impl TreeBuilder {
 
     fn clear_back_to_row(&mut self) {
         while let Some(&cur) = self.open.last() {
-            if matches!(self.dom.name(cur), Some("tr") | Some("table") | Some("html")) {
+            if matches!(self.dom.name(cur), Some("tr") | Some("table") | Some("template") | Some("html")) {
                 break;
             }
             self.open.pop();
