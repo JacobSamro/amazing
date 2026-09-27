@@ -125,6 +125,18 @@ impl ResumableParser {
         self.builder.dom()
     }
 
+    /// The DOM under construction, mutably. A driver that keeps this arena
+    /// separately grafted into a shared document (rather than physically
+    /// exchanging it via `swap_dom`, which only works when this parser's
+    /// arena has nothing else in it -- see `amazing_dom::markup::
+    /// IncrementalDocumentImport`'s own doc comment) needs this to reflect a
+    /// script's mutation of the already-grafted subtree back into this
+    /// arena before resuming: `IncrementalDocumentImport::reverse_sync`
+    /// writes through exactly this accessor.
+    pub fn dom_mut(&mut self) -> &mut Dom {
+        self.builder.dom_mut()
+    }
+
     /// Drains every `defer`/`async`/module script discovered since the last
     /// call, in document order. Meaningful to call after `Eof` (to get the
     /// full, final list) or between pauses (a driver that wants to start

@@ -196,16 +196,43 @@ impl Dom {
     /// tree builder's adoption-agency algorithm to detect a would-be cycle
     /// crossing a shadow or template-content boundary before performing a
     /// move that a plain same-tree ancestor walk would miss.
+    /// HTML-40 (1) follow-up: cycle-safe. An *ordinary* parent-child cycle
+    /// can never exist in a live `Dom` (`attach_before`'s own hard assert),
+    /// but the host-including hops this walks (shadow root -> host,
+    /// template contents -> owning template) are not parent-child edges
+    /// that assert ever sees -- a script can construct a live *host-
+    /// including* cycle (`adoption-agency-reparenting-shadow-cycle.html`
+    /// does exactly this: the shadow host ends up an ordinary descendant of
+    /// a node inside its own shadow root's content). This is precisely the
+    /// shape `is_host_including_inclusive_ancestor` exists to *detect*, so
+    /// it must terminate on one rather than loop forever -- stopping and
+    /// returning the (necessarily incomplete, but that's fine: the caller
+    /// only asks "does this chain contain X", and a cycle not yet
+    /// containing X by the time it repeats never will) chain so far the
+    /// moment a node repeats.
     pub fn host_including_ancestors(&self, node: NodeIdx) -> Vec<NodeIdx> {
         let mut result = Vec::new();
         let mut cursor = Some(node);
         while let Some(id) = cursor {
+            if result.contains(&id) { break; }
             result.push(id);
-            cursor = self.get(id).parent
-                .or_else(|| self.shadow_data(id).map(|data| data.host))
-                .or_else(|| self.template_of_contents(id));
+            cursor = self.host_including_parent(id);
         }
         result
+    }
+
+    /// One step of `host_including_ancestors`: `node`'s ordinary DOM
+    /// parent, or (when `node` has none, i.e. it is itself a root of some
+    /// kind) whichever host-including hop applies -- a shadow root to its
+    /// host, or a template's contents fragment to its owning `<template>`.
+    /// Exposed on its own for `markup.rs`'s `IncrementalDocumentImport::
+    /// reverse_sync`, which needs to walk this same notion of "parent" one
+    /// step at a time while mirroring not-yet-imported ancestors, not just
+    /// test full-ancestor-chain membership.
+    pub fn host_including_parent(&self, node: NodeIdx) -> Option<NodeIdx> {
+        self.get(node).parent
+            .or_else(|| self.shadow_data(node).map(|data| data.host))
+            .or_else(|| self.template_of_contents(node))
     }
     /// Whether `candidate` is a host-including inclusive ancestor of `node`
     /// (DOM Standard): `candidate` is `node` itself, an ordinary ancestor, or

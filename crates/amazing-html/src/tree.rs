@@ -179,6 +179,15 @@ pub struct TreeBuilder {
     allow_declarative_shadow_roots: bool,
     fragment: bool,
     fragment_context: Option<String>,
+    /// HTML-40 (2): the fragment context element's own namespace. `build_
+    /// fragment` never pushes the context element itself onto `open` (see
+    /// its own doc comment) -- the synthetic root at `open[0]` is always an
+    /// HTML `html` element -- so this is the only record of it, needed for
+    /// `adjusted_current_namespace`'s spec-mandated "adjusted current node"
+    /// special case: while `open` still holds only that synthetic root, the
+    /// adjusted current node is the (untracked) context element, not it.
+    /// Unused (stays `Html`) outside fragment parsing.
+    fragment_context_namespace: Namespace,
     /// HTML-31: set by `text_mode`'s `</script>` handling when the just-closed
     /// script is a classic, parser-blocking script during full-document (not
     /// fragment) parsing. `ResumableParser::run` stops tokenizing the instant
@@ -321,6 +330,7 @@ impl TreeBuilder {
             allow_declarative_shadow_roots: true,
             fragment: false,
             fragment_context: None,
+            fragment_context_namespace: Namespace::Html,
             pending_script: None,
             script_events: Vec::new(),
         }
@@ -490,6 +500,25 @@ impl TreeBuilder {
 
     fn current(&self) -> Option<NodeIdx> {
         self.open.last().copied()
+    }
+
+    /// The namespace of the spec's "adjusted current node"
+    /// (<https://html.spec.whatwg.org/multipage/parsing.html#adjusted-current-node>):
+    /// the fragment context element's own namespace, if this is a fragment
+    /// parse and `open` still holds only its synthetic (always-HTML) root
+    /// -- that root is not a real stack member, see `build_fragment`'s own
+    /// doc comment -- otherwise the current node's own namespace. HTML-40
+    /// (2): only `feed_with_tokenizer_feedback`'s CDATA-allowed check uses
+    /// this so far; the foreign-content dispatch helpers below
+    /// (`is_mathml_text_integration_point` etc.) still key off `current()`
+    /// directly, unaffected in practice since a fragment's synthetic root
+    /// is never a real integration point/foreign element by construction.
+    fn adjusted_current_namespace(&self) -> Option<Namespace> {
+        if self.fragment && self.open.len() == 1 {
+            Some(self.fragment_context_namespace)
+        } else {
+            self.current().and_then(|idx| self.dom.namespace(idx))
+        }
     }
 
     fn stack_has(&self, name: &str) -> bool {
@@ -1918,15 +1947,26 @@ impl TreeBuilder {
         }
     }
 
+    /// "In body" ignores a character token that is U+0000 NULL outright (§13.2.6.4.7):
+    /// no reconstruction, no `frameset_ok` effect, nothing inserted for it. The
+    /// tokenizer emits NUL literally in the data state (only RCDATA/RAWTEXT/script
+    /// data/plaintext replace it with U+FFFD there), so this mode must drop any
+    /// embedded NUL from a batched character run before deciding what to do with
+    /// the rest of it.
     fn in_body_characters(&mut self, data: &str) {
         if data.is_empty() {
             return;
         }
+        let owned = data.contains('\0').then(|| data.chars().filter(|&c| c != '\0').collect::<String>());
+        let text = owned.as_deref().unwrap_or(data);
+        if text.is_empty() {
+            return;
+        }
         self.reconstruct();
-        if data.chars().any(|c| !is_ws_char(c)) {
+        if text.chars().any(|c| !is_ws_char(c)) {
             self.frameset_ok = false;
         }
-        self.insert_text(data);
+        self.insert_text(text);
     }
 
     fn in_body_start_tag(&mut self, name: &str, attrs: Vec<(String, String)>) {
@@ -2919,9 +2959,9 @@ pub(crate) fn feed_with_tokenizer_feedback(
         _ => None,
     };
     builder.feed(tok);
-    tokenizer.set_allow_cdata(builder.current().is_some_and(|current| {
-        builder.dom.namespace(current).is_some_and(|namespace| namespace != Namespace::Html)
-    }));
+    tokenizer.set_allow_cdata(
+        builder.adjusted_current_namespace().is_some_and(|namespace| namespace != Namespace::Html)
+    );
     if let Some(name) = start_name {
         let inserted_html_text_element = (builder.mode == Mode::Text || name == "plaintext")
             && builder.current().is_some_and(|current| {
@@ -3062,16 +3102,29 @@ fn fragment_insertion_mode(context: &str) -> Mode {
 
 /// Fragment tree construction with only the synthetic `html` root on the open
 /// stack. The context element sets the initial mode but is not a tree child.
-pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
+/// `namespace` is the *context element's own* namespace (HTML fragment
+/// contexts pass `Namespace::Html`; a foreign context, e.g. `Element.
+/// innerHTML` on a MathML/SVG element, passes that element's own namespace)
+/// -- HTML-40 (2): needed for `adjusted_current_namespace`'s spec-mandated
+/// fragment-case special-casing (`cdata-in-integration-point-fragment.html`),
+/// since the synthetic root pushed below is always HTML regardless.
+pub(crate) fn build_fragment(src: &str, context: &str, namespace: Namespace) -> Dom {
     let mut builder = TreeBuilder::new();
     builder.allow_declarative_shadow_roots = false;
     builder.fragment = true;
     builder.fragment_context = Some(context.to_owned());
+    builder.fragment_context_namespace = namespace;
     builder.insert_and_push("html", Vec::new());
     builder.mode = fragment_insertion_mode(context);
     if context == "template" { builder.template_modes.push(Mode::InTemplate); }
     let mut tokenizer = Tokenizer::new(src.chars().collect());
-    if matches!(context, "textarea" | "title" | "style" | "xmp" | "iframe" | "noembed" | "noframes" | "script" | "noscript" | "plaintext") {
+    // These are HTML-only RAWTEXT/RCDATA-ish tag names; a foreign context
+    // (e.g. SVG's own `<title>`, which is an ordinary child-bearing element,
+    // not RAWTEXT) must not enter the tokenizer's text-context state just
+    // because its local name happens to collide with one of these.
+    if namespace == Namespace::Html
+        && matches!(context, "textarea" | "title" | "style" | "xmp" | "iframe" | "noembed" | "noframes" | "script" | "noscript" | "plaintext")
+    {
         tokenizer.enter_fragment_text_context(context);
     }
     loop {

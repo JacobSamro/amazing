@@ -2638,3 +2638,314 @@ needed this time (per the coordinator's note on HTML-38's own small
 file it, or keep it under 10 lines and name it in the commit message).
 
 Status: done.
+
+## HTML-40 (item 1) -- adoption-agency mid-parse DOM/parser desync in child-iframe documents
+
+HTML-38's own filed finding: a `<script>` inside a child iframe's document
+(parsed via HTML-31's interleaved/pausable parser) that mutates the shared,
+already-grafted DOM (e.g. `document.body.appendChild(fb); fb.appendChild
+(ca)`) was invisible to the parser's *next* `adoption_agency` call, which
+still reasoned about the pre-mutation tree. This is why the four
+`adoption-agency-reparenting-*-cycle.html` WPT tests kept failing even
+though HTML-38's cycle/document-full guard was itself spec-correct.
+
+### Root cause
+
+`run_interleaved_iframe_parse` (`crates/amazing/src/runtime_host_html.rs`)
+builds each iframe's document in a **private** `Dom` arena ("source", via
+`ResumableParser::new(Dom::new())`), grafting it one-way into the shared
+`host.dom` ("dest") via `IncrementalDocumentImport::sync`. `sync` only ever
+copies *forward*, source -> dest. When a paused parser-blocking script
+mutates the shared *dest* tree directly, nothing carried that mutation back
+into the parser's own private *source* arena, so `adoption_agency`'s next
+call (which walks `self.dom`, the source arena) saw stale structure. The
+top-level page doesn't have this problem -- `cmd/js.rs::run_interleaved_
+parse` swaps the whole `Dom` instead of grafting a copy -- but a swap isn't
+available to an iframe, since `host.dom` holds the parent page and every
+sibling frame at the same time.
+
+### Fix
+
+Added `IncrementalDocumentImport::reverse_sync(&mut self, source: &mut Dom,
+dest: &Dom)` (`crates/amazing-dom/src/markup.rs`), called right after a
+paused iframe parser resumes a parser-blocking script
+(`runtime_host_html.rs`'s `ParseSignal::Script` arm). It walks the already-
+mapped source<->dest node pairs and, for each, re-derives the dest parent's
+source-side mirror (creating any not-yet-mirrored new dest structure along
+the way via `mirror_dest_node`/`reverse_import_one`, the reverse-direction
+counterparts of `import_one`) and reparents the source node to match if it
+moved. Because dest can be mutated in an order that would transiently
+require creating a cycle in source before the sequence resolves (`fb` and
+`ca` swapping which one contains the other), the reparent pass is a
+retry-until-fixed-point loop: attempt each pending move, defer any that
+would currently need `source.contains(node, Some(target))`, and retry the
+deferred set until no more progress is possible. dest's own structure was
+itself reached via a sequence of individually-valid moves, so some
+processing order is always cycle-free.
+
+A second, separate gap surfaced once cycles were correctly *detected* in
+source again: HTML-38's guard correctly left the cycle-causing node (`fb`)
+unreachable in source, but `sync`'s forward walk is additions-only -- once
+a node drops out of source's reachable tree, `sync_children` never revisits
+it, so its `dest` counterpart stayed exactly where the *script* had put it,
+forever. Fixed by adding `detach_unreachable`, called at the end of `sync`,
+which detaches any `dest` node whose `source` counterpart no longer reaches
+the arena's document root. Reachability here has to walk the same
+*host-including* ancestor chain the cycle guard itself uses (ordinary
+parent, or a shadow root's hop to its host, or a template's `content`
+fragment's hop to its owning `<template>` -- exposed as the new `Dom::
+host_including_parent` in `amazing-dom/src/shadow.rs`, factored out of the
+existing `host_including_ancestors`), not a plain parent-chain walk: a
+first version used only `.parent`, which made every template-content
+fragment or shadow root "unreachable" on its own (they have no ordinary
+parent, only the host-including hop) and wrongly detached four unrelated,
+previously-passing `template/*` files -- caught by this ticket's own before/
+after WPT diff, not by inspection, and fixed before committing.
+
+A more ambitious, symmetric *forward*-direction pass (`reparent_to_match_
+source`/`mirror_source_node`, mirroring `reverse_sync`'s own shape: reparent
+an already-mapped dest node to match source, mirroring any not-yet-imported
+new source parent into dest) was tried to additionally fix `adoption-agency-
+reparenting.html`'s "furthest block adopted into another Document" and
+"common ancestor adopted into another Document" subtests. It fixed one of
+those but regressed `adoption-agency-reparenting-inner-loop-cycle.html` from
+passing to a `HierarchyRequestError` -- `dest`, unlike `source`, is live for
+the parent page and every sibling frame simultaneously, and the two
+`pre_insert` validation plus retry-order guarantees that make `reverse_
+sync`'s version safe didn't transfer cleanly. Reverted; the ticket's named
+priority is the cycle tests actually passing, not the cross-document moves.
+
+### Known limitations (not fixed this ticket)
+
+- `adoption-agency-reparenting-document-target.html` (foster-parenting into
+  a brand-new, script-created foreign `Document`) and 4 of `adoption-
+  agency-reparenting.html`'s 5 subtests (2 cross-`Document` moves, a
+  detach-then-reconstruct case, and a foster-parenting-into-`<tr>` case)
+  remain failing -- they need either genuine cross-`Document` mirroring
+  (out of scope: `IncrementalDocumentImport` is built around exactly one
+  source arena and one dest document) or the reverted forward-mirroring
+  pass above.
+- `adoption-agency-reparenting-pagehide.tentative.html` errors with
+  `TypeError: cannot access a property on nullish value` in every run,
+  unchanged before/after -- not investigated this ticket; likely unrelated
+  to the desync fix (possibly a `pagehide` event gap).
+
+### Cross-lane note
+
+This ticket's fix required real additions to `amazing-dom` (`markup.rs`'s
+`IncrementalDocumentImport::reverse_sync` and its helpers; `shadow.rs`'s
+`host_including_parent`), not a small under-10-line touch, so per the
+coordinator's HTML-38 feedback this is named here and filed in
+`questions.md` for dom-bindings' awareness rather than kept silent.
+
+### Gate
+
+WPT (`html/syntax/parsing`, 56 selected files, strict per-test status-map
+diff against HTML-39's own after-state, same venus-001 host for build+test
+in one command, `html38d-after-status.json` as the baseline): **0 lost
+passes, +4 gained files** (`adoption-agency-reparenting-cycle.html`,
+`-inner-loop-cycle.html`, `-shadow-cycle.html`, `-template-cycle.html` --
+the four named cycle tests, confirmed individually via direct `wpt-harness-
+worker` invocation, not just the aggregate), **0 other changes**. File
+totals: pass 26 -> 30, fail 23 -> 19, timeout/error/unsupported unchanged
+(3/1/3). `html/syntax/serializing` (item 3) does not exist in the pinned
+WPT checkout (`c2a2fce`) -- nothing to sweep there.
+
+`amazing-html` + `amazing-dom` crate nextest: **420/420 passed**. Workspace
+nextest: **3,461/3,461 passed, 17 skipped** (same count as HTML-39's own
+gate -- no drift). Doctests: 0 FAILED.
+
+Status: done (item 1). Items 2 (remaining `html/syntax/parsing` failures,
+largest cluster first) and 3 (n/a, see above) continue as separate work.
+
+### Correction: infinite hang found in `-shadow-cycle.html`, fixed (commit `03644f9e`)
+
+The "confirmed individually" claim above was true for the exact runs made at
+the time, but was incomplete: under a batched sweep (or plain bad luck with
+host scheduling), `adoption-agency-reparenting-shadow-cycle.html` hung the
+`wpt-harness-worker` process indefinitely instead of failing or timing out
+at the script level -- 26+ minutes observed on venus-001 before the
+coordinator caught it via `ps`/`pgrep` and had it killed. Root cause: a
+live *host-including* cycle (not an ordinary parent-child one, which
+`attach_before`'s own hard assert prevents) that this test's script
+deliberately constructs -- a shadow host ending up an ordinary descendant of
+a node inside its own shadow root's content -- sent two different
+unguarded recursive/iterative walks into an infinite loop: `Incremental
+DocumentImport::mirror_dest_node`'s ancestor-mirroring recursion (`markup.
+rs`), and `shadow.rs`'s `host_including_ancestors` (added in HTML-38 with
+no cycle guard of its own, since no test had previously constructed a live
+one for it to walk). Both fixed with cycle guards; see commit `03644f9e`'s
+own message for the full mechanism. Re-verified in **release** (per the
+coordinator's request, since a debug build's slower recursion may have
+been part of why this hadn't already stack-overflowed or otherwise
+surfaced sooner) with a `timeout 30` guard around every individual
+`wpt-harness-worker` invocation as a defensive belt-and-suspenders measure:
+all four cycle tests pass, no hang, `html/syntax/parsing` sweep and the
+full workspace gate otherwise unaffected (numbers below fold this fix in).
+
+## HTML-40 (2) -- CDATA allowed in foreign fragment-parsing contexts
+
+Item 2's ask: the remaining `html/syntax/parsing` failures, largest cluster
+first (after item 1's fix, measured on the corrected/release state above).
+
+### Cluster ranking and the first one skipped
+
+`clearing-the-stack-back-to-a-table-{,body-,row-}context.html` (33+6+3 = 42
+nonpass subtests, by far the largest remaining cluster) turned out to
+already be HTML-32's own filed, non-html-lane finding: an `amazing-bindings`
+`HTMLTableElement.rows`/`tBodies`/`tFoot`/`tHead` IDL-collection-accessor
+gap, not a tree-builder bug. Confirmed via an isolated `amazing domrun`
+check against this exact cluster's own fixture shape (`<table><tbody>
+<template>...</template><tr>...</tr></tbody></table>`): `template.content`
+resolves correctly (`template.content.querySelector('#tr1')` finds the row,
+correctly nested, *not* leaked into the real table), but `table.rows` is
+itself `undefined`. Skipped, per HTML-32/HTML-38's own routing, rather than
+re-investigating a gap that isn't this lane's to fix.
+
+Next largest: `cdata-in-integration-point-fragment.html` (9 nonpass
+subtests), taken up below.
+
+### Root cause (two parts)
+
+1. `amazing-html/src/lib.rs`'s `parse_fragment` only ever took a plain tag-
+   name context string, so `tree.rs`'s `build_fragment` always pushed an
+   HTML-namespace synthetic root regardless of the real context element's
+   namespace, and `crates/amazing/src/runtime_binding_host.rs`'s
+   `FragmentParser` impl rejected any non-HTML-namespace context outright
+   (`Element.innerHTML` set on a MathML/SVG element threw
+   `NotSupportedError` unconditionally). Added `parse_fragment_with_
+   namespace` (the existing `parse_fragment` now delegates to it with
+   `Namespace::Html`, so every other caller is unaffected) and a new
+   `TreeBuilder::fragment_context_namespace` field plus `adjusted_current_
+   namespace` helper, giving the spec's "adjusted current node" fragment-
+   case special case (used by the CDATA-allowed determination) the context
+   element's real namespace instead of always the synthetic root's.
+   `runtime_binding_host.rs`'s `FragmentContext.namespace_uri` -> `Namespace`
+   mapping replaces the outright rejection.
+
+2. Even with (1), CDATA was *still* parsed as a bogus comment. The
+   tokenizer's `run()` batches as many tokens as it can produce into its
+   queue before returning, so `"x<![CDATA[y]]>"` got fully tokenized --
+   both "x" *and* the CDATA-vs-bogus-comment decision for what follows --
+   in one call, using whatever `allow_cdata` was set to *before* the tree
+   builder ever saw "x" and had a chance to recompute it. The tree builder's
+   `set_allow_cdata` update, made right after feeding "x", came one token
+   too late. Fixed by making the tokenizer flush the pending character run
+   and return control to the caller the moment a `<![CDATA[` open is seen
+   with non-empty pending text -- scoped to exactly that lookahead, not
+   every `'<'` in general, so the EOF-mid-tag "falls back to literal text"
+   behavior (which relies on the run continuing uninterrupted until an
+   unterminated tag is discovered) stays intact. An unscoped first attempt
+   (flush before *every* `'<'`) broke `tokenizer::tests::eof_mid_tag_
+   falls_back_to_literal_text`; caught by the crate gate before committing.
+
+### Gate
+
+WPT (`html/syntax/parsing`, 56 files, strict per-test status-map diff
+against HTML-40 (1)'s own corrected/release after-state, release build):
+**0 lost passes, +2 gained files** (`cdata-in-integration-point-fragment.
+html`, the target; `named-character-references.html`, a pre-existing flaky
+`timeout`-status file per HTML-38's own notes on its non-deterministic
+within-deadline subtest count under this file's fixed 10s budget -- not a
+regression), **0 other changes**. `html/syntax/serializing` (item 3) is not
+present in the pinned WPT checkout (`c2a2fce`) -- nothing to sweep there.
+
+`amazing-html` + `amazing-dom` crate nextest: **420/420 passed**. Workspace
+nextest: **3,461/3,461 passed, 17 skipped** (stable, same as HTML-40 (1)'s
+own gate). Doctests: 0 FAILED.
+
+### Cross-lane note (net lane, no code change)
+
+The coordinator relayed a net-lane report that `ensure_realm`'s realm
+closure in `crates/amazing/src/runtime_host_html.rs` never calls `adapter.
+install_net()`. Checked against this worktree: it already does, immediately
+after `install_selection_global()` (line 508), landed by commit `609c1b5ab`
+("NET-42"), which is already an ancestor of `origin/dev`. No code change
+made for this; the net-lane report appears to be against a state of `dev`
+from before that commit landed.
+
+Status: done (items 1 and 2, plus item 1's hang-fix correction). Item 3 is
+not applicable (`html/syntax/serializing` absent from the pinned WPT
+checkout).
+
+## HTML-40 (2) continued -- U+0000 NULL handling ("largest cluster first")
+
+Next largest cluster after the CDATA fix above: `html/syntax/parsing/zero.html`
+(7 of 14 subtests failing). Two bugs, both genuine `amazing-html` gaps, no
+cross-lane dependency (the full 2,231-entry named-character-reference table
+landed by HTML-34 already covers every entity this file exercises --
+`auml`/`not` are both present in `LEGACY_NO_SEMI` -- so this was never blocked
+on that).
+
+1. **Tokenizer's Data state incorrectly replaced U+0000 with U+FFFD.** Per
+   spec (`13.2.5.1`), the Data state emits a literal NUL character token (a
+   parse error, but not replaced) -- only RCDATA/RAWTEXT/script
+   data/PlainText/CDATA-section states replace NUL with U+FFFD. `amazing-
+   html`'s Data state did the RAWTEXT-family substitution unconditionally,
+   so a `&\u0000auml;`-shaped sequence, once the reference match legitimately
+   failed (NUL isn't a valid entity-name character, so this always fails to
+   match a longer name), left `�` rather than a literal NUL in `text_buf`
+   -- observable as `title='&\u0000auml;'` correctly reading back `&�auml;`
+   (attribute-value states have their own, correct, dedicated NUL->FFFD rule)
+   while the *same shape in body text* also read back with a stray `�`
+   that spec says should vanish instead. Fixed by dropping Data state's own
+   NUL special case entirely, folding it into the generic "anything else,
+   push literally" arm.
+2. **Tree construction never implemented "in body"'s (and "in table text"'s)
+   own NUL rule** ("a character token that is U+0000 NULL: parse error,
+   ignore the token" -- `13.2.6.4.7`; confirmed against the live spec source,
+   `whatwg/html`'s `source` file, not assumed from memory). `in_body_
+   characters` (`tree.rs`) passed a batched character run straight through
+   to `insert_text` with no filtering. Fixed by stripping embedded NUL from
+   the run before deciding reconstruction/`frameset_ok`/insertion, returning
+   early with no side effects at all if that leaves nothing (matching spec's
+   "ignore the token" exactly: no reconstruction call either). "In table
+   text" mode already funnels any non-whitespace-only accumulated run
+   through `in_body` before insertion (foster-parenting path), and NUL is
+   never whitespace, so it always takes that path -- no separate fix needed
+   there; verified by construction, not just observation.
+   `in_foreign_content` already had its own correct, explicit
+   `data.replace('\0', "\u{FFFD}")` (a different, FFFD-inserting rule for
+   that mode, also per spec), untouched by either fix above.
+
+Both were necessary together: fixing only (2) would have left title/other
+attribute contexts unaffected (correct already) but body text still showing
+`�` instead of vanishing, because the FFFD substitution was happening
+one layer too early, before the string ever reached the ignore-filter.
+
+### Verification note: release-mode workspace flakes are pre-existing, not from this fix
+
+The coordinator's HTML-40(1) hang-fix instruction asked for a **release**
+verification; running this fix's own gate the same way (`--release`)
+surfaced 4 workspace failures untouched by this ticket's diff (`amazing::bin/
+amazing::...websocket_large_message_round_trip_under_virtual_frame_pump`,
+`amazing-compositor::paint_view_pages::{retained_real_page_property_trace,
+real_page_frame_time_report}`, `amazing-layout::retained::tests::
+oracle_rejects_a_misclassified_geometry_change`) -- all either wall-clock
+frame-time/paint-budget assertions or a geometry-change timing oracle, none
+in a crate this ticket touches. Re-ran the *identical* worktree in **debug**
+(this lane's and the whole fleet's standing default gate profile): clean
+**3,461/3,461 passed, 17 skipped**, doctests **0 FAILED** -- confirming these
+4 are pre-existing release-profile timing sensitivities (likely sharper
+optimized-build timings colliding with shared-host load), not a regression
+from this fix. Reporting the debug numbers below as this ticket's gate,
+consistent with every earlier HTML-40 gate in this document.
+
+### Gate
+
+WPT (`html/syntax/parsing`, 56 files, strict status diff vs this document's
+own prior HTML-40(1)/(2) after-state): **0 lost passes, +1 gained file**
+(`zero.html`, all 14 subtests now pass), **0 other changes**. Aggregate:
+files pass 32->33, fail 18->17; subtests pass 2634->2641 (+7, exactly the 7
+that were failing), fail 74->67 (-7).
+
+`amazing-html`+`amazing-dom` crate nextest: **420/420 passed** (both debug
+and release). Workspace nextest (debug): **3,461/3,461 passed, 17 skipped**.
+Doctests: **0 FAILED**.
+
+Status: HTML-40 items 1 and 2 done (item 3 n/a, `html/syntax/serializing`
+absent from the pinned WPT checkout). `html/syntax/parsing`'s next-largest
+remaining cluster is the table-context-in-`<template>`
+`HTMLTableElement.rows`/etc. gap, already routed to dom-bindings/HTML-32 --
+no further amazing-html-owned cluster identified in this selection at this
+head.

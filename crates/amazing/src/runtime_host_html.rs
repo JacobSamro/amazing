@@ -840,6 +840,22 @@ impl RuntimeBindings {
                     if let Err(error) = run_one(js, &host, source_node, &import, child_url, resolver.as_ref()) {
                         break Err(error);
                     }
+                    // HTML-40: the script just ran directly against the
+                    // shared, already-grafted subtree in `host.dom` (`sync`,
+                    // above, only ever copies forward INTO it) -- reflect
+                    // any mutation it made back into the parser's own
+                    // private arena before it resumes, or its next
+                    // tree-construction step (the adoption agency
+                    // algorithm's cycle/document-full checks chief among
+                    // them) reasons about stale, pre-mutation structure.
+                    let reversed = {
+                        let mut parser_ref = parser.borrow_mut();
+                        let host_ref = host.borrow();
+                        import.borrow_mut().reverse_sync(parser_ref.dom_mut(), &host_ref.dom)
+                    };
+                    if let Err(error) = reversed {
+                        break Err(Throw::type_error(format!("iframe reverse graft: {error:?}")));
+                    }
                 }
             }
         };
