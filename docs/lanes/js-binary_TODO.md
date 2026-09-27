@@ -507,3 +507,44 @@ this ticket's anchors); `built-ins/SharedArrayBuffer` unchanged, 103 → 103 pas
 not a functional loss. Workspace: `cargo nextest run --workspace --locked --no-fail-fast` →
 3,373 passed, 17 skipped, 0 failed; `cargo test --workspace --locked --doc` → 4/4 doctests
 (`amazing_a11y`, `amazing_devtools`, `amazing_html`, `amazing_js`).
+
+## JSB-11 — cross-realm GetPrototypeFromConstructor + Iterator proposals (base `c57b012c`)
+
+No commit: both parts resolved to measurement rather than code, on a clean fast-forward
+rebase onto `dev` at `c57b012c`.
+
+**Part 1 (cross-realm GetPrototypeFromConstructor, ~19 files claimed):** already satisfied.
+`--only "proto-from-ctor-realm.js"` against the full pinned corpus: 55/55 files pass, 0
+fail, covering every directory the ticket named (RegExp, Set, SharedArrayBuffer, String,
+SuppressedError, all 10 TypedArrayConstructors ctor/ctors-bigint variants, WeakMap, WeakRef,
+WeakSet) plus everything else in the corpus (Array, ArrayBuffer, NativeErrors, Promise, Map,
+Iterator, every intl402 service). `Interpreter::capture_intrinsic_constructors`
+(`interp_realms.rs`) is a *generic* per-realm scan — every global own-property with a `.func`
+and an object `.prototype` gets registered by name once at `Interpreter::new()`, after
+`install_builtins()`/`install_regexp()` — and it already covers all of these, since they're
+ordinary globals. js-intl's `intl_register_intrinsic` (JSI-7) is needed only because Intl's
+service constructors live under the non-global `Intl` namespace object, invisible to that
+generic scan; it is not a gap the other constructors share. Evidence:
+`~/amazing/out/jsb11-proto-before.json` on venus-001.
+
+**Part 2 (Iterator proposals, ~60 files claimed):** blocked and escalated in
+`questions.md`, not implemented. `crates/amazing-js/src/builtins_std_iterator.rs` already
+has full `map`/`filter`/`take`/`drop`/`flatMap`/`reduce`/`toArray`/`forEach`/`some`/`every`/
+`find`/`includes`/`chunks`/`windows`/`Iterator.from`/`concat`/`zip`/`zipKeyed`
+implementations — nothing is missing there — but that file is js-stdlib's exclusive lane
+path (`scripts/tmuxctl.py` `LANE_PATHS`), with no js-binary grant. Measured 166/654 matched
+`built-ins/Iterator` files failing anyway (`~/amazing/out/jsb11-iterator-before.json`).
+Root-caused with a throwaway, never-committed remote probe: under the default (non-VM)
+`Interpreter::new()` tree-walker, `function* g(){}; typeof g()` is `"undefined"` — calling a
+generator function never builds a Generator object, and stepping a real generator body
+throws `"generators are not implemented"` outright (`interp_stmt.rs:863`, the `Yield` arm).
+Nearly every failing file in this cluster uses `function* g(){}` / `let iter = g();` as a
+throwaway iterable, so this single core gap — not per-helper bugs — explains almost the
+whole cluster. The VM (`vm/mod.rs`) does implement real generators
+(`start_generator_with_env`) but is opt-in (`AMAZING_JS_VM=1`) and eligibility-gated on the
+whole top-level program (`vm_eligibility::eligible`), so one ineligible construct anywhere
+in a test file still falls back; confirmed by rerunning the same selection with
+`AMAZING_JS_VM=1` set — only 976→1008 passes moved. This is core interpreter/js-vm
+generator-instantiation territory (js-runtime/js-vm), not an Iterator-helper bug, and not
+reachable from any file js-binary is granted. Recommend routing there; js-stdlib's existing
+implementation likely passes most of the cluster once that lands.
