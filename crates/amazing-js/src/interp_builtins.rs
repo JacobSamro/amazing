@@ -1240,6 +1240,63 @@ fn native_error_is_error(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) ->
     Ok(JsValue::Bool(is_error))
 }
 
+// 9.2.7 %ThrowTypeError% (AddRestrictedFunctionProperties uses this shared,
+// anonymous, non-constructible, length-0 intrinsic as both the getter and
+// the setter installed for `Function.prototype.caller` / `.arguments`).
+// Called for either accessor role, so it ignores `this`/args and just throws.
+fn native_throw_type_error_intrinsic(_i: &mut Interpreter, _this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    Err(Throw::type_error(
+        "'caller' and 'arguments' are restricted function properties and cannot be accessed in this context",
+    ))
+}
+
+// JS-19 fix-before-push (2026-09-27): a plain SLOPPY function declaration/expression gets its
+// OWN "caller" accessor (installed in `make_function`), shadowing the inherited
+// %Function.prototype% poison pill above -- matching the non-standard but universally
+// implemented "legacy function.caller" feature (test262 `features: [caller]`; V8 and
+// SpiderMonkey both still ship it for web compat). It is NOT installed on strict, arrow,
+// generator, async or method-defined functions, which keep the always-throwing inherited
+// accessor (9.2.7 AddRestrictedFunctionProperties intends exactly that split: only "normal"
+// sloppy functions get the historical, non-poisoned form).
+//
+// The historical [[Get]] rule this reproduces (matching real V8/SpiderMonkey, not the stricter
+// ES5.1 15.3.5.4 draft text that would throw here): return the function's actual immediate
+// caller, or `null` if it has none (top-level or direct-eval-at-top-level) or that caller is
+// itself a strict-mode function -- a strict function's identity must never leak through a
+// sloppy callee's `.caller`, but doing that by returning `null` rather than throwing is what
+// `built-ins/Function/forbidden-ext`'s own generated cases assert (they read `inner.caller`
+// unguarded, with no `try`/`catch`, so a throw here would fail them, not satisfy them).
+//
+// Receiver-driven, not distance-from-the-getter's-own-frame: a fixed relative offset (assuming
+// exactly "getter, then reader, then caller" on top of `self.frames`) broke as soon as the read
+// happened anywhere but a single bare `return f.caller;` statement -- an extra statement, an
+// intervening `||`'s second operand, or a harness wrapper like `assert.throws` calling through
+// another function first all shift how many frames sit between this getter's own call and the
+// reader's, without changing which invocation is actually being asked about. Searching for the
+// topmost still-active frame whose `own_function` IS `this` (by identity, `Rc::ptr_eq`) finds
+// that invocation directly regardless of how many frames sit above or below it, and the frame
+// one below THAT is its immediate caller.
+fn native_legacy_function_caller_getter(i: &mut Interpreter, this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let JsValue::Object(reader) = &this else { return Ok(JsValue::Null) };
+    let reader_index = i.frames.iter().enumerate().rev().find_map(|(index, frame)| {
+        frame.own_function.as_ref().filter(|own| Rc::ptr_eq(&own.0, &reader.0)).map(|_| index)
+    });
+    let caller = match reader_index {
+        Some(0) | None => None,
+        Some(index) => i.frames[index - 1].own_function.clone(),
+    };
+    match caller {
+        Some(caller) if !caller.borrow().strict_function => Ok(JsValue::Object(caller)),
+        _ => Ok(JsValue::Null),
+    }
+}
+
+// V8/SpiderMonkey silently ignore an assignment to a sloppy function's own legacy `.caller`;
+// there is no writable backing slot for it to update.
+fn native_legacy_function_caller_setter(_i: &mut Interpreter, _this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    Ok(JsValue::Undefined)
+}
+
 // The `Error.prototype.stack` accessor (proposal "error-stack-accessor",
 // pinned in this Test262 revision under built-ins/Error/prototype/stack/).
 //

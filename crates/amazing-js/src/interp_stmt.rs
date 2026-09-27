@@ -676,6 +676,13 @@ impl Interpreter {
                 }
             }
         }
+        // JS-19 (js-vm cross-lane report, 2026-09-27): a `const` for-head binding is still
+        // lexically re-declared fresh in every per-iteration copy (13.7.4.8/14.7.4.3's
+        // CreatePerIterationEnvironment), but each of those copies must stay immutable, or
+        // `for (const c = 1; ; c++)` never throws on its own `c++` and loops forever instead of
+        // a TypeError on the first update. `per_iteration_mutable` carries the head's actual
+        // `let`-vs-`const`-ness through every copy below, instead of the `true` this hardcoded.
+        let per_iteration_mutable = !matches!(init, Some(ForInit::Decl(decl)) if decl.kind == ast::VarKind::Const);
         let per_iteration_names = match init {
             Some(ForInit::Decl(decl)) if decl.kind != ast::VarKind::Var => decl
                 .decls
@@ -684,13 +691,6 @@ impl Interpreter {
                 .collect(),
             _ => Vec::new(),
         };
-        // JS-19 (js-vm cross-lane report, 2026-09-27): a `const` for-head binding is still
-        // lexically re-declared fresh in every per-iteration copy (13.7.4.8/14.7.4.3's
-        // CreatePerIterationEnvironment), but each of those copies must stay immutable, or
-        // `for (const c = 1; ; c++)` never throws on its own `c++` and loops forever instead of
-        // a TypeError on the first update. `per_iteration_mutable` carries the head's actual
-        // `let`-vs-`const`-ness through every copy below, instead of the `true` this hardcoded.
-        let per_iteration_mutable = !matches!(init, Some(ForInit::Decl(decl)) if decl.kind == ast::VarKind::Const);
         let state_env = if per_iteration_names.is_empty() {
             loop_env.clone()
         } else {
@@ -2156,7 +2156,7 @@ impl Interpreter {
                 FunctionBody::Expr(x) => {
                     let e = EnvHandle::new(if fun.is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(fun.env.clone()));
                     if !fun.is_arrow { e.bind_this(this); }
-                    self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
+                    self.bind_params(&e, &fun.params, args, fun.is_arrow, strict_function)?;
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
                     if thread_async {
                         if let Some(promise) = self.start_thread_async_function(FunctionBody::Expr(x.clone()), e.clone(), strict_function) {
@@ -2193,7 +2193,7 @@ impl Interpreter {
                             }
                         }
                     }
-                    self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
+                    self.bind_params(&e, &fun.params, args, fun.is_arrow, strict_function)?;
                     // Generators/async generators: FunctionDeclarationInstantiation (hoisting)
                     // still runs eagerly, synchronously, right here -- only the body's statements
                     // are deferred, to a pooled coroutine thread that the first `.next()` drives
@@ -2293,6 +2293,7 @@ impl Interpreter {
         ps: &[ast::Param],
         args: Vec<JsValue>,
         is_arrow: bool,
+        strict: bool,
     ) -> Result<(), Throw> {
         // Parameters are mutable function bindings, not lexical declarations:
         // body var declarations reuse them and sloppy duplicate names overwrite.
@@ -2327,6 +2328,24 @@ impl Interpreter {
                         value: values, writable: true, enumerable: false, configurable: true,
                         getter: None, setter: None,
                     }).unwrap();
+                }
+                // 10.4.4.7 CreateUnmappedArgumentsObject step 8 (strict functions get the
+                // unmapped arguments exotic object): "callee" is a poison-pill accessor
+                // sharing the realm's single %ThrowTypeError% intrinsic -- the SAME function
+                // object already installed as Function.prototype's "caller"/"arguments"
+                // getter/setter (JS-18's AddRestrictedFunctionProperties), fetched live from
+                // its descriptor rather than re-created, so `built-ins/ThrowTypeError/
+                // unique-per-realm-function-proto.js`'s cross-check (`arguments.callee.get
+                // === Function.prototype.arguments.get`) holds. Sloppy (mapped) arguments
+                // objects get no "callee" here (unimplemented; out of this fix's scope).
+                if strict {
+                    let thrower = self.function_proto.borrow().own_prop("arguments").and_then(|p| p.getter.clone());
+                    if let Some(thrower) = thrower {
+                        object.borrow_mut().define("callee", Property {
+                            value: JsValue::Undefined, writable: false, enumerable: false,
+                            configurable: false, getter: Some(thrower.clone()), setter: Some(thrower),
+                        }).unwrap();
+                    }
                 }
             }
             e.declare_var("arguments", a)?;
@@ -2494,6 +2513,21 @@ impl Interpreter {
                 configurable: false, getter: None, setter: None,
             }).unwrap();
             h.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(p);
+        }
+        // JS-19 fix-before-push (2026-09-27): a plain sloppy function declaration/expression
+        // gets its own, non-poisoned "caller" accessor here, shadowing the inherited
+        // %Function.prototype% poison pill -- see `native_legacy_function_caller_getter`'s doc
+        // comment in interp_builtins.rs for why (the "legacy function.caller" feature,
+        // test262 `features: [caller]`). Async and generator functions never qualify (matching
+        // 9.2.7 AddRestrictedFunctionProperties' own gating), nor do strict ones, which keep
+        // the inherited always-throwing accessor.
+        if !f.is_async && !f.is_generator && !h.borrow().strict_function {
+            let getter = symbol_method(self, "", native_legacy_function_caller_getter);
+            let setter = symbol_method(self, "", native_legacy_function_caller_setter);
+            h.borrow_mut().define("caller", Property {
+                value: JsValue::Undefined, writable: false, enumerable: false,
+                configurable: true, getter: Some(getter), setter: Some(setter),
+            }).unwrap();
         }
         JsValue::Object(h)
     }
