@@ -684,13 +684,20 @@ impl Interpreter {
                 .collect(),
             _ => Vec::new(),
         };
+        // JS-19 (js-vm cross-lane report, 2026-09-27): a `const` for-head binding is still
+        // lexically re-declared fresh in every per-iteration copy (13.7.4.8/14.7.4.3's
+        // CreatePerIterationEnvironment), but each of those copies must stay immutable, or
+        // `for (const c = 1; ; c++)` never throws on its own `c++` and loops forever instead of
+        // a TypeError on the first update. `per_iteration_mutable` carries the head's actual
+        // `let`-vs-`const`-ness through every copy below, instead of the `true` this hardcoded.
+        let per_iteration_mutable = !matches!(init, Some(ForInit::Decl(decl)) if decl.kind == ast::VarKind::Const);
         let state_env = if per_iteration_names.is_empty() {
             loop_env.clone()
         } else {
             let state = EnvHandle::new(EnvKind::Block, Some(env.clone()));
             for name in &per_iteration_names {
                 let value = loop_env.resolve(name).unwrap_or(JsValue::Undefined);
-                state.declare_lexical(name, value, true)?;
+                state.declare_lexical(name, value, per_iteration_mutable)?;
             }
             state
         };
@@ -701,7 +708,7 @@ impl Interpreter {
                 let iteration = EnvHandle::new(EnvKind::Block, Some(state_env.clone()));
                 for name in &per_iteration_names {
                     let value = state_env.resolve(name).unwrap_or(JsValue::Undefined);
-                    iteration.declare_lexical(name, value, true)?;
+                    iteration.declare_lexical(name, value, per_iteration_mutable)?;
                 }
                 iteration
             };
@@ -728,7 +735,7 @@ impl Interpreter {
                 let update_env = EnvHandle::new(EnvKind::Block, Some(state_env.clone()));
                 for name in &per_iteration_names {
                     let value = iteration_env.resolve(name).unwrap_or(JsValue::Undefined);
-                    update_env.declare_lexical(name, value, true)?;
+                    update_env.declare_lexical(name, value, per_iteration_mutable)?;
                 }
                 if let Some(update) = update {
                     self.eval_expr(update, &update_env)?;

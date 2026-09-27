@@ -1776,4 +1776,36 @@ mod class_name_tests {
             .unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!(result, JsValue::num(1.0));
     }
+
+    #[test]
+    fn c_style_for_head_const_binding_is_immutable_in_every_per_iteration_copy() {
+        // JS-19 (js-vm cross-lane report, 2026-09-27): `loop_for_inner`'s per-iteration
+        // environment copies (CreatePerIterationEnvironment) re-declared a `const` for-head
+        // binding as mutable in every copy, so `c++` in the update clause -- and a plain
+        // reassignment in the body -- silently succeeded instead of throwing, and
+        // `for (const c = 1; ; c++) {}` looped forever instead of throwing on the first `c++`.
+        let mut i = Interpreter::new();
+        let update_throws = i.run_script(
+            "var caught = false; var iterations = 0; \
+             try { for (const c = 1; iterations < 1000; c++) { iterations++; } } \
+             catch (e) { caught = e instanceof TypeError; } \
+             caught && iterations === 1"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(update_throws, JsValue::Bool(true),
+            "c++ on a const for-head binding must throw on the first iteration, not loop forever");
+
+        let body_reassignment_throws = i.run_script(
+            "var caught = false; \
+             try { for (const c = 1; ; ) { c = 2; } } catch (e) { caught = e instanceof TypeError; } \
+             caught"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(body_reassignment_throws, JsValue::Bool(true));
+
+        // `let` for-head bindings must still be genuinely mutable across iterations (this is
+        // the by-far more common shape, and must not regress).
+        let mut i = Interpreter::new();
+        let let_sum = i.run_script("var sum = 0; for (let n = 0; n < 5; n++) { sum += n; } sum")
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(let_sum, JsValue::num(10.0));
+    }
 }
