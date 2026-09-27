@@ -1516,3 +1516,38 @@ pub(crate) const PAIRS: &[(u32, u32)] = &[
     (0x1E920, 0x1E942),
     (0x1E921, 0x1E943),
 ];
+
+/// `PAIRS`, indexed both directions and sorted by code point, built once.
+///
+/// Every `ignoreCase` character-class and `\p{...}`/`\P{...}` containment
+/// check used to scan the full 1512-entry `PAIRS` table linearly (checking
+/// both sides of every pair) for *every single code point tested* -- fine
+/// for one character, but property-escape test262 fixtures build strings
+/// covering tens of thousands of code points and run under both `u`/`v` and
+/// `i`, so that scan ran millions of times per file and pushed the whole
+/// property-escape directory from double-digit timeouts to 400+. A code
+/// point's case-fold partner is *not* always 1:1 -- e.g. both plain `K`
+/// (U+004B) and the Kelvin sign `K` (U+212A) fold to `k`, so `k` has two
+/// distinct partners going the other way -- so this indexes both directions,
+/// sorted by key but keeping every entry, and a lookup does two binary
+/// searches (`partition_point`) to bracket the (usually one, occasionally
+/// two or three) entries sharing that key, rather than a linear scan of all
+/// ~3000 directed entries.
+fn partner_table() -> &'static [(u32, u32)] {
+    static TABLE: std::sync::OnceLock<Vec<(u32, u32)>> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut table: Vec<(u32, u32)> = PAIRS.iter().flat_map(|&(a, b)| [(a, b), (b, a)]).collect();
+        table.sort_unstable_by_key(|&(c, _)| c);
+        table
+    })
+}
+
+/// Every simple case-fold partner of `c` (there can be more than one --
+/// see `partner_table`'s doc), found via two binary searches instead of a
+/// linear scan of the whole table.
+pub(crate) fn partners(c: u32) -> impl Iterator<Item = u32> {
+    let table = partner_table();
+    let start = table.partition_point(|&(k, _)| k < c);
+    let end = start + table[start..].partition_point(|&(k, _)| k == c);
+    table[start..end].iter().map(|&(_, p)| p)
+}

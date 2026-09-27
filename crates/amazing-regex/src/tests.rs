@@ -417,6 +417,34 @@ fn unicode_property_escapes_general_category_script_and_binary() {
     }
     assert!(!crate::unicode_props::supported("Not_A_Real_Property"));
 }
+// JSD-3: the `ignoreCase` fold-partner check for `\p{...}`/`\P{...}` and for
+// `v`-flag `Node::Set` character ranges used to scan the whole 1512-entry
+// `unicode_casefold::PAIRS` table per character; replaced with one binary
+// search (`unicode_casefold::partners`). Both paths only exist under
+// unicode-mode (`u`/`v`) patterns, so this locks in the exact fold-invert
+// semantics documented at the `SetExpr::contains` call site, not just speed.
+#[test]
+fn property_escape_and_v_flag_range_ignore_case_use_the_fast_partner_lookup() {
+    // `\P{Lu}` must match "A" under ignoreCase: invert is folded in before
+    // the fold-partner check, so "A"'s lowercase partner "a" (not in Lu)
+    // decides it, even though "A" itself is directly in Lu.
+    assert!(Regex::new(r"^\P{Lu}$", "iu").unwrap().exec("A", 0).unwrap().is_some());
+    assert!(Regex::new(r"^\p{Lu}$", "iu").unwrap().exec("a", 0).unwrap().is_some());
+    assert!(Regex::new(r"^\p{Lu}$", "u").unwrap().exec("a", 0).unwrap().is_none());
+    // `v`-flag classes always compile through `Node::Set`/`SetExpr`'s
+    // `Member::Range` (not `FoldedClass`), even without nesting.
+    assert!(Regex::new(r"^[A-Z]$", "iv").unwrap().exec("k", 0).unwrap().is_some());
+    assert!(Regex::new(r"^[A-Z]$", "v").unwrap().exec("k", 0).unwrap().is_none());
+    // `unicode_casefold::partners` itself: bidirectional, can be more than
+    // one value (both plain `K` and Kelvin-sign `K` fold to `k`), and empty
+    // for code points with no case pairing.
+    assert_eq!(crate::unicode_casefold::partners(0x41).collect::<Vec<_>>(), vec![0x61]);
+    assert_eq!(crate::unicode_casefold::partners(0x61).collect::<Vec<_>>(), vec![0x41]);
+    let mut k_partners: Vec<_> = crate::unicode_casefold::partners(0x6B).collect();
+    k_partners.sort_unstable();
+    assert_eq!(k_partners, vec![0x4B, 0x212A]);
+    assert_eq!(crate::unicode_casefold::partners('0' as u32).collect::<Vec<_>>(), Vec::<u32>::new());
+}
 #[test]
 fn named_capture_groups_and_backreferences() {
     let regex = Regex::new(r"(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})", "").unwrap();
