@@ -3084,3 +3084,118 @@ for the next pass:**
 - `stretch/block-height-003.html`'s missing general parent/first-or-last-
   child adjoining margin-collapse mechanism (item 3) -- unimplemented CSS2
   SS8.3.1 feature, substantial and separate.
+
+## LAYOUT-36 — float-nowrap-4 multi-reference tooling gap (planned, not started)
+
+### Coordinator direction (2026-09-27)
+
+LAYOUT-35 landed floats +6/tables +1/sizing +2. The one residual loss,
+`css/CSS2/floats/float-nowrap-4.html`, was previously written off as an
+acceptable tool limitation (it has two `rel=match` references and the render
+tool only checks the first). The coordinator rejected that as "explaining it
+away" and asked for: (1) confirm WPT's actual multi-reference semantics from
+the spec doc, (2) render against the second reference to verify empirically,
+(3) if WPT would call it a pass, teach `scripts/wpt_render_compare.py`
+multi-reference handling as its own small commit, (4) refresh the baseline.
+A second, narrowing message then paused the fleet: finish this item only if
+already running, otherwise record the plan here, set the lane `done`, and
+stop -- do not pick up the next cluster. No render or code edit had been made
+yet, so this entry records the plan for the next pass.
+
+### Confirmed spec semantics
+
+`~/corpora/wpt/docs/writing-tests/reftests.md`, "## Multiple References":
+
+> If a test has multiple links, then the test passes if:
+> * If there are any match references, at least one must match, and
+> * If there are any mismatch references, all must mismatch.
+
+`float-nowrap-4.html` has two `rel="match"` links (`float-nowrap-4-ref.html`,
+`float-nowrap-4-ref2.html`, differing by a `<br>` before the float). Under
+this rule the test should be scored a WPT pass if it matches **either**
+reference -- not just the first one encountered. This still needs the actual
+render-and-compare against `-ref2.html` to confirm empirically (not done
+yet); the prior session's crate-level unit test only confirmed box-tree order
+matched `-ref.html`'s intent, and the corpus run against `-ref.html` alone
+still showed a 4279-differing-pixel mismatch.
+
+### Tooling gap, root-caused
+
+`scripts/wpt_render_compare.py`'s `reftest_link()` (singular, ~line 124) only
+ever returns the **first** `<link rel=match|mismatch>` tag with a resolvable
+local href. Every downstream consumer (`classify_candidate()`,  `discover()`,
+`run_one_test()`) threads that single reference through, so a test with a
+second/alternate valid reference can never be scored a pass via it,
+regardless of engine correctness. This is a genuine, fixable bug in the
+harness, not a WPT semantics gap.
+
+Constraint found in `scripts/wpt_render_cluster.py` (`cluster_report()`,
+~line 134-141): it recomputes each mismatch's artifact folder as
+`run_directory / sha256(test_id)[:16]` and reads three **fixed, unsuffixed**
+filenames from it -- `diff.ppm`, `actual.ppm`, `reference.ppm`. Any
+multi-reference rewrite of `wpt_render_compare.py` must keep those plain
+names for the primary/first reference (only using suffixes like
+`reference_1.ppm`/`diff_1.ppm` for additional references) so this file does
+not also need changing -- keeps the fix a small, separate commit as asked.
+
+Confirmed via grep across `scripts/*.py` and `scripts/*.sh`: no other script
+reads `relation`/`href`/`reference_path`/`reference_href` from the report or
+discovery structures, and `scripts/linux-render-wpt.sh` does no per-test
+field parsing (it only shells out to `wpt_render_compare.py` and copies
+`report.json`/`compact.json`). `extract_classifications()` and
+`compare_to_baseline()` only read `id`/`classification`, so an additive
+`references: [...]` array on each test result is safe.
+
+### Planned implementation (next pass)
+
+1. `reftest_link()` -> `reftest_links()` (plural): scan **all** `<link
+   rel=match|mismatch>` tags in the test source (not just the first),
+   resolve each to a `reference_path`, keep the existing conservative
+   remote/escaping-reference rejection (`{"supported": False, "reason":
+   "remote-reference"|"escaping-reference"}`) applied per link, and return
+   `{"supported": True, "links": [{"relation", "reference_path", "href"},
+   ...]}`; `{"supported": False, "reason": "not-reftest"}` if none found.
+2. `classify_candidate()`: for each resolved link, check
+   `reference_path.is_file()` (else `"missing-reference"`) and its suffix
+   isn't XML-mode (else `"xml-reference-mode"`), then build `combined` from
+   the test source plus **every** reference's source (stricter than before --
+   catches a disqualifying pattern hiding only in a second reference) before
+   running the existing `SCRIPT_RE`/`INLINE_EVENT_HANDLER_RE`/
+   `FLAGS_META_RE`/`EMBEDDED_RESOURCE_RE`/`CSS_RESOURCE_RE`/
+   `STYLESHEET_LINK_RE` checks. Return `{"eligible": True, "links": [...],
+   "testharness": ...}`.
+3. `discover()`: store `"links": outcome["links"]` per eligible candidate in
+   place of the singular `reference_path`/`relation`/`href` triple.
+4. `run_one_test()`: render the test once (unchanged). For each reference
+   link in order: render it; if that render itself fails
+   (`error`/`timeout`/`crash`/`unsupported`), record `{"render_failed":
+   <classification>, "satisfied": False}`; otherwise `compare_ppm()` against
+   it and record `"satisfied" = (not matched if relation=="mismatch" else
+   matched)` plus the usual diff detail. Write the **first** reference's
+   `reference.ppm`/`diff.ppm` at the plain names (cluster-script
+   compatibility, see above); suffix subsequent references
+   (`reference_1.ppm`, `diff_1.ppm`, ...). If every link's reference failed
+   to render, return early with the first failure's raw classification
+   (matches old single-ref behavior for that case). Otherwise:
+   `match_ok = (not match_evaluations) or any(e["satisfied"] for e in
+   match_evaluations)`; `mismatch_ok = all(e["satisfied"] for e in
+   mismatch_evaluations)`; `passed = match_ok and mismatch_ok`. Mirror the
+   "primary" (first satisfied, else first) evaluation onto the existing
+   top-level fields (`relation`, `reference_href`, `differing_pixels`,
+   `max_difference`, `reference_sha256`, `diff_sha256`, `detail`) for
+   backward compatibility, and add a new, additive `"references": [...]`
+   array with full per-reference detail.
+5. Render `float-nowrap-4.html` against `float-nowrap-4-ref2.html` to
+   empirically confirm the match before trusting the rewritten tool's
+   verdict on it specifically.
+6. Refresh `crates/amazing-shell-gpui/evidence/wpt-render/css-CSS2-floats/`
+   via `scripts/linux-render-wpt.sh layout css/CSS2/floats --baseline auto
+   --release --jobs 8` once the fix lands, expecting the residual loss to
+   clear (gained=1 lost=0 relative to the current baseline).
+7. Land as its own small commit, separate from any subsequent cluster fix.
+
+No code was changed this pass -- research only (spec doc read, full
+`wpt_render_compare.py` and relevant `wpt_render_cluster.py` sections read,
+cross-script grep for schema dependents). Picking up the next largest
+triage cluster is explicitly deferred until this is scoped in a future
+brief.
