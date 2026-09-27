@@ -154,7 +154,18 @@ impl Interpreter {
                     if let StmtKind::Function(f) = &stmt.kind {
                         if let Some(n) = &f.name {
                             let v = self.make_function(f, &e);
-                            e.declare_lexical(&n.name, v, true)?;
+                            if e.local_cell(&n.name).is_some() {
+                                // Annex B.3.3.4: non-strict code may give the same name more
+                                // than one FunctionDeclaration directly in one block (the
+                                // duplicate-LexicallyDeclaredNames early error is relaxed only
+                                // when every duplicate is a FunctionDeclaration).
+                                // BlockDeclarationInstantiation still runs InitializeBinding once
+                                // per declaration in source order, so the last one silently wins
+                                // rather than re-declaring into a cell that already exists.
+                                let _ = e.assign(&n.name, v);
+                            } else {
+                                e.declare_lexical(&n.name, v, true)?;
+                            }
                         }
                     }
                 }
