@@ -27,6 +27,14 @@ enum V {
     Coerce(&'static str),
     Throw,
     Promise(u64),
+    /// A callable whose body is a Rust closure run against the live `Host`,
+    /// for tests that need a "user callback" to perform real side effects
+    /// (e.g. an Observable initializer that calls back into
+    /// `subscriber.next()`/`.error()`/`.complete()`/`.addTeardown()` on the
+    /// very `Subscriber` value it was invoked with) rather than the fixed
+    /// canned response every plain `V::Callable` gets from `Host::call`.
+    /// See `Host::script`.
+    Script(usize),
 }
 #[derive(Default)]
 struct Host {
@@ -66,6 +74,8 @@ struct Host {
     window: Option<(u64, V)>,
     cancel_events: bool,
     callback_targets: Vec<Option<amazing_dom::events::EventTarget>>,
+    #[allow(clippy::type_complexity)]
+    scripts: Vec<Option<Box<dyn FnMut(&mut Host, &V, &[V]) -> Result<V, String>>>>,
 }
 impl Host {
     fn web_push(&mut self, object: WebMock, brand: InterfaceBrand) -> V {
@@ -76,6 +86,13 @@ impl Host {
     fn web_index(&self, value: &V, brand: InterfaceBrand) -> Result<usize, String> {
         self.platform_object(value, brand).map(|key| key.slot as usize)
             .ok_or_else(|| "incompatible web receiver".into())
+    }
+    /// Wraps a Rust closure as a `V::Script`, callable through the ordinary
+    /// `BindingHost::call` path -- see `V::Script`'s doc comment.
+    fn script(&mut self, f: impl FnMut(&mut Host, &V, &[V]) -> Result<V, String> + 'static) -> V {
+        let id = self.scripts.len();
+        self.scripts.push(Some(Box::new(f)));
+        V::Script(id)
     }
 }
 impl BindingHost for Host {
@@ -180,7 +197,7 @@ impl BindingHost for Host {
         (key.arena == 1 && key.generation == 1 && key.slot < self.dom.node_count() as u64)
             .then(|| NodeIdx(key.slot as u32))
     }
-    fn is_callable(&self, value: &V) -> bool { matches!(value, V::Callable(_)) }
+    fn is_callable(&self, value: &V) -> bool { matches!(value, V::Callable(_) | V::Script(_)) }
     fn call(&mut self, function: &V, this: &V, arguments: &[V]) -> Result<V, String> {
         assert!(!self.arena_borrowed);
         self.call_receivers.push((this.clone(), arguments.to_vec()));
@@ -190,6 +207,12 @@ impl BindingHost for Host {
             if self.cancel_events { event.prevent_default(); }
         }
         if let V::Callable(id) = function { self.calls.push(*id); self.abort_trace.push(*id); }
+        if let V::Script(id) = function {
+            let mut script = self.scripts[*id].take().expect("script re-entered (no reentry support in this mock)");
+            let result = script(self, this, arguments);
+            self.scripts[*id] = Some(script);
+            return result;
+        }
         match function { V::Callable(1) => Ok(V::Number(1.)), V::Callable(_) => Ok(V::Undefined), _ => Err("not callable".into()) }
     }
     fn same_value(&self, left: &V, right: &V) -> bool { left == right }
@@ -2597,3 +2620,6 @@ mod error_events;
 
 #[path = "tests_dom_b_reflect.rs"]
 mod tests_dom_b_reflect;
+
+#[path = "tests_observable.rs"]
+mod tests_observable;

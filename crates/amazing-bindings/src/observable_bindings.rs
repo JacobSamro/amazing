@@ -175,13 +175,26 @@ fn notify_next<H: AbortHost>(host: &mut H, id: ObservableId, value: H::Value) ->
     Ok(())
 }
 
-/// `error()`/`complete()`: notify the current observers, then run teardown
-/// (LIFO) and abort the run's own internal signal. A no-op once inactive.
+/// `error()`/`complete()`: per WICG Observable, step 3 of both methods is
+/// "close a subscription" -- set inactive (done by `observable_terminate`
+/// above), signal-abort the subscription controller with the reason, then
+/// run teardown callbacks in reverse insertion order -- and only steps 4-5
+/// *after that* forward the event to the observers registered at the time.
+/// A no-op once inactive. Verified against the live spec text (SS4's
+/// `error(error)`/`complete()` algorithms and "close a subscription") after
+/// a WPT observable-takeUntil.any.js test asserted a teardown ran before the
+/// forwarded callback it superficially looks unrelated to -- this ordering,
+/// not just the takeUntil-specific mapping below, was backwards.
 fn notify_terminate<H: AbortHost>(host: &mut H, id: ObservableId, is_error: bool, value: Option<H::Value>)
     -> Result<(), H::Error> {
     let Some(termination) = host.with_dom(|dom| dom.observable_terminate(id))? else { return Ok(()) };
     let generation = host.with_dom(|dom| dom.observable_current_generation(id))?;
     let signal = host.with_dom(|dom| dom.observable_signal_for_generation(id, generation)).ok();
+    if let Some(signal) = signal {
+        let reason = value.clone().unwrap_or_else(|| host.undefined());
+        crate::abort_bindings::propagate(host, signal, reason)?;
+    }
+    run_teardowns(host, termination.teardowns)?;
     for entry in termination.observers {
         let event = if is_error {
             RelayEvent::Error(value.clone().unwrap_or_else(|| host.undefined()))
@@ -189,11 +202,6 @@ fn notify_terminate<H: AbortHost>(host: &mut H, id: ObservableId, is_error: bool
             RelayEvent::Complete
         };
         forward(host, id, entry.call_id, entry.sink, event)?;
-    }
-    run_teardowns(host, termination.teardowns)?;
-    if let Some(signal) = signal {
-        let reason = value.unwrap_or_else(|| host.undefined());
-        crate::abort_bindings::propagate(host, signal, reason)?;
     }
     Ok(())
 }
@@ -254,9 +262,20 @@ fn relay_forward<H: AbortHost>(host: &mut H, target: ObservableId, kind: RelayKi
         (RelayKind::TakeUntilSource, RelayEvent::Next(v)) => notify_next(host, target, v),
         (RelayKind::TakeUntilSource, RelayEvent::Error(e)) => notify_terminate(host, target, true, Some(e)),
         (RelayKind::TakeUntilSource, RelayEvent::Complete) => notify_terminate(host, target, false, None),
-        (RelayKind::TakeUntilNotifier, RelayEvent::Error(e)) => notify_terminate(host, target, true, Some(e)),
-        (RelayKind::TakeUntilNotifier, RelayEvent::Next(_) | RelayEvent::Complete) =>
+        // WICG Observable takeUntil(): the notifier's internal observer has
+        // *next steps* and *error steps* that both run the outer Subscriber's
+        // complete() method (not next()/error() -- confirmed against the live
+        // spec text, and against observable-takeUntil.any.js's own asserted
+        // "takeUntil() complete callback" result for both a notifier error()
+        // call and a notifier throw()). It has no *complete steps* at all --
+        // the spec leaves the notifier completing itself unspecified, i.e. a
+        // no-op: "the observable will continue to mirror sourceObservable
+        // uninterrupted". Previously this arm treated notifier Error as an
+        // outer *error* and notifier Complete as an outer *complete*, both
+        // backwards from spec.
+        (RelayKind::TakeUntilNotifier, RelayEvent::Next(_) | RelayEvent::Error(_)) =>
             notify_terminate(host, target, false, None),
+        (RelayKind::TakeUntilNotifier, RelayEvent::Complete) => Ok(()),
     }
 }
 
