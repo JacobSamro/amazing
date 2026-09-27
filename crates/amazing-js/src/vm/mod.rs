@@ -265,6 +265,9 @@ enum Instruction {
     /// never needs to suspend; the enclosing body stays on the VM instead of
     /// falling back to a coroutine thread.
     TreeEval(Register, Rc<crate::ast::Expr>),
+    /// Replace the innermost block scope with a fresh one holding copies of
+    /// the named `let` bindings (a `for (let ...;;)` iteration boundary).
+    CopyScope(Vec<String>),
     /// `ResolvePrivate` without the read, for a plain `=` target.
     ResolvePrivateWrite(usize, Register, String),
     Update(Register, usize, Register, crate::ast::UpdateOp, bool),
@@ -910,6 +913,15 @@ impl Program {
                     Instruction::EnterScope => {
                         scopes.push(env.clone());
                         *env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+                    }
+                    Instruction::CopyScope(names) => {
+                        let outer = scopes.last().cloned()
+                            .ok_or_else(|| Throw::type_error("invalid VM scope"))?;
+                        let next = EnvHandle::new(EnvKind::Block, Some(outer));
+                        for name in names {
+                            next.declare_lexical(name, env.resolve(name).unwrap_or(JsValue::Undefined), true)?;
+                        }
+                        *env = next;
                     }
                     Instruction::LeaveScope => {
                         *env = scopes

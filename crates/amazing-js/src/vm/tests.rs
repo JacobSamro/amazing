@@ -444,6 +444,23 @@ fn jsvm10_suspension_free_unsupported_expressions_run_through_the_tree_walker() 
 }
 
 #[test]
+fn jsvm10_lexical_for_heads_match() {
+    for source in [
+        "var fs = []; for (let i = 0; i < 3; i++) fs.push(() => i); fs.map(f => f()).join(',');",
+        "var fs = []; for (let i = 0; i < 3; i++) { fs.push(() => i); i += 0; } fs.map(f => f()).join(',');",
+        "var out = ''; for (let i = 0, j = 10; i < 3; i++, j--) out += i + ':' + j + ';'; out;",
+        "var out = ''; for (const x = 5; out.length < 3;) out += x; out;",
+        "var out = ''; for (let i = 0; i < 5; i++) { if (i === 1) continue; if (i === 3) break; out += i; } let i = 'after'; out + i;",
+        "var fs = []; for (let i = 0; i < 4; i++) { if (i % 2) continue; fs.push(() => i); } fs.map(f => f()).join(',');",
+        "var out = ''; outer: for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { if (j === 1) continue outer; out += i + '' + j; } out;",
+        "var f; for (let i = 0; f = () => i, i < 2; i++) {} f();",
+        "var out = ''; for (let i = 0; i < 3; i++) { try { if (i === 1) continue; out += i; } finally { out += 'f'; } } out;",
+    ] {
+        differential(source, &["out"]);
+    }
+}
+
+#[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
         "changed = 1; class A { x=7; }",

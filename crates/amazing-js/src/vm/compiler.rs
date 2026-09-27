@@ -628,6 +628,31 @@ impl Compiler {
                 update,
                 body,
             } => {
+                // `for (let/const ...;;)`: the head gets its own scope, and
+                // each iteration of a `let` head gets a fresh copy of it
+                // (CreatePerIterationEnvironment) so closures capture the
+                // iteration's value. Break/continue targets sit inside that
+                // scope; the break target is the closing `LeaveScope`.
+                let lexical = match init {
+                    Some(ast::ForInit::Decl(declaration)) if declaration.kind != VarKind::Var => {
+                        if declaration.resource_kind.is_some() {
+                            return Err(self.error(statement.span, "lexical for binding"));
+                        }
+                        Some(declaration)
+                    }
+                    _ => None,
+                };
+                let mut per_iteration = Vec::new();
+                if let Some(declaration) = lexical {
+                    self.emit(Instruction::EnterScope);
+                    if declaration.kind == VarKind::Let {
+                        for binding in &declaration.decls {
+                            if let Binding::Ident(name) = &binding.binding {
+                                per_iteration.push(name.name.clone());
+                            }
+                        }
+                    }
+                }
                 let labels = std::mem::take(&mut self.pending_labels);
                 self.push_loop(labels, true);
                 self.emit(Instruction::Complete(0));
@@ -635,16 +660,16 @@ impl Compiler {
                     Some(ast::ForInit::Expr(expression)) => {
                         self.expression(expression)?;
                     }
-                    Some(ast::ForInit::Decl(declaration)) if declaration.kind == VarKind::Var => {
+                    Some(ast::ForInit::Decl(declaration)) => {
                         self.statement(&Stmt::new(
                             StmtKind::Var((**declaration).clone()),
                             statement.span,
                         ))?;
                     }
-                    Some(ast::ForInit::Decl(_)) => {
-                        return Err(self.error(statement.span, "lexical for binding"))
-                    }
                     None => {}
+                }
+                if !per_iteration.is_empty() {
+                    self.emit(Instruction::CopyScope(per_iteration.clone()));
                 }
                 let start = self.program.code.len();
                 let end = if let Some(test) = test {
@@ -658,6 +683,9 @@ impl Compiler {
                 // re-testing, so its target is here -- right after the body,
                 // right before `update` -- not back at `start`.
                 let continue_target = self.program.code.len();
+                if !per_iteration.is_empty() {
+                    self.emit(Instruction::CopyScope(per_iteration));
+                }
                 if let Some(update) = update {
                     self.expression(update)?;
                 }
@@ -667,6 +695,9 @@ impl Compiler {
                 }
                 let break_target = self.program.code.len();
                 self.pop_loop(break_target, Some(continue_target));
+                if lexical.is_some() {
+                    self.emit(Instruction::LeaveScope);
+                }
             }
             StmtKind::ForOf { left, right, body } => {
                 let labels = std::mem::take(&mut self.pending_labels);
