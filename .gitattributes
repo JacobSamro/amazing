@@ -1,1 +1,3 @@
 * text=auto eol=lf
+# Rows are appended by many lanes (porting policy, AGENTS.md); union-merge them.
+THIRD_PARTY_NOTICES.md merge=union
