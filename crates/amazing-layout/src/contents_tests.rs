@@ -560,6 +560,23 @@ fn positioned_stretch_is_definite_for_percentage_descendants() {
 }
 
 #[test]
+fn min_width_stretch_ignores_the_box_own_over_constrained_margin_right() {
+    // css-sizing-4 stretch-fit-sizing (`stretch/min-width-1.html`): a
+    // definite `width:50px` on a block box with no margin declared makes
+    // CSS2.1 #blockwidth's over-constrained rule recompute a *used*
+    // margin-right of 50 (cbw - width) even though the specified margin is
+    // 0, not auto. `min-width:stretch` must not read that recomputed value
+    // as a genuine reserved margin -- doing so double-counts the same slack
+    // it's trying to reclaim and the box never grows past its `width`.
+    let (dom, root) = page(
+        "<body><div id=outer><div id=inner></div></div></body>",
+        "#outer{width:100px}#inner{width:50px;min-width:stretch;height:100px}",
+        false,
+    );
+    near(get(&root, id(&dom, "inner")).border_box.w, 100.0);
+}
+
+#[test]
 fn row_lanes_subgrid_chrome_matches_grid_sizing() {
     let html = "<body><div id=outer><div id=c><section id=s><i>A</i><i>B</i></section></div></div></body>";
     let css = "#outer{display:flex;width:200px}#c{grid-template-rows:repeat(2,60px);gap:10px}#s{display:grid;grid-template-rows:subgrid;grid-row:1/-1;grid-auto-flow:column;border:9px solid;padding:6px}i{width:80px;padding:8px;border:1px solid}";

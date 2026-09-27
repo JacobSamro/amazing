@@ -824,3 +824,45 @@ fn fixed_table_column_percentages_exclude_table_borders_and_spacing() {
         }
     }
 }
+
+#[test]
+fn col_definite_min_size_trailing_columns_only_extend_definite_ones() {
+    // css-tables-3 #missing-cells-fixup (col-definite-min-size-001.html):
+    // 4 real tables each with a 4-`<col>` colgroup but only 2 real `<td>`s.
+    // A table.rs regression (LAYOUT-34) shrank `Grid::count` to reflect that
+    // trailing non-definite columns don't force missing-cell placeholders,
+    // but left `Grid::columns` at its full 4-entry declared length --
+    // `constraints()` and friends index per-column vecs sized by `count`
+    // using `columns`'s own index, so `count < columns.len()` panicked
+    // (index out of bounds) on every table below except the first. Asserting
+    // real layout (not just "doesn't panic") also pins the actual column
+    // count: table 1's `min-width:100px` x4 is definite, so all 4 stay and
+    // the table is at least 4*100px + spacing wide; table 3's `min-width:50%`
+    // x4 is never definite, so the extra columns are dropped and the table's
+    // width comes only from its two 1-char cells (far narrower).
+    let b = layout(
+        r#"<body>
+<table id=t1 border="1" cellspacing="10"><colgroup>
+  <col style="min-width:100px"><col style="min-width:100px">
+  <col style="min-width:100px"><col style="min-width:100px">
+</colgroup><thead><tr><td>1</td><td>2</td></tr></thead></table>
+<table id=t2 border="1" cellspacing="10"><colgroup>
+  <col style="min-width:calc(100px + 1%)"><col style="min-width:calc(100px + 1%)">
+  <col style="min-width:calc(100px + 1%)"><col style="min-width:calc(100px + 1%)">
+</colgroup><thead><tr><td>1</td><td>2</td></tr></thead></table>
+<table id=t3 border="1" cellspacing="10"><colgroup>
+  <col style="min-width:50%"><col style="min-width:50%">
+  <col style="min-width:50%"><col style="min-width:50%">
+</colgroup><thead><tr><td>1</td><td>2</td></tr></thead></table>
+<table id=t4 border="1" cellspacing="10"><colgroup>
+  <col><col><col style="min-width:0"><col style="min-width:0">
+</colgroup><thead><tr><td>1</td><td>2</td></tr></thead></table>
+"#,
+        "",
+        false,
+    );
+    let tables = collect(&b, Role::Table);
+    assert_eq!(tables.len(), 4);
+    assert!(tables[0].border_box.w >= 400.0, "t1: {}", tables[0].border_box.w);
+    assert!(tables[2].border_box.w < 100.0, "t3: {}", tables[2].border_box.w);
+}

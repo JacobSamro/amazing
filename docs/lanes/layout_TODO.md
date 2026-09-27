@@ -2771,3 +2771,141 @@ contention; resolved by killing the local stuck ssh/bash process tree and
 removing the stale `.agents/.remote-locks/linux-run-layout` lock directory,
 then retrying cleanly (completed in the usual ~2 minutes). Not a code or
 lane-ownership issue, noted here only in case the pattern recurs elsewhere.
+
+## LAYOUT-34 — cluster-ranking follow-up: css-tables col-definite-min-size,
+residual stretch fixtures, CSS2 clusters (triaged)
+
+Coordinator's explicit ranking after LAYOUT-33 merged: css-tables
+`col-definite-min-size-001`, then the four residual `css-sizing`
+`stretch/*` fixtures, then the CSS2 floats/normal-flow/css-display clusters.
+
+**(1) css-tables `col-definite-min-size-001.html`.** `Grid::new()` seeded
+its column count from the full `<colgroup>`/`<col>` declaration
+unconditionally. Per css-tables-3 `#missing-cells-fixup`, a declared column
+beyond the last one any real cell occupies only forces an anonymous
+"missing cell" placeholder (extending the column count) when that column
+itself has a definite (absolute-length) `width` or `min-width` — a
+percentage, a `calc()` containing one, or no size at all does not, and such
+trailing columns are dropped as if never declared. Added a
+`column_has_definite_size` helper and let it extend `count` past the
+cell-derived minimum.
+
+**(1b) Self-introduced crash, found and fixed before landing.** The (1)
+patch only changed `Grid::count`, leaving `Grid::columns` (the parallel
+per-declared-column path list) at its full, untruncated length.
+`constraints()`, `table_decoration` and colgroup border painting all index
+per-column vecs sized by `count` using the same `i` from
+`g.columns.iter().enumerate()` — `columns.len() == count` was a load-bearing
+invariant everywhere else in the file, not just the common case, so
+`count < columns.len()` panicked (index out of bounds) on 3 of the corpus's
+own tables (`col-definite-min-size-001`, `col-definite-max-size-001`,
+`col-definite-size-001`), caught immediately by the first corpus re-sweep
+(`crash=3`, reproduced locally with a probe test and a real backtrace before
+touching the remote sandbox again). Fixed by truncating `columns` to `count`
+right after computing it, restoring the invariant everywhere at once instead
+of patching each of the ~6 read sites individually.
+
+Also added: `col-definite-min-size-001.html`'s actual target (a `<col>`
+`min-width` acting as a floor, independent of `width`) was never read by
+`constraints()` at all before this — only `width` contributed to a column's
+min/max. Added a floor using the same `intrinsic_limit` helper cells already
+use for their own `min-width`. This makes `min-width-1.html`'s own
+`css-sizing` cousin behave and is a real (if partial) step toward the
+fixture: the corpus render sweep confirms the crash is gone and the
+classification returns to the pre-existing `mismatch` (no change against
+the checked-in baseline, `changed=0`) rather than a full pixel match — full
+parity needs the col-`width`/`min-width`/`max-width` used-value clamp
+(`col-definite-max-size-001.html`'s `max-width:0; width:100px` case implies
+the column's own *used* width must be `clamp(width, min-width, max-width)`
+before feeding `min[i]`/`max[i]`, not three independent floor/ceiling
+signals combined ad hoc), left as a follow-up — not this ticket's assigned
+fixture and a larger, riskier change than budget allowed to also verify
+zero-loss on the rest of the 82-test `unchanged` set in the same pass.
+
+**(2) `min-width`/`max-width: stretch` don't read the box's own
+over-constrained margin-right.** `calc_size_width_limit`'s
+`stretch`/`-webkit-fill-available` arm subtracted `b.margin.left/right` to
+get the fill-available width. For a block box with a definite `width` and
+no margin declared, CSS2.1 `#blockwidth`'s over-constrained rule had
+already overwritten `b.margin.right` with `cbw - width` (the specified `0`
+is ignored so the box-model equation balances) by the time this code ran —
+real per spec, but not a genuine reserved margin. Subtracting it
+double-counted the same slack `min-width:stretch` was trying to reclaim, so
+`width:50px;min-width:stretch` in a 100px containing block stayed at 50
+instead of growing to 100 (`stretch/min-width-1.html`). Fixed by
+re-resolving margins fresh from the declared style inside the stretch arm
+(auto treated as 0, matching css-sizing-4 stretch-fit-sizing) instead of
+trusting the already-mutated `b.margin`. Added a permanent regression test
+in `contents_tests.rs`.
+
+**Residual stretch fixtures (3 of 4), triaged, not fixed this pass:**
+- `stretch/positioned-non-replaced-1.html`: reproduced the box geometry by
+  hand (abspos `width:stretch;height:stretch` with no insets fills its
+  positioned ancestor's whole padding box, independently offset by a
+  negative-margin trick so only a 100×100 sub-region is on-page) and it
+  matches the expected size and position; the corpus mismatch is therefore
+  most likely paint/clip-related (the off-page portion of the filled box),
+  not a sizing bug this lane owns outright — not chased further within
+  budget.
+- `stretch/block-height-003.html`: asserts a `height:stretch` box's
+  `margin: 75px 0px 25px 0px` is ignored for *sizing* but the top margin
+  still participates in ordinary margin collapsing while the bottom doesn't
+  (parent has a definite height). The height-axis stretch arm already
+  doesn't subtract margins at all (unlike the width axis fixed in item 2),
+  so this isn't the same bug class — it's a margin-collapsing-around-a-
+  stretched-child interaction, a different mechanism, not yet root-caused.
+- `stretch/fixed-table-1.html`: `display:table;table-layout:fixed;
+  width:stretch` — table.rs has its own, separate width-resolution path
+  from block.rs's generic `stretch` handling (used above); not established
+  whether `table::layout` consults `stretch` at all. Not investigated in
+  depth this pass.
+
+**CSS2 floats/normal-flow/css-display clusters: triaged, not fixed this
+pass.** Ran a batched `--baseline auto` sweep across all three
+(`css/CSS2/floats` gained=0 lost=0 unchanged=39, `css/CSS2/normal-flow`
+gained=0 lost=0 unchanged=29, `css/css-display` gained=0 lost=0
+unchanged=33 modulo one nondeterministic false "lost", see below). The
+largest identifiable cluster is `css/CSS2/floats`'s `float-nowrap-*` family
+(4+ tests): a `float` inside a `white-space:nowrap` span that doesn't fit
+on the line is spec'd (css2 `#float-position`, matching Firefox's
+`float-nowrap-3-ref.html`/mismatch-tests-itself-against
+`float-nowrap-4.html`) to be deferred to a position *after* the nowrap run
+overflows, not floated in place inline mid-run — a distinct, nontrivial
+float-positioning/line-overflow interaction, not a quick fix. Root-caused
+the shape of the feature gap but did not attempt an implementation within
+this pass's budget; left for a dedicated pass.
+
+**False regression, isolated via A/B, not a real loss.** The first batched
+sweep reported `css/css-display` `lost=1`
+(`display-flow-root-002.html`, a plain `display:flow-root;width:0` box
+between two floats — no stretch, no table styling, nothing this ticket's
+two code changes touch). Isolated by swapping `block.rs`/`table.rs` back to
+their pre-session (`2d36b867`) versions in the worktree and re-running just
+`css/css-display` alone: the same test was **still** lost with every change
+from this ticket completely absent, proving it's pre-existing render
+nondeterminism on this corpus (the same pattern already documented for
+`css-tables`' `th-text-align.html` in LAYOUT-33), not caused by this
+ticket. Restored both files exactly (`git status` clean before
+re-verifying with crate tests) and proceeded.
+
+**Gate.** `crates/amazing-layout` crate tests: 386 passed, 1 skipped, 0
+failed (385 after item 1b's regression test replaced the earlier probe),
+stable across every iteration. `css/css-sizing` render corpus
+(`--baseline auto`): pass 87→88 (gained=1: `stretch/min-width-1.html`,
+lost=0), evidence refreshed. `css/css-tables`: no crash (was 3), returns to
+the pre-existing baseline classification (`changed=0`), evidence
+unchanged (nothing to refresh — same classification as committed). Full
+workspace gate (win-off, `scripts/linux-run.sh`): **3470 passed, 0 failed,
+17 skipped**, workspace `cargo test --doc` clean across every
+doctest-bearing crate.
+
+**Unresolved / follow-ups, left in `.agents/layout/questions.md` or here
+for the next pass:**
+- `col-definite-max-size-001.html`/full col `width`/`min-width`/`max-width`
+  used-value clamp order (item 1b).
+- `stretch/positioned-non-replaced-1.html` paint/clip suspicion (item 2).
+- `stretch/block-height-003.html` margin-collapse-around-stretch (item 2).
+- `stretch/fixed-table-1.html` table.rs's own stretch handling, if any
+  (item 2).
+- CSS2 `float-nowrap-*` deferred-float-past-nowrap-overflow feature gap
+  (item 3), root cause identified, not implemented.

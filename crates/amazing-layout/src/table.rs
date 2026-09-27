@@ -121,7 +121,7 @@ impl Grid {
         }
         let mut occupied_until = vec![0; MAX_COLUMNS];
         let mut cells = Vec::new();
-        let mut count = columns.len();
+        let mut count = 0;
         for (r, row) in rows.iter().enumerate() {
             let mut col = 0;
             for (i, cell) in children(at(b, &row.path)).iter().enumerate() {
@@ -156,6 +156,34 @@ impl Grid {
                 count = count.max(col);
             }
         }
+        // css-tables-3 #missing-cells-fixup: a `<colgroup>`/`<col>` beyond
+        // the last column any real cell occupies only forces a "missing
+        // cell" placeholder column to exist when that column itself has a
+        // definite (absolute-length) `width` or `min-width` -- a `%`/
+        // `calc()`-with-percentage size, or no size at all, does not, and
+        // that trailing column is dropped as if the colgroup had never
+        // declared it (`col-definite-min-size-001.html`: tables with
+        // `min-width: 50%`/`calc(100px + 1%)`/unset collapse to only the
+        // columns real cells use, while `min-width: 100px` keeps all four).
+        // Scanned from the end so a definite column past a non-definite one
+        // still extends the count, matching ordinary trailing-trim.
+        count = count.max(
+            columns
+                .iter()
+                .enumerate()
+                .skip(count)
+                .filter(|(_, path)| column_has_definite_size(at(b, path)))
+                .map(|(i, _)| i + 1)
+                .max()
+                .unwrap_or(count),
+        );
+        // Every other reader of `g.columns` (constraints(), decoration,
+        // colgroup border painting) indexes parallel per-column vecs of
+        // length `g.count` by the same `i` from `g.columns.iter().enumerate()`
+        // -- `columns.len() == count` is a load-bearing invariant, not just
+        // the common case, so a dropped trailing non-definite column must be
+        // removed from `columns` itself here, not just excluded from `count`.
+        columns.truncate(count);
         Self {
             rows,
             cells,
@@ -169,6 +197,21 @@ fn length(b: &LayoutBox, name: &str, basis: f32) -> Option<f32> {
         MaybeLen::Px(v) => Some(v.max(0.0)),
         MaybeLen::Auto => None,
     }
+}
+/// True when a `<col>`/`<colgroup>` has a definite (absolute-length)
+/// `width` or `min-width` -- a bare number/px, not a percentage or a
+/// `calc()` that contains one. Resolving against basis `0.0` and checking
+/// for `%` in the raw source (rather than trusting `MaybeLen::Px` alone,
+/// which a percentage still produces once resolved against *some* basis)
+/// is what distinguishes "genuinely definite" from "resolves to a number
+/// only because there was a basis to resolve against" for this
+/// structural, pre-layout column-count decision.
+fn column_has_definite_size(col: &LayoutBox) -> bool {
+    ["width", "min-width"].into_iter().any(|prop| {
+        col.style
+            .get(prop)
+            .is_some_and(|raw| !raw.contains('%') && length(col, prop, 0.0).is_some())
+    })
 }
 fn spacing(b: &LayoutBox) -> (f32, f32) {
     if collapsed(b) {
@@ -506,6 +549,22 @@ fn constraints(
             .unwrap_or(0.0);
         min[i] = width;
         max[i] = width;
+        // css-tables-3 #computing-column-measures (col-definite-min-size-001.html):
+        // a definite (non-percentage) `<col>`/`<colgroup>` `min-width` floors
+        // the column independent of `width` -- checked on both the `<col>`
+        // and its owning `<colgroup>`, same fallback `width` uses above.
+        // `max-width` interacting with an explicit `width` on the same
+        // column is a separate, not-yet-implemented resolution
+        // (col-definite-max-size-001.html) left for its own pass.
+        let min_width = intrinsic_limit(col, "min-width").or_else(|| {
+            (path.len() == 2)
+                .then(|| intrinsic_limit(at(b, &path[..1]), "min-width"))
+                .flatten()
+        });
+        if let Some(min_width) = min_width {
+            min[i] = min[i].max(min_width);
+            max[i] = max[i].max(min_width);
+        }
     }
     let mut cells: Vec<_> = g.cells.iter().collect();
     cells.sort_by_key(|c| c.cols);
