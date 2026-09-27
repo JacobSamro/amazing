@@ -3003,3 +3003,45 @@ timeouts/errors. `declarative-shadow-dom-basic.html` 17/5->22/0 (now fully passi
 586/68->610/44. Every other file in the directory unchanged.
 
 Evidence: `crates/amazing-bindings/evidence/set-html-unsafe-shadow/`.
+
+## createElementNS DOMException-shape bug: root-caused to two amazing-js/html gaps, routed (base 678f1bfb)
+
+Re-checked `dom/nodes/Document-createElementNS.html`'s 220-subtest failure cluster against current
+`dev` (`678f1bfb`, includes js-runtime's JSRT-20..23 value-model changes -- confirmed unaffected,
+same 220/376 split before and after that merge). Coordinator asked to nail the exact shape rather
+than the prior session's guess ("DOMException object's construction path").
+
+All 220 failures are exactly one shape: `"...in XML document..."` / `"...in XHTML document..."`
+(110 each; every `"in HTML document"` case passes), each failing with `TypeError: value is not
+callable` where a `DOMException` was expected. Diagnosed with three temporary probe `<script>`
+blocks appended to a private WPT copy under `$OUT` (never committed, never touching the shared
+`~/corpora/wpt` checkout), run through `amazing wpt-harness`:
+
+1. **`xmlIframe.contentDocument.defaultView` (and the XHTML iframe's) is exactly `null`** --
+   verified directly (`assert_equals(xmlDoc.defaultView, null)` passes). A broader probe across
+   `DOMException`/`Node`/`Element`/`Event`/`Document`/`Error`/`TypeError`/`Object` confirms this
+   isn't DOMException-specific -- with `defaultView` null, every global constructor is
+   unreachable through it. Root cause is almost certainly `runtime_host_html.rs`'s iframe/child-
+   realm setup (html lane's file) never creating or never wiring a Window realm as an XML/XHTML-
+   typed iframe document's `defaultView` -- outside dom-bindings' granted paths (confirmed:
+   nothing in `amazing-bindings`/`amazing-dom` populates `defaultView`, only reads a stored field).
+2. **Reading a property off `undefined`/`null` does not throw in this engine** -- verified
+   directly (`var u = undefined; u.foo` returns `undefined`, no throw). Per ECMA-262 this must
+   always throw a `TypeError`. This is why the visible symptom is "not callable" two reads and one
+   call later rather than an immediate crash at the real fault site: `null.DOMException` silently
+   yields `undefined`, testharness.js's own `assert_throws_dom` (`resources/testharness.js`
+   ~line 2279, `funcOrConstructor.name === "DOMException"`, no guard) then mis-routes internally
+   because `undefined.name` also doesn't throw, ending in `undefined.call(this)` -- a core amazing-
+   js `GetValue`/property-access gap, independent of DOM/iframes, likely with a much wider blast
+   radius across other WPT selections wherever code expects an immediate throw on a null/undefined
+   property read.
+
+Neither root cause is in dom-bindings' granted paths (html's realm plumbing for #1, amazing-js's
+interpreter for #2); not fixed here, written up in full (with the exact probe results) in
+`questions.md` for js-runtime/html to route and pick up. No code changed; this entry is
+documentation-only.
+
+Tooling note for whoever reruns this: a private `wpt-harness` root under `$OUT` needs an empty
+`.pinned-c2a2fce` marker file at its root (present in the shared `~/corpora/wpt`, not produced by
+a plain `git clone`/`cp`) or the harness errors `"No such file or directory"` before running
+anything at all.
