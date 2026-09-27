@@ -320,6 +320,17 @@ fn layout_block_in_context(
         Some("max-content") => content_w = (intrinsic(b, false) - chrome).max(0.0),
         Some("fit-content") => content_w = (intrinsic(b, true).max(content_w + chrome)
             .min(intrinsic(b, false)) - chrome).max(0.0),
+        // CSS Sizing 4 `stretch` (formerly `-webkit-fill-available`): the
+        // stretch-fit size fills the containing block minus the box's own
+        // margins, same equation as an ordinary in-flow block's width
+        // (MaybeLen::Auto's non-float branch above) -- applied here
+        // unconditionally so it also overrides a float/inline-block/replaced
+        // box's default shrink-to-fit sizing.
+        Some("stretch" | "-webkit-fill-available") => {
+            let used_ml = b.margin.left.unwrap_or(0.0);
+            let used_mr = b.margin.right.unwrap_or(0.0);
+            content_w = (cbw - used_ml - chrome - used_mr).max(0.0);
+        }
         _ => {},
     }
     if let Some(source) = b.style.get("width")
@@ -357,6 +368,11 @@ fn layout_block_in_context(
             "max-content" => return Some((intrinsic(false) - chrome).max(0.0)),
             "fit-content" => return Some((intrinsic(true).max(content_w + chrome)
                 .min(intrinsic(false)) - chrome).max(0.0)),
+            "stretch" | "-webkit-fill-available" => {
+                let used_ml = b.margin.left.unwrap_or(0.0);
+                let used_mr = b.margin.right.unwrap_or(0.0);
+                return Some((cbw - used_ml - chrome - used_mr).max(0.0));
+            }
             _ => {},
         }
         let basis = match values::calc_size_basis(source)? {
@@ -568,6 +584,17 @@ fn layout_block_in_context(
         // trailing-margin-escape/BFC handling below rather than this shortcut.
         match source.trim() {
             "min-content" | "max-content" | "fit-content" => return Some(intrinsic_height),
+            // CSS Sizing 4 `stretch`: the block axis's stretch-fit size is the
+            // containing block's own definite height minus this box's border
+            // and padding -- margins are NOT subtracted here (unlike the
+            // inline axis), matching css-sizing-4's stretch-fit-sizing draft
+            // (margins can then overflow past the containing block, and
+            // still take part in normal margin collapsing above). When the
+            // containing block's height is indefinite, `stretch` behaves as
+            // `auto`, so fall through to the existing auto-height path below.
+            "stretch" | "-webkit-fill-available" => {
+                return b.containing_block_height.map(|h| (h - bt - pt(b) - pb(b) - bb).max(0.0));
+            }
             _ => {},
         }
         match values::calc_size_basis(source)? {
