@@ -105,6 +105,13 @@ pub(super) struct FrameRuntime {
     /// the same frame across re-navigations) are never mistaken for the same
     /// origin, matching the spec's "unique opaque origin per navigation".
     opaque_origin_counter: u64,
+    /// HTML-35: the spec's "already started" flag for non-parser-inserted
+    /// `<script>` elements, kept out-of-band here rather than on
+    /// `amazing-dom`'s `Node` -- an HTML-only concept, not a general DOM
+    /// one (`docs/lanes/html_TODO.md` records why, and the minimal-hook
+    /// alternative considered instead). See `run_pending_scripts` for the
+    /// rule for when a script does/doesn't get added here.
+    already_started_scripts: HashSet<NodeIdx>,
 }
 
 /// Classic inline `<script>` bodies in tree order. External `src` and
@@ -841,6 +848,235 @@ impl RuntimeBindings {
         let _ = host.borrow_mut().dom.set_document_ready_state(document, ReadyState::Complete);
         Ok(())
     }
+
+    /// HTML-35: every `<script>` (HTML or SVG namespace -- `script_source_
+    /// from_node` already knows SVG's `href`/`xlink:href` `src` fallback,
+    /// HTML-32) reachable from a *known* document root, paired with that
+    /// root, in tree order. Walks the top document (`NodeIdx(0)`) plus
+    /// every live iframe's own document (`FrameRuntime::documents`).
+    ///
+    /// A `DOMParser`/`Range.createContextualFragment`/detached-fragment
+    /// tree is not a known document root, so a script inside one is
+    /// correctly invisible here -- until (if ever) it is adopted into a
+    /// document this walk does see, at which point it would wrongly look
+    /// like a fresh, runnable candidate (spec instead requires the
+    /// fragment-parsing algorithm to mark it already-started at creation
+    /// time, for every such API, not just `innerHTML`/`insertAdjacentHTML`
+    /// -- the two this ticket's anchors name and `invoke_operation_with_
+    /// html_hooks` below actually handles). Flagged as a residual gap in
+    /// `docs/lanes/html_TODO.md` rather than silently assumed covered.
+    fn connected_script_nodes(&self) -> Vec<(NodeIdx, NodeIdx)> {
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        let mut roots = vec![NodeIdx(0)];
+        roots.extend(state.frames.documents.values().filter_map(|entry| entry.document));
+        let mut out = Vec::new();
+        for root in roots {
+            for node in host.dom.tree_order(root) {
+                let is_script = matches!(host.dom.namespace(node), Some(Namespace::Html) | Some(Namespace::Svg))
+                    && host.dom.local_name(node) == Some("script");
+                if is_script { out.push((root, node)); }
+            }
+        }
+        out
+    }
+
+    /// HTML-35: resolve a document root to the realm its scripts should
+    /// run in and its base URL for resolving a relative `src`.
+    ///
+    /// `None` for the realm means "run in whatever realm is already
+    /// current" -- correct for the overwhelmingly common case of a script
+    /// mutating its own document (same realm the mutating call is already
+    /// executing in), and only wrong for the rare cross-realm case of a
+    /// child frame reaching into `window.top.document`: there is no
+    /// stored handle for "the top realm" to switch to instead (unlike
+    /// each iframe's own realm, cached in `frames.windows`). Flagged in
+    /// `docs/lanes/html_TODO.md` as a known limitation rather than
+    /// silently assumed correct.
+    fn realm_and_base_for_document(&self, root: NodeIdx) -> (Option<RealmHandle>, String) {
+        let state = self.state.borrow();
+        if root == NodeIdx(0) {
+            return (None, state.document_url.clone().unwrap_or_default());
+        }
+        let frame = state.frames.documents.iter()
+            .find(|(_, entry)| entry.document == Some(root)).map(|(frame, _)| *frame);
+        let base = frame.and_then(|frame| state.frames.documents.get(&frame))
+            .map(|entry| entry.url.clone()).unwrap_or_default();
+        let realm = frame.and_then(|frame| state.frames.windows.get(&frame)).map(|(realm, _)| *realm);
+        (realm, base)
+    }
+
+    /// `load`/`error` on a script element are neither bubbling nor
+    /// cancelable per spec -- unlike `RuntimeBindings::dispatch_event`'s
+    /// hardcoded `bubbles: true` (tuned for iframe's own `load`: a
+    /// different element, same event names).
+    fn dispatch_script_event(&self, js: &mut Interpreter, node: NodeIdx, name: &str) -> Result<(), Throw> {
+        let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
+        amazing_bindings::dispatch_user_agent_event(&mut adapter,
+            amazing_dom::events::EventTarget::Node(node), name,
+            amazing_dom::events::EventInit { bubbles: false, cancelable: false, composed: false })
+    }
+
+    /// HTML-35: the ordered candidate list for ONE `invoke_operation_with_
+    /// html_hooks` call, matching two distinct WHATWG triggers rather than
+    /// a full-document rescan (a rescan double-counts reentrant nested
+    /// calls and gets the anchor `dom/nodes/insertion-removing-steps/
+    /// Node-appendChild-three-scripts.html` wrong -- see below):
+    ///
+    /// 1. The script element's own "children changed steps": if
+    ///    `mutated_parent` (the node whose child list this operation just
+    ///    changed) is *itself* an already-existing `<script>` -- i.e. not
+    ///    one of `inserted`, which would make it a *newly connected* node
+    ///    instead -- it is checked (and, if eligible, run) FIRST, ahead of
+    ///    anything this same operation also just connected. This is what
+    ///    makes `s3.appendChild(new Text(...))`, called from *inside*
+    ///    `s1`'s own running script body, run `s3` immediately rather than
+    ///    waiting for `s3`'s own turn in a document-order walk: `s3` was
+    ///    already connected before this nested call, so it is `mutated_
+    ///    parent`, not a member of `inserted`.
+    /// 2. The DOM standard's `insert` algorithm's own `staticNodeList`:
+    ///    the shadow-including-inclusive-descendants of each node THIS
+    ///    operation inserted, in tree order, snapshotted once before any
+    ///    of them run (the DOM spec's own rationale: "the post-connection
+    ///    steps can modify the tree's structure, making live traversal
+    ///    unsafe, possibly leading to the post-connection steps being
+    ///    called multiple times on the same node").
+    fn scoped_script_candidates(&self, mutated_parent: Option<NodeIdx>, inserted: &[NodeIdx]) -> Vec<NodeIdx> {
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        let is_script = |node: NodeIdx| {
+            matches!(host.dom.namespace(node), Some(Namespace::Html) | Some(Namespace::Svg))
+                && host.dom.local_name(node) == Some("script")
+        };
+        let mut out = Vec::new();
+        if let Some(parent) = mutated_parent {
+            if !inserted.contains(&parent) && is_script(parent) {
+                out.push(parent);
+            }
+        }
+        for &node in inserted {
+            for descendant in host.dom.tree_order(node) {
+                if is_script(descendant) { out.push(descendant); }
+            }
+        }
+        out
+    }
+
+    /// HTML-35: `node`'s shadow-including root is a `Document`, per DOM's
+    /// own `is_connected` -- but that is also true for a fully detached
+    /// `Document`, such as `document.implementation.createHTMLDocument()`'s
+    /// return value, which has no browsing context at all. WHATWG HTML's
+    /// "scripting is disabled" for exactly that case (`html/semantics/
+    /// scripting-1/the-script-element/scripting-enabled.html`: a script
+    /// appended to such a document's `documentElement` must never run) --
+    /// so a script only qualifies here when its root is a document THIS
+    /// driver actually knows as live: the top document, or a connected
+    /// iframe's own document (`FrameRuntime::documents`), matching
+    /// `connected_script_nodes`'s own root list above.
+    fn has_active_document_root(&self, node: NodeIdx) -> bool {
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        if !host.dom.is_connected(node) { return false; }
+        let root = host.dom.root(node);
+        root == NodeIdx(0) || state.frames.documents.values().any(|entry| entry.document == Some(root))
+    }
+
+    /// HTML-35: "prepare the script element" (WHATWG HTML "processing
+    /// model" §"scripting"), for *non-parser-inserted* scripts only --
+    /// parser-inserted ones already run through `ResumableParser`'s own
+    /// pause signal (`run_interleaved_parse`/`run_interleaved_iframe_
+    /// parse` above), which never routes through `invoke_operation_with_
+    /// html_hooks` (the node arrives already in the tree directly from the
+    /// parser, not via one of that function's hooked JS-binding calls) --
+    /// so there is no double-execution risk between the two paths.
+    ///
+    /// Runs every not-yet-started, *still* rooted in a live document
+    /// (`has_active_document_root`, re-checked live, per candidate, right
+    /// before it would run -- a still-pending candidate that an earlier
+    /// one's script disconnected, the spec's own worked example with
+    /// `script1` removing `script2`, must not run), classic-JS-typed,
+    /// non-`nomodule` script `scoped_script_candidates` finds for
+    /// THIS operation, in that order, marking each already-started
+    /// *immediately before* fetching/running it (so a script that mutates
+    /// the DOM while running -- including inserting more scripts, or
+    /// mutating an already-connected sibling script's children -- can
+    /// never see or re-trigger itself; the nested `invoke_operation_with_
+    /// html_hooks` call its own mutation causes handles that mutation's
+    /// own candidates before returning here, exactly as reentrant WHATWG
+    /// "insert" calls nest).
+    ///
+    /// `type="module"` scripts are left untouched entirely -- not marked
+    /// already-started either, matching spec's early-return-without-
+    /// marking for a disqualified type (so fixing the type later and
+    /// reinserting could still let a *classic* rewrite of it run).
+    /// `amazing-js` has a ready `ModuleResolver` hook (`amazing-js/src/
+    /// module.rs`) but nothing in this driver has ever wired it up for ANY
+    /// script context, parser-inserted or dynamic -- a pre-existing gap
+    /// this ticket did not introduce, filed for js-lang/js-runtime in
+    /// `questions.md` rather than attempted here.
+    ///
+    /// Every fetch is synchronous/blocking (`fetch_child_script`, same as
+    /// every other script-fetching path in this driver), so `.async`'s
+    /// spec distinction from an "in-order" (`async = false`) dynamic
+    /// script collapses to no observable difference here: whichever
+    /// script this loop reaches first always finishes (fetch and run)
+    /// before the next one starts, which already matches document order
+    /// for scripts inserted in the same synchronous turn. Honored as an
+    /// ordering *outcome*, not by tracking the `.async` IDL flag itself --
+    /// see `docs/lanes/html_TODO.md` for why, and for the separate, smaller
+    /// pre-existing gap this does NOT fix (`.async`'s own getter reflects
+    /// the content attribute directly, so it reads back `false` by default
+    /// for a dynamic script rather than spec's `true`-until-explicitly-set;
+    /// `amazing-bindings::element_reflection`, not this file).
+    fn run_pending_scripts(&self, js: &mut Interpreter, mutated_parent: Option<NodeIdx>, inserted: &[NodeIdx]) {
+        let resolver = self.state.borrow().frames.resolver.clone();
+        for node in self.scoped_script_candidates(mutated_parent, inserted) {
+            if self.state.borrow().frames.already_started_scripts.contains(&node) { continue; }
+            if !self.has_active_document_root(node) { continue; }
+            let (script, nomodule, is_module) = {
+                let state = self.state.borrow();
+                let host = state.host.borrow();
+                let nomodule = host.dom.get_attribute_ns(node, None, "nomodule").is_some();
+                let is_module = host.dom.get_attribute_ns(node, None, "type")
+                    .is_some_and(|value| value.eq_ignore_ascii_case("module"));
+                (crate::cmd::js::script_source_from_node(&host.dom, node), nomodule, is_module)
+            };
+            // Neither disqualification marks already-started (see doc
+            // comment above): a data-block/module type, or a `nomodule`
+            // script, might still become a runnable classic script later
+            // if its attributes change and it is reinserted.
+            if is_module || nomodule { continue; }
+            let Some(script) = script else { continue }; // wrong type, or no `src`/empty body
+            let root = { let state = self.state.borrow(); state.host.borrow().dom.root(node) };
+            self.state.borrow_mut().frames.already_started_scripts.insert(node);
+            let (realm, base) = self.realm_and_base_for_document(root);
+            let run_body = |js: &mut Interpreter, body: &str| {
+                // A script's own uncaught exception does not stop the page
+                // or suppress its `load` event (that pair reflects fetch
+                // success/failure, not execution success) -- matches
+                // `cmd/js.rs`'s existing top-level script driver, which
+                // swallows the same `Err` into a diagnostics list rather
+                // than propagating it.
+                let _ = match realm {
+                    Some(realm) => js.binding_with_realm(realm, |i| i.run_script(body).map(|_| ())),
+                    None => js.run_script(body).map(|_| ()),
+                };
+            };
+            match &script.src {
+                None => {
+                    run_body(js, &script.body);
+                    let _ = self.dispatch_script_event(js, node, "load");
+                }
+                Some(src) => match fetch_child_script(src, &base, resolver.as_ref()) {
+                    Some(text) => {
+                        run_body(js, &text);
+                        let _ = self.dispatch_script_event(js, node, "load");
+                    }
+                    None => { let _ = self.dispatch_script_event(js, node, "error"); }
+                },
+            }
+        }
+    }
 }
 
 /// A `Rc<RefCell<IncrementalDocumentImport>>` alias, purely so `run_one`'s
@@ -1217,8 +1453,101 @@ impl RuntimeBindingHost<'_> {
         Ok(window.unwrap_or(JsValue::Null))
     }
 
+    /// HTML-35: converts a JS-visible `Node` argument or receiver into its
+    /// `NodeIdx`, `None` for anything else (a `DOMString` argument to
+    /// `append`/`prepend`/`replaceChildren`/`before`/`after`/`replaceWith`,
+    /// or a stale/foreign platform object).
+    fn node_from_value(&self, value: &JsValue) -> Option<NodeIdx> {
+        let key = self.platform_object(value, InterfaceBrand::NODE)?;
+        self.node_from_platform_key(key)
+    }
+
+    /// HTML-35: the node(s) this operation is about to insert (`Node`
+    /// arguments only -- a `DOMString` argument to `append`/`prepend`/
+    /// `replaceChildren`/`before`/`after`/`replaceWith` contributes text,
+    /// never a script), resolved *before* the operation runs.
+    ///
+    /// This must run pre-op: `appendChild`/`append`/etc. of a
+    /// `DocumentFragment` moves the fragment's children out and leaves it
+    /// empty (WHATWG DOM's own `insert` algorithm: "if node is a
+    /// DocumentFragment node ... let nodes be node's children"), so
+    /// resolving it post-op would see nothing -- exactly the bug that made
+    /// `Node-appendChild-three-scripts-from-fragment.html` run zero
+    /// scripts instead of three when this only expanded post-op. Expands
+    /// each fragment argument to its (pre-op) direct children in their
+    /// place; a non-fragment `Node` argument is used as-is.
+    fn pre_insertion_nodes(&self, operation: Operation, args: &[JsValue]) -> Vec<NodeIdx> {
+        let relevant: &[JsValue] = match operation {
+            Operation::AppendChild | Operation::InsertBefore | Operation::ReplaceChild =>
+                args.first().map(std::slice::from_ref).unwrap_or(&[]),
+            Operation::Append | Operation::Prepend | Operation::ReplaceChildren
+            | Operation::Before | Operation::After | Operation::ReplaceWith => args,
+            _ => return Vec::new(),
+        };
+        let nodes: Vec<NodeIdx> = relevant.iter().filter_map(|value| self.node_from_value(value)).collect();
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        let mut out = Vec::new();
+        for node in nodes {
+            if matches!(host.dom.get(node).kind, NodeKind::DocumentFragment) {
+                out.extend(host.dom.children(node));
+            } else {
+                out.push(node);
+            }
+        }
+        out
+    }
+
+    /// HTML-35: the node whose child list this operation may have just
+    /// changed, for `run_pending_scripts`'s "children changed steps"
+    /// check -- read *after* the operation has already run, so `Before`/
+    /// `After` -- which key off a sibling, not a parent directly -- can
+    /// resolve that sibling's (unaffected) parent, and `ReplaceWith` --
+    /// whose `receiver` itself just left the tree, so its OWN post-op
+    /// parent is gone -- can fall back to one of `pre_inserted`'s (now
+    /// correctly placed) nodes instead. `Remove`'s receiver is likewise
+    /// the node that just left the tree, with no surviving replacement to
+    /// fall back to, so its former parent isn't recoverable here -- a
+    /// script losing its only child via `.remove()` called *on that
+    /// child* does not re-run it, a narrow, documented gap. `RemoveChild`
+    /// and `SetTextContent`'s receiver IS the parent itself, unaffected by
+    /// either op, and so is covered normally.
+    fn operation_mutated_parent(&self, operation: Operation, receiver: &JsValue,
+        pre_inserted: &[NodeIdx]) -> Option<NodeIdx> {
+        let parent_of = |node: NodeIdx| {
+            let state = self.state.borrow();
+            state.host.borrow().dom.get(node).parent
+        };
+        match operation {
+            Operation::Append | Operation::Prepend | Operation::ReplaceChildren
+            | Operation::AppendChild | Operation::InsertBefore | Operation::ReplaceChild
+            | Operation::RemoveChild | Operation::SetTextContent => self.node_from_value(receiver),
+            Operation::Before | Operation::After => self.node_from_value(receiver).and_then(parent_of),
+            Operation::ReplaceWith => pre_inserted.first().copied().and_then(parent_of)
+                .or_else(|| self.node_from_value(receiver).and_then(parent_of)),
+            _ => None,
+        }
+    }
+
     pub(super) fn invoke_operation_with_html_hooks(&mut self, operation: Operation,
         receiver: JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
+        // HTML-35: a script produced by a fragment-parsing API (`innerHTML`,
+        // `insertAdjacentHTML`) must never execute, however it is later
+        // moved (WHATWG HTML: the fragment-parsing algorithm marks every
+        // script element it produces already-started, unconditionally).
+        // Snapshot which script nodes already exist *before* the parse, so
+        // any script that appears only afterward -- this operation's own
+        // newly-parsed content, and only that -- can be marked already-
+        // started below instead of treated as a fresh candidate by
+        // `run_pending_scripts`.
+        let fragment_parsed = matches!(operation,
+            Operation::ElementSetInnerHTML | Operation::ElementInsertAdjacentHTML);
+        let bindings = RuntimeBindings { state: self.state.clone() };
+        let before_scripts = fragment_parsed
+            .then(|| bindings.connected_script_nodes().into_iter().map(|(_, node)| node)
+                .collect::<HashSet<_>>());
+        let receiver_for_scripts = receiver.clone();
+        let pre_inserted = self.pre_insertion_nodes(operation, args);
         let result = self.invoke_operation_with_canvas_reset(operation, receiver, args);
         if result.is_ok() && matches!(operation,
             Operation::Append | Operation::Prepend | Operation::ReplaceChildren
@@ -1228,8 +1557,19 @@ impl RuntimeBindingHost<'_> {
             | Operation::ElementInsertAdjacentHTML | Operation::ElementSetAttribute
             | Operation::ElementSetAttributeNS | Operation::ElementRemoveAttribute
             | Operation::ElementRemoveAttributeNS | Operation::ElementSetAttributeNode
-            | Operation::ElementSetAttributeNodeNS | Operation::ElementRemoveAttributeNode) {
-            RuntimeBindings { state: self.state.clone() }.navigate_iframes(self.js);
+            | Operation::ElementSetAttributeNodeNS | Operation::ElementRemoveAttributeNode
+            | Operation::SetTextContent) {
+            bindings.navigate_iframes(self.js);
+            if let Some(before) = before_scripts {
+                let after: Vec<NodeIdx> = bindings.connected_script_nodes()
+                    .into_iter().map(|(_, node)| node).collect();
+                let mut state = self.state.borrow_mut();
+                for node in after {
+                    if !before.contains(&node) { state.frames.already_started_scripts.insert(node); }
+                }
+            }
+            let mutated_parent = self.operation_mutated_parent(operation, &receiver_for_scripts, &pre_inserted);
+            bindings.run_pending_scripts(self.js, mutated_parent, &pre_inserted);
         }
         result
     }
@@ -1889,5 +2229,144 @@ mod tests {
             |_scheduler, script| { ran.push(script.body.clone()); Ok(()) },
         ).unwrap();
         assert_eq!(ran, vec!["1"], "inline defer (no src) must block like an ordinary script");
+    }
+
+    // HTML-35: "prepare the script element" for non-parser-inserted scripts.
+
+    #[test]
+    fn dynamic_script_runs_once_on_connection_and_never_again_on_reinsertion() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(
+            "window.ran = 0; \
+             var el = document.createElement('script'); \
+             el.textContent = 'window.ran += 1;'; \
+             document.body.appendChild(el); \
+             document.body.removeChild(el); \
+             document.body.appendChild(el); \
+             window.ran"
+        ).unwrap(), JsValue::num(1.0), "already-started must survive removal and reinsertion");
+    }
+
+    #[test]
+    fn dynamic_script_inserted_via_inner_html_never_executes_even_if_moved_out_afterward() {
+        // WHATWG HTML: the fragment-parsing algorithm behind the `innerHTML`
+        // setter marks every script element it produces already-started,
+        // unconditionally -- unlike a `createElement`-built script, it never
+        // gets to run, however it is later moved.
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(
+            "window.ran = 0; \
+             document.body.innerHTML = '<script>window.ran = 1;<\\/script>'; \
+             window.ran"
+        ).unwrap(), JsValue::num(0.0), "innerHTML-produced scripts must not execute");
+        // Moving it into a fresh connection point afterward still must not
+        // run it -- the flag, not the location, is what blocks it.
+        assert_eq!(scheduler.run_script(
+            "var s = document.body.querySelector('script'); \
+             document.body.removeChild(s); \
+             document.body.appendChild(s); \
+             window.ran"
+        ).unwrap(), JsValue::num(0.0), "already-started must stick even once moved out and back in");
+    }
+
+    #[test]
+    fn dynamic_script_type_and_nomodule_filtering_matches_is_javascript_mime_type() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(
+            "window.ran = []; \
+             function make(type, nomodule) { \
+               var s = document.createElement('script'); \
+               if (type !== undefined) s.type = type; \
+               if (nomodule) s.setAttribute('nomodule', ''); \
+               s.textContent = 'window.ran.push(\"' + (type || 'default') + '\");'; \
+               document.body.appendChild(s); \
+             } \
+             make(undefined, false); \
+             make('application/javascript', false); \
+             make('module', false); \
+             make('text/plain', false); \
+             make('text/javascript', true); \
+             window.ran.join(',')"
+        ).unwrap(), JsValue::str("default,application/javascript"),
+            "only the no-type and JS-MIME-type scripts should run; module/data-block/nomodule must not");
+    }
+
+    #[test]
+    fn dynamic_script_with_external_src_fetches_fires_load_and_runs_in_order() {
+        let script_path = std::env::temp_dir()
+            .join(format!("amazing-html35-ext-{}.js", std::process::id()));
+        std::fs::write(&script_path, "window.extRan = true;").unwrap();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        let path = script_path.clone();
+        scheduler.set_frame_resource_resolver(Rc::new(move |_| Some(path.to_string_lossy().into_owned())));
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(
+            "var events = []; \
+             var s = document.createElement('script'); \
+             s.src = 'https://example.test/ext.js'; \
+             s.addEventListener('load', () => events.push('load')); \
+             s.addEventListener('error', () => events.push('error')); \
+             document.body.appendChild(s); \
+             events.join(',') + '|' + window.extRan"
+        ).unwrap(), JsValue::str("load|true"));
+        std::fs::remove_file(&script_path).unwrap();
+    }
+
+    #[test]
+    fn dynamic_script_with_failing_external_src_fires_error_and_never_runs() {
+        let missing_path = std::env::temp_dir()
+            .join(format!("amazing-html35-missing-{}.js", std::process::id()));
+        let _ = std::fs::remove_file(&missing_path); // ensure it does not exist
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        let path = missing_path.clone();
+        scheduler.set_frame_resource_resolver(Rc::new(move |_| Some(path.to_string_lossy().into_owned())));
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(
+            "var events = []; window.extRan2 = false; \
+             var s = document.createElement('script'); \
+             s.src = 'https://example.test/missing.js'; \
+             s.addEventListener('load', () => events.push('load')); \
+             s.addEventListener('error', () => events.push('error')); \
+             document.body.appendChild(s); \
+             events.join(',') + '|' + window.extRan2"
+        ).unwrap(), JsValue::str("error|false"));
+    }
+
+    #[test]
+    fn dynamic_script_mutating_text_or_src_after_it_already_ran_does_not_rerun() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(
+            "window.ran = 0; \
+             var s = document.createElement('script'); \
+             s.textContent = 'window.ran += 1;'; \
+             document.body.appendChild(s); \
+             s.textContent = 'window.ran += 100;'; \
+             s.src = 'https://example.test/should-not-fetch.js'; \
+             document.body.appendChild(document.createElement('div')); \
+             window.ran"
+        ).unwrap(), JsValue::num(1.0),
+            "textContent/src set after a script already ran must not re-trigger it");
     }
 }

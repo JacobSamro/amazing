@@ -2008,3 +2008,192 @@ stable (was 3,381/3,381 at HTML-33's own gate). Doctests: **31 crates, 0
 FAILED**.
 
 Committed `e8ab8f4a` on `lane/html34`. Status: done.
+
+## HTML-35 -- dynamic script execution ("prepare the script element" on insertion)
+
+Implements WHATWG HTML's "prepare the script element" for scripts that are
+*not* parser-inserted: `document.createElement("script")` + `appendChild`/
+`insertBefore`/etc. now runs the script once it becomes connected, exactly
+once (`already started`), honoring `type`/`nomodule` filtering, firing
+`load`/`error`, and never executing a script produced by `innerHTML`/
+`insertAdjacentHTML`. This was flagged as the largest real-page blocker in
+HTML-34's `questions.md` entry ("dynamically-inserted `<script>` elements
+never execute at all") and the coordinator took it as HTML-35.
+
+### Design: no new `amazing-dom` hook needed
+
+The brief offered to add a DOM-level insertion hook if needed. Investigated
+first: `crates/amazing/src/runtime_host_html.rs::invoke_operation_with_html_
+hooks` already exists as exactly "a JS-driven DOM mutation just happened,
+run an HTML side effect" (used today for `navigate_iframes`), and it already
+runs *after* every relevant `Operation` succeeds, with the real, post-op
+`receiver`/`args`. Extended it instead of adding a new trait to
+`amazing-dom` -- no cross-lane edit needed, and no new `amazing-dom` surface
+to review.
+
+New state: `FrameRuntime::already_started_scripts: HashSet<NodeIdx>` -- the
+spec's "already started" flag, kept out-of-band rather than on `amazing-
+dom`'s `Node` (an HTML-only concept, not a general DOM one; adding it to
+`Node` would mean every lane's node representation carries a field only this
+one feature reads).
+
+### Two distinct triggers, not one -- the ordering bug this ticket caught
+
+An early version routed every hooked operation through a full-document
+rescan (the pre-existing `connected_script_nodes()`, extended to become the
+iteration source). This looked plausible and passed all six of this
+ticket's own unit tests, but got the ticket's own named anchor wrong:
+`dom/nodes/insertion-removing-steps/Node-appendChild-three-scripts.html`
+expects `["s3","s1","s2"]` and got `["s2","s3","s1"]`. Root-caused against
+the live WHATWG DOM spec text (`dom.spec.whatwg.org`'s `insert` algorithm,
+fetched directly rather than assumed from memory), which distinguishes two
+separate triggers:
+
+1. The DOM `insert` algorithm's own `staticNodeList`: the shadow-including-
+   inclusive-descendants of the node(s) *this operation* inserted, collected
+   in tree order *before* any of them run (its own stated rationale:
+   "the post-connection steps can modify the tree's structure, making live
+   traversal unsafe, possibly leading to the post-connection steps being
+   called multiple times on the same node"), then run in that fixed order,
+   re-checking `is connected` live at each one's own turn (this is what
+   makes the spec's own worked example -- `script1`'s post-connection step
+   removing `script2` before `script2`'s own turn is reached -- correctly
+   skip `script2`).
+2. The script element's own "children changed steps": if an *already-
+   connected* script's children change (e.g. `s3.appendChild(text)`, called
+   from *inside* a sibling's currently-running script), that script's
+   preparation runs *immediately*, ahead of anything else -- this is why
+   `s3` (mutated mid-execution by `s1`) runs before `s1` even finishes.
+
+Rewrote the hook accordingly: `scoped_script_candidates(mutated_parent,
+inserted)` builds the ordered candidate list for *one* operation (parent-
+is-an-existing-script check first, then the inserted nodes' own descendant
+scan), and `operation_mutated_parent`/`pre_insertion_nodes` resolve those two
+inputs from the operation's `Operation` tag + `receiver` + `args`. A
+`DocumentFragment` argument needed its OWN fix within this: resolving it
+*after* the op sees an emptied fragment (its children already moved into
+the real parent by the DOM's own `insert` algorithm), so `pre_insertion_
+nodes` expands a fragment argument to its children *before* the operation
+runs -- missing this broke the sibling anchor,
+`Node-appendChild-three-scripts-from-fragment.html` (ran zero scripts
+instead of three).
+
+### Second bug: `createHTMLDocument()` scripting-disabled documents
+
+`scoped_script_candidates`'s live connectedness check (`Dom::is_connected`)
+is also true for a fully detached `Document` such as `document.
+implementation.createHTMLDocument()`'s return value -- its root IS a
+`Document` node, DOM's own definition of connected, but WHATWG HTML disables
+scripting entirely for a document with no browsing context (`html/
+semantics/scripting-1/the-script-element/scripting-enabled.html`). This
+regressed a previously-passing test during the ordering-bug rewrite above
+(the OLD full-rescan code never found scripts outside the small explicit
+root list -- `NodeIdx(0)` plus live iframe documents -- so it was
+accidentally correct by omission). Fixed with `has_active_document_root`:
+connected AND rooted at the top document or a live iframe's own registered
+document, matching `connected_script_nodes`'s existing root list.
+
+### Performance false alarm -- and the real methodology takeaway
+
+The first full 1,132-file sweep after the rewrite showed a large *subtest*
+count drop on several already-`timeout`-classified files (`html/dom/
+reflection-forms.html` and five siblings, `named-character-references.html`)
+even though FILE-level status barely moved. Investigated with direct timing
+before assuming a regression: two back-to-back runs of `reflection-forms.
+html` alone, unchanged code, same host, same 10s deadline, completed 383 and
+1,113 subtests respectively -- a ~3x swing from host contention alone,
+larger than the swing the sweep's before/after comparison showed. This
+matches HTML-34's own precedent (shared-host CPU contention from other
+lanes' concurrent agents) and is why this lane's gating methodology is the
+strict per-test *status* diff (pass/fail/timeout/error/unsupported), not raw
+subtest counts, which are too noisy on a shared host to gate on directly.
+
+### What this does and doesn't cover
+
+- Inline dynamic scripts execute immediately; external `src` scripts fetch
+  through the existing `fetch_child_script` (same synchronous/blocking path
+  every other script-fetching code in this driver uses) and fire `load`/
+  `error`. `nomodule` and `type` filtering reuse `cmd/js.rs`'s existing
+  `script_source_from_node`/`is_classic_javascript_type` (already correct
+  for classic-JS type sniffing, including SVG's `href`/`xlink:href` `src`
+  fallback from HTML-32).
+- `type="module"` scripts are left untouched entirely, not marked already-
+  started either (matching spec's early-return-without-marking for a
+  disqualified type). `amazing-js/src/module.rs` has a ready, host-pluggable
+  `ModuleResolver` trait, used only by that crate's own tests -- nothing in
+  the `amazing` driver has ever wired it up for ANY script context, parser-
+  inserted or dynamic. Filed for js-lang/js-runtime in `questions.md` rather
+  than attempted here; recommend a dedicated module-script ticket covering
+  both entry points together rather than a dynamic-only half-feature.
+- `.async`'s spec distinction from "in-order" (`async = false`) execution
+  collapses to no observable difference in this engine: every fetch is
+  synchronous/blocking, so whichever script this loop reaches first always
+  finishes before the next one starts, which already matches document
+  order for scripts inserted in the same synchronous turn. Separately,
+  smaller, flagged for dom-bindings: `HTMLScriptElement.async`'s IDL getter
+  (`amazing-bindings::element_reflection`) is plain boolean-attribute
+  reflection, so it reads back `false` by default instead of spec's
+  `true`-until-explicitly-set "force-async" flag -- doesn't affect this
+  ticket's own correctness, only what `script.async` itself reads back.
+- A script produced by `DOMParser.parseFromString`/`Range.
+  createContextualFragment`/`template.innerHTML` (not `Element.innerHTML`/
+  `insertAdjacentHTML`, which this ticket's hook does cover via a before/
+  after connected-script-node snapshot) is not marked already-started at
+  creation time; if later adopted into a real, connected document via a
+  hooked operation, `run_pending_scripts` would incorrectly treat it as a
+  fresh candidate. None of this ticket's WPT anchors exercise that path.
+- A script mutating a *different* realm's document (e.g. a same-origin
+  child frame reaching into `window.top.document`) may run in the wrong
+  realm: there is no stored handle for "the top realm" to switch to
+  (`realm_and_base_for_document` returns `None` for the top document,
+  meaning "whatever's current," correct only when the mutating call is
+  already in that realm). Each iframe's OWN realm IS stored and handled
+  correctly.
+- `Node-appendChild-script-in-script.html` (one of this ticket's own anchor
+  directory's files) still fails, for a reason entirely outside this ticket
+  and outside the html lane: it relies on `window.<id>` ("named access on
+  the Window object" for elements with a matching `id` attribute), which
+  isn't implemented at all (`typeof window.s1` reads `undefined` for
+  `<script id=s1>`) -- confirmed by direct reduction, unrelated to script
+  preparation/ordering. Filed for dom-bindings/window-globals.
+- Net's cross-lane request (`adapter.install_net()?;` in `ensure_realm`)
+  was already landed in HTML-34 (`e8ab8f4a`, tagged `NET-42`); nothing to
+  fold in here.
+
+### Gate
+
+`amazing` crate nextest: **353/353 passed, 6 skipped** (6 new unit tests
+added: dynamic script runs once on connection and never again on
+reinsertion; a script inserted via `innerHTML` never executes even if moved
+out afterward; `type`/`nomodule` filtering matches `is_javascript_mime_
+type`; external `src` fetches, fires `load`, runs in order; a failing
+external `src` fires `error` and never runs; mutating text/`src` after a
+script already ran does not re-run it).
+
+WPT (1,132-file pinned selection: `html/syntax`, `html/dom`, `html/
+semantics/scripting-1`, `html/webappapis/scripting`, `dom/nodes/insertion-
+removing-steps` [new for this ticket], `dom/nodes/MutationObserver-*`;
+before = `cc61330e`, after = this diff, strict per-test status-map diff,
+same venus-001 host): **0 lost passes, +12 gained** -- all eight non-fragment
+anchor files under `dom/nodes/insertion-removing-steps/` that exercise
+dynamic script insertion timing/ordering (`Node-appendChild-three-scripts
+[-from-fragment].html`, `Node-append-form-and-script-from-fragment.html`,
+`-script-and-button-from-div.html`, `-script-and-div-from-fragment.html`,
+`-script-and-source-from-fragment.html`,
+`-script-with-mutation-observer-takeRecords.html`,
+`-text-in-script.html`), plus three `the-script-element/execution-timing/`
+files and one `webappapis/scripting/events/` file. File-level buckets:
+pass 119 -> 131, fail 313 -> 304, timeout 338 -> 335, error/unsupported
+unchanged (163/199). `later-script-removed-by-earlier-script.html` (the
+spec's own script1-removes-script2 reentrancy example) passes, confirming
+the live per-candidate connectedness re-check. IA real-pages corpus: 52
+pages, 2 errors, 2 fallback pages, 0 crashes/panics/timeouts, unchanged
+before/after -- none of the 52 fixtures use `createElement("script")`
+(checked via `grep -rl "createElement(['\"]script"`), so this corpus proves
+no regression but does not itself demonstrate the new effect; the WPT
+anchors and this ticket's own unit tests are the actual effect evidence.
+
+Workspace nextest: **3,395/3,395 passed, 17 skipped** (was 3,389/3,389 at
+HTML-34). Doctests: **31 crates, 0 FAILED**.
+
+Status: done.
