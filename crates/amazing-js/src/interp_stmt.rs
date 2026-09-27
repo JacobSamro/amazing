@@ -89,7 +89,7 @@ impl Interpreter {
                     if d.kind == ast::VarKind::Var && x.init.is_none() {
                         continue;
                     }
-                    let v = x
+                    let mut v = x
                         .init
                         .as_ref()
                         .map(|e| self.eval_expr(e, env))
@@ -97,6 +97,15 @@ impl Interpreter {
                         .unwrap_or(JsValue::Undefined);
                     if d.kind == ast::VarKind::Const && x.init.is_none() {
                         return Err(Throw::syntax_error("const requires an initializer"));
+                    }
+                    // VariableDeclaration/LexicalBinding NamedEvaluation (spec 8.6.3/14.3.1.2):
+                    // only a bare BindingIdentifier target, never a destructuring pattern.
+                    // `export default <expr>` desugars (module.rs) into `const \0module.default
+                    // = expr`, so its synthetic internal binding name is mapped to the spec's
+                    // real name argument, "default", rather than used literally.
+                    if let (Some(init), Binding::Ident(identifier)) = (&x.init, &x.binding) {
+                        let name = if identifier.name == "\0module.default" { "default" } else { &identifier.name };
+                        self.named_evaluation(init, &mut v, name);
                     }
                     if let Some(kind) = d.resource_kind {
                         self.add_disposable(&v, kind == ast::ResourceKind::AwaitUsing)?;
@@ -106,13 +115,23 @@ impl Interpreter {
                 Ok(Flow::Normal)
             }
             StmtKind::Function(f) => {
-                // Annex B.3.3 web-compat sync: evaluating a sloppy block/if-position plain
+                // Annex B.3.3 web-compat sync: evaluating a sloppy block-position plain
                 // function declaration copies the block's own (just-hoisted, possibly
                 // reassigned-by-now) binding into whatever legacy `var` binding `hoist_inner`
                 // created for it in the enclosing scope -- a no-op if that name was blocked by
                 // an intervening lexical declaration (no such outer binding exists) or we're in
                 // strict mode (Annex B never applies). Adapted from lucid-softworks/lumen
                 // (crates/lumen/src/eval.rs, annexb_fn_sync_eval) @ f6c9860d, MIT.
+                //
+                // This arm assumes `env` is the exact Block a StmtKind::Block block-entry
+                // pre-pass already lexically bound this declaration into (`env.local_cell`
+                // below is that per-block-entry binding, not some unrelated same-named
+                // ambient var). A *bare*, braceless if/else-position FunctionDeclaration
+                // (Annex B.3.4) never goes through this arm at all -- StmtKind::If's own
+                // `exec_if_branch` handles that position directly, since there is no block
+                // of its own here to have run a pre-pass, and reusing whatever `env` happens
+                // to already have bound under this name (e.g. an unrelated outer declaration
+                // of the same name elsewhere in the program) would read the wrong value.
                 if !self.strict_eval_context && !f.is_async && !f.is_generator {
                     if let Some(n) = &f.name {
                         let scope = env.var_scope();
@@ -168,9 +187,9 @@ impl Interpreter {
             StmtKind::If { cond, then, els } => {
                 self.completion = JsValue::Undefined;
                 if self.eval_expr(cond, env)?.to_boolean() {
-                    self.exec_stmt(then, env)
+                    self.exec_if_branch(then, env)
                 } else if let Some(e) = els {
-                    self.exec_stmt(e, env)
+                    self.exec_if_branch(e, env)
                 } else {
                     Ok(Flow::Normal)
                 }
@@ -302,6 +321,63 @@ impl Interpreter {
                 self.exec_try(t, env)
             }
         }
+    }
+
+    /// Executes one IfStatement branch (spec 13.6.7 / Annex B.3.4): a *bare*,
+    /// braceless `if (x) function f(){}` / `... else function f(){}` acts as
+    /// if that FunctionDeclaration were the sole statement of a fresh,
+    /// implicit Block -- its closure is created and bound there, then synced
+    /// out to whatever legacy `var` placeholder `hoist_inner` reserved for it
+    /// in the enclosing var scope. This must be handled here, at the If
+    /// itself, rather than by falling through to the generic
+    /// `StmtKind::Function` arm above: that arm's `env.local_cell` lookup
+    /// assumes `env` is a Block whose own pre-pass already bound this exact
+    /// occurrence, which is never true for a bare if/else branch -- `env`
+    /// here is just the ambient enclosing scope, and if some unrelated
+    /// same-named declaration already lives there (e.g. another top-level
+    /// `function f(){}` elsewhere in the same program), that arm would
+    /// silently read and re-sync THAT value instead of creating this
+    /// branch's own closure. Every other bare-statement position (while,
+    /// for, labeled, ...) does not permit a FunctionDeclaration at all, so
+    /// this special case is scoped to If alone. Adapted from
+    /// lucid-softworks/lumen (crates/lumen/src/eval.rs, annexb_fn_sync_eval)
+    /// @ f6c9860d, MIT.
+    fn exec_if_branch(&mut self, branch: &ast::Stmt, env: &EnvHandle) -> Result<Flow, Throw> {
+        if let StmtKind::Function(f) = &branch.kind {
+            if !self.strict_eval_context && !f.is_async && !f.is_generator {
+                if let Some(n) = &f.name {
+                    let scope = env.var_scope();
+                    // B.3.3.1's own exception: the whole extension is skipped, not merely a
+                    // no-op sync, when F collides with a parameter name of the immediately
+                    // enclosing function (var_scope's own cell IS that parameter's cell here,
+                    // indistinguishable by identity/is_lexical alone from a genuine hoist_inner
+                    // placeholder -- `current_function_param_names` checks the AST directly).
+                    let blocked_by_param = self.current_function_param_names().iter().any(|p| p == &n.name);
+                    if !blocked_by_param && scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical()) {
+                        let implicit = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+                        let v = self.make_function(f, &implicit);
+                        let _ = implicit.declare_lexical(&n.name, v.clone(), true);
+                        let _ = scope.assign(&n.name, v);
+                        return Ok(Flow::Normal);
+                    }
+                }
+            }
+        }
+        self.exec_stmt(branch, env)
+    }
+
+    /// Names bound by the currently executing (innermost) call's own formal
+    /// parameter list, per the AST -- `[]` for top-level/global/eval code
+    /// with no enclosing function call at all. Used only by Annex B.3.3.1's
+    /// parameter-collision exception above; a destructuring parameter's own
+    /// nested names count too, via `binding_names`.
+    fn current_function_param_names(&self) -> Vec<String> {
+        self.frames
+            .last()
+            .and_then(|frame| frame.own_function.as_ref())
+            .and_then(|obj| obj.borrow().func.as_ref().map(|f| f.params.clone()))
+            .map(|params| params.iter().flat_map(|p| binding_names(&p.binding)).collect())
+            .unwrap_or_default()
     }
 
     fn exec_stmts(&mut self, body: &[ast::Stmt], env: &EnvHandle) -> Result<Flow, Throw> {
@@ -746,7 +822,21 @@ impl Interpreter {
                                 ast::PropValue::Shorthand(i) => env
                                     .resolve(&i.name)
                                     .ok_or_else(|| Throw::reference_error(i.name.clone()))?,
-                                ast::PropValue::Init(x) => self.eval_expr(x, env)?,
+                                ast::PropValue::Init(x) => {
+                                    let mut val = self.eval_expr(x, env)?;
+                                    // PropertyDefinitionEvaluation (spec 13.2.5.5) skips NamedEvaluation
+                                    // entirely for a non-computed `__proto__` key ("isProtoSetter" is
+                                    // true): an anonymous `{ __proto__: function(){} }` value must NOT
+                                    // be named "__proto__" -- it becomes the object's [[Prototype]]
+                                    // below, not an own property, and confirmedly keeps whatever name
+                                    // (usually none) it already had.
+                                    let is_proto_setter = !matches!(&p.key, PropKey::Computed(_))
+                                        && k.as_string().is_some_and(|name| *name == "__proto__");
+                                    if !is_proto_setter {
+                                        self.named_evaluation(x, &mut val, &property_key_as_fn_name(&k));
+                                    }
+                                    val
+                                }
                                 ast::PropValue::CoverInitializedName { .. } => {
                                     return Err(Throw::syntax_error("cover initialized name outside assignment pattern"));
                                 }
@@ -1145,6 +1235,20 @@ impl Interpreter {
         let (reference, old) = self.resolve_reference(t, e)?;
         if op == ast::AssignOp::Assign {
             let mut v = self.eval_expr(r, e)?;
+            // Plain assignment intentionally keeps the pre-existing, value-based heuristic
+            // (rename whatever nameless function/class the RHS produced -- no source-expression
+            // check, no IsIdentifierRef/Reference::Binding restriction) rather than switching to
+            // precise NamedEvaluation here: `amazing-js/src/vm` (js-vm-owned) mirrors this exact
+            // unconditional heuristic for its own bytecode `=` path, and
+            // `assignment_preserves_legacy_function_name_inference` differentially checks both
+            // backends agree. A global-scope target resolves to `Reference::Property` (via
+            // `resolve_reference`'s `global_binding_object` special case), not
+            // `Reference::Binding` -- an earlier attempt to restrict this call to
+            // `Reference::Binding` only regressed every top-level `name = () => {}` (caught via
+            // language/expressions/assignment/fn-name-*.js), so this stays unconditional on the
+            // reference kind, matching the name both backends already agree on. A symbol-keyed
+            // member target with no description has no derivable name at all (`reference_name`
+            // returns `None`, exactly as `amazing-js/src/vm` treats it) -- skipped, not "".
             if let Some(name) = reference_name(&reference) {
                 self.infer_function_name(&mut v, &name);
             }
@@ -1166,6 +1270,8 @@ impl Interpreter {
             return Ok(old);
         }
         let mut v = self.eval_expr(r, e)?;
+        // Same legacy, unconditional value-based heuristic as plain `=` (see the comment
+        // there) applies to the logical-assignment operators.
         if let Some(name) = reference_name(&reference) {
             self.infer_function_name(&mut v, &name);
         }
@@ -1196,6 +1302,10 @@ impl Interpreter {
         Ok(out)
     }
 
+    /// Renames `value` if it's a still-nameless function/class object -- the actual rename
+    /// step underneath `named_evaluation` below. Kept at this exact 2-argument signature and
+    /// unconditional (no source-expression check): `amazing-js/src/vm` (js-vm-owned) has its
+    /// own, independent assignment-naming call site that already depends on this signature.
     fn infer_function_name(&self, value: &mut JsValue, name: &str) {
         if let JsValue::Object(object) = value {
             let mut object = object.borrow_mut();
@@ -1208,6 +1318,20 @@ impl Interpreter {
                     }).unwrap();
                 }
             }
+        }
+    }
+
+    /// NamedEvaluation (spec 8.6.3, and its many call sites: LexicalBinding/VariableDeclaration
+    /// initializers, AssignmentExpression incl. `&&=`/`||=`/`??=`, destructuring/parameter
+    /// defaults, object-literal properties, class fields, `export default`) for the tree-walker
+    /// (JSRT-19): only renames when `source` is itself an anonymous function/arrow/class
+    /// definition -- `is_anonymous_function_definition` is what makes `x = (0, function(){})`
+    /// correctly stay unnamed while `x = (function(){})` gets named. This is deliberately a
+    /// separate method from `infer_function_name` (rather than adding the check there) so
+    /// `amazing-js/src/vm`'s own, unrelated call site is untouched.
+    fn named_evaluation(&self, source: &ast::Expr, value: &mut JsValue, name: &str) {
+        if is_anonymous_function_definition(source) {
+            self.infer_function_name(value, name);
         }
     }
 
@@ -1372,7 +1496,10 @@ impl Interpreter {
                 value: default,
             } => {
                 if value.is_undefined() {
-                    let fallback = self.eval_expr(default, env)?;
+                    let mut fallback = self.eval_expr(default, env)?;
+                    if let ExprKind::Ident(identifier) = &target.kind {
+                        self.named_evaluation(default, &mut fallback, &identifier.name);
+                    }
                     self.assign_pattern_expr(target, &fallback, env)
                 } else {
                     self.assign_pattern_expr(target, value, env)
@@ -1422,7 +1549,9 @@ impl Interpreter {
                                 }
                                 ast::PropValue::CoverInitializedName { binding, default } => {
                                     let assigned = if matches!(&item, JsValue::Undefined) {
-                                        self.eval_expr(default, env)?
+                                        let mut v = self.eval_expr(default, env)?;
+                                        self.named_evaluation(default, &mut v, &binding.name);
+                                        v
                                     } else {
                                         item
                                     };
@@ -1759,7 +1888,13 @@ impl Interpreter {
                 args.get(i).cloned().unwrap_or(JsValue::Undefined)
             };
             let v = if v.is_undefined() {
-                if let Some(default) = &p.default { self.eval_expr(default, e)? } else { v }
+                if let Some(default) = &p.default {
+                    let mut d = self.eval_expr(default, e)?;
+                    if let Binding::Ident(identifier) = &p.binding {
+                        self.named_evaluation(default, &mut d, &identifier.name);
+                    }
+                    d
+                } else { v }
             } else { v };
             self.bind_pattern_mode(&p.binding, v, None, e)?;
         }

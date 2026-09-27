@@ -4,6 +4,10 @@
 // file consumes; the AST parses private names already (`ExprKind::PrivateName`,
 // `PropKey::Private`, `MemberProp::Private`) but the tree-walker previously
 // rejected every one of them with a placeholder error.
+//
+// `define_field`'s own NamedEvaluation call is adapted from lucid-softworks/lumen
+// (crates/lumen/src/eval.rs, ClassFieldDefinitionEvaluation's SetFunctionName step)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 
 /// Runs one field initializer or static block with `this` bound and `home`
 /// set for `super` resolution, in a fresh function-scoped child of the
@@ -39,7 +43,19 @@ fn define_field(
 ) -> Result<(), Throw> {
     let value = eval_class_element_scope(i, owner.clone(), home, class_env, |i, scope| {
         match init {
-            Some(expr) => i.eval_expr(expr, scope),
+            // ClassFieldDefinitionEvaluation's own NamedEvaluation (spec 15.7.10): an
+            // anonymous function/class field initializer is named after the field's own
+            // key (already resolved to a PropertyKey/PrivateName by class-definition time,
+            // per spec -- computed keys are evaluated once, not per instance).
+            Some(expr) => {
+                let mut v = i.eval_expr(expr, scope)?;
+                let name = match key {
+                    FieldKey::Public(property_key) => property_key_as_fn_name(property_key),
+                    FieldKey::Private(private_name) => private_name.text().to_string(),
+                };
+                i.named_evaluation(expr, &mut v, &name);
+                Ok(v)
+            }
             None => Ok(JsValue::Undefined),
         }
     })?;
