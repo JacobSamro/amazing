@@ -497,6 +497,35 @@ impl Tokenizer {
                             None => self.text_buf.push('&'),
                         }
                     },
+                    // HTML-40 (2): flush any pending character run as its
+                    // own token and yield to the caller *before* dispatching
+                    // on a `<![CDATA[` open, rather than deciding CDATA-vs-
+                    // bogus-comment and continuing in the same `run()` call.
+                    // That decision reads `self.allow_cdata` synchronously
+                    // the instant it runs; the tree builder only updates that
+                    // flag (via `set_allow_cdata`) from `feed_with_tokenizer_
+                    // feedback`, once it has actually seen the *preceding*
+                    // character token and recomputed the adjusted current
+                    // node -- which never happens in time if this run() call
+                    // tokenizes straight through to the decision without
+                    // returning first. Without this, feeding "x" and then
+                    // "<![CDATA[y]]>" is indistinguishable from feeding both
+                    // in one call: `cdata-in-integration-point-fragment.html`
+                    // depends on exactly this ordering (its own comment names
+                    // the same three steps this fixes). Scoped to exactly
+                    // this lookahead (not every '<') so EOF-mid-tag's literal-
+                    // text fallback, which relies on `text_buf` still holding
+                    // the preceding run when the tag turns out unterminated,
+                    // is untouched.
+                    Some('<') if !self.text_buf.is_empty()
+                        && self.peek_at(1) == Some('!')
+                        && self.input[self.pos + 2..].starts_with(
+                            &['[', 'C', 'D', 'A', 'T', 'A', '['],
+                        ) =>
+                    {
+                        self.flush_text();
+                        return;
+                    },
                     Some('<') => self.tag_open_dispatch(),
                     Some('\0') => {
                         self.pos += 1;

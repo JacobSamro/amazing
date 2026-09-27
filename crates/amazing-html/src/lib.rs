@@ -115,6 +115,15 @@ pub fn parse_with_custom_element_host(
 /// `noscript` uses this parser's fixed scripting-enabled RAWTEXT behavior;
 /// there is no scripting-disabled fragment mode.
 pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
+    parse_fragment_with_namespace(context, Namespace::Html, src)
+}
+
+/// `parse_fragment`, but for a context element in a foreign namespace (e.g.
+/// `Element.innerHTML` set on a MathML/SVG element) -- HTML-40 (2): needed
+/// so the tokenizer's CDATA-allowed determination sees the context
+/// element's real namespace instead of always the HTML fragment root's
+/// (see `tree::build_fragment`'s own doc comment).
+pub fn parse_fragment_with_namespace(context: &str, namespace: Namespace, src: &str) -> Result<Dom, String> {
     let context = context.to_ascii_lowercase();
     if context.is_empty() || context.chars().any(|c| c.is_ascii_whitespace() || matches!(c, '<' | '>' | '\0')) {
         return Err("invalid HTML fragment context name".into());
@@ -126,7 +135,7 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
     } else {
         src
     };
-    let source = tree::build_fragment(src, &context);
+    let source = tree::build_fragment(src, &context, namespace);
 
     fn clone_subtree(source: &Dom, source_node: NodeIdx, target: &mut Dom, parent: NodeIdx) {
         let created = target.append_child(parent, source.get(source_node).kind.clone());

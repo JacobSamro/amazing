@@ -1780,15 +1780,26 @@ impl BindingHost for RuntimeBindingHost<'_> {
 
 impl FragmentParser for RuntimeBindingHost<'_> {
     fn parse_fragment(&mut self, context: FragmentContext, markup: &[u16]) -> Result<Dom, DomError> {
-        if context.namespace_uri.as_deref() != Some("http://www.w3.org/1999/xhtml") {
-            return Err(DomError::NotSupportedError);
-        }
+        // HTML-40 (2): a MathML/SVG context element (e.g. `Element.innerHTML`
+        // set on one) used to be rejected outright here; the tree builder now
+        // tracks the context's own namespace (`parse_fragment_with_namespace`)
+        // for the spec's "adjusted current node" fragment-case special-casing.
+        let namespace = match context.namespace_uri.as_deref() {
+            Some("http://www.w3.org/1999/xhtml") | None => amazing_dom::Namespace::Html,
+            Some("http://www.w3.org/2000/svg") => amazing_dom::Namespace::Svg,
+            Some("http://www.w3.org/1998/Math/MathML") => amazing_dom::Namespace::MathMl,
+            _ => return Err(DomError::NotSupportedError),
+        };
         let markup = String::from_utf16(markup).map_err(|_| DomError::TypeError)?;
         // A paragraph uses the ordinary in-body fragment insertion mode.
         // The parser's `div` context has the same tokenizer and insertion
         // state for this context; special contexts remain explicit above.
-        let parser_context = if context.local_name == "p" { "div" } else { &context.local_name };
-        amazing_html::parse_fragment(parser_context, &markup)
+        let parser_context = if namespace == amazing_dom::Namespace::Html && context.local_name == "p" {
+            "div"
+        } else {
+            &context.local_name
+        };
+        amazing_html::parse_fragment_with_namespace(parser_context, namespace, &markup)
             .map_err(|_| DomError::NotSupportedError)
     }
 }
