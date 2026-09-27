@@ -687,3 +687,26 @@ fn has_indices_flag() {
     assert_eq!(Flags::parse("gid").unwrap().as_string(), "dgi");
     assert!(matches!(Flags::parse("dd"), Err(Error::Syntax(_))));
 }
+
+#[test]
+fn many_ignorecase_classes_stay_well_under_the_compile_budget() {
+    // Modelled on test262's `testIntl.js` BCP-47 identifier regex: many
+    // distinct `[a-z]`/`[0-9]`/`[a-z0-9]` character classes combined into
+    // one big alternation under the `i` flag. The old cost model charged a
+    // flat, case-fold-table-sized budget per class regardless of content,
+    // which alone exhausted `MAX_CODE` long before this pattern's actual
+    // (now cheap) work would; this must compile and match cleanly.
+    let group = "(?:[a-z]|[0-9]|[a-z0-9])";
+    let pattern = format!("^{}$", group.repeat(60));
+    let regex = Regex::new(&pattern, "i").expect("many-class ignoreCase pattern should compile");
+    assert!(regex.exec(&"a1B".repeat(20), 0).unwrap().is_some());
+}
+
+// The remaining Annex B fallback/quantifier/class-range regression coverage
+// this ticket (JSD-4) added is superseded by dev's own, independently
+// written and now-adopted Annex B implementation (bcdd8fa0) and its tests
+// above (`annex_b_numeric_escapes_choose_backrefs_before_octal`,
+// `annex_b_identity_control_and_class_range_fallbacks`,
+// `annex_b_quantified_assertions_preserve_zero_width_semantics`), which
+// cover the same escape/quantifier/class-range grammar; kept once, here, to
+// avoid doubling up near-duplicate coverage after merging dev into this lane.

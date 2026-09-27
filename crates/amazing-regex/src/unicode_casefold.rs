@@ -1551,3 +1551,27 @@ pub(crate) fn partners(c: u32) -> impl Iterator<Item = u32> {
     let end = start + table[start..].partition_point(|&(k, _)| k == c);
     table[start..end].iter().map(|&(_, p)| p)
 }
+
+/// Every code point `c` in `lo..=hi` that has a simple case-fold partner,
+/// found by bracketing `partner_table`'s sorted keys with two binary
+/// searches instead of scanning the whole table (or, worse, every code
+/// point in a wide range such as `[\u0000-￿]`). Cost is `O(log n +
+/// matches)`, where `matches` is bounded by the table's size (currently
+/// 3024 directed entries) regardless of how wide the range is -- a `[0-9]`
+/// class matches zero entries (digits have no case), a `[a-z]` class
+/// matches on the order of the alphabet's size, and only a range that
+/// covers most of the table's key space approaches the table-size bound.
+/// Used by `FoldedClass::new` (`vm.rs`) to build a class's ignoreCase fold
+/// set from its own (usually few, usually narrow) member ranges instead of
+/// unconditionally walking the full table once per class -- the prior
+/// per-class-node approach charged a flat table-sized cost regardless of
+/// the class's content, which alone exhausted the compiler's work budget
+/// on patterns with many distinct classes under `/i` (e.g. BCP-47
+/// identifier grammars built from many `[a-z]`/`[0-9]`/`[a-z0-9]`
+/// occurrences), even though the real per-class work is tiny.
+pub(crate) fn keys_in_range(lo: u32, hi: u32) -> impl Iterator<Item = u32> {
+    let table = partner_table();
+    let start = table.partition_point(|&(k, _)| k < lo);
+    let end = start + table[start..].partition_point(|&(k, _)| k <= hi);
+    table[start..end].iter().map(|&(k, _)| k)
+}

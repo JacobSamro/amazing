@@ -212,48 +212,28 @@ impl SetExpr {
     }
 }
 impl FoldedClass {
-    fn new(class: &Class, flags: Flags, remaining: &mut usize) -> Result<Self, Error> {
-        fn charge(remaining: &mut usize, cost: usize) -> Result<(), Error> {
-            *remaining = remaining
-                .checked_sub(cost)
-                .ok_or(Error::Limit("class compilation work"))?;
-            Ok(())
-        }
-        charge(remaining, class.members.len())?;
+    fn new(class: &Class, flags: Flags) -> Self {
         let mut folded = Vec::new();
         if flags.ignore_case {
-            // Index the same endpoints used by the old full-table scan. This
-            // fixed Unicode-data index is shared; pattern-dependent work and
-            // allocations below remain charged to the compilation budget.
-            static ENDPOINTS: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
-            let endpoints = ENDPOINTS.get_or_init(|| {
-                let mut points: Vec<_> = crate::unicode_casefold::PAIRS
-                    .iter()
-                    .flat_map(|&(a, b)| [a, b])
-                    .collect();
-                points.sort_unstable();
-                points.dedup();
-                points
-            });
-            for member in &class.members {
-                if let Member::Range(lo, hi) = member {
-                    // Bound both binary searches as well as the endpoints we
-                    // actually visit, rather than charging an entire Unicode
-                    // table for every small ASCII range.
-                    charge(remaining, 2 * (endpoints.len().ilog2() as usize + 1))?;
-                    let start = endpoints.partition_point(|c| c < lo);
-                    let end = endpoints.partition_point(|c| c <= hi);
-                    charge(remaining, end - start)?;
-                    folded.extend(endpoints[start..end].iter().map(|&c| canonical(c, flags)));
+            // For each of the class's own (few, usually narrow) ranges, find
+            // just the code points in that range that have a case-fold
+            // partner via two binary searches, rather than scanning the
+            // whole case-fold table once per range -- see
+            // `unicode_casefold::keys_in_range`'s doc for why this matters.
+            for m in &class.members {
+                if let Member::Range(lo, hi) = m {
+                    for c in crate::unicode_casefold::keys_in_range(*lo, *hi) {
+                        folded.push(canonical(c, flags));
+                    }
                 }
             }
             folded.sort_unstable();
             folded.dedup();
         }
-        Ok(Self {
+        Self {
             class: class.clone(),
             folded,
-        })
+        }
     }
     fn contains(&self, c: u32, flags: Flags) -> bool {
         let canon = canonical(c, flags);
@@ -358,7 +338,21 @@ impl Compiler {
                 let prepared = if let Some(cached) = self.classes.get(&key) {
                     cached.clone()
                 } else {
-                    let prepared = Rc::new(FoldedClass::new(c, self.flags, &mut self.remaining)?);
+                    // Build the folded class first, then charge for the work
+                    // actually done (member scan + fold entries found) instead
+                    // of a flat, table-sized charge per class node regardless
+                    // of content. A `[0-9]` class now costs next to nothing
+                    // (digits have no case-fold partners); only a class whose
+                    // ranges genuinely cover a large share of the case-fold
+                    // table's key space costs close to what every ignoreCase
+                    // class used to cost unconditionally.
+                    let prepared = FoldedClass::new(c, self.flags);
+                    let cost = c.members.len() + prepared.folded.len();
+                    self.remaining = self
+                        .remaining
+                        .checked_sub(cost)
+                        .ok_or(Error::Limit("class compilation work"))?;
+                    let prepared = Rc::new(prepared);
                     self.classes.insert(key, prepared.clone());
                     prepared
                 };
