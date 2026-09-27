@@ -1,9 +1,10 @@
 # JSVM-8 design note: generators/async-generators in the default execution path
 
-Status: **investigation complete, implementation blocked on the js-lang merge landing in
-`dev`** (per coordinator instruction -- no VM code or rebase yet). This note picks the
-approach and records the evidence behind it, for the agent (me, next session, or a
-handoff) that implements it once unblocked.
+Status: **implemented** (option (b) only, per the coordinator's scoping -- option (a), the
+VM fast path, is a deliberate follow-up). See `docs/lanes/js-vm_TODO.md`'s "JSVM-8" section
+for the landed implementation, the regression found and fixed along the way, and the
+measured gate numbers. This note is kept as-is below: the approach comparison and the
+evidence behind picking the hybrid.
 
 ## Problem, precisely
 
