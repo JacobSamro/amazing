@@ -880,4 +880,148 @@ files (same `relativeTo` family); `PlainDate`/`PlainDateTime.prototype.
 the float64-exact-precision sub-cluster in `add`/`subtract`/`from`/`compare`
 noted above (~6 files each).
 
+## JSS-since-until: PlainDate/PlainDateTime since/until direction+rounding, Duration.total's calendar fraction, relativeTo weeks gate
+
+Fixed base: local `dev` `0654b5d3`, fast-forwarded mid-ticket (no lane-owned
+drift) to `2248f9bd`, which carries the orchestrator's new porting policy
+(`AGENTS.md` "Porting from other engines", `THIRD_PARTY_NOTICES.md`). Per that
+policy, this round ports (copies and adapts onto our own `[i64; 10]`
+field/f64-free model, with attribution) two algorithms from
+`boa-dev/temporal` (temporal_rs) `@ eadf8039d2577e4375493a0eb3f46a66f25616ec`
+(Apache-2.0): the since/until direction+rounding-mode convention
+(`src/builtins/core/plain_date.rs` `diff_date`) and `DifferenceISODate`'s
+month/year bracket search (`src/iso.rs` `IsoDate::diff_iso_date`). Both are
+recorded in `THIRD_PARTY_NOTICES.md` against
+`crates/amazing-js/src/builtins_temporal_arithmetic.rs`, which also carries a
+file-header attribution comment. No crate dependency was added.
+
+**Root cause 1 (since/until direction and rounding mode, `std_temporal_difference`):**
+every branch computed the exact delta self -> other (unrounded), rounded it
+directly, and then negated the WHOLE thing for `since` -- which looks
+plausible but is provably wrong for a directional roundingMode: rounding a
+value and its negation with the same `ceil`/`floor`/`halfCeil`/`halfFloor`
+does not generally negate (`ceil(-3) = -2`, but `-ceil(3) = -4`). Confirmed by
+hand against `roundingmode-ceil.js` and traced against the actual ported
+algorithm: the correct behavior is to always compute the exact delta as
+receiver -> argument (never swapped), always bracket-search/round relative to
+the RECEIVER (never the argument -- calendar units are variable-length, so
+which endpoint anchors the month/year bracket is observable, not just a sign
+convention; confirmed by `rounding-relative.js`, `round-relative-to-receiver.js`,
+`roundingmode-half-boundary.js`), swap `ceil`<->`floor` and
+`halfCeil`<->`halfFloor` (the only modes without a sign-symmetric
+`mode(-x) = -mode(x)` identity) before that one rounding step when the
+operation is `since`, and negate the fully-rounded result at the very end.
+Added `std_temporal_swap_directional_mode`. Also fixed a related, independent
+bug: an absent/`"auto"` `largestUnit` must default to the larger of the
+operation's own default unit and `smallestUnit` (`GetDifferenceSettings`), not
+always the operation's own default -- so `smallestUnit: "week"` with no
+`largestUnit` resolves to `largestUnit: "week"`, not `"day"`, and does not
+spuriously throw "largestUnit is smaller than smallestUnit"
+(`smallestunit-plurals-accepted.js`).
+
+**Root cause 2 (`std_temporal_calendar_difference`, the shared exact
+year/month/day breakdown): the day-of-month clamp anchor was wrong.** The old
+code swapped `first`/`second` to always anchor at whichever endpoint is
+chronologically earlier and clamped month/year steps using THAT endpoint's
+day-of-month. The ported `diff_iso_date` never swaps: it always anchors at
+the literal `first` argument (walking in the `sign` direction) and always
+clamps using `first`'s own day-of-month, so which argument is `first` is
+observable in the day remainder whenever a month is shorter than `first`'s
+day -- e.g. `2019-03-01` minus `2019-01-29` at `largestUnit: "month"` is
+1 month + 3 days (correct, per `rounding-relative.js`), not 1 month + 1 day
+(the old, wrong answer). Rewrote as a faithful port: an unclamped
+`(year, month, day)` tuple comparison (`std_temporal_calendar_surpasses`,
+matching the spec's `IsoDate::new_unchecked`-based compare exactly, including
+at the day-31-vs-shorter-month boundary) drives the bracket search, and only
+the FINAL result is clamped via the existing `std_temporal_add_calendar`. This
+one fix alone resolved `basic-arithmetic.js`, `largestunit-higher-units.js`,
+`leap-year-arithmetic.js`, and the `rounding-relative.js`/
+`roundingmode-half-boundary.js` cluster for both `since` and `until` on both
+`PlainDate` and `PlainDateTime`.
+
+**Two regressions surfaced by the `calendar_difference` rewrite and fixed
+before landing** (both in `std_temporal_round_to_calendar_unit`, used by
+`Duration.prototype.round`'s `relativeTo` handling as well as since/until):
+the `largestUnit == smallestUnit` branch and the `smallestUnit: "month"`/
+`largestUnit: "year"` branch each re-derived their result by adding the
+already-correct rounded count back onto `base` and then diffing that date
+against `base` again through `calendar_difference` -- redundant, and lossy at
+an end-of-month boundary (adding 11 months to a day-31 `base` lands on a
+clamped day-30 date, and diffing that clamped date back against `base`'s own
+unclamped day 31 reads one month short: `end-of-month-round-up.js`). Fixed by
+constructing the result directly from the values the bracket search already
+computed, with the month/year branch folding the combined month count back
+into years using TRUNCATING (not Euclidean) division, so the sign matches the
+overall span's own sign rather than always landing in `0..12`
+(`round-cross-unit-boundary.js`'s cross-unit-carry cases, in both the positive
+and negative direction).
+
+**`Duration.prototype.total`'s year/month fraction divided by the wrong
+unit's length.** It computed the exact span's total nanoseconds correctly,
+then divided by the length of exactly ONE year/month starting at `relativeTo`
+-- wrong whenever the span crosses into a differently-sized year/month, e.g.
+1 year + 183 days counted from a non-leap year divides by that (365-day) first
+year's length instead of the (366-day) leap year the 183 remaining days
+actually fall inside, giving `1.5013698630136987` instead of the exact `1.5`
+(`roundingmode-half-boundary.js`'s tie-break setup assertion, which needs an
+exact `0.5` boundary to even be meaningful). Added
+`std_temporal_total_calendar_unit`, the fractional counterpart of the
+existing integer bracket search: find the two adjacent whole-unit-count
+candidates that bracket the total, then interpolate linearly within that
+SPECIFIC bracket's own length.
+
+**`relativeTo` was not required often enough, in both `total` and `round`.**
+Both gated only on the duration's own nonzero years/months and the requested
+unit being year/month, missing weeks entirely on both sides: a week-only
+duration always needs `relativeTo` (weeks are fixed-length in isolation, but
+converting between a week-carrying duration and another unit is treated as
+calendar-relative by spec), and requesting `unit`/`smallestUnit`/`largestUnit`
+`"week"` requires `relativeTo` even for a duration with no calendar fields at
+all (confirmed by `calendar-possibly-required.js`'s week-only case and
+`relativeto-undefined-throw-on-calendar-units.js`'s full per-unit sweep over
+every duration shape). `Duration.compare` already had this right (it already
+checked `left[0..3]`, from the JSS-Temporal round); `total`/`round` did not.
+
+`built-ins/Temporal`: **8,218 -> 8,400 pass variants (+182), zero lost**,
+diffed by (path, variant) against a fresh `js-stdlib-sinceuntil-baseline.jsonl`
+taken at this round's start. Final classification SHA-256 is
+`e78d0849587f683b63436bcce4ca84eac09c2124bfe191a0a8e66eb674d44b00`. File-level,
+before -> after:
+
+| Selection | Before pass | After pass | Total files |
+| --- | ---: | ---: | ---: |
+| `PlainDate/prototype/since` | 61 | 84 | 87 |
+| `PlainDate/prototype/until` | 60 | 83 | 86 |
+| `PlainDateTime/prototype/since` | 73 | 88 | 95 |
+| `PlainDateTime/prototype/until` | 74 | 90 | 98 |
+| `Duration/prototype/total` | 49 | 57 | 78 |
+| `Duration/prototype/round` | 105 | 107 | 126 |
+
+Workspace: `cargo nextest run --workspace --locked --no-fail-fast`
+**3,381/3,381 passed** (3 slow, 17 skipped, 0 failed); `cargo test --workspace
+--locked --doc` all green.
+
+Remaining `PlainDate`/`PlainDateTime` since/until failures (25 files) are a
+different, cross-cutting bug affecting many Temporal methods beyond
+since/until: `options-read-before-algorithmic-validation.js`/
+`order-of-operations.js` need the exact spec read order (`largestUnit` ->
+`roundingIncrement` -> `roundingMode` -> `smallestUnit`, all read and cast
+BEFORE any validation can throw), but `std_temporal_rounding_options`
+currently reads/validates smallestUnit's increment before largestUnit is even
+read -- a `std_temporal_rounding_options`-level fix, not attempted this round
+(it is shared by Duration.round/PlainTime.round/etc., so touches more than
+since/until). The rest are unrelated: string-parsing edge cases
+(`argument-string-invalid.js`, `argument-string-limits.js`), a
+`float64-representable-integer.js`/`largestunit-plurals-accepted.js`
+precision-exact sub-cluster (same class of bug noted for `add`/`subtract` in
+JSS-duration), and `rounding-near-minimum-date.js`/`units-changed.js` (date
+range edge cases). `Duration.prototype.round`/`total`'s remaining ~19+21
+files are almost entirely `ZonedDateTime`-as-`relativeTo` property-bag/
+timezone-string edge cases and the same options-read-order bug, not the
+calendar-arithmetic bugs fixed this round. `Duration.prototype.round`/`total`/
+`compare`'s `relativeTo` handling and the float64-exact `BalanceDuration`
+sub-cluster (this ticket's stated next items) were only partially reached
+(the two bugs shared with since/until above); no dedicated round started on
+either this session.
+
 
