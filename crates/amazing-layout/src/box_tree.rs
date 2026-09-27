@@ -83,7 +83,19 @@ pub fn build_layout_tree_with_replaced(
                 ))
                 .or_else(|| root.font_metric_style.clone())
                 .unwrap_or_default();
-            assign_root_font_metric_style(&mut root, &root_metric_style, None, None);
+            // `rlh` (css-values-4 6.2) is the root element's own used
+            // line-height, which can differ from `root`'s (the body box,
+            // when body is present) -- resolve it from `<html>` directly
+            // rather than reusing the body's already-resolved line_height.
+            let root_line_height = dom_html(dom)
+                .and_then(|html| styled.get(html))
+                .map(|style| {
+                    let root_font_size = values::resolve_used_font_size(style, values::ROOT_FONT_SIZE);
+                    let normal_lh = fonts.scaled_metrics(root_font_size).line_height;
+                    values::resolve_used_line_height(style, root_font_size, normal_lh)
+                })
+                .unwrap_or(root.line_height);
+            assign_root_font_metric_style(&mut root, &root_metric_style, root_line_height, None, None);
             let order = document_order(dom);
             assign_source_order(&mut root, &order);
             root
@@ -299,6 +311,7 @@ fn document_order(dom: &Dom) -> std::collections::HashMap<NodeIdx, [u64; 4]> {
 fn assign_root_font_metric_style(
     box_: &mut LayoutBox,
     root_style: &TextStyle,
+    root_line_height: f32,
     inherited_style: Option<&TextStyle>,
     inherited_box_style: Option<&ComputedStyle>,
 ) {
@@ -322,14 +335,15 @@ fn assign_root_font_metric_style(
         box_.line_height = values::resolve_used_line_height(&box_.style, box_.font_size, box_.line_height);
     }
     box_.root_font_metric_style = Some(root_style.clone());
+    box_.root_line_height = root_line_height;
     let current = box_.font_metric_style.as_ref();
     if let Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) = &mut box_.flow {
         for child in children {
-            assign_root_font_metric_style(child, root_style, current, Some(&box_.style));
+            assign_root_font_metric_style(child, root_style, root_line_height, current, Some(&box_.style));
         }
     }
     for child in &mut box_.positioned {
-        assign_root_font_metric_style(child, root_style, current, Some(&box_.style));
+        assign_root_font_metric_style(child, root_style, root_line_height, current, Some(&box_.style));
     }
 }
 
@@ -915,6 +929,12 @@ fn text_style(
     let word_break = match style.get("word-break").unwrap_or("normal") {
         value if value.eq_ignore_ascii_case("break-all") => WordBreak::BreakAll,
         value if value.eq_ignore_ascii_case("keep-all") => WordBreak::KeepAll,
+        // CSS Text 4 `word-break: manual` (TEXT-25, amazing-text's
+        // `WordBreak::Manual`): the box-tree side of this was previously
+        // unreachable -- this match only ever produced BreakAll/KeepAll/
+        // Normal, so `line_breaks`'s Manual handling in amazing-text-provider
+        // had no caller. Wired here now that TEXT-25 (06c753fe) is on dev.
+        value if value.eq_ignore_ascii_case("manual") => WordBreak::Manual,
         _ => WordBreak::Normal,
     };
     let mut unicode_bidi = match style.get("unicode-bidi").unwrap_or("normal") {
@@ -980,6 +1000,20 @@ fn text_style(
     }
 }
 
+/// CSS Fonts 4 §2.6 `font-size-adjust`. `amazing-css`'s own grammar
+/// (`font_properties.rs`) only accepts `none` or a bare `<number>` today,
+/// which is always the ex-height basis (the single-value syntax); the full
+/// `<metric> <number>` form is not yet parseable there, so every non-`none`
+/// value maps to `FontSizeAdjustMetric::ExHeight`.
+fn font_size_adjust(style: &ComputedStyle) -> Option<(amazing_text::FontSizeAdjustMetric, f32)> {
+    let value = style.get("font-size-adjust")?;
+    if value.eq_ignore_ascii_case("none") {
+        return None;
+    }
+    let aspect = value.trim().parse::<f32>().ok().filter(|n| n.is_finite() && *n >= 0.0)?;
+    Some((amazing_text::FontSizeAdjustMetric::ExHeight, aspect))
+}
+
 /// CSS Fonts 4 §5.5. `amazing-css` expands the `font-synthesis` shorthand
 /// into `font-synthesis-{weight,style,small-caps,position}`, each computed
 /// to `auto` (default, synthesis permitted) or `none`. `amazing-text::
@@ -1029,6 +1063,7 @@ fn inline_text(
         source_mappings,
         font_size,
         style: Box::new(text_style(dom, owner, style, font_size, inline_box)),
+        font_size_adjust: font_size_adjust(style),
         letter_spacing: values::style_length_percentage(style, "letter-spacing", font_size, font_size * 0.6)
             .and_then(|length| length.resolve(None)).unwrap_or(0.0),
         tab_size: tab_size(style, font_size),

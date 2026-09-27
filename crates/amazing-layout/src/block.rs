@@ -172,7 +172,7 @@ fn layout_block_in_context(
         b.font_metric_style.as_ref(),
         b.root_font_metric_style.as_ref(),
         font_px,
-    );
+    ).with_line_heights(b.line_height, b.root_line_height);
     if let Some(svg) = &b.svg_sizing {
         b.replaced_size = Some(svg.used_size(
             &b.style,
@@ -616,7 +616,7 @@ fn vertical_inline_measure(b: &LayoutBox, available: f32, text: Option<&dyn amaz
         crate::inline::InlineContainingBlock { x:0.0,y:0.0,width:available,height:inline },
         &strut, style.direction, style.writing_mode, text, &FloatContext::default(),
         !matches!(b.style.get("white-space"), Some("nowrap" | "pre")), None,
-        "start", "auto", b.style.get("unicode-bidi") == Some("plaintext"))?;
+        "start", "auto", "auto", b.style.get("unicode-bidi") == Some("plaintext"))?;
     let cross = lines.iter().map(|line| line.replaced.iter().map(|fragment| fragment.width)
         .fold(b.line_height, f32::max)).sum();
     Some((cross, inline))
