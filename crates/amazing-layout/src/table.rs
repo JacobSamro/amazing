@@ -198,20 +198,45 @@ fn length(b: &LayoutBox, name: &str, basis: f32) -> Option<f32> {
         MaybeLen::Auto => None,
     }
 }
-/// True when a `<col>`/`<colgroup>` has a definite (absolute-length)
-/// `width` or `min-width` -- a bare number/px, not a percentage or a
-/// `calc()` that contains one. Resolving against basis `0.0` and checking
-/// for `%` in the raw source (rather than trusting `MaybeLen::Px` alone,
-/// which a percentage still produces once resolved against *some* basis)
-/// is what distinguishes "genuinely definite" from "resolves to a number
-/// only because there was a basis to resolve against" for this
-/// structural, pre-layout column-count decision.
+/// True when a `<col>`/`<colgroup>` clamps to a positive, definite
+/// (absolute-length) used width for the css-tables-3 #missing-cells-fixup
+/// decision -- a bare number/px, not a percentage or a `calc()` that
+/// contains one, and not a `width`/`min-width` that a conflicting
+/// `max-width` clamps down to zero. Resolving against basis `0.0` and
+/// checking for `%` in the raw source (rather than trusting `MaybeLen::Px`
+/// alone, which a percentage still produces once resolved against *some*
+/// basis) is what distinguishes "genuinely definite" from "resolves to a
+/// number only because there was a basis to resolve against".
+///
+/// Applies the same width/min-width/max-width clamp order `constraints()`
+/// uses (max-width first, then min-width, so a conflicting min-width
+/// wins) rather than treating either property as definite on its own:
+/// `col-definite-max-size-001.html`'s `max-width:0;width:100px` clamps to
+/// a non-definite 0 (dropping that trailing column), while
+/// `max-width:0;min-width:100px` still clamps back up to a definite 100
+/// (min-width overriding the same losing max-width keeps it). Also fixes
+/// `col-definite-min-size-001.html`'s own `min-width:0` case, which the
+/// prior any-raw-property-present check wrongly treated as definite (0 is
+/// `Some(0.0)`, not `None`) -- it clamps to 0 too and must not extend the
+/// column count either.
 fn column_has_definite_size(col: &LayoutBox) -> bool {
-    ["width", "min-width"].into_iter().any(|prop| {
-        col.style
-            .get(prop)
-            .is_some_and(|raw| !raw.contains('%') && length(col, prop, 0.0).is_some())
-    })
+    let definite = |prop: &str| {
+        col.style.get(prop).and_then(|raw| {
+            if raw.contains('%') {
+                None
+            } else {
+                length(col, prop, 0.0)
+            }
+        })
+    };
+    let mut width = definite("width").unwrap_or(0.0);
+    if let Some(max_width) = definite("max-width") {
+        width = width.min(max_width);
+    }
+    if let Some(min_width) = definite("min-width") {
+        width = width.max(min_width);
+    }
+    width > 0.0
 }
 fn spacing(b: &LayoutBox) -> (f32, f32) {
     if collapsed(b) {
