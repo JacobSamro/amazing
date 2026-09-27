@@ -11,6 +11,7 @@ the table, once per license.
 
 | Upstream | Commit | License | Copyright | Our files |
 |----------|--------|---------|-----------|-----------|
+| [boa-dev/temporal](https://github.com/boa-dev/temporal) (temporal_rs) | `eadf8039d2577e4375493a0eb3f46a66f25616ec` | Apache-2.0 (dual MIT/Apache-2.0 upstream) | Copyright (c) 2024 Boa | `crates/amazing-js/src/builtins_temporal_arithmetic.rs` |
 
 ## MIT License
 

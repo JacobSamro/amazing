@@ -1,6 +1,11 @@
 // ISO arithmetic shared by the plain Temporal types. Epoch nanoseconds stay
 // i128 throughout; no f64 conversion occurs until Duration.total returns a
 // Number, as required by its JavaScript API.
+//
+// Portions of the since/until difference algorithm and its rounding-mode
+// handling are ported from boa-dev/temporal (temporal_rs)
+// @ eadf8039d2577e4375493a0eb3f46a66f25616ec, src/builtins/core/plain_date.rs
+// and src/rounding.rs, Apache-2.0. See THIRD_PARTY_NOTICES.md.
 
 const STD_TEMPORAL_NS_SECOND: i128 = 1_000_000_000;
 const STD_TEMPORAL_NS_DAY: i128 = 86_400 * STD_TEMPORAL_NS_SECOND;
@@ -218,6 +223,17 @@ fn std_temporal_round_mode_valid(mode: &str) -> bool {
         | "halfFloor" | "halfExpand" | "halfTrunc" | "halfEven")
 }
 
+// Ported from boa-dev/temporal (temporal_rs) @ eadf8039d2577e4375493a0eb3f46a66f25616ec,
+// src/iso.rs `IsoDate::diff_iso_date` (spec 5.5.6 DifferenceISODate), Apache-2.0.
+// Always anchored at `first` (never swapped to whichever endpoint is
+// chronologically earlier): a month/year step's day-of-month clamping keeps
+// using `first`'s own day throughout the bracket search, so which argument is
+// `first` is observable in the day remainder whenever a month is shorter than
+// `first`'s day-of-month, not just the overall sign of the result -- e.g.
+// 2019-03-01 minus 2019-01-29 at largestUnit "month" is 1 month, 3 days
+// (anchored at 2019-03-01, day 1, stepping backward), not 1 month, 1 day (the
+// wrong answer produced by anchoring at whichever side is earlier and
+// clamping with ITS day-of-month instead).
 fn std_temporal_calendar_difference(first: &[i64; 10], second: &[i64; 10], largest: &str) -> Result<[i64; 10], Throw> {
     let mut result = [0; 10];
     let first_day = std_temporal_epoch_day(first[0], first[1], first[2]);
@@ -225,29 +241,62 @@ fn std_temporal_calendar_difference(first: &[i64; 10], second: &[i64; 10], large
     if !matches!(largest, "year" | "month" | "week" | "day") {
         return Err(Throw::range_error("invalid largestUnit for date difference"));
     }
+    if first_day == second_day { return Ok(result); }
     if largest == "day" { result[3] = second_day - first_day; return Ok(result); }
     if largest == "week" {
         let days = second_day - first_day;
         result[2] = days / 7; result[3] = days % 7;
         return Ok(result);
     }
-    let sign = if second_day < first_day { -1 } else { 1 };
-    let (start, end) = if sign > 0 { (first, second) } else { (second, first) };
-    let mut months = (end[0] - start[0]) * 12 + end[1] - start[1];
-    let mut month_duration = [0; 10]; month_duration[1] = months;
-    let mut cursor = std_temporal_add_calendar(start, &month_duration, 1, false)?;
-    if std_temporal_epoch_day(cursor[0], cursor[1], cursor[2])
-        > std_temporal_epoch_day(end[0], end[1], end[2]) {
-        months -= 1; month_duration[1] = months;
-        cursor = std_temporal_add_calendar(start, &month_duration, 1, false)?;
+    let sign: i64 = if second_day < first_day { -1 } else { 1 };
+    let mut years = 0i64;
+    let mut months = 0i64;
+    // `years`/`months` are found by walking candidate offsets from `first` in
+    // the `sign` direction until the next step would land strictly past
+    // `second` (per `sign`); the comparison uses `first`'s own
+    // (year, month, day) tuple unclamped (a raw ISO-date compare, not a valid
+    // calendar date) exactly as the ported algorithm's `IsoDate::new_unchecked`
+    // does, so a day-of-month that overflows the candidate month (e.g. day 31
+    // against a candidate February) still orders correctly against `second`
+    // without being silently clamped away first.
+    let mut candidate_years = second[0] - first[0];
+    if candidate_years != 0 { candidate_years -= sign; }
+    loop {
+        let (cy, cm) = std_temporal_balance_year_month(first[0] + candidate_years, first[1]);
+        if std_temporal_calendar_surpasses((cy, cm, first[2]), (second[0], second[1], second[2]), sign) { break; }
+        years = candidate_years;
+        candidate_years += sign;
     }
-    let days = std_temporal_epoch_day(end[0], end[1], end[2])
-        - std_temporal_epoch_day(cursor[0], cursor[1], cursor[2]);
-    if largest == "year" {
-        result[0] = sign * (months / 12); result[1] = sign * (months % 12);
-    } else { result[1] = sign * months; }
-    result[3] = sign * days;
+    let mut candidate_months = sign;
+    loop {
+        let (cy, cm) = std_temporal_balance_year_month(first[0] + years, first[1] + candidate_months);
+        if std_temporal_calendar_surpasses((cy, cm, first[2]), (second[0], second[1], second[2]), sign) { break; }
+        months = candidate_months;
+        candidate_months += sign;
+    }
+    if largest == "month" { months += years * 12; years = 0; }
+    let mut single = [0i64; 10];
+    single[0] = years; single[1] = months;
+    let constrained = std_temporal_add_calendar(first, &single, 1, false)?;
+    let constrained_day = std_temporal_epoch_day(constrained[0], constrained[1], constrained[2]);
+    result[0] = years; result[1] = months; result[3] = second_day - constrained_day;
     Ok(result)
+}
+
+fn std_temporal_balance_year_month(year: i64, month: i64) -> (i64, i64) {
+    (year + (month - 1).div_euclid(12), (month - 1).rem_euclid(12) + 1)
+}
+
+// Whether `candidate` (an unclamped, possibly-invalid ISO (year, month, day)
+// tuple) has gone strictly past `other` in the `sign` direction -- landing
+// exactly on `other` does not count, so the bracket-search loop above keeps
+// the last candidate that lands on or short of the target and stops at the
+// first step that overshoots it.
+fn std_temporal_calendar_surpasses(candidate: (i64, i64, i64), other: (i64, i64, i64), sign: i64) -> bool {
+    let cmp = if candidate.0 != other.0 { (candidate.0 - other.0).signum() }
+        else if candidate.1 != other.1 { (candidate.1 - other.1).signum() }
+        else { (candidate.2 - other.2).signum() };
+    cmp != 0 && cmp == sign.signum()
 }
 
 fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, since: bool) -> Result<JsValue, Throw> {
@@ -258,6 +307,28 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
         if data.kind == StdTemporalKind::PlainYearMonth { "month" } else { "day" }
     } else { "nanosecond" };
     let (smallest, increment, mode) = std_temporal_rounding_options(i, &options, smallest_default, "trunc")?;
+    // Ported from boa-dev/temporal (temporal_rs) @ eadf8039d2577e4375493a0eb3f46a66f25616ec,
+    // src/builtins/core/plain_date.rs `diff_date`/`internal_diff_date` and the
+    // RoundRelativeDuration algorithm they call into (Apache-2.0). `since` and
+    // `until` share one exact-difference-then-round computation, always taken
+    // in the receiver -> argument direction and always rounded/bracket-searched
+    // relative to the RECEIVER (`self`, never the argument) -- calendar units
+    // are variable-length (a month anchored at the receiver can be a different
+    // number of days than the same span anchored at the argument), so which
+    // side is used as the calendar anchor for the fractional/bracket
+    // computation is observable, not just a sign convention (confirmed by
+    // PlainDate/PlainDateTime's `rounding-relative.js`/`round-relative-to-
+    // receiver.js`/`roundingmode-half-boundary.js`). Only at the very end does
+    // `since` negate the whole rounded Duration. A directional roundingMode
+    // (ceil/floor, halfCeil/halfFloor) must be swapped before that rounding
+    // step for `since`, matching the identity floor(-x) = -ceil(x): otherwise
+    // negating a `ceil`-rounded receiver->argument value at the end would
+    // yield the same magnitude in the wrong direction relative to what the
+    // caller asked for (confirmed by `roundingmode-ceil.js`, which expects
+    // `since` and `until` on swapped receiver/argument to agree exactly, not
+    // merely negate). `trunc`/`expand`/`halfExpand`/`halfTrunc`/`halfEven` are
+    // already symmetric under negation and need no swap.
+    let mode = if since { std_temporal_swap_directional_mode(&mode) } else { mode };
     if data.kind == StdTemporalKind::PlainYearMonth {
         let largest = std_temporal_largest_unit(i, &options, "year")?;
         if !matches!(largest.as_str(), "year" | "month")
@@ -271,9 +342,9 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
             }
         }
         let months = (other[0] - data.fields[0]) as i128 * 12 + (other[1] - data.fields[1]) as i128;
-        let months = if since { -months } else { months };
         let step = increment as i128 * if smallest == "year" { 12 } else { 1 };
         let rounded = std_temporal_round_integer(months, step, &mode)?;
+        let rounded = if since { -rounded } else { rounded };
         let mut fields = [0; 10];
         if largest == "year" {
             fields[0] = (rounded / 12) as i64;
@@ -282,76 +353,123 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
         return std_temporal_make(i, StdTemporalKind::Duration, fields);
     }
     let mut result = match data.kind {
-        StdTemporalKind::PlainDate | StdTemporalKind::PlainYearMonth => {
-            let default = if data.kind == StdTemporalKind::PlainYearMonth { "year" } else { "day" };
-            let largest = std_temporal_largest_unit(i, &options, default)?;
-            if data.kind == StdTemporalKind::PlainYearMonth
-                && !matches!(largest.as_str(), "year" | "month") {
-                return Err(Throw::range_error("invalid largestUnit for PlainYearMonth"));
+        StdTemporalKind::PlainDate => {
+            if !matches!(smallest.as_str(), "year" | "month" | "week" | "day") {
+                return Err(Throw::range_error("invalid smallestUnit for date difference"));
             }
-            if data.kind == StdTemporalKind::PlainYearMonth
-                && !matches!(smallest.as_str(), "year" | "month") {
-                return Err(Throw::range_error("invalid smallestUnit for PlainYearMonth"));
+            // GetDifferenceSettings: an absent/"auto" largestUnit defaults to
+            // the larger of the operation's own default ("day") and
+            // smallestUnit -- so smallestUnit "week" with no largestUnit
+            // resolves to largestUnit "week", not "day", and does not throw
+            // "largestUnit is smaller than smallestUnit".
+            let largest_default = std_temporal_larger_unit("day", &smallest);
+            let largest = std_temporal_largest_unit(i, &options, &largest_default)?;
+            if !matches!(largest.as_str(), "year" | "month" | "week" | "day") {
+                return Err(Throw::range_error("invalid largestUnit for date difference"));
             }
-            if matches!(smallest.as_str(), "day" | "week") && matches!(largest.as_str(), "day" | "week") {
-                let days = std_temporal_epoch_day(other[0], other[1], other[2])
-                    - std_temporal_epoch_day(data.fields[0], data.fields[1], data.fields[2]);
-                let signed = if since { -days } else { days };
-                let step = if smallest == "week" { 7 } else { 1 } * increment;
-                let rounded = std_temporal_round_integer(signed as i128, step as i128, &mode)?;
-                let mut fields = [0; 10];
-                if largest == "week" { fields[2] = (rounded / 7) as i64; fields[3] = (rounded % 7) as i64; }
-                else { fields[3] = rounded as i64; }
-                return std_temporal_make(i, StdTemporalKind::Duration, fields);
+            if std_temporal_unit_rank(&largest).unwrap() > std_temporal_unit_rank(&smallest).unwrap() {
+                return Err(Throw::range_error("largestUnit is smaller than smallestUnit"));
             }
-            std_temporal_calendar_difference(&data.fields, &other, &largest)?
+            if smallest == "day" {
+                // A fixed-length unit: round the exact receiver->argument day
+                // count to the requested increment/mode, then re-express that
+                // many days from the receiver as a calendar breakdown at
+                // `largest` (which may itself be coarser, e.g. smallestUnit
+                // "day" with largestUnit "year").
+                let base_day = std_temporal_epoch_day(data.fields[0], data.fields[1], data.fields[2]);
+                let other_day = std_temporal_epoch_day(other[0], other[1], other[2]);
+                let rounded = std_temporal_round_integer((other_day - base_day) as i128, increment as i128, &mode)? as i64;
+                let (ry, rm, rd) = std_temporal_civil_from_epoch_day(base_day + rounded);
+                let rounded_other = { let mut f = [0i64; 10]; f[0] = ry; f[1] = rm; f[2] = rd; f };
+                std_temporal_calendar_difference(&data.fields, &rounded_other, &largest)?
+            } else {
+                // smallest is "week", "month" or "year": a real calendar-unit
+                // rounding, bracket-searched from the RECEIVER (the same
+                // machinery Duration.prototype.round uses for a calendar
+                // smallestUnit against relativeTo). This also correctly
+                // rounds a "week" remainder left over after an exact
+                // whole-month/year breakdown, rather than re-rounding the
+                // raw day count in weeks from the receiver (which would
+                // spuriously add a week when the span is an exact multiple of
+                // the larger unit, e.g. Jan 1 -> Feb 1 is exactly P1M with
+                // zero weeks left over, even though 31 is not a multiple of
+                // 7).
+                let target_ns = std_temporal_epoch_day(other[0], other[1], other[2]) as i128 * STD_TEMPORAL_NS_DAY;
+                std_temporal_round_to_calendar_unit(&data.fields, target_ns, &smallest, &largest, increment, &mode)?
+            }
         }
         StdTemporalKind::PlainTime | StdTemporalKind::PlainDateTime => {
             if data.kind == StdTemporalKind::PlainDateTime
                 && matches!(smallest.as_str(), "year" | "month" | "week") {
-                let mut fields = std_temporal_calendar_difference(&data.fields, &other, &smallest)?;
-                if since { for field in &mut fields { *field = -*field; } }
-                return std_temporal_make(i, StdTemporalKind::Duration, fields);
+                let largest_default = std_temporal_larger_unit("day", &smallest);
+                let largest = std_temporal_largest_unit(i, &options, &largest_default)?;
+                if !matches!(largest.as_str(), "year" | "month" | "week" | "day") {
+                    return Err(Throw::range_error("invalid largestUnit for date difference"));
+                }
+                if std_temporal_unit_rank(&largest).unwrap() > std_temporal_unit_rank(&smallest).unwrap() {
+                    return Err(Throw::range_error("largestUnit is smaller than smallestUnit"));
+                }
+                std_temporal_round_to_calendar_unit(&data.fields, std_temporal_epoch_ns(&other), &smallest, &largest, increment, &mode)?
+            } else {
+                let default = if data.kind == StdTemporalKind::PlainTime { "hour" } else { "day" };
+                let largest = std_temporal_largest_unit(i, &options, default)?;
+                if data.kind == StdTemporalKind::PlainDateTime
+                    && matches!(largest.as_str(), "year" | "month" | "week") {
+                    // Full precision (smallestUnit defaulted to nanosecond, the
+                    // only case reaching here): an exact calendar+time
+                    // rebalance to the requested largestUnit, no rounding
+                    // involved (a mode swap/negation is a no-op on an exact,
+                    // unrounded value, so the receiver->argument direction
+                    // alone is negated for `since` below with everything else).
+                    std_temporal_epoch_breakdown(&data.fields, std_temporal_epoch_ns(&other), &largest)?
+                } else {
+                    let index = match largest.as_str() {
+                        "day" if data.kind == StdTemporalKind::PlainDateTime => 3,
+                        "hour" => 4, "minute" => 5, "second" => 6,
+                        "millisecond" => 7, "microsecond" => 8, "nanosecond" => 9,
+                        _ => return Err(Throw::range_error("invalid largestUnit for time difference")),
+                    };
+                    if data.kind == StdTemporalKind::PlainTime && smallest == "day" {
+                        return Err(Throw::range_error("day is not a PlainTime unit"));
+                    }
+                    let smallest_index = match smallest.as_str() { "day" => 3, "hour" => 4, "minute" => 5,
+                        "second" => 6, "millisecond" => 7, "microsecond" => 8, "nanosecond" => 9,
+                        _ => return Err(Throw::range_error("invalid smallestUnit")) };
+                    if index > smallest_index {
+                        return Err(Throw::range_error("largestUnit is smaller than smallestUnit"));
+                    }
+                    let delta = if data.kind == StdTemporalKind::PlainTime {
+                        std_temporal_time_ns(&other) - std_temporal_time_ns(&data.fields)
+                    } else { std_temporal_epoch_ns(&other) - std_temporal_epoch_ns(&data.fields) };
+                    let unit = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
+                    let rounded = std_temporal_round_integer(delta, unit * increment as i128, &mode)?;
+                    std_temporal_split_duration_ns(rounded, index)
+                }
             }
-            let default = if data.kind == StdTemporalKind::PlainTime { "hour" } else { "day" };
-            let largest = std_temporal_largest_unit(i, &options, default)?;
-            if data.kind == StdTemporalKind::PlainDateTime
-                && matches!(largest.as_str(), "year" | "month" | "week") {
-                // Full precision (smallestUnit defaulted to nanosecond, the only
-                // case reaching here): an exact calendar+time rebalance to the
-                // requested largestUnit, no rounding involved.
-                let mut fields = std_temporal_epoch_breakdown(&data.fields, std_temporal_epoch_ns(&other), &largest)?;
-                if since { for field in &mut fields { *field = -*field; } }
-                return std_temporal_make(i, StdTemporalKind::Duration, fields);
-            }
-            let index = match largest.as_str() {
-                "day" if data.kind == StdTemporalKind::PlainDateTime => 3,
-                "hour" => 4, "minute" => 5, "second" => 6,
-                "millisecond" => 7, "microsecond" => 8, "nanosecond" => 9,
-                _ => return Err(Throw::range_error("invalid largestUnit for time difference")),
-            };
-            let mut delta = if data.kind == StdTemporalKind::PlainTime {
-                std_temporal_time_ns(&other) - std_temporal_time_ns(&data.fields)
-            } else { std_temporal_epoch_ns(&other) - std_temporal_epoch_ns(&data.fields) };
-            if since { delta = -delta; }
-            let unit = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
-            delta = std_temporal_round_integer(delta, unit * increment as i128, &mode)?;
-            if data.kind == StdTemporalKind::PlainTime && smallest == "day" {
-                return Err(Throw::range_error("day is not a PlainTime unit"));
-            }
-            if index > match smallest.as_str() { "day" => 3, "hour" => 4, "minute" => 5,
-                "second" => 6, "millisecond" => 7, "microsecond" => 8, "nanosecond" => 9,
-                _ => return Err(Throw::range_error("invalid smallestUnit")) } {
-                return Err(Throw::range_error("largestUnit is smaller than smallestUnit"));
-            }
-            std_temporal_split_duration_ns(delta, index)
         }
         _ => return Err(Throw::type_error("incompatible Temporal receiver")),
     };
-    if since && matches!(data.kind, StdTemporalKind::PlainDate | StdTemporalKind::PlainYearMonth) {
-        for field in &mut result { *field = -*field; }
-    }
+    if since { for field in &mut result { *field = -*field; } }
     std_temporal_make(i, StdTemporalKind::Duration, result)
+}
+
+// The identity floor(-x) = -ceil(x) (and halfFloor(-x) = -halfCeil(x)) means a
+// rounding mode that favors one side of zero must swap partners when the
+// whole rounded value is later negated (as `since` does relative to `until`'s
+// receiver -> argument computation), or the caller's requested direction
+// would come out backwards. `trunc`, `expand` and the `half*` variants other
+// than halfCeil/halfFloor are symmetric under negation and pass through
+// unchanged. Ported from boa-dev/temporal (temporal_rs)
+// @ eadf8039d2577e4375493a0eb3f46a66f25616ec's sign-aware rounding-mode
+// handling in `src/rounding.rs`, Apache-2.0.
+fn std_temporal_swap_directional_mode(mode: &str) -> String {
+    match mode {
+        "ceil" => "floor",
+        "floor" => "ceil",
+        "halfCeil" => "halfFloor",
+        "halfFloor" => "halfCeil",
+        other => other,
+    }.to_string()
 }
 
 fn std_temporal_until(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -567,7 +685,16 @@ fn std_temporal_duration_total(i: &mut Interpreter, this: JsValue, args: Vec<JsV
     let base = if relative.is_undefined() { None } else {
         Some(std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative, false)?)
     };
-    if (fields[0] != 0 || fields[1] != 0 || matches!(unit.as_str(), "year" | "years" | "month" | "months"))
+    // relativeTo is required whenever a calendar unit is in play at all: the
+    // requested `unit` is year/month/week (unconditionally -- even a
+    // fixed-length duration like a single day needs it to convert into
+    // weeks/months/years, per spec), or the duration itself carries a
+    // nonzero year, month OR week component and is being read out in any
+    // other unit (confirmed by `calendar-possibly-required.js`'s week-only
+    // duration and `relativeto-undefined-throw-on-calendar-units.js`'s
+    // per-unit sweep over every duration shape).
+    if (fields[0] != 0 || fields[1] != 0 || fields[2] != 0
+        || matches!(unit.as_str(), "year" | "years" | "month" | "months" | "week" | "weeks"))
         && base.is_none() {
         return Err(Throw::range_error("calendar units require relativeTo"));
     }
@@ -580,15 +707,48 @@ fn std_temporal_duration_total(i: &mut Interpreter, this: JsValue, args: Vec<JsV
             + std_temporal_duration_time_ns(&fields)
             - (fields[2] as i128 * 7 + fields[3] as i128) * STD_TEMPORAL_NS_DAY
     } else { std_temporal_duration_time_ns(&fields) };
-    let unit_ns = if matches!(unit.as_str(), "year" | "years" | "month" | "months") {
+    if matches!(unit.as_str(), "year" | "years" | "month" | "months") {
+        // A year/month has no fixed length, so the fractional part of the
+        // total depends on WHICH year/month the span actually lands in, not
+        // the length of the first one from `base` -- e.g. a duration that is
+        // exactly 1 year plus 183 days, counted from a non-leap year's start,
+        // spends those 183 days inside the following (leap) year, so the
+        // fraction is 183/366 (= exactly 0.5), not 183/365 (confirmed by
+        // since/until's `roundingmode-half-boundary.js`, which needs the
+        // total to land on an exact 0.5 boundary for its half-rounding-mode
+        // tie-break assertions to even be meaningful).
         let base = base.as_ref().unwrap();
-        let mut single = [0; 10];
-        single[if unit.starts_with("year") { 0 } else { 1 }] = 1;
-        let next = std_temporal_add_calendar(base, &single, 1, false)?;
-        (std_temporal_epoch_day(next[0], next[1], next[2])
-            - std_temporal_epoch_day(base[0], base[1], base[2])) as i128 * STD_TEMPORAL_NS_DAY
-    } else { std_temporal_unit_ns(&unit).ok_or_else(|| Throw::range_error("invalid unit"))? };
+        let calendar_unit = if unit.starts_with("year") { "year" } else { "month" };
+        return Ok(JsValue::num(std_temporal_total_calendar_unit(base, total_ns, calendar_unit)?));
+    }
+    let unit_ns = std_temporal_unit_ns(&unit).ok_or_else(|| Throw::range_error("invalid unit"))?;
     Ok(JsValue::num(total_ns as f64 / unit_ns as f64))
+}
+
+// The real-valued position of `total_ns` (an exact epoch-nanosecond offset
+// from `base`) in units of `unit` ("year" or "month"), for
+// Temporal.Duration.prototype.total -- the fractional counterpart of
+// `std_temporal_round_calendar_unit`'s integer bracket search: find the two
+// adjacent whole-unit-count candidates (via real calendar arithmetic from
+// `base`) that bracket `total_ns`, then interpolate linearly within that
+// specific bracket's own length.
+fn std_temporal_total_calendar_unit(base: &[i64; 10], total_ns: i128, unit: &str) -> Result<f64, Throw> {
+    let unit_index = std_temporal_unit_rank(unit).filter(|r| *r <= 1)
+        .ok_or_else(|| Throw::range_error("invalid unit for calendar total"))?;
+    if total_ns == 0 { return Ok(0.0); }
+    let single = std_temporal_calendar_step_ns(base, unit_index, 1)?.max(1);
+    let mut lo = (total_ns as f64 / single as f64).floor() as i64;
+    for _ in 0..1_000_000 {
+        let lo_ns = std_temporal_calendar_step_ns(base, unit_index, lo)?;
+        if lo_ns > total_ns { lo -= 1; continue; }
+        let hi_ns = std_temporal_calendar_step_ns(base, unit_index, lo + 1)?;
+        if hi_ns <= total_ns { lo += 1; continue; }
+        if lo_ns == total_ns { return Ok(lo as f64); }
+        let numerator = (total_ns - lo_ns) as f64;
+        let denom = (hi_ns - lo_ns) as f64;
+        return Ok(lo as f64 + numerator / denom);
+    }
+    Err(Throw::range_error("Temporal calendar total did not converge"))
 }
 
 fn std_temporal_round_integer(value: i128, increment: i128, mode: &str) -> Result<i128, Throw> {
@@ -783,12 +943,21 @@ fn std_temporal_round_to_calendar_unit(base: &[i64; 10], target_ns: i128, smalle
     increment: i64, mode: &str) -> Result<[i64; 10], Throw> {
     let total_ns = target_ns - std_temporal_epoch_ns(base);
     if largest == smallest {
+        // `k` (found by bracket-searching real calendar steps from `base`) is
+        // already the exact answer -- re-deriving it by adding `k` units to
+        // `base` and then diffing back is not just redundant but lossy at an
+        // end-of-month boundary: adding 11 months to a day-31 `base` lands on
+        // a clamped shorter month (e.g. day 30), and diffing that clamped
+        // date back against `base`'s own unclamped day 31 can read one unit
+        // short (confirmed by `Duration/prototype/round/
+        // end-of-month-round-up.js`, which needs "at the exact upper
+        // bound" -- self.day=31 vs a 30-day target month -- to still report
+        // the full 11 months rather than 10).
         let unit_index = std_temporal_unit_rank(smallest).unwrap();
         let k = std_temporal_round_calendar_unit(base, total_ns, smallest, increment, mode)?;
         let mut single = [0i64; 10];
         single[unit_index] = k;
-        let rounded_target_date = std_temporal_add_calendar(base, &single, 1, false)?;
-        return std_temporal_calendar_difference(base, &rounded_target_date, largest);
+        return Ok(single);
     }
     if smallest == "week" {
         // largest is "year" or "month": round the exact breakdown's day (+
@@ -812,10 +981,22 @@ fn std_temporal_round_to_calendar_unit(base: &[i64; 10], target_ns: i128, smalle
     let cursor = std_temporal_add_calendar(base, &years_only, 1, false)?;
     let remainder_ns = target_ns - std_temporal_epoch_ns(&cursor);
     let k = std_temporal_round_calendar_unit(&cursor, remainder_ns, "month", increment, mode)?;
-    let mut single = [0i64; 10];
-    single[1] = k;
-    let rounded_target_date = std_temporal_add_calendar(&cursor, &single, 1, false)?;
-    std_temporal_calendar_difference(base, &rounded_target_date, "year")
+    // As above: `years` and `k` are already exact (found by bracket-search),
+    // so construct the result directly rather than re-deriving it through
+    // `std_temporal_calendar_difference`, which would reintroduce the same
+    // end-of-month clamping loss. Unlike the `largest == smallest` case,
+    // rounding here CAN cross a year boundary (e.g. 1 year + 11 months
+    // rounds up to 12 months, i.e. 2 years exactly), so the combined month
+    // count still needs folding back into whole years -- confirmed by
+    // `round-cross-unit-boundary.js`, which expects that carry.
+    // Trunc (not Euclidean) division: the folded months must keep the sign
+    // the overall span actually has, not always land in 0..12 -- e.g. -67
+    // total months is years=-5, months=-7 (both negative, matching the
+    // duration's own sign), not years=-6, months=+5.
+    let total_months = years * 12 + k;
+    let mut result = [0i64; 10];
+    result[0] = total_months / 12; result[1] = total_months % 12;
+    Ok(result)
 }
 
 // Temporal.Duration.prototype.round: a real RoundDuration + calendar-relative
@@ -869,7 +1050,8 @@ fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], option: &
         return Err(Throw::range_error("invalid roundingIncrement"));
     }
 
-    let needs_calendar = smallest_index <= 2 || largest_index <= 2 || fields[0] != 0 || fields[1] != 0;
+    let needs_calendar = smallest_index <= 2 || largest_index <= 2
+        || fields[0] != 0 || fields[1] != 0 || fields[2] != 0;
     if !needs_calendar {
         let step = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?
             * increment as i128;
