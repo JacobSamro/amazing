@@ -1,49 +1,39 @@
 {
   "schema": 1,
   "subdir": "css/css-sizing",
-  "mismatch_count": 62,
+  "mismatch_count": 53,
   "unreadable": 0,
   "clusters": [
     {
       "signature": "medium-region, top-left, lighter than reference",
-      "count": 20,
+      "count": 15,
       "examples": [
-        "css__css-sizing__stretch__positioned-non-replaced-1.html",
-        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-024.html",
         "css__css-sizing__svg-intrinsic-size-005.html",
-        "css__css-sizing__stretch__stretch-float-with-sibling.html",
-        "css__css-sizing__aspect-ratio__flex-aspect-ratio-046.html"
+        "css__css-sizing__aspect-ratio__flex-aspect-ratio-046.html",
+        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-logical-001.html",
+        "css__css-sizing__block-size-with-min-or-max-content-5.html",
+        "css__css-sizing__calc-margins-fieldset-legend.html"
       ]
     },
     {
       "signature": "small-region, top-left, lighter than reference",
-      "count": 10,
+      "count": 7,
       "examples": [
         "css__css-sizing__stretch__min-width-1.html",
         "css__css-sizing__fit-content-min-inline-size.html",
         "css__css-sizing__aspect-ratio__replaced-element-019.html",
         "css__css-sizing__replaced-aspect-ratio-stretch-fit-003.html",
-        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-023.html"
+        "css__css-sizing__aspect-ratio__floats-aspect-ratio-001.html"
       ]
     },
     {
-      "signature": "medium-region, top-left, redder than reference",
+      "signature": "medium-region, top-left, darker than reference",
       "count": 4,
       "examples": [
-        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-022.html",
-        "css__css-sizing__range-percent-intrinsic-size-2.html",
-        "css__css-sizing__range-percent-intrinsic-size-2a.html",
-        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-008.html"
-      ]
-    },
-    {
-      "signature": "medium-region, top-left, same tone, different shape",
-      "count": 4,
-      "examples": [
-        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-014.html",
-        "css__css-sizing__clone-nowrap-intrinsic-size.html",
-        "css__css-sizing__intrinsic-percent-replaced-020.html",
-        "css__css-sizing__range-percent-intrinsic-size-1.html"
+        "css__css-sizing__stretch__positioned-non-replaced-1.html",
+        "css__css-sizing__stretch__fixed-table-1.html",
+        "css__css-sizing__fit-content-max-inline-size.tentative.html",
+        "css__css-sizing__block-size-with-min-or-max-content-7.html"
       ]
     },
     {
@@ -65,28 +55,30 @@
       ]
     },
     {
-      "signature": "medium-region, top-left, darker than reference",
+      "signature": "medium-region, left, lighter than reference",
       "count": 3,
       "examples": [
-        "css__css-sizing__stretch__fixed-table-1.html",
-        "css__css-sizing__fit-content-max-inline-size.tentative.html",
-        "css__css-sizing__block-size-with-min-or-max-content-7.html"
+        "css__css-sizing__aspect-ratio__flex-aspect-ratio-025.html",
+        "css__css-sizing__fit-content-block-size-abspos.html",
+        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-015.html"
       ]
     },
     {
-      "signature": "large-region, left, lighter than reference",
-      "count": 2,
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 3,
       "examples": [
-        "css__css-sizing__intrinsic-height-abspos-stretch-percentage-child.html",
-        "css__css-sizing__border-box-and-max-content-002.html"
+        "css__css-sizing__range-percent-intrinsic-size-2.html",
+        "css__css-sizing__range-percent-intrinsic-size-2a.html",
+        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-008.html"
       ]
     },
     {
-      "signature": "large-region, left, redder than reference",
-      "count": 2,
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 3,
       "examples": [
-        "css__css-sizing__stretch__block-height-003.html",
-        "css__css-sizing__max-content-input-001.html"
+        "css__css-sizing__clone-nowrap-intrinsic-size.html",
+        "css__css-sizing__intrinsic-percent-replaced-020.html",
+        "css__css-sizing__range-percent-intrinsic-size-1.html"
       ]
     },
     {
@@ -98,19 +90,18 @@
       ]
     },
     {
-      "signature": "medium-region, left, lighter than reference",
-      "count": 2,
-      "examples": [
-        "css__css-sizing__aspect-ratio__flex-aspect-ratio-025.html",
-        "css__css-sizing__fit-content-block-size-abspos.html"
-      ]
-    },
-    {
       "signature": "medium-region, top, lighter than reference",
       "count": 2,
       "examples": [
         "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-016.html",
         "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-010.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-sizing__stretch__block-height-003.html"
       ]
     },
     {
@@ -125,6 +116,20 @@
       "count": 1,
       "examples": [
         "css__css-sizing__table-child-percentage-height-with-border-box.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-sizing__border-box-and-max-content-002.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-sizing__max-content-input-001.html"
       ]
     },
     {
