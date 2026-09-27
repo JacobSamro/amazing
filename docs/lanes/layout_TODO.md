@@ -2453,9 +2453,31 @@ different bug, not attempted.
 
 ### Item 3: align-self-016.html pixel gap after LAYOUT-30's layout fix
 
-See `questions.md` for the filed finding (pixel-sampled the real
-`render-wpt` output directly against
-`css/reference/ref-filled-green-200px-square.html`) -- LAYOUT-30 already
-proved the isolated layout geometry is correct (200x200); this ticket
-narrowed where paint diverges and handed the exact divergence to whichever
-lane owns `amazing-paint`.
+LAYOUT-30 already proved the isolated layout geometry is correct (the flex
+item's border box is exactly 200x200, flush with `#container`), so this
+diff is paint-time, not layout geometry -- out of this lane's owned paths
+(`amazing-paint` belongs to replaced-content). Pixel-sampled the real
+`amazing render-wpt` PPM output directly against both `#container`'s own
+CSS (`width:100px; border-right:100px solid red`) and the reference
+`css/reference/ref-filled-green-200px-square.html`, at matching absolute
+(x, y) coordinates on the shared 800x600 canvas:
+
+- y=95, y=105, y=150: actual and reference are byte-identical across
+  x=50..205 -- the item correctly covers the container's red border-right
+  for most of its height.
+- Starting at y=151 (immediately below the last matching row) through at
+  least y=221: a band from x~108 to x~208 (~100px wide, exactly matching
+  `border-right: 100px`) renders `(255,0,0)` -- the border-right showing
+  through -- where the reference is solid `(0,128,0)`. This is a real
+  ~100x70+px hole (matches the measured 4508/40000 mismatched pixels),
+  not a rounding artifact.
+- The hole's top edge lines up with the boundary between the item's two
+  halves (top half painted by child floats that span the full 200px width;
+  bottom half painted by the item's own background/gradient per LAYOUT-30's
+  structural notes) -- suggesting the item's own background paint is
+  clipped narrower than its border box specifically for that self-painted
+  half. Not confirmed against `amazing-paint`'s background-painting code
+  (out of this lane's owned paths).
+
+Filed in `questions.md` for replaced-content with the exact pixel evidence
+above.
