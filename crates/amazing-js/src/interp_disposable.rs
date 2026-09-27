@@ -17,12 +17,19 @@
 // `adopt`/`defer`/`disposed` only need the generic `[[DisposableState]]`-slot brand check, which
 // either kind of receiver satisfies (RequireInternalSlot in the spec has no kind-specific brand).
 
-fn require_disposable_state(this: &JsValue) -> Result<Obj, Throw> {
+/// `DisposableStack` and `AsyncDisposableStack` have distinct internal slots per spec
+/// ([[DisposableState]] vs [[AsyncDisposableState]]), so — unlike a first read of
+/// "RequireInternalSlot" might suggest — borrowing a method across the two kinds (e.g.
+/// `DisposableStack.prototype.use.call(anAsyncDisposableStack, v)`) throws TypeError: every
+/// method here is brand-checked against the specific kind its own prototype installs.
+fn require_disposable_state(this: &JsValue, want_async: bool) -> Result<Obj, Throw> {
+    let name = if want_async { "AsyncDisposableStack" } else { "DisposableStack" };
     let JsValue::Object(object) = this else {
-        return Err(Throw::type_error("receiver does not have a [[DisposableState]] internal slot"));
+        return Err(Throw::type_error(format!("receiver is not a {name}")));
     };
-    if !matches!(&object.borrow().exotic, Exotic::DisposableStack(_)) {
-        return Err(Throw::type_error("receiver does not have a [[DisposableState]] internal slot"));
+    let matches_brand = matches!(&object.borrow().exotic, Exotic::DisposableStack(state) if state.is_async == want_async);
+    if !matches_brand {
+        return Err(Throw::type_error(format!("receiver is not a {name}")));
     }
     Ok(object.clone())
 }
@@ -97,15 +104,21 @@ impl Interpreter {
             prototype.borrow_mut().define("constructor", symbol_data(constructor.clone(), true, true)).unwrap();
             prototype.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(), symbol_data(JsValue::str(name), false, true)).unwrap();
 
-            let (use_fn, move_fn, dispose_name, dispose_fn): (crate::value::NativeFn, crate::value::NativeFn, &str, crate::value::NativeFn) = if is_async {
-                (native_disposable_stack_use_async, native_disposable_stack_move_async, "disposeAsync", native_async_disposable_stack_dispose)
+            let (use_fn, adopt_fn, defer_fn, move_fn, dispose_name, dispose_fn, disposed_getter_fn):
+                (crate::value::NativeFn, crate::value::NativeFn, crate::value::NativeFn, crate::value::NativeFn, &str, crate::value::NativeFn, crate::value::NativeFn)
+                = if is_async {
+                (native_disposable_stack_use_async, native_disposable_stack_adopt_async, native_disposable_stack_defer_async,
+                 native_disposable_stack_move_async, "disposeAsync", native_async_disposable_stack_dispose,
+                 native_disposable_stack_disposed_getter_async)
             } else {
-                (native_disposable_stack_use_sync, native_disposable_stack_move_sync, "dispose", native_disposable_stack_dispose)
+                (native_disposable_stack_use_sync, native_disposable_stack_adopt_sync, native_disposable_stack_defer_sync,
+                 native_disposable_stack_move_sync, "dispose", native_disposable_stack_dispose,
+                 native_disposable_stack_disposed_getter_sync)
             };
             let methods: Vec<(&str, u32, crate::value::NativeFn)> = vec![
                 ("use", 1, use_fn),
-                ("adopt", 2, native_disposable_stack_adopt),
-                ("defer", 1, native_disposable_stack_defer),
+                ("adopt", 2, adopt_fn),
+                ("defer", 1, defer_fn),
                 (dispose_name, 0, dispose_fn),
                 ("move", 0, move_fn),
             ];
@@ -113,7 +126,7 @@ impl Interpreter {
                 prototype.borrow_mut().define(method_name,
                     symbol_data(std_collection_method(self, method_name, length, native), true, true)).unwrap();
             }
-            let disposed_getter = std_collection_method(self, "get disposed", 0, native_disposable_stack_disposed_getter);
+            let disposed_getter = std_collection_method(self, "get disposed", 0, disposed_getter_fn);
             prototype.borrow_mut().define("disposed", Property {
                 value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
                 getter: Some(disposed_getter), setter: None,
@@ -147,7 +160,7 @@ fn native_async_disposable_stack_constructor(_i: &mut Interpreter, this: JsValue
 }
 
 fn disposable_stack_use_impl(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, is_async: bool) -> Result<JsValue, Throw> {
-    let object = require_disposable_state(&this)?;
+    let object = require_disposable_state(&this, is_async)?;
     if disposable_stack_disposed(&object) {
         return Err(Throw::reference_error("resource stack is already disposed"));
     }
@@ -162,8 +175,8 @@ fn native_disposable_stack_use_async(i: &mut Interpreter, this: JsValue, args: V
     disposable_stack_use_impl(i, this, args, true)
 }
 
-fn native_disposable_stack_adopt(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let object = require_disposable_state(&this)?;
+fn disposable_stack_adopt_impl(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, is_async: bool) -> Result<JsValue, Throw> {
+    let object = require_disposable_state(&this, is_async)?;
     if disposable_stack_disposed(&object) {
         return Err(Throw::reference_error("resource stack is already disposed"));
     }
@@ -175,9 +188,15 @@ fn native_disposable_stack_adopt(i: &mut Interpreter, this: JsValue, args: Vec<J
     i.disposable_stack_push_callback(&object, on_dispose, Some(value.clone()));
     Ok(value)
 }
+fn native_disposable_stack_adopt_sync(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    disposable_stack_adopt_impl(i, this, args, false)
+}
+fn native_disposable_stack_adopt_async(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    disposable_stack_adopt_impl(i, this, args, true)
+}
 
-fn native_disposable_stack_defer(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let object = require_disposable_state(&this)?;
+fn disposable_stack_defer_impl(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, is_async: bool) -> Result<JsValue, Throw> {
+    let object = require_disposable_state(&this, is_async)?;
     if disposable_stack_disposed(&object) {
         return Err(Throw::reference_error("resource stack is already disposed"));
     }
@@ -188,9 +207,15 @@ fn native_disposable_stack_defer(i: &mut Interpreter, this: JsValue, args: Vec<J
     i.disposable_stack_push_callback(&object, on_dispose, None);
     Ok(JsValue::Undefined)
 }
+fn native_disposable_stack_defer_sync(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    disposable_stack_defer_impl(i, this, args, false)
+}
+fn native_disposable_stack_defer_async(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    disposable_stack_defer_impl(i, this, args, true)
+}
 
 fn native_disposable_stack_dispose(i: &mut Interpreter, this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let object = require_disposable_state(&this)?;
+    let object = require_disposable_state(&this, false)?;
     if disposable_stack_disposed(&object) {
         return Ok(JsValue::Undefined);
     }
@@ -205,7 +230,7 @@ fn native_disposable_stack_dispose(i: &mut Interpreter, this: JsValue, _args: Ve
 fn native_async_disposable_stack_dispose(i: &mut Interpreter, this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {
     // `disposeAsync` never throws synchronously: even a brand failure rejects the returned
     // promise (spec wraps the whole body as an async abstract operation).
-    let object = match require_disposable_state(&this) {
+    let object = match require_disposable_state(&this, true) {
         Ok(object) => object,
         Err(Throw(error)) => return Ok(new_promise(i, PromiseFate::Rejected(error))),
     };
@@ -223,7 +248,7 @@ fn native_async_disposable_stack_dispose(i: &mut Interpreter, this: JsValue, _ar
 }
 
 fn disposable_stack_move_impl(i: &mut Interpreter, this: JsValue, is_async: bool, proto_name: &str) -> Result<JsValue, Throw> {
-    let object = require_disposable_state(&this)?;
+    let object = require_disposable_state(&this, is_async)?;
     if disposable_stack_disposed(&object) {
         return Err(Throw::reference_error("resource stack is already disposed"));
     }
@@ -247,7 +272,11 @@ fn native_disposable_stack_move_async(i: &mut Interpreter, this: JsValue, _args:
     disposable_stack_move_impl(i, this, true, "AsyncDisposableStack")
 }
 
-fn native_disposable_stack_disposed_getter(_i: &mut Interpreter, this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let object = require_disposable_state(&this)?;
+fn native_disposable_stack_disposed_getter_sync(_i: &mut Interpreter, this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let object = require_disposable_state(&this, false)?;
+    Ok(JsValue::Bool(disposable_stack_disposed(&object)))
+}
+fn native_disposable_stack_disposed_getter_async(_i: &mut Interpreter, this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let object = require_disposable_state(&this, true)?;
     Ok(JsValue::Bool(disposable_stack_disposed(&object)))
 }
