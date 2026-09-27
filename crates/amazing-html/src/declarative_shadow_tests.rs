@@ -1,6 +1,6 @@
 use amazing_dom::shadow::{ShadowMode, SlotAssignment};
 use amazing_dom::{Dom, NodeIdx};
-use crate::{parse, parse_fragment, IncrementalParser};
+use crate::{parse, parse_fragment, parse_fragment_with_shadow_roots, IncrementalParser};
 
 fn by_id(dom: &Dom, id: &str) -> NodeIdx {
     (0..dom.node_count()).map(|n| NodeIdx(n as u32))
@@ -127,6 +127,50 @@ fn nested_duplicate_and_fragment_registry_declarations_keep_their_places() {
     let fragment_host = by_id(&fragment, "host");
     assert_eq!(fragment.shadow_root_of_host(fragment_host), None);
     assert!(html(&fragment, fragment_host).contains("<template shadowrootmode=\"open\" shadowrootcustomelementregistry=\"\">"));
+}
+
+#[test]
+fn shadow_roots_fragment_parser_attaches_nested_declarative_templates() {
+    // setHTMLUnsafe/parseHTMLUnsafe's fragment entry point, gated separately
+    // from the always-off `parse_fragment`/`parse_fragment_with_namespace`
+    // (see `invalid_duplicate_and_fragment_declarations_stay_templates`
+    // above, whose `parse_fragment("div", ...)` case with this exact markup
+    // stays an inert template). A nested ancestor (`<div id=host>`, itself
+    // ordinary content of the "body" fragment context) is a real, already-
+    // open element within the fragment, so it's a valid shadow host and the
+    // shadow content -- and its clone into the standalone fragment `Dom` --
+    // both work exactly as they would in a full document parse.
+    let fragment = parse_fragment_with_shadow_roots(
+        "body",
+        "<div id=host><template shadowrootmode=open><span>shadow</span></template><b>light</b></div>",
+    ).unwrap();
+    let host = by_id(&fragment, "host");
+    let root = fragment.shadow_root_of_host(host).unwrap();
+    let data = fragment.shadow_data(root).unwrap();
+    assert!(data.declarative);
+    assert_eq!(data.options.mode, ShadowMode::Open);
+    assert_eq!(html(&fragment, root), "<span>shadow</span>");
+    assert_eq!(html(&fragment, host), "<b>light</b>");
+}
+
+#[test]
+fn shadow_roots_fragment_parser_still_leaves_a_top_level_template_as_a_leftover() {
+    // The fragment parser's synthetic root standing in for the context
+    // element is never a valid shadow host, and this function has no real
+    // host `NodeIdx` to attach to even if it were -- only the caller does
+    // (see this function's own doc comment). A template with no real
+    // element ancestor already open in the fragment -- `setHTMLUnsafe`'s
+    // single most common shape, `el.setHTMLUnsafe('<template
+    // shadowrootmode="open">...')` -- comes back as an ordinary top-level
+    // template child for the binding layer to detect and re-home itself.
+    let fragment = parse_fragment_with_shadow_roots(
+        "div",
+        "<template shadowrootmode=open><span>shadow</span></template><b>light</b>",
+    ).unwrap();
+    assert_eq!(
+        fragment.dump(NodeIdx(0)),
+        "#document\n  <template shadowrootmode=\"open\">\n    content\n      <span>\n        \"shadow\"\n  <b>\n    \"light\"\n",
+    );
 }
 
 #[test]

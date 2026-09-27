@@ -2624,9 +2624,33 @@ fn fragment_insertion_mode(context: &str) -> Mode {
 /// -- HTML-40 (2): needed for `adjusted_current_namespace`'s spec-mandated
 /// fragment-case special-casing (`cdata-in-integration-point-fragment.html`),
 /// since the synthetic root pushed below is always HTML regardless.
-pub(crate) fn build_fragment(src: &str, context: &str, namespace: Namespace) -> Dom {
+///
+/// `allow_declarative_shadow_roots` gates `<template shadowrootmode>`
+/// handling exactly as it does for a full document parse (`start_template`,
+/// unchanged): a template whose *host* -- the real, already-open ancestor
+/// element it would otherwise be inserted under, e.g. a `<div>` earlier in
+/// this same fragment's own markup -- is on the open-elements stack gets its
+/// content redirected straight into a newly attached shadow root instead of
+/// becoming an ordinary child. `setHTMLUnsafe`/`Document.parseHTMLUnsafe`
+/// are the spec's two fragment-parsing entry points that turn this on;
+/// ordinary `innerHTML`/`insertAdjacentHTML` must keep it off, which is why
+/// this is a parameter here rather than always-on. The synthetic `html` root
+/// itself is never a valid shadow host (`Dom::attach_shadow` doesn't allow
+/// the name "html"), so a *top-level* `<template shadowrootmode>` -- with no
+/// real element ancestor in the fragment at all, as `Element.setHTMLUnsafe`'s
+/// own most common usage looks like -- still comes back as an ordinary
+/// leftover template rather than attaching to the caller's real host
+/// element; that caller-side host-identity gap is intentionally left to the
+/// binding layer, which has an actual host `NodeIdx` available to attach to
+/// (see `parse_fragment_with_shadow_roots`'s doc comment in `lib.rs`).
+pub(crate) fn build_fragment(
+    src: &str,
+    context: &str,
+    namespace: Namespace,
+    allow_declarative_shadow_roots: bool,
+) -> Dom {
     let mut builder = TreeBuilder::new();
-    builder.allow_declarative_shadow_roots = false;
+    builder.allow_declarative_shadow_roots = allow_declarative_shadow_roots;
     builder.fragment = true;
     builder.fragment_context = Some(context.to_owned());
     builder.fragment_context_namespace = namespace;
