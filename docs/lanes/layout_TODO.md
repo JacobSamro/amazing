@@ -2561,3 +2561,72 @@ orthogonal writing-mode auto-margin tests; 7 "small-region, lighter"; 5
 "medium-region, darker"; 4 "large-region, top, darker", mostly
 `contain-intrinsic-size`) and the smaller clusters in the other 4 directories
 (all <=4, dwarfed by css-sizing's) are next per "continue down the ranking."
+
+**Correction:** the re-clustered post-fix `clusters.json` (62 remaining
+mismatches) does not actually break down as the 9/7/5/4 guess above —
+fixing the top 2 clusters changed which signatures dominate. The new top 2
+(20 "medium-region, lighter", 10 "small-region, lighter" — 30 of 62) turned
+out to be a different, larger, coherent bug (see item 2 below), which is
+what "continue down the ranking" was actually followed into.
+
+## LAYOUT-32 (2) — CSS Sizing 4 `stretch` keyword; abspos anchor/stretch bug
+
+Re-clustering after item 1's fix moved a `stretch`-keyword family to the top
+of css-sizing's ranking (20+10=30 of 62 remaining mismatches, examples:
+`stretch/positioned-non-replaced-1.html`, `stretch/min-width-1.html`,
+`stretch/stretch-float-with-sibling.html`, `stretch/block-height-003.html`,
+`stretch/fixed-table-1.html`), dwarfing every other remaining cluster (<=4
+each) — so this became "the next largest," per "continue down the ranking."
+
+**Layout-side fix (block.rs).** CSS Sizing 4's `stretch` keyword (née
+`-webkit-fill-available`) needed the same treatment item 1 gave the three
+CSS Sizing 3 keywords, but with a different formula per axis:
+- `width`/`min-width`/`max-width: stretch` -> containing block minus this
+  box's own margins and chrome — the same equation an ordinary in-flow
+  block's width already uses — applied unconditionally so it also overrides
+  a float/inline-block/replaced box's default shrink-to-fit.
+- `height`/`min-height`/`max-height: stretch` -> the containing block's own
+  definite height minus border/padding only, **no margin subtraction**
+  (confirmed by `stretch/block-height-003.html`'s own assert: "Both margins
+  are ignored for sizing, but top margin still collapses"), falling through
+  to ordinary `auto` height when the containing block's height is
+  indefinite (css-sizing-4: stretch behaves as auto when available space is
+  indefinite).
+
+**Independent bug found and fixed (position.rs).** `prepare_sizes`'s abspos
+sizing loop had a static-position anchor fallback (CSS2.1 §10.3.7 rule 3:
+when width is not `auto` and both `left`/`right` are `auto`, treat `left` as
+the static position to *place* the box) that was also feeding into
+`stretch`'s *size* computation — narrowing a stretch box by however far its
+static position sits from the containing block edge, when css-sizing-4's
+stretch-fit-sizing does not depend on insets at all. Fixed by skipping that
+fallback when the property resolves to `stretch`; `absolute_origin` (the
+box's real x/y placement) already resolves position independently from
+`anchor` and the box's own resolved width, so nothing regresses there.
+
+**Blocked at the CSS layer, root-caused and filed to `css`.** The
+width/height fixes above are correct but **inert**: `amazing-css`'s
+`values.rs::parse()` rejects a bare `stretch`/`-webkit-fill-available`
+keyword for every sizing property — it accepts `min-content`/`max-content`/
+`fit-content` in the exact same `Keyword` match arm but has no `stretch`
+case, and nothing else in that function parses it either, so the whole
+declaration is dropped as invalid before layout ever sees the string.
+(`math.rs`'s `calc_size_basis`, used only inside a `calc-size(...)` call,
+already accepts `stretch` — this gap is specifically the bare-keyword path,
+which every `css/css-sizing/stretch/*` fixture uses.) Confirmed via
+`min-width-1.html`'s exact 5000-pixel (50×100) shortfall — `min-width`
+literally never took effect. Filed to the css lane in `questions.md` with
+the exact location and a minimal, precedented fix (add the two keywords
+alongside the existing three). `css/css-sizing/stretch/fixed-table-1.html`
+will need a further, separate `table.rs` follow-up even after that lands
+(table role bypasses `block.rs`'s width resolution entirely) — noted, not
+attempted.
+
+**Gate.** Targeted re-sweep of `css/css-sizing` + `css/css-position` (not
+the full 5-directory set — only these two corpora exercise the changed
+code): `css/css-position` gained=6 lost=0 (pass 35->41, mismatch 19->13) — a
+clean, real win from the position.rs fix, unrelated to the still-blocked
+css-sizing cluster. `css/css-sizing`: gained=0 lost=0, as expected given the
+CSS-layer block above. Crate tests: 382 passed, 1 skipped, 0 failed.
+Checked-in evidence refreshed for `css-position` in a separate, code-free
+commit.
