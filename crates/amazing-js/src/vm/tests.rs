@@ -426,6 +426,12 @@ fn jsvm10_suspension_free_unsupported_expressions_run_through_the_tree_walker() 
         "function sum() { var t = 0; for (var i = 0; i < arguments.length; i++) t += arguments[i]; return t; } \
          var xs = [1, 2]; sum(...xs, 3) + [...xs, ...'ab'].join('');",
         "typeof 10n + String(10n + 5n);",
+        "var x = 1; eval('x + 1');",
+        "function f() { var y = 2; eval('var z = y * 3'); return z; } f();",
+        "function f(a) { eval('a = 5'); return arguments[0] + a; } f(1);",
+        "function f() { 'use strict'; eval('var q = 1'); return typeof q; } f();",
+        "function* g() { var n = yield 1; yield eval('n * 2'); } var it = g(); it.next(); it.next(21).value;",
+        "var out = ''; async function h() { await 0; eval('var w = 7'); out = String(w); } h(); 0;",
         "function* g() { var a, b; var x = yield 1; [a, b] = [x, 2]; yield a + b; } \
          var it = g(); it.next(); var out = it.next(5).value; out;",
         "var out = ''; async function h() { var p = {q: {r: 3}}; await 0; out = String(p?.q?.r) + t`z`; } \

@@ -2504,9 +2504,7 @@ impl Interpreter {
     }
     fn make_function(&self, f: &ast::FunctionItem, e: &EnvHandle) -> JsValue {
         if f.is_generator {
-            let compiled = vm::compile_function_item(f, f.body.span, self.strict_eval_context);
-            jsvm10_record(if f.is_async { "asyncgen" } else { "gen" }, compiled.as_ref().map(|_| ()));
-            if let Ok(code) = compiled {
+            if let Ok(code) = vm::compile_function_item(f, f.body.span, self.strict_eval_context) {
                 return code.instantiate(self, e);
             }
         }
@@ -2609,13 +2607,7 @@ impl Interpreter {
     }
     fn method_value(&self, m: &ast::ClassMethod, e: &EnvHandle, class_method: bool) -> JsValue {
         if m.kind != ast::MethodKind::Constructor {
-            let compiled = vm::compile_class_method(m, class_method || self.strict_eval_context);
-            if m.is_generator || m.is_async {
-                jsvm10_record(match (m.is_async, m.is_generator) {
-                    (true, true) => "asyncgen-method", (false, true) => "gen-method", _ => "async-method",
-                }, compiled.as_ref().map(|_| ()));
-            }
-            if let Ok(code) = compiled {
+            if let Ok(code) = vm::compile_class_method(m, class_method || self.strict_eval_context) {
                 let value = code.instantiate(self, e);
                 if let JsValue::Object(function) = &value {
                     let mut function = function.borrow_mut();

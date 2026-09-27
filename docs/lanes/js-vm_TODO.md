@@ -688,3 +688,65 @@ In the nine directories:
 - Async generator bodies on the coroutine path still use the synchronous `await_value`. They are
   rare now that the VM handles async generators correctly; porting lumen's `drive_async_gen`
   queue would close it.
+
+## JSVM-10: shrinking the coroutine fallback
+
+Goal: generator and async bodies that the VM compiler declined fell back to the pooled-OS-thread
+coroutine (JSVM-8/9), one parked thread per concurrently suspended body. JSVM-10 measured why bodies
+were declined and compiled the largest clusters instead. All code is original to this crate; nothing
+was ported (no upstream construct mapped cleanly onto this register VM's `Instruction` set).
+
+### How it was measured
+
+A temporary, env-gated hook (`JSVM10_FALLBACK_LOG`, removed in the final commit) logged one line
+per generator/async body compile attempt (`make_function`, `method_value`, `async_body_code`) with
+`ok` or the `CompileError` message. Each construct group was measured on `language/` + `built-ins/`
+of the pinned Test262, before and after, together with a zero-lost pass comparison.
+
+### What landed (per commit series)
+
+| Commit | Group | Fallbacks | Test262 |
+|---|---|---|---|
+| `71473758` (1) | break/continue (`ExitTo` + `Abrupt::Goto` through try/finally, `TryHandler::start`), switch, for-in (`ForInStart/Next` over the tree walker's `ForInState`), for-of (`IteratorStart`), labels | not measured on its own; the 2729 baseline below is taken after (0) and (1) | 0 lost |
+| `59b19e9d` (0) | `Array.fromAsync` / `disposeAsync` rejections go through `normalize_throw` (4 coordinator-flagged false passes turned real) | — | fromAsync dir 0 lost |
+| `05357c69` (2) | private members: `GetPrivateField`, `ResolvePrivate`, write-only `ResolvePrivateWrite` (setter-only accessors), `HasPrivateField` (`#x in o`) | 2729 → 995 ("private member" 1728 → 0) | language/ 0 lost |
+| `5f6924ea` (5) | regression fix: for-heads whose pattern may `yield`/`await`, and every `using`/`await using`, stay on the coroutine (`BindFor` binds through the tree walker, which cannot suspend; the VM has no disposal) | — | for-of +15, for-await-of +12, await-using +31, staging/explicit-resource-management +17, 0 lost (the 19 files dev 61f76417 lost) |
+| `ea94e5b7` (3) | `TreeEval`: an expression the compiler cannot lower and that contains no `yield`/`await` is evaluated by the tree walker's `eval_expr` against the frame's env; optional chains from their outermost link; spread/`super`/`#x` never alone | 1267 → 636 | 0 lost |
+| `b5addca4` (4) | `for (let/const;;)`: head scope + `CopyScope` per-iteration `let` copies (CreatePerIterationEnvironment); `const` not copied | 636 → 538 | +1, 0 lost |
+| `bb8c1a7d` (6) | body-level direct eval through `TreeEval` (parameter-default eval stays excluded) | 538 → 525 | 0 lost |
+
+(The 1267 baseline for (3) is after (5), which deliberately moved some bodies back to the coroutine.)
+
+Overall, from the first comparable measurement (`59b19e9d`): **2729 → 525** fallbacks of ~24.2k generator/async body compile attempts (11.3% → 2.2%).
+
+### Thread cost after JSVM-10 (in-process probe, venus-003)
+
+| Probe (5000 async bodies in flight, each awaiting twice) | Threads in flight | Threads after | Note |
+|---|---|---|---|
+| bodies using a private name (the JSVM-9 probe shape) | 2 | 2 | JSVM-9: 5001 threads, 193 MB; now VM heap frames |
+| bodies with a `using` declaration (still declined) | 5002 | 18 | unchanged mechanism: one thread per suspended fallback body |
+
+### Remaining fallbacks (525)
+
+- `using declaration` 164 and `suspending for binding` 74: deliberate (disposal / tree-walker binding
+  cannot suspend). A VM-native destructuring binder and disposal would remove both.
+- `direct eval` 128: eval inside parameter initializers (parameters run in the tree walker).
+- `spread` 56 and `assignment target` 48: destructuring *assignment* whose pattern itself contains
+  `yield`/`await` (`[...x[yield]] = …`). Needs VM-native destructuring assignment.
+- Tail: `expression kind` 14, `yield` 10, `statement kind` 10, `lexical for binding` 10 (`using`
+  heads), `class field or static block` 8, `member access` 2, `binding pattern` 1.
+
+### Found along the way
+
+- Tree walker: `switch` ran case bodies in the caller's scope (a `let` in a case clashed with one
+  after the switch) and swallowed labeled `break`s; both fixed in (1).
+- Tree walker: `loop_for_inner` copies `const` for-heads as mutable, so `for (const c = 1;; c++)`
+  loops forever (js-lang fixed it in `a4e206fe`; flagged in `questions.md`).
+
+### Final gate (venus-003, head `135efe46` on dev `2635118e`)
+
+- Full pinned Test262 (all 53578 files, `--timeout 20`): dev `2635118e` 48927 → head 48929 pass,
+  **0 lost**, 2 gained.
+- Workspace nextest 3493/3493 (17 skipped); workspace doctests 4 passed, 0 failed (31 crates).
+- The measurement hook is removed (`135efe46`); `interp_async.rs` and `interp_coroutine.rs` are
+  byte-identical to their JSVM-9 versions.
