@@ -297,6 +297,7 @@ pub struct Interpreter {
     legacy_iterator_proto: Obj,
     pair_hooks: HashMap<u64, PairIterableHooks>,
     pair_iterator_proto: Obj,
+    regexp_string_iterator_proto: Obj,
     symbol_registry: HashMap<crate::value::JsString, JsSymbol>,
     random_state: u64,
     jobs: VecDeque<Job>,
@@ -453,6 +454,11 @@ impl Interpreter {
             o.proto = Some(object_proto.clone());
             o
         })));
+        let regexp_string_iterator_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
         let host_realm = NEXT_HOST_REALM.fetch_add(1, Ordering::Relaxed);
         let mut i = Self {
             global_env,
@@ -497,6 +503,7 @@ impl Interpreter {
             legacy_iterator_proto,
             pair_hooks: HashMap::new(),
             pair_iterator_proto,
+            regexp_string_iterator_proto,
             symbol_registry: HashMap::new(),
             random_state: host_realm ^ 0xA076_1D64_78BD_642F,
             jobs: VecDeque::new(),

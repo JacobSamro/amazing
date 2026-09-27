@@ -262,3 +262,35 @@ fn string_split_delegates_to_regexp() {
 fn duplicate_named_group_replace_with_dollar_name() {
     truth(r#""ab".replace(/(?<x>a)|(?<x>b)/, "[$<x>]")==='[a]b'"#);
 }
+// JSD-3 regressions: %RegExpStringIteratorPrototype%.next was defined fresh
+// on every matchAll() iterator instance rather than shared, so distinct
+// iterators didn't share one prototype object (built-ins/
+// RegExpStringIteratorPrototype/next/{length,name,prop-desc}.js).
+#[test]
+fn regexp_string_iterator_shares_one_prototype() {
+    truth(
+        r#"
+const a = /./g[Symbol.matchAll]("x");
+const b = /./g[Symbol.matchAll]("y");
+const proto = Object.getPrototypeOf(a);
+proto === Object.getPrototypeOf(b)
+  && proto.hasOwnProperty("next")
+  && proto.next.length === 0
+  && proto.next.name === "next"
+  && Object.getOwnPropertyDescriptor(proto, "next").enumerable === false
+  && Object.getOwnPropertyDescriptor(proto, "next").configurable === true
+  && !a.hasOwnProperty("next")
+"#,
+    );
+}
+// A bare `\k` (not `\k<name>`) is a plain identity escape for `k` only when
+// the pattern has no named group anywhere; once one exists (even elsewhere,
+// even declared after this `\k`), a bare `\k` is a Syntax Error --
+// language/literals/regexp/named-groups/invalid-incomplete-groupname{,-6}.js.
+#[test]
+fn bare_k_escape_errors_once_pattern_has_a_named_group() {
+    assert!(amazing_regex::Regex::new(r"(?<a>.)\k", "").is_err());
+    assert!(amazing_regex::Regex::new(r"\k(?<a>.)", "").is_err());
+    // No named group anywhere: `\k` alone stays a literal 'k' (Annex B).
+    assert!(amazing_regex::Regex::new(r"\k", "").is_ok());
+}

@@ -981,6 +981,18 @@ impl Parser {
                     indices
                 }))
             }
+            // A bare `\k` not followed by `<` is a plain identity escape for
+            // `k` -- unless the pattern (as a whole; `known_names` reflects
+            // the completed pre-pass, not just what's been seen so far) has
+            // a named group anywhere, in which case `\k` always introduces a
+            // NamedBackreference and a missing `<name>` is a Syntax Error
+            // (this holds even in Annex B / non-unicode mode, and even when
+            // the `\k` appears before the group it doesn't name). Checked
+            // only in the real pass: the scanning pre-pass must not error
+            // here, since its whole job is to discover `known_names` first.
+            Some('k') if !in_class && !self.scanning && !self.known_names.is_empty() => {
+                self.error("\\k must be followed by a named backreference in a pattern with a named group")
+            }
             Some(ch)
                 if self.flags.unicode_mode()
                     && !"^$\\.*+?()[]{}|/".contains(ch)

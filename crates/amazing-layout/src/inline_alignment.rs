@@ -6,6 +6,10 @@ use std::collections::HashSet;
 pub(super) struct Alignment<'a> {
     pub value: &'a str,
     pub last: &'a str,
+    /// CSS Text 3 `text-justify`: `"none"` disables justification outright,
+    /// regardless of what `value`/`last` resolve to -- any left-over space
+    /// stays unfilled, same as a non-justified alignment.
+    pub justify: &'a str,
     pub final_line: bool,
     pub direction: Direction,
     pub writing_mode: WritingMode,
@@ -39,6 +43,12 @@ pub(super) fn apply(
             "auto" => value,
             last => last,
         };
+    }
+    // CSS Text 3 s7.4: `text-justify: none` disables justification outright.
+    // Any left-over space at the end of the line stays unfilled -- treated
+    // the same as a non-justified `start` alignment, not stretched.
+    if a.justify.eq_ignore_ascii_case("none") && matches!(value, "justify" | "justify-all") {
+        value = "start";
     }
     let free = a.end - a.used_end;
     let mut opportunities = Vec::new();
@@ -200,6 +210,21 @@ mod tests {
         let b = layout("x x", "body{text-align-last:justify}");
         near(b.lines[0].glyphs[0].x, 0.);
         near(b.lines[0].glyphs.last().unwrap().x, 89.);
+    }
+    #[test]
+    fn text_justify_none_disables_stretching_from_text_align_last() {
+        // CSS Text 3 s7.4 (WPT text-justify-none-001.html's own property
+        // combo): `text-justify: none` disables justification outright,
+        // regardless of what text-align/text-align-last resolve to. A line
+        // that would otherwise stretch under `text-align-last: justify`
+        // instead keeps its natural, unstretched position -- same as no
+        // justification requested at all.
+        let baseline = layout("x x", "body{}");
+        let last = baseline.lines[0].glyphs.last().unwrap().x;
+        let stretched = layout("x x", "body{text-align-last:justify}");
+        assert!(stretched.lines[0].glyphs.last().unwrap().x > last);
+        let disabled = layout("x x", "body{text-align-last:justify;text-justify:none}");
+        near(disabled.lines[0].glyphs.last().unwrap().x, last);
     }
     #[test]
     fn atomic_vertical_advance_is_height_and_cross_extent_is_width() {

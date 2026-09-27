@@ -167,7 +167,42 @@ impl Interpreter {
                 .borrow_mut()
                 .define(symbol.symbol(), regexp_property(method, true));
         }
+        self.install_regexp_string_iterator_proto();
         self.define_global("RegExp", constructor);
+    }
+    /// `%RegExpStringIteratorPrototype%` (§22.2.7.6), installed once per
+    /// realm rather than redefined on every iterator instance -- test262's
+    /// `built-ins/RegExpStringIteratorPrototype/next/*` tests look up the
+    /// shared prototype via `Object.getPrototypeOf` on a live iterator and
+    /// inspect `next`'s own property descriptor there, which only exists if
+    /// every iterator instance shares one prototype object.
+    fn install_regexp_string_iterator_proto(&mut self) {
+        let next = Self::native("next", native_regexp_string_iterator_next, &self.function_proto);
+        if let JsValue::Object(o) = &next {
+            o.borrow_mut().constructible = false;
+            o.borrow_mut().delete_own("prototype");
+        }
+        let _ = self
+            .regexp_string_iterator_proto
+            .borrow_mut()
+            .define("next", crate::value::Property { value: next, writable: true, enumerable: false, configurable: true, getter: None, setter: None });
+        let self_iter = Self::native(
+            "[Symbol.iterator]",
+            native_iterator_self_placeholder,
+            &self.function_proto,
+        );
+        if let JsValue::Object(o) = &self_iter {
+            o.borrow_mut().constructible = false;
+            o.borrow_mut().delete_own("prototype");
+        }
+        let _ = self.regexp_string_iterator_proto.borrow_mut().define(
+            WellKnownSymbol::Iterator.symbol(),
+            crate::value::Property { value: self_iter, writable: true, enumerable: false, configurable: true, getter: None, setter: None },
+        );
+        let _ = self.regexp_string_iterator_proto.borrow_mut().define(
+            WellKnownSymbol::ToStringTag.symbol(),
+            crate::value::Property { value: JsValue::str("RegExp String Iterator"), writable: false, enumerable: false, configurable: true, getter: None, setter: None },
+        );
     }
 }
 fn native_regexp(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -778,32 +813,12 @@ fn regexp_string_iterator(
     unicode: bool,
 ) -> JsValue {
     let mut object = JsObject::ordinary();
-    object.proto = Some(i.object_proto.clone());
+    object.proto = Some(i.regexp_string_iterator_proto.clone());
     let _ = object.define(RSI_MATCHER, regexp_iter_state(matcher));
     let _ = object.define(RSI_STRING, regexp_iter_state(JsValue::str(string)));
     let _ = object.define(RSI_GLOBAL, regexp_iter_state(JsValue::Bool(global)));
     let _ = object.define(RSI_UNICODE, regexp_iter_state(JsValue::Bool(unicode)));
     let _ = object.define(RSI_DONE, regexp_iter_state(JsValue::Bool(false)));
-    let next = Interpreter::native("next", native_regexp_string_iterator_next, &i.function_proto);
-    if let JsValue::Object(o) = &next {
-        o.borrow_mut().constructible = false;
-        o.borrow_mut().delete_own("prototype");
-    }
-    let _ = object.define("next", regexp_property(next, true));
-    let self_iter = Interpreter::native(
-        "[Symbol.iterator]",
-        native_iterator_self_placeholder,
-        &i.function_proto,
-    );
-    if let JsValue::Object(o) = &self_iter {
-        o.borrow_mut().constructible = false;
-        o.borrow_mut().delete_own("prototype");
-    }
-    let _ = object.define(WellKnownSymbol::Iterator.symbol(), regexp_property(self_iter, true));
-    let _ = object.define(
-        WellKnownSymbol::ToStringTag.symbol(),
-        regexp_property(JsValue::str("RegExp String Iterator"), false),
-    );
     JsValue::object(object)
 }
 fn native_iterator_self_placeholder(

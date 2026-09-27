@@ -1,3 +1,7 @@
+// `is_anonymous_function_definition` and `property_key_as_fn_name` below are ported/adapted
+// from lucid-softworks/lumen (crates/lumen/src/eval.rs, IsAnonymousFunctionDefinition/
+// SetFunctionName helpers) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
+
 fn has_use_strict_directive(statements: &[ast::Stmt]) -> bool {
     statements.iter()
         .take_while(|stmt| matches!(&stmt.kind, StmtKind::Expression(ast::Expr { kind: ExprKind::Str(_), .. })))
@@ -36,6 +40,37 @@ fn is_destructuring_expr(expression: &ast::Expr) -> bool {
         ExprKind::Paren(inner) => is_destructuring_expr(inner),
         ExprKind::Array(_) | ExprKind::Object(_) => true,
         _ => false,
+    }
+}
+
+/// IsAnonymousFunctionDefinition (spec 8.6.2): true only for a bare, nameless function/arrow/
+/// class expression -- a `CoverParenthesizedExpression` is transparent (`(function(){})` is
+/// still anonymous-eligible; `(0, function(){})` is not, since unwrapping its parens reaches a
+/// Sequence expression, not a function), but every other kind of wrapping (a call, a ternary,
+/// another operator) is not. Every NamedEvaluation call site below (JSRT-19) checks this on the
+/// *source expression* before naming a value -- naming unconditionally on "the produced value
+/// happens to be a nameless function" would over-fire for exactly the excluded cases.
+fn is_anonymous_function_definition(expression: &ast::Expr) -> bool {
+    match &expression.kind {
+        ExprKind::Paren(inner) => is_anonymous_function_definition(inner),
+        ExprKind::Function(f) => f.name.is_none(),
+        ExprKind::Arrow(_) => true,
+        ExprKind::Class(c) => c.name.is_none(),
+        _ => false,
+    }
+}
+
+/// The name argument SetFunctionName expects for a given property key (spec 7.3.9): a string
+/// key as-is, a numeric key's string form (already folded into `PropertyKey::String` by the
+/// time it reaches here), a symbol key with a description as `[description]`, or `""` for a
+/// symbol with no description.
+fn property_key_as_fn_name(key: &PropertyKey) -> String {
+    match key {
+        PropertyKey::String(s) => s.to_utf8_lossy(),
+        PropertyKey::Symbol(s) => match s.description() {
+            Some(d) => format!("[{}]", d.to_utf8_lossy()),
+            None => String::new(),
+        },
     }
 }
 
@@ -193,13 +228,11 @@ impl Interpreter {
             },
             Binding::Default(inner, expression) => {
                 let value = if value.is_undefined() {
-                    let mut value = if let Binding::Ident(name) = inner.as_ref() {
-                        self.eval_named_class_expr(expression, env, &name.name.clone().into())?
-                    } else { self.eval_expr(expression, env)? };
-                    if let Binding::Ident(name) = inner.as_ref() {
-                        self.infer_function_name(&mut value, &name.name);
+                    let mut v = self.eval_expr(expression, env)?;
+                    if let Binding::Ident(identifier) = inner.as_ref() {
+                        self.named_evaluation(expression, &mut v, &identifier.name);
                     }
-                    value
+                    v
                 } else {
                     value
                 };

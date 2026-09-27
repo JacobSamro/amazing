@@ -1755,3 +1755,95 @@ instructions left for the compositor lane.
 Next: the residual 13 table cases and `-079`'s nested-inline shrink-to-fit
 gap (own-lane follow-up, not yet ticketed), then inline positioned ancestors
 and fragment containing blocks (LAYOUT-25).
+
+## LAYOUT-27 — font-size-adjust, lh/rlh, `-079` follow-up, word-break:manual, text-justify:none (base `0654b5d3`)
+
+### Design
+
+- **`font-size-adjust`** (CSS Fonts 4 s2.6): `amazing_text::TextSystem::
+  adjusted_font_size(&style, metric, aspect)` was already correct but had no
+  caller. Added `box_tree.rs::font_size_adjust` to parse the (currently
+  `none`-or-bare-`<number>`, always ex-height-basis — `amazing-css`'s own
+  grammar doesn't yet parse the full `<metric> <number>` form) value into
+  `InlineNode::Text.font_size_adjust: Option<(FontSizeAdjustMetric, f32)>`,
+  resolved in `inline.rs`'s shaping choke point (`shape_chunk_in_mode`) by
+  building an adjusted `TextStyle` for glyph selection/shaping only — the
+  unadjusted `font_size` still feeds every em-relative CSS value, per spec.
+- **`lh`/`rlh` units** (CSS Values 4 s6.2): entirely self-contained in
+  `amazing-layout` — its length parser (`values.rs`'s `CalcParser`) re-parses
+  raw CSS text independently of `amazing-css`'s typed `RelativeUnit` enum
+  (which already had unused `Lh`/`Rlh` variants). Added `lh`/`root_lh` to
+  `FontRelativeUnits`, a `with_line_heights(lh, root_lh)` builder, and a new
+  `LayoutBox.root_line_height` field propagated top-down from `<html>`'s own
+  used line-height via `assign_root_font_metric_style` (mirroring the
+  existing `root_font_metric_style` propagation) — deliberately resolved from
+  `<html>` directly rather than reusing the tree's own "root" box, since that
+  is often `<body>` when one is present, which is a different used
+  line-height than the true root element's.
+- **`table-anonymous-objects-079` follow-up**: `position.rs`'s
+  `shaped_intrinsic_width` now takes the real-shaped-text path for a
+  `Flow::Inlines` leaf found while descending `Flow::Blocks`, but only when
+  the box is auto-sized (no explicit `width`/`min-width`, `max-width: none`).
+  LAYOUT-24 tried the broad version of this (shaping every nested inline
+  unconditionally) and reverted it after 17 regressions in table *cells'*
+  own short inline runs measured the same way; the auto-sized guard scopes
+  this to the target pattern (a bare unstyled `<div>` of text) without
+  re-touching styled cells, which normally get width from column
+  distribution rather than pure content.
+- **`word-break: manual`** (TEXT-25, `06c753fe`): one-line fix —
+  `box_tree.rs`'s word-break keyword match was missing the `"manual"` arm,
+  so `amazing_text::WordBreak::Manual` (and its real Thai/dictionary-break
+  suppression in `amazing-text-provider`) was unreachable from real CSS.
+- **`text-justify: none`** (CSS Text 3 s7.4, found this ticket — not
+  previously flagged): `text-justify` was unimplemented anywhere in
+  `amazing-layout`/`amazing-text`/`amazing-css` (zero grep hits). Added a
+  `justify: &str` field to `inline_alignment.rs`'s `Alignment` struct; `none`
+  now disables justification outright (falls back to unstretched `start`)
+  regardless of what `text-align`/`text-align-last` resolve to, matching the
+  WPT `text-justify-none-001.html` fixture this directly targets. Threaded
+  from CSS text through `layout_lines_shaped`'s new `text_justify: &str`
+  parameter at all 4 call sites (`block.rs`, `lib.rs`, both `inline.rs` test
+  helpers).
+
+### Measured evidence (worker-2, `3c4f2f4d`, base `0654b5d3`)
+
+- Workspace nextest: **3375/3375 passed** (17 skipped, 3 slow), 0 failed.
+  Doctests clean across every doctest-bearing crate. (Notably cleaner than
+  LAYOUT-26's 11 known-EPERM IPC failures — fixed upstream by IPC-12 since.)
+- `gate.sh` (fixed historical baselines, not this ticket's own before/after):
+  zero unexplained losses — every reported loss matches a pre-existing named
+  `accepted` entry, 39/39 exact (position 2, writing 3, ruby 3, tables 13,
+  retained 18). Net pass deltas vs. the layout22/23 baselines: position
+  226→260 (+34), writing 243→242 (-1), ruby 70→81 (+11), tables 309→301 (-8),
+  retained 303→307 (+4). The writing/tables net decreases are baseline drift
+  from other lanes' merges since layout22/23 were captured (all 3/13 losses
+  there are pre-existing accepted entries, not new), not this ticket's doing.
+- `table-anonymous-objects-079.xht` itself: still among tables' 13 accepted
+  losses (unchanged classification), but `actual_hash_changes: 341` of 386
+  proves the fix substantively changed measured widths across the corpus —
+  same partial-improvement-without-a-final-flip pattern LAYOUT-24 documented
+  for `-059`/`-098`. The residual gap is downstream of this fix (a ~1px-class
+  rounding/anti-aliasing difference this whole test family shares); not
+  re-diagnosed further this ticket.
+- `css/css-text` render vs. checked-in baseline (`--baseline auto`): pass
+  236/445 (was 235 pre-ticket), `gained=23 lost=5` — **`text-justify-none-
+  001.html` flips from lost to pass**, confirming the fix. The remaining 5
+  losses (`text-align-match-parent-{001,01}`, `text-indent-overflow`,
+  `white-space-pre-wrap-justify-{001,002}`) are the same pre-existing
+  TEXT-25-flagged regressions from before this ticket started, confirmed
+  unrelated (present on the very first baseline compare, before any of this
+  ticket's code existed).
+
+### Process note: verified porting policy (AGENTS.md `c4b52249`)
+
+Mid-ticket the coordinator introduced a "Porting from other engines" policy
+(MIT/Apache-2.0 ports with a per-file attribution header and a
+`THIRD_PARTY_NOTICES.md` row; layout's suggested source is `DioxusLabs/taffy`,
+MIT, for block/flexbox/grid). Independently verified as a genuine, merged
+`dev` commit (not a fabricated one) before acting on it — see `questions.md`
+if a written record of the verification steps is needed. Applies starting
+with this lane's *next* ticket, not retroactively to LAYOUT-27.
+
+Next: cluster this lane's layout/layout-flexgrid geometry/flex/grid WPT
+failures and port matching `DioxusLabs/taffy` algorithm sections in bulk
+onto Amazing's own box tree and types, per the verified porting policy.
