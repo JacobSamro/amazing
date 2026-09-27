@@ -379,8 +379,21 @@ fn layout_block_in_context(
             "fit-content" => return Some((intrinsic(true).max(content_w + chrome)
                 .min(intrinsic(false)) - chrome).max(0.0)),
             "stretch" | "-webkit-fill-available" => {
-                let used_ml = b.margin.left.unwrap_or(0.0);
-                let used_mr = b.margin.right.unwrap_or(0.0);
+                // Read the DECLARED margins fresh from the style, not
+                // `b.margin`: by this point in the function `b.margin` may
+                // already hold the CSS2.1 #blockwidth over-constrained-fixup
+                // value for the box's own (pre-stretch) `width`, e.g. a
+                // `width:50px` box in a 100px containing block with no
+                // margin declared gets a *used* margin-right of 50 (the
+                // specified 0 is ignored and recalculated so the equation
+                // balances) -- real, but not a genuine reserved space, and
+                // subtracting it here would double-count the same slack
+                // `min-width:stretch` is trying to reclaim. The stretch-fit
+                // formula wants the box's real specified margins (auto
+                // treated as 0, matching css-sizing-4 stretch-fit-sizing).
+                let specified = values::resolve_margins_with_units(&b.style, font_units, cbw);
+                let used_ml = specified.left.unwrap_or(0.0);
+                let used_mr = specified.right.unwrap_or(0.0);
                 return Some((cbw - used_ml - chrome - used_mr).max(0.0));
             }
             _ => {},
