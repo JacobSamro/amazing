@@ -1862,6 +1862,38 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
 }
 
+impl RuntimeBindingHost<'_> {
+    /// HTML-35 gap (found via `shadow-dom/declarative/innerhtml-on-ordinary-
+    /// template.html`'s `ReferenceError: ordinarytemplate is not defined`,
+    /// reduced to a minimal repro: a bare `<div id=x>` followed immediately
+    /// by a sibling `<script>` with no DOM API call in between never sees
+    /// `window.x`). `with_dom`'s dirty-flag refresh (just above) is the only
+    /// place window's named properties get (re)computed, and it only runs
+    /// when *some* DOM-mutating binding call happens -- but a parser-driven
+    /// insertion (an `id`/`name`-bearing element inserted directly by
+    /// `amazing-html`'s tree builder, not through any JS binding call) sets
+    /// the dirty flag without ever passing through `with_dom` itself. If the
+    /// very next thing that runs is a plain inline `<script>` that reads the
+    /// bare global identifier with no intervening DOM call, nothing has
+    /// triggered the refresh yet, and the property genuinely does not exist
+    /// -- ordinary global-identifier lookup has no hook into this crate at
+    /// all (see `with_dom`'s own comment: no `[[Get]]` hook into amazing-js).
+    ///
+    /// This is a thin, safe wrapper around the exact same dirty-check
+    /// `with_dom` already does (`with_dom(|_| Ok(()))` triggers it for
+    /// free, no duplicated logic) -- `pub(crate)` so any script-execution
+    /// call site elsewhere in this crate can call it right before running a
+    /// parser-driven script. **Not yet wired to a call site**: every
+    /// `run_script`/`i.run_script` invocation that executes a
+    /// parser-encountered `<script>` lives in `runtime_host_html.rs` (html
+    /// lane's file, not this lane's), so wiring one call to this method
+    /// immediately before each of those still needs html lane or the
+    /// integrator -- see `questions.md`.
+    pub(crate) fn sync_window_named_access(&mut self) -> Result<(), Throw> {
+        self.with_dom(|_| Ok(()))
+    }
+}
+
 impl FragmentParser for RuntimeBindingHost<'_> {
     fn parse_fragment(&mut self, context: FragmentContext, markup: &[u16]) -> Result<Dom, DomError> {
         if context.namespace_uri.as_deref() != Some("http://www.w3.org/1999/xhtml") {

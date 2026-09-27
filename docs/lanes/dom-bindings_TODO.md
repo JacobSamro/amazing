@@ -2789,3 +2789,44 @@ not defined` (a declarative-shadow-attach-skip or window-named-access gap
 specific to `<template>`, not triaged further).
 
 Evidence: `crates/amazing-bindings/evidence/dom-18-shadow-roots/combined-followup/`.
+
+## innerhtml-on-ordinary-template.html ReferenceError: root cause + partial fix (fixed base ffdde5a3)
+
+Root-caused via a minimal repro (two standalone probe pages run directly
+through `amazing wpt-harness` against a scratch root, not committed).
+Neither of the two hypotheses from the prior escalation was the actual
+shape of the bug:
+
+1. Declarative-shadow-attach-skip-when-host-already-has-a-shadow-root
+   already works correctly (confirmed empirically) -- not the bug.
+2. Not `<template>`-specific at all: a bare `<div id=x>` followed
+   immediately by a sibling `<script>` with **zero** intervening DOM API
+   calls never sees `window.x`, full stop.
+
+**Real root cause**: `with_dom`'s dirty-flag refresh
+(`runtime_binding_host.rs`) is the only place window's named properties
+(HTML SS7.2.2.3) get recomputed, and it only runs when some DOM-mutating
+JS *binding call* happens. A parser-driven insertion sets the dirty flag
+without ever passing through `with_dom`; if the next thing that runs is a
+script whose first statement is a bare global read with no DOM call
+before it, the refresh never fires in time.
+
+**Fixed here**: added `RuntimeBindingHost::sync_window_named_access`
+(`pub(crate)`, one-line wrapper around `with_dom(|_| Ok(()))` -- reuses the
+existing dirty-check, no duplicated logic), ready to call.
+**Not fixed here, escalated**: the actual call site. Every place that runs
+a parser-encountered `<script>` lives in `runtime_host_html.rs` (html
+lane's file) and `amazing-html`'s tree builder is outside this lane's
+granted paths; wiring one call to `sync_window_named_access()` immediately
+before each `run_script`/`i.run_script` call there (9 call sites, listed
+with line numbers in `questions.md`) needs html lane or the integrator.
+
+**Gate**: workspace `cargo nextest run --workspace --locked --no-fail-fast`
+-- **3482 passed / 17 skipped / 0 failed**; doctests all `ok`. Crate:
+`amazing` + `amazing-bindings` + `amazing-dom` **736/736 passed, 6
+skipped**. No WPT corpus re-measurement this ticket -- the fix has no call
+site yet, so the target file's outcome is unchanged; a re-measurement
+before the wiring lands would show zero movement and be misleading
+evidence, not real signal.
+
+Evidence: `crates/amazing-bindings/evidence/window-named-access-script-timing/`.
