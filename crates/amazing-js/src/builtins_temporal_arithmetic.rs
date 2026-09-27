@@ -111,7 +111,7 @@ fn std_temporal_resolve_relative_to(i: &mut Interpreter, relative: &JsValue) -> 
                 // confirmed by relativeto-hour.js and largestunit-correct-
                 // rebalancing.js, which pass bare date strings like
                 // "2023-02-21".
-                std_temporal_parse(StdTemporalKind::PlainDate, &text)?
+                std_temporal_parse(StdTemporalKind::PlainDate, &text)?.0
             };
             fields[3..9].fill(0);
             Ok(Some(fields))
@@ -124,7 +124,7 @@ fn std_temporal_resolve_relative_to(i: &mut Interpreter, relative: &JsValue) -> 
                 std_temporal_set_epoch_ns(&mut f, epoch_ns + tz_offset_ns(&zone, epoch_ns))?;
                 f
             } else {
-                let (mut f, month, code) = std_temporal_bag(i, StdTemporalKind::PlainDateTime, relative)?;
+                let (mut f, month, code, _calendar) = std_temporal_bag(i, StdTemporalKind::PlainDateTime, relative)?;
                 std_temporal_bag_resolve_month(&mut f, month, code)?;
                 std_temporal_regulate(StdTemporalKind::PlainDateTime, &mut f, false);
                 // ToRelativeTemporalObject reads hour..nanosecond (each
@@ -185,7 +185,7 @@ fn std_temporal_add_calendar(base: &[i64; 10], duration: &[i64; 10], factor: i64
 
 fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, factor: i64) -> Result<JsValue, Throw> {
     let data = std_temporal_record(&this, None)?;
-    let duration = std_temporal_from_fields(i, StdTemporalKind::Duration, std_reflect_arg(&args, 0), false)?;
+    let duration = std_temporal_from_fields(i, StdTemporalKind::Duration, std_reflect_arg(&args, 0), false)?.0;
     let mut result = data.fields;
     match data.kind {
         StdTemporalKind::Duration => {
@@ -290,7 +290,7 @@ fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
         }
         StdTemporalKind::PlainMonthDay => return Err(Throw::type_error("PlainMonthDay does not support addition")),
     }
-    std_temporal_make(i, data.kind, result)
+    std_temporal_make_cal(i, data.kind, result, data.calendar)
 }
 
 fn std_temporal_add(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -459,7 +459,15 @@ fn std_temporal_calendar_surpasses(candidate: (i64, i64, i64), other: (i64, i64,
 
 fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, since: bool) -> Result<JsValue, Throw> {
     let data = std_temporal_record(&this, None)?;
-    let other = std_temporal_from_fields(i, data.kind, std_reflect_arg(&args, 0), false)?;
+    let (other, other_calendar) = std_temporal_from_fields(i, data.kind, std_reflect_arg(&args, 0), false)?;
+    // CalendarEquals (spec): since/until require the receiver and argument
+    // to share a calendar -- almost never observable against this pinned
+    // corpus (every existing test uses iso8601 on both sides, so both sides
+    // canonicalize identically), but real for intl402's mixed-calendar
+    // cases.
+    if data.kind != StdTemporalKind::Duration && data.calendar != other_calendar {
+        return Err(Throw::range_error("since/until require the same calendar"));
+    }
     let options = std_reflect_arg(&args, 1);
     // All four option properties are read here, in spec order, before any
     // per-kind default/validation logic below is allowed to throw -- see
@@ -937,7 +945,17 @@ fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
             StdWithField::Year => {
                 let value = std_temporal_number(i, property, None)?;
                 if data.kind == StdTemporalKind::PlainMonthDay { year_hint = Some(value); }
-                else { result[0] = value; }
+                else {
+                    // `year` here is calendar-native; for the ISO-day-grid
+                    // family (gregory/japanese/roc/buddhist) only
+                    // buddhist/roc actually differ from the ISO year
+                    // numerically (see std_calendar_year_to_iso). A genuine
+                    // month-structure calendar's `.with({year: ...})` is a
+                    // documented gap, left as a plain passthrough for now.
+                    result[0] = if matches!(data.calendar.as_str(), "buddhist" | "roc") {
+                        std_calendar_year_to_iso(&data.calendar, value)
+                    } else { value };
+                }
             }
             // PrepareCalendarFields reads "month" and "day" via
             // ToPositiveIntegerWithTruncation: a value below 1 throws a
@@ -1000,7 +1018,7 @@ fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
         std_temporal_regulate(data.kind, &mut result, reject);
     }
     std_temporal_validate(data.kind, &result)?;
-    std_temporal_make(i, data.kind, result)
+    std_temporal_make_cal(i, data.kind, result, data.calendar)
 }
 
 fn std_temporal_datetime_with_time(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -1008,7 +1026,7 @@ fn std_temporal_datetime_with_time(i: &mut Interpreter, this: JsValue, args: Vec
     let time = std_reflect_arg(&args, 0);
     if time.is_undefined() { fields[3..9].fill(0); }
     else {
-        let values = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time, false)?;
+        let values = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time, false)?.0;
         fields[3..9].copy_from_slice(&values[3..9]);
     }
     std_temporal_make(i, StdTemporalKind::PlainDateTime, fields)
@@ -1530,5 +1548,5 @@ fn std_temporal_round(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
         }
         _ => return Err(Throw::type_error("incompatible Temporal receiver")),
     }
-    std_temporal_make(i, data.kind, fields)
+    std_temporal_make_cal(i, data.kind, fields, data.calendar)
 }

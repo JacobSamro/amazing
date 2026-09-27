@@ -10,7 +10,14 @@ struct StdTemporalData {
     kind: StdTemporalKind,
     // Calendar values: year, month, day, hour, minute, second, ms, us, ns,
     // reference year. Duration values use the ten fields in spec order.
+    // These fields are ALWAYS in the proleptic-Gregorian (ISO) calendar
+    // regardless of `calendar` below -- a non-iso8601 calendar's own
+    // year/month/day/era/monthCode/etc. are VIEWS computed on demand from
+    // these ISO fields (see builtins_temporal_calendar.rs). `calendar` is
+    // unused (always "iso8601") for Duration/PlainTime, which have no
+    // calendar concept.
     fields: [i64; 10],
+    calendar: String,
 }
 
 struct StdTemporalPrototypes {
@@ -305,7 +312,11 @@ fn std_temporal_now_datetime(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>
     std_temporal_make(i, StdTemporalKind::PlainDateTime, fields)
 }
 
-fn std_temporal_make(i: &Interpreter, kind: StdTemporalKind, mut fields: [i64; 10]) -> Result<JsValue, Throw> {
+fn std_temporal_make(i: &Interpreter, kind: StdTemporalKind, fields: [i64; 10]) -> Result<JsValue, Throw> {
+    std_temporal_make_cal(i, kind, fields, "iso8601".to_string())
+}
+
+fn std_temporal_make_cal(i: &Interpreter, kind: StdTemporalKind, mut fields: [i64; 10], calendar: String) -> Result<JsValue, Throw> {
     // Every Duration Record field is spec-constrained to a float64-
     // representable integer (Number, not an exact big integer), so the
     // internal representation must be canonicalized here -- the single
@@ -329,7 +340,7 @@ fn std_temporal_make(i: &Interpreter, kind: StdTemporalKind, mut fields: [i64; 1
     object.proto = Some(prototype);
     let object = Obj(Rc::new(RefCell::new(object)));
     STD_TEMPORAL_DATA.with(|registry| registry.borrow_mut().insert(std_weak_id(&object),
-        StdTemporalData { owner: Rc::downgrade(&object.0), kind, fields }));
+        StdTemporalData { owner: Rc::downgrade(&object.0), kind, fields, calendar }));
     Ok(JsValue::Object(object))
 }
 
@@ -411,6 +422,57 @@ fn std_temporal_calendar_from_value(i: &mut Interpreter, value: &JsValue) -> Res
         }
     }
     std_temporal_iso_calendar(i, value)
+}
+
+// ToTemporalCalendarIdentifier (spec), for the Plain* kinds: unlike
+// std_temporal_iso_calendar/std_temporal_calendar_from_value above (kept
+// iso8601-only and used only by ZonedDateTime's calendar gate -- ADR 0013's
+// JSS-calendars port has not yet extended ZonedDateTime), this resolves and
+// returns the canonical calendar id for any of the calendars
+// builtins_temporal_calendar.rs supports. A bare calendar id string
+// (case-insensitively, with its documented CLDR aliases) is the common case;
+// an existing Temporal date-like object carries its own stored calendar
+// forward; a full ISO string bearing a non-iso8601 [u-ca=...] annotation as
+// the CALENDAR ARGUMENT ITSELF (not the value being converted -- see
+// std_temporal_parse for that far more common case) is a rare form left
+// iso8601-only, matching this function's prior behavior for strings that
+// don't parse as a bare calendar id.
+fn std_temporal_resolve_calendar_id(i: &mut Interpreter, value: &JsValue) -> Result<String, Throw> {
+    std_temporal_resolve_calendar_id_ex(i, value, true)
+}
+
+// The constructor's own calendar argument is stricter than every other
+// calendar-argument site (with(), withCalendar(), a bag's own "calendar"
+// property): those fall back to accepting a full ISO string carrying an
+// iso8601 annotation, e.g. "2020-01-01[u-ca=iso8601]" (confirmed valid by
+// argument-propertybag-calendar-iso-string.js and withCalendar's own
+// calendar-iso-string.js), but `new Temporal.PlainDate(y, m, d, calendarArg)`
+// rejects that exact same form -- confirmed by calendar-invalid-iso-
+// string.js's "1997-12-04[u-ca=iso8601]" case, which must throw RangeError.
+fn std_temporal_resolve_calendar_id_strict(i: &mut Interpreter, value: &JsValue) -> Result<String, Throw> {
+    std_temporal_resolve_calendar_id_ex(i, value, false)
+}
+
+fn std_temporal_resolve_calendar_id_ex(i: &mut Interpreter, value: &JsValue, allow_iso_string_fallback: bool) -> Result<String, Throw> {
+    if value.is_undefined() { return Ok("iso8601".to_string()); }
+    if let Ok(record) = std_temporal_record(value, None) {
+        if matches!(record.kind, StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime
+            | StdTemporalKind::PlainYearMonth | StdTemporalKind::PlainMonthDay) {
+            return Ok(record.calendar.clone());
+        }
+    }
+    if std_epoch_record(value, Some(StdEpochKind::ZonedDateTime)).is_ok() {
+        return Ok("iso8601".to_string());
+    }
+    if !matches!(value, JsValue::Str(_)) {
+        return Err(Throw::type_error("Temporal calendar must be a string or Temporal object"));
+    }
+    let name = i.to_string(value)?;
+    if let Some(canonical) = std_calendar_canonicalize(&name) { return Ok(canonical.to_string()); }
+    if allow_iso_string_fallback && std_temporal_calendar_from_value(i, value).is_ok() {
+        return Ok("iso8601".to_string());
+    }
+    Err(Throw::range_error("invalid Temporal calendar"))
 }
 
 fn std_temporal_week_start(year: i64) -> i64 {
@@ -557,6 +619,7 @@ fn std_temporal_construct(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
     // Confirmed by PlainYearMonth's own calendar-invalid.js: an invalid
     // calendar with a Symbol referenceISODay must throw RangeError from the
     // calendar check, never reaching (and never coercing) that trailing arg.
+    let mut calendar_id = "iso8601".to_string();
     if kind != StdTemporalKind::Duration && kind != StdTemporalKind::PlainTime {
         let calendar_arg = match kind {
             StdTemporalKind::PlainDate => 3,
@@ -565,7 +628,7 @@ fn std_temporal_construct(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
             _ => unreachable!(),
         };
         let calendar = std_reflect_arg(&args, calendar_arg);
-        std_temporal_iso_calendar(i, &calendar)?;
+        calendar_id = std_temporal_resolve_calendar_id_strict(i, &calendar)?;
     }
     if kind == StdTemporalKind::PlainMonthDay { values[9] = std_temporal_number(i, std_reflect_arg(&args, 3), Some(1972))?; }
     if kind == StdTemporalKind::PlainYearMonth {
@@ -573,7 +636,7 @@ fn std_temporal_construct(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
     }
     std_temporal_validate(kind, &values)?;
     STD_TEMPORAL_DATA.with(|registry| registry.borrow_mut().insert(std_weak_id(object),
-        StdTemporalData { owner: Rc::downgrade(&object.0), kind, fields: values }));
+        StdTemporalData { owner: Rc::downgrade(&object.0), kind, fields: values, calendar: calendar_id }));
     Ok(this)
 }
 
@@ -596,11 +659,12 @@ fn std_temporal_property(i: &mut Interpreter, value: &JsValue, name: &str) -> Re
 // be read from a *different* object (options) only after these gets on
 // `value` complete (Proxy-observable order). std_temporal_regulate below
 // applies the overflow-dependent half once the caller knows it.
-fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue) -> Result<([i64; 10], Option<i64>, Option<String>), Throw> {
+fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue) -> Result<([i64; 10], Option<i64>, Option<String>, String), Throw> {
     let mut fields = [0; 10];
+    let mut calendar_id = "iso8601".to_string();
     if !matches!(kind, StdTemporalKind::Duration | StdTemporalKind::PlainTime) {
         let calendar = i.get_prop(value, "calendar")?;
-        std_temporal_calendar_from_value(i, &calendar)?;
+        calendar_id = std_temporal_resolve_calendar_id(i, &calendar)?;
     }
     if kind == StdTemporalKind::Duration {
         let mut present = false;
@@ -623,7 +687,7 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
         // Duration never takes an overflow option; its range check is
         // unconditional, so it runs here rather than in std_temporal_regulate.
         std_temporal_validate(kind, &fields)?;
-        return Ok((fields, None, None));
+        return Ok((fields, None, None, calendar_id));
     } else if kind == StdTemporalKind::PlainTime {
         // Reads hour..nanosecond in alphabetical order (hour, microsecond,
         // millisecond, minute, nanosecond, second), not the natural
@@ -632,7 +696,7 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
         let read = std_temporal_read_calendar_fields(i, kind, value)?;
         if !read.any_present { return Err(Throw::type_error("time-like object has no fields")); }
         fields[3..9].copy_from_slice(&read.time);
-        return Ok((fields, None, None));
+        return Ok((fields, None, None, calendar_id));
     } else {
         // Reads year/month/monthCode/day(/hour..nanosecond for
         // PlainDateTime) in the exact alphabetical order
@@ -674,7 +738,7 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
         // read GetTemporalOverflowOption before running CalendarResolveFields'
         // own suitability check. Confirmed by `.from()`'s own
         // options-read-before-algorithmic-validation.js.
-        return Ok((fields, read.month, read.month_code_text));
+        return Ok((fields, read.month, read.month_code_text, calendar_id));
     }
 }
 
@@ -696,6 +760,73 @@ fn std_temporal_bag_resolve_month(fields: &mut [i64; 10], month: Option<i64>, co
     }
     fields[1] = month.or(code_month).unwrap();
     Ok(())
+}
+
+// Resolves the month (from `month`/`monthCode`, as read by std_temporal_bag)
+// and, for a non-iso8601 calendar, converts the still calendar-native
+// year/day (as read into fields[0]/fields[2] by std_temporal_bag) into the
+// object's actual internal ISO year/month/day -- original integration glue
+// (not ported); the per-calendar tables it calls into
+// (builtins_temporal_calendar.rs) are the ported part. PlainMonthDay is left
+// iso8601-only here (a documented gap: see std_temporal_monthday_to_date) --
+// it has no calendar-native year to convert from at all in this bag path
+// (std_temporal_bag always sets its fields[0] to 0), so its month/day are
+// simply taken as already-ISO, matching this function's behavior before the
+// JSS-calendars port.
+fn std_temporal_bag_resolve_calendar(kind: StdTemporalKind, calendar: &str, fields: &mut [i64; 10],
+    month: Option<i64>, code_text: Option<String>) -> Result<(), Throw> {
+    if calendar == "iso8601" || kind == StdTemporalKind::PlainMonthDay {
+        return std_temporal_bag_resolve_month(fields, month, code_text);
+    }
+    if month.is_none() && code_text.is_none() { return Ok(()); }
+    let native_year = fields[0];
+    let native_day = fields[2];
+    if !std_calendar_is_month_structure(calendar) {
+        // gregory/japanese/roc/buddhist: same ISO month/day grid, only the
+        // year numbering differs.
+        let m = std_calendar_bag_resolve_plain_month(calendar, month, code_text)?;
+        fields[0] = std_calendar_year_to_iso(calendar, native_year);
+        fields[1] = m;
+        fields[2] = native_day;
+        return Ok(());
+    }
+    let months_in_year = std_calendar_months_in_year(calendar, native_year);
+    let m = if std_calendar_has_leap_months(calendar) {
+        if let Some(code) = &code_text {
+            let (ordinal, existed) = std_calendar_resolve_code_ord(calendar, native_year, code)
+                .ok_or_else(|| Throw::range_error("invalid monthCode"))?;
+            if !existed && month.is_some_and(|value| value != ordinal) {
+                return Err(Throw::range_error("month and monthCode disagree"));
+            }
+            ordinal
+        } else {
+            month.ok_or_else(|| Throw::type_error("month is required"))?
+        }
+    } else {
+        std_calendar_bag_resolve_plain_month(calendar, month, code_text)?
+    }.clamp(1, months_in_year);
+    let (iso_year, iso_month, iso_day) = std_calendar_to_iso(calendar, native_year, m, native_day);
+    fields[0] = iso_year;
+    fields[1] = iso_month;
+    fields[2] = iso_day;
+    Ok(())
+}
+
+// month/monthCode resolution shared by every non-leap-month calendar
+// (gregory/japanese/roc/buddhist/coptic/ethiopic/ethioaa/islamic-family/
+// indian/persian): a plain 1-based month number, with no "L" (leap) suffix
+// ever valid on the monthCode.
+fn std_calendar_bag_resolve_plain_month(calendar: &str, month: Option<i64>, code_text: Option<String>) -> Result<i64, Throw> {
+    let _ = calendar;
+    let code_month = if let Some(code) = &code_text {
+        if code.ends_with('L') { return Err(Throw::range_error("calendar has no leap months")); }
+        let digits = code.strip_prefix('M').ok_or_else(|| Throw::range_error("invalid monthCode"))?;
+        Some(digits.parse::<i64>().map_err(|_| Throw::range_error("invalid monthCode"))?)
+    } else { None };
+    if month.zip(code_month).is_some_and(|(a, b)| a != b) {
+        return Err(Throw::range_error("month and monthCode disagree"));
+    }
+    month.or(code_month).ok_or_else(|| Throw::type_error("month is required"))
 }
 
 // RegulateISODate / RegulateISOYearMonth / RegulateISOMonthDay / RegulateTime:
@@ -792,12 +923,12 @@ fn std_temporal_parse_time(text: &str, fields: &mut [i64; 10]) -> Result<(), Thr
     Ok(())
 }
 
-fn std_temporal_parse_annotations(text: &str, require_iso_calendar: bool) -> Result<(&str, bool, Option<&str>), Throw> {
+fn std_temporal_parse_annotations(text: &str, require_known_calendar: bool) -> Result<(&str, Option<&str>, Option<&str>), Throw> {
     let invalid = || Throw::range_error("invalid Temporal annotation");
-    let Some(first) = text.find('[') else { return Ok((text, false, None)); };
+    let Some(first) = text.find('[') else { return Ok((text, None, None)); };
     let body = &text[..first];
     let mut tail = &text[first..];
-    let mut calendar = false;
+    let mut calendar_name: Option<&str> = None;
     let mut critical_calendar = false;
     let mut time_zone = None;
     while !tail.is_empty() {
@@ -810,20 +941,27 @@ fn std_temporal_parse_annotations(text: &str, require_iso_calendar: bool) -> Res
             // Only the FIRST calendar annotation is ever consulted (later
             // ones are still grammar-checked but otherwise ignored, per
             // "second annotation ignored" in both PlainDate's and
-            // PlainTime's own argument-string-calendar-annotation.js). This
-            // engine's calendar model is iso8601-only (ADR-locked), so a
+            // PlainTime's own argument-string-calendar-annotation.js). A
             // calendar-bearing kind (PlainDate/PlainDateTime/PlainYearMonth/
-            // PlainMonthDay/ZonedDateTime) must reject any other value --
-            // but Temporal.PlainTime has no calendar slot at all and never
-            // canonicalizes this value, so any syntactically valid calendar
-            // ID (including a real but unsupported one like "hebrew", or an
-            // outright unknown one) is accepted and simply discarded.
-            if (!calendar && require_iso_calendar && !name.eq_ignore_ascii_case("iso8601"))
-                || (calendar && (critical_calendar || value.starts_with('!'))) {
+            // PlainMonthDay/ZonedDateTime) must reject any id
+            // builtins_temporal_calendar.rs's std_calendar_canonicalize
+            // does not recognize -- but Temporal.PlainTime has no calendar
+            // slot at all and never canonicalizes this value, so any
+            // syntactically valid calendar ID (including an outright
+            // unknown one) is accepted there and simply discarded.
+            if calendar_name.is_none() {
+                if require_known_calendar && std_calendar_canonicalize(name).is_none() {
+                    return Err(invalid());
+                }
+                calendar_name = Some(name);
+                critical_calendar = value.starts_with('!');
+            } else if critical_calendar || value.starts_with('!') {
+                // A second annotation is grammar-checked (it must still be
+                // well-formed) but never overwrites the first, consulted
+                // one -- only whether ITS OWN "!" or the first's "!" makes
+                // the pair illegal is checked here.
                 return Err(invalid());
             }
-            calendar = true;
-            critical_calendar = value.starts_with('!');
         } else if let Some((key, _)) = annotation.split_once('=') {
             if value.starts_with('!') || key.bytes().any(|c| c.is_ascii_uppercase()) {
                 return Err(invalid());
@@ -832,7 +970,7 @@ fn std_temporal_parse_annotations(text: &str, require_iso_calendar: bool) -> Res
             return Err(invalid());
         } else { time_zone = Some(annotation); }
     }
-    Ok((body, calendar, time_zone))
+    Ok((body, calendar_name, time_zone))
 }
 
 fn std_temporal_time_prefix(text: &str) -> &str {
@@ -899,7 +1037,7 @@ fn std_temporal_parse_duration(text: &str) -> Result<[i64; 10], Throw> {
     Ok(values)
 }
 
-fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<[i64; 10], Throw> {
+fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<([i64; 10], String), Throw> {
     if kind == StdTemporalKind::Duration {
         // Unlike every other kind (validated below, after the match), a
         // Duration string returns early here and must run the same sign/range
@@ -909,10 +1047,28 @@ fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<[i64; 10], Th
         // entirely before this.
         let values = std_temporal_parse_duration(text)?;
         std_temporal_validate(StdTemporalKind::Duration, &values)?;
-        return Ok(values);
+        return Ok((values, "iso8601".to_string()));
     }
     let invalid = || Throw::range_error("invalid Temporal string");
-    let (text, _calendar, _zone) = std_temporal_parse_annotations(text, kind != StdTemporalKind::PlainTime)?;
+    let (text, calendar_name, _zone) = std_temporal_parse_annotations(text, kind != StdTemporalKind::PlainTime)?;
+    // PlainYearMonth/PlainMonthDay strings stay iso8601-only here (a
+    // documented gap: unlike PlainDate/PlainDateTime, converting an
+    // ISO-form YearMonth/MonthDay string's non-iso8601 annotation into that
+    // calendar's own year-month/month-day would need day precision the
+    // short "YYYY-MM"/"--MM-DD" forms don't carry -- confirmed by
+    // PlainYearMonth's own from/argument-string-invalid.js and
+    // argument-string-date-with-utc-offset.js, whose invalidStrings include
+    // "2022-09[u-ca=hebrew]").
+    if matches!(kind, StdTemporalKind::PlainYearMonth | StdTemporalKind::PlainMonthDay)
+        && calendar_name.is_some_and(|name| !name.eq_ignore_ascii_case("iso8601")) {
+        return Err(invalid());
+    }
+    // A calendar annotation on a PlainTime string is grammar-checked above
+    // but never canonicalized/kept (PlainTime has no calendar slot); every
+    // other kind's calendar id defaults to iso8601 with no annotation, or
+    // canonicalizes the (already-validated-known) annotated name.
+    let calendar_id = if kind == StdTemporalKind::PlainTime { "iso8601".to_string() }
+        else { calendar_name.and_then(std_calendar_canonicalize).unwrap_or("iso8601").to_string() };
     if text.ends_with('Z') || text.ends_with('z') { return Err(invalid()); }
     let mut values = [0; 10];
     match kind {
@@ -987,11 +1143,11 @@ fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<[i64; 10], Th
         }
     }
     std_temporal_validate(kind, &values)?;
-    Ok(values)
+    Ok((values, calendar_id))
 }
 
-fn std_temporal_from_fields(i: &mut Interpreter, kind: StdTemporalKind, value: JsValue, reject: bool) -> Result<[i64; 10], Throw> {
-    if let Ok(data) = std_temporal_record(&value, Some(kind)) { return Ok(data.fields); }
+fn std_temporal_from_fields(i: &mut Interpreter, kind: StdTemporalKind, value: JsValue, reject: bool) -> Result<([i64; 10], String), Throw> {
+    if let Ok(data) = std_temporal_record(&value, Some(kind)) { return Ok((data.fields, data.calendar)); }
     if let Ok(data) = std_temporal_record(&value, None) {
         let compatible = matches!((kind, data.kind),
             (StdTemporalKind::PlainDate, StdTemporalKind::PlainDateTime)
@@ -1011,7 +1167,7 @@ fn std_temporal_from_fields(i: &mut Interpreter, kind: StdTemporalKind, value: J
                 StdTemporalKind::PlainMonthDay => { fields[0] = 0; fields[9] = 1972; },
                 _ => {}
             }
-            return Ok(fields);
+            return Ok((fields, data.calendar));
         }
     }
     if let Ok(data) = std_epoch_record(&value, Some(StdEpochKind::ZonedDateTime)) {
@@ -1032,17 +1188,19 @@ fn std_temporal_from_fields(i: &mut Interpreter, kind: StdTemporalKind, value: J
                 StdTemporalKind::PlainTime => fields[0..3].fill(0),
                 _ => {}
             }
-            return Ok(fields);
+            // ZonedDateTime is calendar-locked to iso8601 (JSS-calendars has
+            // not yet extended it -- see std_temporal_iso_calendar).
+            return Ok((fields, "iso8601".to_string()));
         }
     }
     match &value {
         JsValue::Str(text) => std_temporal_parse(kind, &text.to_utf8_lossy()),
         JsValue::Object(_) => {
-            let (mut fields, month, code) = std_temporal_bag(i, kind, &value)?;
-            std_temporal_bag_resolve_month(&mut fields, month, code)?;
+            let (mut fields, month, code, calendar) = std_temporal_bag(i, kind, &value)?;
+            std_temporal_bag_resolve_calendar(kind, &calendar, &mut fields, month, code)?;
             std_temporal_regulate(kind, &mut fields, reject);
             std_temporal_validate(kind, &fields)?;
-            Ok(fields)
+            Ok((fields, calendar))
         }
         _ => Err(Throw::type_error("invalid Temporal input")),
     }
@@ -1064,21 +1222,21 @@ fn std_temporal_from(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTemporalK
     let is_bag = kind != StdTemporalKind::Duration && item.is_object()
         && std_temporal_record(&item, None).is_err()
         && std_epoch_record(&item, Some(StdEpochKind::ZonedDateTime)).is_err();
-    let fields = if is_bag {
-        let (mut fields, month, code) = std_temporal_bag(i, kind, &item)?;
+    let (fields, calendar) = if is_bag {
+        let (mut fields, month, code, calendar) = std_temporal_bag(i, kind, &item)?;
         let reject = std_temporal_overflow(i, std_reflect_arg(&args, 1))?;
         // monthCode suitability (CalendarResolveFields, folded into
         // CalendarYearMonthFromFields/CalendarDateFromFields) is checked
         // AFTER GetTemporalOverflowOption reads/coerces `overflow` here --
         // confirmed by options-read-before-algorithmic-validation.js.
-        std_temporal_bag_resolve_month(&mut fields, month, code)?;
+        std_temporal_bag_resolve_calendar(kind, &calendar, &mut fields, month, code)?;
         std_temporal_regulate(kind, &mut fields, reject);
         std_temporal_validate(kind, &fields)?;
-        fields
+        (fields, calendar)
     } else if matches!(item, JsValue::Str(_)) {
-        let fields = std_temporal_from_fields(i, kind, item, false)?;
+        let result = std_temporal_from_fields(i, kind, item, false)?;
         if kind != StdTemporalKind::Duration { std_temporal_overflow(i, std_reflect_arg(&args, 1))?; }
-        fields
+        result
     } else if std_temporal_record(&item, None).is_ok()
         || std_epoch_record(&item, Some(StdEpochKind::ZonedDateTime)).is_ok() {
         // A recognized Temporal-like value (an existing record of some
@@ -1098,12 +1256,12 @@ fn std_temporal_from(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTemporalK
         // failing non-bag, non-string, non-Temporal argument.
         std_temporal_from_fields(i, kind, item, false)?
     };
-    std_temporal_make(i, kind, fields)
+    std_temporal_make_cal(i, kind, fields, calendar)
 }
 
 fn std_temporal_compare(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTemporalKind) -> Result<JsValue, Throw> {
-    let left = std_temporal_from_fields(i, kind, std_reflect_arg(&args, 0), false)?;
-    let right = std_temporal_from_fields(i, kind, std_reflect_arg(&args, 1), false)?;
+    let left = std_temporal_from_fields(i, kind, std_reflect_arg(&args, 0), false)?.0;
+    let right = std_temporal_from_fields(i, kind, std_reflect_arg(&args, 1), false)?.0;
     let ordering = if kind == StdTemporalKind::Duration {
         // GetOptionsObject + ToRelativeTemporalObject (spec steps 3-4) run
         // unconditionally -- a wrong options type or a malformed relativeTo
@@ -1167,8 +1325,8 @@ temporal_statics!(std_temporal_monthday_from, std_temporal_monthday_compare, Std
 
 fn std_temporal_equals(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_temporal_record(&this, None)?;
-    let other = std_temporal_from_fields(i, data.kind, std_reflect_arg(&args, 0), false)?;
-    Ok(JsValue::Bool(data.fields == other))
+    let (other, other_calendar) = std_temporal_from_fields(i, data.kind, std_reflect_arg(&args, 0), false)?;
+    Ok(JsValue::Bool(data.fields == other && data.calendar == other_calendar))
 }
 
 fn std_temporal_duration_abs(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -1189,37 +1347,41 @@ fn std_temporal_with_calendar(i: &mut Interpreter, this: JsValue, args: Vec<JsVa
         StdTemporalKind::PlainYearMonth | StdTemporalKind::PlainMonthDay) {
         return Err(Throw::type_error("incompatible Temporal receiver"));
     }
-    std_temporal_calendar_from_value(i, &std_reflect_arg(&args, 0))?;
-    std_temporal_make(i, data.kind, data.fields)
+    let calendar = std_temporal_resolve_calendar_id(i, &std_reflect_arg(&args, 0))?;
+    std_temporal_make_cal(i, data.kind, data.fields, calendar)
 }
 
 fn std_temporal_date_to_datetime(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let mut fields = std_temporal_record(&this, Some(StdTemporalKind::PlainDate))?.fields;
+    let data = std_temporal_record(&this, Some(StdTemporalKind::PlainDate))?;
+    let mut fields = data.fields;
     let time = std_reflect_arg(&args, 0);
     if !time.is_undefined() {
-        let parts = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time, false)?;
+        let (parts, _) = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time, false)?;
         fields[3..9].copy_from_slice(&parts[3..9]);
     }
-    std_temporal_make(i, StdTemporalKind::PlainDateTime, fields)
+    std_temporal_make_cal(i, StdTemporalKind::PlainDateTime, fields, data.calendar)
 }
 
 fn std_temporal_date_to_yearmonth(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let mut fields = std_temporal_record(&this, Some(StdTemporalKind::PlainDate))?.fields;
+    let data = std_temporal_record(&this, Some(StdTemporalKind::PlainDate))?;
+    let mut fields = data.fields;
     fields[2] = 1;
-    std_temporal_make(i, StdTemporalKind::PlainYearMonth, fields)
+    std_temporal_make_cal(i, StdTemporalKind::PlainYearMonth, fields, data.calendar)
 }
 
 fn std_temporal_date_to_monthday(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let mut fields = std_temporal_record(&this, Some(StdTemporalKind::PlainDate))?.fields;
+    let data = std_temporal_record(&this, Some(StdTemporalKind::PlainDate))?;
+    let mut fields = data.fields;
     fields[9] = 1972;
     fields[0] = 0;
-    std_temporal_make(i, StdTemporalKind::PlainMonthDay, fields)
+    std_temporal_make_cal(i, StdTemporalKind::PlainMonthDay, fields, data.calendar)
 }
 
 fn std_temporal_datetime_to_date(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let mut fields = std_temporal_record(&this, Some(StdTemporalKind::PlainDateTime))?.fields;
+    let data = std_temporal_record(&this, Some(StdTemporalKind::PlainDateTime))?;
+    let mut fields = data.fields;
     fields[3..9].fill(0);
-    std_temporal_make(i, StdTemporalKind::PlainDate, fields)
+    std_temporal_make_cal(i, StdTemporalKind::PlainDate, fields, data.calendar)
 }
 
 fn std_temporal_datetime_to_time(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -1229,7 +1391,8 @@ fn std_temporal_datetime_to_time(i: &mut Interpreter, this: JsValue, _: Vec<JsVa
 }
 
 fn std_temporal_yearmonth_to_date(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let mut fields = std_temporal_record(&this, Some(StdTemporalKind::PlainYearMonth))?.fields;
+    let data = std_temporal_record(&this, Some(StdTemporalKind::PlainYearMonth))?;
+    let mut fields = data.fields;
     let bag = std_reflect_arg(&args, 0);
     if !bag.is_object() { return Err(Throw::type_error("day property bag required")); }
     let day = std_temporal_property(i, &bag, "day")?
@@ -1238,18 +1401,34 @@ fn std_temporal_yearmonth_to_date(i: &mut Interpreter, this: JsValue, args: Vec<
     // ~constrain~ overflow here -- there is no overflow option to read --
     // so a day past the target month's end (e.g. day 29 in a common-year
     // February, or day 31 in a 30-day month) is clamped, never rejected.
-    // Confirmed by default-overflow-behaviour.js.
+    // Confirmed by default-overflow-behaviour.js. For a non-iso8601
+    // month-structure calendar, `day` is calendar-native (the object's own
+    // fields[0]/fields[1] are ISO, so they are first converted to that
+    // calendar's own (year, month) before the day bound is computed).
+    if std_calendar_is_month_structure(&data.calendar) {
+        let (cal_year, cal_month, ..) = std_calendar_fields(&data.calendar, fields[0], fields[1], fields[2]);
+        let clamped_day = day.clamp(1, std_calendar_month_len(&data.calendar, cal_year, cal_month));
+        let (iso_year, iso_month, iso_day) = std_calendar_to_iso(&data.calendar, cal_year, cal_month, clamped_day);
+        fields[0] = iso_year; fields[1] = iso_month; fields[2] = iso_day;
+        return std_temporal_make_cal(i, StdTemporalKind::PlainDate, fields, data.calendar);
+    }
     fields[2] = day.min(std_temporal_days_in_month(fields[0], fields[1])).max(1);
-    std_temporal_make(i, StdTemporalKind::PlainDate, fields)
+    std_temporal_make_cal(i, StdTemporalKind::PlainDate, fields, data.calendar)
 }
 
 fn std_temporal_monthday_to_date(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let mut fields = std_temporal_record(&this, Some(StdTemporalKind::PlainMonthDay))?.fields;
+    let data = std_temporal_record(&this, Some(StdTemporalKind::PlainMonthDay))?;
+    let mut fields = data.fields;
     let bag = std_reflect_arg(&args, 0);
     if !bag.is_object() { return Err(Throw::type_error("year property bag required")); }
+    // PlainMonthDay's own calendar-native month/day resolution is a
+    // documented gap (see std_temporal_bag_resolve_calendar); `year` here is
+    // likewise taken as the plain ISO year, correct for iso8601 and for the
+    // ISO-day-grid calendars (gregory/japanese/roc/buddhist) but not yet for
+    // a genuine month-structure calendar.
     fields[0] = std_temporal_property(i, &bag, "year")?
         .ok_or_else(|| Throw::type_error("year is required"))?;
-    std_temporal_make(i, StdTemporalKind::PlainDate, fields)
+    std_temporal_make_cal(i, StdTemporalKind::PlainDate, fields, data.calendar)
 }
 
 fn std_temporal_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -1258,19 +1437,51 @@ fn std_temporal_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> R
         .unwrap_or_default();
     let field = name.strip_prefix("get ").unwrap_or("");
     let v = data.fields;
+    // Non-iso8601 calendars are VIEWS computed on demand from the object's
+    // always-ISO internal fields (see builtins_temporal_calendar.rs's file
+    // header): a Duration/PlainTime never has one, and PlainMonthDay's own
+    // calendar-relevant date is its reference ISO year (fields[9]), not
+    // fields[0] (always 0 for PlainMonthDay).
+    let calendar_relevant = matches!(data.kind, StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime
+        | StdTemporalKind::PlainYearMonth | StdTemporalKind::PlainMonthDay);
+    let iso_triple = if data.kind == StdTemporalKind::PlainMonthDay { (v[9], v[1], v[2]) } else { (v[0], v[1], v[2]) };
+    let calendar_fields = if calendar_relevant && data.calendar != "iso8601" {
+        Some(std_calendar_fields(&data.calendar, iso_triple.0, iso_triple.1, iso_triple.2))
+    } else { None };
+    if calendar_relevant {
+        match field {
+            "calendarId" => return Ok(JsValue::str(data.calendar.clone())),
+            "era" => {
+                if data.calendar == "iso8601" { return Ok(JsValue::Undefined); }
+                let (era, _) = std_calendar_era(&data.calendar, iso_triple.0, iso_triple.1, iso_triple.2);
+                return Ok(era.map(JsValue::str).unwrap_or(JsValue::Undefined));
+            }
+            "eraYear" => {
+                if data.calendar == "iso8601" { return Ok(JsValue::Undefined); }
+                let (_, era_year) = std_calendar_era(&data.calendar, iso_triple.0, iso_triple.1, iso_triple.2);
+                return Ok(era_year.map(|value| JsValue::num(value as f64)).unwrap_or(JsValue::Undefined));
+            }
+            "monthCode" => {
+                let code = if data.calendar == "iso8601" { format!("M{:02}", v[1]) }
+                    else { std_calendar_month_code(&data.calendar, iso_triple.0, iso_triple.1, iso_triple.2) };
+                return Ok(JsValue::str(code));
+            }
+            _ => {}
+        }
+    }
     let result = match field {
-        "calendarId" => return Ok(JsValue::str("iso8601")),
         "era" | "eraYear" => return Ok(JsValue::Undefined),
         "monthCode" => return Ok(JsValue::str(format!("M{:02}", v[1]))),
-        "inLeapYear" => return Ok(JsValue::Bool(std_temporal_leap(v[0]))),
+        "inLeapYear" => return Ok(JsValue::Bool(calendar_fields.map(|f| f.7).unwrap_or_else(|| std_temporal_leap(v[0])))),
         "blank" => return Ok(JsValue::Bool(v.iter().all(|part| *part == 0))),
         "sign" => v.iter().find(|part| **part != 0).map(|part| part.signum()).unwrap_or(0),
-        "daysInMonth" => std_temporal_days_in_month(v[0], v[1]),
-        "daysInYear" => if std_temporal_leap(v[0]) { 366 } else { 365 },
-        "monthsInYear" => 12,
+        "daysInMonth" => calendar_fields.map(|f| f.3).unwrap_or_else(|| std_temporal_days_in_month(v[0], v[1])),
+        "daysInYear" => calendar_fields.map(|f| f.6).unwrap_or_else(|| if std_temporal_leap(v[0]) { 366 } else { 365 }),
+        "monthsInYear" => calendar_fields.map(|f| f.4).unwrap_or(12),
         "daysInWeek" => 7,
         "dayOfWeek" => std_temporal_day_of_week(std_temporal_epoch_day(v[0], v[1], v[2])),
-        "dayOfYear" => std_temporal_epoch_day(v[0], v[1], v[2]) - std_temporal_epoch_day(v[0], 1, 1) + 1,
+        "dayOfYear" => calendar_fields.map(|f| f.5)
+            .unwrap_or_else(|| std_temporal_epoch_day(v[0], v[1], v[2]) - std_temporal_epoch_day(v[0], 1, 1) + 1),
         "weekOfYear" | "yearOfWeek" => {
             let day = std_temporal_epoch_day(v[0], v[1], v[2]);
             let week_year = if day < std_temporal_week_start(v[0]) { v[0] - 1 }
@@ -1279,9 +1490,10 @@ fn std_temporal_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> R
             if field == "yearOfWeek" { week_year }
             else { (day - std_temporal_week_start(week_year)) / 7 + 1 }
         }
-        "year" | "years" => v[0],
-        "month" | "months" => v[1],
-        "day" | "weeks" => if field == "day" { v[2] } else { v[2] },
+        "year" | "years" => calendar_fields.map(|f| f.0).unwrap_or(v[0]),
+        "month" | "months" => calendar_fields.map(|f| f.1).unwrap_or(v[1]),
+        "day" => calendar_fields.map(|f| f.2).unwrap_or(v[2]),
+        "weeks" => v[2],
         "days" => v[3],
         "hour" => v[3],
         "minute" => v[4],
@@ -1417,7 +1629,13 @@ fn std_temporal_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
             std_temporal_set_epoch_ns(&mut v, rounded)?;
         }
     }
-    let show_calendar = matches!(calendar_name.as_str(), "always" | "critical");
+    // ShowCalendar (spec): "auto" shows the calendar annotation whenever the
+    // calendar is anything other than iso8601 -- this engine was iso8601-only
+    // when this always/critical-only condition was written, so "auto" never
+    // needed to show anything on its own; now that non-iso8601 calendars
+    // exist, "auto" must show them too, but "never" still never does.
+    let show_calendar = matches!(calendar_name.as_str(), "always" | "critical")
+        || (calendar_name == "auto" && data.calendar != "iso8601");
     let mut text = match data.kind {
         StdTemporalKind::PlainDate => std_temporal_date_text(v[0], v[1], v[2]),
         StdTemporalKind::PlainTime => std_temporal_time_text_options(&v, digits, minute_only),
@@ -1432,8 +1650,8 @@ fn std_temporal_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
         StdTemporalKind::Duration => std_temporal_duration_to_string(&v, digits, step, &mode)?,
     };
     if show_calendar && !matches!(data.kind, StdTemporalKind::Duration | StdTemporalKind::PlainTime) {
-        if calendar_name == "critical" { text.push_str("[!u-ca=iso8601]"); }
-        else { text.push_str("[u-ca=iso8601]"); }
+        if calendar_name == "critical" { text.push_str(&format!("[!u-ca={}]", data.calendar)); }
+        else { text.push_str(&format!("[u-ca={}]", data.calendar)); }
     }
     Ok(JsValue::str(text))
 }

@@ -580,7 +580,7 @@ fn std_epoch_from_value_with_options(i: &mut Interpreter, value: JsValue, kind: 
             // e.g. "islamic") happens before PrepareCalendarFields' field
             // reads, which is in turn before timeZone is read/validated --
             // std_temporal_bag validates the calendar as its first action.
-            let (mut fields, month, code) = std_temporal_bag(i, StdTemporalKind::PlainDateTime, &value)?;
+            let (mut fields, month, code, _calendar) = std_temporal_bag(i, StdTemporalKind::PlainDateTime, &value)?;
             std_temporal_bag_resolve_month(&mut fields, month, code)?;
             let zone_value = i.get_prop(&value, "timeZone")?;
             let zone = std_epoch_zone_value(i, &zone_value)?;
@@ -1001,7 +1001,7 @@ fn std_epoch_with_plain_time(i: &mut Interpreter, this: JsValue, args: Vec<JsVal
     let time = std_reflect_arg(&args, 0);
     if time.is_undefined() { fields[3..9].fill(0); }
     else {
-        let parts = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time, false)?;
+        let parts = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time, false)?.0;
         fields[3..9].copy_from_slice(&parts[3..9]);
     }
     let epoch_ns = std_epoch_disambiguate(&data.zone_id, std_temporal_epoch_ns(&fields), "compatible")?;
@@ -1063,7 +1063,7 @@ fn std_temporal_plain_to_zoned(i: &mut Interpreter, this: JsValue, args: Vec<JsV
     let mut fields = data.fields;
     let has_time = data.kind == StdTemporalKind::PlainDate && !time_value.is_undefined();
     if has_time {
-        let parsed = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time_value, false)?;
+        let parsed = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time_value, false)?.0;
         fields[3..9].copy_from_slice(&parsed[3..9]);
         // ISODateTimeWithinLimits is checked on the COMBINED date+time (the
         // date alone, or the time alone, may each be within their own
@@ -1092,7 +1092,7 @@ fn std_temporal_now_zoned(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -
 
 fn std_epoch_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, sign: i64) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, None)?;
-    let duration = std_temporal_from_fields(i, StdTemporalKind::Duration, std_reflect_arg(&args, 0), false)?;
+    let duration = std_temporal_from_fields(i, StdTemporalKind::Duration, std_reflect_arg(&args, 0), false)?.0;
     if data.kind == StdEpochKind::Instant && duration[..4].iter().any(|part| *part != 0) {
         return Err(Throw::range_error("date units are not valid for Instant"));
     }
