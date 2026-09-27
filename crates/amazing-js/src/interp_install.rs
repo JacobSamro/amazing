@@ -34,6 +34,23 @@ impl Interpreter {
         let _ = handle.borrow_mut().define("name", Property { value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         JsValue::Object(handle)
     }
+    /// `Self::native` defaults every native function object to
+    /// `constructible: true` (JsObject's own default), which real
+    /// constructors (Promise, Error, Array, ...) rely on implicitly across
+    /// the whole builtins surface. Plain functions that are never valid
+    /// `new` targets per spec (global functions like `eval`, and -- more
+    /// broadly -- ordinary methods) need it cleared explicitly instead.
+    /// Auditing every native install site for this is a separate, larger
+    /// architectural ticket (filed in questions.md); this helper only
+    /// covers the specific global functions installed below that a
+    /// `IsConstructor` check must reject.
+    fn native_non_constructor(name: &str, f: crate::value::NativeFn, proto: &Obj) -> JsValue {
+        let value = Self::native(name, f, proto);
+        if let JsValue::Object(o) = &value {
+            o.borrow_mut().constructible = false;
+        }
+        value
+    }
     fn install_builtins(&mut self) {
         self.install_binary_builtins();
         self.install_bigint_builtins();
@@ -42,7 +59,7 @@ impl Interpreter {
         self.define_global("Infinity", JsValue::Num(f64::INFINITY));
         self.define_global(
             "eval",
-            Self::native("eval", native_eval, &self.function_proto),
+            Self::native_non_constructor("eval", native_eval, &self.function_proto),
         );
         self.define_global(
             "fetch",

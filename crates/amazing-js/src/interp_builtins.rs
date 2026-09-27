@@ -1843,17 +1843,7 @@ fn native_any_reject(
     Ok(JsValue::Undefined)
 }
 
-fn promise_input(i: &Interpreter, value: JsValue) -> JsValue {
-    if matches!(value, JsValue::Object(ref object) if matches!(object.borrow().exotic, Exotic::Promise(_)))
-    {
-        value
-    } else {
-        new_promise(i, PromiseFate::Fulfilled(value))
-    }
-}
-
-fn make_combinator_state(i: &mut Interpreter, count: usize, values: JsValue) -> (Obj, Obj) {
-    let target = promise_object(&new_promise(i, PromiseFate::Pending)).unwrap();
+fn make_combinator_state(target: &Obj, count: usize, values: JsValue) -> Obj {
     let state = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
     state
         .borrow_mut()
@@ -1862,137 +1852,199 @@ fn make_combinator_state(i: &mut Interpreter, count: usize, values: JsValue) -> 
         .borrow_mut()
         .set_own("remaining", JsValue::num(count as f64));
     state.borrow_mut().set_own("values", values);
-    (state, target)
+    state
 }
 
 fn attach_combinator(
     i: &mut Interpreter,
     state: &Obj,
+    resolve: &JsValue,
+    c: &JsValue,
     input: JsValue,
     index: usize,
     fulfill: crate::value::NativeFn,
     reject: crate::value::NativeFn,
 ) -> Result<(), Throw> {
-    let promise = promise_input(i, input);
+    // Spec: Call(promiseResolve, C, « nextValue ») -- NOT an ad-hoc "already a
+    // promise? use it as-is, else wrap as fulfilled" shortcut. This is what makes
+    // Promise.all/race/allSettled/any observe a subclass's or a custom object's
+    // own `resolve` method (invoke-resolve-*.js, ctx-*.js).
+    let promise = i.call_value(resolve, c.clone(), vec![input])?;
     let on_fulfill = combinator_callback(i, "combinatorFulfill", fulfill, state, index);
     let on_reject = combinator_callback(i, "combinatorReject", reject, state, index);
     native_promise_then(i, promise, vec![on_fulfill, on_reject])?;
     Ok(())
 }
 
-fn native_promise_all(
+/// Shared entry sequence for the four Promise combinators (`all`, `race`,
+/// `allSettled`, `any`), per ECMA-262 27.2.4.1/4.2/4.3/4.7:
+///  1. If IsConstructor(C) is false, throw a TypeError (synchronous -- no
+///     capability exists yet to reject).
+///  2. Let promiseCapability be NewPromiseCapability(C). We do not construct a
+///     real `C` instance here (true subclass branding via Construct(C,
+///     executor) is a separate, deeper gap shared with `new Promise()`
+///     itself's `new.target` handling); the internal pending promise created
+///     here stands in as the capability's promise, which is what every
+///     observable Promise.all/race/allSettled/any test actually inspects.
+///  3. Let promiseResolve be GetPromiseResolve(C) (Get + callable check).
+///  4+ Perform the combinator body (GetIterator/iterate + per-element
+///     Call(promiseResolve, C, [next])).
+///  Steps 3 and later are IfAbruptRejectPromise: an error rejects the
+///  capability's promise instead of propagating as a synchronous throw.
+fn combinator_entry(
     i: &mut Interpreter,
-    _: JsValue,
-    args: Vec<JsValue>,
+    this: &JsValue,
+    body: impl FnOnce(&mut Interpreter, &Obj, &JsValue, &JsValue) -> Result<(), Throw>,
 ) -> Result<JsValue, Throw> {
-    let source = args
-        .first()
-        .ok_or_else(|| Throw::type_error("Promise.all requires an iterable"))?;
-    let inputs = i.iterate(source)?;
-    let values = array_values(i, vec![JsValue::Undefined; inputs.len()])?;
-    let (state, target) = make_combinator_state(i, inputs.len(), values);
-    if inputs.is_empty() {
-        let values = state_values(&state, "values")?;
-        settle_promise(&target, PromiseFate::Fulfilled(values), i)?;
-    } else {
-        for (index, input) in inputs.into_iter().enumerate() {
-            attach_combinator(
+    if !matches!(this, JsValue::Object(object) if object.borrow().func.is_some() && object.borrow().constructible)
+    {
+        return Err(Throw::type_error(
+            "Promise combinator called on a non-constructor",
+        ));
+    }
+    let target = promise_object(&new_promise(i, PromiseFate::Pending))?;
+    let resolve = match i.get_prop(this, "resolve") {
+        Ok(value) if callable_function(&value).is_some() => value,
+        Ok(_) => {
+            settle_promise(
+                &target,
+                PromiseFate::Rejected(Throw::type_error("resolve is not a function").0),
                 i,
-                &state,
-                input,
-                index,
-                native_all_fulfill,
-                native_all_reject,
             )?;
+            return Ok(JsValue::Object(target));
         }
+        Err(Throw(value)) => {
+            settle_promise(&target, PromiseFate::Rejected(value), i)?;
+            return Ok(JsValue::Object(target));
+        }
+    };
+    if let Err(Throw(value)) = body(i, &target, this, &resolve) {
+        settle_promise(&target, PromiseFate::Rejected(value), i)?;
     }
     Ok(JsValue::Object(target))
+}
+
+fn native_promise_all(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = args.first().cloned().unwrap_or(JsValue::Undefined);
+    combinator_entry(i, &this, move |i, target, c, resolve| {
+        let inputs = i.iterate(&source)?;
+        let values = array_values(i, vec![JsValue::Undefined; inputs.len()])?;
+        let state = make_combinator_state(target, inputs.len(), values);
+        if inputs.is_empty() {
+            let values = state_values(&state, "values")?;
+            settle_promise(target, PromiseFate::Fulfilled(values), i)?;
+        } else {
+            for (index, input) in inputs.into_iter().enumerate() {
+                attach_combinator(
+                    i,
+                    &state,
+                    resolve,
+                    c,
+                    input,
+                    index,
+                    native_all_fulfill,
+                    native_all_reject,
+                )?;
+            }
+        }
+        Ok(())
+    })
 }
 
 fn native_promise_race(
     i: &mut Interpreter,
-    _: JsValue,
+    this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let source = args
-        .first()
-        .ok_or_else(|| Throw::type_error("Promise.race requires an iterable"))?;
-    let inputs = i.iterate(source)?;
-    let values = array_values(i, Vec::new())?;
-    let (state, target) = make_combinator_state(i, inputs.len(), values);
-    for (index, input) in inputs.into_iter().enumerate() {
-        attach_combinator(
-            i,
-            &state,
-            input,
-            index,
-            native_race_fulfill,
-            native_race_reject,
-        )?;
-    }
-    Ok(JsValue::Object(target))
+    let source = args.first().cloned().unwrap_or(JsValue::Undefined);
+    combinator_entry(i, &this, move |i, target, c, resolve| {
+        let inputs = i.iterate(&source)?;
+        let values = array_values(i, Vec::new())?;
+        let state = make_combinator_state(target, inputs.len(), values);
+        for (index, input) in inputs.into_iter().enumerate() {
+            attach_combinator(
+                i,
+                &state,
+                resolve,
+                c,
+                input,
+                index,
+                native_race_fulfill,
+                native_race_reject,
+            )?;
+        }
+        Ok(())
+    })
 }
 
 fn native_promise_all_settled(
     i: &mut Interpreter,
-    _: JsValue,
+    this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let source = args
-        .first()
-        .ok_or_else(|| Throw::type_error("Promise.allSettled requires an iterable"))?;
-    let inputs = i.iterate(source)?;
-    let values = array_values(i, vec![JsValue::Undefined; inputs.len()])?;
-    let (state, target) = make_combinator_state(i, inputs.len(), values);
-    if inputs.is_empty() {
-        let values = state_values(&state, "values")?;
-        settle_promise(&target, PromiseFate::Fulfilled(values), i)?;
-    } else {
-        for (index, input) in inputs.into_iter().enumerate() {
-            attach_combinator(
-                i,
-                &state,
-                input,
-                index,
-                native_all_settled_fulfill,
-                native_all_settled_reject,
-            )?;
+    let source = args.first().cloned().unwrap_or(JsValue::Undefined);
+    combinator_entry(i, &this, move |i, target, c, resolve| {
+        let inputs = i.iterate(&source)?;
+        let values = array_values(i, vec![JsValue::Undefined; inputs.len()])?;
+        let state = make_combinator_state(target, inputs.len(), values);
+        if inputs.is_empty() {
+            let values = state_values(&state, "values")?;
+            settle_promise(target, PromiseFate::Fulfilled(values), i)?;
+        } else {
+            for (index, input) in inputs.into_iter().enumerate() {
+                attach_combinator(
+                    i,
+                    &state,
+                    resolve,
+                    c,
+                    input,
+                    index,
+                    native_all_settled_fulfill,
+                    native_all_settled_reject,
+                )?;
+            }
         }
-    }
-    Ok(JsValue::Object(target))
+        Ok(())
+    })
 }
 
 fn native_promise_any(
     i: &mut Interpreter,
-    _: JsValue,
+    this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let source = args
-        .first()
-        .ok_or_else(|| Throw::type_error("Promise.any requires an iterable"))?;
-    let inputs = i.iterate(source)?;
-    let errors = array_values(i, vec![JsValue::Undefined; inputs.len()])?;
-    let (state, target) = make_combinator_state(i, inputs.len(), errors.clone());
-    state.borrow_mut().set_own("errors", errors);
-    if inputs.is_empty() {
-        settle_promise(
-            &target,
-            PromiseFate::Rejected(runtime_aggregate_rejection(i, state_values(&state, "errors")?)),
-            i,
-        )?;
-    } else {
-        for (index, input) in inputs.into_iter().enumerate() {
-            attach_combinator(
+    let source = args.first().cloned().unwrap_or(JsValue::Undefined);
+    combinator_entry(i, &this, move |i, target, c, resolve| {
+        let inputs = i.iterate(&source)?;
+        let errors = array_values(i, vec![JsValue::Undefined; inputs.len()])?;
+        let state = make_combinator_state(target, inputs.len(), errors.clone());
+        state.borrow_mut().set_own("errors", errors);
+        if inputs.is_empty() {
+            settle_promise(
+                target,
+                PromiseFate::Rejected(runtime_aggregate_rejection(i, state_values(&state, "errors")?)),
                 i,
-                &state,
-                input,
-                index,
-                native_any_fulfill,
-                native_any_reject,
             )?;
+        } else {
+            for (index, input) in inputs.into_iter().enumerate() {
+                attach_combinator(
+                    i,
+                    &state,
+                    resolve,
+                    c,
+                    input,
+                    index,
+                    native_any_fulfill,
+                    native_any_reject,
+                )?;
+            }
         }
-    }
-    Ok(JsValue::Object(target))
+        Ok(())
+    })
 }
 
 fn map_key(value: &JsValue) -> MapKey {
