@@ -1947,15 +1947,26 @@ impl TreeBuilder {
         }
     }
 
+    /// "In body" ignores a character token that is U+0000 NULL outright (§13.2.6.4.7):
+    /// no reconstruction, no `frameset_ok` effect, nothing inserted for it. The
+    /// tokenizer emits NUL literally in the data state (only RCDATA/RAWTEXT/script
+    /// data/plaintext replace it with U+FFFD there), so this mode must drop any
+    /// embedded NUL from a batched character run before deciding what to do with
+    /// the rest of it.
     fn in_body_characters(&mut self, data: &str) {
         if data.is_empty() {
             return;
         }
+        let owned = data.contains('\0').then(|| data.chars().filter(|&c| c != '\0').collect::<String>());
+        let text = owned.as_deref().unwrap_or(data);
+        if text.is_empty() {
+            return;
+        }
         self.reconstruct();
-        if data.chars().any(|c| !is_ws_char(c)) {
+        if text.chars().any(|c| !is_ws_char(c)) {
             self.frameset_ok = false;
         }
-        self.insert_text(data);
+        self.insert_text(text);
     }
 
     fn in_body_start_tag(&mut self, name: &str, attrs: Vec<(String, String)>) {

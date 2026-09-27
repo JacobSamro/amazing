@@ -527,11 +527,15 @@ impl Tokenizer {
                         return;
                     },
                     Some('<') => self.tag_open_dispatch(),
-                    Some('\0') => {
-                        self.pos += 1;
-                        self.text_buf.push('\u{FFFD}');
-                    },
                     Some(_) => {
+                        // Data state (§13.2.5.1): U+0000 NULL is a parse error
+                        // but is emitted *literally* here, unlike RCDATA/
+                        // RAWTEXT/script data/PlainText/CDATA-section, which
+                        // replace it with U+FFFD. A standalone NUL character
+                        // token is later ignored by tree construction's "in
+                        // body" (and "in table text") insertion mode rules
+                        // (`in_body_characters` in `tree.rs`) rather than
+                        // replaced here.
                         let c = self.bump().unwrap();
                         self.text_buf.push(c);
                     },
