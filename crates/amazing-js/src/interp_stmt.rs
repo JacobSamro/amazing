@@ -306,7 +306,7 @@ impl Interpreter {
             }
             StmtKind::ForIn { left, right, body } => {
                 self.completion = JsValue::Undefined;
-                let v = self.eval_expr(right, env)?;
+                let v = self.eval_for_head_right(left, right, env)?;
                 let object = match v {
                     JsValue::Null | JsValue::Undefined => None,
                     other => match array_receiver(self, other)? {
@@ -333,12 +333,12 @@ impl Interpreter {
             }
             StmtKind::ForOf { left, right, body } => {
                 self.completion = JsValue::Undefined;
-                let v = self.eval_expr(right, env)?;
+                let v = self.eval_for_head_right(left, right, env)?;
                 self.exec_for_of(left, &v, body, env)
             }
             StmtKind::ForAwaitOf { left, right, body } => {
                 self.completion = JsValue::Undefined;
-                let iterable = self.eval_expr(right, env)?;
+                let iterable = self.eval_for_head_right(left, right, env)?;
                 self.exec_for_await_of(left, &iterable, body, env)
             }
             StmtKind::Switch { disc, cases } => {
@@ -740,6 +740,26 @@ impl Interpreter {
             }
         }
         Ok(Flow::Normal)
+    }
+    /// ForIn/OfHeadEvaluation (14.7.5.1): for a `let`/`const`/`using`/`await using` ForDeclaration,
+    /// the loop's bound names already exist -- UNINITIALIZED, i.e. in TDZ -- in the environment
+    /// `expr` (the head's right-hand side) is evaluated in, so a self-referencing right side
+    /// (`for (let x of [x])`, `for (using x of [x])`) throws ReferenceError instead of silently
+    /// reading an outer same-named binding. This temporary environment is deliberately discarded
+    /// right after: reusing it as the loop's own per-iteration environment (what
+    /// `for_iteration_env` creates fresh every time round) would break the fresh-binding-per-
+    /// iteration semantics a closure captured in the body relies on. A `var`/plain assignment
+    /// target skips this entirely, matching plain `ForBinding`'s evaluation order.
+    fn eval_for_head_right(&mut self, left: &ForLeft, right: &ast::Expr, env: &EnvHandle) -> Result<JsValue, Throw> {
+        let ForLeft::Decl(d) = left else { return self.eval_expr(right, env); };
+        if d.kind == ast::VarKind::Var { return self.eval_expr(right, env); }
+        let head_env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+        for declarator in &d.decls {
+            for name in binding_names(&declarator.binding) {
+                head_env.declare_uninitialized(&name, d.kind == ast::VarKind::Let)?;
+            }
+        }
+        self.eval_expr(right, &head_env)
     }
     fn bind_for(&mut self, left: &ForLeft, value: JsValue, env: &EnvHandle) -> Result<(), Throw> {
         match left {
@@ -1726,20 +1746,40 @@ impl Interpreter {
                 }
             }
             ExprKind::Array(elements) => {
-                let items = self.iterate(value)?;
-                let mut index = 0usize;
-                for element in elements.iter().flatten() {
-                    if let ExprKind::Spread(inner) = &element.kind {
-                        let rest = array_values(self, items[index..].to_vec())?;
-                        self.assign_pattern_expr(inner, &rest, env)?;
-                        index = items.len();
-                    } else {
-                        let item = items.get(index).cloned().unwrap_or(JsValue::Undefined);
-                        self.assign_pattern_expr(element, &item, env)?;
-                        index += 1;
+                // ArrayAssignmentPattern (8.6.3 DestructuringAssignmentEvaluation): pull only as
+                // many values as the pattern declares -- an elision still steps the iterator, a
+                // trailing rest drains the rest (and thereby exhausts it, so no close needed) --
+                // and IteratorClose whatever's left over once the list is done, exactly like
+                // `bind_pattern_mode`'s `Binding::Array` arm's own `PatternIter`. The previous
+                // `self.iterate(value)?` eagerly drained the WHOLE iterator up front regardless
+                // of how many elements the pattern actually bound, so `[x] = iterable` never
+                // closed a not-yet-exhausted iterator and any iterator that legitimately never
+                // signals `done` (a common conformance-test shape) looped until `iterate`'s
+                // hard-coded step bound gave up.
+                let mut iter = PatternIter::new(self, value)?;
+                let result = (|| -> Result<(), Throw> {
+                    for element in elements {
+                        match element {
+                            Some(element) if matches!(&element.kind, ExprKind::Spread(_)) => {
+                                let ExprKind::Spread(inner) = &element.kind else { unreachable!() };
+                                let items = iter.collect_rest(self)?;
+                                let rest = array_values(self, items)?;
+                                self.assign_pattern_expr(inner, &rest, env)?;
+                            }
+                            Some(element) => {
+                                let item = iter.step(self)?.unwrap_or(JsValue::Undefined);
+                                self.assign_pattern_expr(element, &item, env)?;
+                            }
+                            None => {
+                                iter.step(self)?;
+                            }
+                        }
                     }
-                }
-                Ok(())
+                    Ok(())
+                })();
+                let closed = iter.close(self);
+                // See `bind_pattern_mode`'s `Binding::Array` arm's identical combination.
+                result.and(closed)
             }
             ExprKind::Object(elements) => {
                 if value.is_null() || value.is_undefined() {
@@ -1750,7 +1790,18 @@ impl Interpreter {
                     match element {
                         ast::ObjElem::Spread(inner) => {
                             let rest = self.object_rest(value, &used)?;
-                            self.assign_pattern_expr(inner, &rest, env)?;
+                            // `parse_object_element` wraps a `{...x}` rest target as
+                            // `ObjElem::Spread(Expr::Spread(x))` (its own generic spread-parsing
+                            // path, shared with array/call-argument spreads), not as the bare
+                            // target directly -- unwrap the same way `parser.rs`'s own
+                            // `ensure_assignable` already does, or this recurses on the
+                            // `ExprKind::Spread` node itself, which no arm below matches, and
+                            // falls through to `assign_target`'s "invalid assignment target".
+                            let target = match &inner.kind {
+                                ExprKind::Spread(t) => t.as_ref(),
+                                _ => inner.as_ref(),
+                            };
+                            self.assign_pattern_expr(target, &rest, env)?;
                         }
                         ast::ObjElem::Prop(property) => {
                             let key = self.prop_key(&property.key, env)?;
@@ -2248,6 +2299,31 @@ impl Interpreter {
                 }
             }
         }
+        // FunctionDeclarationInstantiation (10.2.11) creates and binds `arguments` (steps 18-22)
+        // BEFORE IteratorBindingInitialization runs over the formal parameters (step 23), so a
+        // parameter default that reads `arguments` (`function f(a = arguments) {}`) sees a real
+        // arguments object, not a ReferenceError -- it must be bound here, before the defaults
+        // loop below, not after it.
+        if !is_arrow && !names.contains("arguments") {
+            let argument_count = args.len();
+            let a = self.object_value();
+            for (i, v) in args.iter().enumerate() {
+                self.set_prop(&a, &i.to_string(), v.clone())?;
+            }
+            if let JsValue::Object(object) = &a {
+                object.borrow_mut().define("length", Property {
+                    value: JsValue::num(argument_count as f64), writable: true,
+                    enumerable: false, configurable: true, getter: None, setter: None,
+                }).unwrap();
+                if let Some(values) = self.array_proto.borrow().get_own("values") {
+                    object.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), Property {
+                        value: values, writable: true, enumerable: false, configurable: true,
+                        getter: None, setter: None,
+                    }).unwrap();
+                }
+            }
+            e.declare_var("arguments", a)?;
+        }
         for (i, p) in ps.iter().enumerate() {
             let v = if p.rest {
                 array_values(self, args.iter().skip(i).cloned().collect())?
@@ -2270,25 +2346,6 @@ impl Interpreter {
             self.bind_pattern_mode(&p.binding, v, None, e)?;
         }
         for name in &names { e.finish_parameter_initialization(name); }
-        if is_arrow || names.contains("arguments") { return Ok(()); }
-        let argument_count = args.len();
-        let a = self.object_value();
-        for (i, v) in args.into_iter().enumerate() {
-            self.set_prop(&a, &i.to_string(), v)?;
-        }
-        if let JsValue::Object(object) = &a {
-            object.borrow_mut().define("length", Property {
-                value: JsValue::num(argument_count as f64), writable: true,
-                enumerable: false, configurable: true, getter: None, setter: None,
-            }).unwrap();
-            if let Some(values) = self.array_proto.borrow().get_own("values") {
-                object.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), Property {
-                    value: values, writable: true, enumerable: false, configurable: true,
-                    getter: None, setter: None,
-                }).unwrap();
-            }
-        }
-        e.declare_var("arguments", a)?;
         Ok(())
     }
     fn construct(&mut self, f: &JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -2758,6 +2815,21 @@ impl Interpreter {
                                 Some(units) => PropertyKey::String(crate::value::JsString::from_units(units.clone())),
                                 None => self.prop_key(&x.key, &class_env)?,
                             };
+                            // A *computed* static method name can't be caught by the parser's
+                            // PropName-based early error (PropName of a ComputedPropertyName is
+                            // empty -- a literal `static prototype(){}` IS caught there, see
+                            // `parser_functions.rs`), and unlike a static FIELD's own equivalent
+                            // check above, the ordinary `[[DefineOwnProperty]]` below does NOT
+                            // naturally reject it either (this engine's `.define()`, used for
+                            // both accessors and data methods, overwrites the constructor's own
+                            // "prototype" property unconditionally rather than honoring its
+                            // non-configurable/non-writable attributes), so this needs its own
+                            // explicit runtime check.
+                            if x.is_static && matches!(&k, PropertyKey::String(s) if *s == "prototype") {
+                                return Err(Throw::type_error(
+                                    "static class methods cannot be named prototype",
+                                ));
+                            }
                             let key_name = match &k {
                                 PropertyKey::String(s) => s.to_utf8_lossy(),
                                 PropertyKey::Symbol(symbol) => symbol.descriptive_string(),
@@ -2795,7 +2867,25 @@ impl Interpreter {
                                         .expect("collect_private_names recorded every private key"),
                                 )
                             } else {
-                                FieldKey::Public(self.prop_key(&field.key, &class_env)?)
+                                let k = self.prop_key(&field.key, &class_env)?;
+                                // ClassFieldDefinitionEvaluation (15.7.10): a *computed* field
+                                // name can't be checked by the parser's own PropName-based early
+                                // error (PropName of a ComputedPropertyName is empty, so a literal
+                                // `static prototype;`/`static "prototype" = 1;` is caught at parse
+                                // time -- see `parser_functions.rs` -- but `static [x] = 1;` with
+                                // `x === "prototype"` at runtime is not, and needs this explicit
+                                // check instead. Methods need no equivalent runtime check: a
+                                // static method's key collides with the constructor's own
+                                // non-configurable, non-writable "prototype" property and the
+                                // ordinary `[[DefineOwnProperty]]` below already throws for that.
+                                if field.is_static
+                                    && matches!(&k, PropertyKey::String(s) if *s == "prototype")
+                                {
+                                    return Err(Throw::type_error(
+                                        "static class fields cannot be named prototype",
+                                    ));
+                                }
+                                FieldKey::Public(k)
                             };
                             let init = field.init.clone();
                             if field.is_static {
@@ -3160,12 +3250,17 @@ impl Interpreter {
     /// subclass override or a deleted `Array.prototype[Symbol.iterator]`
     /// must fall through to the slow path instead, so a missing/non-callable
     /// method still throws per GetIterator (§7.4.2).
+    /// Whether `v`'s own `Symbol.iterator` is still this realm's *original*
+    /// `%Array.prototype%[Symbol.iterator]` (`self.original_array_iterator`, a fixed snapshot
+    /// from install time -- see its own doc comment), not merely whatever `array_proto` currently
+    /// holds under that key. Comparing against the live value would always agree with itself once
+    /// `Array.prototype[Symbol.iterator]` is globally reassigned (both sides read the same
+    /// replacement), so every fast path guarded by this check would keep bypassing the override.
     fn has_original_array_iterator(&mut self, v: &JsValue) -> Result<bool, Throw> {
         let method = self.get_prop(v, WellKnownSymbol::Iterator.symbol())?;
-        let canonical = self.array_proto.borrow().get_own(WellKnownSymbol::Iterator.symbol());
         Ok(matches!(
-            (&method, &canonical),
-            (JsValue::Object(a), Some(JsValue::Object(b))) if Rc::ptr_eq(&a.0, &b.0)
+            (&method, &self.original_array_iterator),
+            (JsValue::Object(a), JsValue::Object(b)) if Rc::ptr_eq(&a.0, &b.0)
         ))
     }
     fn iterate(&mut self, v: &JsValue) -> Result<Vec<JsValue>, Throw> {
@@ -3199,14 +3294,14 @@ impl Interpreter {
                 let result = match self.call_value(&next, v.clone(), Vec::new()) {
                     Ok(result) => result,
                     Err(error) => {
-                        self.close_iterator(v);
+                        let _ = self.close_iterator(v);
                         return Err(error);
                     }
                 };
                 let result_value = match result {
                     JsValue::Object(_) => result,
                     _ => {
-                        self.close_iterator(v);
+                        let _ = self.close_iterator(v);
                         return Err(Throw::type_error("iterator result is not an object"));
                     }
                 };
@@ -3218,7 +3313,7 @@ impl Interpreter {
                 let done = match self.get_prop(&result_value, "done") {
                     Ok(value) => value.to_boolean(),
                     Err(error) => {
-                        self.close_iterator(v);
+                        let _ = self.close_iterator(v);
                         return Err(error);
                     }
                 };
@@ -3228,12 +3323,12 @@ impl Interpreter {
                 match self.get_prop(&result_value, "value") {
                     Ok(value) => values.push(value),
                     Err(error) => {
-                        self.close_iterator(v);
+                        let _ = self.close_iterator(v);
                         return Err(error);
                     }
                 }
             }
-            self.close_iterator(v);
+            let _ = self.close_iterator(v);
             return Err(Throw::range_error("iterator exceeded the iteration limit"));
         }
         match v {
@@ -3257,12 +3352,23 @@ impl Interpreter {
             _ => Err(Throw::type_error("value is not iterable")),
         }
     }
-    fn close_iterator(&mut self, iterator: &JsValue) {
-        let Ok(return_method) = self.get_prop(iterator, "return") else {
-            return;
-        };
-        if callable_function(&return_method).is_some() {
-            let _ = self.call_value(&return_method, iterator.clone(), Vec::new());
+    /// 7.4.6 IteratorClose, minus the completion-type combination step: every call site already
+    /// knows whether it's closing for an abrupt completion (a `next()`/body throw, or a
+    /// synthesized "iterator result is not an object" error) -- there, per spec step 2, this
+    /// call's own outcome is entirely ignored and the caller keeps propagating its original
+    /// error (`let _ = self.close_iterator(...)`) -- or a normal one (a `break`, an unlabeled
+    /// `Flow::Return`, or a labeled `break`/`continue` to an outer construct), where THIS call's
+    /// `Err` (an uncallable-but-present `return` throwing, or a non-Object result) becomes the
+    /// new completion, replacing the original (`self.close_iterator(...)?`). Mirrors
+    /// `close_async_iterator`'s already-correct treatment for `for await`.
+    fn close_iterator(&mut self, iterator: &JsValue) -> Result<(), Throw> {
+        let return_method = self.get_prop(iterator, "return")?;
+        if callable_function(&return_method).is_none() {
+            return Ok(());
+        }
+        match self.call_value(&return_method, iterator.clone(), Vec::new())? {
+            JsValue::Object(_) => Ok(()),
+            _ => Err(Throw::type_error("iterator's return method did not return an object")),
         }
     }
 
@@ -3291,21 +3397,21 @@ impl Interpreter {
             let result = match self.call_value(&next, iterator.clone(), Vec::new()) {
                 Ok(result) => result,
                 Err(error) => {
-                    self.close_iterator(&iterator);
+                    let _ = self.close_iterator(&iterator);
                     return Err(error);
                 }
             };
             let result_value = match result {
                 JsValue::Object(_) => result,
                 _ => {
-                    self.close_iterator(&iterator);
+                    let _ = self.close_iterator(&iterator);
                     return Err(Throw::type_error("iterator result is not an object"));
                 }
             };
             let done = match self.get_prop(&result_value, "done") {
                 Ok(value) => value.to_boolean(),
                 Err(error) => {
-                    self.close_iterator(&iterator);
+                    let _ = self.close_iterator(&iterator);
                     return Err(error);
                 }
             };
@@ -3315,23 +3421,28 @@ impl Interpreter {
             let value = match self.get_prop(&result_value, "value") {
                 Ok(value) => value,
                 Err(error) => {
-                    self.close_iterator(&iterator);
+                    let _ = self.close_iterator(&iterator);
                     return Err(error);
                 }
             };
             let iteration_env = for_iteration_env(left, env);
             match self.for_of_iteration_body(left, value, body, &iteration_env, dispose) {
                 Ok(Flow::Normal | Flow::Continue(None)) => {}
+                // A normal completion (unlike the `Err` arm below): IteratorClose's own
+                // failure -- an uncallable `return` that itself throws, or a non-Object
+                // result -- REPLACES this break/flow as the new completion (7.4.6 step 3/4),
+                // rather than being discarded the way it is when we're already unwinding an
+                // abrupt one.
                 Ok(Flow::Break(None)) => {
-                    self.close_iterator(&iterator);
+                    self.close_iterator(&iterator)?;
                     break;
                 }
                 Ok(flow) => {
-                    self.close_iterator(&iterator);
+                    self.close_iterator(&iterator)?;
                     return Ok(flow);
                 }
                 Err(error) => {
-                    self.close_iterator(&iterator);
+                    let _ = self.close_iterator(&iterator);
                     return Err(error);
                 }
             }

@@ -257,6 +257,14 @@ pub struct Interpreter {
     /// %AsyncGeneratorPrototype%, the async equivalent of `generator_proto`.
     pub async_generator_proto: Obj,
     pub array_proto: Obj,
+    /// This realm's *original* `%Array.prototype%[Symbol.iterator]` (the same function object
+    /// as its original `.values`), captured once at install time so `has_original_array_iterator`
+    /// can tell a plain array using the stock protocol from one that isn't, even after user code
+    /// reassigns `Array.prototype[Symbol.iterator]` -- comparing against `array_proto`'s *current*
+    /// value instead (the previous approach) always agreed with itself post-override, so the
+    /// fast paths that skip the iterator protocol entirely (destructuring, spread, `iterate()`)
+    /// silently kept reading array elements by index instead of actually calling the override.
+    original_array_iterator: JsValue,
     pub string_proto: Obj,
     pub number_proto: Obj,
     pub boolean_proto: Obj,
@@ -475,6 +483,7 @@ impl Interpreter {
             generator_proto,
             async_generator_proto,
             array_proto,
+            original_array_iterator: JsValue::Undefined,
             string_proto,
             number_proto,
             boolean_proto,

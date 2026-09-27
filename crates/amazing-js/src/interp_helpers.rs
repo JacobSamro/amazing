@@ -180,14 +180,18 @@ impl PatternIter {
     }
 
     /// IteratorClose: a no-op once already done (naturally exhausted, a
-    /// rest element drained it, or `step` itself already failed).
-    fn close(&mut self, i: &mut Interpreter) {
+    /// rest element drained it, or `step` itself already failed). The
+    /// caller (see its own call sites) discards this `Err` when the pattern
+    /// itself already failed abruptly, or surfaces it as the new completion
+    /// when the pattern otherwise finished normally (7.4.6 step 2 vs 3/4).
+    fn close(&mut self, i: &mut Interpreter) -> Result<(), Throw> {
         if let PatternIter::Protocol { iterator, done, .. } = self {
             if !*done {
-                i.close_iterator(iterator);
                 *done = true;
+                return i.close_iterator(iterator);
             }
         }
+        Ok(())
     }
 }
 
@@ -267,8 +271,11 @@ impl Interpreter {
                     }
                     Ok(())
                 })();
-                iter.close(self);
-                result?;
+                let closed = iter.close(self);
+                // `result.and(closed)`: an already-abrupt `result` wins outright (`closed` is
+                // discarded, matching 7.4.6 step 2); a normal `result` defers to whatever
+                // `closed` says (its own `Err`, if any, becomes the new completion).
+                result.and(closed)?;
             }
             Binding::Object(properties) => {
                 let source = match value {

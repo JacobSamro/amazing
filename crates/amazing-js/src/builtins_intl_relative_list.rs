@@ -246,14 +246,14 @@ fn intl_list_arguments(i: &mut Interpreter, args: &[JsValue]) -> Result<Vec<Stri
     loop {
         let step = i.call_value(&next, iterator.clone(), Vec::new())?;
         let JsValue::Object(result) = step else {
-            i.close_iterator(&iterator);
+            let _ = i.close_iterator(&iterator);
             return Err(Throw::type_error("iterator result is not an object"));
         };
         let done = result.borrow().get_own("done").map(|value| value.to_boolean()).unwrap_or(false);
         if done { return Ok(values); }
         let value = i.get_prop(&JsValue::Object(result), "value")?;
         if !matches!(value, JsValue::Str(_)) {
-            i.close_iterator(&iterator);
+            let _ = i.close_iterator(&iterator);
             return Err(Throw::type_error("ListFormat elements must be strings"));
         }
         values.push(i.to_string(&value)?);

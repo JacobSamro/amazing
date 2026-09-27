@@ -1622,4 +1622,108 @@ mod class_name_tests {
         ).unwrap();
         assert_eq!(result, JsValue::Bool(true), "the same call site must return the same Strings object");
     }
+
+    #[test]
+    fn destructuring_assignment_in_for_of_and_for_await_heads_accepts_patterns_and_closes_the_iterator() {
+        for source in [
+            // Object-rest assignment target ({...x} = ...), previously rejected as
+            // "invalid assignment target" because the parser double-wraps a rest
+            // element's target in ExprKind::Spread(Box<Expr{kind: Spread(inner)}>).
+            "var r; ({...r} = {a: 1, b: 2}); r.a === 1 && r.b === 2",
+            "var a, rest; ({a, ...rest} = {a: 1, b: 2, c: 3}); a === 1 && rest.b === 2 && rest.c === 3",
+            // Bare array-pattern assignment (no let/const/var) in a for-of head must
+            // use the lazy, closing iterator protocol, not an eager collect-all.
+            "var closed = false; var it = { [Symbol.iterator]() { var n = 0; return { \
+               next() { n++; return { value: n, done: n > 5 }; }, \
+               return() { closed = true; return { done: true }; } }; } }; \
+             var x; for ([x] of [it]) break; closed",
+            // A plain (non-destructuring) for-of body break must also close the iterator.
+            "var closed = false; var it = { [Symbol.iterator]() { return { \
+               next() { return { value: 1, done: false }; }, \
+               return() { closed = true; return { done: true }; } }; } }; \
+             for (var x of it) break; closed",
+        ] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")),
+                JsValue::Bool(true), "{source}");
+        }
+    }
+
+    #[test]
+    fn destructuring_honors_an_overridden_array_prototype_iterator() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(
+            "var calls = 0; \
+             var original = Array.prototype[Symbol.iterator]; \
+             Array.prototype[Symbol.iterator] = function() { \
+               calls++; \
+               return original.call(this); \
+             }; \
+             var [a, b] = [1, 2]; \
+             Array.prototype[Symbol.iterator] = original; \
+             a === 1 && b === 2 && calls === 1"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(result, JsValue::Bool(true));
+    }
+
+    #[test]
+    fn parameter_defaults_can_reference_the_arguments_object() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(
+            "function f(a = arguments.length) { return a; } f() === 0 && f(1) === 1"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(result, JsValue::Bool(true));
+    }
+
+    #[test]
+    fn static_class_element_named_prototype_throws_a_type_error() {
+        // A *literal* static "prototype" key (`static prototype`, `static
+        // ["prototype"]`) is already an early SyntaxError from the parser,
+        // thrown before the try block runs at all -- covered by the existing
+        // corpus (fields-literal/string-name-static-propname-prototype.js).
+        // A *computed* key's PropName is spec-defined as empty, so it skips
+        // that early check; these need the runtime check this fix adds,
+        // which throws once the class definition actually executes (in try).
+        for class_body in [
+            "static ['proto' + 'type'] = 1;",
+            "static ['proto' + 'type']() {}",
+            "static get ['proto' + 'type']() {}",
+            "static set ['proto' + 'type'](v) {}",
+            "static *['proto' + 'type']() {}",
+        ] {
+            let source = format!(
+                "var caught = false; \
+                 try {{ class C {{ {class_body} }} }} catch (e) {{ caught = e instanceof TypeError; }} \
+                 caught"
+            );
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script(&source).unwrap_or_else(|error| panic!("{source}: {error:?}")),
+                JsValue::Bool(true), "{source}");
+        }
+    }
+
+    #[test]
+    fn for_head_bound_names_are_in_tdz_while_evaluating_the_head_expression() {
+        for body in [
+            "for (let x of [x]) {}",
+            "for (const x of [x]) {}",
+            "for (let x in {x}) {}",
+            "for (const x in {x}) {}",
+        ] {
+            let source = format!(
+                "var caught = false; \
+                 try {{ let x = 1; {body} }} catch (e) {{ caught = e instanceof ReferenceError; }} \
+                 caught"
+            );
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script(&source).unwrap_or_else(|error| panic!("{source}: {error:?}")),
+                JsValue::Bool(true), "{source}");
+        }
+        // A `var` ForBinding is not in TDZ (it's function/script-scoped, not a
+        // fresh per-iteration binding), so the same shape must keep working.
+        let mut i = Interpreter::new();
+        let result = i.run_script("var x = 1; var seen; for (var x of [x]) seen = x; seen")
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(result, JsValue::num(1.0));
+    }
 }
