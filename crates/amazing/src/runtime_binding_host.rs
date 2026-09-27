@@ -172,8 +172,9 @@ struct BindingState {
     /// WebIDL prototype is a long-lived intrinsic). See `materialize_accessors`.
     accessor_cache: HashMap<usize, Rc<Vec<(PropertyKey, Property)>>>,
     /// HTML-35: names most recently installed on the global object by
-    /// `refresh_window_named_properties` (HTML SS7.2.2.3), so a name that
-    /// stops qualifying (its `id`/`name` attribute changed, or the
+    /// `dom_refresh_window_named_properties` (HTML SS7.2.2.3, in the
+    /// dom-bindings adapter file `runtime_host_dom_bindings.rs`), so a name
+    /// that stops qualifying (its `id`/`name` attribute changed, or the
     /// contributing element left the tree) gets deleted rather than left
     /// stale. See `Dom::window_named_objects`/`mark_named_objects_dirty`.
     window_named_property_keys: Vec<String>,
@@ -1377,6 +1378,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
         }
         Ok(values)
     }
+    fn sequence_shadow_roots(&mut self, value: &JsValue) -> Result<Vec<NodeIdx>, Throw> {
+        self.dom_sequence_shadow_roots(value)
+    }
     fn construct_custom_element(&mut self, constructor: &JsValue,
         _definition: usize, _element: NodeIdx) -> Result<JsValue, Throw> {
         // JSRT-7 must make derived `super()` return this element's canonical
@@ -1811,7 +1815,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
         // size) rescan behind it only runs when `Dom::mark_named_objects_dirty`
         // actually fired.
         if result.is_ok() && host.borrow_mut().dom.take_named_objects_dirty() {
-            self.refresh_window_named_properties()?;
+            self.dom_refresh_window_named_properties()?;
         }
         result.map_err(|error| throw_dom_error(self, error))
     }
@@ -1855,55 +1859,6 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
     fn type_error(&mut self, message: &'static str) -> Throw {
         Throw::type_error(message)
-    }
-}
-
-impl RuntimeBindingHost<'_> {
-    /// See the call site in `with_dom` above and `Dom::window_named_objects`
-    /// for the spec algorithm and its one deliberate omission (nested
-    /// browsing contexts by name -- this engine has no iframe content
-    /// navigables yet).
-    fn refresh_window_named_properties(&mut self) -> Result<(), Throw> {
-        let host = self.state.borrow().host.clone();
-        let entries = host.borrow().dom.window_named_objects(NodeIdx(0));
-        let global = self.js.binding_global_object();
-        let previous = std::mem::take(&mut self.state.borrow_mut().window_named_property_keys);
-        for stale in previous.iter().filter(|name| !entries.iter().any(|(fresh, _)| fresh == *name)) {
-            self.js.binding_delete_property(&global, stale)?;
-        }
-        // Only names we actually define below (not skipped for colliding
-        // with a pre-existing property) count as "owned" for next time.
-        let mut owned = Vec::with_capacity(entries.len());
-        for (name, nodes) in entries {
-            // Named access is a [[Get]] fallback in the spec (Window's named
-            // properties object is only consulted when ordinary property
-            // lookup fails), so it must never shadow a property that is
-            // already there for a different reason -- a `var`/function
-            // declaration, a built-in like `document`, or a testharness.js
-            // global such as `test`/`async_test`. `<div id="test">` is
-            // common in WPT fixtures and would otherwise clobber the
-            // `test()` function every such page relies on. We can only
-            // eagerly materialize properties (no engine-level [[Get]] hook
-            // for window -- see the with_dom call site), so approximate the
-            // fallback rule by skipping any name we did not already own
-            // from a previous refresh when something is already there.
-            if !previous.contains(&name) && self.js.binding_get_own_property(&global, &name)?.is_some() {
-                continue;
-            }
-            let value = if let [single] = nodes[..] {
-                self.wrap_node(single)?
-            } else {
-                let slot = host.borrow_mut().dom.create_static_node_list(nodes);
-                let mut key = self.node_platform_key(self.current_document());
-                key.slot = slot as u64;
-                self.wrap_platform_object(key, InterfaceBrand::STATIC_NODE_LIST)?
-            };
-            self.js.binding_define_data_property(&global, &name, value,
-                BindingPropertyFlags { writable: false, enumerable: true, configurable: true })?;
-            owned.push(name);
-        }
-        self.state.borrow_mut().window_named_property_keys = owned;
-        Ok(())
     }
 }
 
