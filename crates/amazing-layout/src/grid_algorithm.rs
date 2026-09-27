@@ -185,12 +185,15 @@ mod tests {
 
     #[test]
     fn maximize_tracks_grows_an_infinite_limit_track_to_fill_leftover_space() {
-        // grid-template-columns: 40px auto -- bases start at [40, 20], and
-        // with 200px available there is 140px of leftover space (200 -
-        // (40+20)). The `auto` column (no explicit numeric max, so
-        // `TrackSize::maximize_limit()` reports it as unlimited here, not
-        // excluded from this step) should absorb all of it, matching every
-        // browser's rendering of that pattern.
+        // Primitive-level test of `maximize_tracks` itself (not of
+        // `TrackSize::maximize_limit()`, which no longer ever hands it a
+        // `Some(f32::INFINITY)` limit for a real track -- see that
+        // method's doc comment for why a bare `auto` max freezes at its
+        // content size instead). Given a track whose limit genuinely is
+        // unbounded, the function must still grow it to absorb all leftover
+        // space: bases start at [40, 20], 200px available leaves 140px
+        // leftover (200 - (40+20)), and the second track's limit is
+        // infinite, so it alone should absorb all of it.
         let sizes = maximize_tracks(200.0, 0.0, &[40.0, 20.0], &[Some(40.0), Some(f32::INFINITY)]);
         assert_eq!(sizes[0], 40.0, "the fixed track must not grow past its own size");
         assert!((sizes[1] - 160.0).abs() < 0.001, "the unlimited track should take all leftover space: {sizes:?}");

@@ -1909,13 +1909,15 @@ comparison.
    from ever absorbing leftover container space (found by comparing against
    taffy's `maximise_tracks`, which the spec text backs directly: "a track
    without an upper limit is treated as having a growth limit of
-   infinity"). Three-way fix: a literal `auto` max is `Some(INFINITY)`
-   (unbounded, matches every browser's `auto`-column-fills-remaining-space
-   behavior); an explicit `max-content`/`min-content` max
-   (`TrackSize::Content`, conflating the two, or `minmax(_, max-content)`)
-   freezes at its own content-derived base size instead, since that *does*
-   have a real, finite growth limit unlike bare `auto`; `fr` stays excluded
-   (`resolve_flexible_tracks` overwrites it afterward regardless).
+   infinity"). First cut treated a literal `auto` max as `Some(INFINITY)`
+   (unconditionally unbounded); a second pass (see "3 patch-correlated
+   losses, resolved" below) found this over-broad and corrected it to
+   freeze at `current_base` instead, the same as an explicit
+   `max-content`/`min-content` max (`TrackSize::Content`, conflating the
+   two, or `minmax(_, max-content)`) -- both have a real, finite growth
+   limit derived from their items' content, not an unbounded one. `fr`
+   stays excluded (`None`; `resolve_flexible_tracks` computes it afterward
+   independently).
 
 ### Triage of the render-corpus losses this exposed
 
@@ -1936,36 +1938,77 @@ and needed updating, not reverting:
   directly cover the `auto`-vs-`max-content` distinction the three-way fix
   depends on, since nothing previously exercised it.
 
-Pinned `css/css-grid` render (`--baseline auto`, checked-in evidence):
-**pass 385/945 (was ~389 with the fix reverted; baseline was 339 pass before
-any of this session's or other lanes' changes) -- gained=46, lost=7** (of
-which 4 are pre-existing drift from other lanes' merges since the checked-in
-baseline, confirmed by re-rendering on the reverted code: the *same* 4 losses
-reproduce with zero grid.rs/grid_algorithm.rs changes in the tree). The
-remaining **3 losses are specific to this patch**
-(`grid-lanes-track-sizing-explicit-block.html`,
+Pinned `css/css-grid` render (`--baseline auto`, checked-in evidence), first
+pass (commit `8fccf8a4`, the `maximize_limit`-returns-`Some(INFINITY)`
+version): **pass 385/945 -- gained=46, lost=7.** 4 of the 7 are pre-existing
+drift from other lanes' merges since the checked-in baseline (confirmed by
+re-rendering on the reverted code: the *same* 4 losses reproduce with zero
+grid.rs/grid_algorithm.rs changes in the tree). The remaining **3 losses were
+specific to this patch** (`grid-lanes-track-sizing-explicit-block.html`,
 `grid-lanes-track-sizing-overflow-left-side.html`,
-`subgrid/writing-directions-002.html`) but traced to a dead end: a targeted
-unit reproduction of the first test's exact CSS (`display:grid-lanes;
-grid-template-columns:100px 1fr` with 4 items, matching the WPT fixture)
-produces **byte-identical box geometry** with the patch applied and reverted
-(verified directly, both runs' `Rect` dumps compared). Every code path
-`maximize_limit`/`distribute_up_to_limits` can reach for this fixture is
-`Px`/`Fr` only, neither of which takes either changed branch. Reproduced the
-pixel-classification difference deterministically across repeated renders
-(not run-to-run noise), but with geometry proven unaffected, the mechanism
-must be outside this ticket's actual logic change -- likely a
-render-pipeline sensitivity uncorrelated with grid track sizing (e.g. a
-binary-layout-dependent timing/threshold effect in the fuzzy pixel compare).
-Not chased further given the dead end; flagging rather than silently
-absorbing into "documented simplification." `css/css-flexbox` (untouched
-this ticket) reproduces its own pre-existing 15-loss baseline drift
-identically with and without this patch, confirming that corpus's drift is
-unrelated to this change too.
+`subgrid/writing-directions-002.html`); an initial unit reproduction of the
+first test's exact grid-lanes CSS (`display:grid-lanes;
+grid-template-columns:100px 1fr`) showed byte-identical geometry
+patched-vs-reverted, which was a real but incomplete finding: that fixture's
+own `Px 1fr` columns indeed never touch `maximize_limit`'s `auto` branch, but
+its *reference* file does -- `grid-lanes-track-sizing-explicit-block-ref.html`
+uses ordinary `display:grid; grid-template-columns:auto 1fr`, and it was the
+reference's render, not the test's, that changed. Confirmed with direct
+`render-wpt` PPM SHA256 hashing (bypassing the fuzzy-compare classifier
+entirely): fully deterministic on both the patched and reverted build (5/5
+identical hashes each, ruling out flakiness), and for all 3 tests the
+*reverted* build's test-file hash matched one of the *patched* build's
+hashes exactly, proving the render pipeline itself is stable and the
+regression is real, not noise.
 
-Workspace nextest (worker-2, uncommitted-edits gate): **3389/3389 passed**
-(17 skipped, 3 slow), doctests clean. Crate: **380/380** (1 skipped, up from
-378 before the 2 new tests).
+Root cause: a bare `auto` max track's growth limit is bounded by its items'
+own max-content contribution (already folded into `current_base` in this
+crate's single-contribution `Contrib` model, see item 3 above) -- it is
+*never* actually infinite except when there is no other claim on the
+leftover space. Treating it as unconditionally `Some(f32::INFINITY)` let
+`auto` win an axis's entire leftover space in the Maximize Tracks step
+*before* `resolve_flexible_tracks` ever ran, starving a sibling `fr` track
+down to zero -- breaking the extremely common `grid-template-columns: auto
+1fr` idiom (exactly what all 3 references use), where `auto` must stay
+content-sized and `1fr` must absorb the remainder. Traced by reading
+taffy's `resolve_intrinsic_track_sizes`/`maximise_tracks`
+(`src/compute/grid/track_sizing.rs` @ `e661b35980d9644ad8f1df64e183d27e5884533b`):
+a flexible track's growth limit is deliberately frozen to its own base size
+*before* Maximize Tracks runs specifically "to ensure the Maximise Tracks
+step doesn't affect flexible tracks" (its comment, verbatim), leaving that
+space for `resolve_flexible_tracks` to hand out afterward; a plain `auto`
+max only ever gets its growth limit raised by max-content contributions
+that this crate's model has already folded into `current_base`, so there is
+no legitimate extra headroom for it to claim either. Fix: `maximize_limit()`
+now freezes a bare `auto` max at `current_base`, the same treatment as an
+explicit `max-content`/`min-content` max -- removing the three-way split in
+favor of a two-way one (`fr` excluded via `None`; everything else frozen at
+`current_base` unless it has a real explicit numeric max). Rewrote the two
+unit tests that had encoded the wrong premise
+(`auto_track_grows_past_content_size_to_fill_leftover_container_space` ->
+`auto_track_does_not_grow_past_content_size_when_no_flexible_sibling`,
+asserting the *opposite*) and added
+`fr_sibling_absorbs_leftover_space_while_auto_track_stays_content_sized` to
+cover the actual regression (`auto 1fr`, container 300px, item 70px: `auto`
+column stays 70px, `1fr` column takes the remaining 230px).
+
+Re-ran the full `css/css-grid` render after the fix, same baseline: **pass
+388/945 -- gained=46, lost=4.** Confirmed by re-running the render at
+`8fccf8a4` (before this second pass, with the fix's two files reverted via
+patch-file, never `git stash`) that the remaining 4 losses are byte-for-byte
+the same 4 pre-existing ones (`abspos/positioned-grid-items-{008,016}`,
+`abspos/orthogonal-positioned-grid-items-008`,
+`grid-lanes/.../row-auto-placed-subgrid-inherited-tracks-003`) -- present
+identically whether this ticket's fix is applied or not, so this pass fixed
+exactly the 3 patch-correlated losses and changed nothing else. **Zero
+unexplained losses.** `css/css-flexbox` (untouched this ticket) reproduces
+its own pre-existing 15-loss baseline drift identically with and without
+this patch (re-checked on this pass too), confirming that corpus's drift is
+unrelated to this change.
+
+Workspace nextest (worker-2, uncommitted-edits gate at the final fix):
+**3403/3403 passed** (17 skipped, 3 slow), doctests clean. Crate:
+**381/381** (1 skipped).
 
 ### Follow-up (this lane's next taffy-porting step, not started)
 
