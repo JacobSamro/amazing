@@ -2395,3 +2395,67 @@ Gate (crate + the two named corpora, `--baseline auto --release`, worker-2):
 crate 382/1 skipped, 0 failed. `css/css-grid`: gained=58 lost=1 (the
 still-unpinned 4th loss above, unchanged, not a new regression) changed=0
 unchanged=884 new=2. Confirms all 3 pinned fixtures now pass.
+
+### Item 2: css-position/abspos sweep
+
+Largest real cluster in the checked-in `css/css-position` evidence (9+6=15 of
+19 mismatches, `crates/amazing-shell-gpui/evidence/wpt-render/css-css-position/
+clusters.json`): `static-position/inline-level-absolute-in-block-level-context-*`
+(a matrix of direction x text-align x float-side combinations) plus 2
+`position-relative-011/013` (an unrelated table-percentage-height bug,
+left alone -- different root cause, not chased this ticket).
+
+**Root cause:** `position.rs`'s `static_anchor` (the static-position fallback
+for an abspos child when both inset properties on an axis are auto) computed
+the horizontal anchor as strictly the containing block's near/far content
+edge based only on `direction` -- CSS2 §10.3.7 requires an *inline-level*
+descendant's static position to be that of a hypothetical zero-width inline
+box at that point in the flow: narrowed by any floats already placed at that
+block position, and shifted within the narrowed band by `text-align`, same as
+real inline content (`inline_alignment::apply`'s shift formula). A
+block-level descendant's static position ignores both, per spec -- so this
+had to be gated on "was this box's specified `display` inline-level before
+CSS2 §9.7 reset it to block for box generation", a distinction the codebase
+discarded at construction time.
+
+**Fix:**
+- New `LayoutBox` field `originally_inline_level`, captured in
+  `box_tree.rs::build_element` from `parse_display` on the pre-mutation style,
+  before the out-of-flow/float `display: block` override.
+- `position.rs::static_anchor`: when `positioned.originally_inline_level` and
+  the parent is `Flow::Blocks` (floats have no effect on flex/grid items,
+  LAYOUT-30) and not a vertical writing mode, compute the anchor from a new
+  `float_narrowed_band` (walks the parent's `Flow::Blocks` children, narrowing
+  by any floated sibling's final border box that spans the anchor's `y`) and a
+  new `text_align_fraction` (0.0/0.5/1.0, matching `left`/`right`/`center`/
+  `start`/`end` resolution against the container's direction). Block-level
+  abspos children and every pre-existing (non-float, default-align) case fall
+  through to the unchanged prior formula -- verified algebraically equivalent
+  at the boundary (no floats, default `text-align`: new formula reduces to
+  the exact old `content_box.x` / `content_box.x + w` expressions).
+
+Scoped to physical horizontal resolution only (matches the pre-existing
+limitation already noted at this call site for vertical writing modes);
+`display: inline-block`/`inline-flex`/etc. (outer-inline but
+generation-block per `parse_display`) aren't covered, only plain
+`display: inline` -- matches every fixture in this cluster, left as a
+follow-up for a broader fix.
+
+Gate: crate 382/1 skipped, 0 failed. `css/css-position`: gained=6 lost=0
+changed=0 unchanged=48. 6 of the 9+6=15-test family now pass
+(`-004/-005/-006/-007/-008/-009`); 6 remain (`-001/-002/-003/-010/-011/-012`),
+reported by `wpt_render_cluster.py` as "small-region... lighter" (not the
+same large/darker signature as before the fix) -- consistent with a residual
+edge/rounding-class gap rather than the same wrong-band bug, not root-caused
+further this ticket. `position-relative-011/013` (table row/cell percentage
+`top` resolving against specified vs. used height) untouched, as intended --
+different bug, not attempted.
+
+### Item 3: align-self-016.html pixel gap after LAYOUT-30's layout fix
+
+See `questions.md` for the filed finding (pixel-sampled the real
+`render-wpt` output directly against
+`css/reference/ref-filled-green-200px-square.html`) -- LAYOUT-30 already
+proved the isolated layout geometry is correct (200x200); this ticket
+narrowed where paint diverges and handed the exact divergence to whichever
+lane owns `amazing-paint`.

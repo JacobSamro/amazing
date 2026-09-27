@@ -627,19 +627,85 @@ fn static_anchor(parent: &LayoutBox, positioned: &LayoutBox) -> StaticAnchor {
             .max_by_key(|child| child.source_order.unwrap_or(0)),
         Flow::Inlines(_) | Flow::Empty => None,
     };
+    let y = preceding.map_or(parent.content_box.y, |sibling| {
+        sibling.border_box.y + sibling.border_box.h + sibling.margin.bottom.unwrap_or(0.0)
+    });
+    let vertical_parent = parent
+        .font_metric_style
+        .as_ref()
+        .is_some_and(|style| style.writing_mode.is_vertical_flow());
+    // CSS2 §10.3.7: an inline-level abspos descendant's static position is
+    // that of a hypothetical zero-width inline box at this point in the
+    // flow -- narrowed by any floats already placed at this block position,
+    // and shifted within that narrowed band by `text-align` the same way
+    // real inline content is (matches `inline_alignment::apply`'s shift
+    // formula for a zero-width run). A block-level descendant ignores both
+    // (its static position is always the containing block's content edge);
+    // physical mapping for vertical writing modes isn't handled by either
+    // path yet (pre-existing limitation, unchanged here).
+    if positioned.originally_inline_level && matches!(parent.flow, Flow::Blocks(_)) && !vertical_parent {
+        let (left, right_edge) = float_narrowed_band(parent, y);
+        let reversed = is_rtl(parent);
+        let fraction = text_align_fraction(parent.style.get("text-align"), reversed);
+        return StaticAnchor {
+            x: left + fraction * (right_edge - left),
+            y,
+            right: false,
+        };
+    }
     // Block flow currently exposes horizontal physical block origins. Vertical
     // static rectangles follow that same origin until block-axis mapping exists.
-    let right = is_rtl(parent)
-        && !parent
-            .font_metric_style
-            .as_ref()
-            .is_some_and(|style| style.writing_mode.is_vertical_flow());
+    let right = is_rtl(parent) && !vertical_parent;
     StaticAnchor {
         x: parent.content_box.x + if right { parent.content_box.w } else { 0.0 },
-        y: preceding.map_or(parent.content_box.y, |sibling| {
-            sibling.border_box.y + sibling.border_box.h + sibling.margin.bottom.unwrap_or(0.0)
-        }),
+        y,
         right,
+    }
+}
+
+/// The available horizontal band at block position `y` inside `parent`'s
+/// content box, narrowed by any of its floated `Flow::Blocks` children whose
+/// border box spans `y` (CSS2 §9.5). Floats have no layout effect on an
+/// actual flex/grid item (LAYOUT-30), so this is only ever consulted for a
+/// `Flow::Blocks` parent -- the caller already gates on that.
+fn float_narrowed_band(parent: &LayoutBox, y: f32) -> (f32, f32) {
+    let mut left = parent.content_box.x;
+    let mut right = parent.content_box.x + parent.content_box.w;
+    if let Flow::Blocks(children) = &parent.flow {
+        for child in children {
+            let Some(side) = crate::floats::side(&child.style) else { continue };
+            let r = child.border_box;
+            if y < r.y || y >= r.y + r.h {
+                continue;
+            }
+            match side {
+                crate::floats::Side::Left => left = left.max(r.x + r.w),
+                crate::floats::Side::Right => right = right.min(r.x),
+            }
+        }
+    }
+    (left, right.max(left))
+}
+
+/// CSS Text 3 alignment shift as a 0.0..=1.0 fraction of the available band,
+/// matching `inline_alignment::apply`'s resolution for a zero-width run:
+/// `left`/`right` are always physical; `start`/`end`/unset (and `justify`,
+/// which has no free space to distribute for a zero-width box) resolve
+/// against `reversed` (the containing block's direction).
+fn text_align_fraction(value: Option<&str>, reversed: bool) -> f32 {
+    let is = |s: &str| value.is_some_and(|v| v.eq_ignore_ascii_case(s));
+    if is("left") {
+        0.0
+    } else if is("right") {
+        1.0
+    } else if is("center") {
+        0.5
+    } else if is("end") {
+        if reversed { 0.0 } else { 1.0 }
+    } else if reversed {
+        1.0
+    } else {
+        0.0
     }
 }
 
