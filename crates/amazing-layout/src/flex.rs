@@ -997,7 +997,50 @@ fn layout_column(
     }
 
     // Cross (horizontal) sizes: stretch fills the line; otherwise
-    // specified width or max-content, clamped to the container.
+    // specified width or max-content, clamped to the line's cross size.
+    //
+    // CSS Flexbox 9.4 step 7: the used cross size clamps against the flex
+    // *line's* cross size, not directly against the container's own
+    // specified cross size -- a sibling with a definite (non-auto) width
+    // can make the line wider than the container, and every other item's
+    // fit-content/stretch clamp (including this one's own) uses that wider
+    // value. Find it up front from every item's own definite width before
+    // resolving any item's auto width against it.
+    let mut line_cross = content_w;
+    for &i in order {
+        let it = &items[i];
+        if let MaybeLen::Px(w) = values::resolve_extent(&it.style, "width", it.font_size, content_w) {
+            let margin = values::resolve_margins(&it.style, it.font_size, content_w);
+            let outer_w = w + margin.left.unwrap_or(0.0) + margin.right.unwrap_or(0.0);
+            line_cross = line_cross.max(outer_w);
+        }
+    }
+    // §9.2 step 3: an auto-height item's flex base size is measured using
+    // its own cross size if definite, otherwise the *container's* inner
+    // cross size -- not the flex line's (possibly wider) cross size, which
+    // isn't about to be resolved until this same step for a row container.
+    // Measure at `content_w` here so a fit-content item whose line later
+    // grows past the container (a sibling's definite cross size) doesn't
+    // retroactively shrink this item's already-settled main size; only its
+    // *final* cross size (used for the real box below) uses `line_cross`.
+    let cross_size = |it: &LayoutBox, align: Pack, width_auto: bool, avail_for: f32, fonts: &FontSource| {
+        let ml = it.margin.left.unwrap_or(0.0);
+        let mr = it.margin.right.unwrap_or(0.0);
+        let avail = (avail_for - ml - mr).max(0.0);
+        match align {
+            Pack::Stretch
+                if width_auto
+                    && !margin_is_auto(&it.style, "left")
+                    && !margin_is_auto(&it.style, "right") =>
+            {
+                avail
+            },
+            _ => match values::resolve_extent(&it.style, "width", it.font_size, avail_for) {
+                MaybeLen::Px(v) => v.min(avail),
+                MaybeLen::Auto => max_content_width(it, fonts).min(avail),
+            },
+        }
+    };
     let mut layout_widths = vec![0.0; items.len()];
     for &i in order {
         let align = props[i].align_self.unwrap_or(spec.align_items);
@@ -1005,27 +1048,9 @@ fn layout_column(
             values::resolve_extent(&items[i].style, "width", items[i].font_size, content_w),
             MaybeLen::Auto
         );
-        let w = {
-            let it = &mut items[i];
-            let ml = it.margin.left.unwrap_or(0.0);
-            let mr = it.margin.right.unwrap_or(0.0);
-            let avail = (content_w - ml - mr).max(0.0);
-            match align {
-                Pack::Stretch
-                    if width_auto
-                        && !margin_is_auto(&it.style, "left")
-                        && !margin_is_auto(&it.style, "right") =>
-                {
-                    avail
-                },
-                _ => match values::resolve_extent(&it.style, "width", it.font_size, content_w) {
-                    MaybeLen::Px(v) => v.min(avail),
-                    MaybeLen::Auto => max_content_width(it, fonts).min(avail),
-                },
-            }
-        };
-        layout_widths[i] = w;
-        crate::block::layout_block(&mut items[i], 0.0, 0.0, w, fonts);
+        let w_measure = cross_size(&items[i], align, width_auto, content_w, fonts);
+        layout_widths[i] = cross_size(&items[i], align, width_auto, line_cross, fonts);
+        crate::block::layout_block(&mut items[i], 0.0, 0.0, w_measure, fonts);
     }
 
     // Main (vertical) sizes use the same §9.7 solver as rows. Measurement
@@ -1385,7 +1410,39 @@ pub(crate) fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 
             }).sum::<f32>();
             items + gap * children.len().saturating_sub(1) as f32
         }
-        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children
+        // Ordinary block children each get their own "line" (stack), so
+        // their max-content contribution is the widest one alone -- but
+        // floats don't force a break: a run of consecutive floats sits on
+        // the same shelf and, with no other line-break forcing them apart,
+        // would naturally lay out side by side. Sum a float run's widths
+        // (CSS Intrinsic Sizing 3's "no line breaks other than mandatory
+        // ones" contribution rule) and compare that shelf against ordinary
+        // children's own max, rather than folding every child through the
+        // same `max` as if none of them could ever sit beside another.
+        // `float` has no layout effect on a flex/grid item (it is always
+        // flex/grid-formatted, never actually floated per spec), so only
+        // an ordinary block formatting context gets the float-shelf sum --
+        // Flex/Grid keep the plain per-child max.
+        Flow::Blocks(children) => {
+            let mut best = 0.0f32;
+            let mut shelf = 0.0f32;
+            for child in children {
+                let margin = values::resolve_margins(&child.style, child.font_size, 0.0);
+                let w = max_content_width(child, fonts)
+                    + margin.left.unwrap_or(0.0)
+                    + margin.right.unwrap_or(0.0);
+                let floated = child.style.get("float").is_some_and(|value| value != "none");
+                if floated {
+                    shelf += w;
+                    best = best.max(shelf);
+                } else {
+                    best = best.max(w);
+                    shelf = 0.0;
+                }
+            }
+            best
+        }
+        Flow::Flex(children) | Flow::Grid(children) => children
             .iter()
             .map(|child| {
                 let margin = values::resolve_margins(&child.style, child.font_size, 0.0);
@@ -1796,5 +1853,52 @@ mod tests {
         assert!(k[0].node.is_none(), "first item is anonymous");
         // The text item sits left of the div (max-content fits).
         assert!(k[0].border_box.x < k[1].border_box.x);
+    }
+
+    /// css/css-flexbox/align-self-016.html: a column-direction item with
+    /// `align-self: start` (so its cross size is fit-content, not stretch)
+    /// contains two same-side floats that only fit side by side if the item
+    /// is allowed to grow past the *container's* own cross size to match a
+    /// sibling's definite (200px) width -- CSS Flexbox 9.4 step 7 clamps an
+    /// item's used cross size against the flex *line's* cross size, which a
+    /// sibling can make wider than the container itself, not directly
+    /// against the container. The item's main size (height) must still come
+    /// out as 200 (measured against the *container's* cross size per §9.2
+    /// step 3, before the line's final cross size is known) even though the
+    /// floats end up needing only 100px once the item is 200 wide.
+    #[test]
+    fn align_self_start_item_grows_to_sibling_cross_size_without_shrinking_its_settled_main_size() {
+        let html = r##"<body>
+<div id="container">
+  <div id="item">
+    <div class="float"></div>
+    <div class="float"></div>
+  </div>
+  <div style="width: 200px"></div>
+</div>
+</body>"##;
+        let css = "
+#container {
+  display: flex;
+  flex-flow: column wrap;
+  width: 100px;
+  border-right: 100px solid red;
+}
+#item{
+  align-self: start;
+  background: linear-gradient(to bottom, red 50%, green 50%);
+}
+.float {
+  float: left;
+  width: 100px;
+  height: 100px;
+  background: green;
+}
+";
+        let root = lay(html, css, 800.0);
+        let k = kids(&root);
+        assert!(close(k[0].border_box.w, 200.0), "item width={}", k[0].border_box.w);
+        assert!(close(k[0].border_box.h, 200.0), "item height={}", k[0].border_box.h);
+        assert!(close(k[1].border_box.w, 200.0), "sibling width={}", k[1].border_box.w);
     }
 }
