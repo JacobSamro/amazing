@@ -2638,3 +2638,122 @@ needed this time (per the coordinator's note on HTML-38's own small
 file it, or keep it under 10 lines and name it in the commit message).
 
 Status: done.
+
+## HTML-40 (item 1) -- adoption-agency mid-parse DOM/parser desync in child-iframe documents
+
+HTML-38's own filed finding: a `<script>` inside a child iframe's document
+(parsed via HTML-31's interleaved/pausable parser) that mutates the shared,
+already-grafted DOM (e.g. `document.body.appendChild(fb); fb.appendChild
+(ca)`) was invisible to the parser's *next* `adoption_agency` call, which
+still reasoned about the pre-mutation tree. This is why the four
+`adoption-agency-reparenting-*-cycle.html` WPT tests kept failing even
+though HTML-38's cycle/document-full guard was itself spec-correct.
+
+### Root cause
+
+`run_interleaved_iframe_parse` (`crates/amazing/src/runtime_host_html.rs`)
+builds each iframe's document in a **private** `Dom` arena ("source", via
+`ResumableParser::new(Dom::new())`), grafting it one-way into the shared
+`host.dom` ("dest") via `IncrementalDocumentImport::sync`. `sync` only ever
+copies *forward*, source -> dest. When a paused parser-blocking script
+mutates the shared *dest* tree directly, nothing carried that mutation back
+into the parser's own private *source* arena, so `adoption_agency`'s next
+call (which walks `self.dom`, the source arena) saw stale structure. The
+top-level page doesn't have this problem -- `cmd/js.rs::run_interleaved_
+parse` swaps the whole `Dom` instead of grafting a copy -- but a swap isn't
+available to an iframe, since `host.dom` holds the parent page and every
+sibling frame at the same time.
+
+### Fix
+
+Added `IncrementalDocumentImport::reverse_sync(&mut self, source: &mut Dom,
+dest: &Dom)` (`crates/amazing-dom/src/markup.rs`), called right after a
+paused iframe parser resumes a parser-blocking script
+(`runtime_host_html.rs`'s `ParseSignal::Script` arm). It walks the already-
+mapped source<->dest node pairs and, for each, re-derives the dest parent's
+source-side mirror (creating any not-yet-mirrored new dest structure along
+the way via `mirror_dest_node`/`reverse_import_one`, the reverse-direction
+counterparts of `import_one`) and reparents the source node to match if it
+moved. Because dest can be mutated in an order that would transiently
+require creating a cycle in source before the sequence resolves (`fb` and
+`ca` swapping which one contains the other), the reparent pass is a
+retry-until-fixed-point loop: attempt each pending move, defer any that
+would currently need `source.contains(node, Some(target))`, and retry the
+deferred set until no more progress is possible. dest's own structure was
+itself reached via a sequence of individually-valid moves, so some
+processing order is always cycle-free.
+
+A second, separate gap surfaced once cycles were correctly *detected* in
+source again: HTML-38's guard correctly left the cycle-causing node (`fb`)
+unreachable in source, but `sync`'s forward walk is additions-only -- once
+a node drops out of source's reachable tree, `sync_children` never revisits
+it, so its `dest` counterpart stayed exactly where the *script* had put it,
+forever. Fixed by adding `detach_unreachable`, called at the end of `sync`,
+which detaches any `dest` node whose `source` counterpart no longer reaches
+the arena's document root. Reachability here has to walk the same
+*host-including* ancestor chain the cycle guard itself uses (ordinary
+parent, or a shadow root's hop to its host, or a template's `content`
+fragment's hop to its owning `<template>` -- exposed as the new `Dom::
+host_including_parent` in `amazing-dom/src/shadow.rs`, factored out of the
+existing `host_including_ancestors`), not a plain parent-chain walk: a
+first version used only `.parent`, which made every template-content
+fragment or shadow root "unreachable" on its own (they have no ordinary
+parent, only the host-including hop) and wrongly detached four unrelated,
+previously-passing `template/*` files -- caught by this ticket's own before/
+after WPT diff, not by inspection, and fixed before committing.
+
+A more ambitious, symmetric *forward*-direction pass (`reparent_to_match_
+source`/`mirror_source_node`, mirroring `reverse_sync`'s own shape: reparent
+an already-mapped dest node to match source, mirroring any not-yet-imported
+new source parent into dest) was tried to additionally fix `adoption-agency-
+reparenting.html`'s "furthest block adopted into another Document" and
+"common ancestor adopted into another Document" subtests. It fixed one of
+those but regressed `adoption-agency-reparenting-inner-loop-cycle.html` from
+passing to a `HierarchyRequestError` -- `dest`, unlike `source`, is live for
+the parent page and every sibling frame simultaneously, and the two
+`pre_insert` validation plus retry-order guarantees that make `reverse_
+sync`'s version safe didn't transfer cleanly. Reverted; the ticket's named
+priority is the cycle tests actually passing, not the cross-document moves.
+
+### Known limitations (not fixed this ticket)
+
+- `adoption-agency-reparenting-document-target.html` (foster-parenting into
+  a brand-new, script-created foreign `Document`) and 4 of `adoption-
+  agency-reparenting.html`'s 5 subtests (2 cross-`Document` moves, a
+  detach-then-reconstruct case, and a foster-parenting-into-`<tr>` case)
+  remain failing -- they need either genuine cross-`Document` mirroring
+  (out of scope: `IncrementalDocumentImport` is built around exactly one
+  source arena and one dest document) or the reverted forward-mirroring
+  pass above.
+- `adoption-agency-reparenting-pagehide.tentative.html` errors with
+  `TypeError: cannot access a property on nullish value` in every run,
+  unchanged before/after -- not investigated this ticket; likely unrelated
+  to the desync fix (possibly a `pagehide` event gap).
+
+### Cross-lane note
+
+This ticket's fix required real additions to `amazing-dom` (`markup.rs`'s
+`IncrementalDocumentImport::reverse_sync` and its helpers; `shadow.rs`'s
+`host_including_parent`), not a small under-10-line touch, so per the
+coordinator's HTML-38 feedback this is named here and filed in
+`questions.md` for dom-bindings' awareness rather than kept silent.
+
+### Gate
+
+WPT (`html/syntax/parsing`, 56 selected files, strict per-test status-map
+diff against HTML-39's own after-state, same venus-001 host for build+test
+in one command, `html38d-after-status.json` as the baseline): **0 lost
+passes, +4 gained files** (`adoption-agency-reparenting-cycle.html`,
+`-inner-loop-cycle.html`, `-shadow-cycle.html`, `-template-cycle.html` --
+the four named cycle tests, confirmed individually via direct `wpt-harness-
+worker` invocation, not just the aggregate), **0 other changes**. File
+totals: pass 26 -> 30, fail 23 -> 19, timeout/error/unsupported unchanged
+(3/1/3). `html/syntax/serializing` (item 3) does not exist in the pinned
+WPT checkout (`c2a2fce`) -- nothing to sweep there.
+
+`amazing-html` + `amazing-dom` crate nextest: **420/420 passed**. Workspace
+nextest: **3,461/3,461 passed, 17 skipped** (same count as HTML-39's own
+gate -- no drift). Doctests: 0 FAILED.
+
+Status: done (item 1). Items 2 (remaining `html/syntax/parsing` failures,
+largest cluster first) and 3 (n/a, see above) continue as separate work.

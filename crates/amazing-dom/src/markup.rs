@@ -2,6 +2,32 @@
 use crate::{Dom, DomError, NodeIdx, NodeKind};
 use std::collections::HashMap;
 
+/// Whether walking `node`'s host-including ancestor chain (ordinary DOM
+/// parent, *or* a shadow root's hop to its host, *or* a template's
+/// `content` fragment's hop to its owning `<template>` -- see `Dom::
+/// host_including_parent`) reaches the arena's own document root
+/// (`NodeIdx(0)`, per `ResumableParser`'s own contract -- see
+/// `IncrementalDocumentImport::new`). `false` for a node that is either
+/// plainly detached (no parent and no host-including hop) or attached
+/// only to a floating subtree that itself never made it back into the
+/// document (a formatting-element clone the adoption agency algorithm's
+/// inner loop created and never attached anywhere is exactly this shape:
+/// the dropped node ends up with a real `parent`, just not one that leads
+/// anywhere). The host-including hop matters here as much as it does for
+/// the cycle guard itself: a template's `content` fragment root, or a
+/// shadow root, has no ordinary `parent` at all -- it is a root of its
+/// own arena-local tree -- so a plain parent-chain walk would call *every*
+/// such fragment "unreachable" even while its owning template/host is very
+/// much attached, and wrongly detach its `dest` counterpart.
+fn source_reaches_document_root(dom: &Dom, node: NodeIdx) -> bool {
+    let mut cursor = Some(node);
+    while let Some(id) = cursor {
+        if id == NodeIdx(0) { return true; }
+        cursor = dom.host_including_parent(id);
+    }
+    false
+}
+
 fn append(out: &mut Vec<u16>, value: &str) { out.extend(value.encode_utf16()); }
 
 fn escape(out: &mut Vec<u16>, value: &[u16], attribute: bool, raw: bool) {
@@ -280,6 +306,12 @@ pub struct IncrementalDocumentImport {
     /// so `sync_special_containers` below re-descends into it explicitly)
     /// and a template's contents fragment, the same way.
     map: HashMap<NodeIdx, NodeIdx>,
+    /// The reverse of `map` (dest -> source), kept in lockstep by `record`
+    /// -- `reverse_sync` needs to go from a `dest` node it already knows
+    /// back to the `source` node it should update, just as often as `sync`
+    /// needs the other direction, so both maps are maintained together
+    /// rather than rebuilding one from the other on every call.
+    rev: HashMap<NodeIdx, NodeIdx>,
 }
 
 impl IncrementalDocumentImport {
@@ -290,7 +322,15 @@ impl IncrementalDocumentImport {
     pub fn new(dest_document: NodeIdx) -> Self {
         let mut map = HashMap::new();
         map.insert(NodeIdx(0), dest_document);
-        Self { dest_document, map }
+        let mut rev = HashMap::new();
+        rev.insert(dest_document, NodeIdx(0));
+        Self { dest_document, map, rev }
+    }
+
+    /// Records a newly-copied pair in both directions.
+    fn record(&mut self, source_node: NodeIdx, dest_node: NodeIdx) {
+        self.map.insert(source_node, dest_node);
+        self.rev.insert(dest_node, source_node);
     }
 
     /// The destination document node passed to `new`.
@@ -308,7 +348,44 @@ impl IncrementalDocumentImport {
     /// call repeatedly (at every parser pause, and once more after `Eof`);
     /// a call with nothing new to copy is a no-op.
     pub fn sync(&mut self, dest: &mut Dom, source: &Dom) -> Result<(), DomError> {
-        self.sync_children(dest, source, NodeIdx(0), self.dest_document)
+        self.sync_children(dest, source, NodeIdx(0), self.dest_document)?;
+        self.detach_unreachable(dest, source);
+        Ok(())
+    }
+
+    // A symmetric forward-direction "reparent an already-mapped node to
+    // match source, creating any not-yet-mirrored new parent along the
+    // way" pass (mirroring `reverse_sync`'s own reparent pass) was tried
+    // here and reverted (HTML-40): it fixed one `adoption-agency-
+    // reparenting.html` subtest (a furthest block adopted into another
+    // Document, then reconstructed normally) but regressed `adoption-
+    // agency-reparenting-inner-loop-cycle.html` from passing to a
+    // `HierarchyRequestError` -- the two `pre_insert` validation and the
+    // retry-order guarantee that make `reverse_sync`'s own version safe
+    // turned out not to transfer cleanly to `dest`, which (unlike
+    // `source`) is also live for every sibling frame and the parent page
+    // at the same time. The explicitly-named priority for this ticket is
+    // the cycle tests actually passing, so this stayed reverted rather
+    // than risk that regression; the `adoption-agency-reparenting.html`
+    // cross-document subtests remain unfixed (see html_TODO.md).
+
+    /// A tree-construction step (the adoption agency algorithm's
+    /// cycle/document-full guards chief among them) can decide to leave an
+    /// already-imported node unreachable from the document root in
+    /// `source` -- fully detached, or hanging off a floating
+    /// formatting-element clone the inner loop created and never attached
+    /// anywhere -- rather than move it somewhere. `sync_children`'s walk,
+    /// being additions-only and reachability-driven, never visits such a
+    /// node again to notice this, so `dest`'s counterpart would otherwise
+    /// keep sitting wherever it last was, forever. Detach it there too.
+    fn detach_unreachable(&mut self, dest: &mut Dom, source: &Dom) {
+        let pairs: Vec<(NodeIdx, NodeIdx)> = self.map.iter()
+            .filter(|&(&s, _)| s != NodeIdx(0)).map(|(&s, &d)| (s, d)).collect();
+        for (source_node, dest_node) in pairs {
+            if !source_reaches_document_root(source, source_node) && dest.get(dest_node).parent.is_some() {
+                dest.detach(dest_node);
+            }
+        }
     }
 
     /// Imports every not-yet-copied direct child of `source_parent`, then
@@ -326,7 +403,7 @@ impl IncrementalDocumentImport {
                 Some(existing) => *existing,
                 None => {
                     let created = self.import_one(dest, source, child, dest_parent)?;
-                    self.map.insert(child, created);
+                    self.record(child, created);
                     created
                 }
             };
@@ -400,14 +477,228 @@ impl IncrementalDocumentImport {
             copied_data.declarative = source_data.declarative;
             copied_data.available_to_element_internals = source_data.available_to_element_internals;
             copied_data.keep_custom_element_registry_null = source_data.keep_custom_element_registry_null;
-            self.map.insert(root, copied_root);
+            self.record(root, copied_root);
         }
         if source.is_html_template(node) {
             let destination = dest.ensure_template_contents(created)?;
             if let Some(contents) = source.template_contents(node) {
-                self.map.insert(contents, destination);
+                self.record(contents, destination);
             }
         }
         Ok(created)
+    }
+
+    /// The reverse of `sync`: makes this arena's own private `source`
+    /// mirror whatever the shared, already-grafted subtree currently looks
+    /// like in `dest`, for every node this import has ever copied there.
+    ///
+    /// `sync` only ever copies `source` forward INTO `dest`; a script that
+    /// runs while a `ResumableParser` is paused mutates `dest` directly
+    /// (the real, shared arena the JS host and every other frame sees), and
+    /// without this, `source`'s own tree-construction algorithms -- the
+    /// adoption agency algorithm's cycle/document-full checks chief among
+    /// them (`amazing-html`'s `tree.rs`) -- keep reasoning about `source`'s
+    /// STALE, pre-mutation shape once the parser resumes, since nothing
+    /// ever told `source` about the mutation. Call this once, right after
+    /// running a script and before resuming the parser.
+    ///
+    /// Two passes: first, every already-mapped node is re-parented in
+    /// `source` to match wherever its `dest` counterpart currently lives
+    /// (needed for the common "script reparents an existing node" case --
+    /// the cycle tests this exists for). Second, every mapped node's
+    /// current `dest` children are walked and any not-yet-mirrored one --
+    /// a script-created element, or new content placed straight into a
+    /// mirrored shadow root or template's contents -- gets a brand-new
+    /// `source` counterpart too, so a cycle or host-including-ancestor
+    /// relationship that only exists through such brand-new structure
+    /// (the shadow-root/template-contents cycle tests) is visible to
+    /// `source` as well, not just moves of pre-existing nodes.
+    ///
+    /// A move to a location with no possible mirror -- script moved the
+    /// node into a *different* `Document` entirely (`dest.host_including_
+    /// parent` walks off the top without ever reaching something already
+    /// mapped) -- has nothing in `source` it could be mirrored into, since
+    /// `source` has no notion of any document but its own. The
+    /// corresponding `source` node is left/made detached instead, which
+    /// happens to match what the adoption agency algorithm's own "detach,
+    /// then insert at the adjusted insertion location" step needs
+    /// regardless of where a node used to be.
+    pub fn reverse_sync(&mut self, source: &mut Dom, dest: &Dom) -> Result<(), DomError> {
+        let pairs: Vec<(NodeIdx, NodeIdx)> = self.map.iter()
+            .filter(|&(&s, _)| s != NodeIdx(0)).map(|(&s, &d)| (s, d)).collect();
+        // `dest`'s current shape was reached by some sequence of
+        // individually-valid DOM mutations (a real `Dom` can never hold an
+        // actual cycle), so *some* order exists in which replaying every
+        // node's move in `source` is itself never momentarily cyclic --
+        // but `pairs`' own (hash-map, so arbitrary) order is not
+        // necessarily that order. Retry whatever doesn't fit yet -- e.g.
+        // moving A under B before B has itself been moved out from under
+        // A -- until nothing more can progress.
+        let mut remaining = pairs.clone();
+        loop {
+            let mut progressed = false;
+            let mut deferred = Vec::new();
+            for (source_node, dest_node) in remaining {
+                let target = match dest.get(dest_node).parent {
+                    None => None,
+                    Some(parent) => self.mirror_dest_node(source, dest, parent)?,
+                };
+                if source.get(source_node).parent == target { continue; }
+                if let Some(t) = target {
+                    if source.contains(source_node, Some(t)) {
+                        deferred.push((source_node, dest_node));
+                        continue;
+                    }
+                }
+                source.detach(source_node);
+                if let Some(parent) = target {
+                    source.attach_before(parent, None, source_node);
+                }
+                progressed = true;
+            }
+            if deferred.is_empty() { break; }
+            if !progressed {
+                // No order made progress this round -- `dest` itself would
+                // have to be cyclic for that to happen, which a real `Dom`
+                // cannot be; give up on the rest rather than looping
+                // forever, leaving them at their last-known `source`
+                // position instead.
+                break;
+            }
+            remaining = deferred;
+        }
+        for (source_node, dest_node) in &pairs {
+            self.reverse_sync_children(source, dest, *dest_node, *source_node)?;
+            self.reverse_sync_special_containers(source, dest, *dest_node)?;
+        }
+        Ok(())
+    }
+
+    /// Resolves `node` (a `dest`-side node -- an ordinary element/text/etc,
+    /// or itself a shadow root or a template's contents fragment) to the
+    /// `source`-side node it should be mirrored as, creating it (and, via
+    /// recursion, any not-yet-mirrored ancestor above it) if it has no
+    /// mirror yet. `None` means `node` is unreachable from `dest_document`'s
+    /// own tree -- it, or an ancestor of it, is not this arena's document at
+    /// all -- so there is nothing to mirror it into.
+    fn mirror_dest_node(&mut self, source: &mut Dom, dest: &Dom, node: NodeIdx)
+        -> Result<Option<NodeIdx>, DomError> {
+        if let Some(&mapped) = self.rev.get(&node) { return Ok(Some(mapped)); }
+        if let Some(data) = dest.shadow_data(node) {
+            let (host, options) = (data.host, data.options.clone());
+            let (declarative, available, keep_registry_null) = (data.declarative,
+                data.available_to_element_internals, data.keep_custom_element_registry_null);
+            let Some(source_host) = self.mirror_dest_node(source, dest, host)? else { return Ok(None) };
+            let source_root = match source.shadow_root_of_host(source_host) {
+                Some(existing) => existing,
+                None => {
+                    let created = source.attach_shadow(source_host, options)?;
+                    let copied = source.shadow_roots.iter_mut().find(|d| d.root == created)
+                        .expect("just-attached mirrored shadow root");
+                    copied.declarative = declarative;
+                    copied.available_to_element_internals = available;
+                    copied.keep_custom_element_registry_null = keep_registry_null;
+                    created
+                }
+            };
+            self.record(source_root, node);
+            return Ok(Some(source_root));
+        }
+        if let Some(template) = dest.template_of_contents(node) {
+            let Some(source_template) = self.mirror_dest_node(source, dest, template)? else { return Ok(None) };
+            let source_contents = source.ensure_template_contents(source_template)?;
+            self.record(source_contents, node);
+            return Ok(Some(source_contents));
+        }
+        let Some(parent) = dest.get(node).parent else { return Ok(None) };
+        let Some(source_parent) = self.mirror_dest_node(source, dest, parent)? else { return Ok(None) };
+        self.reverse_import_one(source, dest, node, source_parent)
+    }
+
+    /// Mirrors every not-yet-mirrored direct child of `dest_parent`
+    /// (recursing into every child, mirrored just now or earlier, exactly
+    /// like `sync_children`'s own forward walk) into `source`, under
+    /// `source_parent`.
+    fn reverse_sync_children(&mut self, source: &mut Dom, dest: &Dom,
+        dest_parent: NodeIdx, source_parent: NodeIdx) -> Result<(), DomError> {
+        for child in dest.children(dest_parent) {
+            let source_child = match self.rev.get(&child) {
+                Some(&existing) => existing,
+                None => match self.reverse_import_one(source, dest, child, source_parent)? {
+                    Some(created) => created,
+                    None => continue,
+                },
+            };
+            self.reverse_sync_children(source, dest, child, source_child)?;
+            self.reverse_sync_special_containers(source, dest, child)?;
+        }
+        Ok(())
+    }
+
+    /// The reverse of `sync_special_containers`: `node`'s shadow root
+    /// and/or template contents, mirrored already (by `mirror_dest_node`,
+    /// as an ancestor-resolution side effect) or not at all -- either way
+    /// there is nothing to *create* here, only to recurse into if it
+    /// exists.
+    fn reverse_sync_special_containers(&mut self, source: &mut Dom, dest: &Dom,
+        node: NodeIdx) -> Result<(), DomError> {
+        if let Some(root) = dest.shadow_root_of_host(node) {
+            if let Some(&source_root) = self.rev.get(&root) {
+                self.reverse_sync_children(source, dest, root, source_root)?;
+            }
+        }
+        if dest.is_html_template(node) {
+            if let Some(contents) = dest.template_contents(node) {
+                if let Some(&source_contents) = self.rev.get(&contents) {
+                    self.reverse_sync_children(source, dest, contents, source_contents)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Creates a brand-new `source` mirror of the single `dest` node
+    /// `node` (an ordinary element/text/comment/etc -- never a shadow root
+    /// or template-contents fragment, which `mirror_dest_node` handles on
+    /// its own), as a child of `source_parent`. `None` for a `dest` node
+    /// kind with no meaningful mirror (a `Document`, a `DocumentFragment`
+    /// that is not a template's contents, or an `Attr`) -- its subtree, if
+    /// any, simply stays invisible to `source` rather than erroring the
+    /// whole reverse-sync over one such node.
+    fn reverse_import_one(&mut self, source: &mut Dom, dest: &Dom, node: NodeIdx, source_parent: NodeIdx)
+        -> Result<Option<NodeIdx>, DomError> {
+        let source_document = NodeIdx(0);
+        let created = match &dest.get(node).kind {
+            NodeKind::Element { .. } => {
+                let created = source.create_element_expanded_in(source_document, dest.namespace_uri(node),
+                    dest.prefix(node), dest.local_name(node).unwrap())?;
+                for attr in dest.attributes_expanded(node).unwrap() {
+                    source.set_attribute_expanded(created, attr.namespace_uri, attr.prefix,
+                        attr.local_name, attr.value)?;
+                }
+                created
+            }
+            NodeKind::Text { .. } | NodeKind::CDATASection { .. } | NodeKind::Comment { .. } => {
+                let kind = match &dest.get(node).kind {
+                    NodeKind::Text { .. } => NodeKind::Text { data: String::new() },
+                    NodeKind::CDATASection { .. } => NodeKind::CDATASection { data: String::new() },
+                    _ => NodeKind::Comment { data: String::new() },
+                };
+                let created = source.create_node_in(source_document, kind)?;
+                let units = dest.character_data_utf16(node).unwrap_or_default();
+                source.replace_character_data(created, 0, 0, &units)?;
+                created
+            }
+            NodeKind::ProcessingInstruction { target, data } =>
+                source.create_node_in(source_document, NodeKind::ProcessingInstruction { target: target.clone(), data: data.clone() })?,
+            NodeKind::DocumentType { name, public_id, system_id } =>
+                source.create_node_in(source_document, NodeKind::DocumentType {
+                    name: name.clone(), public_id: public_id.clone(), system_id: system_id.clone(),
+                })?,
+            NodeKind::Document | NodeKind::DocumentFragment | NodeKind::Attr { .. } => return Ok(None),
+        };
+        source.attach_before(source_parent, None, created);
+        self.record(created, node);
+        Ok(Some(created))
     }
 }
