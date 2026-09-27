@@ -1,0 +1,77 @@
+{
+  "ticket": "JSRT-22 (ToPrimitive hint bug: numeric operators used the default hint instead of number)",
+  "base": "3cbfc982",
+  "commit": "1d2eb7de",
+  "root_cause": {
+    "summary": "ToNumber/ToNumeric on an object must call ToPrimitive with the \"number\" hint (7.1.3/7.1.4), not \"default\". A separate primitive_number_hint() helper already existed and was already used correctly by builtins_binary.rs, builtins_binary_bigint.rs and builtins_date.rs, but the interpreter's own core numeric operators called primitive()/primitive_with_hint(v, false) (default hint) instead.",
+    "affected": [
+      "interp.rs to_number(): the generic ToNumber(object) path (used directly by Math.max/min, to_int32/to_uint32 on an object, array length assignment, etc, and indirectly by every operator below once its own operand primitive is already resolved)",
+      "interp_stmt.rs unary_value() UnOp::Neg (unary minus, 13.5.6 ToNumeric)",
+      "interp_stmt.rs unary_value() UnOp::BitNot (13.5.8 ToNumeric)",
+      "interp_stmt.rs update_value()/update() (prefix/postfix ++/--, 13.4.x ToNumeric)",
+      "interp_stmt.rs binary() Sub|Mul|Div|Rem|Pow|Shl|Shr|UShr|BitAnd|BitOr|BitXor (13.15.3 ApplyStringOrNumericBinaryOperator's ToNumeric on each operand)",
+      "interp_stmt.rs binary() Lt|Gt|Le|Ge (7.2.13 IsLessThan's ToPrimitive(x, number)/ToPrimitive(y, number))",
+      "interp_builtins.rs native_number() (Number(value), 21.1.1.1 ToNumeric) -- installed at interp_install.rs but overwritten/dead once builtins_std_number_math.rs runs, fixed anyway for consistency",
+      "builtins_std_number_math.rs std_number_constructor() (Number(value), the one actually installed as the global Number)"
+    ],
+    "deliberately_unchanged": [
+      "binary() BinOp::Add (13.15.3): `+` calls ToPrimitive with no hint (default), since it may end up doing string concatenation instead of numeric addition -- spec-correct as-is.",
+      "interp_equality.rs loose_eq() (7.2.14 IsLooselyEqual): object-vs-primitive coercion also has no hint specified (default) -- spec-correct as-is.",
+      "builtins_date.rs date_ctor()'s single-argument Date(value) overload (21.4.3.2 `ToPrimitive(value)`, no hint) and date_proto_to_primitive/date_ordinary_to_primitive (Date's own @@toPrimitive, which picks its own order from the passed-in hint argument) -- both already correct, untouched.",
+      "interp.rs to_js_string()/to_property_key() (string hint) -- already correct, untouched."
+    ],
+    "observability": "Only observable when an operand has a custom @@toPrimitive that inspects its hint argument (e.g. `{[Symbol.toPrimitive](hint){...}}`); ordinary objects relying on valueOf/toString use the identical fallback order for hints \"number\" and \"default\" (OrdinaryToPrimitive), so this had zero effect on plain objects/boxed primitives without an exotic @@toPrimitive."
+  },
+  "related_bug_found_via_regression_test": {
+    "summary": "Postfix ++/-- returned the raw pre-conversion operand instead of ToNumeric(oldValue) (13.4.2/13.4.3 step \"Return oldValue\"), invisible for plain numbers (old == ToNumeric(old)) but wrong for objects.",
+    "fix": "interp_stmt.rs update() now converts old to old_numeric via primitive_number_hint() once, passes that (already-primitive) value into update_value() (a no-op re-entry there, not a second ToPrimitive call/side effect), and returns old_numeric for the postfix case instead of the raw old.",
+    "caught_by": "numeric_operators_pass_the_number_hint_to_to_primitive's `o-- === 5` case, added for the hint fix itself; not something the ticket named up front.",
+    "cross_lane_note": "amazing-js/src/vm/mod.rs's Instruction::Update handling (`registers[*dst] = if *prefix { next } else { previous };`) has the identical bug and is js-vm-owned; not touched here. update_value()'s own signature/behavior was left unchanged (still takes a possibly-object JsValue and does the number-hint conversion internally) specifically so vm/mod.rs's existing call site keeps compiling and behaving as before -- filed in questions.md for js-vm to fix or grant a one-line change."
+  },
+  "gate": {
+    "platform": "Linux (venus-003, idle dedicated host, load average 0.05-0.19 at measurement time)",
+    "lane": "js-runtime",
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "timeout_seconds": 60.0,
+    "before_source": ".agents/test262/baseline.json, built at dev 3cbfc982 -- same commit as this ticket's rebase base for crates/amazing-js (git diff 6a002829..3cbfc982 -- crates/amazing-js/src/ is empty, so the source underlying that snapshot is byte-identical there), same timeout_seconds so directly comparable",
+    "directories": {
+      "language/expressions": {
+        "after": {"pass": 10161, "fail": 945, "timeout": 0, "unsupported": 22, "files_total": 11128},
+        "per_file_diff_vs_baseline": {
+          "lost": 0,
+          "gained": 4,
+          "gained_files": [
+            "language/expressions/postfix-decrement/S11.3.2_A2.2_T1.js",
+            "language/expressions/postfix-decrement/S11.3.2_A4_T2.js",
+            "language/expressions/postfix-increment/S11.3.1_A2.2_T1.js",
+            "language/expressions/postfix-increment/S11.3.1_A4_T2.js"
+          ],
+          "note": "All four gains are the postfix ++/-- ToNumeric(oldValue) fix, confirming it against the real corpus, not just the added unit test."
+        }
+      },
+      "built-ins/Number": {
+        "after": {"pass": 330, "fail": 10, "timeout": 0, "unsupported": 0, "files_total": 340},
+        "per_file_diff_vs_baseline": {"lost": 0, "gained": 0, "note": "No existing Number() test in this corpus observably distinguishes the number vs default hint."}
+      },
+      "built-ins/Math": {
+        "after": {"pass": 295, "fail": 32, "timeout": 0, "unsupported": 0, "files_total": 327},
+        "per_file_diff_vs_baseline": {"lost": 0, "gained": 0}
+      }
+    },
+    "crate_amazing_js": {
+      "nextest": "446 tests run: 446 passed, 1 skipped (up from 445 pass/1 skip at JSRT-21's HEAD; +1 is numeric_operators_pass_the_number_hint_to_to_primitive)",
+      "doctest": "1 passed",
+      "note": "interp::vm::tests::primitive_and_operator_differential_corpus (tree-walker vs VM parity) still passes -- it does not probe the specific hint-observing-object/postfix-object edge cases this ticket fixed, so it does not (and structurally cannot yet) catch the tree-walker/VM divergence this ticket introduces on those specific cases until js-vm's mirrored bugs are fixed."
+    },
+    "workspace": {
+      "nextest": "3468 tests run: 3468 passed (3 slow), 17 skipped, 126.273s",
+      "doctests": "all ok across the workspace; amazing_js 1 passed, amazing_html 1 passed, all others 0 passed/ok (cargo test --workspace --locked --doc)"
+    },
+    "method": "scripts/linux-run.sh js-runtime --host venus-003, release test262_host, one scripts/test262.py --only invocation per directory, per-file diff against .agents/test262/baseline.json's records (not just aggregate counts)."
+  },
+  "known_gaps": [
+    "amazing-js/src/vm/mod.rs's Instruction::Update handling has the identical postfix-returns-pre-conversion-value bug for object operands; js-vm-owned, filed in questions.md rather than fixed here.",
+    "IsLessThan's LeftFirst evaluation-order parameter (7.2.13) is not modeled: binary()'s Lt|Gt|Le|Ge branch always calls primitive_number_hint(a) before primitive_number_hint(b) regardless of operator, but spec evaluates `a > b` as IsLessThan(b, a, false) -- side-effect-observable only when both operands are objects with side-effecting valueOf/toString AND neither has already been resolved to a primitive earlier in evaluation. Noted but not fixed this ticket (scope: hint value, not evaluation order); a candidate for a future, separate, narrow ticket if it surfaces in practice.",
+    "primitive_number_hint() and primitive_with_hint() have a pre-existing, unrelated divergence in their internal-slot ([[NumberData]]/[[StringData]]/[[BooleanData]]) fast-path shortcut: primitive_number_hint() only takes the shortcut when the object has neither an own valueOf nor an own toString, while primitive_with_hint() always checks the slots first regardless. Both bypass calling an inherited (possibly monkey-patched) Number.prototype.valueOf/toString for boxed primitives when the shortcut fires, which is not what OrdinaryToPrimitive specifies (it never special-cases internal slots). Observed while reading this code for the hint fix, not exercised by any test262 gain/loss above; flagged as a separate, narrower correctness question, not fixed here to avoid scope creep beyond the named ticket."
+  ]
+}
