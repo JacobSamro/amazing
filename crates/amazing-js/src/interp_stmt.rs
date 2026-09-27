@@ -1109,8 +1109,26 @@ impl Interpreter {
                     })?;
                     private_field_get(self, &o, &name)
                 } else {
+                    // The key expression evaluates (and may have side effects, for a computed
+                    // `obj[expr]`) before base-nullishness is checked (13.3.2.1), but a
+                    // non-optional `.`/`[]` read on a null/undefined base must still throw here
+                    // -- `get_prop`/`get_prop_receiver` is also used internally for prototype
+                    // walks and primitive boxing where returning `undefined` for a nullish
+                    // receiver is the right internal behavior, so the throw belongs at this
+                    // call site, not inside `get_prop` itself (matching `resolve_reference`'s
+                    // assignment-target Member arm below, which already has this check).
+                    // Found via a JS-19 regression test (a strict function's identity leaking
+                    // null through a sloppy function's own `.caller` relies on exactly this:
+                    // `null.throwTypeError` must throw) and confirmed against the corpus:
+                    // built-ins/Function/15.3.5.4_2-94gs.js already failed on this in the
+                    // pre-JS-18 baseline with the identical "no exception thrown at all"
+                    // diagnostic -- a pre-existing gap, not a regression.
                     let k = self.member_key(prop, env)?;
-                    self.get_prop(&o, &k)
+                    if o.is_null() || o.is_undefined() {
+                        Err(Throw::type_error("cannot access a property on nullish value"))
+                    } else {
+                        self.get_prop(&o, &k)
+                    }
                 }
             }
             ExprKind::Yield { argument, delegate } => {
@@ -1898,7 +1916,13 @@ impl Interpreter {
                 })?;
                 private_field_get(self, &receiver, &name)?
             } else {
+                // Same non-optional nullish-base throw as the plain-read Member arm in
+                // eval_expr (JS-19): `null.method()`'s property read must throw here, not
+                // fall through to "value is not callable" from calling `undefined` below.
                 let k = self.member_key(prop, e)?;
+                if o.is_null() || o.is_undefined() {
+                    return Err(Throw::type_error("cannot access a property on nullish value"));
+                }
                 self.get_prop(&o, &k)?
             };
             (function, receiver)
@@ -1970,6 +1994,9 @@ impl Interpreter {
                 private_field_get(self, &receiver, &name)?
             } else {
                 let k = self.member_key(prop, e)?;
+                if o.is_null() || o.is_undefined() {
+                    return Err(Throw::type_error("cannot access a property on nullish value"));
+                }
                 self.get_prop(&o, &k)?
             };
             Ok((function, receiver))
