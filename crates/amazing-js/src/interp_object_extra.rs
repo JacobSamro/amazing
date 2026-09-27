@@ -352,10 +352,51 @@ fn native_function_to_string(
     // Render it as the anonymous form instead, exactly like a nameless
     // function already does.
     let name = if function.name.starts_with('#') { "" } else { function.name.as_str() };
+    // NativeFunctionAccessor and PropertyName are separate grammar slots
+    // (`function NativeFunctionAccessor? PropertyName? (...) {...}`), and
+    // harness/nativeFunctionMatcher.js's PropertyName handling only accepts
+    // a bare IdentifierName or a `[...]`-bracketed computed form (which is
+    // how every Symbol-keyed method name here is already spelled from
+    // construction, e.g. "[Symbol.iterator]") -- never an arbitrary
+    // non-identifier string bare. RegExp's Annex B legacy accessors have
+    // names like "get $&"/"get $'" whose property part (`$&`, `$'`, `` $` ``,
+    // `$+`) isn't an IdentifierName, so omit that part entirely rather than
+    // emit text the matcher can't parse
+    // (built-ins/Function/prototype/toString/built-in-function-object.js
+    // walks every built-in function reachable from the global object and
+    // requires this to hold generically, not just for RegExp).
+    let (accessor, prop_name) = if let Some(rest) = name.strip_prefix("get ") {
+        ("get ", rest)
+    } else if let Some(rest) = name.strip_prefix("set ") {
+        ("set ", rest)
+    } else {
+        ("", name)
+    };
+    let prop_name = if prop_name.is_empty()
+        || prop_name.starts_with('[')
+        || is_valid_identifier_name(prop_name)
+    {
+        prop_name
+    } else {
+        ""
+    };
     Ok(JsValue::str(format!(
-        "function {}() {{ [native code] }}",
-        name
+        "function {accessor}{prop_name}() {{ [native code] }}"
     )))
+}
+/// A conservative ASCII-biased `IdentifierName` check: every legitimate
+/// built-in function/accessor name in this engine is a plain ASCII
+/// identifier (Symbol-keyed and private-name forms are already handled
+/// separately, above), so this only needs to correctly reject the small set
+/// of non-identifier property names that actually occur (`$&`, `$'`, `` $` ``,
+/// `$+`), not fully replicate Unicode ID_Start/ID_Continue.
+fn is_valid_identifier_name(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if c == '_' || c == '$' || c.is_alphabetic() => {}
+        _ => return false,
+    }
+    chars.all(|c| c == '_' || c == '$' || c.is_alphanumeric())
 }
 
 fn boolean_value(this: JsValue) -> Result<bool, Throw> {

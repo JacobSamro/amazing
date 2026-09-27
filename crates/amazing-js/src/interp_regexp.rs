@@ -588,13 +588,29 @@ fn native_regexp(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Resu
             return Ok(pattern);
         }
     }
-    // Steps 6-9: a RegExp-like pattern's source/flags come from property
-    // GETS -- observing overrides and forwarding thrown errors exactly
-    // where the spec puts them, e.g. `from-regexp-like-flag-override.js`
-    // requires "flags" to go entirely unread once an explicit `flags`
-    // argument is given -- never from ToString-ing the whole object (which
-    // is what a plain, non-regexp-like pattern gets instead).
-    let (pattern_units, flags_string) = if pattern_is_regexp {
+    // Steps 4-9: a pattern that is an actual RegExp exotic object (has a
+    // [[RegExpMatcher]] internal slot) gets its source/flags from the
+    // internal [[OriginalSource]]/[[OriginalFlags]] slots directly (step
+    // 4) -- NEVER through the "source"/"flags" *properties*, even when
+    // those are overridden with getters, same-realm or cross-realm
+    // (staging/sm/RegExp/constructor-regexp.js: `new RegExp(a)` must not
+    // invoke `a`'s overridden `source`/`flags` getters at all, and must
+    // still get the ORIGINAL "foo", not the getters' "bar"). Only a
+    // RegExp-*like* pattern that isn't a real RegExp exotic object (a
+    // plain object with a truthy overridden `@@match`) falls to step 5's
+    // ordinary property GETS, observing overrides -- e.g.
+    // `from-regexp-like-flag-override.js` requires "flags" to go entirely
+    // unread once an explicit `flags` argument is given -- never from
+    // ToString-ing the whole object (which is what a plain, non-regexp-like
+    // pattern gets instead).
+    let (pattern_units, flags_string) = if let Some(other) = regexp_data(&pattern) {
+        let flags_string = if flag_value.is_undefined() {
+            other.flags().as_string()
+        } else {
+            i.to_string(&flag_value)?
+        };
+        (other.pattern_utf16().to_vec(), flags_string)
+    } else if pattern_is_regexp {
         let source = i.get_prop(&pattern, "source")?;
         let source_units = i.to_js_string(&source)?.units().to_vec();
         let flags_string = if flag_value.is_undefined() {
