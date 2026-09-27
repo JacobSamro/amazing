@@ -1439,3 +1439,83 @@ session -- every bug found was an existing-code defect (wrong order, missing
 gate, missing check), not a missing algorithm. PlainDateTime (45 files) and
 PlainDate (42 files) are next per the coordinator's ordering, not yet
 started.
+
+## JSS-temporal-port item 2 continued: PlainDateTime cluster (checkpoint)
+
+| Selection | Before | After |
+|---|---|---|
+| `built-ins/Temporal` variants | 8218 pass / 988 fail | 8704 pass / 502 fail |
+| `built-ins/Temporal` files | 4109 pass / 494 fail | 4352 pass / 251 fail |
+
++486 pass variants (+243 pass files), zero lost, verified by a full
+(path, variant) pass-set diff against the Duration-cluster commit's baseline
+(`js-stdlib-sinceuntil-baseline.jsonl`, captured at 1aeaf16e). Workspace
+`cargo nextest run --workspace --locked --no-fail-fast`: 3399/3399 passed (3
+slow, 17 skipped, 0 failed). `cargo test --workspace --locked --doc`: all
+green.
+
+Root causes fixed (all local bug fixes; no temporal_rs/lumen porting needed):
+
+- `std_temporal_validate`'s PlainDate/PlainDateTime range check used a crude
+  day-count-only cutoff instead of the spec's `ISODateTimeWithinLimits`/
+  `ISODateWithinLimits` (fetched from the real tc39/proposal-temporal spec
+  text to resolve a hand-calculation contradiction between the two
+  algorithms). Replaced with the precise ns-based check: PlainDateTime uses
+  its own literal time-of-day; PlainDate defers to the same check with a
+  noon (hour 12) reference time, both padded by a full extra day
+  (`nsPerDay`) beyond Instant's own `nsMinInstant`/`nsMaxInstant` range.
+- `std_temporal_resolve_relative_to`'s no-zone string branch parsed via
+  `std_temporal_parse(PlainDateTime, ...)`, wrongly requiring a
+  time-of-day -- same bug class as the Duration-cluster fix, third
+  occurrence found this segment. Fixed to parse as `PlainDate`.
+- That same resolver's property-bag-without-`timeZone` branch validated the
+  resolved fields as `PlainDateTime` (midnight-anchored), but
+  `ToRelativeTemporalObject` actually constructs a `PlainDate` (time fields
+  are read/range-checked then discarded) -- fixed to validate as
+  `PlainDate` (noon-anchored), which is what a boundary date like
+  `{year:-271821, month:4, day:19}` needs to pass.
+- `PlainDateTime.from`'s own string parser also mandated time-of-day (same
+  bug class, a separate code path from the resolver) -- made optional.
+- `std_temporal_round` (the bare PlainTime/PlainDateTime `.round()`, not
+  Duration.round) read `smallestUnit` before `roundingIncrement`/
+  `roundingMode`, backwards from spec's alphabetical-property-read order;
+  it also never called the divisibility-into-next-unit check at all (only
+  a bare 1..1e9 numeric range check existed). Reordered the reads and added
+  the missing `std_temporal_validate_rounding_increment` call.
+- `smallestUnit: "week"` didn't throw for PlainTime/PlainDateTime.round
+  (only year/month were rejected; week is a real duration unit elsewhere,
+  just not a legal `round()` smallestUnit) -- added to the rejected set.
+- `smallestUnit: "day"` didn't throw for PlainTime.round at all (per spec,
+  `ValidateTemporalUnitValue` for PlainTime.round excludes "day" outright,
+  unlike PlainDateTime.round which allows it with `roundingIncrement`
+  pinned to exactly 1) -- added a PlainTime-only day rejection alongside
+  the week/year/month check.
+- First attempt at the increment-must-be-1-for-day rule put it inside the
+  *shared* `std_temporal_validate_rounding_increment`, used by
+  Duration.round (with relativeTo) and by the since/until difference-
+  rounding machinery for PlainDate/PlainDateTime -- both of which
+  legitimately allow day increments > 1 (confirmed by
+  `Duration/prototype/round/roundingincrement-days-large.js` and
+  `PlainDate(Time)/prototype/since|until/roundingincrement.js`). That
+  first attempt caused an 18-file regression (-30 net). Reverted the
+  shared-function change and instead added the day-increment-must-be-1
+  rule locally inside `std_temporal_round` only, per spec's
+  `PlainDateTime.prototype.round` algorithm (`smallestUnit` is `day` =>
+  `maximum` is 1, `inclusive` is `true`) -- Duration.round's and
+  since/until's calls to the shared validator are untouched. Re-verified
+  zero-loss after the fix.
+
+Remaining PlainDateTime-cluster files not yet triaged: calendar-field-
+ordering (`calendarresolvefields-error-ordering.js`), monthCode strict-type
+corpus inconsistency (`month-code-wrong-type.js`, `monthcode-invalid.js`),
+`observable-get-overflow-argument-primitive.js`, sub-second precision
+(`add-large-subseconds.js`/`subtract-large-subseconds.js`), a likely
+`RoundNumberToIncrementAsIfPositive` sign-handling gap
+(`negative-time.js`/`rounding-direction.js`), `rounding-edge-of-range.js`,
+`toZonedDateTime/timezone-string-datetime.js` (same theme as the reverted
+Duration timezone-string item, likely the same unresolved root cause),
+`withCalendar/calendar-time-string.js` + `missing-argument.js`, four
+`withPlainTime/argument-string-*.js`/`year-zero.js` files (PlainTime's parse
+arm not validating the date-prefix grammar it discards), and
+`order-of-operations.js` (deprioritized). PlainDate (42 files) is next per
+the coordinator's ordering.
