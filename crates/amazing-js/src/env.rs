@@ -93,6 +93,14 @@ impl BindingCell {
     pub fn same_target(&self, other: &BindingCell) -> bool {
         Rc::ptr_eq(&self.target().0, &other.target().0)
     }
+
+    /// `true` for a `let`/`const`/class/catch-parameter binding, as opposed to a `var`- or
+    /// function-declaration-hoisted one. Used by Annex B.3.3's block-function var sync (interp)
+    /// to confirm a same-named outer cell really is the legacy `var`-style promotion (never a
+    /// same-named lexical binding, which redeclaration rules would have already rejected).
+    pub fn is_lexical(&self) -> bool {
+        self.target().0.borrow().lexical
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
