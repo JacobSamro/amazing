@@ -1419,7 +1419,18 @@ fn classify_children(
                         // hoist immediately -- `inlines` stays open for
                         // whatever follows, exactly like the pre-existing
                         // (non-float) hoist arm below.
-                        if inlines.is_empty() && deferred_floats.is_empty() {
+                        //
+                        // "Nothing precedes it" means no *renderable*
+                        // content, not merely an empty `Vec`: markup
+                        // whitespace (an indentation newline before the
+                        // float) already produced a whitespace-only Text
+                        // node in `inlines` by this point, which collapses
+                        // away during line layout and must not itself
+                        // count as "something flowed" (float-nowrap-1-
+                        // notref.html's own leading indentation before its
+                        // float kept tripping the non-empty branch here,
+                        // deferring a float that should hoist immediately).
+                        if !has_renderable_inline_content(&inlines) && deferred_floats.is_empty() {
                             blocks.push(build_element(
                                 dom, styled, child, entry.parent_font, fonts, replaced,
                             ));
@@ -1696,11 +1707,13 @@ fn flatten_inline(
                     _ if crate::floats::side(&cs).is_some() && no_wrap_here(&style) => {
                         // CSS2 #float-position (float-nowrap-*): see
                         // classify_children's matching branch for the full
-                        // rationale and the "only defer once something has
-                        // already flowed" fix. `style` here is this scope's
-                        // own (e.g. the `white-space:nowrap` span's)
-                        // computed style, not the float's.
-                        if inlines.is_empty() && deferred_floats.is_empty() {
+                        // rationale, the "only defer once something has
+                        // already flowed" fix, and why this checks
+                        // renderable content rather than a bare `is_empty`.
+                        // `style` here is this scope's own (e.g. the
+                        // `white-space:nowrap` span's) computed style, not
+                        // the float's.
+                        if !has_renderable_inline_content(inlines) && deferred_floats.is_empty() {
                             blocks_out.push(build_element(
                                 dom,
                                 styled,
