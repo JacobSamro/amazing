@@ -73,6 +73,13 @@ fn push_blocked(blocked: &mut Vec<String>, added: Vec<String>) -> usize {
     pushed
 }
 
+thread_local! {
+    /// 13.2.8.1 GetTemplateObject's per-realm [[TemplateMap]], approximated
+    /// here as (realm, template-literal AST node address) -> the frozen
+    /// template object. See `Interpreter::get_template_object`.
+    static TEMPLATE_OBJECTS: RefCell<HashMap<(RealmHandle, usize), JsValue>> = RefCell::new(HashMap::new());
+}
+
 impl Interpreter {
     fn exec_stmt(&mut self, s: &ast::Stmt, env: &EnvHandle) -> Result<Flow, Throw> {
         if let Some(hook) = self.debug_hook.clone() {
@@ -212,7 +219,27 @@ impl Interpreter {
                 self.completion = JsValue::Undefined;
                 self.loop_while(test, body, env, None)
             }
-            StmtKind::With { .. } => Err(Throw::type_error("with statement is not implemented")),
+            StmtKind::With { object, body } => {
+                // 14.11.2 Runtime Semantics: Evaluation. RequireObjectCoercible
+                // then ToObject on the head expression (throwing for
+                // null/undefined, unlike Object(...)'s own boxing-only
+                // behavior -- `native_object` alone would return `undefined`
+                // unchanged instead), then run the body in a fresh
+                // object-environment record so `scoped_reference` (used by
+                // every identifier read/write/call/delete already) sees it.
+                let value = self.eval_expr(object, env)?;
+                if value.is_null() || value.is_undefined() {
+                    return Err(Throw::type_error(
+                        "cannot convert null or undefined to object in with statement",
+                    ));
+                }
+                let bound = native_object(self, JsValue::Undefined, vec![value])?;
+                let JsValue::Object(bound) = bound else {
+                    return Err(Throw::type_error("with statement requires an object"));
+                };
+                let with_env = EnvHandle::new_object(bound, env.clone());
+                self.exec_stmt(body, &with_env)
+            }
             StmtKind::DoWhile { body, test } => {
                 self.completion = JsValue::Undefined;
                 self.loop_do_while(body, test, env, None)
@@ -728,7 +755,21 @@ impl Interpreter {
             ExprKind::BigInt(digits) => BinaryBigInt::parse_radix(digits, 10)
                 .map(Self::bigint_value)
                 .ok_or_else(|| Throw::syntax_error("invalid BigInt literal")),
-            ExprKind::TaggedTemplate { .. } => Err(Throw::type_error("tagged templates are not implemented")),
+            ExprKind::TaggedTemplate { tag, template } => {
+                // 13.3.11.1 Runtime Semantics: Evaluation. `resolve_tag_callee`
+                // preserves the MemberExpression/Ident `this` binding exactly
+                // like an ordinary call's callee (`call_expr`'s own logic);
+                // anything else (a nested CallExpression, a parenthesized
+                // expression, ...) is a plain GetValue with `this` undefined.
+                let (f, this) = self.resolve_tag_callee(tag, env)?;
+                let template_object = self.get_template_object(template)?;
+                let mut argv = Vec::with_capacity(1 + template.exprs.len());
+                argv.push(template_object);
+                for x in &template.exprs {
+                    argv.push(self.eval_expr(x, env)?);
+                }
+                self.call_value(&f, this, argv)
+            }
             ExprKind::Str(s) => Ok(match &e.string_utf16 {
                 Some(units) => JsValue::str_units(units.clone()),
                 None => JsValue::str(s.as_str()),
@@ -1775,6 +1816,86 @@ impl Interpreter {
             }
         }
     }
+    /// Resolves a tagged-template's `tag` expression to (function, this),
+    /// preserving the MemberExpression/Identifier `this` binding exactly like
+    /// an ordinary call's own callee resolution in `call_expr` above (mirrors
+    /// its Member/scoped_call/plain-eval branches deliberately, rather than
+    /// sharing them): a tag can never carry `?.` or trigger direct-`eval`
+    /// bookkeeping, both of which are `call_expr`-only concerns per the
+    /// grammar, so duplicating the ~15 lines here is safer than threading an
+    /// extra flag through already-verified call-expression code.
+    fn resolve_tag_callee(&mut self, c: &ast::Expr, e: &EnvHandle) -> Result<(JsValue, JsValue), Throw> {
+        if let ExprKind::Member { obj, prop, optional } = &c.kind {
+            let o = self.eval_expr(obj, e)?;
+            if *optional && (o.is_null() || o.is_undefined()) {
+                return Ok((JsValue::Undefined, JsValue::Undefined));
+            }
+            let receiver = if matches!(&obj.kind, ExprKind::Super) {
+                e.resolve_this_checked()?
+            } else {
+                o.clone()
+            };
+            let function = if let MemberProp::Private(identifier) = prop {
+                let name = e.resolve_private(&identifier.name).ok_or_else(|| {
+                    Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
+                })?;
+                private_field_get(self, &receiver, &name)?
+            } else {
+                let k = self.member_key(prop, e)?;
+                self.get_prop(&o, &k)?
+            };
+            Ok((function, receiver))
+        } else if let Some(name) = event_handler::identifier_name(c) {
+            self.scoped_call(e, name)
+        } else {
+            Ok((self.eval_expr(c, e)?, JsValue::Undefined))
+        }
+    }
+
+    /// 13.2.8.1 GetTemplateObject: builds, once per template literal site per
+    /// realm (mirroring the spec's per-Realm [[TemplateMap]]), the frozen
+    /// cooked-strings array with a frozen `raw` array of the same site's raw
+    /// spellings. Cached by this exact `TemplateLit` AST node's address --
+    /// stable across repeated evaluations of the same call site (a loop
+    /// body, a function called more than once) because the AST is walked by
+    /// reference and never cloned between evaluations.
+    fn get_template_object(&mut self, t: &ast::TemplateLit) -> Result<JsValue, Throw> {
+        let key = (self.binding_current_realm(), t as *const ast::TemplateLit as usize);
+        if let Some(cached) = TEMPLATE_OBJECTS.with(|cache| cache.borrow().get(&key).cloned()) {
+            return Ok(cached);
+        }
+        let raw: Vec<JsValue> = t.raw_quasis_utf16.iter()
+            .map(|units| JsValue::str_units(units.clone())).collect();
+        let cooked: Vec<JsValue> = t.quasis_utf16.iter().zip(t.cooked_valid.iter())
+            .map(|(units, valid)| if *valid { JsValue::str_units(units.clone()) } else { JsValue::Undefined })
+            .collect();
+
+        let mut raw_obj = JsObject::array();
+        raw_obj.proto = Some(self.array_proto.clone());
+        let raw_array = JsValue::object(raw_obj);
+        array_create_data_properties(self, &raw_array, raw)?;
+        let raw_array = object_integrity(self, vec![raw_array], true)?;
+
+        let mut cooked_obj = JsObject::array();
+        cooked_obj.proto = Some(self.array_proto.clone());
+        let template_object = JsValue::object(cooked_obj);
+        array_create_data_properties(self, &template_object, cooked)?;
+        let JsValue::Object(template_obj) = &template_object else {
+            unreachable!("array literal construction always yields an object")
+        };
+        let _ = template_obj.borrow_mut().define("raw", Property {
+            value: raw_array,
+            writable: false,
+            enumerable: false,
+            configurable: false,
+            getter: None,
+            setter: None,
+        });
+        let template_object = object_integrity(self, vec![template_object], true)?;
+        TEMPLATE_OBJECTS.with(|cache| cache.borrow_mut().insert(key, template_object.clone()));
+        Ok(template_object)
+    }
+
     fn prop_key(&mut self, p: &PropKey, e: &EnvHandle) -> Result<PropertyKey, Throw> {
         match p {
             PropKey::Ident(i) => Ok(i.name.clone().into()),

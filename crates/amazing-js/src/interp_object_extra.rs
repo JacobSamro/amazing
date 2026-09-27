@@ -343,9 +343,18 @@ fn native_function_to_string(
         .func
         .clone()
         .ok_or_else(|| Throw::type_error("Function.toString receiver is not callable"))?;
+    // A private method's spec name is "#name" (SetFunctionName's Description
+    // for a Private Name key genuinely includes the `#`, and that's what
+    // .name correctly reports) -- but harness/nativeFunctionMatcher.js's
+    // NativeFunction grammar has no `#` production, so embedding it here
+    // makes every private-method toString() fail both the exact-source-text
+    // branch (we never have real source text to offer) and this fallback.
+    // Render it as the anonymous form instead, exactly like a nameless
+    // function already does.
+    let name = if function.name.starts_with('#') { "" } else { function.name.as_str() };
     Ok(JsValue::str(format!(
         "function {}() {{ [native code] }}",
-        function.name
+        name
     )))
 }
 
