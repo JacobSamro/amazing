@@ -439,12 +439,28 @@ impl RuntimeBindings {
             let mut adapter = RuntimeBindingHost { js: i, state: state.clone() };
             // A real Document/Element/Array/... surface for this realm, not
             // the top realm's: `frame.contentWindow.Array !== window.Array`
-            // and `frame.contentWindow.Document !== window.Document`. Storage,
-            // messaging, canvas and net stay top-only for this slice.
+            // and `frame.contentWindow.Document !== window.Document`.
+            // NET-42: `install_net()` was missing here entirely, so every
+            // net-backed global (starting with `document.cookie`, which is
+            // what surfaced this) was simply absent from every child realm.
+            // `install_storage_interfaces`/`install_messaging` had the exact
+            // same gap -- both only install classes/constructors onto
+            // *this* realm's own global object (mirroring the top-level
+            // realm's install sequence in `runtime_binding_host.rs`), so
+            // both are safe to add the same way. This does NOT give a frame
+            // its own per-origin `localStorage`/`sessionStorage` *instance*
+            // (the top realm additionally calls `storage_lexical_areas()`
+            // and declares those two as lexical globals, which needs a
+            // real per-frame-origin storage design, not just an API-shape
+            // fix) -- canvas stays top-only too, unrequested and unrelated
+            // to this fix; see docs/lanes/html_TODO.md's HTML-33 section.
             install_interfaces(&mut adapter)?;
             adapter.install_dom_unscopables()?;
             adapter.install_window_event_target()?;
             adapter.install_selection_global()?;
+            adapter.install_net()?;
+            adapter.install_storage_interfaces()?;
+            adapter.install_messaging()?;
             adapter.install_iframe_members()?;
             adapter.install_html_form_globals()?;
             adapter.install_document_write_globals()?;
