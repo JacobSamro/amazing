@@ -232,7 +232,14 @@ fn native_async_disposable_stack_dispose(i: &mut Interpreter, this: JsValue, _ar
     // promise (spec wraps the whole body as an async abstract operation).
     let object = match require_disposable_state(&this, true) {
         Ok(object) => object,
-        Err(Throw(error)) => return Ok(new_promise(i, PromiseFate::Rejected(error))),
+        // JSVM-10: `Throw::type_error` et al. build a bare, proto-less error
+        // marker that a script only ever observes correctly once
+        // `normalize_throw` attaches the real realm-bound prototype (see
+        // `interp_array.rs`'s `native_array_from_async` for the Test262
+        // case that caught this same gap) -- required here too, since this
+        // native brand check's failure never passes through any other
+        // catcher on its way into the promise.
+        Err(error) => return Ok(new_promise(i, PromiseFate::Rejected(i.normalize_throw(error).0))),
     };
     if disposable_stack_disposed(&object) {
         return Ok(new_promise(i, PromiseFate::Fulfilled(JsValue::Undefined)));
@@ -243,7 +250,7 @@ fn native_async_disposable_stack_dispose(i: &mut Interpreter, this: JsValue, _ar
     };
     Ok(match i.dispose_stack_entries(entries, true) {
         Ok(()) => new_promise(i, PromiseFate::Fulfilled(JsValue::Undefined)),
-        Err(Throw(error)) => new_promise(i, PromiseFate::Rejected(error)),
+        Err(error) => new_promise(i, PromiseFate::Rejected(i.normalize_throw(error).0)),
     })
 }
 

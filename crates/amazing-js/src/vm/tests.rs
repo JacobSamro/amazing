@@ -1137,3 +1137,4 @@ fn class_static_methods_and_accessors_install_on_the_constructor() {
 }
 
 
+
