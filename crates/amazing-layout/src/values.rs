@@ -447,11 +447,31 @@ pub(crate) fn calc_size_basis(source: &str) -> Option<&str> {
 pub(crate) fn preferred_aspect_ratio(style: &ComputedStyle) -> Option<f32> {
     let source = style.get("aspect-ratio")?.trim();
     let ratio = source.strip_prefix("auto ").unwrap_or(source);
-    let (numerator, denominator) = ratio.split_once('/')?;
+    // `<ratio> = <number [0,inf]> [ / <number [0,inf]> ]?` -- the `/
+    // <number>` half is optional and defaults to 1 (`aspect-ratio: 2` means
+    // `2/1`), so a bare number is a valid, common form, not just `w/h`.
+    let (numerator, denominator) = ratio.split_once('/').unwrap_or((ratio, "1"));
     let numerator: f32 = numerator.trim().parse().ok()?;
     let denominator: f32 = denominator.trim().parse().ok()?;
     (numerator.is_finite() && denominator.is_finite() && numerator > 0.0 && denominator > 0.0)
         .then_some(numerator / denominator)
+}
+
+/// CSS Sizing 3 "automatic minimum size": a box's content-based minimum
+/// only replaces the initial `0` (letting a shrink-to-fit/aspect-ratio
+/// suggestion act as a true minimum) while every relevant overflow axis is
+/// `visible`/`clip` -- an `auto`/`hidden`/`scroll` box drops it, since it
+/// can always grow a scrollbar/clip content instead of overflowing its own
+/// box. Shared by the flex algorithm's per-item automatic minimum width
+/// (`flex.rs`) and plain block boxes' aspect-ratio-derived height
+/// (`block.rs`, #aspect-ratio-height-derivation).
+pub(crate) fn overflow_allows_automatic_minimum(style: &ComputedStyle) -> bool {
+    ["overflow", "overflow-x", "overflow-y"]
+        .into_iter()
+        .filter_map(|property| style.get(property))
+        .all(|overflow| {
+            overflow.eq_ignore_ascii_case("visible") || overflow.eq_ignore_ascii_case("clip")
+        })
 }
 
 pub(crate) fn parse_used_maybe_len(

@@ -463,6 +463,34 @@ fn table_rowspan_explicit_height_is_a_minimum_across_owned_rows() {
 }
 
 #[test]
+fn table_min_height_grows_past_intrinsic_row_height() {
+    // css-tables/#computing-the-table-height: `min-height` applies to the
+    // table's WRAPPER box (padding/border edge), not its grid box, so the
+    // grid must grow by exactly enough to make the wrapper reach it.
+    let b = layout(
+        "<body><table><tr><td><div></div></td></tr></table>",
+        "table{min-height:312px;border:1px solid black;padding:5px}div{width:300px;height:5px}",
+        false,
+    );
+    let table = &kids(&b)[0];
+    near(table.border_box.h, 312.0);
+}
+
+#[test]
+fn table_min_height_wins_over_a_smaller_max_height() {
+    // Same rule as every other min/max clamp in this codebase: min always
+    // wins when it exceeds max, even though that means max-height did not
+    // actually cap anything here.
+    let b = layout(
+        "<body><table><tr><td><div></div></td></tr></table>",
+        "table{min-height:150px;max-height:40px;border:1px solid black;padding:5px}div{width:300px;height:5px}",
+        false,
+    );
+    let table = &kids(&b)[0];
+    near(table.border_box.h, 150.0);
+}
+
+#[test]
 fn table_intrinsic_width_in_a_float_honors_width_and_collapsed_padding() {
     for model in ["content-box", "border-box"] {
         let b = layout(

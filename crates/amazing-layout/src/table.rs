@@ -807,7 +807,27 @@ pub(crate) fn layout(
             ((natural[i] + adjustment).max(minimum_heights[i]) - sy * (c.rows - 1) as f32).max(0.0),
         );
     }
-    let desired = length(b, "height", b.containing_block_height.unwrap_or(0.0)).unwrap_or(0.0);
+    // A table's `min-height`/`max-height` apply to its WRAPPER box (the
+    // padding/border edge), not the grid box being sized here, so both
+    // convert into a grid-box target by subtracting the table's own
+    // vertical padding+border (css-tables/#computing-the-table-height).
+    // `min-height` can grow the grid past its intrinsic row heights (the
+    // `desired`/`extra` distribution below already does that for an
+    // explicit `height`; min-height is the same mechanism). `max-height`
+    // is only applied here as a lower cap on this target, never by
+    // shrinking already-natural-sized rows -- matching every other
+    // min/max clamp in this function, min always wins when it exceeds
+    // max (`min-height-table-2.html`'s "min trumps max, like everywhere
+    // else").
+    let cbh = b.containing_block_height.unwrap_or(0.0);
+    let vertical_edges = b.padding.top + b.padding.bottom + b.border.top + b.border.bottom;
+    let mut desired = length(b, "height", cbh).unwrap_or(0.0);
+    if let Some(max_h) = length(b, "max-height", cbh) {
+        desired = desired.min((max_h - vertical_edges).max(0.0));
+    }
+    if let Some(min_h) = length(b, "min-height", cbh) {
+        desired = desired.max((min_h - vertical_edges).max(0.0));
+    }
     let grid_height = heights.iter().sum::<f32>()
         + if heights.is_empty() {
             0.0
