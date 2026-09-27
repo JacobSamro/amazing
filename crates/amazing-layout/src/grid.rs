@@ -48,7 +48,7 @@ use std::collections::HashMap;
 
 use crate::LayoutBox;
 use crate::font::FontSource;
-use crate::grid_algorithm::{maximize_tracks, resolve_flexible_tracks};
+use crate::grid_algorithm::{distribute_up_to_limits, maximize_tracks, resolve_flexible_tracks};
 use crate::values::{self, MaybeLen};
 
 #[path = "grid_repeat.rs"]
@@ -204,6 +204,37 @@ impl TrackSize {
                 ..
             } => Some(value),
             _ => None,
+        }
+    }
+    /// Growth limit for CSS Grid 2 s11.6 "Maximize Tracks". `growth_limit()`
+    /// above answers a different question (does one item's own contribution
+    /// need capping against an explicit numeric max), where treating `None`
+    /// as "no cap" is already correct there. This step needs three-way
+    /// treatment instead of that method's two-way one:
+    /// - an explicit numeric max stays exactly as `growth_limit()` gives it;
+    /// - a literal `auto` max (`has_auto_max()`: plain `TrackSize::Auto` or
+    ///   `minmax(_, auto)`) is unlimited, since nothing bounds it -- it
+    ///   should absorb leftover container space in this step, not be
+    ///   excluded from it (found by comparing against DioxusLabs/taffy's
+    ///   `maximise_tracks`, which the spec's growth-limit definition backs:
+    ///   "a track without an upper limit is treated as having a growth
+    ///   limit of infinity"; excluding it, as `growth_limit()` alone would
+    ///   via `maximize_tracks`'s `Some(_)`-only `growable` filter, silently
+    ///   dropped ordinary `auto`/`1fr auto`-style tracks' share of leftover
+    ///   space);
+    /// - a `max-content`/`min-content` max (`TrackSize::Content`, or
+    ///   `minmax(_, max-content)`) is *not* unlimited despite also having no
+    ///   numeric cap: its growth limit is the content-derived size the
+    ///   intrinsic-contribution step already computed (`current_base`), so
+    ///   it must freeze there rather than additionally soak up free space --
+    ///   `grid-template-columns: max-content max-content` must stay sized to
+    ///   its items' own content, not stretch across a wide container.
+    fn maximize_limit(self, current_base: f32) -> Option<f32> {
+        match self.growth_limit() {
+            Some(limit) => Some(limit),
+            None if self.is_fr() => None,
+            None if self.has_auto_max() => Some(f32::INFINITY),
+            None => Some(current_base),
         }
     }
     fn repeat_size(self) -> Option<f32> {
@@ -1219,7 +1250,17 @@ fn size_axis(
         .map(|kind| kind.base_floor().max(0.0))
         .collect();
 
-    // Intrinsic contributions.
+    // Intrinsic contributions (CSS Grid 2 s11.5.1): distribute each item's
+    // outer contribution across its span's intrinsic tracks up to their own
+    // growth limits before any of them exceeds it, via
+    // `distribute_up_to_limits` (ported from taffy's
+    // `distribute_space_up_to_limits` -- see `grid_algorithm.rs`), instead
+    // of a single equal share hard-clamped per track independently. The
+    // difference matters whenever a span mixes tracks with different
+    // limits, e.g. `[minmax(0,40px) auto]`: a flat equal share can clamp
+    // the capped track down without ever handing its unused portion to the
+    // other track, undersizing the whole span below the item's real
+    // content need.
     for c in contribs {
         let end = (c.start + c.span).min(n);
         let intr: Vec<usize> = (c.start..end)
@@ -1227,22 +1268,40 @@ fn size_axis(
                 kinds[t].is_intrinsic() || (fr_is_intrinsic && kinds[t].is_fr())
             })
             .collect();
-        if !intr.is_empty() {
-            let fixed = (c.start..end).filter(|track| intr.binary_search(track).is_err())
-                .map(|track| base[track]).sum::<f32>();
-            let internal_gaps = gap * (end - c.start).saturating_sub(1) as f32;
-            let share = (c.outer - fixed - internal_gaps).max(0.0) / intr.len() as f32;
-            for track in intr {
-                base[track] = base[track].max(share)
-                    .min(kinds[track].growth_limit().unwrap_or(f32::INFINITY));
-            }
+        if intr.is_empty() {
+            continue;
+        }
+        // The item's own contribution already accounts for every track it
+        // spans, not just the intrinsic ones -- so the space still needed
+        // subtracts *all* of them at their current size (definite tracks,
+        // which never change here, and intrinsic tracks, which may already
+        // have grown to satisfy an earlier item sharing this span). Only
+        // subtracting the definite tracks (as amazing-layout's own prior
+        // version and grid_algorithm.rs's other functions do for a single
+        // fixed/base tuple) double-counts an intrinsic track across
+        // multiple items landing in the same span and overshoots its size.
+        let track_sizes: f32 = (c.start..end).map(|track| base[track]).sum();
+        let internal_gaps = gap * (end - c.start).saturating_sub(1) as f32;
+        let extra = (c.outer - track_sizes - internal_gaps).max(0.0);
+        if extra <= 0.0 {
+            continue;
+        }
+        let affected: Vec<bool> = (c.start..end).map(|t| intr.contains(&t)).collect();
+        let limits: Vec<f32> = (c.start..end)
+            .map(|t| kinds[t].growth_limit().unwrap_or(f32::INFINITY))
+            .collect();
+        let mut spanned: Vec<f32> = (c.start..end).map(|t| base[t]).collect();
+        distribute_up_to_limits(extra, &mut spanned, &affected, &limits);
+        for (offset, t) in (c.start..end).enumerate() {
+            base[t] = spanned[offset];
         }
     }
 
     if let Some(available) = available {
         let limits = kinds
             .iter()
-            .map(|kind| kind.growth_limit())
+            .zip(&base)
+            .map(|(kind, &current_base)| kind.maximize_limit(current_base))
             .collect::<Vec<_>>();
         let gaps = gap * n.saturating_sub(1) as f32;
         base = maximize_tracks(available, gaps, &base, &limits);
@@ -2805,15 +2864,63 @@ mod tests {
 
     #[test]
     fn subgrid_child_sizing_contributes_to_parent_auto_track() {
+        // Container width is exactly the auto column's content need (70)
+        // plus the fixed column (50) -- 120, not the 200 an earlier version
+        // of this test used. With leftover container space, CSS Grid 2
+        // s11.6 "Maximize Tracks" grows the `auto` column past its content
+        // size to fill it (an `auto` max sizing function has no growth
+        // limit, unlike an explicit `max-content`/`min-content` one), which
+        // this test isn't about; giving it exactly the content total keeps
+        // it isolated to what it checks, that a subgrid child's own
+        // contribution reaches the parent's track sizing at all.
         let root = crate::layout_document(
             "<body><section><div></div></section></body>",
             "body{display:grid;margin:0;grid-template-columns:auto 50px;justify-content:start}section{display:grid;grid-column:1/span 2;grid-template-columns:subgrid}section>div{width:70px;height:10px}",
-            200.0, &FontSource::fallback(),
+            120.0, &FontSource::fallback(),
         );
         let Flow::Grid(parent_items) = &root.flow else { panic!("parent grid missing") };
         let Flow::Grid(children) = &parent_items[0].flow else { panic!("subgrid missing") };
         assert!(close(children[0].border_box.w, 70.0));
         assert!(close(parent_items[0].border_box.w, 120.0));
+    }
+
+    #[test]
+    fn auto_track_grows_past_content_size_to_fill_leftover_container_space() {
+        // CSS Grid 2 s11.6 "Maximize Tracks": a track whose max sizing
+        // function is the bare `auto` keyword has no growth limit, so once
+        // its content-based base size is resolved it still absorbs any
+        // space left over in the container -- unlike an explicit
+        // `max-content`/`min-content` max, which freezes at the
+        // content-derived size (see `minmax_content_max_does_not_grow_past_
+        // its_content_size` below). 200px container, `auto 50px` columns:
+        // the default row-flow auto-places item 0 in column 1 (a 70px-wide
+        // item, so the auto column's content-based need is 70) and item 1
+        // in column 2. The auto column should grow to fill the 80px of
+        // leftover space (200 - 70 - 50), landing item 1's border box at
+        // x=150 (70 + 80), not at its own 70px content size.
+        let mut items = grid_fixture(2, "", "height:10px");
+        items[0].style.set("width", "70px");
+        lay(&mut items, &cs(&[("grid-template-columns", "auto 50px"), ("justify-content", "start")]), 200.0, None);
+        assert!(close(items[0].border_box.w, 70.0), "{:?}", items[0].border_box);
+        assert!(close(items[1].border_box.x, 150.0), "column 2 should start after the grown auto column: {:?}", items[1].border_box);
+    }
+
+    #[test]
+    fn minmax_content_max_does_not_grow_past_its_content_size() {
+        // Contrast with the `auto`-max case above: `max-content` (and, per
+        // this crate's conflated `TrackSize::Content`, `min-content`) as an
+        // explicit max sizing function has a real, finite growth limit --
+        // the content's own max-content contribution -- so it must NOT also
+        // absorb leftover container space in the Maximize Tracks step.
+        // `grid-template-columns: max-content max-content` must stay sized
+        // to its items' content even in a much wider container.
+        let mut items = grid_fixture(2, "", "");
+        lay(&mut items, &cs(&[("grid-template-columns", "max-content max-content")]), 300.0, None);
+        // Neither column has any real content (empty divs), so both should
+        // stay at their (near-zero) content size, not stretch to fill the
+        // 300px container between them.
+        assert!(items[0].border_box.w < 5.0, "{:?}", items[0].border_box);
+        assert!(items[1].border_box.w < 5.0, "{:?}", items[1].border_box);
     }
 
     #[test]

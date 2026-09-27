@@ -13,6 +13,7 @@ the table, once per license.
 |----------|--------|---------|-----------|-----------|
 | [boa-dev/temporal](https://github.com/boa-dev/temporal) (temporal_rs) | `eadf8039d2577e4375493a0eb3f46a66f25616ec` | Apache-2.0 (dual MIT/Apache-2.0 upstream) | Copyright (c) 2024 Boa | `crates/amazing-js/src/builtins_temporal_arithmetic.rs` |
 | [lucid-softworks/lumen](https://github.com/lucid-softworks/lumen) | `f6c9860d44fa52249cfd647122edea184d32c863` | MIT | Copyright (c) 2026 Lucid Softworks limited | `crates/amazing-js/src/interp.rs`, `crates/amazing-js/src/interp_stmt.rs`, `crates/amazing-js/src/interp_disposable.rs`, `crates/amazing-js/src/value.rs` |
+| [DioxusLabs/taffy](https://github.com/DioxusLabs/taffy) | `e661b35980d9644ad8f1df64e183d27e5884533b` | MIT | Copyright (c) 2018 Visly Inc.; Copyright (c) 2026 Taffy Authors | `crates/amazing-layout/src/grid_algorithm.rs` |
 
 ## MIT License
 
