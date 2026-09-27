@@ -1637,7 +1637,7 @@ fn rejection(i: &Interpreter, error: JsValue) -> PromiseFate {
     PromiseFate::Rejected(i.normalize_throw(Throw(error)).0)
 }
 
-fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValue {
+pub(crate) fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValue {
     if matches!(&value, JsValue::Object(object) if matches!(object.borrow().exotic, Exotic::Promise(_))) {
         // PromiseResolve(%Promise%, value): a native promise is reused only
         // when its `constructor` is %Promise% (recognised here by its own
@@ -1671,7 +1671,7 @@ fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValue {
     promise
 }
 
-fn async_complete(i: &mut Interpreter, target: &Obj, value: JsValue) -> Result<(), Throw> {
+pub(crate) fn async_complete(i: &mut Interpreter, target: &Obj, value: JsValue) -> Result<(), Throw> {
     if matches!(&value, JsValue::Object(object) if matches!(object.borrow().exotic, Exotic::Promise(_))) {
         if adopt_promise_result(target, &value, i)? {
             return Ok(());

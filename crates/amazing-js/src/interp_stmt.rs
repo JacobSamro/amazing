@@ -1158,6 +1158,10 @@ impl Interpreter {
             },
             ast::UnOp::Await => {
                 let value = self.eval_expr(x, env)?;
+                // A coroutine-backed async function body suspends for real (interp_coroutine.rs).
+                if let Some(result) = coroutine_await(self, value.clone()) {
+                    return result;
+                }
                 self.await_value(value)
             }
             ast::UnOp::Not => {
@@ -1975,6 +1979,11 @@ impl Interpreter {
         let bytecode_async = fun.is_async && !fun.is_generator
             && (async_body.is_some() || matches!(&fun.body, FunctionBody::Bytecode(_)));
         let async_generator = fun.is_async && fun.is_generator;
+        // A plain async function the VM did not compile runs on a coroutine (JSVM-9), whose
+        // promise the body branch below returns directly.
+        let thread_async = fun.is_async && !fun.is_generator && async_body.is_none()
+            && matches!(&fun.body, FunctionBody::Block(_) | FunctionBody::Expr(_));
+        let thread_started = std::cell::Cell::new(false);
         if self.depth >= MAX_CALL_DEPTH {
             return Err(Throw::range_error("maximum call stack size exceeded"));
         }
@@ -2038,6 +2047,12 @@ impl Interpreter {
                     if !fun.is_arrow { e.bind_this(this); }
                     self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
+                    if thread_async {
+                        if let Some(promise) = self.start_thread_async_function(FunctionBody::Expr(x.clone()), e.clone(), strict_function) {
+                            thread_started.set(true);
+                            return Ok(promise);
+                        }
+                    }
                     self.eval_expr(&x, &e)
                 }
                 FunctionBody::Block(b) => {
@@ -2100,6 +2115,12 @@ impl Interpreter {
                     }
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
                     self.hoist(&b.body, &e)?;
+                    if thread_async {
+                        if let Some(promise) = self.start_thread_async_function(FunctionBody::Block(b.clone()), e.clone(), strict_function) {
+                            thread_started.set(true);
+                            return Ok(promise);
+                        }
+                    }
                     // A function body is a disposal boundary in its own right (spec: ordinary
                     // FunctionDeclarationInstantiation's disposal capability), independent of any
                     // nested block's own boundary.
@@ -2137,6 +2158,10 @@ impl Interpreter {
                 Ok(value) => Ok(value),
                 Err(Throw(value)) => Ok(new_promise(self, PromiseFate::Rejected(value))),
             }
+        } else if thread_started.get() {
+            // The coroutine path already returned the function's own promise. (Its synchronous
+            // fallback, when no coroutine could be spawned, falls through to the branch below.)
+            r
         } else if fun.is_async && !fun.is_generator {
             // An async *generator* call returns the AsyncGenerator instance itself, synchronously
             // and directly (spec 27.4.3.2 EvaluateAsyncGeneratorBody's completion is the generator

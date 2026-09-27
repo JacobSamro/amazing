@@ -11,13 +11,13 @@
 // @ f6c9860d44fa52249cfd647122edea184d32c863, MIT: the pooled-worker design (`Resume`/`Suspend`,
 // `ThreadCoro`, the idle pool, the panic/teardown handling in `resume`/`park`) is adapted here
 // onto this crate's own `Interpreter`/`JsValue`/`Throw` types in place of lumen's `Interp`/
-// `Value`; the `Coroutine::{Thread,Vm}` split, the frame-ownership panic recovery tied to
-// `Interp::cur_coro`/`fn_frames`, and the `Suspend::Await`-driven cross-microtask async driver are
-// not reproduced here (this crate has no per-call frame stack to tag, and `await` inside a
-// coroutine body currently falls through to this crate's own pre-existing, separately tracked
-// `await_value` fallback -- see its doc comment -- rather than truly parking; wiring `await`
-// through a `coroutine_await` the way lumen's own async bodies use it is a follow-up, not
-// attempted here).
+// `Value`; the `Coroutine::{Thread,Vm}` split and the frame-ownership panic recovery tied to
+// `Interp::cur_coro`/`fn_frames` are not reproduced here (this crate has no per-call frame stack
+// to tag). JSVM-9 adds lumen's `Suspend::Await`-driven async driver (`coroutine_await` and
+// `Interp::drive_async`, crates/lumen/src/interpreter.rs, same commit): a plain async function
+// the VM does not compile runs here too, parking at each `await` and resumed from the awaited
+// value's reaction (`start_thread_async_function`/`thread_async_function_step`). Async
+// generator bodies on this path still use the synchronous `await_value` degrade.
 //
 // `yield`'s "inject a `.return(v)`/`.throw(e)` completion at the suspended point" is not
 // representable in `eval_expr`'s `Result<JsValue, Throw>` return type (only `exec_stmt`'s
@@ -55,6 +55,9 @@ enum Suspend {
     Done(JsValue),
     /// The body threw `e` and it escaped.
     Throw(JsValue),
+    /// `await v` in a coroutine-backed async function body -- parked until `v` settles; the
+    /// driver resumes with `Resume::Next(value)` or `Resume::Throw(reason)`.
+    Await(JsValue),
 }
 
 /// A `*mut Interpreter` carried to the generator thread. Sound only under the strict ping-pong
@@ -81,6 +84,104 @@ thread_local! {
     /// received `Resume::Return`; consulted by `exec_try`'s catch dispatch (to skip `catch`) and
     /// finally taken (and cleared) once at the top of the body, in `thread_result_to_suspend`.
     static PENDING_RETURN: RefCell<Option<JsValue>> = const { RefCell::new(None) };
+    /// The running body's execution context (see `Segment`), while a coroutine body runs.
+    static SEGMENT: RefCell<Option<Segment>> = const { RefCell::new(None) };
+}
+
+/// A coroutine body's own execution context. The body runs in *segments* -- from its start or a
+/// resumption up to its next suspension or completion -- each on top of whatever call stack the
+/// driver happens to have at that moment (the original call, a later `.next()`, a promise
+/// reaction). Every segment therefore re-establishes the function's own call frame (`this`,
+/// `new.target`, `super`, `[[HomeObject]]`) and strictness on entry and restores the driver's on
+/// exit, the way the VM keeps them in its resumable frame.
+struct Segment {
+    this: JsValue,
+    home: Option<Obj>,
+    super_constructor: Option<JsValue>,
+    new_target: Option<JsValue>,
+    own_function: Option<Obj>,
+    strict: bool,
+    /// The driver's strictness, restored when the current segment ends.
+    saved_strict: bool,
+    /// `i.frames.len()` inside the current segment: an `await` evaluated at exactly this depth
+    /// belongs to the body itself (anything deeper is a nested, non-coroutine call).
+    base: usize,
+    /// An async function body: its `await`s park the coroutine.
+    awaits: bool,
+}
+
+impl Segment {
+    fn capture(i: &Interpreter, strict: bool, awaits: bool) -> Segment {
+        let frame = i.frames.last();
+        Segment {
+            this: frame.map(|f| f.this.clone()).unwrap_or(JsValue::Undefined),
+            home: frame.and_then(|f| f.home.clone()),
+            super_constructor: frame.and_then(|f| f.super_constructor.clone()),
+            new_target: frame.and_then(|f| f.new_target.clone()),
+            own_function: frame.and_then(|f| f.own_function.clone()),
+            strict,
+            saved_strict: false,
+            base: 0,
+            awaits,
+        }
+    }
+}
+
+/// Start a segment of the running body: push its frame, switch to its strictness.
+fn enter_segment(i: &mut Interpreter) {
+    SEGMENT.with(|segment| {
+        if let Some(segment) = segment.borrow_mut().as_mut() {
+            i.frames.push(CallFrame {
+                this: segment.this.clone(),
+                home: segment.home.clone(),
+                super_constructor: segment.super_constructor.clone(),
+                new_target: segment.new_target.clone(),
+                own_function: segment.own_function.clone(),
+            });
+            segment.saved_strict = i.strict_eval_context;
+            i.strict_eval_context = segment.strict;
+            segment.base = i.frames.len();
+        }
+    });
+}
+
+/// End the current segment: pop its frame, restore the driver's strictness.
+fn leave_segment(i: &mut Interpreter) {
+    SEGMENT.with(|segment| {
+        if let Some(segment) = segment.borrow().as_ref() {
+            i.frames.pop();
+            i.strict_eval_context = segment.saved_strict;
+        }
+    });
+}
+
+/// `park` from inside a running body, closing the current segment first and opening the next
+/// one once resumed.
+fn park_segment(i: &mut Interpreter, msg: Suspend) -> Resume {
+    leave_segment(i);
+    let resumed = park(msg);
+    enter_segment(i);
+    resumed
+}
+
+/// `await value` in a coroutine-backed async function body: park until the driver settles it.
+/// `None` when the `await` does not belong to such a body (the caller then keeps the
+/// pre-existing synchronous `await_value` behaviour).
+pub(crate) fn coroutine_await(i: &mut Interpreter, value: JsValue) -> Option<Result<JsValue, Throw>> {
+    if !in_coroutine() {
+        return None;
+    }
+    let owned = SEGMENT.with(|segment| {
+        segment.borrow().as_ref().is_some_and(|segment| segment.awaits && segment.base == i.frames.len())
+    });
+    if !owned {
+        return None;
+    }
+    Some(match park_segment(i, Suspend::Await(value)) {
+        Resume::Next(value) => Ok(value),
+        Resume::Throw(error) => Err(Throw(error)),
+        Resume::Return(_) => Err(Throw::type_error("an async function cannot be returned from")),
+    })
 }
 
 /// Whether the current thread is executing a coroutine-backed generator body (so `yield` is legal
@@ -177,8 +278,8 @@ fn park(msg: Suspend) -> Resume {
 /// `yield value` (non-delegating) -- park producing a generator value, and convert the eventual
 /// resumption to `eval_expr`'s return shape. Callers must have already checked `in_coroutine()`;
 /// `park` panics with a clear message otherwise instead of silently misbehaving.
-fn coroutine_yield_to_expr(value: JsValue) -> Result<JsValue, Throw> {
-    match park(Suspend::Yield(value)) {
+fn coroutine_yield_to_expr(i: &mut Interpreter, value: JsValue) -> Result<JsValue, Throw> {
+    match park_segment(i, Suspend::Yield(value)) {
         Resume::Next(v) => Ok(v),
         Resume::Throw(e) => Err(Throw(e)),
         Resume::Return(v) => {
@@ -217,7 +318,7 @@ fn yield_delegate(i: &mut Interpreter, iterable: JsValue) -> Result<JsValue, Thr
                 if done {
                     return Ok(value);
                 }
-                park(Suspend::Yield(value))
+                park_segment(i, Suspend::Yield(value))
             }
             Resume::Throw(e) => {
                 let throw_method = i.get_prop(&iterator, "throw")?;
@@ -231,7 +332,7 @@ fn yield_delegate(i: &mut Interpreter, iterable: JsValue) -> Result<JsValue, Thr
                 if done {
                     return Ok(value);
                 }
-                park(Suspend::Yield(value))
+                park_segment(i, Suspend::Yield(value))
             }
             Resume::Return(v) => {
                 let return_method = i.get_prop(&iterator, "return")?;
@@ -245,7 +346,7 @@ fn yield_delegate(i: &mut Interpreter, iterable: JsValue) -> Result<JsValue, Thr
                     set_pending_return(value);
                     return Err(Throw(JsValue::Undefined));
                 }
-                park(Suspend::Yield(value))
+                park_segment(i, Suspend::Yield(value))
             }
         };
     }
@@ -266,7 +367,7 @@ pub(crate) fn eval_yield(
     if delegate {
         yield_delegate(i, value)
     } else {
-        coroutine_yield_to_expr(value)
+        coroutine_yield_to_expr(i, value)
     }
 }
 
@@ -330,6 +431,7 @@ fn run_job(job: CoroutineJob) {
     };
     let _ = suspend_tx.send(outcome);
     YIELDER.with(|y| *y.borrow_mut() = None);
+    SEGMENT.with(|segment| *segment.borrow_mut() = None);
 }
 
 /// Spawn a coroutine over `body` on a pooled worker, parked until its first resume.
@@ -358,6 +460,8 @@ pub struct ThreadGeneratorState {
     coro: Option<Coroutine>,
     is_async: bool,
     started: bool,
+    /// A coroutine-backed plain async function (not a generator): its promise.
+    async_target: Option<Obj>,
 }
 
 impl std::fmt::Debug for ThreadGeneratorState {
@@ -457,6 +561,8 @@ fn thread_generator_resume(
         Suspend::Yield(v) => Ok(create_iter_result(i, v, false)),
         Suspend::Done(v) => Ok(create_iter_result(i, v, true)),
         Suspend::Throw(e) => Err(Throw(e)),
+        // Generator bodies never park at an await (`Segment::awaits` is false for them).
+        Suspend::Await(_) => Err(Throw::type_error("await in a generator coroutine")),
     }
 }
 
@@ -625,16 +731,13 @@ impl Interpreter {
         strict: bool,
     ) -> JsValue {
         let has_using = body.body.iter().any(stmt_declares_resource);
+        // Captured now, inside the generator function's own call, so every later segment (each
+        // driven from an arbitrary `.next()` call site) runs with this function's frame and
+        // strictness rather than the driver's (see `Segment`).
+        let segment = Segment::capture(self, strict, false);
         let job = SendBody(Box::new(move |i: &mut Interpreter| -> Suspend {
-            // `strict_eval_context` is a scalar on `Interpreter`, not part of the captured
-            // `env`'s scope chain, and the driver already restored it to whatever it was before
-            // *this* call by the time a later `.next()` actually drives the body (this call
-            // itself returned immediately, without running any body statements). Save/restore it
-            // around the body the same way the VM's own generator/async driver does for its
-            // resumed frames (`resume_frame_with_strictness`), so a strict-mode generator body
-            // stays strict on every resume regardless of the driver's own context at that moment.
-            let previous_strict = i.strict_eval_context;
-            i.strict_eval_context = strict;
+            SEGMENT.with(|s| *s.borrow_mut() = Some(segment));
+            enter_segment(i);
             let completion = if has_using {
                 i.using_stack.push(Vec::new());
                 let result = i.exec_stmts(&body.body, &env);
@@ -643,7 +746,7 @@ impl Interpreter {
             } else {
                 i.exec_stmts(&body.body, &env)
             };
-            i.strict_eval_context = previous_strict;
+            leave_segment(i);
             thread_result_to_suspend(completion)
         }));
         let ptr = self as *mut Interpreter;
@@ -660,9 +763,149 @@ impl Interpreter {
             coro,
             is_async,
             started: false,
+            async_target: None,
         })));
         JsValue::object(object)
     }
+
+    /// Run a plain async function's body (one the bytecode VM did not compile) on a coroutine so
+    /// its `await`s truly suspend until the awaited value settles, instead of the synchronous
+    /// `await_value` degrade. Parameters are bound and the body hoisted by the caller, inside the
+    /// function's own call; the body runs synchronously up to its first `await` right here, like
+    /// AsyncFunctionStart. Returns the function's promise, or `None` when no coroutine can be
+    /// spawned (no OS threads), in which case the caller keeps its synchronous path.
+    pub(crate) fn start_thread_async_function(
+        &mut self,
+        body: FunctionBody,
+        env: EnvHandle,
+        strict: bool,
+    ) -> Option<JsValue> {
+        let segment = Segment::capture(self, strict, true);
+        let job = SendBody(Box::new(move |i: &mut Interpreter| -> Suspend {
+            SEGMENT.with(|s| *s.borrow_mut() = Some(segment));
+            enter_segment(i);
+            let completion = match &body {
+                FunctionBody::Expr(expression) => i.eval_expr(expression, &env).map(Flow::Return),
+                FunctionBody::Block(block) => {
+                    if block.body.iter().any(stmt_declares_resource) {
+                        i.using_stack.push(Vec::new());
+                        let result = i.exec_stmts(&block.body, &env);
+                        let frame = i.using_stack.pop().unwrap_or_default();
+                        i.dispose_frame(frame, result)
+                    } else {
+                        i.exec_stmts(&block.body, &env)
+                    }
+                }
+                _ => Ok(Flow::Normal),
+            };
+            leave_segment(i);
+            thread_result_to_suspend(completion)
+        }));
+        let coro = spawn_coroutine(self as *mut Interpreter, job).ok()?;
+        let promise = new_promise(self, PromiseFate::Pending);
+        let JsValue::Object(target) = &promise else { unreachable!() };
+        let state = Rc::new(RefCell::new(ThreadGeneratorState {
+            coro: Some(coro),
+            is_async: true,
+            started: true,
+            async_target: Some(target.clone()),
+        }));
+        if let Err(Throw(error)) = thread_async_function_step(self, state, Resume::Next(JsValue::Undefined)) {
+            let error = self.normalize_throw(Throw(error)).0;
+            let _ = settle_promise(target, PromiseFate::Rejected(error), self);
+        }
+        Some(promise)
+    }
+}
+
+/// Drive a coroutine-backed async function one segment: resume it with `resume`, then act on
+/// how it parked -- chain the next resumption onto an awaited value (Await: PromiseResolve +
+/// PerformPromiseThen), or settle the function's promise on completion.
+fn thread_async_function_step(
+    i: &mut Interpreter,
+    state: Rc<RefCell<ThreadGeneratorState>>,
+    resume: Resume,
+) -> Result<(), Throw> {
+    // The coroutine is taken out for the resume so no `RefCell` borrow is held while the body
+    // runs (it may re-enter the driver through nested calls).
+    let (mut coro, target) = {
+        let mut guard = state.borrow_mut();
+        match (guard.coro.take(), guard.async_target.clone()) {
+            (Some(coro), Some(target)) => (coro, target),
+            _ => return Ok(()),
+        }
+    };
+    let suspend = coro.resume(resume);
+    let done = coro.done();
+    if !done {
+        state.borrow_mut().coro = Some(coro);
+    }
+    match suspend {
+        Suspend::Await(value) => {
+            let awaited = vm::async_resolve_value(i, value);
+            let fulfilled = thread_async_callback(i, state.clone(), false);
+            let rejected = thread_async_callback(i, state, true);
+            let then = i.get_prop(&awaited, "then")?;
+            i.call_value(&then, awaited, vec![fulfilled, rejected])?;
+            Ok(())
+        }
+        Suspend::Done(value) => vm::async_complete(i, &target, value),
+        Suspend::Throw(error) => {
+            let error = i.normalize_throw(Throw(error)).0;
+            settle_promise(&target, PromiseFate::Rejected(error), i)
+        }
+        Suspend::Yield(_) => {
+            let error = i.normalize_throw(Throw::type_error("yield in an async function")).0;
+            settle_promise(&target, PromiseFate::Rejected(error), i)
+        }
+    }
+}
+
+/// The await reaction for a coroutine-backed async function: a native closure carrying the
+/// function's state in its own environment (like the VM's `async_handler`).
+fn thread_async_callback(i: &Interpreter, state: Rc<RefCell<ThreadGeneratorState>>, reject: bool) -> JsValue {
+    let env = EnvHandle::new(EnvKind::Function, Some(i.global_env.clone()));
+    let mut holder = JsObject::ordinary();
+    holder.exotic = Exotic::ThreadGenerator(state);
+    let _ = env.declare_var("[[ThreadAsyncState]]", JsValue::object(holder));
+    let mut function = JsObject::function(JsFunction {
+        name: if reject { "awaitRejected" } else { "awaitFulfilled" }.into(),
+        params: vec![],
+        body: FunctionBody::Native(if reject { thread_async_rejected } else { thread_async_fulfilled }),
+        is_arrow: false,
+        is_async: false,
+        is_generator: false,
+        env,
+        home: None,
+        proto_for_new: None,
+    });
+    function.proto = Some(i.function_proto.clone());
+    JsValue::object(function)
+}
+
+fn thread_async_callback_state(i: &Interpreter) -> Result<Rc<RefCell<ThreadGeneratorState>>, Throw> {
+    let native = i.native_stack.last().ok_or_else(|| Throw::type_error("missing async callback"))?;
+    let env = native.borrow().func.as_ref().unwrap().env.clone();
+    let Some(JsValue::Object(holder)) = env.resolve("[[ThreadAsyncState]]") else {
+        return Err(Throw::type_error("missing async function state"));
+    };
+    let state = match &holder.borrow().exotic {
+        Exotic::ThreadGenerator(state) => state.clone(),
+        _ => return Err(Throw::type_error("invalid async function state")),
+    };
+    Ok(state)
+}
+
+fn thread_async_fulfilled(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let state = thread_async_callback_state(i)?;
+    thread_async_function_step(i, state, Resume::Next(args.into_iter().next().unwrap_or(JsValue::Undefined)))?;
+    Ok(JsValue::Undefined)
+}
+
+fn thread_async_rejected(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let state = thread_async_callback_state(i)?;
+    thread_async_function_step(i, state, Resume::Throw(args.into_iter().next().unwrap_or(JsValue::Undefined)))?;
+    Ok(JsValue::Undefined)
 }
 
 #[cfg(test)]
