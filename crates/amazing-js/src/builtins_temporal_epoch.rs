@@ -9,6 +9,16 @@ struct StdEpochData {
     kind: StdEpochKind,
     epoch_ns: i128,
     zone_id: String,
+    // Instant has no calendar concept at all and this is always "iso8601"
+    // for it; ZonedDateTime's calendar is a VIEW-selecting tag exactly like
+    // StdTemporalData's own (see builtins_temporal_calendar.rs's file
+    // header): the object's local date/time is always computed from
+    // epoch_ns/zone_id in proleptic-Gregorian (ISO) terms, and a non-iso8601
+    // calendar's era/eraYear/year/month/monthCode/day/daysInMonth/
+    // daysInYear/monthsInYear/inLeapYear are views computed on demand from
+    // that local ISO date, matching JSS-calendars' PlainDate/PlainDateTime
+    // architecture. Added by JSS-calendars item 2 (ZonedDateTime).
+    calendar: String,
 }
 
 struct StdEpochPrototypes {
@@ -113,6 +123,11 @@ impl Interpreter {
 }
 
 fn std_epoch_make(i: &Interpreter, kind: StdEpochKind, epoch_ns: i128, zone_id: String) -> Result<JsValue, Throw> {
+    std_epoch_make_cal(i, kind, epoch_ns, zone_id, "iso8601".to_string())
+}
+
+fn std_epoch_make_cal(i: &Interpreter, kind: StdEpochKind, epoch_ns: i128, zone_id: String,
+    calendar: String) -> Result<JsValue, Throw> {
     if !(-8_640_000_000_000_000_000_000i128..=8_640_000_000_000_000_000_000i128).contains(&epoch_ns) {
         return Err(Throw::range_error("instant outside Temporal range"));
     }
@@ -124,7 +139,7 @@ fn std_epoch_make(i: &Interpreter, kind: StdEpochKind, epoch_ns: i128, zone_id: 
     object.proto = Some(prototype);
     let object = Obj(Rc::new(RefCell::new(object)));
     STD_EPOCH_DATA.with(|registry| registry.borrow_mut().insert(std_weak_id(&object),
-        StdEpochData { owner: Rc::downgrade(&object.0), kind, epoch_ns, zone_id }));
+        StdEpochData { owner: Rc::downgrade(&object.0), kind, epoch_ns, zone_id, calendar }));
     Ok(JsValue::Object(object))
 }
 
@@ -206,7 +221,7 @@ fn std_epoch_string_field_value(i: &mut Interpreter, value: &JsValue) -> Result<
 fn std_epoch_zone_from_string(text: &str) -> Result<String, Throw> {
     let invalid = || Throw::range_error("invalid Temporal time zone");
     if let Some(zone) = tz_canonicalize(text) { return Ok(zone); }
-    let (body, annotation) = std_epoch_validate_annotations(text)?;
+    let (body, annotation, _calendar) = std_epoch_validate_annotations(text, false)?;
     // The date-time is validated in full regardless of whether an
     // annotation ultimately supplies the zone -- an annotation only picks
     // which zone id wins, it does not exempt the rest of the string from
@@ -365,12 +380,26 @@ fn std_epoch_annotation_zone(text: &str) -> bool {
         && text.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'/' | b'_' | b'-' | b'+' | b'.'))
 }
 
-fn std_epoch_validate_annotations(text: &str) -> Result<(&str, Option<&str>), Throw> {
+// Returns (body, zone annotation, calendar annotation). Only the FIRST
+// u-ca= annotation is ever consulted (a second one is still grammar-checked
+// -- including its own/the first's "!" making the pair illegal -- but never
+// overwrites the first), matching std_temporal_parse_annotations' identical
+// rule for PlainDate/PlainDateTime/PlainYearMonth/PlainMonthDay (JSS-
+// calendars item 1). `require_known_calendar` gates whether the name must
+// canonicalize via std_calendar_canonicalize: true for ZonedDateTime (which,
+// like PlainDate/PlainDateTime, accepts any of the 16 supported calendars in
+// its own string form), false for Instant and for a bare time-zone-value
+// string (std_epoch_zone_from_string) -- neither has a calendar slot at all,
+// so any syntactically valid id (including an outright unknown one) is
+// accepted and simply discarded, exactly like PlainTime's own calendar
+// annotation. Confirmed by Instant's own argument-string-calendar-
+// annotation.js, which uses an unrecognized calendar name on purpose.
+fn std_epoch_validate_annotations(text: &str, require_known_calendar: bool) -> Result<(&str, Option<&str>, Option<&str>), Throw> {
     let invalid = || Throw::range_error("invalid Temporal annotation");
-    let Some(first) = text.find('[') else { return Ok((text, None)); };
+    let Some(first) = text.find('[') else { return Ok((text, None, None)); };
     let body = &text[..first];
     let mut tail = &text[first..];
-    let mut calendar = false;
+    let mut calendar_name: Option<&str> = None;
     let mut critical_calendar = false;
     let mut time_zone: Option<&str> = None;
     while !tail.is_empty() {
@@ -385,9 +414,13 @@ fn std_epoch_validate_annotations(text: &str) -> Result<(&str, Option<&str>), Th
                 || name.bytes().any(|c| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')) {
                 return Err(invalid());
             }
-            if calendar && (critical_calendar || critical) { return Err(invalid()); }
-            calendar = true;
-            critical_calendar |= critical;
+            if calendar_name.is_none() {
+                if require_known_calendar && std_calendar_canonicalize(name).is_none() { return Err(invalid()); }
+                calendar_name = Some(name);
+                critical_calendar = critical;
+            } else if critical_calendar || critical {
+                return Err(invalid());
+            }
         } else if let Some((key, _)) = annotation.split_once('=') {
             if critical || key.is_empty() || key.bytes().any(|c| c.is_ascii_uppercase()) {
                 return Err(invalid());
@@ -399,7 +432,7 @@ fn std_epoch_validate_annotations(text: &str) -> Result<(&str, Option<&str>), Th
             time_zone = Some(annotation);
         }
     }
-    Ok((body, time_zone))
+    Ok((body, time_zone, calendar_name))
 }
 
 // The string parse is split into a pure-syntax phase (`std_epoch_parse_syntax`)
@@ -415,18 +448,26 @@ struct StdEpochParsed {
     exact: bool,
     offset: i128,
     minute_precision: bool,
+    calendar: String,
 }
 
 fn std_epoch_parse_syntax(text: &str, kind: StdEpochKind) -> Result<StdEpochParsed, Throw> {
     let invalid = || Throw::range_error("invalid Temporal instant string");
     // Annotations are validated syntactically for every epoch type. Instant
-    // ignores the zone and calendar; ZonedDateTime requires a zone it can
-    // canonicalize.
-    let (body, zone_annotation) = std_epoch_validate_annotations(text)?;
+    // ignores the zone and calendar (its own calendar is always "iso8601");
+    // ZonedDateTime requires a zone it can canonicalize and canonicalizes
+    // its own calendar annotation the same way PlainDate/PlainDateTime do
+    // (JSS-calendars item 2).
+    let (body, zone_annotation, calendar_annotation) = std_epoch_validate_annotations(text, kind == StdEpochKind::ZonedDateTime)?;
     let zone = if kind == StdEpochKind::ZonedDateTime {
         std_epoch_zone(zone_annotation.ok_or_else(invalid)?)?
     } else {
         "UTC".into()
+    };
+    let calendar = if kind == StdEpochKind::ZonedDateTime {
+        calendar_annotation.and_then(std_calendar_canonicalize).unwrap_or("iso8601").to_string()
+    } else {
+        "iso8601".to_string()
     };
     let time_start = body.find('T').or_else(|| body.find('t')).or_else(|| body.find(' '));
     // A TemporalZonedDateTimeString may be just `Date TimeZoneAnnotation`,
@@ -474,7 +515,7 @@ fn std_epoch_parse_syntax(text: &str, kind: StdEpochKind) -> Result<StdEpochPars
     if !time.is_empty() { std_temporal_parse_time(clock, &mut fields)?; }
     std_temporal_validate(StdTemporalKind::PlainDateTime, &fields)?;
     let minute_precision = !time.is_empty() && time[clock.len()..].matches(':').count() == 1;
-    Ok(StdEpochParsed { fields, zone, offset_absent, exact, offset, minute_precision })
+    Ok(StdEpochParsed { fields, zone, offset_absent, exact, offset, minute_precision, calendar })
 }
 
 fn std_epoch_check_range(epoch_ns: i128) -> Result<i128, Throw> {
@@ -485,12 +526,12 @@ fn std_epoch_check_range(epoch_ns: i128) -> Result<i128, Throw> {
 }
 
 fn std_epoch_resolve_parsed(parsed: StdEpochParsed, kind: StdEpochKind, offset_option: &str,
-    disambiguation: &str) -> Result<(i128, String), Throw> {
+    disambiguation: &str) -> Result<(i128, String, String), Throw> {
     let invalid = || Throw::range_error("invalid Temporal instant string");
-    let StdEpochParsed { fields, zone, offset_absent, exact, offset, minute_precision } = parsed;
+    let StdEpochParsed { fields, zone, offset_absent, exact, offset, minute_precision, calendar } = parsed;
     if kind == StdEpochKind::ZonedDateTime && offset_absent {
         let epoch_ns = std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?;
-        return Ok((std_epoch_check_range(epoch_ns)?, zone));
+        return Ok((std_epoch_check_range(epoch_ns)?, zone, calendar));
     }
     let epoch_ns = std_epoch_check_range(std_temporal_epoch_ns(&fields) - offset)?;
     if kind == StdEpochKind::ZonedDateTime && !exact {
@@ -498,28 +539,28 @@ fn std_epoch_resolve_parsed(parsed: StdEpochParsed, kind: StdEpochKind, offset_o
         let matches = actual_offset == offset || (minute_precision
             && std_temporal_round_integer(actual_offset, 60 * STD_TEMPORAL_NS_SECOND, "halfExpand")? == offset);
         return match offset_option {
-            "use" => Ok((epoch_ns, zone)),
-            "ignore" => Ok((std_epoch_check_range(std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?)?, zone)),
-            "prefer" if !matches => Ok((std_epoch_check_range(std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?)?, zone)),
-            _ if matches => Ok((epoch_ns, zone)),
+            "use" => Ok((epoch_ns, zone, calendar)),
+            "ignore" => Ok((std_epoch_check_range(std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?)?, zone, calendar)),
+            "prefer" if !matches => Ok((std_epoch_check_range(std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?)?, zone, calendar)),
+            _ if matches => Ok((epoch_ns, zone, calendar)),
             _ => Err(invalid()),
         };
     }
-    Ok((epoch_ns, zone))
+    Ok((epoch_ns, zone, calendar))
 }
 
 fn std_epoch_parse(text: &str, kind: StdEpochKind, offset_option: &str,
-    disambiguation: &str) -> Result<(i128, String), Throw> {
+    disambiguation: &str) -> Result<(i128, String, String), Throw> {
     let parsed = std_epoch_parse_syntax(text, kind)?;
     std_epoch_resolve_parsed(parsed, kind, offset_option, disambiguation)
 }
 
-fn std_epoch_from_value(i: &mut Interpreter, value: JsValue, kind: StdEpochKind) -> Result<(i128, String), Throw> {
+fn std_epoch_from_value(i: &mut Interpreter, value: JsValue, kind: StdEpochKind) -> Result<(i128, String, String), Throw> {
     std_epoch_from_value_with_options(i, value, kind, JsValue::Undefined)
 }
 
 fn std_epoch_from_value_with_options(i: &mut Interpreter, value: JsValue, kind: StdEpochKind,
-    options: JsValue) -> Result<(i128, String), Throw> {
+    options: JsValue) -> Result<(i128, String, String), Throw> {
     if let Ok(data) = std_epoch_record(&value, Some(kind)) {
         // `item` is already the target kind: ZonedDateTime.from clones it
         // without applying overflow/disambiguation/offset, but per spec
@@ -536,12 +577,14 @@ fn std_epoch_from_value_with_options(i: &mut Interpreter, value: JsValue, kind: 
                 return Err(Throw::range_error("invalid Temporal offset option"));
             }
         }
-        return Ok((data.epoch_ns, data.zone_id.clone()));
+        return Ok((data.epoch_ns, data.zone_id.clone(), data.calendar.clone()));
     }
-    // ToTemporalInstant also accepts a ZonedDateTime instance.
+    // ToTemporalInstant also accepts a ZonedDateTime instance; Instant has
+    // no calendar of its own, so the source's calendar is discarded (this
+    // return's third element is never consulted by an Instant caller).
     if kind == StdEpochKind::Instant {
         if let Ok(data) = std_epoch_record(&value, Some(StdEpochKind::ZonedDateTime)) {
-            return Ok((data.epoch_ns, data.zone_id.clone()));
+            return Ok((data.epoch_ns, data.zone_id.clone(), "iso8601".to_string()));
         }
     }
     // A string argument is parsed -- and any syntax error surfaced -- before
@@ -580,8 +623,12 @@ fn std_epoch_from_value_with_options(i: &mut Interpreter, value: JsValue, kind: 
             // e.g. "islamic") happens before PrepareCalendarFields' field
             // reads, which is in turn before timeZone is read/validated --
             // std_temporal_bag validates the calendar as its first action.
-            let (mut fields, month, code, _calendar) = std_temporal_bag(i, StdTemporalKind::PlainDateTime, &value)?;
-            std_temporal_bag_resolve_month(&mut fields, month, code)?;
+            // The resolved calendar id is then used (JSS-calendars item 2)
+            // to convert the bag's still calendar-native year/month/day into
+            // this object's always-ISO internal fields, exactly as the
+            // Plain* kinds' own bag path does (std_temporal_bag_resolve_calendar).
+            let (mut fields, month, code, calendar) = std_temporal_bag(i, StdTemporalKind::PlainDateTime, &value)?;
+            std_temporal_bag_resolve_calendar(StdTemporalKind::PlainDateTime, &calendar, &mut fields, month, code, reject)?;
             let zone_value = i.get_prop(&value, "timeZone")?;
             let zone = std_epoch_zone_value(i, &zone_value)?;
             std_temporal_regulate(StdTemporalKind::PlainDateTime, &mut fields, reject);
@@ -611,7 +658,7 @@ fn std_epoch_from_value_with_options(i: &mut Interpreter, value: JsValue, kind: 
                     _ => return Err(Throw::range_error("Temporal offset does not match time zone")),
                 }
             };
-            Ok((std_epoch_check_range(epoch_ns)?, zone))
+            Ok((std_epoch_check_range(epoch_ns)?, zone, calendar))
         }
         // Any other object is coerced to its string form, as ToTemporalInstant does.
         JsValue::Object(_) => {
@@ -626,13 +673,17 @@ fn std_epoch_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>,
     let JsValue::Object(object) = &this else { return Err(Throw::type_error("Temporal constructor requires new")); };
     if !object.borrow().constructed { return Err(Throw::type_error("Temporal constructor requires new")); }
     let epoch_ns = std_epoch_to_nanoseconds(i, &std_reflect_arg(&args, 0))?;
-    let zone = if kind == StdEpochKind::ZonedDateTime {
+    let (zone, calendar_id) = if kind == StdEpochKind::ZonedDateTime {
         let zone = std_epoch_zone_value_strict(&std_reflect_arg(&args, 1))?;
-        let calendar = std_reflect_arg(&args, 2);
-        std_temporal_iso_calendar(i, &calendar)?;
-        zone
-    } else { "UTC".into() };
-    std_epoch_make(i, kind, epoch_ns, zone)
+        // Strict resolution, matching every Plain* constructor's own
+        // calendar argument (std_temporal_resolve_calendar_id_strict):
+        // rejects a full ISO-string-with-annotation form that with()/
+        // withCalendar()/a bag's own `calendar` property all accept.
+        // Confirmed by ZonedDateTime's own calendar-invalid-iso-string.js.
+        let calendar = std_temporal_resolve_calendar_id_strict(i, &std_reflect_arg(&args, 2))?;
+        (zone, calendar)
+    } else { ("UTC".into(), "iso8601".to_string()) };
+    std_epoch_make_cal(i, kind, epoch_ns, zone, calendar_id)
 }
 fn std_epoch_to_nanoseconds(i: &mut Interpreter, value: &JsValue) -> Result<i128, Throw> {
     let bigint = i.to_bigint(value)?;
@@ -670,9 +721,9 @@ fn std_epoch_from(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         let name = object.borrow().func.as_ref().map(|function| function.name.clone()).unwrap_or_default();
         if name == "ZonedDateTime" { StdEpochKind::ZonedDateTime } else { StdEpochKind::Instant }
     } else { std_epoch_kind_from_callee(i) };
-    let (ns, zone) = std_epoch_from_value_with_options(i, std_reflect_arg(&args, 0), kind,
+    let (ns, zone, calendar) = std_epoch_from_value_with_options(i, std_reflect_arg(&args, 0), kind,
         std_reflect_arg(&args, 1))?;
-    std_epoch_make(i, kind, ns, zone)
+    std_epoch_make_cal(i, kind, ns, zone, calendar)
 }
 fn std_epoch_compare(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let kind = if let JsValue::Object(object) = &this {
@@ -701,25 +752,61 @@ fn std_epoch_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Resu
         "epochNanoseconds" => return Ok(std_epoch_bigint(data.epoch_ns)),
         "epochMilliseconds" => return Ok(JsValue::num(data.epoch_ns.div_euclid(1_000_000) as f64)),
         "timeZoneId" => return Ok(JsValue::str(data.zone_id.clone())),
-        "calendarId" => return Ok(JsValue::str("iso8601")),
+        "calendarId" => return Ok(JsValue::str(data.calendar.clone())),
         "offset" => return Ok(JsValue::str(std_epoch_offset_text(std_epoch_offset(&data)))),
         "offsetNanoseconds" => return Ok(JsValue::num(std_epoch_offset(&data) as f64)),
-        "era" | "eraYear" => return Ok(JsValue::Undefined),
         _ => {}
     }
     let v = std_epoch_local_fields(&data)?;
     let day = std_temporal_epoch_day(v[0], v[1], v[2]);
+    // Non-iso8601 calendars are VIEWS computed on demand from the object's
+    // always-ISO local date, exactly like PlainDate/PlainDateTime's own
+    // getter (std_temporal_getter, builtins_temporal.rs) -- JSS-calendars
+    // item 2. (2026-09-27: confirmed required for every calendar, including
+    // chinese/dangi -- toPlainDate()/toPlainDateTime()/toPlainYearMonth()
+    // share this object's calendar tag with a Plain* object whose OWN
+    // getters are already unconditionally calendar-real (JSS-calendars item
+    // 1, not touched by this ticket), so narrowing ZDT's own getters to ISO
+    // for chinese/dangi just moves the self-consistency break to the
+    // ZDT-getter-vs-toPlainDateTime()-getter boundary instead of fixing it
+    // -- confirmed by direct measurement. The actual gap is since()/until()
+    // for chinese/dangi only; see its call site below and questions.md.)
+    let view_cal: &str = &data.calendar;
+    let calendar_fields = if view_cal != "iso8601" {
+        Some(std_calendar_fields(view_cal, v[0], v[1], v[2]))
+    } else { None };
+    match field {
+        "era" => {
+            if view_cal == "iso8601" { return Ok(JsValue::Undefined); }
+            let (era, _) = std_calendar_era(view_cal, v[0], v[1], v[2]);
+            return Ok(era.map(JsValue::str).unwrap_or(JsValue::Undefined));
+        }
+        "eraYear" => {
+            if view_cal == "iso8601" { return Ok(JsValue::Undefined); }
+            let (_, era_year) = std_calendar_era(view_cal, v[0], v[1], v[2]);
+            return Ok(era_year.map(|value| JsValue::num(value as f64)).unwrap_or(JsValue::Undefined));
+        }
+        "monthCode" => {
+            let code = if view_cal == "iso8601" { format!("M{:02}", v[1]) }
+                else { std_calendar_month_code(view_cal, v[0], v[1], v[2]) };
+            return Ok(JsValue::str(code));
+        }
+        _ => {}
+    }
     let result = match field {
-        "monthCode" => return Ok(JsValue::str(format!("M{:02}", v[1]))),
-        "inLeapYear" => return Ok(JsValue::Bool(std_temporal_leap(v[0]))),
-        "year" => v[0], "month" => v[1], "day" => v[2],
+        "inLeapYear" => return Ok(JsValue::Bool(calendar_fields.map(|f| f.7).unwrap_or_else(|| std_temporal_leap(v[0])))),
+        "year" => calendar_fields.map(|f| f.0).unwrap_or(v[0]),
+        "month" => calendar_fields.map(|f| f.1).unwrap_or(v[1]),
+        "day" => calendar_fields.map(|f| f.2).unwrap_or(v[2]),
         "hour" => v[3], "minute" => v[4], "second" => v[5],
         "millisecond" => v[6], "microsecond" => v[7], "nanosecond" => v[8],
         "dayOfWeek" => std_temporal_day_of_week(day),
-        "dayOfYear" => day - std_temporal_epoch_day(v[0], 1, 1) + 1,
-        "daysInWeek" => 7, "daysInMonth" => std_temporal_days_in_month(v[0], v[1]),
-        "daysInYear" => if std_temporal_leap(v[0]) { 366 } else { 365 },
-        "monthsInYear" => 12, "hoursInDay" => {
+        "dayOfYear" => calendar_fields.map(|f| f.5)
+            .unwrap_or_else(|| day - std_temporal_epoch_day(v[0], 1, 1) + 1),
+        "daysInWeek" => 7, "daysInMonth" => calendar_fields.map(|f| f.3).unwrap_or_else(|| std_temporal_days_in_month(v[0], v[1])),
+        "daysInYear" => calendar_fields.map(|f| f.6).unwrap_or_else(|| if std_temporal_leap(v[0]) { 366 } else { 365 }),
+        "monthsInYear" => calendar_fields.map(|f| f.4).unwrap_or(12),
+        "hoursInDay" => {
             let mut midnight = v;
             midnight[3..9].fill(0);
             let local_midnight = std_temporal_epoch_ns(&midnight);
@@ -798,8 +885,16 @@ fn std_epoch_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
             text.push_str(&data.zone_id);
             text.push(']');
         }
-        if matches!(calendar.as_str(), "always" | "critical") {
-            text.push_str(if calendar == "critical" { "[!u-ca=iso8601]" } else { "[u-ca=iso8601]" });
+        // "auto" shows the calendar annotation only when it is not iso8601
+        // (matching Plain*'s own toString), "never" never shows it
+        // regardless of the calendar, and "always"/"critical" always show
+        // it (optionally critical-flagged).
+        if calendar == "always" || calendar == "critical" || (calendar == "auto" && data.calendar != "iso8601") {
+            text.push('[');
+            if calendar == "critical" { text.push('!'); }
+            text.push_str("u-ca=");
+            text.push_str(&data.calendar);
+            text.push(']');
         }
     }
     Ok(JsValue::str(text))
@@ -813,8 +908,14 @@ fn std_epoch_value_of(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Re
 }
 fn std_epoch_equals(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, None)?;
-    let (other, zone) = std_epoch_from_value(i, std_reflect_arg(&args, 0), data.kind)?;
-    Ok(JsValue::Bool(data.epoch_ns == other && (data.kind == StdEpochKind::Instant || data.zone_id == zone)))
+    let (other, zone, other_calendar) = std_epoch_from_value(i, std_reflect_arg(&args, 0), data.kind)?;
+    // Instant.equals only ever compares epoch nanoseconds. ZonedDateTime.
+    // equals additionally requires the time zone identifier AND the
+    // calendar identifier to both match (CalendarEquals, JSS-calendars item
+    // 2) -- confirmed by ZonedDateTime/prototype/equals' own family of
+    // calendar-mismatch tests.
+    Ok(JsValue::Bool(data.epoch_ns == other && (data.kind == StdEpochKind::Instant
+        || (data.zone_id == zone && data.calendar == other_calendar))))
 }
 
 fn std_epoch_to_plain(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -826,7 +927,10 @@ fn std_epoch_to_plain(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Re
         "toPlainTime" => StdTemporalKind::PlainTime,
         _ => StdTemporalKind::PlainDateTime,
     };
-    std_temporal_make(i, kind, std_epoch_local_fields(&data)?)
+    // The receiver's own calendar carries forward into the Plain* result
+    // (JSS-calendars item 2); PlainTime has no calendar concept, so its
+    // conversion path is unaffected either way.
+    std_temporal_make_cal(i, kind, std_epoch_local_fields(&data)?, data.calendar)
 }
 fn std_epoch_to_instant(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, Some(StdEpochKind::ZonedDateTime))?;
@@ -835,17 +939,24 @@ fn std_epoch_to_instant(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> 
 fn std_epoch_to_zoned(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, Some(StdEpochKind::Instant))?;
     let zone = std_epoch_zone_value(i, &std_reflect_arg(&args, 0))?;
+    // toZonedDateTimeISO: always iso8601, per its own name -- Instant has no
+    // calendar of its own to carry forward.
     std_epoch_make(i, StdEpochKind::ZonedDateTime, data.epoch_ns, zone)
 }
 fn std_epoch_with_zone(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, Some(StdEpochKind::ZonedDateTime))?;
     let zone = std_epoch_zone_value(i, &std_reflect_arg(&args, 0))?;
-    std_epoch_make(i, data.kind, data.epoch_ns, zone)
+    std_epoch_make_cal(i, data.kind, data.epoch_ns, zone, data.calendar)
 }
 fn std_epoch_with_calendar(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, Some(StdEpochKind::ZonedDateTime))?;
-    std_temporal_calendar_from_value(i, &std_reflect_arg(&args, 0))?;
-    std_epoch_make(i, data.kind, data.epoch_ns, data.zone_id.clone())
+    // Permissive resolution, matching every other calendar-argument site
+    // except the constructor (std_temporal_resolve_calendar_id, not
+    // std_temporal_resolve_calendar_id_strict) -- confirmed accepting a
+    // full ISO-string-with-annotation form by withCalendar's own
+    // calendar-iso-string.js.
+    let calendar = std_temporal_resolve_calendar_id(i, &std_reflect_arg(&args, 0))?;
+    std_epoch_make_cal(i, data.kind, data.epoch_ns, data.zone_id.clone(), calendar)
 }
 // PrepareTemporalFields's "string"-typed fields (monthCode, offset) read via
 // ToPrimitive with a string hint, then require the result to already be a
@@ -863,6 +974,7 @@ fn std_epoch_string_field(i: &mut Interpreter, value: JsValue) -> Result<String,
 
 fn std_epoch_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, Some(StdEpochKind::ZonedDateTime))?;
+    let view_cal: &str = &data.calendar;
     let like = std_reflect_arg(&args, 0);
     if !like.is_object() { return Err(Throw::type_error("with() argument must be an object")); }
     // RejectObjectWithCalendarOrTimeZone: `calendar`/`timeZone` are always
@@ -883,6 +995,22 @@ fn std_epoch_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     // offset when the bag doesn't name one), and merges them onto the
     // receiver's own current local date-time.
     let mut merged = std_epoch_local_fields(&data)?;
+    // Non-iso8601 calendars merge in CALENDAR-NATIVE year/month/day terms
+    // (CalendarMergeFields + CalendarDateFromFields, JSS-calendars item 2),
+    // not ISO ones -- cal_year/cal_month/cal_day start as the receiver's own
+    // calendar-native date (std_calendar_fields for a month-structure
+    // calendar; for the ISO-grid family (gregory/japanese/roc/buddhist)
+    // month/day are already the ISO ones and only the year differs).
+    // Without this, a supplied `day`/`month`/`monthCode` would silently be
+    // interpreted as an ISO field instead, which for a month-structure
+    // calendar is a different date entirely.
+    let is_month_structure = std_calendar_is_month_structure(view_cal);
+    let (mut cal_year, mut cal_month, mut cal_day) = if view_cal == "iso8601" {
+        (merged[0], merged[1], merged[2])
+    } else {
+        let (y, m, d, ..) = std_calendar_fields(view_cal, merged[0], merged[1], merged[2]);
+        (y, m, d)
+    };
     let mut month_seen: Option<i64> = None;
     let mut month_code_text: Option<String> = None;
     let mut offset_field = std_epoch_offset_text(std_epoch_offset(&data));
@@ -906,15 +1034,15 @@ fn std_epoch_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         let raw = i.get_prop(&like, key)?;
         if raw.is_undefined() { continue; }
         match key {
-            "day" => { merged[2] = number_field(i, raw, 1)?; present = true; }
+            "day" => { cal_day = number_field(i, raw, 1)?; present = true; }
             "hour" => { merged[3] = number_field(i, raw, 0)?; present = true; }
             "microsecond" => { merged[7] = number_field(i, raw, 0)?; present = true; }
             "millisecond" => { merged[6] = number_field(i, raw, 0)?; present = true; }
             "minute" => { merged[4] = number_field(i, raw, 0)?; present = true; }
-            "month" => { let value = number_field(i, raw, 1)?; merged[1] = value; month_seen = Some(value); present = true; }
+            "month" => { let value = number_field(i, raw, 1)?; cal_month = value; month_seen = Some(value); present = true; }
             // Only the field's own type is validated here (must be a string
-            // at all); resolving that string against the (iso8601) calendar
-            // -- and rejecting month/monthCode disagreement -- is a
+            // at all); resolving that string against the calendar -- and
+            // rejecting month/monthCode disagreement -- is a
             // calendar-dependent step deferred to InterpretTemporalDateTimeFields,
             // after options has been fully read (options-read-before-
             // algorithmic-validation.js).
@@ -922,7 +1050,7 @@ fn std_epoch_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
             "nanosecond" => { merged[8] = number_field(i, raw, 0)?; present = true; }
             "offset" => { offset_field = std_epoch_string_field(i, raw)?; present = true; }
             "second" => { merged[5] = number_field(i, raw, 0)?; present = true; }
-            "year" => { merged[0] = std_temporal_number(i, raw, None)?; present = true; }
+            "year" => { cal_year = std_temporal_number(i, raw, None)?; present = true; }
             _ => unreachable!(),
         }
     }
@@ -941,34 +1069,65 @@ fn std_epoch_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         return Err(Throw::range_error("invalid offset option"));
     }
     // InterpretTemporalDateTimeFields's calendar-dependent step: resolve
-    // monthCode against iso8601 (which has no leap months, so any "M##L"
-    // code is simply invalid) now that options has been read in full.
+    // monthCode against the receiver's own calendar (iso8601 and every
+    // non-leap-month calendar have no "M##L" leap-month code at all; hebrew/
+    // chinese/dangi do) now that options has been read in full.
     if let Some(text) = month_code_text {
-        let month = text.strip_prefix('M').and_then(|digits| digits.parse::<i64>().ok())
-            .filter(|month| text.len() == 3 && (1..=12).contains(month))
-            .ok_or_else(|| Throw::range_error("invalid monthCode"))?;
-        if month_seen.is_some_and(|value| value != month) {
-            return Err(Throw::range_error("month and monthCode disagree"));
+        if is_month_structure && std_calendar_has_leap_months(view_cal) {
+            let (ordinal, _existed) = std_calendar_resolve_code_ord(view_cal, cal_year, &text)
+                .ok_or_else(|| Throw::range_error("invalid monthCode"))?;
+            // 2026-09-27: see the matching fix and comment at
+            // std_temporal_bag_resolve_calendar's identical check
+            // (builtins_temporal.rs) -- the disagreement check must not be
+            // gated on `_existed`.
+            if month_seen.is_some_and(|value| value != ordinal) {
+                return Err(Throw::range_error("month and monthCode disagree"));
+            }
+            cal_month = ordinal;
+        } else {
+            let month = text.strip_prefix('M').and_then(|digits| digits.parse::<i64>().ok())
+                .filter(|month| text.len() == 3 && *month >= 1)
+                .ok_or_else(|| Throw::range_error("invalid monthCode"))?;
+            if month_seen.is_some_and(|value| value != month) {
+                return Err(Throw::range_error("month and monthCode disagree"));
+            }
+            cal_month = month;
         }
-        merged[1] = month;
     }
     // Upper bounds are overflow-dependent: "constrain" (the default) clamps
     // each field into range, "reject" throws once any of them is out of
-    // range (checked together, matching Duration/Plain*'s own with()).
+    // range (checked together, matching Duration/Plain*'s own with()). A
+    // month-structure calendar's own month/day bounds
+    // (std_calendar_months_in_year/std_calendar_month_len) replace the
+    // ISO-grid ones (std_temporal_days_in_month, always 12 months); the
+    // ISO-grid family (gregory/japanese/roc/buddhist) still uses
+    // std_temporal_days_in_month, but against the ISO year the calendar-
+    // native year maps to (std_calendar_year_to_iso), since a leap Feb 29 is
+    // an ISO-calendar concept.
+    let months_in_year = if is_month_structure { std_calendar_months_in_year(view_cal, cal_year) } else { 12 };
     if reject_overflow {
-        if merged[1] > 12 || merged[2] > std_temporal_days_in_month(merged[0], merged[1])
+        let max_day = if is_month_structure { std_calendar_month_len(view_cal, cal_year, cal_month) }
+            else { std_temporal_days_in_month(std_calendar_year_to_iso(view_cal, cal_year), cal_month) };
+        if cal_month > months_in_year || cal_day > max_day
             || merged[3] > 23 || merged[4] > 59 || merged[5] > 59
             || merged[6..9].iter().any(|value| *value > 999) {
             return Err(Throw::range_error("Temporal field out of range"));
         }
     } else {
-        merged[1] = merged[1].clamp(1, 12);
-        merged[2] = merged[2].clamp(1, std_temporal_days_in_month(merged[0], merged[1]));
+        cal_month = cal_month.clamp(1, months_in_year);
+        let max_day = if is_month_structure { std_calendar_month_len(view_cal, cal_year, cal_month) }
+            else { std_temporal_days_in_month(std_calendar_year_to_iso(view_cal, cal_year), cal_month) };
+        cal_day = cal_day.clamp(1, max_day);
         merged[3] = merged[3].clamp(0, 23);
         merged[4] = merged[4].clamp(0, 59);
         merged[5] = merged[5].clamp(0, 59);
         for field in &mut merged[6..9] { *field = (*field).clamp(0, 999); }
     }
+    (merged[0], merged[1], merged[2]) = if is_month_structure {
+        std_calendar_to_iso(view_cal, cal_year, cal_month, cal_day)
+    } else {
+        (std_calendar_year_to_iso(view_cal, cal_year), cal_month, cal_day)
+    };
     std_temporal_validate(StdTemporalKind::PlainDateTime, &merged)?;
     let local_ns = std_temporal_epoch_ns(&merged);
     let epoch_ns = if offset_option == "ignore" {
@@ -993,7 +1152,7 @@ fn std_epoch_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
             }
         }
     };
-    std_epoch_make(i, data.kind, epoch_ns, data.zone_id)
+    std_epoch_make_cal(i, data.kind, epoch_ns, data.zone_id, data.calendar)
 }
 fn std_epoch_with_plain_time(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, Some(StdEpochKind::ZonedDateTime))?;
@@ -1005,7 +1164,7 @@ fn std_epoch_with_plain_time(i: &mut Interpreter, this: JsValue, args: Vec<JsVal
         fields[3..9].copy_from_slice(&parts[3..9]);
     }
     let epoch_ns = std_epoch_disambiguate(&data.zone_id, std_temporal_epoch_ns(&fields), "compatible")?;
-    std_epoch_make(i, data.kind, epoch_ns, data.zone_id)
+    std_epoch_make_cal(i, data.kind, epoch_ns, data.zone_id, data.calendar)
 }
 fn std_epoch_transition(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, Some(StdEpochKind::ZonedDateTime))?;
@@ -1021,7 +1180,7 @@ fn std_epoch_transition(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) 
     } else if direction == "next" { tz_next_transition(&data.zone_id, data.epoch_ns) }
         else { tz_previous_transition(&data.zone_id, data.epoch_ns) };
     match transition {
-        Some(epoch_ns) => std_epoch_make(i, data.kind, epoch_ns, data.zone_id),
+        Some(epoch_ns) => std_epoch_make_cal(i, data.kind, epoch_ns, data.zone_id, data.calendar),
         None => Ok(JsValue::Null),
     }
 }
@@ -1029,7 +1188,7 @@ fn std_epoch_start_of_day(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -
     let data = std_epoch_record(&this, Some(StdEpochKind::ZonedDateTime))?;
     let fields = std_epoch_local_fields(&data)?;
     let epoch_ns = std_epoch_start_of_day_ns(&data.zone_id, &fields)?;
-    std_epoch_make(i, data.kind, epoch_ns, data.zone_id)
+    std_epoch_make_cal(i, data.kind, epoch_ns, data.zone_id, data.calendar)
 }
 
 fn std_temporal_plain_to_zoned(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -1078,7 +1237,10 @@ fn std_temporal_plain_to_zoned(i: &mut Interpreter, this: JsValue, args: Vec<JsV
     let disambiguation = std_temporal_option_string(i, &options, "disambiguation")?
         .unwrap_or_else(|| "compatible".into());
     let epoch_ns = std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), &disambiguation)?;
-    std_epoch_make(i, StdEpochKind::ZonedDateTime, epoch_ns, zone)
+    // The source PlainDate/PlainDateTime's own calendar carries forward
+    // (JSS-calendars item 2), matching ToTemporalZonedDateTime's use of the
+    // receiver's already-resolved calendar.
+    std_epoch_make_cal(i, StdEpochKind::ZonedDateTime, epoch_ns, zone, data.calendar)
 }
 
 fn std_temporal_now_instant(i: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -1100,13 +1262,20 @@ fn std_epoch_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, 
         data.epoch_ns + sign as i128 * std_temporal_duration_time_ns(&duration)
     } else {
         let local = std_epoch_local_fields(&data)?;
-        let shifted = std_temporal_add_calendar(&local, &duration, sign, false)?;
+        // (2026-09-27: confirmed required, not parkable -- add()/subtract()
+        // must stay calendar-native here to match the calendar-real getter
+        // views above for month-structure calendars, including chinese/
+        // dangi (narrowing just them to ISO here was tried and reverted --
+        // see the getter comment above); only since()/until() (std_temporal_
+        // epoch_breakdown_cal, below) is parked, since its bracket search
+        // has an unresolved bug for chinese/dangi.)
+        let shifted = std_temporal_add_calendar_cal(&data.calendar, &local, &duration, sign, false)?;
         let time_ns = std_temporal_duration_time_ns(&duration)
             - (duration[2] as i128 * 7 + duration[3] as i128) * STD_TEMPORAL_NS_DAY;
         std_epoch_disambiguate(&data.zone_id, std_temporal_epoch_ns(&shifted), "compatible")?
             + sign as i128 * time_ns
     };
-    std_epoch_make(i, data.kind, result, data.zone_id.clone())
+    std_epoch_make_cal(i, data.kind, result, data.zone_id.clone(), data.calendar.clone())
 }
 fn std_epoch_add(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     std_epoch_add_values(i, this, args, 1)
@@ -1116,7 +1285,16 @@ fn std_epoch_subtract(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
 }
 fn std_epoch_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, since: bool) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, None)?;
-    let (other, _) = std_epoch_from_value(i, std_reflect_arg(&args, 0), data.kind)?;
+    let (other, _, other_calendar) = std_epoch_from_value(i, std_reflect_arg(&args, 0), data.kind)?;
+    // CalendarEquals (spec): since/until require the receiver and argument
+    // to share a calendar -- mirrors std_temporal_difference's identical
+    // check for PlainDate/PlainDateTime/PlainYearMonth/PlainMonthDay
+    // (JSS-calendars item 1). Instant has no calendar concept at all
+    // (its `other_calendar` is always the "iso8601" placeholder), so this
+    // is a no-op for it.
+    if data.kind == StdEpochKind::ZonedDateTime && data.calendar != other_calendar {
+        return Err(Throw::range_error("since/until require the same calendar"));
+    }
     let options = std_reflect_arg(&args, 1);
     // All four option properties (largestUnit, roundingIncrement,
     // roundingMode, smallestUnit) are read here, in that spec order, before
@@ -1171,6 +1349,11 @@ fn std_epoch_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, 
             let step = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?
                 * increment as i128;
             let rounded_ns = std_temporal_round_integer(total_ns, step, &mode)?;
+            // PARKED (2026-09-27): reverted to the ISO-only breakdown here --
+            // see the matching note at std_temporal_difference's calendar-
+            // native call sites (builtins_temporal_arithmetic.rs). Resume
+            // ZonedDateTime's own chinese/dangi since/until from the WIP
+            // commit once the bracket-search bug is root-caused.
             std_temporal_epoch_breakdown(&first, std_temporal_epoch_ns(&first) + rounded_ns, &largest)?
         };
         std_temporal_validate(StdTemporalKind::Duration, &fields)?;
@@ -1267,7 +1450,7 @@ fn std_epoch_round(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Re
             return Err(Throw::range_error("invalid roundingIncrement"));
         }
         let rounded = std_temporal_round_integer(data.epoch_ns, step, &mode)?;
-        return std_epoch_make(i, data.kind, rounded, data.zone_id.clone());
+        return std_epoch_make_cal(i, data.kind, rounded, data.zone_id.clone(), data.calendar.clone());
     }
     if unit == "day" {
         if increment != 1 { return Err(Throw::range_error("invalid roundingIncrement")); }
@@ -1314,5 +1497,5 @@ fn std_epoch_round(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Re
         std_temporal_set_time_ns(&mut new_local, rounded_time);
         std_epoch_disambiguate(&data.zone_id, std_temporal_epoch_ns(&new_local), "compatible")?
     };
-    std_epoch_make(i, data.kind, epoch_ns, data.zone_id.clone())
+    std_epoch_make_cal(i, data.kind, epoch_ns, data.zone_id.clone(), data.calendar.clone())
 }

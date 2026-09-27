@@ -87,22 +87,48 @@ fn std_calendar_valid_era(cal: &str, era: &str) -> bool {
     }
 }
 
-/// Back-converts an (era, eraYear) pair to the ISO (proleptic Gregorian)
-/// year, for the calendars that share the ISO year/month/day grid
-/// (gregory/japanese/buddhist/roc). Other era-using calendars resolve their
-/// own native year directly (see `std_calendar_bag_to_iso`).
-fn std_calendar_era_to_iso_year(cal: &str, era: &str, era_year: i64) -> Option<i64> {
-    match (cal, era) {
-        ("gregory" | "japanese", "ce" | "gregory" | "ad") => Some(era_year),
-        ("gregory" | "japanese", "bce" | "gregory-inverse" | "bc") => Some(1 - era_year),
-        ("japanese", "reiwa") => Some(2019 + era_year - 1),
-        ("japanese", "heisei") => Some(1989 + era_year - 1),
-        ("japanese", "showa") => Some(1926 + era_year - 1),
-        ("japanese", "taisho") => Some(1912 + era_year - 1),
-        ("japanese", "meiji") => Some(1868 + era_year - 1),
-        ("buddhist", "be") => Some(era_year - 543),
-        ("roc", "roc" | "minguo") => Some(1911 + era_year),
-        ("roc", "broc" | "before-roc") => Some(1912 - era_year),
+/// Back-converts an already-validated (era, eraYear) pair to the calendar-
+/// NATIVE year -- the same numbering `std_calendar_year_num`/
+/// `std_calendar_fields` report, and what `std_temporal_bag`/`std_temporal_
+/// with` store into `fields[0]` before any further year-to-ISO conversion
+/// (`std_calendar_year_to_iso` for the ISO-grid family,
+/// `std_calendar_to_iso` for the true month-structure calendars). `era` must
+/// already be lowercased and validated via `std_calendar_valid_era` --
+/// this returns `None` only for an era this function doesn't yet have a
+/// formula for (should not happen for a pre-validated era).
+fn std_calendar_era_to_native_year(cal: &str, era: &str, era_year: i64) -> Option<i64> {
+    match cal {
+        "gregory" | "japanese" => match era {
+            "ce" | "gregory" | "ad" => Some(era_year),
+            "bce" | "gregory-inverse" | "bc" => Some(1 - era_year),
+            "reiwa" => Some(2019 + era_year - 1),
+            "heisei" => Some(1989 + era_year - 1),
+            "showa" => Some(1926 + era_year - 1),
+            "taisho" => Some(1912 + era_year - 1),
+            "meiji" => Some(1868 + era_year - 1),
+            _ => None,
+        },
+        "buddhist" if era == "be" => Some(era_year),
+        "roc" => match era {
+            "roc" | "minguo" => Some(era_year),
+            "broc" | "before-roc" => Some(1 - era_year),
+            _ => None,
+        },
+        "coptic" if era == "am" => Some(era_year),
+        "ethiopic" => match era {
+            "am" | "incar" => Some(era_year),
+            "aa" | "mundi" => Some(era_year - 5500),
+            _ => None,
+        },
+        "ethioaa" if era == "aa" => Some(era_year - 5500),
+        _ if std_calendar_is_islamic(cal) => match era {
+            "ah" => Some(era_year),
+            "bh" => Some(1 - era_year),
+            _ => None,
+        },
+        "indian" if era == "shaka" => Some(era_year),
+        "hebrew" if era == "am" => Some(era_year),
+        "persian" if era == "ap" => Some(era_year),
         _ => None,
     }
 }
@@ -772,6 +798,15 @@ fn std_calendar_fields(cal: &str, year: i64, month: i64, day: i64) -> (i64, i64,
 fn std_calendar_resolve_code_ord(cal: &str, year: i64, code: &str) -> Option<(i64, bool)> {
     if cal == "hebrew" {
         if let Some(o) = std_calendar_hebrew_ord_from_code(year, code) { return Some((o, true)); }
+        // Only "M05L" (Adar I) is a real Hebrew monthCode that can be absent
+        // in a particular (non-leap) year -- everything else that failed
+        // above (out-of-range "M13", any OTHER "*L"-suffixed code, a
+        // malformed shape) is never a real Hebrew monthCode in ANY year, so
+        // it is a hard invalid code with no constrain-mode fallback.
+        // Confirmed by invalid-month-codes-hebrew.js, which requires "M13"
+        // and every "*L" code besides "M05L" to throw unconditionally in
+        // both leap and common years.
+        if code != "M05L" { return None; }
         let fallback = std_calendar_hebrew_ord_from_code(year, "M06")?;
         Some((fallback, false))
     } else {
@@ -800,4 +835,43 @@ fn std_calendar_advance_ord(cal: &str, year: i64, ord: i64, k: i64) -> (i64, i64
         }
     }
     (y, m)
+}
+
+/// Renormalize a (year, possibly out-of-range month) pair into range,
+/// walking year boundaries with the CALENDAR'S OWN months-per-year count
+/// (varying for hebrew/chinese/dangi) rather than a fixed 12 -- the
+/// month-structure generalization of std_temporal_balance_year_month
+/// (builtins_temporal_arithmetic.rs), used by the since/until calendar-unit
+/// bracket search (JSS-calendars item 2, std_temporal_calendar_difference_cal).
+fn std_calendar_balance_year_month(cal: &str, year: i64, month: i64) -> (i64, i64) {
+    if !std_calendar_is_month_structure(cal) { return std_temporal_balance_year_month(year, month); }
+    let mut y = year;
+    let mut m = month;
+    while m < 1 {
+        y -= 1;
+        m += std_calendar_months_in_year(cal, y);
+    }
+    loop {
+        let months_in_year = std_calendar_months_in_year(cal, y);
+        if m <= months_in_year { break; }
+        m -= months_in_year;
+        y += 1;
+    }
+    (y, m)
+}
+
+/// Total signed month count from `from_year` to `to_year` (exclusive of
+/// `to_year` itself, matching `(to_year - from_year) * 12`'s ISO-grid
+/// meaning) -- the varying-months-per-year generalization needed to fold a
+/// bracket-searched year count into a month count for hebrew/chinese/dangi,
+/// where a plain `* 12` is wrong.
+fn std_calendar_months_between(cal: &str, from_year: i64, to_year: i64) -> i64 {
+    if !std_calendar_is_month_structure(cal) { return (to_year - from_year) * 12; }
+    let mut total = 0i64;
+    if to_year >= from_year {
+        for y in from_year..to_year { total += std_calendar_months_in_year(cal, y); }
+    } else {
+        for y in to_year..from_year { total -= std_calendar_months_in_year(cal, y); }
+    }
+    total
 }

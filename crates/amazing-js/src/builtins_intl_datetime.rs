@@ -370,7 +370,7 @@ fn intl_civil_date_from_temporal(kind: IntlTemporalKind, fields: &[i64; 10]) -> 
 // so those values fall through to the legacy ToNumber path below, same as
 // any other non-Date object -- correct for ZonedDateTime (format() must
 // throw TypeError for it) but not yet reachable for Instant.
-fn intl_temporal_lookup(value: &JsValue) -> Option<(IntlTemporalKind, IntlCivilDate)> {
+fn intl_temporal_lookup(value: &JsValue) -> Option<(IntlTemporalKind, IntlCivilDate, String)> {
     for (std_kind, kind) in [
         (StdTemporalKind::PlainDateTime, IntlTemporalKind::DateTime),
         (StdTemporalKind::PlainDate, IntlTemporalKind::Date),
@@ -379,7 +379,7 @@ fn intl_temporal_lookup(value: &JsValue) -> Option<(IntlTemporalKind, IntlCivilD
         (StdTemporalKind::PlainMonthDay, IntlTemporalKind::MonthDay),
     ] {
         if let Ok(record) = std_temporal_record(value, Some(std_kind)) {
-            return Some((kind, intl_civil_date_from_temporal(kind, &record.fields)));
+            return Some((kind, intl_civil_date_from_temporal(kind, &record.fields), record.calendar.clone()));
         }
     }
     None
@@ -436,12 +436,12 @@ fn intl_temporal_adapt_state(state: &IntlDateState, kind: IntlTemporalKind) -> R
 // of the five implemented Temporal Plain* kinds, carrying its own
 // already-computed civil date (never routed through millisecond TimeClip,
 // so it works past the legacy Date range -- see days_from_civil above).
-enum IntlDateInput { Legacy(f64), Temporal(IntlTemporalKind, IntlCivilDate) }
+enum IntlDateInput { Legacy(f64), Temporal(IntlTemporalKind, IntlCivilDate, String) }
 
 fn intl_date_input(i: &mut Interpreter, value: Option<&JsValue>) -> Result<IntlDateInput, Throw> {
     if let Some(value @ JsValue::Object(_)) = value {
-        if let Some((kind, date)) = intl_temporal_lookup(value) {
-            return Ok(IntlDateInput::Temporal(kind, date));
+        if let Some((kind, date, calendar)) = intl_temporal_lookup(value) {
+            return Ok(IntlDateInput::Temporal(kind, date, calendar));
         }
     }
     intl_date_value(i, value).map(IntlDateInput::Legacy)
@@ -542,7 +542,7 @@ fn intl_date_format_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) 
 fn intl_render_input(state: &IntlDateState, input: IntlDateInput) -> Result<Vec<(&'static str, String)>, Throw> {
     match input {
         IntlDateInput::Legacy(milliseconds) => Ok(intl_render_date(state, milliseconds)),
-        IntlDateInput::Temporal(kind, date) => Ok(intl_render_civil(&intl_temporal_adapt_state(state, kind)?, date, 0)),
+        IntlDateInput::Temporal(kind, date, _calendar) => Ok(intl_render_civil(&intl_temporal_adapt_state(state, kind)?, date, 0)),
     }
 }
 
@@ -558,7 +558,15 @@ fn intl_date_range_input(
             if !start.is_finite() || !end.is_finite() { return Err(Throw::range_error("invalid date range")); }
             Ok(intl_date_range_parts(state, start, end))
         }
-        (IntlDateInput::Temporal(left_kind, start), IntlDateInput::Temporal(right_kind, end)) if left_kind == right_kind => {
+        (IntlDateInput::Temporal(left_kind, start, left_calendar), IntlDateInput::Temporal(right_kind, end, right_calendar))
+            if left_kind == right_kind => {
+            // CalendarEquals (spec): formatRange/formatRangeToParts require
+            // both endpoints to share a calendar, same as since/until --
+            // confirmed by temporal-objects-throws-with-different-
+            // calendars.js.
+            if left_calendar != right_calendar {
+                return Err(Throw::range_error("formatRange requires the same calendar on both dates"));
+            }
             intl_date_range_parts_temporal(state, left_kind, start, end)
         }
         _ => Err(Throw::type_error("formatRange requires two values of the same type")),

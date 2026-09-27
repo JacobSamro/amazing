@@ -96,9 +96,9 @@ fn std_temporal_resolve_relative_to(i: &mut Interpreter, relative: &JsValue) -> 
     match relative {
         JsValue::Str(text) => {
             let text = text.to_utf8_lossy();
-            let (_, zone_annotation) = std_epoch_validate_annotations(&text)?;
+            let (_, zone_annotation, _calendar_annotation) = std_epoch_validate_annotations(&text, true)?;
             let mut fields = if zone_annotation.is_some() {
-                let (epoch_ns, zone) = std_epoch_parse(&text, StdEpochKind::ZonedDateTime, "reject", "compatible")?;
+                let (epoch_ns, zone, _calendar) = std_epoch_parse(&text, StdEpochKind::ZonedDateTime, "reject", "compatible")?;
                 let mut f = [0i64; 10];
                 std_temporal_set_epoch_ns(&mut f, epoch_ns + tz_offset_ns(&zone, epoch_ns))?;
                 f
@@ -119,7 +119,7 @@ fn std_temporal_resolve_relative_to(i: &mut Interpreter, relative: &JsValue) -> 
         JsValue::Object(_) => {
             let time_zone = i.get_prop(relative, "timeZone")?;
             let mut fields = if !time_zone.is_undefined() {
-                let (epoch_ns, zone) = std_epoch_from_value_with_options(i, relative.clone(), StdEpochKind::ZonedDateTime, JsValue::Undefined)?;
+                let (epoch_ns, zone, _calendar) = std_epoch_from_value_with_options(i, relative.clone(), StdEpochKind::ZonedDateTime, JsValue::Undefined)?;
                 let mut f = [0i64; 10];
                 std_temporal_set_epoch_ns(&mut f, epoch_ns + tz_offset_ns(&zone, epoch_ns))?;
                 f
@@ -180,6 +180,55 @@ fn std_temporal_add_calendar(base: &[i64; 10], duration: &[i64; 10], factor: i64
     let start = std_temporal_epoch_day(result[0], result[1], result[2]) as i128;
     let day = i64::try_from(start + days).map_err(|_| Throw::range_error("Temporal date outside valid range"))?;
     (result[0], result[1], result[2]) = std_temporal_civil_from_epoch_day(day);
+    Ok(result)
+}
+
+// Calendar-native CalendarDateAdd (JSS-calendars item 2), used only by
+// add()/subtract() (NOT by the since/until/round calendar-unit bracket
+// search below, which stays ISO-grid-only -- a documented, separate gap):
+// iso8601/gregory/japanese/roc/buddhist share the ISO month/day grid exactly
+// (only the year LABEL differs), so adding N months there in raw ISO terms
+// already gives the calendar-correct result and this defers to
+// std_temporal_add_calendar unchanged. A real month-structure calendar
+// (coptic/ethiopic/ethioaa/islamic-family/indian/persian/hebrew/chinese/
+// dangi) instead adds years, then advances the calendar's own ordinal month
+// (std_calendar_advance_ord) across its own (possibly year-varying, for
+// hebrew/chinese/dangi) month count, clamps/rejects the day the same way
+// std_temporal_add_calendar does, and only then converts back to ISO
+// (std_calendar_to_iso) before applying the day/week delta in ISO terms
+// (day-length is universal regardless of calendar). Fixing this was
+// required for zero-loss: before it, ZonedDateTime.prototype.add/subtract's
+// intl402 month-boundary-*.js tests for these calendars had been passing
+// only by accident, on a calendar that was silently a complete no-op
+// (add() moved in raw ISO terms while the object was mislabeled with a
+// non-iso8601 calendar id) -- correctly reporting the calendar's real
+// year/month/day (JSS-calendars item 1/2's getters) while still adding in
+// ISO terms broke that accidental self-consistency and regressed them.
+fn std_temporal_add_calendar_cal(cal: &str, base: &[i64; 10], duration: &[i64; 10], factor: i64,
+    reject_overflow: bool) -> Result<[i64; 10], Throw> {
+    if !std_calendar_is_month_structure(cal) {
+        return std_temporal_add_calendar(base, duration, factor, reject_overflow);
+    }
+    let mut result = *base;
+    let (native_year, native_month, native_day, ..) = std_calendar_fields(cal, base[0], base[1], base[2]);
+    let target_year = native_year + factor * duration[0];
+    // A years-only add can land the SAME ordinal month on a year with fewer
+    // months (hebrew/chinese/dangi's leap month varies by year) -- clamp
+    // before advancing further, matching this function's own day-overflow
+    // clamp/reject just below.
+    let start_month = native_month.min(std_calendar_months_in_year(cal, target_year));
+    let (year, month) = std_calendar_advance_ord(cal, target_year, start_month, factor * duration[1]);
+    let max_day = std_calendar_month_len(cal, year, month);
+    let day = if native_day > max_day {
+        if reject_overflow { return Err(Throw::range_error("day is invalid in target month")); }
+        max_day
+    } else { native_day };
+    let (iso_year, iso_month, iso_day) = std_calendar_to_iso(cal, year, month, day);
+    result[0] = iso_year; result[1] = iso_month; result[2] = iso_day;
+    let days = factor as i128 * (duration[2] as i128 * 7 + duration[3] as i128);
+    let start = std_temporal_epoch_day(result[0], result[1], result[2]) as i128;
+    let day_index = i64::try_from(start + days).map_err(|_| Throw::range_error("Temporal date outside valid range"))?;
+    (result[0], result[1], result[2]) = std_temporal_civil_from_epoch_day(day_index);
     Ok(result)
 }
 
@@ -260,6 +309,19 @@ fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
             let mut anchor = result;
             anchor[2] = 1;
             std_temporal_validate(StdTemporalKind::PlainDate, &anchor)?;
+            // PARKED (2026-09-27): reverted to the ISO-only add here,
+            // matching aa5116a0 exactly. PlainYearMonth/PlainDate/
+            // PlainDateTime already had calendar-real getters before this
+            // session (JSS-calendars item 1), paired with ISO-only add()/
+            // since()/until() there the whole time -- an "accidental
+            // self-consistency" that must stay matched on both sides. Only
+            // ZonedDateTime (whose getters went calendar-real for the first
+            // time this session, item 2) keeps add()/subtract() wired to
+            // std_temporal_add_calendar_cal, since no baseline behavior
+            // exists there to stay accidentally consistent with. Resume the
+            // real calendar-native add() generalization for these three
+            // kinds together with since()/until() from the WIP commit once
+            // the bracket-search bug is root-caused.
             let mut added = std_temporal_add_calendar(&anchor, &duration, factor, reject)?;
             std_temporal_validate(StdTemporalKind::PlainDate, &added)?;
             added[2] = data.fields[2];
@@ -267,6 +329,8 @@ fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
         }
         StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime => {
             let reject = std_temporal_overflow(i, std_reflect_arg(&args, 1))?;
+            // PARKED: see the matching note at the PlainYearMonth add
+            // branch above.
             result = std_temporal_add_calendar(&result, &duration, factor, reject)?;
             if data.kind == StdTemporalKind::PlainDateTime {
                 let time_delta = factor as i128 * (duration[4] as i128 * 3_600_000_000_000
@@ -393,6 +457,30 @@ fn std_temporal_round_mode_valid(mode: &str) -> bool {
 // wrong answer produced by anchoring at whichever side is earlier and
 // clamping with ITS day-of-month instead).
 fn std_temporal_calendar_difference(first: &[i64; 10], second: &[i64; 10], largest: &str) -> Result<[i64; 10], Throw> {
+    std_temporal_calendar_difference_cal("iso8601", first, second, largest)
+}
+
+// Calendar-native generalization of std_temporal_calendar_difference
+// (JSS-calendars item 2), used by since/until's bracket search
+// (std_temporal_difference) -- NOT by std_temporal_epoch_breakdown's own
+// internal call (used only by round()'s calendar-anchored path, which
+// stays ISO-grid-only for now: unlike since/until, it showed no regression
+// against a real calendar, so widening it risked a NEW bug for no measured
+// gain). For the ISO-grid family (iso8601/gregory/japanese/roc/buddhist,
+// !std_calendar_is_month_structure) this is behaviorally identical to the
+// original: the year LABEL cancels out of a year/month DELTA, so operating
+// on raw ISO tuples already gives the calendar-correct answer. A real
+// month-structure calendar instead brackets in its OWN (year, ordinal
+// month, day) terms (std_calendar_fields / std_calendar_balance_year_month
+// / std_calendar_months_between, all varying-months-per-year-aware for
+// hebrew/chinese/dangi) and only converts back to ISO for the final
+// constrain step (std_temporal_add_calendar_cal). Fixing this was required
+// for zero-loss: chinese/dangi (the only two calendars whose months-per-
+// year actually varies) surfaced a wrong bracket-search count once the
+// getters/add() started reporting the real calendar instead of a
+// consistently-wrong ISO no-op (see std_temporal_add_calendar_cal's own
+// comment for the general pattern).
+fn std_temporal_calendar_difference_cal(cal: &str, first: &[i64; 10], second: &[i64; 10], largest: &str) -> Result<[i64; 10], Throw> {
     let mut result = [0; 10];
     let first_day = std_temporal_epoch_day(first[0], first[1], first[2]);
     let second_day = std_temporal_epoch_day(second[0], second[1], second[2]);
@@ -407,35 +495,52 @@ fn std_temporal_calendar_difference(first: &[i64; 10], second: &[i64; 10], large
         return Ok(result);
     }
     let sign: i64 = if second_day < first_day { -1 } else { 1 };
+    // For the ISO-grid family, bracket-search directly on the raw ISO
+    // tuples (unchanged from before); a month-structure calendar instead
+    // brackets on its OWN (year, ordinal month, day) -- month boundaries
+    // genuinely differ, so comparing raw ISO fields would compare the
+    // wrong quantity entirely.
+    let month_structure = std_calendar_is_month_structure(cal);
+    let (first_native, second_native) = if month_structure {
+        let (fy, fm, fd, ..) = std_calendar_fields(cal, first[0], first[1], first[2]);
+        let (sy, sm, sd, ..) = std_calendar_fields(cal, second[0], second[1], second[2]);
+        ((fy, fm, fd), (sy, sm, sd))
+    } else {
+        ((first[0], first[1], first[2]), (second[0], second[1], second[2]))
+    };
     let mut years = 0i64;
     let mut months = 0i64;
     // `years`/`months` are found by walking candidate offsets from `first` in
     // the `sign` direction until the next step would land strictly past
     // `second` (per `sign`); the comparison uses `first`'s own
-    // (year, month, day) tuple unclamped (a raw ISO-date compare, not a valid
-    // calendar date) exactly as the ported algorithm's `IsoDate::new_unchecked`
-    // does, so a day-of-month that overflows the candidate month (e.g. day 31
-    // against a candidate February) still orders correctly against `second`
-    // without being silently clamped away first.
-    let mut candidate_years = second[0] - first[0];
+    // (year, month, day) tuple unclamped (a raw calendar-date compare, not a
+    // valid calendar date) exactly as the ported algorithm's
+    // `IsoDate::new_unchecked` does, so a day-of-month that overflows the
+    // candidate month (e.g. day 31 against a candidate February) still
+    // orders correctly against `second` without being silently clamped away
+    // first.
+    let mut candidate_years = second_native.0 - first_native.0;
     if candidate_years != 0 { candidate_years -= sign; }
     loop {
-        let (cy, cm) = std_temporal_balance_year_month(first[0] + candidate_years, first[1]);
-        if std_temporal_calendar_surpasses((cy, cm, first[2]), (second[0], second[1], second[2]), sign) { break; }
+        let (cy, cm) = std_calendar_balance_year_month(cal, first_native.0 + candidate_years, first_native.1);
+        if std_temporal_calendar_surpasses((cy, cm, first_native.2), second_native, sign) { break; }
         years = candidate_years;
         candidate_years += sign;
     }
     let mut candidate_months = sign;
     loop {
-        let (cy, cm) = std_temporal_balance_year_month(first[0] + years, first[1] + candidate_months);
-        if std_temporal_calendar_surpasses((cy, cm, first[2]), (second[0], second[1], second[2]), sign) { break; }
+        let (cy, cm) = std_calendar_balance_year_month(cal, first_native.0 + years, first_native.1 + candidate_months);
+        if std_temporal_calendar_surpasses((cy, cm, first_native.2), second_native, sign) { break; }
         months = candidate_months;
         candidate_months += sign;
     }
-    if largest == "month" { months += years * 12; years = 0; }
+    if largest == "month" {
+        months += std_calendar_months_between(cal, first_native.0, first_native.0 + years);
+        years = 0;
+    }
     let mut single = [0i64; 10];
     single[0] = years; single[1] = months;
-    let constrained = std_temporal_add_calendar(first, &single, 1, false)?;
+    let constrained = std_temporal_add_calendar_cal(cal, first, &single, 1, false)?;
     let constrained_day = std_temporal_epoch_day(constrained[0], constrained[1], constrained[2]);
     result[0] = years; result[1] = months; result[3] = second_day - constrained_day;
     Ok(result)
@@ -634,6 +739,13 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
                 let rounded = std_temporal_round_integer((other_day - base_day) as i128, increment as i128, &mode)? as i64;
                 let (ry, rm, rd) = std_temporal_civil_from_epoch_day(base_day + rounded);
                 let rounded_other = { let mut f = [0i64; 10]; f[0] = ry; f[1] = rm; f[2] = rd; f };
+                // PARKED (2026-09-27): the calendar-native bracket search
+                // (std_temporal_calendar_difference_cal) mis-counts months
+                // for chinese/dangi in some cases (a real bug still under
+                // investigation, see questions.md) and is not required for
+                // the JSS-calendars-fix-14 regressions -- reverted to the
+                // ISO-only wrapper here so this commit stays zero-loss;
+                // resume from the WIP commit that has the wiring.
                 std_temporal_calendar_difference(&data.fields, &rounded_other, &largest)?
             } else {
                 // smallest is "week", "month" or "year": a real calendar-unit
@@ -695,6 +807,8 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
                     let unit = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
                     let delta = std_temporal_epoch_ns(&other) - std_temporal_epoch_ns(&data.fields);
                     let rounded = std_temporal_round_integer(delta, unit * increment as i128, &mode)?;
+                    // PARKED: see the matching note at std_temporal_calendar_
+                    // difference_cal's call site above.
                     std_temporal_epoch_breakdown(&data.fields, std_temporal_epoch_ns(&data.fields) + rounded, &largest)?
                 } else {
                     let index = match largest.as_str() {
@@ -757,7 +871,7 @@ fn std_temporal_since(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
 // a Proxy). MonthCode and Year get their own arms because they need special
 // handling (a calendar-format string; and, for PlainMonthDay, a value that
 // regulates the result without being stored in it).
-enum StdWithField { Plural(usize), Year, Month, MonthCode, Day, Hour, Minute, Second, Millisecond, Microsecond, Nanosecond }
+enum StdWithField { Plural(usize), Year, Month, MonthCode, Day, Hour, Minute, Second, Millisecond, Microsecond, Nanosecond, Era, EraYear }
 
 // The per-kind field name table, already listed in the exact alphabetical
 // order PrepareTemporalFields/PrepareCalendarFields/GetTemporalPlainTimeFields
@@ -784,22 +898,26 @@ fn std_temporal_field_table(kind: StdTemporalKind) -> &'static [(&'static str, S
             ("nanosecond", StdWithField::Nanosecond), ("second", StdWithField::Second),
         ],
         StdTemporalKind::PlainDate => &[
-            ("day", StdWithField::Day), ("month", StdWithField::Month),
+            ("day", StdWithField::Day), ("era", StdWithField::Era), ("eraYear", StdWithField::EraYear),
+            ("month", StdWithField::Month),
             ("monthCode", StdWithField::MonthCode), ("year", StdWithField::Year),
         ],
         StdTemporalKind::PlainDateTime => &[
-            ("day", StdWithField::Day), ("hour", StdWithField::Hour),
+            ("day", StdWithField::Day), ("era", StdWithField::Era), ("eraYear", StdWithField::EraYear),
+            ("hour", StdWithField::Hour),
             ("microsecond", StdWithField::Microsecond), ("millisecond", StdWithField::Millisecond),
             ("minute", StdWithField::Minute), ("month", StdWithField::Month),
             ("monthCode", StdWithField::MonthCode), ("nanosecond", StdWithField::Nanosecond),
             ("second", StdWithField::Second), ("year", StdWithField::Year),
         ],
         StdTemporalKind::PlainYearMonth => &[
+            ("era", StdWithField::Era), ("eraYear", StdWithField::EraYear),
             ("month", StdWithField::Month), ("monthCode", StdWithField::MonthCode),
             ("year", StdWithField::Year),
         ],
         StdTemporalKind::PlainMonthDay => &[
-            ("day", StdWithField::Day), ("month", StdWithField::Month),
+            ("day", StdWithField::Day), ("era", StdWithField::Era), ("eraYear", StdWithField::EraYear),
+            ("month", StdWithField::Month),
             ("monthCode", StdWithField::MonthCode), ("year", StdWithField::Year),
         ],
     }
@@ -819,6 +937,8 @@ struct StdCalendarRead {
     day: Option<i64>,
     time: [i64; 6],
     any_present: bool,
+    era_text: Option<String>,
+    era_year: Option<i64>,
 }
 
 // ParseISOMonthCode: a well-formed monthCode is "M" + exactly 2 ASCII
@@ -835,9 +955,21 @@ fn std_temporal_validate_month_code_syntax(code: &str) -> Result<(), Throw> {
     if well_formed { Ok(()) } else { Err(Throw::range_error("monthCode is not well-formed")) }
 }
 
-fn std_temporal_read_calendar_fields(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue) -> Result<StdCalendarRead, Throw> {
-    let mut read = StdCalendarRead { year: None, month: None, month_code_text: None, day: None, time: [0; 6], any_present: false };
+fn std_temporal_read_calendar_fields(i: &mut Interpreter, kind: StdTemporalKind, calendar: &str, value: &JsValue) -> Result<StdCalendarRead, Throw> {
+    let mut read = StdCalendarRead { year: None, month: None, month_code_text: None, day: None, time: [0; 6], any_present: false,
+        era_text: None, era_year: None };
+    // CalendarFields (spec): "era"/"eraYear" only join the requested field
+    // list for a calendar that actually uses eras -- for iso8601 (and
+    // chinese/dangi, which have no eras either) they are never even Get'd
+    // from the bag at all, not just ignored once read. Confirmed by
+    // PlainDate/PlainDateTime/PlainYearMonth/PlainMonthDay's own `from`/
+    // `with`/`since`/`until` order-of-operations.js (pre-era-feature tests,
+    // pinned in this test262 revision, whose Proxy-observed expected op list
+    // has no "get fields.era"/"get fields.eraYear" trap at all for an
+    // iso8601 bag).
+    let uses_era = std_calendar_uses_era(calendar);
     for (name, field) in std_temporal_field_table(kind) {
+        if matches!(field, StdWithField::Era | StdWithField::EraYear) && !uses_era { continue; }
         let property = i.get_prop(value, *name)?;
         if property.is_undefined() { continue; }
         read.any_present = true;
@@ -889,9 +1021,51 @@ fn std_temporal_read_calendar_fields(i: &mut Interpreter, kind: StdTemporalKind,
             StdWithField::Millisecond => read.time[3] = std_temporal_number(i, property, None)?,
             StdWithField::Microsecond => read.time[4] = std_temporal_number(i, property, None)?,
             StdWithField::Nanosecond => read.time[5] = std_temporal_number(i, property, None)?,
+            // `era`'s own validity (is this a real era name for the
+            // calendar?) is calendar-dependent cross-field resolution,
+            // deferred to the caller like monthCode's suitability check --
+            // only the ToString coercion happens here, at era's own
+            // alphabetical read position.
+            StdWithField::Era => read.era_text = Some(i.to_string(&property)?.to_ascii_lowercase()),
+            StdWithField::EraYear => read.era_year = Some(std_temporal_number(i, property, None)?),
         }
     }
     Ok(read)
+}
+
+// Resolves an (era, eraYear) pair (as read by std_temporal_read_calendar_
+// fields / std_temporal_with's own loop) into a calendar-NATIVE year,
+// validating the era name against the calendar and the eraYear-vs-year
+// cross-check against an explicit `year` if one was also given. Returns the
+// resolved native year (from era/eraYear, or the passed-through explicit
+// `year` if era/eraYear were absent), or `None` if neither was given at all.
+fn std_temporal_resolve_era_year(calendar: &str, era_text: &Option<String>, era_year: Option<i64>,
+    explicit_year: Option<i64>) -> Result<Option<i64>, Throw> {
+    match (era_text, era_year) {
+        (None, None) => Ok(explicit_year),
+        // Only ONE of era/eraYear present: this is only an error if there is
+        // no OTHER way to resolve the year at all (`year` absent too) -- a
+        // partial era pair alongside an explicit `year` is not even
+        // validated, just silently ignored in favor of `year`. Confirmed by
+        // one-of-era-erayear-undefined.js.
+        (Some(_), None) | (None, Some(_)) => match explicit_year {
+            Some(y) => Ok(Some(y)),
+            None => Err(Throw::type_error("era and eraYear must both be present, or neither")),
+        },
+        (Some(era), Some(era_year)) => {
+            if !std_calendar_valid_era(calendar, era) {
+                return Err(Throw::range_error("invalid era for this calendar"));
+            }
+            let native_year = std_calendar_era_to_native_year(calendar, era, era_year)
+                .ok_or_else(|| Throw::range_error("invalid era for this calendar"))?;
+            if let Some(explicit) = explicit_year {
+                if explicit != native_year {
+                    return Err(Throw::range_error("eraYear and year must be consistent"));
+                }
+            }
+            Ok(Some(native_year))
+        }
+    }
 }
 
 fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -936,12 +1110,20 @@ fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
     // until after options.overflow has been read, per
     // options-read-before-algorithmic-validation.js.
     let mut month_code_text: Option<String> = None;
+    let mut era_text: Option<String> = None;
+    let mut era_year: Option<i64> = None;
+    // See std_temporal_read_calendar_fields: era/eraYear are never even
+    // Get'd from the bag for a calendar that doesn't use eras.
+    let uses_era = std_calendar_uses_era(&data.calendar);
     for (name, field) in fields {
+        if matches!(field, StdWithField::Era | StdWithField::EraYear) && !uses_era { continue; }
         let property = i.get_prop(&bag, *name)?;
         if property.is_undefined() { continue; }
         present = true;
         match field {
             StdWithField::Plural(index) => result[*index] = std_temporal_duration_number(i, property, None)?,
+            StdWithField::Era => era_text = Some(i.to_string(&property)?.to_ascii_lowercase()),
+            StdWithField::EraYear => era_year = Some(std_temporal_number(i, property, None)?),
             StdWithField::Year => {
                 let value = std_temporal_number(i, property, None)?;
                 if data.kind == StdTemporalKind::PlainMonthDay { year_hint = Some(value); }
@@ -985,6 +1167,22 @@ fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
         }
     }
     if !present { return Err(Throw::type_error("no Temporal fields provided")); }
+    // era/eraYear (present in this bag at all only if `with()`'s argument
+    // supplied at least one -- absent otherwise, so an explicit `year` given
+    // alone still passes through untouched via std_temporal_resolve_era_year's
+    // (None, None) arm) resolve into the same calendar-native year an
+    // explicit `year` would have supplied, with the same cross-check against
+    // one if both were given.
+    if era_text.is_some() || era_year.is_some() {
+        let native_year = std_temporal_resolve_era_year(&data.calendar, &era_text, era_year, None)?
+            .expect("era/eraYear present implies a resolved year");
+        if data.kind == StdTemporalKind::PlainMonthDay { year_hint = Some(native_year); }
+        else {
+            result[0] = if matches!(data.calendar.as_str(), "buddhist" | "roc") {
+                std_calendar_year_to_iso(&data.calendar, native_year)
+            } else { native_year };
+        }
+    }
     let reject = if data.kind == StdTemporalKind::Duration { false }
         else { std_temporal_overflow(i, std_reflect_arg(&args, 1))? };
     if let Some(code) = month_code_text {
@@ -1205,6 +1403,19 @@ fn std_temporal_duration_apply(base: &[i64; 10], duration: &[i64; 10]) -> Result
 // difference borrows one day from the date part instead of leaving a
 // mixed-sign result.
 fn std_temporal_epoch_breakdown(base: &[i64; 10], target_epoch_ns: i128, largest: &str) -> Result<[i64; 10], Throw> {
+    std_temporal_epoch_breakdown_cal("iso8601", base, target_epoch_ns, largest)
+}
+
+// Calendar-native sibling of std_temporal_epoch_breakdown (JSS-calendars
+// item 2), used only by ZonedDateTime's own since/until calendar-anchored
+// branch (std_epoch_difference) -- round()'s calendar-anchored path keeps
+// calling the plain, ISO-only std_temporal_epoch_breakdown above (no
+// regression was observed there, so it is left unchanged rather than risking
+// a new one for no measured gain). Identical to std_temporal_epoch_breakdown
+// except for the final date-only breakdown, which uses
+// std_temporal_calendar_difference_cal instead of the ISO-only
+// std_temporal_calendar_difference.
+fn std_temporal_epoch_breakdown_cal(cal: &str, base: &[i64; 10], target_epoch_ns: i128, largest: &str) -> Result<[i64; 10], Throw> {
     if matches!(largest, "hour" | "minute" | "second" | "millisecond" | "microsecond" | "nanosecond") {
         let delta = target_epoch_ns - std_temporal_epoch_ns(base);
         let index = match largest { "hour" => 4, "minute" => 5, "second" => 6,
