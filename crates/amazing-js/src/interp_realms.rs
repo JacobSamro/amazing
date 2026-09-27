@@ -12,6 +12,8 @@ struct RealmState {
     async_function_proto: Obj,
     generator_function_proto: Obj,
     async_generator_function_proto: Obj,
+    generator_proto: Obj,
+    async_generator_proto: Obj,
     array_proto: Obj,
     string_proto: Obj,
     number_proto: Obj,
@@ -54,6 +56,8 @@ impl RealmState {
             async_function_proto: i.async_function_proto.clone(),
             generator_function_proto: i.generator_function_proto.clone(),
             async_generator_function_proto: i.async_generator_function_proto.clone(),
+            generator_proto: i.generator_proto.clone(),
+            async_generator_proto: i.async_generator_proto.clone(),
             array_proto: i.array_proto.clone(),
             string_proto: i.string_proto.clone(),
             number_proto: i.number_proto.clone(),
@@ -94,6 +98,8 @@ impl RealmState {
         i.async_function_proto = self.async_function_proto;
         i.generator_function_proto = self.generator_function_proto;
         i.async_generator_function_proto = self.async_generator_function_proto;
+        i.generator_proto = self.generator_proto;
+        i.async_generator_proto = self.async_generator_proto;
         i.array_proto = self.array_proto;
         i.string_proto = self.string_proto;
         i.number_proto = self.number_proto;
@@ -262,6 +268,7 @@ impl Interpreter {
         let mut pending = vec![self.global_obj.clone(), self.object_proto.clone(),
             self.function_proto.clone(), self.async_function_proto.clone(),
             self.generator_function_proto.clone(), self.async_generator_function_proto.clone(),
+            self.generator_proto.clone(), self.async_generator_proto.clone(),
             self.legacy_iterator_proto.clone(), self.pair_iterator_proto.clone()];
         let mut seen = std::collections::HashSet::new();
         while let Some(object) = pending.pop() {
@@ -326,6 +333,23 @@ impl Interpreter {
             let prototype = constructor.borrow().get_own("prototype");
             if let Some(JsValue::Object(prototype)) = prototype {
                 self.intrinsic_constructors.insert(name.to_utf8_lossy(), (constructor, prototype));
+            }
+        }
+        // %AsyncFunction%, %GeneratorFunction% and %AsyncGeneratorFunction%
+        // are deliberately never global bindings (is-not-a-global.js), so
+        // the scan above never finds them. Register them by name anyway,
+        // reached from their shared prototype's own "constructor" property,
+        // so GetPrototypeFromConstructor's realm-scoped name lookup
+        // (constructor_fallback_prototype) still resolves a subclassed
+        // `new AsyncFunction()` etc. to the right realm's
+        // %AsyncFunction.prototype% (proto-from-ctor-realm.js).
+        for (name, proto) in [
+            ("AsyncFunction", &self.async_function_proto),
+            ("GeneratorFunction", &self.generator_function_proto),
+            ("AsyncGeneratorFunction", &self.async_generator_function_proto),
+        ] {
+            if let Some(JsValue::Object(constructor)) = proto.borrow().get_own("constructor") {
+                self.intrinsic_constructors.insert(name.to_string(), (constructor, proto.clone()));
             }
         }
     }

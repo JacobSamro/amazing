@@ -161,8 +161,56 @@ impl Interpreter {
                 .set_own("prototype", JsValue::Object(self.function_proto.clone()));
         }
         self.define_global("Function", function_ctor);
-        if let Some(constructor) = self.global_env.resolve("Function") {
-            self.function_proto.borrow_mut().define("constructor", symbol_data(constructor, true, true)).unwrap();
+        let function_constructor = if let Some(constructor) = self.global_env.resolve("Function") {
+            self.function_proto.borrow_mut().define("constructor", symbol_data(constructor.clone(), true, true)).unwrap();
+            constructor
+        } else {
+            unreachable!("Function was just defined above")
+        };
+        // %AsyncFunction%, %GeneratorFunction%, %AsyncGeneratorFunction%:
+        // never exposed as globals (CreateDynamicFunction kinds "async",
+        // "generator", "async generator"), but reachable from any matching
+        // function/method/arrow's `.constructor`, since make_function/
+        // method_value/make_arrow already give every such value the shared
+        // async_function_proto/generator_function_proto/
+        // async_generator_function_proto as its `[[Prototype]]`. Each
+        // constructor's own `[[Prototype]]` is %Function% (it "is a
+        // subclass of Function"), and its `.prototype` link is
+        // {writable:false, enumerable:false, configurable:false} --
+        // overwriting native_arity's ordinary-constructor default of
+        // {writable:true, configurable:true} -- matching
+        // AsyncFunction-prototype.js. `constructor`/@@toStringTag on the
+        // shared prototype are {writable:false, enumerable:false,
+        // configurable:true}, per GeneratorFunction/prototype/constructor.js
+        // and *-to-string.js/Symbol.toStringTag.js (this differs from an
+        // ordinary function's writable:true `.prototype.constructor`,
+        // because these three use direct property definition rather than
+        // MakeConstructor).
+        if let JsValue::Object(function_constructor) = &function_constructor {
+            for (name, native, proto, tag, instance_proto) in [
+                ("AsyncFunction", native_async_function_constructor as crate::value::NativeFn, self.async_function_proto.clone(), "AsyncFunction", None),
+                ("GeneratorFunction", native_generator_function_constructor as crate::value::NativeFn, self.generator_function_proto.clone(), "GeneratorFunction", Some(self.generator_proto.clone())),
+                ("AsyncGeneratorFunction", native_async_generator_function_constructor as crate::value::NativeFn, self.async_generator_function_proto.clone(), "AsyncGeneratorFunction", Some(self.async_generator_proto.clone())),
+            ] {
+                let ctor = Self::native_arity(name, native, &self.function_proto, 1);
+                let JsValue::Object(ctor_obj) = &ctor else { unreachable!("native_arity always returns an object") };
+                ctor_obj.borrow_mut().proto = Some(function_constructor.clone());
+                ctor_obj.borrow_mut().define("prototype", Property {
+                    value: JsValue::Object(proto.clone()), writable: false, enumerable: false,
+                    configurable: false, getter: None, setter: None,
+                }).unwrap();
+                proto.borrow_mut().define("constructor", symbol_data(ctor.clone(), false, true)).unwrap();
+                proto.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(), symbol_data(JsValue::str(tag), false, true)).unwrap();
+                // For the generator kinds, %XFunction.prototype%'s own
+                // "prototype" is the shared %[Async]GeneratorPrototype%
+                // singleton every constructed generator's own `.prototype`
+                // object inherits from (GeneratorFunction/prototype/
+                // prototype.js): {writable:false, enumerable:false,
+                // configurable:true}.
+                if let Some(instance_proto) = instance_proto {
+                    proto.borrow_mut().define("prototype", symbol_data(JsValue::Object(instance_proto), false, true)).unwrap();
+                }
+            }
         }
         let has_own_property = symbol_method(self, "hasOwnProperty", native_has_own_property);
         symbol_method_length(&has_own_property, 1);

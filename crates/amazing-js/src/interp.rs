@@ -4,6 +4,11 @@
 //! objects, arrays, functions, closures, control flow, coercion and a small
 //! set of ES built-ins using only `std`. Modules, generators and a
 //! real asynchronous job queue remain explicit later milestones.
+//!
+//! Portions ported from lucid-softworks/lumen (crates/lumen/src/{eval,interpreter}.rs)
+//! @ f6c9860d44fa52249cfd647122edea184d32c863, MIT: explicit resource management's `using_stack`
+//! disposal-frame stack, the `Disposable` record, and `add_disposable`/`dispose_method`/
+//! `dispose_frame` (see their doc comments for the exact adaptation).
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -14,7 +19,8 @@ use std::time::{Duration, Instant};
 use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey, StmtKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::value::{
-    number_to_string, ClassElements, DerivedConstructor, Exotic, FieldKey, FunctionBody, HostCallPolicy,
+    number_to_string, ClassElements, DerivedConstructor, DisposableStackEntry, DisposableStackState,
+    Exotic, FieldKey, FunctionBody, HostCallPolicy,
     HostFunctionId, HostHandle, InstanceElement, JsFunction, JsObject, JsValue, LegacyIteratorKind,
     LegacyIteratorState, PairIteratorKind, PairIteratorState, MapKey, MapState, Obj, PendingReaction, PrivateElementKind,
     PrivateName, PromiseFate,
@@ -72,6 +78,32 @@ struct ForInState {
 struct PromiseJob {
     reaction: PendingReaction,
     fate: PromiseFate,
+}
+
+/// A captured `using`/`await using` resource: the value plus its resolved dispose method.
+/// `method_is_async` records whether `method` came from a real `@@asyncDispose` lookup (its
+/// result is awaited at disposal time) as opposed to the `@@dispose` fallback used inside an
+/// `await using` declaration when no `@@asyncDispose` exists (called but not awaited).
+/// Ported from lucid-softworks/lumen (crates/lumen/src/interpreter.rs) @ f6c9860d, MIT.
+struct Disposable {
+    value: JsValue,
+    method: JsValue,
+    method_is_async: bool,
+}
+
+/// Whether a statement directly in a block/for-head is a `using`/`await using` declaration (so
+/// that scope is a disposal boundary). Does not recurse — disposal scopes are per lexical block.
+fn stmt_declares_resource(s: &ast::Stmt) -> bool {
+    matches!(&s.kind, StmtKind::Var(d) if d.resource_kind.is_some())
+}
+
+/// Whether a `for-of` head (`for (using x of ...)` / `for (await using x of ...)`) declares a
+/// per-iteration disposal resource, and if so whether it is the `await using` form.
+fn for_of_dispose_kind(left: &ForLeft) -> Option<bool> {
+    match left {
+        ForLeft::Decl(d) => d.resource_kind.map(|k| k == ast::ResourceKind::AwaitUsing),
+        ForLeft::Target(_) => None,
+    }
 }
 
 enum Job {
@@ -237,6 +269,14 @@ pub struct Interpreter {
     pub async_function_proto: Obj,
     pub generator_function_proto: Obj,
     pub async_generator_function_proto: Obj,
+    /// %GeneratorPrototype%: the shared object every generator function's
+    /// own (per-function) `.prototype` object inherits from -- distinct
+    /// from `generator_function_proto` (%GeneratorFunction.prototype%,
+    /// the FUNCTION's own `[[Prototype]]`). `generator_function_proto`'s
+    /// own "prototype" property points at this object.
+    pub generator_proto: Obj,
+    /// %AsyncGeneratorPrototype%, the async equivalent of `generator_proto`.
+    pub async_generator_proto: Obj,
     pub array_proto: Obj,
     pub string_proto: Obj,
     pub number_proto: Obj,
@@ -269,6 +309,11 @@ pub struct Interpreter {
     host_cache: HashMap<HostHandle, Weak<RefCell<JsObject>>>,
     put_forwards: Vec<(Weak<RefCell<JsObject>>, String, String)>,
     legacy_hooks: HashMap<u64, LegacyPlatformHooks>,
+    /// Explicit resource management (`using`/`await using`): a stack of disposal frames, one per
+    /// block/function-body/for-head/for-of-iteration that actually declares a resource. Resources
+    /// are disposed in reverse declaration order when that scope exits (see `dispose_frame`).
+    /// Ported from lucid-softworks/lumen (crates/lumen/src/{eval,interpreter}.rs) @ f6c9860d, MIT.
+    using_stack: Vec<Vec<Disposable>>,
     error_brands: std::collections::HashSet<u64>,
     legacy_iterator_proto: Obj,
     pair_hooks: HashMap<u64, PairIterableHooks>,
@@ -332,6 +377,21 @@ impl Interpreter {
         let async_function_proto = function_subproto();
         let generator_function_proto = function_subproto();
         let async_generator_function_proto = function_subproto();
+        // %GeneratorPrototype%'s own [[Prototype]] is %IteratorPrototype%
+        // (installed later by install_std_iterator_helpers and re-parented
+        // below once it exists); %AsyncGeneratorPrototype% keeps a plain
+        // Object.prototype parent since this crate has no %AsyncIterator-
+        // Prototype% singleton yet (no test in this ticket's scope needs it).
+        let generator_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
+        let async_generator_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
         let array_proto = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::array();
             o.proto = Some(object_proto.clone());
@@ -423,6 +483,8 @@ impl Interpreter {
             async_function_proto,
             generator_function_proto,
             async_generator_function_proto,
+            generator_proto,
+            async_generator_proto,
             array_proto,
             string_proto,
             number_proto,
@@ -451,6 +513,7 @@ impl Interpreter {
             host_cache: HashMap::new(),
             put_forwards: Vec::new(),
             legacy_hooks: HashMap::new(),
+            using_stack: Vec::new(),
             error_brands: std::collections::HashSet::new(),
             legacy_iterator_proto,
             pair_hooks: HashMap::new(),
@@ -1344,6 +1407,9 @@ impl Interpreter {
                     if d.kind == ast::VarKind::Const && x.init.is_none() {
                         return Err(Throw::syntax_error("const requires an initializer"));
                     }
+                    if let Some(kind) = d.resource_kind {
+                        self.add_disposable(&v, kind == ast::ResourceKind::AwaitUsing)?;
+                    }
                     self.bind_pattern(&x.binding, v, d.kind, env)?;
                 }
                 Ok(Flow::Normal)
@@ -1359,7 +1425,15 @@ impl Interpreter {
             StmtKind::Block(b) => {
                 self.completion = JsValue::Undefined;
                 let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-                self.exec_stmts(&b.body, &e)
+                // A block is a disposal boundary only when it directly declares a `using` /
+                // `await using` resource (spec: BlockDeclarationInstantiation's disposal capability).
+                if !b.body.iter().any(stmt_declares_resource) {
+                    return self.exec_stmts(&b.body, &e);
+                }
+                self.using_stack.push(Vec::new());
+                let result = self.exec_stmts(&b.body, &e);
+                let frame = self.using_stack.pop().unwrap_or_default();
+                self.dispose_frame(frame, result)
             }
             StmtKind::If { cond, then, els } => {
                 self.completion = JsValue::Undefined;
@@ -1510,6 +1584,100 @@ impl Interpreter {
         Ok(Flow::Normal)
     }
 
+    /// GetDisposeMethod (explicit resource management, spec 27.3.1): `@@asyncDispose` (falling
+    /// back to `@@dispose`) for `await using`, else plain `@@dispose`. Returns the resolved
+    /// method plus whether it came from a real `@@asyncDispose` lookup (as opposed to the
+    /// `@@dispose` fallback), which decides whether disposal awaits its result.
+    /// Ported from lucid-softworks/lumen (crates/lumen/src/eval.rs) @ f6c9860d, MIT.
+    fn dispose_method(&mut self, value: &JsValue, is_async: bool) -> Result<(JsValue, bool), Throw> {
+        let mut method = JsValue::Undefined;
+        let mut from_async = false;
+        if is_async {
+            method = self.get_prop(value, WellKnownSymbol::AsyncDispose.symbol())?;
+            from_async = self.binding_is_callable(&method);
+        }
+        if !self.binding_is_callable(&method) {
+            method = self.get_prop(value, WellKnownSymbol::Dispose.symbol())?;
+        }
+        if !self.binding_is_callable(&method) {
+            return Err(Throw::type_error("value is not disposable"));
+        }
+        Ok((method, from_async))
+    }
+
+    /// AddDisposableResource (spec 27.3.3.2): capture `value`'s dispose method now, at `using`/
+    /// `await using` binding time (so a later TypeError from a non-disposable value surfaces at
+    /// the declaration, not at scope exit). `null`/`undefined` resources are simply skipped: no
+    /// dispose call is ever made for them.
+    /// Ported from lucid-softworks/lumen (crates/lumen/src/eval.rs) @ f6c9860d, MIT.
+    fn add_disposable(&mut self, value: &JsValue, is_async: bool) -> Result<(), Throw> {
+        if matches!(value, JsValue::Null | JsValue::Undefined) {
+            return Ok(());
+        }
+        let (method, method_is_async) = self.dispose_method(value, is_async)?;
+        if self.using_stack.is_empty() {
+            self.using_stack.push(Vec::new());
+        }
+        self.using_stack.last_mut().unwrap().push(Disposable {
+            value: value.clone(),
+            method,
+            method_is_async,
+        });
+        Ok(())
+    }
+
+    /// DisposeResources (spec 27.3.3.4): run a disposal frame's resources in reverse declaration
+    /// order against `result`, the enclosing scope's own completion. A disposal that throws
+    /// either becomes the completion (when nothing was already pending) or is folded into a
+    /// `SuppressedError` chain, with the previously-pending error as `suppressed` — so a single
+    /// disposal error, with the scope otherwise completing normally, propagates as-is.
+    /// Ported from lucid-softworks/lumen (crates/lumen/src/eval.rs) @ f6c9860d, MIT.
+    fn dispose_frame(&mut self, frame: Vec<Disposable>, result: Result<Flow, Throw>) -> Result<Flow, Throw> {
+        let mut completion = result;
+        for d in frame.into_iter().rev() {
+            let disposed = self
+                .call_value(&d.method, d.value.clone(), Vec::new())
+                .and_then(|v| if d.method_is_async { self.await_value(v) } else { Ok(v) });
+            if let Err(new_err) = disposed {
+                completion = match completion {
+                    Err(prev) => Err(Throw(self.make_suppressed_error(new_err.0, prev.0))),
+                    Ok(_) => Err(new_err),
+                };
+            }
+        }
+        completion
+    }
+
+    /// Build a `SuppressedError` with the same `error`/`suppressed` own-data-property shape as
+    /// the `SuppressedError` constructor (see `native_suppressed_error`), for disposal-time error
+    /// aggregation that isn't going through a `new SuppressedError(...)` call.
+    fn make_suppressed_error(&mut self, error: JsValue, suppressed: JsValue) -> JsValue {
+        let mut object = JsObject::ordinary();
+        object.exotic = Exotic::Error;
+        object.proto = self.intrinsic_constructors.get("SuppressedError").map(|(_, proto)| proto.clone());
+        object.define("error", symbol_data(error, true, true)).unwrap();
+        object.define("suppressed", symbol_data(suppressed, true, true)).unwrap();
+        JsValue::Object(Obj(Rc::new(RefCell::new(object))))
+    }
+
+    /// Await(value) (spec 27.7.5.3), factored out of `UnOp::Await` so disposal can reuse it. Only
+    /// unwraps an already-settled promise; a still-pending one degrades to `undefined` since this
+    /// tree-walking interpreter has no coroutine/suspension machinery to genuinely park here.
+    fn await_value(&mut self, value: JsValue) -> Result<JsValue, Throw> {
+        match value {
+            JsValue::Object(o) => {
+                let exotic = o.borrow().exotic.clone();
+                match exotic {
+                    Exotic::Promise(PromiseState { state: PromiseFate::Fulfilled(value), .. }) => Ok(value),
+                    Exotic::Promise(PromiseState { state: PromiseFate::Rejected(value), .. }) => Err(Throw(value)),
+                    Exotic::Promise(PromiseState { state: PromiseFate::Pending, .. }) => Ok(JsValue::Undefined),
+                    _ => Ok(JsValue::Object(o)),
+                }
+            }
+            other => Ok(other),
+        }
+    }
+
     fn drain_jobs(&mut self) -> Result<(), Throw> {
         if self.depth != 0 { return Ok(()); }
         while let Some(job) = self.jobs.pop_front() {
@@ -1571,6 +1739,28 @@ impl Interpreter {
     }
 
     fn loop_for(
+        &mut self,
+        init: Option<&ForInit>,
+        test: Option<&ast::Expr>,
+        update: Option<&ast::Expr>,
+        body: &ast::Stmt,
+        env: &EnvHandle,
+        label: Option<&str>,
+    ) -> Result<Flow, Throw> {
+        // A `for (using x = r; ...)` / `for (await using x = r; ...)` head is a disposal
+        // boundary: the head's resource(s) are disposed once, when the whole loop exits (not
+        // per-iteration — contrast `for (using x of iterable)`, handled in `exec_for_of`).
+        let has_using = matches!(init, Some(ForInit::Decl(decl)) if decl.resource_kind.is_some());
+        if !has_using {
+            return self.loop_for_inner(init, test, update, body, env, label);
+        }
+        self.using_stack.push(Vec::new());
+        let result = self.loop_for_inner(init, test, update, body, env, label);
+        let frame = self.using_stack.pop().unwrap_or_default();
+        self.dispose_frame(frame, result)
+    }
+
+    fn loop_for_inner(
         &mut self,
         init: Option<&ForInit>,
         test: Option<&ast::Expr>,
@@ -2057,27 +2247,7 @@ impl Interpreter {
             },
             ast::UnOp::Await => {
                 let value = self.eval_expr(x, env)?;
-                match value {
-                    JsValue::Object(o) => {
-                        let exotic = o.borrow().exotic.clone();
-                        match exotic {
-                            Exotic::Promise(PromiseState {
-                                state: PromiseFate::Fulfilled(value),
-                                ..
-                            }) => Ok(value),
-                            Exotic::Promise(PromiseState {
-                                state: PromiseFate::Rejected(value),
-                                ..
-                            }) => Err(Throw(value)),
-                            Exotic::Promise(PromiseState {
-                                state: PromiseFate::Pending,
-                                ..
-                            }) => Ok(JsValue::Undefined),
-                            _ => Ok(JsValue::Object(o)),
-                        }
-                    }
-                    other => Ok(other),
-                }
+                self.await_value(value)
             }
             ast::UnOp::Not => {
                 let value = self.eval_expr(x, env)?;
@@ -2792,7 +2962,18 @@ impl Interpreter {
                     self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
                     self.hoist(&b.body, &e)?;
-                    let completion = self.exec_stmts(&b.body, &e)?;
+                    // A function body is a disposal boundary in its own right (spec: ordinary
+                    // FunctionDeclarationInstantiation's disposal capability), independent of any
+                    // nested block's own boundary.
+                    let has_using = b.body.iter().any(stmt_declares_resource);
+                    let completion = if has_using {
+                        self.using_stack.push(Vec::new());
+                        let result = self.exec_stmts(&b.body, &e);
+                        let frame = self.using_stack.pop().unwrap_or_default();
+                        self.dispose_frame(frame, result)?
+                    } else {
+                        self.exec_stmts(&b.body, &e)?
+                    };
                     if derived {
                         self.complete_derived_constructor(completion, &e, caller_realm)
                     } else {
@@ -2970,18 +3151,45 @@ impl Interpreter {
             self.function_proto.clone()
         });
         o.strict_function = self.strict_eval_context || has_use_strict_directive(&f.body.body);
+        // Async and generator function instances have no [[Construct]]
+        // internal method (25.5.1/27.3.1/27.4.1): only a plain function is
+        // constructible.
+        o.constructible = !(f.is_async || f.is_generator);
         let h = Obj(Rc::new(RefCell::new(o)));
-        let p = Obj(Rc::new(RefCell::new({
-            let mut x = JsObject::ordinary();
-            x.proto = Some(self.object_proto.clone());
-            x
-        })));
-        if !f.is_generator {
-            p.borrow_mut().define("constructor", symbol_data(JsValue::Object(h.clone()), true, true)).unwrap();
+        // A plain (non-generator) async function has no "prototype"
+        // property at all (25.5.3 Async Function Instances): [[Construct]]
+        // is unreachable and there's nowhere to stash new.target-derived
+        // instance state. Sync and async generators keep their own
+        // `.prototype` (that's where a constructed generator's state would
+        // live), matching the VM's equivalent narrowed exclusion.
+        if !(f.is_async && !f.is_generator) {
+            let p = Obj(Rc::new(RefCell::new({
+                let mut x = JsObject::ordinary();
+                // A (sync or async) generator's own `.prototype` inherits
+                // from the shared %[Async]GeneratorPrototype%, not
+                // Object.prototype (GeneratorFunction/instance-prototype.js).
+                x.proto = Some(if f.is_generator {
+                    if f.is_async { self.async_generator_proto.clone() } else { self.generator_proto.clone() }
+                } else {
+                    self.object_proto.clone()
+                });
+                x
+            })));
+            if !f.is_generator {
+                p.borrow_mut().define("constructor", symbol_data(JsValue::Object(h.clone()), true, true)).unwrap();
+            }
+            // A function's own "prototype" is {writable:true, enumerable:
+            // false, configurable:false} (20.2.4.3 for ordinary functions;
+            // 27.5.3/27.4.3 identically for generators) -- `set_own` would
+            // give it Property::data's ordinary-property defaults
+            // (enumerable:true, configurable:true), which is wrong for both
+            // kinds, not just generators.
+            h.borrow_mut().define("prototype", Property {
+                value: JsValue::Object(p.clone()), writable: true, enumerable: false,
+                configurable: false, getter: None, setter: None,
+            }).unwrap();
+            h.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(p);
         }
-        h.borrow_mut()
-            .set_own("prototype", JsValue::Object(p.clone()));
-        h.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(p);
         JsValue::Object(h)
     }
     fn make_arrow(&self, a: &ast::ArrowFunc, e: &EnvHandle) -> JsValue {
@@ -3670,12 +3878,12 @@ impl Interpreter {
         body: &ast::Stmt,
         env: &EnvHandle,
     ) -> Result<Flow, Throw> {
+        let dispose = for_of_dispose_kind(left);
         let custom_iterator = self.custom_iterator(iterable)?;
         let Some(iterator) = custom_iterator else {
             for value in self.iterate(iterable)? {
                 let iteration_env = for_iteration_env(left, env);
-                self.bind_for(left, value, &iteration_env)?;
-                match self.exec_stmt(body, &iteration_env)? {
+                match self.for_of_iteration_body(left, value, body, &iteration_env, dispose)? {
                     Flow::Normal | Flow::Continue(None) => {}
                     Flow::Break(None) => break,
                     flow => return Ok(flow),
@@ -3717,8 +3925,7 @@ impl Interpreter {
                 }
             };
             let iteration_env = for_iteration_env(left, env);
-            self.bind_for(left, value, &iteration_env)?;
-            match self.exec_stmt(body, &iteration_env) {
+            match self.for_of_iteration_body(left, value, body, &iteration_env, dispose) {
                 Ok(Flow::Normal | Flow::Continue(None)) => {}
                 Ok(Flow::Break(None)) => {
                     self.close_iterator(&iterator);
@@ -3735,6 +3942,42 @@ impl Interpreter {
             }
         }
         Ok(Flow::Normal)
+    }
+
+    /// Run one `for-of` iteration: bind the element and execute the body. `dispose` is
+    /// `Some(is_async)` when `left` is a `using`/`await using` declaration, in which case the
+    /// element is a per-iteration disposal resource — disposed (awaited for `await using`) at
+    /// the end of that same iteration, before the loop's next `next()` call.
+    /// Ported from lucid-softworks/lumen (crates/lumen/src/eval.rs) @ f6c9860d, MIT.
+    fn for_of_iteration_body(
+        &mut self,
+        left: &ForLeft,
+        value: JsValue,
+        body: &ast::Stmt,
+        iteration_env: &EnvHandle,
+        dispose: Option<bool>,
+    ) -> Result<Flow, Throw> {
+        let Some(is_async) = dispose else {
+            self.bind_for(left, value, iteration_env)?;
+            return self.exec_stmt(body, iteration_env);
+        };
+        self.using_stack.push(Vec::new());
+        let step = self.for_of_iteration_step(left, value, body, iteration_env, is_async);
+        let frame = self.using_stack.pop().unwrap_or_default();
+        self.dispose_frame(frame, step)
+    }
+
+    fn for_of_iteration_step(
+        &mut self,
+        left: &ForLeft,
+        value: JsValue,
+        body: &ast::Stmt,
+        iteration_env: &EnvHandle,
+        is_async: bool,
+    ) -> Result<Flow, Throw> {
+        self.add_disposable(&value, is_async)?;
+        self.bind_for(left, value, iteration_env)?;
+        self.exec_stmt(body, iteration_env)
     }
 
     fn custom_iterator(&mut self, value: &JsValue) -> Result<Option<JsValue>, Throw> {
@@ -3952,6 +4195,7 @@ include!("interp_class_private.rs");
 include!("interp_object_extra.rs");
 include!("interp_errors.rs");
 include!("interp_bound.rs");
+include!("interp_disposable.rs");
 include!("builtins_std_object_model.rs");
 include!("builtins_std_reflect.rs");
 include!("builtins_std_collections.rs");

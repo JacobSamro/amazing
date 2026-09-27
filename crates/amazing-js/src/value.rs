@@ -112,15 +112,15 @@ impl fmt::Debug for JsSymbol {
 pub enum WellKnownSymbol {
     Iterator, AsyncIterator, HasInstance, ToPrimitive, ToStringTag,
     IsConcatSpreadable, Species, Unscopables, Match, MatchAll, Replace, Search, Split,
-    Dispose,
+    Dispose, AsyncDispose,
 }
 
 impl WellKnownSymbol {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Iterator, Self::AsyncIterator, Self::HasInstance, Self::ToPrimitive,
         Self::ToStringTag, Self::IsConcatSpreadable, Self::Species, Self::Unscopables,
         Self::Match, Self::MatchAll, Self::Replace, Self::Search, Self::Split,
-        Self::Dispose,
+        Self::Dispose, Self::AsyncDispose,
     ];
     pub fn name(self) -> &'static str {
         match self {
@@ -130,7 +130,7 @@ impl WellKnownSymbol {
             Self::Species => "species", Self::Unscopables => "unscopables",
             Self::Match => "match", Self::MatchAll => "matchAll", Self::Replace => "replace",
             Self::Search => "search", Self::Split => "split",
-            Self::Dispose => "dispose",
+            Self::Dispose => "dispose", Self::AsyncDispose => "asyncDispose",
         }
     }
     pub fn symbol(self) -> JsSymbol {
@@ -139,7 +139,7 @@ impl WellKnownSymbol {
             Self::ToPrimitive => 4, Self::ToStringTag => 5, Self::IsConcatSpreadable => 6,
             Self::Species => 7, Self::Unscopables => 8, Self::Match => 9,
             Self::MatchAll => 10, Self::Replace => 11, Self::Search => 12, Self::Split => 13,
-            Self::Dispose => 14,
+            Self::Dispose => 14, Self::AsyncDispose => 15,
         };
         JsSymbol { id, description: Some(JsString::from(format!("Symbol.{}", self.name()))) }
     }
@@ -228,6 +228,7 @@ impl fmt::Debug for Obj {
             (Exotic::ModuleNamespace(_), _) => write!(f, "[module namespace]"),
             (Exotic::WindowProxy(_), _) => write!(f, "[WindowProxy]"),
             (Exotic::Proxy(_), _) => write!(f, "[proxy]"),
+            (Exotic::DisposableStack(_), _) => write!(f, "[disposable stack]"),
             (Exotic::Ordinary, _) => write!(f, "[object; {} props]", b.props.len()),
         }
     }
@@ -764,6 +765,30 @@ pub enum Exotic {
     Generator(Rc<RefCell<crate::interp::vm::GeneratorState>>),
     ModuleNamespace(std::collections::BTreeMap<String, crate::env::BindingCell>),
     Proxy(Rc<crate::interp::ProxyState>),
+    DisposableStack(DisposableStackState),
+}
+
+/// `DisposableStack` / `AsyncDisposableStack` internal state (explicit resource management,
+/// spec 11.4). `resources` runs LIFO on `dispose()`/`disposeAsync()`. The resource-record shape
+/// is adapted from lucid-softworks/lumen's `Disposable`/stack-entry design (crates/lumen/src/
+/// {interpreter,builtins/disposable}.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT, onto
+/// this codebase's `Exotic`-variant internal-slot convention (see `interp_disposable.rs`).
+#[derive(Debug, Clone, Default)]
+pub struct DisposableStackState {
+    pub is_async: bool,
+    pub disposed: bool,
+    pub resources: Vec<DisposableStackEntry>,
+}
+
+/// One `use`/`adopt`/`defer` entry: `method` is called as `method.call(this_arg, ..arg)`.
+/// `use(v)`: method = v's resolved dispose method, this_arg = v, arg = None.
+/// `adopt(v, onDispose)`: method = onDispose, this_arg = Undefined, arg = Some(v).
+/// `defer(onDispose)`: method = onDispose, this_arg = Undefined, arg = None.
+#[derive(Debug, Clone)]
+pub struct DisposableStackEntry {
+    pub method: JsValue,
+    pub this_arg: JsValue,
+    pub arg: Option<JsValue>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

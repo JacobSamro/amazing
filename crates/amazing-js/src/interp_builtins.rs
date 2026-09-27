@@ -3348,17 +3348,25 @@ fn native_queue_microtask(
 
 // testharness.js distinguishes callback setup from property-object setup with
 // instanceof Function, and checks setup properties with hasOwnProperty.
-fn native_function_constructor(
-    i: &mut Interpreter,
-    _: JsValue,
-    args: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
+//
+// Shared by %Function%, %AsyncFunction%, %GeneratorFunction% and
+// %AsyncGeneratorFunction% (CreateDynamicFunction): `prefix` selects the
+// kind by spelling out the keyword(s) that precede the synthesized
+// function's name, so the parser sets `is_async`/`is_generator` on the
+// resulting `ast::FunctionItem` exactly as it would for a literal
+// declaration -- `make_function` then places the result on the matching
+// shared `[[Prototype]]` (async_function_proto, generator_function_proto,
+// ...) with no further kind-specific logic needed here. Call and construct
+// behave identically (this ignores `this`/`new.target`; a subclassed
+// construction's `[[Prototype]]` is fixed up generically afterward by
+// `construct_with_new_target`).
+fn native_dynamic_function(i: &mut Interpreter, args: Vec<JsValue>, prefix: &str) -> Result<JsValue, Throw> {
     let mut parts = args
         .iter()
         .map(|a| i.to_string(a))
         .collect::<Result<Vec<_>, _>>()?;
     let body = parts.pop().unwrap_or_default();
-    let source = format!("function anonymous({}) {{\n{}\n}}", parts.join(","), body);
+    let source = format!("{prefix} anonymous({}) {{\n{}\n}}", parts.join(","), body);
     let script = crate::parse_script(&source).map_err(|e| Throw::syntax_error(e.to_string()))?;
     if script.body.len() != 1 {
         return Err(Throw::syntax_error("invalid Function constructor source"));
@@ -3372,6 +3380,38 @@ fn native_function_constructor(
     } else {
         Err(Throw::syntax_error("invalid Function constructor source"))
     }
+}
+
+fn native_function_constructor(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    native_dynamic_function(i, args, "function")
+}
+
+fn native_async_function_constructor(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    native_dynamic_function(i, args, "async function")
+}
+
+fn native_generator_function_constructor(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    native_dynamic_function(i, args, "function*")
+}
+
+fn native_async_generator_function_constructor(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    native_dynamic_function(i, args, "async function*")
 }
 fn native_has_own_property(
     i: &mut Interpreter,
