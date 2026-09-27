@@ -451,6 +451,10 @@ pub enum Operation {
     /// shadow-dom-basic.html`) crashed with `TypeError: value is not
     /// callable` before running any of its assertions.
     ElementSetHTMLUnsafe,
+    /// Static `Document.parseHTMLUnsafe(html, options?)`. See
+    /// `parser_bindings.rs`'s handling for why this needs no new parser
+    /// support beyond `create_inert_document`, unlike `ElementSetHTMLUnsafe`.
+    DocumentParseHTMLUnsafe,
     ElementOuterHTML,
     ElementSetOuterHTML,
     ElementInsertAdjacentHTML,
@@ -850,6 +854,17 @@ pub struct FragmentContext {
 pub trait FragmentParser: BindingHost {
     fn parse_fragment(&mut self, context: FragmentContext, markup: &[u16])
         -> Result<Dom, DomError>;
+    /// `Element`/`ShadowRoot.setHTMLUnsafe` and `Document.parseHTML(Unsafe)`
+    /// need declarative shadow roots enabled during fragment parsing (spec's
+    /// "set and filter HTML" always parses with `allowDeclarativeShadowRoots
+    /// = true`); ordinary `innerHTML`/`outerHTML`/`insertAdjacentHTML` must
+    /// keep them off and keep calling plain `parse_fragment`. Defaults to
+    /// `parse_fragment` (declarative shadow roots off) so a host that
+    /// hasn't opted in keeps its current, pre-existing behavior.
+    fn parse_fragment_with_shadow_roots(&mut self, context: FragmentContext, markup: &[u16])
+        -> Result<Dom, DomError> {
+        self.parse_fragment(context, markup)
+    }
 }
 
 /// The embedding parses and matches selectors using its CSS crate. A failed

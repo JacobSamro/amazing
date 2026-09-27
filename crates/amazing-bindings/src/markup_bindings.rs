@@ -1,5 +1,40 @@
 use crate::host::{BindingHost, FragmentContext, FragmentParser, InterfaceBrand, Operation as O, SelectorEngine};
-use amazing_dom::{DomError, NodeKind};
+use amazing_dom::shadow::{ShadowMode, ShadowOptions, SlotAssignment};
+use amazing_dom::{Dom, DomError, NodeIdx, NodeKind};
+
+/// `Element`/`ShadowRoot.setHTMLUnsafe`'s top-level declarative-shadow-root
+/// shape: `el.setHTMLUnsafe('<template shadowrootmode="open">...')`, where
+/// the `<template>` is the fragment's very first (and typically only)
+/// top-level content and is meant to attach directly to `el` itself, rather
+/// than to some real ancestor already open within the fragment's own
+/// markup (that nested case is handled entirely inside
+/// `amazing_html::parse_fragment_with_shadow_roots` -- see its doc comment).
+/// The parser has no real `NodeIdx` for the caller's actual host to attach
+/// to, so it leaves this shape as an ordinary leftover `<template>`; the
+/// caller (`invoke`, below) detects it and performs the attach itself.
+/// Mirrors `amazing_html::tree::TreeBuilder::start_template`'s own reading
+/// of the `shadowroot*` attributes for the nested case.
+fn top_level_declarative_shadow_template(parsed: &Dom) -> Option<(NodeIdx, ShadowOptions, bool)> {
+    let template = parsed.children(NodeIdx(0)).next()?;
+    if parsed.namespace_uri(template) != Some("http://www.w3.org/1999/xhtml")
+        || parsed.local_name(template) != Some("template") {
+        return None;
+    }
+    let mode = match parsed.get_attribute_ns(template, None, "shadowrootmode")?.to_ascii_lowercase().as_str() {
+        "open" => ShadowMode::Open,
+        "closed" => ShadowMode::Closed,
+        _ => return None,
+    };
+    let has = |name| parsed.get_attribute_ns(template, None, name).is_some();
+    let manual = parsed.get_attribute_ns(template, None, "shadowrootslotassignment")
+        .is_some_and(|value| value.eq_ignore_ascii_case("manual"));
+    let options = ShadowOptions {
+        mode, delegates_focus: has("shadowrootdelegatesfocus"),
+        slot_assignment: if manual { SlotAssignment::Manual } else { SlotAssignment::Named },
+        clonable: has("shadowrootclonable"), serializable: has("shadowrootserializable"),
+    };
+    Some((template, options, has("shadowrootcustomelementregistry")))
+}
 
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::ElementGetHTML | O::ElementInnerHTML | O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe | O::ElementOuterHTML
@@ -162,7 +197,7 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
                 Some(text)
             } else { None };
             let markup = required_string(host, args.get(if position.is_some() { 1 } else { 0 }))?;
-            let (parent, reference, parse_context) = host.with_dom(|dom| {
+            let (parent, reference, parse_context, context_node) = host.with_dom(|dom| {
                 let parent = dom.get(node).parent;
                 let (insertion_parent, reference) = match position.as_deref() {
                     Some("beforebegin") => (parent.ok_or(DomError::NoModificationAllowedError)?, Some(node)),
@@ -181,15 +216,48 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
                     FragmentContext { local_name: dom.local_name(context_node).ok_or(DomError::TypeError)?.into(),
                         namespace_uri: dom.namespace_uri(context_node).map(str::to_owned) }
                 };
-                Ok((insertion_parent, reference, context))
+                Ok((insertion_parent, reference, context, context_node))
             })?;
-            let result = host.parse_fragment(parse_context, &markup);
-            let parsed = seam_result(host, result)?;
+            // `setHTMLUnsafe` alone parses with declarative shadow roots
+            // enabled (spec's "set and filter HTML" always passes `true` for
+            // `allowDeclarativeShadowRoots`, but only `setHTMLUnsafe`/
+            // `parseHTML(Unsafe)` route through it) -- `innerHTML`/
+            // `outerHTML`/`insertAdjacentHTML` keep them off, unchanged.
+            let result = if op == O::ElementSetHTMLUnsafe {
+                host.parse_fragment_with_shadow_roots(parse_context, &markup)
+            } else {
+                host.parse_fragment(parse_context, &markup)
+            };
+            let mut parsed = seam_result(host, result)?;
+            // Nested declarative shadow roots (a real ancestor already open
+            // within the fragment's own markup) survive into `parsed`
+            // already, fully formed, courtesy of `parse_fragment_with_
+            // shadow_roots`'s own shadow-aware cloning -- `import_fragment`
+            // below imports them like any other node. Only the top-level
+            // shape (the template meant to attach to `context_node` itself)
+            // needs handling here; see `top_level_declarative_shadow_
+            // template`'s doc comment for why the parser can't do it.
+            let top_level_shadow = (op == O::ElementSetHTMLUnsafe)
+                .then(|| top_level_declarative_shadow_template(&parsed)).flatten();
             host.with_dom(|dom| {
                 let insertion = if matches!(op, O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe) && dom.is_html_template(node) {
                     dom.ensure_template_contents(node)?
                 } else { parent };
                 let document = dom.owner_document(insertion).unwrap_or(insertion);
+                if let Some((template, options, keep_registry_null)) = top_level_shadow {
+                    // Spec's "attach a shadow root" throwing (already a
+                    // shadow host, or `context_node`'s local name is not a
+                    // valid declarative shadow host) is caught and the
+                    // template is left as ordinary content -- do not detach
+                    // it from `parsed` below, so the unmodified fallthrough
+                    // `import_fragment` keeps it as a plain top-level child.
+                    if let Ok(shadow_root) = dom.attach_declarative_shadow(context_node, options, keep_registry_null) {
+                        if let Some(contents) = parsed.template_contents(template) {
+                            dom.import_subtree_children(&parsed, contents, shadow_root)?;
+                        }
+                        parsed.pre_remove(template, NodeIdx(0)).expect("top-level template");
+                    }
+                }
                 let fragment = dom.import_fragment(&parsed, document)?;
                 if matches!(op, O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe) { dom.replace_all(insertion, Some(fragment)) }
                 else if op == O::ElementSetOuterHTML { dom.replace(node, fragment, parent).map(|_| ()) }

@@ -1651,6 +1651,7 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
     host.install_static_method(I::AbortSignal, "any", O::AbortSignalAny, 1)?;
     host.install_static_method(I::AbortSignal, "timeout", O::AbortSignalTimeout, 1)?;
     host.install_static_method(I::Observable, "from", O::ObservableFrom, 1)?;
+    host.install_static_method(I::Document, "parseHTMLUnsafe", O::DocumentParseHTMLUnsafe, 1)?;
     host.install_static_method(I::URL, "canParse", O::URLCanParse, 1)?;
     host.install_static_method(I::URL, "parse", O::URLParse, 1)?;
     host.define_legacy_platform_object(InterfaceBrand::COLLECTION, LegacyPlatformHooks {

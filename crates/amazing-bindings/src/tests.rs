@@ -592,6 +592,33 @@ impl FragmentParser for Host {
         }
         Ok(parsed)
     }
+    /// Crate-level coverage for `markup_bindings.rs`'s top-level
+    /// declarative-shadow-root handling (`tests_set_html_unsafe.rs`) needs
+    /// a `Dom` shaped exactly like `amazing_html::parse_fragment_with_
+    /// shadow_roots` would produce for a top-level `<template
+    /// shadowrootmode="open">` -- not a real HTML parser (that shape's real
+    /// parsing is covered by `amazing-html`'s own tests and the
+    /// `shadow-dom/declarative` WPT gate). Recognizes two sentinel markup
+    /// strings; anything else falls back to the ordinary mock parser above.
+    fn parse_fragment_with_shadow_roots(&mut self, context: FragmentContext, markup: &[u16])
+        -> Result<Dom, DomError> {
+        assert!(!self.arena_borrowed);
+        let source = String::from_utf16(markup).map_err(|_| DomError::SyntaxError)?;
+        if source == "<template-shadow-open>" || source == "<template-shadow-open-with-sibling>" {
+            let mut parsed = Dom::new();
+            let template = parsed.create_element(NodeIdx(0), "template");
+            parsed.set_attribute(template, "shadowrootmode", "open").expect("set attribute");
+            let contents = parsed.ensure_template_contents(template).expect("template contents");
+            let child = parsed.create_element(contents, "b");
+            parsed.append_child(child, NodeKind::Text { data: "shadow-child".into() });
+            if source == "<template-shadow-open-with-sibling>" {
+                let sibling = parsed.create_element(NodeIdx(0), "i");
+                parsed.append_child(sibling, NodeKind::Text { data: "sibling".into() });
+            }
+            return Ok(parsed);
+        }
+        self.parse_fragment(context, markup)
+    }
 }
 impl SelectorEngine for Host {
     type SelectorHandle = String;
@@ -1205,6 +1232,22 @@ fn dom_parser_creates_inert_documents_and_xml_error_document() {
     assert_eq!(h.dom.local_name(h.dom.document_element(xml_error).unwrap().unwrap()), Some("parsererror"));
     assert_eq!(invoke(&mut h, O::DOMParserParseFromString, parser,
         &[str_value("x"), str_value("text/plain")]), Err("TypeError: Unsupported DOMParser content type".into()));
+}
+
+/// `Document.parseHTMLUnsafe` is static and routes through the same
+/// `create_inert_document("text/html", ...)` primitive `DOMParser.
+/// parseFromString` already uses -- see `parser_bindings.rs`'s doc comment
+/// for why this needed no new parser support, unlike `ElementSetHTMLUnsafe`.
+#[test]
+fn document_parse_html_unsafe_creates_an_inert_html_document() {
+    let mut h = Host::default();
+    let document = node(call(&mut h, O::DocumentParseHTMLUnsafe, V::Undefined,
+        &[str_value("<template shadowrootmode=open><p>hi</p></template>")]));
+    let metadata = h.dom.document_metadata(document).unwrap().unwrap();
+    assert_eq!(metadata.content_type, "text/html");
+    assert_eq!(h.dom.local_name(h.dom.document_element(document).unwrap().unwrap()), Some("html"));
+    assert_eq!(invoke(&mut h, O::DocumentParseHTMLUnsafe, V::Undefined, &[]),
+        Err("TypeError: Not enough arguments".into()));
 }
 
 #[test]
@@ -2623,3 +2666,5 @@ mod tests_dom_b_reflect;
 
 #[path = "tests_observable.rs"]
 mod tests_observable;
+#[path = "tests_set_html_unsafe.rs"]
+mod tests_set_html_unsafe;
