@@ -397,6 +397,28 @@ impl EnvHandle {
         self.0.borrow_mut().declare_raw(name, value, mutable, true)
     }
 
+    /// True if `declare_lexical(name, ..)` would throw "already declared" on THIS frame right
+    /// now, without actually declaring or mutating anything (mirrors `declare_raw`'s conflict
+    /// rule with `lexical = true`: any existing same-frame binding conflicts, except the
+    /// TDZ-placeholder case of an uninitialized lexical cell reserved for this same name).
+    ///
+    /// Used by a generator/async-generator call (JSVM-8, `start_thread_generator`) to detect a
+    /// FunctionDeclarationInstantiation-time redeclaration conflict -- e.g. a parameter default's
+    /// `eval("var x")` colliding with a top-level `let x` in the body -- eagerly, at call time,
+    /// before deferring the body's own statement execution to a coroutine. Per spec (10.2.11 /
+    /// 27.5.3), FDI itself always runs synchronously at call time, even for a generator; only
+    /// the body's statements are suspended, so this conflict must still surface from the call
+    /// itself rather than from the first `.next()`.
+    pub fn would_conflict_as_lexical(&self, name: &str) -> bool {
+        match self.0.borrow().vars.get(name) {
+            None => false,
+            Some(cell) => {
+                let existing = cell.0.borrow();
+                !(!existing.initialized && existing.import_target.is_none() && existing.lexical)
+            }
+        }
+    }
+
     pub fn declare_uninitialized(&self, name: &str, mutable: bool) -> Result<BindingCell, Throw> {
         let mut env = self.0.borrow_mut();
         if env.vars.contains_key(name) {

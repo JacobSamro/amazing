@@ -1602,6 +1602,7 @@ include!("interp_object_extra.rs");
 include!("interp_errors.rs");
 include!("interp_bound.rs");
 include!("interp_disposable.rs");
+include!("interp_coroutine.rs");
 include!("interp_stmt.rs");
 include!("builtins_std_object_model.rs");
 include!("builtins_std_reflect.rs");

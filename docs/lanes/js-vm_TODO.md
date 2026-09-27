@@ -413,6 +413,139 @@ Closing either gap (parameter destructuring; array/object rest-binding
 patterns) is a separate, sizable VM-compiler feature, not a generator fix,
 and was left out of this ticket's scope rather than attempted as a drive-by.
 
+## JSVM-8: generators and async generators in the *default* execution path
+
+Ticket: make `function*`/`async function*` work when called under the tree
+walker (the default backend), not just when the VM compiles them (JSVM-7).
+Per JSB-11's finding, calling a generator function under the tree walker
+returned `undefined` and `yield` threw `"generators are not implemented"` --
+`call_value_with_new_target_inner`'s `FunctionBody::Block` arm never
+consulted `fun.is_generator`.
+
+Investigation phase (design note, `docs/lanes/js-vm-8-design.md`) compared
+(a) a per-function VM-compile fast path (mirroring `async_body_code`) against
+(b) porting lumen's pooled-OS-thread stackful coroutine
+(`lucid-softworks/lumen`, `crates/lumen/src/coroutine.rs`, MIT, `f6c9860d`,
+per ADR 0013) and recommended the hybrid lumen itself ships (both, not
+either/or). The coordinator approved the hybrid but scoped this ticket to
+**(b) only**: the VM fast path is a separate follow-up.
+
+### What landed
+
+New `crates/amazing-js/src/interp_coroutine.rs` (attributed per ADR 0013,
+row appended to `THIRD_PARTY_NOTICES.md`): a pooled-worker/`mpsc`
+ping-pong-handoff coroutine, adapted onto this crate's own
+`Interpreter`/`JsValue`/`Throw` types. `unsafe impl Send` for the
+ping-pong payloads and the raw `*mut Interpreter` shuttled across the
+worker-thread boundary is sound for the same reason as lumen's own: the
+ping-pong protocol guarantees exactly one side runs at any instant, never
+concurrently. Workers are pooled (`IDLE: Mutex<Vec<Sender<CoroutineJob>>>`)
+to amortize spawn cost. Not reproduced: lumen's `Vm` coroutine variant
+(that's the deferred VM-fast-path follow-up), its frame-ownership panic
+recovery (no per-call frame stack to tag here), and `Suspend::Await` (an
+`await` inside a coroutine body still uses the pre-existing synchronous-
+degrade fallback, unchanged, out of this ticket's scope).
+
+Hooked into `interp_stmt.rs` in five small places: `FunctionBody::Block`'s
+call path defers a generator/async-generator body to a coroutine instead of
+running it eagerly (right after `bind_params`+`hoist`, matching where
+`async_body_code`'s bridge sits for plain async functions); `ExprKind::Yield`
+now drives the coroutine (`eval_yield`) instead of throwing; `exec_try`'s
+catch dispatch gained one arm so a smuggled `.return(v)` completion at a
+suspended `yield` bypasses `catch` but still runs `finally` (real JS
+`return` semantics, distinguished from a real throw via a `PENDING_RETURN`
+thread-local); `method_value` gained the same per-method `.prototype`
+construction generator methods need that `make_function` already had; and
+the post-match async-wrapping code's condition narrowed from `fun.is_async`
+to `fun.is_async && !fun.is_generator` (a genuine pre-existing bug found
+along the way: it unconditionally wrapped every async function's return
+value in a Promise, double-wrapping an async generator's own instance --
+spec 27.4.3.2 says that call returns the generator object itself,
+synchronously, not a promise).
+
+### A regression found and fixed before the final gate
+
+The crate's own differential test
+`compiled_method_and_generator_boundaries_preserve_eval_strictness_and_names`
+(`vm/tests.rs`) broke: `var o={*m(p=eval('var arguments')){let arguments;}};
+try { o.m(); false; } catch(e) { e instanceof SyntaxError; }` stopped
+throwing. Root cause: this tree walker fuses top-level lexical-name
+declaration with statement *execution* (`exec_stmts` declares a `let`/
+`const`/class binding only when it reaches that statement -- there is no
+separate FunctionDeclarationInstantiation pre-pass, even for ordinary
+functions; it "works" for them only because their body runs synchronously
+immediately anyway). Deferring a generator body's execution to a coroutine
+silently deferred this redeclaration conflict check too, past the call and
+into the first `.next()` -- but spec (10.2.11/27.5.3) has FDI itself run
+synchronously at call time even for a generator; only the body's own
+statements suspend. Fixed with a new read-only, no-side-effect check,
+`Env::would_conflict_as_lexical` (`env.rs`), run over the body's top-level
+lexical names (`block_lexical_names`, already existed for Annex B.3.3) right
+after `hoist()`, before spawning the coroutine -- if any name would collide,
+throw immediately; otherwise do nothing and let the real declaration happen
+later exactly as before.
+
+### Measured numbers
+
+Rebased onto `dev`'s `079f2030` (js-lang's JS-11..17 merge) per the
+coordinator's mid-ticket instruction, so the baseline already includes that
+merge's passes. Directory-scoped Test262 gate, `--timeout 10`, before
+(`079f2030`) vs. after (this ticket's head), on `built-ins/Iterator`,
+`built-ins/GeneratorPrototype`, `built-ins/AsyncGeneratorPrototype`,
+`language/statements/generators`, `language/expressions/generators`,
+`language/expressions/yield` (pinned Test262 `3655e746`, venus-001):
+
+| | files pass | files fail |
+|---|---|---|
+| before (`079f2030`) | 510 | 144 |
+| after (this ticket) | 518 | 136 |
+
+**0 lost / 8 gained files.** (An earlier in-progress measurement against a
+now-stale, pre-rebase base had shown 3 apparently-lost files --
+`language/expressions/generators/named-strict-error-reassign-fn-name-in-body*`
+-- traced to a *different*, pre-existing, generator-unrelated bug: this
+interpreter's named function/generator expressions never bind their own
+name as an immutable self-reference (`make_function` has no
+`NewDeclarativeEnvironment`+`CreateImmutableBinding` step per spec 15.2.5),
+confirmed via a direct Rust-level probe reproducing the identical no-throw
+behavior for a *plain*, non-generator, synchronously-executed named function
+expression. Against the correct `079f2030` baseline the loss does not
+appear at all -- js-lang's concurrent JS-11..17 merge already closed it
+independently.)
+
+Crate: `cargo nextest run -p amazing-js --locked`: **441 tests run, 441
+passed, 1 skipped, 0 failed** (includes 14 new
+`thread_generator_tests`). `cargo test -p amazing-js --locked --doc`: 1
+passed.
+
+Workspace: `cargo nextest run --workspace --locked`: **3,443 tests run,
+3,443 passed (4 slow), 17 skipped, 0 failed.** `cargo test --workspace
+--locked --doc`: all green (4 crates with real doctests, each 1 passed).
+
+No leaked-thread/hang issue observed: the after-run Test262 host completed
+in 15.7s (before-run: 14.1s), no timeouts beyond the expected `--timeout 10`
+per-test budget, no kill required -- consistent with the pooled coroutine
+workers' park-forever-on-teardown design not blocking a per-file host
+process's own exit.
+
+### Commit
+
+Landed as `9922d5f0` on `lane/js-vm-coverage`, base `079f2030`.
+`.agents/js-vm/status.json` records `state: done`.
+
+### Cross-lane notes (also in `questions.md`)
+
+- The VM fast path (option a from the design note) is an explicit follow-up,
+  not done here -- only the pooled-thread fallback shipped.
+- `await` inside a coroutine-backed generator body still degrades to the
+  pre-existing synchronous fallback rather than truly suspending across a
+  microtask; flagged as a known, documented limitation, not attempted here.
+- Named function/generator expressions' missing immutable self-binding
+  (`make_function`, `interp_stmt.rs`) is flagged for whichever lane owns
+  general function-expression semantics next -- confirmed pre-existing and
+  generator-unrelated, not fixed here (out of this ticket's narrow scope),
+  and no longer visible as a loss against the current baseline regardless.
+
 On pinned Test262 `3655e746`, venus-001 release-host, this lane's own tree
 vs. VM+fallback pair on **the same commit** (the rigorous comparison; the
 fleet's `.agents/test262/baseline.json` is a separate, older snapshot and
