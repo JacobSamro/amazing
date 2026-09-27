@@ -2630,3 +2630,115 @@ css-sizing cluster. `css/css-sizing`: gained=0 lost=0, as expected given the
 CSS-layer block above. Crate tests: 382 passed, 1 skipped, 0 failed.
 Checked-in evidence refreshed for `css-position` in a separate, code-free
 commit.
+
+## LAYOUT-33 (coordinator-directed continuation, 2026-09-27)
+
+Landed the stretch keyword's css-lane block plus the next three items the
+coordinator ranked after LAYOUT-32 merged (2aeca2df): contain-intrinsic-size,
+aspect-ratio, then css-tables' largest cluster.
+
+**(0) Cross-lane amazing-css fix, integrator-authorized.** The css lane
+wasn't running, so the coordinator explicitly authorized a minimal, narrowly
+scoped fix in `values.rs::parse()`: add `Keyword::Stretch`, accepted for the
+same sizing properties as `min-content`/`max-content`/`fit-content`, for the
+bare `stretch`/`-webkit-fill-available` keyword LAYOUT-32 had root-caused and
+filed. Committed 5ccd1a68; `docs/lanes/css_TODO.md` line added in the same
+commit per the coordinator's instruction. This lane's own `block.rs`/
+`position.rs` consumption of the keyword (written in LAYOUT-32) was already
+correct and needed no change once the keyword reached it.
+
+**(1) CSS Sizing 4 `contain-intrinsic-size` (#intrinsic-size-override).**
+Entirely an `amazing-layout` change — `contain`/`contain-intrinsic-size` are
+both unregistered in `amazing-css`'s `PROPERTIES` table, but unregistered
+properties survive `expand_declaration`'s cascade unmodified via its default
+passthrough (confirmed with a temporary probe unit test in `computed.rs`,
+then reverted), so no css-crate edit was needed at all. Under
+`contain: size`/`strict`, `block.rs`'s width `intrinsic()` closure and its
+`def_h` height computation now take the override's width/height half
+respectively, only filling in where nothing else (an explicit definite
+length) already applies. Committed dee887d2 + evidence refresh d8d8d2cf;
+`css/css-sizing` gained=9 lost=0 (pass 79→85, mismatch 59→53).
+
+**(2) CSS Sizing 4 / Flexbox 1 aspect-ratio.** Three fixes, landed together
+after iterating past two real regressions:
+
+- `values.rs::preferred_aspect_ratio` required a literal `/`, silently
+  rejecting the common bare-number `<ratio>` form (`aspect-ratio: 2` means
+  `2/1` — the `/ <number>` half is optional per the grammar). Workspace-wide
+  fix, affects every existing caller.
+- `flex.rs`: Flexbox 1 §9.2.3 rule B, the transferred size suggestion — a
+  row-direction flex item with `aspect-ratio` and an auto main size derives
+  its flex base size from a definite cross size (explicit `height`, or
+  `align-items`/`align-self: stretch` against the container's definite cross
+  extent) times the ratio, instead of always measuring content. Not capped
+  to the container's own main size the way the plain max-content fallback
+  is — `main_limits`'s existing automatic minimum (content min-width,
+  ignoring the ratio) still floors the result when content needs more room.
+- `block.rs`: general block-level width→height ratio derivation
+  (#aspect-ratio-height-derivation) for any box with `aspect-ratio` and no
+  other height source, but **only** when overflow disallows automatic
+  minimum sizing (`auto`/`scroll`/`hidden`, not `visible`/`clip` — CSS
+  Sizing 3's automatic-minimum-size rule, shared via a new
+  `values::overflow_allows_automatic_minimum`, deduplicated from flex.rs's
+  existing per-item version). This is what keeps `overflow:auto`/`scroll` +
+  `aspect-ratio:1/1` at its ratio-derived height with a scrollbar (per
+  `block-aspect-ratio-011/012.html`'s assert, "setting overflow to
+  non-visible/clip should not apply min-height:auto") without breaking two
+  other things: a plain `overflow:visible` box (fieldset's legend/inputs
+  must still be able to grow it past a too-small ratio-derived height —
+  `fieldset-element-001/002.html`), and a row-direction flex item's own
+  intermediate `layout_block` call *before* stretch runs (an unconditional
+  min-height floor there made align-items:stretch's "only grow, never
+  shrink" guard see an already-too-tall measured height from the ratio and
+  skip growing the item to the container's real cross size —
+  `flex-aspect-ratio-049/051.html`). Both regressions were caught by the
+  corpus re-sweep (not by crate tests, which stayed 382/382 clean through
+  every iteration) before landing.
+
+Committed af2aefc1 + evidence refresh 34dfc39f. `css/css-sizing` gained=2
+lost=0 (pass 85→87, mismatch 53→51) — smaller than an intermediate,
+since-discarded version that briefly reached gained=4 but carried the
+flex-stretch regression above; this is the clean, zero-loss version.
+
+**(3) css-tables' largest cluster — root-caused, filed, not fixed here.**
+Per `clusters.json`, `table-intrinsic-size-001..004.html` (4 tests: "a
+table's content-box inline size is never smaller than its minimum intrinsic
+inline size") is css-tables' single biggest cluster. Investigated with a
+temporary probe unit test in `table_tests.rs` (reverted): `table.rs`'s own
+intrinsic-width math (`constraints()`/`intrinsic_with_text()`, including the
+`.max(mn)` GRIDMIN floor) is already correct — a physical-property version
+of fixture 001's exact structure (`width`/`border-left`/`border-right`/
+`margin-left`/`margin-right` instead of the fixture's logical properties)
+resolves to the expected 80px table / 100px outer min-content correctly. The
+real bug is one level up, in `amazing-css`: the two-side logical border
+shorthands `border-inline`/`border-block` (all four fixtures use
+`border-inline`) have no expansion arm in `computed.rs::expand_declaration`
+at all — only the per-edge logical longhands (`border-inline-start`/`-end`)
+and the four physical shorthands are handled — so the shorthand falls
+through the unregistered-property passthrough and is completely inert, same
+failure shape as LAYOUT-32's `stretch` gap. Filed to the css lane in
+`questions.md` with the exact location and a minimal, precedented fix
+(expand each two-edge shorthand into its two single-edge logical
+counterparts, which already resolve correctly on their own). Not attempted
+here: outside this lane's prior narrow stretch-keyword authorization,
+per AGENTS.md's escalation rule.
+
+**Gate.** `crates/amazing-layout` crate tests: 382 passed, 1 skipped, 0
+failed, stable across every iteration of item 2. `css/css-sizing` render
+corpus (worker-2, `--baseline auto`): pass 76→87 across items 1+2 combined
+(gained=11, lost=0 net). Full-workspace gate deferred to the end of this
+lane's LAYOUT-33 scope (after the next cluster), per "gate once" — not yet
+re-run since LAYOUT-32's 3466-passed baseline.
+
+**Aside.** One remote-tooling incident during this ticket: a
+`linux-render-wpt.sh` call's underlying ssh session hung completely (no
+process ever appeared on the remote host, confirmed via a direct `ps aux`
+check and a fresh connection responding normally) and sat for over 90
+minutes without producing output or erroring, silently holding this lane's
+`linux-run.sh` per-lane lock and starving a second, unrelated diagnostic
+command queued behind it. Diagnosed by checking the remote host directly
+(load average 0, no matching cargo/rsync process) rather than assuming fleet
+contention; resolved by killing the local stuck ssh/bash process tree and
+removing the stale `.agents/.remote-locks/linux-run-layout` lock directory,
+then retrying cleanly (completed in the usual ~2 minutes). Not a code or
+lane-ownership issue, noted here only in case the pattern recurs elsewhere.
