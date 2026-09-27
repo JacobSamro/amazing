@@ -106,6 +106,7 @@ impl Interpreter {
             constructor.borrow_mut().define("groupBy", symbol_data(std_collection_method(self, "groupBy", 2, std_map_group_by), true, true)).unwrap();
         }
         self.install_std_weak_collections();
+        self.install_disposable_stack();
     }
 }
 
