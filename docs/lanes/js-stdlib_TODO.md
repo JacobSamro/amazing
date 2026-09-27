@@ -1754,3 +1754,141 @@ revisited this checkpoint.
 PlainYearMonth cluster done. Remaining item2 clusters per the coordinator's
 ordering: PlainMonthDay (11 files, last surveyed), Instant (22 files), Now (8
 files).
+
+## JSS-calendars: non-ISO Temporal calendar support (priority-change ticket)
+
+Coordinator priority-change, mid-PlainYearMonth-cluster: implement non-ISO
+calendar support for `Temporal.Plain*` (gregory, japanese, buddhist, roc,
+islamic-civil/tbla/umalqura, hebrew, chinese, dangi, persian, indian, coptic,
+ethiopic, ethioaa -- 16 calendars total including iso8601), citing a RangeError
+at `builtins_temporal.rs`'s calendar gate as the largest remaining intl402
+cluster. Addressed as the ticket's first commit (architecture + all 16
+calendars' pure math + full read-direction support); ZonedDateTime and
+calendar-aware date-arithmetic for the non-ISO-grid calendars are documented
+gaps, not yet done (see below).
+
+**Port.** `boa-dev/temporal` (the coordinator's suggested Apache-2.0 source)
+turned out to delegate ALL calendar math to `icu_calendar` (ICU4X) -- it
+contains no portable calendar algorithm to copy, only glue around that crate.
+Ported instead from `lucid-softworks/lumen`
+(`crates/lumen/src/temporal.rs` @ `f6c9860d44fa52249cfd647122edea184d32c863`,
+MIT, already used elsewhere in this codebase -- see `THIRD_PARTY_NOTICES.md`'s
+new row for this file), which has a complete from-scratch (non-ICU4X)
+implementation of every listed calendar. Rewritten onto this engine's own
+`std_temporal_epoch_day`/`std_temporal_civil_from_epoch_day` day-counting
+helpers rather than porting lumen's equivalent ones, and onto plain
+`(i64, i64, i64)` tuples instead of lumen's `IsoDate` struct. New file:
+`crates/amazing-js/src/builtins_temporal_calendar.rs` (attribution header at
+top; 16 calendar ids, era tables, 13-month coptic/ethiopic/ethioaa, tabular
+islamic-civil/tbla, indian (Saka), persian (arithmetic Solar Hijri), hebrew
+(Metonic lunisolar), and a full from-scratch Meeus-series astronomical
+chinese/dangi lunisolar implementation -- solar longitude, new-moon,
+winter-solstice and leap-month-detection algorithms, not a stub). Included
+into the shared compilation unit via a new line in `interp.rs`.
+`islamic-umalqura` is approximated by the tabular civil algorithm --
+lumen's real Umm al-Qura data table (`crates/lumen/src/umalqura.rs`) was not
+ported (out of scope this commit). Bare `"islamic"`/`"islamic-rgsa"` remain
+rejected (Intl.DateTimeFormat-only aliases per lumen's own comment; not part
+of Temporal's `KNOWN_CALENDARS`).
+
+**Architecture.** `StdTemporalData` gained a `calendar: String` field
+(default `"iso8601"`); the internal `fields: [i64; 10]` stay ALWAYS
+proleptic-Gregorian (ISO) regardless of calendar -- a non-iso8601 calendar's
+own year/month/day/era/monthCode/daysInMonth/monthsInYear/inLeapYear are
+VIEWS computed on demand from those ISO fields (read direction), and
+calendar-native `.from()`/bag construction CONVERTS calendar-native fields
+into ISO before storing (write direction). `std_temporal_make` split into a
+default-iso8601 wrapper plus `std_temporal_make_cal(..., calendar)`; every
+call site across `builtins_temporal.rs`/`builtins_temporal_arithmetic.rs`
+that operates on an existing receiver now threads `data.calendar.clone()`
+through instead of silently resetting to iso8601 (add/subtract/since/until/
+round/with/to*-conversions/equals). `std_temporal_iso_calendar` (unchanged,
+iso8601-only) still gates ZonedDateTime's calendar argument --
+**ZonedDateTime remains iso8601-locked this commit** (see Gaps). Two new
+calendar-argument resolvers replace it for Plain*:
+`std_temporal_resolve_calendar_id` (accepts any of the 16 ids, plus -- like
+the pre-existing `std_temporal_calendar_from_value` it wraps for this
+fallback -- a full ISO string carrying a u-ca annotation, e.g.
+`"2020-01-01[u-ca=iso8601]"`, for `with()`/`withCalendar()`/a bag's own
+`calendar` property) and `std_temporal_resolve_calendar_id_strict` (no ISO-
+string fallback, used only by the constructor's own calendar argument --
+confirmed as the right split by `calendar-invalid-iso-string.js`, which
+requires the constructor to reject that exact fallback form while
+`argument-propertybag-calendar-iso-string.js`/`withCalendar`'s own
+`calendar-iso-string.js` require the other two sites to accept it).
+`std_temporal_bag_resolve_calendar` (new) resolves a bag's calendar-native
+year/month/monthCode/day into ISO via the ported per-calendar tables, for
+every kind except PlainMonthDay (documented gap: its bag path has no
+calendar-native year to convert from at all). `std_temporal_parse`/
+`std_temporal_parse_annotations` widened to canonicalize (not just validate)
+a string's u-ca annotation, with a fixed bug caught mid-port: a *second*
+annotation (grammar-checked but supposed to be ignored) was overwriting the
+first's already-resolved name instead of just being checked for a `!`
+disagreement -- caught by `PlainYearMonth/from/argument-string-calendar-
+annotation.js`'s `[u-ca=iso8601][u-ca=discord]` case. `std_temporal_getter`
+and `toString`'s calendar-name `"auto"` display now consult
+`std_calendar_fields`/`std_calendar_era` when `calendar != "iso8601"`.
+
+**Arithmetic scope.** gregory/japanese/roc/buddhist share the exact ISO
+day/month grid, so `add`/`subtract`/`since`/`until`/`round` needed NO math
+changes at all -- only the calendar tag had to survive the trip (the bug
+class the zero-loss regressions below were about). Every other listed
+calendar (13-month, islamic, indian, persian, hebrew, chinese/dangi) gets
+correct GETTERS and (non-leap-month cases) correct bag CONSTRUCTION via the
+ported tables, but `add`/`subtract`/`since`/`until`/`.with()`'s `year`/`month`
+fields still operate in ISO terms -- a documented gap (calendar-native
+`CalendarDateAdd`/`CalendarDateUntil` for these is follow-up work, per
+calendar family, as originally planned).
+
+**Zero-loss regressions caught and fixed before commit (self-caught, not
+reported by a stale gate):** three iterations were needed to reach zero
+loss on `built-ins/Temporal`, each diagnosed with a real baseline (`--ref`
+to the pre-calendar commit, never assumed):
+1. The constructor's calendar-argument resolver was given the SAME ISO-
+   string fallback as `with()`/`withCalendar()`, but the constructor never
+   had that fallback before -- regressed `calendar-invalid-iso-string.js`
+   (4 files: PlainDate/PlainDateTime/PlainMonthDay/PlainYearMonth), whose
+   `"1997-12-04[u-ca=iso8601]"` case requires the constructor specifically
+   to reject it. Split into `_strict` (constructor only) vs. the original
+   (every other site) resolver.
+2. Restricting non-iso8601 string ANNOTATIONS to PlainDate/PlainDateTime
+   only (PlainYearMonth/PlainMonthDay's short "YYYY-MM"/"--MM-DD" string
+   forms lack the day precision to resolve a non-iso8601 calendar's real
+   year-month/month-day -- confirmed by `PlainYearMonth/from/argument-
+   string-invalid.js`'s `"2022-09[u-ca=hebrew]"`) was implemented as a
+   blanket "no non-iso8601 annotation for these two kinds" check, which
+   collided with #3 below and regressed a different, larger cluster
+   (`argument-propertybag-calendar-*.js`, `withCalendar/calendar-*-string.js`
+   -- 57 files) until the `_strict` split (#1) was in place.
+3. The second-annotation-overwrites-the-first bug (above) regressed
+   `argument-string-calendar-annotation.js` for PlainYearMonth/PlainMonthDay
+   (7 files) once #2's stricter check made the wrongly-overwritten name
+   ("discord" instead of "iso8601") visible as a throw.
+
+**Measured** (venus-003, base `b4cf29a7`, this ticket's commit on top):
+`built-ins/Temporal`: 4,472 -> 4,472 pass files, confirmed zero-loss AND
+zero-gain by a full path-level diff against the `--ref b4cf29a7` baseline
+(this suite is iso8601-only by construction, so no gain was expected here).
+`intl402/Temporal`: 744 -> 744 pass files, **no measured gain** -- diagnosed
+why before committing rather than reporting a hollow number: every
+calendar-named fail file in this directory
+(`ZonedDateTime/*/canonicalize-calendar.js`, `*/calendarId/basic.js`,
+`*/toString/calendarname-*.js`, `*/withCalendar/*.js`,
+`*/{monthCode,inLeapYear,monthsInYear}/{chinese,dangi}-calendar-*.js`, ~45
+files sampled) is on `Temporal.ZonedDateTime`, which this commit deliberately
+leaves iso8601-locked (`StdEpochData` has no `calendar` field at all;
+extending it needs the same-sized construction/getter/toString/arithmetic
+work again, plus changing `std_epoch_from_value_with_options`'s shared
+`(i128, String)` return into a 3-tuple across its ~10 call sites -- sized
+like this whole commit, not a quick add-on). `intl402/` as a whole:
+1,949 pass / ~1,409 fail (variants) -- far smaller than the "3,520 of
+3,969" the priority-change message cited; that figure appears stale
+relative to the current pinned corpus/host (other lanes' concurrent intl402
+work likely moved it), not a measurement error here. **Recommendation for
+whoever picks up JSS-calendars next: Temporal.ZonedDateTime is the
+highest-value remaining family** -- intl402/Temporal's calendar tests
+concentrate there, not on Plain*.
+Workspace gate: `cargo nextest run --workspace --locked --no-fail-fast`
+3,399/3,399 pass (3 slow, 17 skipped, 0 failed); `cargo test --workspace
+--locked --doc` all green (`amazing_js`/`amazing_html` doctests individually
+confirmed, 1 passed each, matching prior runs).
