@@ -405,19 +405,27 @@ fn prepare_sizes(
         if !stretch && (!auto || replaced) {
             continue;
         }
-        // The static-position anchor fallback determines *position* only
-        // (case 1 of CSS2.1 §10.3.7 / css-position-3 §3.5.1's rule for width
-        // not auto with both insets auto): it must not narrow `stretch`'s
-        // *size*, which -- per css-sizing-4's stretch-fit-sizing -- always
-        // fills the whole containing block minus margin/chrome regardless of
-        // insets. `absolute_origin` below independently resolves the box's
-        // final x/y from `anchor` and this box's own resolved width, so
-        // skipping the fallback here does not lose the position.
-        if property == "width" && start.is_none() && end.is_none() && !stretch {
-            if anchor.right {
-                end = Some(cb.x + cb.w - anchor.x);
-            } else {
-                start = Some(anchor.x - cb.x);
+        // css-sizing-4 stretch-fit-sizing (stretch/positioned-non-replaced-1.html):
+        // when both insets on an axis are auto, `absolute_origin` positions
+        // the box at its static-position anchor (CSS2.1 §10.3.7 case 1 /
+        // css-position-3 §3.5.1), unchanged by `stretch`. `stretch` does NOT
+        // mean "fill the containing block regardless of where that anchor
+        // falls" -- it fills from the anchor to the containing block's FAR
+        // edge, i.e. exactly as far as a one-sided `left:<anchor>` (or
+        // `top:<anchor>`) would let it grow. So the anchor is a real inset
+        // for this size computation too, not position-only: treating it as
+        // the known `start` (or `end`, right-anchored) below makes `available`
+        // subtract it out, on both axes, whether the box is stretch-sized or
+        // shrink-to-fit auto-sized (the latter already relied on this for
+        // `width`; `height` never had an anchor fallback at all, since a
+        // non-stretch auto `height` with both insets auto is content-sized
+        // instead and never reaches `available` below).
+        if start.is_none() && end.is_none() {
+            match property {
+                "width" if anchor.right => end = Some(cb.x + cb.w - anchor.x),
+                "width" => start = Some(anchor.x - cb.x),
+                "height" => start = Some(anchor.y - cb.y),
+                _ => {}
             }
         }
         let available =

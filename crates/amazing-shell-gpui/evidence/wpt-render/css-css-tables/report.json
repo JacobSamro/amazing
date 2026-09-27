@@ -9,8 +9,8 @@
   },
   "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
   "host": "worker-2",
-  "generated": "2026-09-27T15:36:38Z",
-  "run_directory": "/root/amazing/out/layout/wpt-render/css-css-tables/run-20260927T153606Z-2240052",
+  "generated": "2026-09-27T18:03:27Z",
+  "run_directory": "/root/amazing/out/layout/wpt-render/css-css-tables/run-20260927T180258Z-2323943",
   "inventory": {
     "document_files": 418,
     "testharness_files": 135,
@@ -26,8 +26,8 @@
     }
   },
   "counts": {
-    "pass": 53,
-    "mismatch": 29,
+    "pass": 54,
+    "mismatch": 28,
     "error": 0,
     "timeout": 0,
     "unsupported": 0,
@@ -246,17 +246,17 @@
     },
     {
       "id": "css__css-tables__col-definite-min-size-001.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "col-definite-size-001-ref.html",
-      "differing_pixels": 1798,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "10e53ae148fdcc1dde812256a98fbea486fc785a6a965905aac3ba5c2dc0892e",
+      "actual_sha256": "6c5f1857309d5ed870cfacd3cdb4a6a92e24fb0e982a59b4a74555b6562ba82f",
       "reference_sha256": "6c5f1857309d5ed870cfacd3cdb4a6a92e24fb0e982a59b4a74555b6562ba82f",
-      "diff_sha256": "8b69480094c688efb64820d525c961d15fd9548b0d5b4787802e1f35247811f5",
-      "detail": "maxDifference=255/0; totalPixels=1798/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__css-tables__zero-rowspan-001.html",
@@ -459,14 +459,14 @@
       "classification": "mismatch",
       "relation": "match",
       "reference_href": "col-definite-max-size-001-ref.html",
-      "differing_pixels": 7371,
+      "differing_pixels": 547,
       "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "98dfd8b353eb11c5c564173ea302f6fd2d51c0bce6f001c69763287bc733bfe4",
+      "actual_sha256": "448e23a802025baf39090aac8ce296645a6a93fdb09b2e9ff8eb1ed3c6e72a8b",
       "reference_sha256": "4d1ade433d7bfff74701adb13b6f2dbcd371949279be6856e00f5a38e6afc561",
-      "diff_sha256": "a5d09e979ec6999b8e3c1333e12fadb8d30b334245b828086f76f2836c5f0d72",
-      "detail": "maxDifference=255/0; totalPixels=7371/0"
+      "diff_sha256": "adb997998254ff1dbad053847b2a77d56a151783f4508eeab1af3d1b1e65811c",
+      "detail": "maxDifference=255/0; totalPixels=547/0"
     },
     {
       "id": "css__css-tables__height-distribution__percentage-sizing-of-table-cell-007.html",
@@ -753,14 +753,14 @@
       "classification": "mismatch",
       "relation": "match",
       "reference_href": "col-definite-size-001-ref.html",
-      "differing_pixels": 1713,
+      "differing_pixels": 1019,
       "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "a68f94785b3ac9dae08d8982a906cda2cb7a4fb6aac2704aef37d46a3ce3579f",
+      "actual_sha256": "0c00fdf34ea557e49ffc82b996a2adc2b55765daf1b596dfcdd7b6da680912cc",
       "reference_sha256": "6c5f1857309d5ed870cfacd3cdb4a6a92e24fb0e982a59b4a74555b6562ba82f",
-      "diff_sha256": "88a4a31ca9119826e6c5cbe318fff6ee2e4acff72d684bc2ea8be56d574a3c80",
-      "detail": "maxDifference=255/0; totalPixels=1713/0"
+      "diff_sha256": "e71de6a5914484c2eb465cecce09239882cf926f9a331fcc8a06ecd32e5a433a",
+      "detail": "maxDifference=255/0; totalPixels=1019/0"
     },
     {
       "id": "css__css-tables__min-height-table.html",
@@ -1186,8 +1186,7 @@
   "baseline_compare": {
     "baseline": "/root/amazing/wt/layout/crates/amazing-shell-gpui/evidence/wpt-render/css-css-tables/report.json",
     "gained": [
-      "css__css-tables__min-height-table-2.html",
-      "css__css-tables__min-height-table.html"
+      "css__css-tables__col-definite-min-size-001.html"
     ],
     "lost": [],
     "changed": [],
@@ -1207,7 +1206,6 @@
       "css__css-tables__calc-percent-plus-0px-auto.html",
       "css__css-tables__calc-percent-plus-0px-fixed.html",
       "css__css-tables__col-definite-max-size-001.html",
-      "css__css-tables__col-definite-min-size-001.html",
       "css__css-tables__col-definite-size-001.html",
       "css__css-tables__collapsed-border-large-rowgroup-001.html",
       "css__css-tables__collapsed-border-large-rowgroup-002.html",
@@ -1221,6 +1219,8 @@
       "css__css-tables__height-distribution__td-different-subpixel-padding-in-same-row.html",
       "css__css-tables__html-display-table.html",
       "css__css-tables__max-height-table.html",
+      "css__css-tables__min-height-table-2.html",
+      "css__css-tables__min-height-table.html",
       "css__css-tables__min-max-size-table-content-box.html",
       "css__css-tables__out-of-order-elements-collapsed-border.html",
       "css__css-tables__paint__col-paint-htb-rtl.html",

@@ -293,7 +293,7 @@ fn append_generated(
             inlines.append(items);
         }
     } else {
-        flush_anonymous_into(blocks, inlines, positioned, font_size, fonts);
+        flush_anonymous_into(blocks, inlines, positioned, font_size, fonts, &mut Vec::new());
         blocks.push(generated);
     }
 }
@@ -678,6 +678,15 @@ fn is_out_of_flow(style: &ComputedStyle) -> bool {
     style.get("position").is_some_and(|value| {
         value.eq_ignore_ascii_case("absolute") || value.eq_ignore_ascii_case("fixed")
     })
+}
+
+/// True when `white-space` disables ordinary line wrapping in `style`'s own
+/// scope (`nowrap` or `pre` -- `pre-wrap`/`pre-line`/`break-spaces` still
+/// wrap). `white-space` inherits and `ComputedStyle` already resolves
+/// inheritance, so this reads correctly off any scope's own computed style,
+/// not just an element with an explicit `white-space` declaration.
+fn no_wrap_here(style: &ComputedStyle) -> bool {
+    matches!(style.get("white-space"), Some("nowrap" | "pre"))
 }
 
 fn is_atomic_inline_container(style: &ComputedStyle) -> bool {
@@ -1263,14 +1272,14 @@ fn classify_children(
                         ));
                         continue;
                     }
-                    flush_anonymous_into(&mut items, &mut run, &mut positioned, font_size, fonts);
+                    flush_anonymous_into(&mut items, &mut run, &mut positioned, font_size, fonts, &mut Vec::new());
                     items.push(build_element(
                         dom, styled, child, entry.parent_font, fonts, replaced,
                     ));
                 }
             }
         }
-        flush_anonymous_into(&mut items, &mut run, &mut positioned, font_size, fonts);
+        flush_anonymous_into(&mut items, &mut run, &mut positioned, font_size, fonts, &mut Vec::new());
         if let Some(generated) =
             generated_box(dom, styled, idx, PseudoElement::After, font_size, fonts, replaced)
         {
@@ -1291,6 +1300,12 @@ fn classify_children(
     let mut blocks: Vec<LayoutBox> = Vec::new();
     let mut inlines: Vec<InlineNode> = Vec::new();
     let mut positioned = Vec::new();
+    // CSS2 #float-position (float-nowrap-*): floats hit while `inlines` is
+    // still an open `white-space:nowrap` run are parked here instead of
+    // immediately hoisted -- see the matching branch below and
+    // flush_anonymous_into's tail, which is where they actually land in
+    // `blocks`.
+    let mut deferred_floats: Vec<LayoutBox> = Vec::new();
 
     if crate::replaced::kind(dom, idx).is_none() {
         for pseudo in [PseudoElement::Marker, PseudoElement::Before] {
@@ -1379,13 +1394,59 @@ fn classify_children(
                         push_atomic_inline(dom, styled, child, entry.parent_font, fonts,
                             replaced, &mut inlines, &mut positioned);
                     }
+                    _ if crate::floats::side(&child_style).is_some() && no_wrap_here(&own_style) => {
+                        // CSS2 #float-position (float-nowrap-*): a float
+                        // never needs to split the surrounding inline
+                        // formatting context the way a genuine block-level
+                        // child does -- it's taken out of normal flow
+                        // entirely. Splitting anyway breaks a
+                        // `white-space:nowrap` run's "stays on one unbroken
+                        // line" guarantee: text before and after the float
+                        // within the same nowrap scope must remain one
+                        // continuous inline run, with the float's own
+                        // source position irrelevant to where (or whether)
+                        // that text wraps.
+                        //
+                        // Only defer when something has already flowed in
+                        // this run (`inlines`/`deferred_floats` non-empty):
+                        // deferring unconditionally would move a float that
+                        // is the very FIRST thing in its nowrap scope past
+                        // *later* text too, reversing DOM order instead of
+                        // preserving it (float-nowrap-1's own "must not
+                        // match a float-first arrangement" check regressed
+                        // this way, along with float-nowrap-4's and -6's own
+                        // float-first fixtures). When nothing precedes it,
+                        // hoist immediately -- `inlines` stays open for
+                        // whatever follows, exactly like the pre-existing
+                        // (non-float) hoist arm below.
+                        //
+                        // "Nothing precedes it" means no *renderable*
+                        // content, not merely an empty `Vec`: markup
+                        // whitespace (an indentation newline before the
+                        // float) already produced a whitespace-only Text
+                        // node in `inlines` by this point, which collapses
+                        // away during line layout and must not itself
+                        // count as "something flowed" (float-nowrap-1-
+                        // notref.html's own leading indentation before its
+                        // float kept tripping the non-empty branch here,
+                        // deferring a float that should hoist immediately).
+                        if !has_renderable_inline_content(&inlines) && deferred_floats.is_empty() {
+                            blocks.push(build_element(
+                                dom, styled, child, entry.parent_font, fonts, replaced,
+                            ));
+                        } else {
+                            deferred_floats.push(build_element(
+                                dom, styled, child, entry.parent_font, fonts, replaced,
+                            ));
+                        }
+                    }
                     _ if matches!(
                         parse_display(&child_style),
                         Display::Block | Display::Flex | Display::Grid
                     ) =>
                     {
                         // Flush pending inline content into an anonymous block.
-                        flush_anonymous_into(&mut blocks, &mut inlines, &mut positioned, font_size, fonts);
+                        flush_anonymous_into(&mut blocks, &mut inlines, &mut positioned, font_size, fonts, &mut deferred_floats);
                         blocks.push(build_element(
                             dom, styled, child, entry.parent_font, fonts, replaced,
                         ));
@@ -1412,6 +1473,7 @@ fn classify_children(
                             &mut positioned,
                             fonts,
                             replaced,
+                            &mut deferred_floats,
                         )
                 }
                 }
@@ -1434,9 +1496,14 @@ fn classify_children(
     }
     // Trailing inline content: when the container has no block children it
     // IS an inline formatting context — keep the items directly. Otherwise
-    // the remainder becomes one last anonymous block.
-    if !inlines.is_empty() && !blocks.is_empty() {
-        flush_anonymous_into(&mut blocks, &mut inlines, &mut positioned, font_size, fonts);
+    // the remainder becomes one last anonymous block. Any float still
+    // waiting in `deferred_floats` (a nowrap run's trailing float, or a
+    // float with nothing else at all in the container) forces this path
+    // unconditionally -- a float can never itself become part of a
+    // Flow::Inlines list, so it must not be left stranded when `blocks` was
+    // otherwise empty.
+    if (!inlines.is_empty() && !blocks.is_empty()) || !deferred_floats.is_empty() {
+        flush_anonymous_into(&mut blocks, &mut inlines, &mut positioned, font_size, fonts, &mut deferred_floats);
     }
     if blocks.is_empty() && !has_renderable_inline_content(&inlines) {
         inlines.clear();
@@ -1457,37 +1524,48 @@ fn flush_anonymous_into(
     positioned: &mut Vec<LayoutBox>,
     font_size: f32,
     fonts: &FontSource,
+    deferred_floats: &mut Vec<LayoutBox>,
 ) {
     if inlines.is_empty() || !has_renderable_inline_content(inlines) {
         inlines.clear();
-        return;
-    }
-    let taken = std::mem::take(inlines);
-    let lh = fonts.scaled_metrics(font_size).line_height;
-    let mut anon = LayoutBox::new(
-        None,
-        Display::Block,
-        ComputedStyle::default(),
-        font_size,
-        lh,
-    );
-    // Atomic inline boxes belong to the inline run that owns their placeholder.
-    // When a block sibling forces an anonymous wrapper, keeping them on the
-    // original parent leaves the placeholder at zero size and paints their
-    // descendants at the unplaced origin.
-    let mut remaining = Vec::with_capacity(positioned.len());
-    for child in positioned.drain(..) {
-        if child.inline_atomic && taken.iter().any(|item| {
-            matches!(item, InlineNode::Atomic { node, .. } if Some(*node) == child.node)
-        }) {
-            anon.positioned.push(child);
-        } else {
-            remaining.push(child);
+    } else {
+        let taken = std::mem::take(inlines);
+        let lh = fonts.scaled_metrics(font_size).line_height;
+        let mut anon = LayoutBox::new(
+            None,
+            Display::Block,
+            ComputedStyle::default(),
+            font_size,
+            lh,
+        );
+        // Atomic inline boxes belong to the inline run that owns their placeholder.
+        // When a block sibling forces an anonymous wrapper, keeping them on the
+        // original parent leaves the placeholder at zero size and paints their
+        // descendants at the unplaced origin.
+        let mut remaining = Vec::with_capacity(positioned.len());
+        for child in positioned.drain(..) {
+            if child.inline_atomic && taken.iter().any(|item| {
+                matches!(item, InlineNode::Atomic { node, .. } if Some(*node) == child.node)
+            }) {
+                anon.positioned.push(child);
+            } else {
+                remaining.push(child);
+            }
         }
+        *positioned = remaining;
+        anon.flow = Flow::Inlines(taken);
+        blocks.push(anon);
     }
-    *positioned = remaining;
-    anon.flow = Flow::Inlines(taken);
-    blocks.push(anon);
+    // CSS2 #float-position (float-nowrap-*): floats deferred past a
+    // `white-space:nowrap` run (see the matching branches in
+    // classify_children/flatten_inline) land here, right after the run they
+    // interrupted is finally flushed as one unsplit anonymous block -- the
+    // same relative order a plain "text, then float" source already
+    // produces (and already passes). Flushed unconditionally, even when
+    // there was no renderable inline content to flush above (a float with
+    // nothing but whitespace before it inside the nowrap scope still needs
+    // to land in `blocks` somewhere).
+    blocks.extend(deferred_floats.drain(..));
 }
 
 fn has_renderable_inline_content(inlines: &[InlineNode]) -> bool {
@@ -1527,6 +1605,7 @@ fn flatten_inline(
     positioned_out: &mut Vec<LayoutBox>,
     fonts: &FontSource,
     replaced: &dyn ReplacedElementProvider,
+    deferred_floats: &mut Vec<LayoutBox>,
 ) {
     let font_size = values::resolve_used_font_size(&style, parent_font_px);
     let bidi_style = text_style(dom, idx, &style, font_size, true);
@@ -1625,13 +1704,64 @@ fn flatten_inline(
                         push_atomic_inline(dom, styled, child, entry.parent_font, fonts,
                             replaced, inlines, positioned_out);
                     }
+                    _ if crate::floats::side(&cs).is_some() && no_wrap_here(&style) => {
+                        // CSS2 #float-position (float-nowrap-*): see
+                        // classify_children's matching branch for the full
+                        // rationale, the "only defer once something has
+                        // already flowed" fix, and why this checks
+                        // renderable content rather than a bare `is_empty`.
+                        // `style` here is this scope's own (e.g. the
+                        // `white-space:nowrap` span's) computed style, not
+                        // the float's.
+                        //
+                        // "Since" is scoped to `inline_start` (this
+                        // flatten_inline call's own entry point), not index
+                        // 0 of the whole shared `inlines` -- this element
+                        // (e.g. the nowrap span) may be nested inside an
+                        // OUTER scope that is NOT itself nowrap and already
+                        // flowed unrelated content into the same vector
+                        // before recursing here (float-nowrap-4.html: the
+                        // outer div's own leading "Some " text must not
+                        // count as "something flowed" for a float that is
+                        // the nowrap span's own first child -- that float
+                        // hoists in place, right after "Some ", per
+                        // float-nowrap-4-ref.html, not deferred past the
+                        // nowrap span's own trailing text). Does not
+                        // generalize to a float nested two-or-more inline
+                        // levels below where the CURRENT nowrap run
+                        // actually began if an intervening sibling already
+                        // flowed content earlier in that same run -- no
+                        // fixture in this family exercises that deeper
+                        // case.
+                        if !has_renderable_inline_content(&inlines[inline_start.min(inlines.len())..])
+                            && deferred_floats.is_empty()
+                        {
+                            blocks_out.push(build_element(
+                                dom,
+                                styled,
+                                child,
+                                entry.parent_font,
+                                fonts,
+                                replaced,
+                            ));
+                        } else {
+                            deferred_floats.push(build_element(
+                                dom,
+                                styled,
+                                child,
+                                entry.parent_font,
+                                fonts,
+                                replaced,
+                            ));
+                        }
+                    }
                     _ if matches!(
                         parse_display(&cs),
                         Display::Block | Display::Flex | Display::Grid
                     ) =>
                     {
                         // Hoist: end the current inline run here.
-                        flush_anonymous_into(blocks_out, inlines, positioned_out, parent_font_px, fonts);
+                        flush_anonymous_into(blocks_out, inlines, positioned_out, parent_font_px, fonts, deferred_floats);
                         blocks_out.push(build_element(
                             dom,
                             styled,
@@ -1657,6 +1787,7 @@ fn flatten_inline(
                             positioned_out,
                             fonts,
                             replaced,
+                            deferred_floats,
                         )
                 }
                 }
@@ -1727,6 +1858,86 @@ mod tests {
         let styled = amazing_css::compute(&dom, &[amazing_css::parse_stylesheet(css)]);
         let tree = build_layout_tree(&dom, &styled, &FontSource::fallback());
         (dom, tree)
+    }
+
+    #[test]
+    fn float_inside_a_nowrap_run_does_not_split_the_inline_content() {
+        // CSS2 #float-position (WPT css/CSS2/floats/float-nowrap-2.html): a
+        // float in the middle of a `white-space:nowrap` run must not split
+        // the surrounding text into two separately-line-broken anonymous
+        // blocks -- it's taken out of normal flow entirely, so the text
+        // before and after it stays one continuous, unsplit inline run
+        // (matching a source where the float sits at the very end instead,
+        // which never had anything to split in the first place). Before the
+        // fix this produced 3 blocks (text, float, text); the float must
+        // now land after ONE unified text block.
+        let (_, root) = tree_css(
+            "<body><div id=d>Some text that <span class=f></span> overflows my parent.</div></body>",
+            "#d{width:10ch;white-space:nowrap}.f{float:right;width:5ch;height:5ch}",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Blocks(parts) = &body[0].flow else { panic!("div blocks") };
+        assert_eq!(parts.len(), 2, "expected [unified text, float], got {parts:?}");
+        assert!(
+            matches!(&parts[0].flow, Flow::Inlines(_)),
+            "first part should be the unified inline run"
+        );
+        assert_eq!(parts[1].style.get("float"), Some("right"));
+    }
+
+    #[test]
+    fn float_first_in_a_nowrap_run_hoists_immediately_instead_of_deferring() {
+        // CSS2 #float-position (WPT float-nowrap-1-notref.html / -4.html /
+        // -6.html): a float that is the very FIRST thing in its nowrap
+        // scope has nothing preceding it to keep contiguous, so it must
+        // hoist in place -- landing BEFORE the text that follows, not
+        // after it. Deferring unconditionally (this session's first
+        // attempt) collapsed this into the same [text, float] order as the
+        // float-last case below, making the two indistinguishable --
+        // exactly the float-nowrap-1-notref.html regression (float-nowrap-1,
+        // float-last, must NOT match a float-first arrangement like this).
+        let (_, root) = tree_css(
+            "<body><div id=d><span class=f></span>Some text that overflows my parent.</div></body>",
+            "#d{width:10ch;white-space:nowrap}.f{float:right;width:5ch;height:5ch}",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Blocks(parts) = &body[0].flow else { panic!("div blocks") };
+        assert_eq!(parts.len(), 2, "expected [float, unified text], got {parts:?}");
+        assert_eq!(parts[0].style.get("float"), Some("right"), "float must come first");
+        assert!(
+            matches!(&parts[1].flow, Flow::Inlines(_)),
+            "second part should be the unified inline run"
+        );
+    }
+
+    #[test]
+    fn float_first_in_a_nested_nowrap_span_hoists_before_the_outer_text_that_preceded_it() {
+        // CSS2 #float-position (WPT float-nowrap-4.html / float-nowrap-4-
+        // ref.html): the float is the very first child of a NESTED
+        // `white-space:nowrap` span, but that span itself is nested inside
+        // an outer, non-nowrap div whose own leading text ("Some ") already
+        // flowed into the same shared `inlines` buffer before flatten_inline
+        // ever recurses into the span. That outer, unrelated text must not
+        // count as "something flowed" for the nowrap span's OWN scope --
+        // the float still hoists in place (right after "Some ", landing
+        // BEFORE the nowrap span's own text), matching float-nowrap-4-ref's
+        // `Some <float> <nowrap>text...</nowrap>` arrangement. Regression:
+        // checking `inlines` from index 0 (rather than from this
+        // flatten_inline call's own `inline_start`) saw the outer "Some "
+        // and deferred the float past the nowrap span's own trailing text
+        // instead.
+        let (_, root) = tree_css(
+            "<body><div id=d>Some <span class=nw><span class=f></span>text that overflows my parent.</span></div></body>",
+            "#d{width:10ch}.nw{white-space:nowrap}.f{float:right;width:5ch;height:5ch}",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Blocks(parts) = &body[0].flow else { panic!("div blocks") };
+        assert_eq!(parts.len(), 2, "expected [float, unified text], got {parts:?}");
+        assert_eq!(parts[0].style.get("float"), Some("right"), "float must come first");
+        assert!(
+            matches!(&parts[1].flow, Flow::Inlines(_)),
+            "second part should be the unified inline run"
+        );
     }
 
     #[test]

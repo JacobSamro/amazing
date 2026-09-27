@@ -9,8 +9,8 @@
   },
   "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
   "host": "worker-2",
-  "generated": "2026-09-27T12:16:01Z",
-  "run_directory": "/root/amazing/out/layout/wpt-render/css-CSS2-floats/run-20260927T121547Z-2136726",
+  "generated": "2026-09-27T18:02:57Z",
+  "run_directory": "/root/amazing/out/layout/wpt-render/css-CSS2-floats/run-20260927T180243Z-2323846",
   "inventory": {
     "document_files": 200,
     "testharness_files": 17,
@@ -25,8 +25,8 @@
     }
   },
   "counts": {
-    "pass": 23,
-    "mismatch": 16,
+    "pass": 28,
+    "mismatch": 11,
     "error": 0,
     "timeout": 0,
     "unsupported": 0,
@@ -35,17 +35,17 @@
   "tests": [
     {
       "id": "css__CSS2__floats__float-nowrap-3.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "float-nowrap-3-ref.html",
-      "differing_pixels": 912,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "b949cf417225014530ba73a9a6c1f4b08f813b35ca1cc274982c1ff196f0a3e1",
+      "actual_sha256": "e0da710c47fc4074cd3cb43f3f49ac953a72a2ce012d0759b856fbcd80adec05",
       "reference_sha256": "e0da710c47fc4074cd3cb43f3f49ac953a72a2ce012d0759b856fbcd80adec05",
-      "diff_sha256": "6a49d2c9fbd890492fad17f305e25c5b21ad77771c373df5692a317c311d6004",
-      "detail": "maxDifference=255/0; totalPixels=912/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__CSS2__floats__float-table-align-left-quirk.html",
@@ -63,17 +63,17 @@
     },
     {
       "id": "css__CSS2__floats__float-nowrap-4.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "float-nowrap-4-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 4279,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "b65702503c55578f4b9dd3120a112d7de15f825d45150afa06a345f699e5e78a",
+      "actual_sha256": "406c16060cc31b55ba28ca13b740e6d7a52aa749466f3ab1d74016e1d83324b2",
       "reference_sha256": "b65702503c55578f4b9dd3120a112d7de15f825d45150afa06a345f699e5e78a",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "diff_sha256": "6380db30124e521db948af94b1abb29d7aaa12b81dfa238f6445ee60ddb89f3d",
+      "detail": "maxDifference=255/0; totalPixels=4279/0"
     },
     {
       "id": "css__CSS2__floats__float-in-nested-multicol-001.html",
@@ -108,14 +108,14 @@
       "classification": "pass",
       "relation": "mismatch",
       "reference_href": "float-nowrap-4.html",
-      "differing_pixels": 4118,
+      "differing_pixels": 5936,
       "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "e0da710c47fc4074cd3cb43f3f49ac953a72a2ce012d0759b856fbcd80adec05",
-      "reference_sha256": "b65702503c55578f4b9dd3120a112d7de15f825d45150afa06a345f699e5e78a",
-      "diff_sha256": "cdae1718e0ffdc7ba07d4f968e693da252fbedcf06bcc1f4320b918cb03a28e8",
-      "detail": "maxDifference=255/0; totalPixels=4118/0"
+      "reference_sha256": "406c16060cc31b55ba28ca13b740e6d7a52aa749466f3ab1d74016e1d83324b2",
+      "diff_sha256": "a2c6dc2c2529844c6f6e9e9b61865866ef7e9100ffb75b18a186d46461eb772d",
+      "detail": "maxDifference=255/0; totalPixels=5936/0"
     },
     {
       "id": "css__CSS2__floats__new-fc-separates-from-float.html",
@@ -133,17 +133,17 @@
     },
     {
       "id": "css__CSS2__floats__float-nowrap-7.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "float-nowrap-1.html",
-      "differing_pixels": 3066,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "87051970b8292fbe7949497825fded9a07f8e58d1f92928692c2ca869c3d8a21",
+      "actual_sha256": "72af8a4cf40b844ed6cd668f5d548857e4572e7eb6a739c4391c444eb1254f75",
       "reference_sha256": "72af8a4cf40b844ed6cd668f5d548857e4572e7eb6a739c4391c444eb1254f75",
-      "diff_sha256": "66e3300cc5ebc48cdc1f2dce3381ed79b8f8aceb31beb32f263ba849ccef3ec6",
-      "detail": "maxDifference=255/0; totalPixels=3066/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__CSS2__floats__new-fc-separates-from-float-4.html",
@@ -175,17 +175,17 @@
     },
     {
       "id": "css__CSS2__floats__float-nowrap-hyphen-rewind-1.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "float-nowrap-hyphen-rewind-1-ref.html",
-      "differing_pixels": 3168,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "3b040e3e072799e29bd3d417ad1056f680b723bf3197ddc9aa2aca683269a477",
+      "actual_sha256": "f7aa5a844149281941a6ccb2dd75af02dde011e4c3015d5ebe9edeec58665719",
       "reference_sha256": "f7aa5a844149281941a6ccb2dd75af02dde011e4c3015d5ebe9edeec58665719",
-      "diff_sha256": "0d9866c54d56f45e8b7d9fc599fad2c7563b2b5ae230cd30ed42af95295ba515",
-      "detail": "maxDifference=255/0; totalPixels=3168/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__CSS2__floats__table-sizing-with-adjacent-floats.html",
@@ -315,17 +315,17 @@
     },
     {
       "id": "css__CSS2__floats__float-nowrap-9.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "float-nowrap-3-ref.html",
-      "differing_pixels": 4085,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "dde1641f82bf77d6fa3d287a1b307597c20daf29218d79f79af00b02ec10e2ce",
+      "actual_sha256": "e0da710c47fc4074cd3cb43f3f49ac953a72a2ce012d0759b856fbcd80adec05",
       "reference_sha256": "e0da710c47fc4074cd3cb43f3f49ac953a72a2ce012d0759b856fbcd80adec05",
-      "diff_sha256": "1ff0c8b4af1275b7565654950a08633ba41221b0e2f5fea9a5a1e35608729ea7",
-      "detail": "maxDifference=255/0; totalPixels=4085/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__CSS2__floats__zero-available-space-float-positioning.html",
@@ -343,17 +343,17 @@
     },
     {
       "id": "css__CSS2__floats__float-nowrap-2.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "float-nowrap-1.html",
-      "differing_pixels": 1821,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "f281f2cfc6172783733da408245178cac3b00a77a7bd99a12afc5dff06f40d8f",
+      "actual_sha256": "72af8a4cf40b844ed6cd668f5d548857e4572e7eb6a739c4391c444eb1254f75",
       "reference_sha256": "72af8a4cf40b844ed6cd668f5d548857e4572e7eb6a739c4391c444eb1254f75",
-      "diff_sha256": "48f1eadbaf56e86c3a2fa68ebedb9b3f108feb0361458f9767e435bc78e3de8e",
-      "detail": "maxDifference=255/0; totalPixels=1821/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__CSS2__floats__floats-in-table-caption-001.html",
@@ -525,17 +525,17 @@
     },
     {
       "id": "css__CSS2__floats__float-nowrap-8.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "match",
       "reference_href": "float-nowrap-1.html",
-      "differing_pixels": 2667,
-      "max_difference": 255,
+      "differing_pixels": 0,
+      "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "b65702503c55578f4b9dd3120a112d7de15f825d45150afa06a345f699e5e78a",
+      "actual_sha256": "72af8a4cf40b844ed6cd668f5d548857e4572e7eb6a739c4391c444eb1254f75",
       "reference_sha256": "72af8a4cf40b844ed6cd668f5d548857e4572e7eb6a739c4391c444eb1254f75",
-      "diff_sha256": "5fe9feda4e78be22c6087885b2310d2e5815000d29611c2733d266bf1b600fbc",
-      "detail": "maxDifference=255/0; totalPixels=2667/0"
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
     },
     {
       "id": "css__CSS2__floats__negative-block-margin-pushing-float-out-of-block-formatting-context.html",
@@ -579,5 +579,56 @@
       "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
       "detail": "maxDifference=0/0; totalPixels=0/0"
     }
-  ]
+  ],
+  "baseline_compare": {
+    "baseline": "/root/amazing/wt/layout/crates/amazing-shell-gpui/evidence/wpt-render/css-CSS2-floats/report.json",
+    "gained": [
+      "css__CSS2__floats__float-nowrap-2.html",
+      "css__CSS2__floats__float-nowrap-3.html",
+      "css__CSS2__floats__float-nowrap-7.html",
+      "css__CSS2__floats__float-nowrap-8.html",
+      "css__CSS2__floats__float-nowrap-9.html",
+      "css__CSS2__floats__float-nowrap-hyphen-rewind-1.html"
+    ],
+    "lost": [
+      "css__CSS2__floats__float-nowrap-4.html"
+    ],
+    "changed": [],
+    "unchanged": [
+      "css__CSS2__floats__float-after-block-with-collapsed-margin-inside-inline.html",
+      "css__CSS2__floats__float-in-inline-001.html",
+      "css__CSS2__floats__float-in-inline-002.html",
+      "css__CSS2__floats__float-in-nested-multicol-001.html",
+      "css__CSS2__floats__float-no-content-beside-001.html",
+      "css__CSS2__floats__float-nowrap-1.html",
+      "css__CSS2__floats__float-nowrap-3-ref.html",
+      "css__CSS2__floats__float-nowrap-5.html",
+      "css__CSS2__floats__float-nowrap-6.html",
+      "css__CSS2__floats__float-root.html",
+      "css__CSS2__floats__float-table-align-left-quirk.html",
+      "css__CSS2__floats__float-with-absolutely-positioned-child-with-static-inset.html",
+      "css__CSS2__floats__floated-table-wider-than-specified.html",
+      "css__CSS2__floats__floats-in-table-caption-001.html",
+      "css__CSS2__floats__floats-line-wrap-shifted-001.html",
+      "css__CSS2__floats__floats-placement-005.html",
+      "css__CSS2__floats__floats-wrap-bfc-with-margin-010.html",
+      "css__CSS2__floats__intrinsic-size-float-and-line.html",
+      "css__CSS2__floats__negative-block-margin-pushing-float-out-of-block-formatting-context.html",
+      "css__CSS2__floats__negative-margin-float-positioning.html",
+      "css__CSS2__floats__new-fc-beside-adjoining-float-2.html",
+      "css__CSS2__floats__new-fc-beside-adjoining-float.html",
+      "css__CSS2__floats__new-fc-relayout.html",
+      "css__CSS2__floats__new-fc-separates-from-float-2.html",
+      "css__CSS2__floats__new-fc-separates-from-float-4.html",
+      "css__CSS2__floats__new-fc-separates-from-float.html",
+      "css__CSS2__floats__overflow-scroll-float-paint-order.html",
+      "css__CSS2__floats__overhanging-float-paint-order.html",
+      "css__CSS2__floats__table-sizing-with-adjacent-floats.html",
+      "css__CSS2__floats__zero-available-space-float-positioning.html",
+      "css__CSS2__floats__zero-width-floats-positioning.tentative.html",
+      "css__CSS2__floats__zero-width-floats.html"
+    ],
+    "new": [],
+    "removed": []
+  }
 }

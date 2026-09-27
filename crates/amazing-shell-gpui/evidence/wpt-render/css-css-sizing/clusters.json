@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "subdir": "css/css-sizing",
-  "mismatch_count": 50,
+  "mismatch_count": 48,
   "unreadable": 0,
   "clusters": [
     {
@@ -24,16 +24,6 @@
         "css__css-sizing__replaced-aspect-ratio-stretch-fit-003.html",
         "css__css-sizing__aspect-ratio__floats-aspect-ratio-001.html",
         "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-007.html"
-      ]
-    },
-    {
-      "signature": "medium-region, top-left, darker than reference",
-      "count": 4,
-      "examples": [
-        "css__css-sizing__stretch__positioned-non-replaced-1.html",
-        "css__css-sizing__stretch__fixed-table-1.html",
-        "css__css-sizing__fit-content-max-inline-size.tentative.html",
-        "css__css-sizing__block-size-with-min-or-max-content-7.html"
       ]
     },
     {
@@ -93,6 +83,14 @@
       "examples": [
         "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-016.html",
         "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-010.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-sizing__fit-content-max-inline-size.tentative.html",
+        "css__css-sizing__block-size-with-min-or-max-content-7.html"
       ]
     },
     {

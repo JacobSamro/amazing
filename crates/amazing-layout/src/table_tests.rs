@@ -865,4 +865,101 @@ fn col_definite_min_size_trailing_columns_only_extend_definite_ones() {
     assert_eq!(tables.len(), 4);
     assert!(tables[0].border_box.w >= 400.0, "t1: {}", tables[0].border_box.w);
     assert!(tables[2].border_box.w < 100.0, "t3: {}", tables[2].border_box.w);
+    // t4: `min-width:0` on the trailing columns is a definite value (0 is
+    // `Some(0.0)`, not absent), but it clamps to a non-definite *size* --
+    // a column that ends up 0px wide doesn't force a missing-cell
+    // placeholder either. Regression: the prior "any raw property
+    // present" check treated `min-width:0` as definite regardless of its
+    // clamped value, wrongly extending the count.
+    assert!(tables[3].border_box.w < 100.0, "t4: {}", tables[3].border_box.w);
+}
+
+#[test]
+fn col_max_width_alone_never_extends_missing_cell_columns_only_a_positive_clamped_size_does() {
+    // css-tables-3 #missing-cells-fixup (col-definite-max-size-001.html):
+    // a trailing column beyond what real cells need only forces a
+    // missing-cell placeholder when its *clamped* width/min-width is a
+    // positive definite value -- `max-width` alone (t1: no width/min-width
+    // at all, just a losing `max-width:0`) never does, and neither does a
+    // `width` that a conflicting `max-width` clamps down to zero (t2:
+    // `max-width:0;width:100px` with no min-width to override it). Both
+    // stay at their real 2-cell column count and are narrow; t3 keeps its
+    // min-width:100px winning over the same losing max-width:0 (already
+    // covered by col_max_width_clamps_a_definite_width_and_min_width_
+    // still_wins_over_it, included here as a same-run cross-check).
+    let b = layout(
+        r#"<body>
+<table id=t1 border="1" cellspacing="10"><colgroup>
+  <col><col><col style="max-width:0"><col style="max-width:0">
+</colgroup><thead><tr><td>1</td><td>2</td></tr></thead></table>
+<table id=t2 border="1" cellspacing="10"><colgroup>
+  <col style="max-width:0;width:100px"><col style="max-width:0;width:100px">
+  <col style="max-width:0;width:100px"><col style="max-width:0;width:100px">
+</colgroup><thead><tr><td>1</td><td>2</td></tr></thead></table>
+<table id=t3 border="1" cellspacing="10"><colgroup>
+  <col style="max-width:0;min-width:100px"><col style="max-width:0;min-width:100px">
+  <col style="max-width:0;min-width:100px"><col style="max-width:0;min-width:100px">
+</colgroup><thead><tr><td>1</td><td>2</td></tr></thead></table>
+"#,
+        "",
+        false,
+    );
+    let tables = collect(&b, Role::Table);
+    assert_eq!(tables.len(), 3);
+    assert!(tables[0].border_box.w < 100.0, "t1: {}", tables[0].border_box.w);
+    assert!(tables[1].border_box.w < 100.0, "t2: {}", tables[1].border_box.w);
+    assert!(tables[2].border_box.w >= 400.0, "t3: {}", tables[2].border_box.w);
+}
+
+#[test]
+fn col_max_width_clamps_a_definite_width_and_min_width_still_wins_over_it() {
+    // css-tables-3 #computing-column-measures (col-definite-max-size-001.html):
+    // a <col>'s own used width is `width` clamped by its own min-width/
+    // max-width, applying max-width first so a conflicting min-width still
+    // wins (t1: width:100px clamped down to max-width:40px -> narrow;
+    // t2: only min-width:100px against a losing max-width:0 -> min wins,
+    // stays wide).
+    let b = layout(
+        r#"<body>
+<table id=t1 border="1" cellspacing="10"><colgroup>
+  <col style="max-width:40px;width:100px"><col style="max-width:40px;width:100px">
+  <col style="max-width:40px;width:100px"><col style="max-width:40px;width:100px">
+</colgroup><thead><tr><td>1</td><td>2</td></tr></thead></table>
+<table id=t2 border="1" cellspacing="10"><colgroup>
+  <col style="max-width:0;min-width:100px"><col style="max-width:0;min-width:100px">
+  <col style="max-width:0;min-width:100px"><col style="max-width:0;min-width:100px">
+</colgroup><thead><tr><td>1</td><td>2</td></tr></thead></table>
+"#,
+        "",
+        false,
+    );
+    let tables = collect(&b, Role::Table);
+    assert_eq!(tables.len(), 2);
+    assert!(tables[0].border_box.w < 250.0, "t1: {}", tables[0].border_box.w);
+    assert!(tables[1].border_box.w >= 400.0, "t2: {}", tables[1].border_box.w);
+}
+
+#[test]
+fn table_width_stretch_activates_fixed_table_layout() {
+    // css-sizing-4 stretch-fit-sizing (stretch/fixed-table-1.html):
+    // `width:stretch` on a `table-layout:fixed` table must both resolve to
+    // the available width AND still activate fixed-layout mode. `length()`
+    // (a plain-length parser) never recognized the `stretch` keyword, so
+    // `specified` stayed `None` and `fixed` could never become true --
+    // fixed-layout's own column-width distribution (ignoring a 200px-wide
+    // cell's content) never ran, and the table intrinsic-sized instead of
+    // stretching to the 100px containing block.
+    let b = layout(
+        r#"<body><div style="width:100px">
+<div style="display:table;table-layout:fixed;width:stretch">
+  <div style="display:table-cell;width:100px">
+    <div style="width:200px;height:10px"></div>
+  </div>
+</div>
+</div>"#,
+        "",
+        false,
+    );
+    let table = &collect(&b, Role::Table)[0];
+    near(table.border_box.w, 100.0);
 }

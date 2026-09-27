@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "subdir": "css/css-tables",
-  "mismatch_count": 29,
+  "mismatch_count": 28,
   "unreadable": 0,
   "clusters": [
     {
@@ -33,20 +33,19 @@
       ]
     },
     {
-      "signature": "medium-region, top-left, darker than reference",
-      "count": 3,
-      "examples": [
-        "css__css-tables__height-distribution__percentage-sizing-of-table-cell-007.html",
-        "css__css-tables__table-cell-child-overflow-measure.html",
-        "css__css-tables__col-definite-size-001.html"
-      ]
-    },
-    {
       "signature": "medium-region, top, darker than reference",
       "count": 2,
       "examples": [
         "css__css-tables__visibility-collapse-colspan-003.html",
         "css__css-tables__tentative__paint__overflow-hidden-table.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-tables__height-distribution__percentage-sizing-of-table-cell-007.html",
+        "css__css-tables__table-cell-child-overflow-measure.html"
       ]
     },
     {
@@ -58,17 +57,18 @@
       ]
     },
     {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-tables__baseline-empty-cell-001.html",
+        "css__css-tables__col-definite-size-001.html"
+      ]
+    },
+    {
       "signature": "large-region, left, same tone, different shape",
       "count": 1,
       "examples": [
         "css__css-tables__rules-groups.html"
-      ]
-    },
-    {
-      "signature": "large-region, top-left, lighter than reference",
-      "count": 1,
-      "examples": [
-        "css__css-tables__col-definite-min-size-001.html"
       ]
     },
     {
@@ -79,7 +79,7 @@
       ]
     },
     {
-      "signature": "large-region, left, darker than reference",
+      "signature": "small-region, left, redder than reference",
       "count": 1,
       "examples": [
         "css__css-tables__col-definite-max-size-001.html"
@@ -104,13 +104,6 @@
       "count": 1,
       "examples": [
         "css__css-tables__tentative__paint__collapsed-border-large-cell.html"
-      ]
-    },
-    {
-      "signature": "small-region, top-left, same tone, different shape",
-      "count": 1,
-      "examples": [
-        "css__css-tables__baseline-empty-cell-001.html"
       ]
     },
     {

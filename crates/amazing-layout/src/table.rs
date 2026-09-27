@@ -198,20 +198,45 @@ fn length(b: &LayoutBox, name: &str, basis: f32) -> Option<f32> {
         MaybeLen::Auto => None,
     }
 }
-/// True when a `<col>`/`<colgroup>` has a definite (absolute-length)
-/// `width` or `min-width` -- a bare number/px, not a percentage or a
-/// `calc()` that contains one. Resolving against basis `0.0` and checking
-/// for `%` in the raw source (rather than trusting `MaybeLen::Px` alone,
-/// which a percentage still produces once resolved against *some* basis)
-/// is what distinguishes "genuinely definite" from "resolves to a number
-/// only because there was a basis to resolve against" for this
-/// structural, pre-layout column-count decision.
+/// True when a `<col>`/`<colgroup>` clamps to a positive, definite
+/// (absolute-length) used width for the css-tables-3 #missing-cells-fixup
+/// decision -- a bare number/px, not a percentage or a `calc()` that
+/// contains one, and not a `width`/`min-width` that a conflicting
+/// `max-width` clamps down to zero. Resolving against basis `0.0` and
+/// checking for `%` in the raw source (rather than trusting `MaybeLen::Px`
+/// alone, which a percentage still produces once resolved against *some*
+/// basis) is what distinguishes "genuinely definite" from "resolves to a
+/// number only because there was a basis to resolve against".
+///
+/// Applies the same width/min-width/max-width clamp order `constraints()`
+/// uses (max-width first, then min-width, so a conflicting min-width
+/// wins) rather than treating either property as definite on its own:
+/// `col-definite-max-size-001.html`'s `max-width:0;width:100px` clamps to
+/// a non-definite 0 (dropping that trailing column), while
+/// `max-width:0;min-width:100px` still clamps back up to a definite 100
+/// (min-width overriding the same losing max-width keeps it). Also fixes
+/// `col-definite-min-size-001.html`'s own `min-width:0` case, which the
+/// prior any-raw-property-present check wrongly treated as definite (0 is
+/// `Some(0.0)`, not `None`) -- it clamps to 0 too and must not extend the
+/// column count either.
 fn column_has_definite_size(col: &LayoutBox) -> bool {
-    ["width", "min-width"].into_iter().any(|prop| {
-        col.style
-            .get(prop)
-            .is_some_and(|raw| !raw.contains('%') && length(col, prop, 0.0).is_some())
-    })
+    let definite = |prop: &str| {
+        col.style.get(prop).and_then(|raw| {
+            if raw.contains('%') {
+                None
+            } else {
+                length(col, prop, 0.0)
+            }
+        })
+    };
+    let mut width = definite("width").unwrap_or(0.0);
+    if let Some(max_width) = definite("max-width") {
+        width = width.min(max_width);
+    }
+    if let Some(min_width) = definite("min-width") {
+        width = width.max(min_width);
+    }
+    width > 0.0
 }
 fn spacing(b: &LayoutBox) -> (f32, f32) {
     if collapsed(b) {
@@ -540,31 +565,43 @@ fn constraints(
     let sx = spacing(b).0;
     for (i, path) in g.columns.iter().enumerate() {
         let col = at(b, path);
-        let width = length(col, "width", basis)
+        // css-tables-3 #computing-column-measures: a `<col>`/`<colgroup>`'s
+        // own used width is `width` clamped by its own `min-width`/
+        // `max-width` -- checked on both the `<col>` and its owning
+        // `<colgroup>` for each property independently (a `<col>` can
+        // declare `width` while its `<colgroup>` declares `min-width`, and
+        // vice versa), matching how `width` alone already falls back to the
+        // colgroup. Only a definite (non-percentage) `min-width`/`max-width`
+        // participates (col-definite-min-size-001.html /
+        // col-definite-max-size-001.html use `%` and `calc()`-with-`%`
+        // variants specifically to probe this); a percentage `width` still
+        // resolves through `length()`'s own basis as before. Applying
+        // `max-width` first and `min-width` second means `min-width` wins
+        // when the two conflict (col-definite-max-size-001.html's
+        // `max-width:0; min-width:100px` case), same precedence CSS box
+        // sizing uses everywhere else.
+        let col_or_group_limit = |prop| {
+            intrinsic_limit(col, prop).or_else(|| {
+                (path.len() == 2)
+                    .then(|| intrinsic_limit(at(b, &path[..1]), prop))
+                    .flatten()
+            })
+        };
+        let mut width = length(col, "width", basis)
             .or_else(|| {
                 (path.len() == 2)
                     .then(|| length(at(b, &path[..1]), "width", basis))
                     .flatten()
             })
             .unwrap_or(0.0);
+        if let Some(max_width) = col_or_group_limit("max-width") {
+            width = width.min(max_width);
+        }
+        if let Some(min_width) = col_or_group_limit("min-width") {
+            width = width.max(min_width);
+        }
         min[i] = width;
         max[i] = width;
-        // css-tables-3 #computing-column-measures (col-definite-min-size-001.html):
-        // a definite (non-percentage) `<col>`/`<colgroup>` `min-width` floors
-        // the column independent of `width` -- checked on both the `<col>`
-        // and its owning `<colgroup>`, same fallback `width` uses above.
-        // `max-width` interacting with an explicit `width` on the same
-        // column is a separate, not-yet-implemented resolution
-        // (col-definite-max-size-001.html) left for its own pass.
-        let min_width = intrinsic_limit(col, "min-width").or_else(|| {
-            (path.len() == 2)
-                .then(|| intrinsic_limit(at(b, &path[..1]), "min-width"))
-                .flatten()
-        });
-        if let Some(min_width) = min_width {
-            min[i] = min[i].max(min_width);
-            max[i] = max[i].max(min_width);
-        }
     }
     let mut cells: Vec<_> = g.cells.iter().collect();
     cells.sort_by_key(|c| c.cols);
@@ -694,12 +731,26 @@ pub(crate) fn layout(
     } else {
         0.0
     };
-    let specified = length(b, "width", cbw).map(|w| outer_table_width(b, w, edges));
+    let available = (cbw - b.margin.left.unwrap_or(0.0) - b.margin.right.unwrap_or(0.0)).max(0.0);
+    // css-sizing-4 stretch-fit-sizing (fixed-table-1.html): `width:stretch`/
+    // `-webkit-fill-available` on the table itself resolves to the whole
+    // available border-box space (`available` above already subtracts the
+    // table's own margins from `cbw`) -- same fill-available formula
+    // block.rs's generic stretch arm uses, but expressed directly as an
+    // outer/border-box width like `specified` below, not a content width.
+    // Without this, `length()` (a plain-length parser) never recognizes the
+    // keyword, `specified` stayed `None`, and `table-layout:fixed` could
+    // never activate for a stretch-sized table.
+    let specified = length(b, "width", cbw)
+        .map(|w| outer_table_width(b, w, edges))
+        .or_else(|| {
+            matches!(b.style.get("width"), Some("stretch" | "-webkit-fill-available"))
+                .then_some(available)
+        });
     let fixed = specified.is_some()
         && b.style
             .get("table-layout")
             .is_some_and(|s| s.eq_ignore_ascii_case("fixed"));
-    let available = (cbw - b.margin.left.unwrap_or(0.0) - b.margin.right.unwrap_or(0.0)).max(0.0);
     let (min, max) = if fixed {
         (vec![0.0; g.count], vec![0.0; g.count])
     } else {
