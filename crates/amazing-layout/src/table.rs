@@ -177,6 +177,13 @@ impl Grid {
                 .max()
                 .unwrap_or(count),
         );
+        // Every other reader of `g.columns` (constraints(), decoration,
+        // colgroup border painting) indexes parallel per-column vecs of
+        // length `g.count` by the same `i` from `g.columns.iter().enumerate()`
+        // -- `columns.len() == count` is a load-bearing invariant, not just
+        // the common case, so a dropped trailing non-definite column must be
+        // removed from `columns` itself here, not just excluded from `count`.
+        columns.truncate(count);
         Self {
             rows,
             cells,
@@ -542,6 +549,22 @@ fn constraints(
             .unwrap_or(0.0);
         min[i] = width;
         max[i] = width;
+        // css-tables-3 #computing-column-measures (col-definite-min-size-001.html):
+        // a definite (non-percentage) `<col>`/`<colgroup>` `min-width` floors
+        // the column independent of `width` -- checked on both the `<col>`
+        // and its owning `<colgroup>`, same fallback `width` uses above.
+        // `max-width` interacting with an explicit `width` on the same
+        // column is a separate, not-yet-implemented resolution
+        // (col-definite-max-size-001.html) left for its own pass.
+        let min_width = intrinsic_limit(col, "min-width").or_else(|| {
+            (path.len() == 2)
+                .then(|| intrinsic_limit(at(b, &path[..1]), "min-width"))
+                .flatten()
+        });
+        if let Some(min_width) = min_width {
+            min[i] = min[i].max(min_width);
+            max[i] = max[i].max(min_width);
+        }
     }
     let mut cells: Vec<_> = g.cells.iter().collect();
     cells.sort_by_key(|c| c.cols);
