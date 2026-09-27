@@ -13,6 +13,7 @@ amazing-common = { path = "../amazing-common" }
 amazing-compositor = { path = "../amazing-compositor" }
 amazing-devtools = { path = "../amazing-devtools" }
 amazing-dom = { path = "../amazing-dom" }
+amazing-encoding = { path = "../amazing-encoding" }
 amazing-html = { path = "../amazing-html" }
 amazing-ipc = { path = "../amazing-ipc" }
 amazing-css = { path = "../amazing-css" }

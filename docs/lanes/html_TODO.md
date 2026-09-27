@@ -2257,3 +2257,152 @@ passed, 17 skipped** (dev moved since HTML-35's own 3,395/3,395 gate; no
 loss). Doctests: **31 crates, 0 FAILED**.
 
 Status: done.
+
+## HTML-37 -- TextDecoder/TextEncoder (largest failing WPT cluster in this
+lane's own paths was `encoding/`, not `html/syntax/parsing`)
+
+Base: local `dev` at `4ef281e4` (HTML-36's merge). Brief: pick the largest
+failing cluster in this lane's own paths (tree builder/parser or encoding)
+from a narrowed WPT sweep of `html/syntax/parsing` and `encoding/` alone --
+HTML-35/36's own 1,132-file selection had mixed in `html/dom`/`html/
+semantics/scripting-1`, mostly dom-bindings territory, so a fresh, narrower
+measurement was needed first. Port from `servo/html5ever` where that closes
+a gap faster, per the porting policy.
+
+### Measurement: two comparable-looking candidates, one enormous gap
+
+Wrote a new sweep (`.agents/html/html37_sweep.py`, not committed --
+orchestration scratch) selecting exactly `html/syntax/parsing` (56 files) and
+`encoding/` (194 files after exclusions) via the existing `measure-wpt-dom.py`
+inventory helper, with one addition: that helper hardcodes its `.any.js`
+"generated window global" exception to `suite == 'url'` only, and `encoding/`
+is almost entirely `.any.js` -- so this ticket's sweep script carries its own
+local copy of that one exception for `encoding` (not editing `measure-wpt-
+dom.py` itself, which other lanes' sweeps also import) rather than leaving
+nearly the whole suite marked "unsupported" by a selection-tool gap that has
+nothing to do with the engine's actual `wpt-harness` binary (`cmd/
+wpt_harness.rs` already runs `.any.js`/`.window.js` generically for any
+suite, confirmed by direct code reading -- the restriction was purely in the
+Python selection helper).
+
+Measured (before = `4ef281e4`, same venus-001 host):
+
+| Suite | Files: pass/fail/timeout/error/unsupported | Subtests: pass/fail |
+| --- | --- | --- |
+| `html/syntax/parsing` (56) | 14/13/26/0/3 | small (~100 nonpass across 39 files) |
+| `encoding/` (194) | 1/40/4/8/141 | **1,121 pass / 6,296 fail** |
+
+`html/syntax/parsing`'s own remaining fails/timeouts were real but small and
+scattered (adoption-agency-reparenting-*-cycle.html timeouts, template
+insertion-mode edge cases, `clearing-the-stack-back-to-a-given-context`) --
+each file a handful of subtests. `encoding/`'s 6,296 failing subtests came
+from ONE root cause, confirmed by direct code search: **`TextDecoder`/
+`TextEncoder` did not exist as JS globals anywhere in this engine at all**
+(`grep -rl "TextDecoder\|TextEncoder" --include=*.rs crates/` only found
+`amazing-fetch`'s internal Rust-side `XhrTextDecoder` trait, never a JS
+binding), even though the codec underneath -- every encoding family, every
+label, streaming decode, fatal/replacement handling -- has been complete
+since HTML-15. This made `encoding/` the largest fixable cluster in this
+lane's own paths by roughly two orders of magnitude, not `html/syntax/
+parsing`; picked it over the syntax cluster on that measurement rather than
+the brief's own naming order.
+
+### Fix: `TextDecoder`/`TextEncoder`, self-contained, no `amazing-bindings` edits
+
+`servo/html5ever` (the brief's suggested port source) is an HTML tree
+builder -- it has nothing resembling the Encoding Standard's `TextDecoder`/
+`TextEncoder` IDL surface, so no port applied here; this is a from-spec
+WebIDL wrapper over the already-complete `amazing-encoding` codec, plus one
+new dependency edge (`crates/amazing/Cargo.toml`: `amazing-encoding`, not
+previously a dependency of the driver binary).
+
+New file `crates/amazing/src/runtime_host_encoding.rs`, following
+`runtime_host_messaging.rs`'s own self-contained pattern exactly (its own
+brand-numbered host-object arena, `ENCODING_BRAND_BASE = 400` -- 100, 200 and
+300 are already taken by storage/messaging/net) rather than adding new
+`Interface`/`Operation` entries to `amazing-bindings::host` (dom-bindings'
+crate; every existing `Operation` variant referenced from this lane's own
+`runtime_host_html.rs` was confirmed pre-existing, added by whoever owns
+that file, never by an html-lane commit). The shared files touched are the
+same handful of lines every other lane's own driver file needed:
+`runtime_binding_host.rs` gets one `#[path=...] mod` line, one `NativeEntry`
+variant, one dispatch arm, one `BindingState` field, one `install_text_
+codec()` call in the top-level realm installer; `runtime_host_html.rs` (this
+lane's own file already) gets the matching call in the child-iframe-realm
+closure, next to `install_messaging()`.
+
+`TextDecoderState::decode` implements the spec's streaming/BOM/fatal
+algorithm directly against `amazing_encoding::Decoder::push`/`finish`: a
+`None` internal `decoder` slot means "not mid-stream" (matching the spec's
+"do not flush" flag), the decoder is taken out and either restored (`stream:
+true`) or dropped (`stream: false`) regardless of whether this call itself
+errors, and "BOM seen" is checked once against the first character of the
+first non-empty decoded chunk (equivalent to the spec's per-code-point check,
+since only the very first code point of the whole logical stream is ever a
+candidate). `TextEncoder.encode` reuses `JsString::to_utf8_lossy`'s existing
+lone-surrogate-to-U+FFFD replacement (`amazing-js`'s own WTF-16 `JsString`
+already implements exactly the USVString coercion this needed) and
+`Interpreter::binding_create_uint8_array`, both already-public `amazing-js`
+API -- no new surface needed there either.
+
+Nine new unit tests in `runtime_host_encoding.rs`: label defaulting,
+`decoder.encoding` normalization, BOM stripping vs. `ignoreBOM`, fatal
+`TypeError` vs. lenient U+FFFD, a byte sequence split across two `stream:
+true` calls, unknown-label `RangeError`, calling without `new` throws
+`TypeError`, `TextEncoder`'s fixed `"utf-8"` encoding and lone-surrogate
+replacement, and a non-UTF legacy label (`shift_jis`) round-trip.
+
+### What this does not cover
+
+- **`TextEncoder.prototype.encodeInto`**: needs to write into a *caller-
+  supplied* `Uint8Array`'s existing backing store in place; `amazing-js`'s
+  public binding surface (`binding_buffer_source_bytes`/`binding_create_
+  uint8_array`) only offers read-a-snapshot/allocate-fresh, and its
+  write-into-existing-view internals (`BinaryState`, `binary_view_bytes`,
+  ...) are private to that crate. Filed for js-binary in `questions.md`
+  rather than reached into.
+- **`TextDecoderStream`/`TextEncoderStream`**: the Streams-API transform-
+  stream wrappers. `grep -rl "ReadableStream\|WritableStream\|TransformStream"`
+  found nothing anywhere in the engine -- a separate, much bigger
+  cross-cutting gap, not specific to encoding.
+- **Non-`TextEncoder` legacy multi-byte encoding**: `gb18030-encoder.html`
+  (254 nonpass, the single largest file left after this fix),
+  `big5-enc-ascii.html` (123), `gbk-encoder.html` (49), `big5-encoder.html`
+  (13), `iso-2022-jp-encoder.html` (12) test encoding legacy multi-byte
+  charsets through a *different* mechanism than `TextEncoder` (which is
+  spec-fixed to UTF-8 only) -- almost certainly HTML form `accept-charset`
+  submission encoding. Unchanged before/after this ticket (confirmed via the
+  strict status diff below); a distinct, pre-existing, un-investigated gap,
+  not attempted here.
+- The `html/syntax/parsing` cluster measured above (adoption-agency-
+  reparenting-*-cycle.html timeouts, `clearing-the-stack-back-to-a-given-
+  context` table/table-body/table-row, various `template/` insertion-mode
+  edge cases) is untouched. Recommend it as the next ticket in this lane; it
+  is real but an order of magnitude smaller than `encoding/` was.
+
+### Gate
+
+`amazing` crate nextest: **364/364 passed, 6 skipped** (9 new unit tests; was
+355/355 at HTML-36). `amazing-html`: unchanged, **171/171 passed**.
+
+WPT (this ticket's own narrower 250-file selection -- `html/syntax/parsing` +
+`encoding/`, strict per-test status-map diff, same venus-001 host): **0 lost
+passes, +14 gained files** (all in `encoding/`); subtests **1,121 -> 12,310
+pass** (+11,189), **6,296 -> 922 fail** (-5,374). One fail-to-timeout churn
+(`encoding/single-byte-decoder.any.js`, already the third-largest cluster
+before this fix): before, all 336 of its subtests failed instantly
+(`TextDecoder is not defined`); after, `TextDecoder` actually does real
+per-byte decode work across every single-byte encoding in a tight loop, and
+the file now runs past the 10s harness deadline after completing 301
+subtests with 168 correct -- the exact same "real effect is in the subtest
+detail, not the file-level bucket" shape HTML-34 already documented for
+`named-character-references.html`, confirmed via the raw before/after subtest
+counts for this one file, not assumed. `html/syntax/parsing`'s own 39
+fail/26 timeout files are unchanged (this ticket did not touch tree
+construction).
+
+Workspace nextest: **3,447/3,447 passed, 17 skipped**, run twice with
+identical counts (dev moved since HTML-36's 3,407/3,407; no loss). Doctests:
+**31 crates, 0 FAILED**.
+
+Status: done.

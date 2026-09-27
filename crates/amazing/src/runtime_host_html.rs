@@ -508,6 +508,11 @@ impl RuntimeBindings {
             adapter.install_net()?;
             adapter.install_storage_interfaces()?;
             adapter.install_messaging()?;
+            // HTML-37: TextDecoder/TextEncoder are stateless-per-instance
+            // globals (no per-origin scoping unlike storage/net above), so
+            // installing them onto the child realm's own global object is
+            // safe the same way install_messaging() already is.
+            adapter.install_text_codec()?;
             adapter.install_iframe_members()?;
             adapter.install_html_form_globals()?;
             adapter.install_document_write_globals()?;

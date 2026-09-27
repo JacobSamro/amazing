@@ -47,6 +47,15 @@ use runtime_host_integrator_assist::{IaNativeEntry, IaRuntime};
 pub(crate) mod runtime_host_messaging;
 use runtime_host_messaging::MessagingOp;
 
+// HTML-37: TextDecoder/TextEncoder (WHATWG Encoding Standard). Owned by the
+// html lane -- `amazing-encoding` is this lane's own crate -- entirely
+// self-contained the same way runtime_host_messaging.rs is: its own
+// brand-numbered host-object arena, no amazing-bindings Interface/Operation
+// table entries. See docs/lanes/html_TODO.md (HTML-37).
+#[path = "runtime_host_encoding.rs"]
+mod runtime_host_encoding;
+use runtime_host_encoding::EncodingOp;
+
 use crate::dom_host::BrowserDomHost;
 use amazing_bindings::canvas_interfaces::{CanvasSlot, Member};
 use self::compositor::{CanvasObject, CanvasTarget};
@@ -77,6 +86,7 @@ enum NativeEntry {
     Messaging(MessagingOp),
     StorageLockSettled(u64, bool),
     IntegratorAssist(IaNativeEntry),
+    Encoding(EncodingOp),
 }
 
 enum WebObject {
@@ -125,6 +135,7 @@ struct BindingState {
     frames: html::FrameRuntime,
     pending_form_selection_events: Vec<NodeIdx>,
     messaging: Option<runtime_host_messaging::MessagingRealm>,
+    encoding: Option<runtime_host_encoding::EncodingRealm>,
     net: NetRuntime,
     integrator_assist: IaRuntime,
     /// HTML-29: per-document `document.write`/`writeln` insertion point.
@@ -638,6 +649,7 @@ pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> 
             NativeEntry::Messaging(op) => adapter.messaging_invoke(op, this, &args),
             NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
             NativeEntry::IntegratorAssist(entry) => adapter.invoke_integrator_assist(entry, this, &args),
+            NativeEntry::Encoding(op) => adapter.invoke_encoding(op, this, &args),
         }
     })
 }
@@ -686,6 +698,7 @@ pub(crate) fn install(
         frames: html::FrameRuntime::default(),
         pending_form_selection_events: Vec::new(),
         messaging: None,
+        encoding: None,
         net: NetRuntime::new(),
         integrator_assist: IaRuntime::new(),
         write_insertion_points: HashMap::new(),
@@ -703,6 +716,7 @@ pub(crate) fn install(
     adapter.install_navigator_clipboard()?;
     adapter.install_storage_interfaces()?;
     adapter.install_messaging()?;
+    adapter.install_text_codec()?;
     adapter.install_integrator_assist_globals()?;
     adapter.install_canvas()?;
     adapter.install_iframe_members()?;
