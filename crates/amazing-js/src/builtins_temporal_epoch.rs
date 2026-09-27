@@ -1349,12 +1349,7 @@ fn std_epoch_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, 
             let step = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?
                 * increment as i128;
             let rounded_ns = std_temporal_round_integer(total_ns, step, &mode)?;
-            // PARKED (2026-09-27): reverted to the ISO-only breakdown here --
-            // see the matching note at std_temporal_difference's calendar-
-            // native call sites (builtins_temporal_arithmetic.rs). Resume
-            // ZonedDateTime's own chinese/dangi since/until from the WIP
-            // commit once the bracket-search bug is root-caused.
-            std_temporal_epoch_breakdown(&first, std_temporal_epoch_ns(&first) + rounded_ns, &largest)?
+            std_temporal_epoch_breakdown_cal(&data.calendar, &first, std_temporal_epoch_ns(&first) + rounded_ns, &largest)?
         };
         std_temporal_validate(StdTemporalKind::Duration, &fields)?;
         if since { for field in &mut fields { *field = -*field; } }

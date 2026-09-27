@@ -18,6 +18,7 @@ the table, once per license.
 | [lucid-softworks/lumen](https://github.com/lucid-softworks/lumen) (`crates/lumen/src/coroutine.rs`, pooled-OS-thread generator coroutines) | `f6c9860d44fa52249cfd647122edea184d32c863` | MIT | Copyright (c) 2026 Lucid Softworks limited | `crates/amazing-js/src/interp_coroutine.rs` |
 | [lucid-softworks/lumen](https://github.com/lucid-softworks/lumen) (`crates/lumen/src/interpreter.rs` `drive_async`, `crates/lumen/src/coroutine.rs` `coroutine_await`: await-driven coroutine async functions) | `f6c9860d44fa52249cfd647122edea184d32c863` | MIT | Copyright (c) 2026 Lucid Softworks limited | `crates/amazing-js/src/interp_coroutine.rs` (JSVM-9) |
 | [lucid-softworks/lumen](https://github.com/lucid-softworks/lumen) (`crates/lumen/src/temporal.rs`) | `f6c9860d44fa52249cfd647122edea184d32c863` | MIT | Copyright (c) 2026 Lucid Softworks limited | `crates/amazing-js/src/builtins_temporal_calendar.rs` (JSS-calendars: non-ISO Temporal calendar math -- calendar id table/eras, coptic/ethiopic/ethioaa, islamic-civil/tbla/umalqura(approximated), indian, persian, hebrew, chinese/dangi) |
+| [lucid-softworks/lumen](https://github.com/lucid-softworks/lumen) (`crates/lumen/src/temporal.rs` `diff_date_cal`) | `f6c9860d44fa52249cfd647122edea184d32c863` | MIT | Copyright (c) 2026 Lucid Softworks limited | `crates/amazing-js/src/builtins_temporal_arithmetic.rs` (JSS-calendars: month-structure calendar-native since/until bracket search, replacing an ordinal-month-position search that mis-counted chinese/dangi) |
 
 ## MIT License
 
