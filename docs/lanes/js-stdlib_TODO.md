@@ -1653,3 +1653,104 @@ a local bug fix); 6 are an unrelated precision cluster not yet investigated
 `argument-duration-precision-exact-numerical-values.js` x2 add/subtract,
 `order-of-operations.js` x2 add/subtract). PlainYearMonth (29 files) is next
 per the coordinator's ordering.
+
+## JSS-temporal-port item 2 continued: PlainYearMonth cluster (checkpoint)
+
+| Selection | Before | After |
+|---|---|---|
+| `built-ins/Temporal` files | 4432 pass | 4472 pass |
+
++40 pass files, zero lost, verified by a full (path, variant) pass-set diff
+against the PlainTime-cluster baseline (`js-stdlib-pym-base.jsonl`). Workspace
+`cargo nextest run --workspace --locked --no-fail-fast`: 3399/3399 passed (3
+slow, 17 skipped). `cargo test --workspace --locked --doc`: all green
+(`amazing_js`/`amazing_html` doctests re-verified individually).
+
+Root causes fixed (all local bug fixes; no temporal_rs/lumen porting needed):
+
+- `std_temporal_validate` had no `ISOYearMonthWithinLimits` check at all --
+  `PlainYearMonth` only ever went through the day-precise
+  `PlainDate`/`PlainDateTime` range check (which does not apply to it) or no
+  range check beyond plain field bounds. Added the coarser year+boundary-month
+  check from the real spec algorithm (year -271821 requires month >= 4; year
+  275760 requires month <= 9).
+- `std_temporal_construct` read `PlainYearMonth`/`PlainMonthDay`'s trailing
+  `referenceISODay`/`referenceISOYear` argument BEFORE validating the
+  `calendar` argument, backwards from every constructor's own spec order
+  (calendar type-check/canonicalize always precedes both the trailing extra
+  argument's read and the final `IsValidISODate` check). Reordered; confirmed
+  by `PlainYearMonth`'s own `calendar-invalid.js`.
+- `std_temporal_yearmonth_to_date` (`toPlainDate`) set the day field directly
+  from the input without constraining it to the target month's length --
+  `toPlainDate` always uses `~constrain~` overflow (there is no overflow
+  option to read), so day 29 in a common-year February must clamp to 28, not
+  throw. Fixed to clamp into `[1, days_in_month]`.
+- `PlainYearMonth.prototype.add`/`.subtract` used the object's own
+  `referenceISODay` (not day 1) as the anchor for the month-arithmetic
+  overflow check, and never validated the day-1 anchor (before or after the
+  add) against the full day-precise `PlainDate` range -- per
+  `AddDurationToYearMonth`, the anchor is always day 1 of the month, and both
+  `CalendarDateFromFields` (before) and `CalendarDateAdd` (after) are gated by
+  `ISODateWithinLimits`, narrower at the two extreme years than
+  `PlainYearMonth`'s own limits. Fixed; confirmed by
+  `throws-if-year-outside-valid-iso-range.js` (throws even for a blank
+  duration, from materializing `-271821-04-01` alone).
+- `PlainYearMonth.prototype.since`/`.until` had only an ad hoc
+  `+-100_000_000` epoch-day sanity check, not the real
+  `CalendarDateFromFields`/`CalendarDateAdd`-style range gating, and rounded
+  by flattening the whole span to a single unit before re-splitting into
+  years+months -- disagreeing with the real per-unit rounding (an increment
+  coarser than a month rounds the *remainder after extracting whole years*,
+  not the flattened total; confirmed by
+  `roundingincrement-as-expected.js`'s "mixed with years" case, which needs
+  2y5mo, not 2y6mo). Also added: an early zero-duration return for equal
+  year-months (spec's own short-circuit, needed so `minYearMonth.since(
+  minYearMonth)` does NOT throw even though materializing its own day-1
+  anchor would), and a bracket-candidate range check gated to only run when
+  `smallestUnit != month || roundingIncrement != 1` (the real spec algorithm
+  skips its NudgeToCalendarUnit bracket search entirely for the default
+  case -- confirmed by two regressions caught and fixed in the same pass:
+  probing one unit past a valid boundary argument wrongly rejected it, and
+  `since`/`until`'s own `argument-string-limits.js` needed the bracket
+  search *disabled* for default options).
+- `std_temporal_bag`'s Duration-bag field reads used the natural years-down-
+  to-nanoseconds order instead of the spec's alphabetical order (days, hours,
+  microseconds, milliseconds, minutes, months, nanoseconds, seconds, weeks,
+  years) -- a pre-existing, previously-unnoticed bug affecting EVERY kind's
+  `.add()`/`.subtract()`/`.compare()`/`Duration.from()`, not just
+  PlainYearMonth's. Fixed the shared function; this alone fixed
+  `order-of-operations.js` for Duration, Instant, PlainDate, PlainDateTime,
+  PlainTime and PlainYearMonth's own add/subtract in one pass (part of the
+  +40, spanning kinds outside this cluster).
+- `std_temporal_bag`'s monthCode SUITABILITY check (a calendar-dependent
+  RangeError) ran immediately inside the shared bag reader, before any
+  caller could read/coerce an `overflow` option in between --
+  `CalendarYearMonthFromFields`/`CalendarDateFromFields` read
+  `GetTemporalOverflowOption` before running `CalendarResolveFields`'s own
+  suitability check. Split `std_temporal_bag` to return the raw
+  month/monthCode-text pair instead of resolving eagerly, added
+  `std_temporal_bag_resolve_month` for callers to invoke at the right point,
+  and deferred it past the overflow read in `.from()`'s bag branch only
+  (other call sites resolve immediately, matching their own existing,
+  untouched order). Fixed `options-read-before-algorithmic-validation.js`
+  for `.from()` across PlainDate, PlainDateTime, PlainMonthDay and
+  PlainYearMonth in one pass.
+- `std_temporal_to_string` unconditionally called the shared
+  fractionalSecondDigits/roundingMode/smallestUnit option reader even for
+  `PlainDate`/`PlainYearMonth`/`PlainMonthDay`, which have no time-of-day and
+  whose spec algorithms only ever call
+  `GetTemporalShowCalendarNameOption` -- reading (and finding absent) three
+  extra options is observable via a Proxy options bag. Skipped the call
+  entirely for those three kinds; fixed `toString/order-of-operations.js`
+  for PlainDate, PlainMonthDay and PlainYearMonth in one pass.
+
+Remaining PlainYearMonth-cluster files: 1
+(`from/month-code-wrong-type.js`), a deliberately-unresolved,
+previously-documented tradeoff (monthCode is read via `ToString` coercion to
+keep 13 passing `order-of-operations.js`-style tests; a TypeError-on-
+non-string read would flip this one test but regress those 13). Not
+revisited this checkpoint.
+
+PlainYearMonth cluster done. Remaining item2 clusters per the coordinator's
+ordering: PlainMonthDay (11 files, last surveyed), Instant (22 files), Now (8
+files).
