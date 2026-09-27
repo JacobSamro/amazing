@@ -211,6 +211,9 @@ enum Instruction {
     AsyncIteratorNext(Register, usize),
     AsyncIteratorDone(Register, usize, Register),
     AsyncIteratorValue(Register, Register),
+    /// for-await-of's value: awaited only for a sync iterator (CreateAsyncFromSyncIterator's
+    /// continuation); an async iterator's value is used as is. `(dst, slot, value)`.
+    AsyncIteratorAwaitValue(Register, usize, Register),
     AsyncIteratorClose(Register, usize),
     AsyncIteratorCloseCheck(Register),
     BindFor(ForLeft, Register),
@@ -287,7 +290,7 @@ struct VmFrame {
 
 enum AsyncIteratorState {
     Values { values: Vec<JsValue>, index: usize, exhausted: bool },
-    Iterator { value: JsValue, next: JsValue, exhausted: bool },
+    Iterator { value: JsValue, next: JsValue, exhausted: bool, sync: bool },
 }
 
 impl Drop for VmFrame {
@@ -1105,10 +1108,10 @@ impl Program {
                             if callable_function(&next).is_none() {
                                 return Err(Throw::type_error("async iterator next is not callable"));
                             }
-                            AsyncIteratorState::Iterator { value, next, exhausted: false }
+                            AsyncIteratorState::Iterator { value, next, exhausted: false, sync: false }
                         } else if let Some(value) = i.custom_iterator(&iterable)? {
                             let next = i.get_prop(&value, "next")?;
-                            AsyncIteratorState::Iterator { value, next, exhausted: false }
+                            AsyncIteratorState::Iterator { value, next, exhausted: false, sync: true }
                         } else {
                             AsyncIteratorState::Values { values: i.iterate(&iterable)?, index: 0, exhausted: false }
                         };
@@ -1144,6 +1147,16 @@ impl Program {
                     }
                     Instruction::AsyncIteratorValue(dst, source) => {
                         registers[*dst] = i.get_prop(&registers[*source], "value")?;
+                    }
+                    Instruction::AsyncIteratorAwaitValue(dst, slot, source) => {
+                        let is_async = matches!(async_iterators[*slot].as_ref(),
+                            Some(AsyncIteratorState::Iterator { sync: false, .. }));
+                        if is_async {
+                            registers[*dst] = registers[*source].clone();
+                        } else {
+                            *await_dst = Some(*dst);
+                            return Ok(None);
+                        }
                     }
                     Instruction::AsyncIteratorClose(dst, slot) => {
                         // AsyncIteratorClose preserves a pending throw over any
@@ -1204,7 +1217,7 @@ impl Program {
             }
             if await_dst.is_some() {
                 let value = match op {
-                    Instruction::Await(_, src) => registers[*src].clone(),
+                    Instruction::Await(_, src) | Instruction::AsyncIteratorAwaitValue(_, _, src) => registers[*src].clone(),
                     Instruction::YieldDelegateAsync(dst, _) => registers[*dst].clone(),
                     _ => unreachable!(),
                 };

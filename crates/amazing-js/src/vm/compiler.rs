@@ -564,7 +564,7 @@ impl Compiler {
                 let value = self.register(statement.span)?;
                 self.emit(Instruction::AsyncIteratorValue(value, result));
                 let awaited = self.register(statement.span)?;
-                self.emit(Instruction::Await(awaited, value));
+                self.emit(Instruction::AsyncIteratorAwaitValue(awaited, slot, value));
                 self.emit(Instruction::BindFor(left.clone(), awaited));
                 self.statement(body)?;
                 self.emit(Instruction::LeaveScope);
