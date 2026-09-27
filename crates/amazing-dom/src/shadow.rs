@@ -189,6 +189,31 @@ impl Dom {
         }
         result
     }
+    /// DOM Standard "host-including inclusive ancestor": like
+    /// `shadow_including_ancestors`, but a template-contents `DocumentFragment`
+    /// also hops to its owning `<template>` element when its own tree is
+    /// exhausted, alongside a shadow root hopping to its host. Used by the
+    /// tree builder's adoption-agency algorithm to detect a would-be cycle
+    /// crossing a shadow or template-content boundary before performing a
+    /// move that a plain same-tree ancestor walk would miss.
+    pub fn host_including_ancestors(&self, node: NodeIdx) -> Vec<NodeIdx> {
+        let mut result = Vec::new();
+        let mut cursor = Some(node);
+        while let Some(id) = cursor {
+            result.push(id);
+            cursor = self.get(id).parent
+                .or_else(|| self.shadow_data(id).map(|data| data.host))
+                .or_else(|| self.template_of_contents(id));
+        }
+        result
+    }
+    /// Whether `candidate` is a host-including inclusive ancestor of `node`
+    /// (DOM Standard): `candidate` is `node` itself, an ordinary ancestor, or
+    /// reached by additionally crossing a shadow-root-to-host or
+    /// template-contents-to-owning-template boundary.
+    pub fn is_host_including_inclusive_ancestor(&self, candidate: NodeIdx, node: NodeIdx) -> bool {
+        self.host_including_ancestors(node).contains(&candidate)
+    }
     pub fn shadow_including_tree_order(&self, root: NodeIdx) -> Vec<NodeIdx> {
         let mut result = Vec::new();
         let mut stack = vec![root];

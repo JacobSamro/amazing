@@ -1411,9 +1411,37 @@ impl TreeBuilder {
             // Move lastNode to the adjusted insertion location for the
             // common ancestor. This is foster-parented when the agency was
             // entered through the table fallback rules.
+            //
+            // Two ways this can go wrong once a script has mutated the tree
+            // from underneath this algorithm (the open-elements stack still
+            // points at nodes script may have relocated before the parser
+            // resumed):
+            //
+            // - The insertion location can end up inside `last_node`'s own
+            //   subtree (e.g. a formatting element's furthest block got
+            //   re-parented into one of its own descendants via a shadow
+            //   root or a `<template>`'s inert contents). Performing the
+            //   move as written would create a cycle -- attach a node under
+            //   itself.
+            // - Foster-parenting resolves `parent` from the last `<table>`
+            //   on the stack's *current* DOM parent, which script can have
+            //   replaced with a `Document` that already has a document
+            //   element (e.g. moving that `<table>` into a second, freshly
+            //   created `Document`). A `Document` may only ever have one
+            //   element child.
+            //
+            // Both are a no-op per the general "insert a node" step the
+            // spec's tree construction relies on throughout, which silently
+            // drops a node whose target has become unreachable or already
+            // full rather than erroring; `last_node` is left detached.
             self.dom.detach(last_node);
             let (parent, before) = self.adjusted_insertion_place_for(common);
-            self.dom.attach_before(parent, before, last_node);
+            let cyclic = self.dom.is_host_including_inclusive_ancestor(last_node, parent);
+            let document_full = matches!(self.dom.get(parent).kind, NodeKind::Document)
+                && self.dom.document_element(parent).ok().flatten().is_some();
+            if !cyclic && !document_full {
+                self.dom.attach_before(parent, before, last_node);
+            }
 
             // Clone the formatting element; adopt furthest block's children.
             let (fname, fattrs) = self.elem_name_attrs(fe_idx);

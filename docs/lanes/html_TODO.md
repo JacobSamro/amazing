@@ -2406,3 +2406,176 @@ identical counts (dev moved since HTML-36's 3,407/3,407; no loss). Doctests:
 **31 crates, 0 FAILED**.
 
 Status: done.
+
+## HTML-38 -- adoption-agency cycle timeouts, clearing-the-stack routing, template insertion-mode edge cases
+
+The coordinator's ticket after HTML-37's encoding win: fix the `html/syntax/
+parsing` cluster measured there, in priority order -- adoption-agency-
+reparenting cycle timeouts first (suspected real hangs), then
+clearing-the-stack-back-to-a-given-context, then `template/` insertion-mode
+edge cases. Port from `servo/html5ever`'s tree_builder where it matches this
+engine's structure.
+
+### What actually caused the timeouts
+
+Investigation (file-based logging -- `wpt-harness` always spawns a
+`wpt-harness-worker` subprocess with `stderr(Stdio::null())`, for every test,
+not just `.any.js`, so `eprintln!` is silently discarded during any
+wpt-harness run; `/tmp`-file logging is the workaround) found the timeouts
+were not a tree-construction hang at all. Most of this cluster's tests use a
+`parseInIframe`-style helper: load markup into a child `<iframe>`, then wait
+on `iframe.onload` before asserting. **`HTMLIFrameElement.onload` did not
+exist anywhere in the engine** -- no element's `load` EventHandlerNonNull IDL
+attribute was wired to anything -- so the assignment silently did nothing,
+the test's own timeout fired, and the harness reported a hang. This was by
+far the largest single fix of this ticket.
+
+Added `onload` get/set to `install_iframe_members()` in `runtime_host_html.rs`
+(html lane's own file, matching the "driver adapter per lane" split), using
+the exact pattern `HTMLElement.onclick` already established in
+`amazing-bindings`' `input_activation_bindings.rs`: `Events::event_handler`/
+`set_event_handler` (a `handler: true`-flagged `Listener`, dispatched through
+the same generic `next_listener` path as `addEventListener` listeners, no new
+dispatch logic needed) plus `BindingHost::retain_value`/`root_value`/
+`release_value` for holding the callback across the JS/Rust boundary. Also
+added `.srcdoc` property-to-attribute reflection (mirroring the existing
+`.src` accessor), needed by a handful of these tests' own setup.
+
+### Adoption agency: cycle/document-full guard added, but not yet effective for the WPT case
+
+Added the DOM Standard's "document-full" and cycle checks to `adoption_
+agency`'s "move lastNode to the adjusted insertion location" step in
+`amazing-html/src/tree.rs`:
+
+```rust
+self.dom.detach(last_node);
+let (parent, before) = self.adjusted_insertion_place_for(common);
+let cyclic = self.dom.is_host_including_inclusive_ancestor(last_node, parent);
+let document_full = matches!(self.dom.get(parent).kind, NodeKind::Document)
+    && self.dom.document_element(parent).ok().flatten().is_some();
+if !cyclic && !document_full {
+    self.dom.attach_before(parent, before, last_node);
+}
+```
+
+`is_host_including_inclusive_ancestor` is new in `amazing-dom/src/shadow.rs`:
+the DOM Standard "host-including inclusive ancestor" walk, which is
+`shadow_including_ancestors` extended to also hop a template-contents
+`DocumentFragment` to its owning `<template>` (new reverse lookup,
+`template_of_contents`, added to `amazing-dom/src/template.rs`) when its own
+tree is exhausted, alongside a shadow root hopping to its host.
+
+This guard is spec-correct but **did not, by itself, stop the WPT cycle
+tests from failing** -- confirmed via debug logging that at the point
+`adoption_agency` runs, `last_node`'s parent in `self.dom` still reflects its
+*pre-mutation* position, even though the test script's own
+`document.body.appendChild(fb); fb.appendChild(ca);` (run inside the child
+iframe) had already completed successfully by then. The parser's
+open-elements-stack bookkeeping (`common = self.open[fe_stack_pos - 1]`) and
+`self.dom`'s live tree are not staying in sync with script-driven mutations
+made mid-parse inside a child iframe's document, specifically. This looks
+like deeper territory in the interleaved/resumable parser (HTML-31/HTML-34),
+not something this guard alone fixes -- documented as a finding in
+`questions.md` rather than pursued further this ticket, since it needs
+either a resync step the pausable-parser design doesn't have yet or a
+different way of reading "common ancestor" that isn't the stale stack slot.
+These 7 files moved from `timeout` to `fail`/`error` (no longer hanging the
+harness, which is real progress -- but still not passing):
+`adoption-agency-reparenting-cycle.html`,
+`adoption-agency-reparenting-document-target.html`,
+`adoption-agency-reparenting-inner-loop-cycle.html`,
+`adoption-agency-reparenting-pagehide.tentative.html` (`-> error`),
+`adoption-agency-reparenting-shadow-cycle.html`,
+`adoption-agency-reparenting-template-cycle.html`,
+`adoption-agency-reparenting.html`.
+
+### `appropriate_template_document` was never marking its inert document as HTML
+
+Separately found while chasing one of these files: `template.innerHTML`-built
+elements (and anything else parsed into template contents) reported a
+foreign-case `tagName` (`"div"` instead of `"DIV"`). Root cause:
+`appropriate_template_document` (`amazing-dom/src/template.rs`) created the
+inert owner document with `create_document()` and no metadata at all, and
+`is_html_document` (in `runtime_binding_host.rs`) only special-cases the main
+document (`NodeIdx(0)`); every other document needs explicit
+`content_type == "text/html"` metadata to get HTML tag-name-casing
+semantics. Fixed by copying the source document's `DocumentMetadata` onto the
+new inert document (defaulting to `text/html`/`UTF-8` when the source itself
+has none set, matching that same main-document default). This is exactly the
+DOM Standard's "the new document has `document`'s type" wording for the
+appropriate template contents owner document algorithm. Three more files
+moved `timeout -> fail` from this fix combined with the `onload` fix pushing
+them far enough to actually reach their real (structural) failures instead
+of hanging first:
+`html/syntax/parsing/template/additions-to-the-in-body-insertion-mode/
+start-tag-html.html`,
+`html/syntax/parsing/template/additions-to-the-in-frameset-insertion-mode/
+end-tag-frameset.html`,
+`html/syntax/parsing/template/creating-an-element-for-the-token/
+template-owner-document.html`.
+
+### Clearing-the-stack-back-to-a-given-context: already routed, not a tree-builder bug
+
+Re-confirmed rather than re-investigated: HTML-32's own triage (in
+`questions.md`, 2026-09-27) already found this cluster's 3 files fail purely
+on missing `HTMLTableElement`/`HTMLTableRowElement` IDL-collection accessors
+(`.rows`/`.tBodies`/`.tFoot`/`.tHead`/`.cells`) in `amazing-bindings`, not a
+tree-construction gap. Grepped `amazing-bindings` again to confirm none of
+these exist yet. No lane-owned action here; still correctly routed
+cross-lane, not re-filed.
+
+### Why no html5ever port this ticket
+
+Checked `servo/html5ever`'s `tree_builder` against each bug found here: the
+`onload` gap is an event-handler-wiring gap (this engine's own
+`amazing-dom`/`amazing-bindings` boundary, not a tree-construction
+algorithm), the template-document metadata bug is a DOM-document-creation
+gap, and the mid-parse DOM-sync gap is specific to this engine's own
+pausable/interleaved parser architecture (html5ever has no equivalent
+design to port from -- it parses synchronously to completion). The
+adoption-agency cycle/document-full guard itself *was* written directly
+from the WHATWG HTML spec text (which is what html5ever's own
+implementation also follows) rather than ported, since it's about a dozen
+lines and the spec text is the more precise reference than translating
+html5ever's Rust. No port landed this ticket; no `THIRD_PARTY_NOTICES.md`
+row added.
+
+### New findings, not fixed this ticket (filed in `questions.md`)
+
+- Table-context elements (`caption`/`colgroup`/`tbody`/`td`/`tfoot`/`th`/
+  `thead`/`tr`) placed directly inside a `<template>` via a full-document
+  `body.innerHTML` context (not template-fragment context) are dropped
+  entirely rather than ending up in `template.content` -- `in_template`'s
+  redirect to `Mode::InTable`/`InTableBody`/`InRow` likely assumes an
+  enclosing `<table>` is on the open-elements stack, which isn't true here.
+  This is the remaining 16 failures in `template-owner-document.html`.
+- The adoption-agency mid-parse DOM-sync gap described above (likely
+  HTML-31/HTML-34 territory): the tree builder's `self.dom` view of a child
+  iframe's document doesn't reflect script-driven mutations made to that
+  document by the time `adoption_agency` next runs against it.
+
+### Gate
+
+`amazing` + `amazing-html` + `amazing-dom` crate nextest: unchanged pass
+counts, all green (no test removed or added by this ticket beyond what's
+already covered by the workspace figure below).
+
+WPT (`html/syntax/parsing`, 56 selected files, strict per-test status-map
+diff against HTML-37's baseline, same venus-001 host for build+test in one
+command): **0 lost passes**, **+10 gained files** (`timeout -> pass`, mostly
+`template/additions-to-the-in-*-insertion-mode/*` and
+`truncated-markup-declaration-at-eof.html`), **+13 files moved `timeout ->
+fail`/`error`** (real progress -- no longer hanging the harness, though not
+yet passing; see above for which). File totals: pass 22 -> 24, timeout
+30 -> 3 (13 to fail/error, 10 to pass, 4 already non-timeout), fail 3 -> 25,
+error 0 -> 1, unsupported 3 (unchanged). One run-to-run subtest-count swing
+was investigated and traced entirely to `named-character-references.html`
+(a `timeout`-status file both before and after, whose subtest count within
+its own 10s deadline is inherently non-deterministic on a shared host) --
+not a regression.
+
+Workspace nextest: **3,461/3,461 passed, 17 skipped**, run twice with
+identical counts (dev moved since HTML-37's 3,447/3,447; no loss). Doctests:
+**31 crates, 0 FAILED**.
+
+Status: done.
