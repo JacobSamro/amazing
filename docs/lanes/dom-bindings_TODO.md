@@ -2789,3 +2789,133 @@ not defined` (a declarative-shadow-attach-skip or window-named-access gap
 specific to `<template>`, not triaged further).
 
 Evidence: `crates/amazing-bindings/evidence/dom-18-shadow-roots/combined-followup/`.
+
+## innerhtml-on-ordinary-template.html ReferenceError: root cause + partial fix (fixed base ffdde5a3)
+
+Root-caused via a minimal repro (two standalone probe pages run directly
+through `amazing wpt-harness` against a scratch root, not committed).
+Neither of the two hypotheses from the prior escalation was the actual
+shape of the bug:
+
+1. Declarative-shadow-attach-skip-when-host-already-has-a-shadow-root
+   already works correctly (confirmed empirically) -- not the bug.
+2. Not `<template>`-specific at all: a bare `<div id=x>` followed
+   immediately by a sibling `<script>` with **zero** intervening DOM API
+   calls never sees `window.x`, full stop.
+
+**Real root cause**: `with_dom`'s dirty-flag refresh
+(`runtime_binding_host.rs`) is the only place window's named properties
+(HTML SS7.2.2.3) get recomputed, and it only runs when some DOM-mutating
+JS *binding call* happens. A parser-driven insertion sets the dirty flag
+without ever passing through `with_dom`; if the next thing that runs is a
+script whose first statement is a bare global read with no DOM call
+before it, the refresh never fires in time.
+
+**Fixed here**: added `RuntimeBindingHost::sync_window_named_access`
+(`pub(crate)`, one-line wrapper around `with_dom(|_| Ok(()))` -- reuses the
+existing dirty-check, no duplicated logic), ready to call.
+**Not fixed here, escalated**: the actual call site. Every place that runs
+a parser-encountered `<script>` lives in `runtime_host_html.rs` (html
+lane's file) and `amazing-html`'s tree builder is outside this lane's
+granted paths; wiring one call to `sync_window_named_access()` immediately
+before each `run_script`/`i.run_script` call there (9 call sites, listed
+with line numbers in `questions.md`) needs html lane or the integrator.
+
+**Gate**: workspace `cargo nextest run --workspace --locked --no-fail-fast`
+-- **3482 passed / 17 skipped / 0 failed**; doctests all `ok`. Crate:
+`amazing` + `amazing-bindings` + `amazing-dom` **736/736 passed, 6
+skipped**. No WPT corpus re-measurement this ticket -- the fix has no call
+site yet, so the target file's outcome is unchanged; a re-measurement
+before the wiring lands would show zero movement and be misleading
+evidence, not real signal.
+
+Evidence: `crates/amazing-bindings/evidence/window-named-access-script-timing/`.
+
+## setHTMLUnsafe: implement the missing Element/ShadowRoot method (base fa514dc9)
+
+`Element`/`ShadowRoot.setHTMLUnsafe(html, options?)` (HTML Sanitizer API) was
+entirely absent -- no `Operation` variant, no interface member -- so every WPT
+test calling it crashed with `TypeError: value is not callable`, aborting the
+whole test file before any assertion ran. Next actionable item from the
+`declarative-shadow-dom-basic.html` remaining-failures queue entry.
+
+**Fix**: added `O::ElementSetHTMLUnsafe` (`host.rs`), routed in
+`markup_bindings.rs` into the exact same fragment-replacement body as
+`O::ElementSetInnerHTML` (this engine has no sanitizer either way, so "skip
+sanitizing" and the ordinary setter currently behave identically), declared
+`method("setHTMLUnsafe", O::ElementSetHTMLUnsafe, 1)` on both `ELEMENT` and
+`SHADOW_ROOT` in `interfaces.rs`. Options argument is accepted but ignored (no
+sanitizer to apply against).
+
+**Escalated, not fixed here**: `amazing_html::parse_fragment` has no way to
+enable declarative shadow roots (`build_fragment` in `tree.rs` hardcodes
+`allow_declarative_shadow_roots = false` for every fragment parse), so
+`<template shadowrootmode=open>` markup passed to `setHTMLUnsafe` still
+becomes an ordinary leftover template rather than an attached shadow root.
+Routed to `questions.md` with a proposed non-breaking sibling function
+(`parse_fragment_with_shadow_roots`) -- `amazing-html` is outside this lane's
+granted paths. Once it lands, this lane's `FragmentParser` trait in `host.rs`
+needs a second method/parameter to expose it to `markup_bindings.rs`.
+
+**Measured** (venus-001, freshly rebuilt release binary both sides, fixed base
+`fa514dc9`): `declarative-shadow-dom-basic.html` fail{pass:15,fail:7} ->
+fail{pass:17,fail:5} (the 7 crashes gone; 5 remaining fail for the exact
+escalated reason above). `declarative-shadow-dom-attachment.html`: 0/654 pass
+-> 586/68 pass -- large genuine improvement, this file exercises
+`setHTMLUnsafe` heavily. Whole-`shadow-dom/declarative` (56 files) naive diff
+showed 588 gained/608 lost; the entire "lost" figure traces to `gethtml.html`
+alone, an auto-generated page whose retained-pass count is a function of a
+hard wall-clock worker-deadline timeout, not correctness (three consecutive
+runs of the same unchanged binary against that one file gave 1216, 608, and
+530 passes) -- not usable as a before/after signal, not a regression.
+
+**Gate**: workspace `cargo nextest run --workspace --locked --no-fail-fast` --
+**3482 passed / 17 skipped / 0 failed**; doctests all `ok`. Crate:
+`amazing` + `amazing-bindings` + `amazing-dom` **736/736 passed, 6 skipped**.
+
+Evidence: `crates/amazing-bindings/evidence/set-html-unsafe/`.
+
+## observable-takeUntil.any.js: investigated, root cause found, fix reverted (base d7103c5b)
+
+Took this from the queued-tickets backlog under "keep batching". Two findings, no code landed
+(working tree is clean, back to `d7103c5b`) -- this section exists so the investigation isn't
+repeated.
+
+**Finding 1 (why the target file can't even be measured)**: `observable-takeUntil.any.js` errors
+as a whole page (`status: error, harness_status: null, detail: "[object]"`) before any subtest
+runs -- confirmed identical on base and on every variant tried. `"[object]"` traces to
+`Throw::describe()` (`crates/amazing-js/src/value.rs:454`) formatting a thrown plain object with no
+string `name`/`message`. Something throws a non-Error object during this file's setup/execution,
+and `cmd/wpt_harness.rs`'s page driver treats it as fatal despite the file's own
+`setup({allow_uncaught_exception: true})`. Not triaged further (no panic, no backtrace -- a real JS
+throw, not a Rust crash). `dom/observable` corpus can't validate anything about `takeUntil`
+specifically until this is fixed first.
+
+**Finding 2 (the obvious per-spec fix regresses 9 other files, reverted)**: implemented the WICG
+Observable spec's SS4.1 step 4 exactly ("if the initializer's abrupt completion, invoke
+Subscriber's error() with the value") -- a new `BindingHost::caught_value` trait method plus a
+`catch_to_error` helper wired into `Producer::Js`. Crate/workspace gates stayed green (no unit test
+anywhere exercises this path). Measured `dom/observable` (29 files), base `d7103c5b`, two
+independent runs per side to rule out host-load noise: base 100% stable both runs; the fix
+reproducibly (both its own runs agree) flips 9 files from real `fail{pass:N,...}` counts to a
+full-file `timeout{pass:0,fail:0}` hang (`observable-every/-find/-first/-forEach/-forEach.window/
+-last/-reduce/-some/-toArray/-map.window`), while gaining 3 real passes on
+`observable-constructor.any.js` and leaving the actual target file (`takeUntil.any.js`) completely
+unaffected (blocked by finding 1). Root cause of the hang not found within budget. **Reverted**
+rather than trade one broken file for nine newly broken ones under a gate that can't see it (no
+Observable unit tests exist to catch this at the crate level -- a gap worth closing before anyone
+touches `observable_bindings.rs` again).
+
+**Finding 3 (a larger, separate spec-conformance gap, not attempted)**: `notify_terminate`
+(`observable_bindings.rs`) forwards to observers *before* running teardowns and aborting its own
+signal; the live WICG spec's "close a subscription" (invoked by `Subscriber#error()`/`#complete()`
+*before* forwarding to observers) does the opposite order: abort signal, run teardowns LIFO, *then*
+forward. Also, `relay_forward`'s `RelayKind::TakeUntilNotifier` arm maps notifier `Error` to an
+outer *error* and notifier's own `Complete` to an outer *complete*; spec has notifier's error steps
+call the outer's *complete()* (not error), and leaves notifier's own complete steps unspecified (a
+no-op, source keeps mirroring uninterrupted) -- confirmed by the WPT file's own asserted results
+array. Both are real, but reordering `notify_terminate` changes every operator's callback ordering
+project-wide and needs a full `dom/observable` before/after gate to attempt safely -- out of this
+ticket's budget. Full detail, including the exact spec quotes and reproduction commands, is in
+`.agents/dom-bindings/questions.md` (not git-tracked; ask the lane agent or re-derive from this
+entry plus the WICG Observable spec at https://wicg.github.io/observable/ if picking this up later).

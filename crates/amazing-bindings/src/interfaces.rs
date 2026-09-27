@@ -511,6 +511,7 @@ const ELEMENT: &[Member] = &[
     getter("slot", O::ElementSlot), setter("slot", O::ElementSetSlot),
     getter("innerHTML", O::ElementInnerHTML), setter("innerHTML", O::ElementSetInnerHTML),
     method("getHTML", O::ElementGetHTML, 0),
+    method("setHTMLUnsafe", O::ElementSetHTMLUnsafe, 1),
     getter("outerHTML", O::ElementOuterHTML), setter("outerHTML", O::ElementSetOuterHTML),
     method("insertAdjacentHTML", O::ElementInsertAdjacentHTML, 2),
     method("insertAdjacentElement", O::ElementInsertAdjacentElement, 2),
@@ -641,6 +642,7 @@ const SHADOW_ROOT: &[Member] = &[
     getter("serializable", O::ShadowSerializable),
     getter("innerHTML", O::ElementInnerHTML), setter("innerHTML", O::ElementSetInnerHTML),
     method("getHTML", O::ElementGetHTML, 0),
+    method("setHTMLUnsafe", O::ElementSetHTMLUnsafe, 1),
 ];
 const SLOT: &[Member] = &[
     getter("name", O::SlotName), setter("name", O::SlotSetName),
