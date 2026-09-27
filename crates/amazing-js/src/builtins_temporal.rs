@@ -408,9 +408,40 @@ fn std_temporal_week_start(year: i64) -> i64 {
 fn std_temporal_validate(kind: StdTemporalKind, values: &[i64; 10]) -> Result<(), Throw> {
     if kind == StdTemporalKind::Duration {
         let sign = values.iter().find(|v| **v != 0).map(|v| v.signum()).unwrap_or(0);
+        // years/months/weeks are each independently capped at 2**32-1 (no
+        // relationship to the time part). days-through-nanoseconds are NOT
+        // capped per field -- each can individually run into the
+        // quadrillions once expressed in a fine-enough unit -- instead the
+        // spec caps the *exact total* of that whole day..ns span, expressed
+        // in seconds, to the float64-safe-integer range (with up to
+        // .999999999 of a further second, since nanosecond precision is
+        // kept exactly). Confirmed by Duration/max.js (the largest legal
+        // days/hours/minutes/seconds cases, none of which are individually
+        // under 2**32) and Duration/out-of-range.js (one unit step past
+        // each threshold, including a finer unit balancing into the next).
+        const STD_TEMPORAL_DURATION_MAX_NS: i128 = 9_007_199_254_740_991 * 1_000_000_000 + 999_999_999;
+        let total_ns: i128 = values[3] as i128 * STD_TEMPORAL_NS_DAY
+            + values[4] as i128 * 3_600 * STD_TEMPORAL_NS_SECOND
+            + values[5] as i128 * 60 * STD_TEMPORAL_NS_SECOND
+            + values[6] as i128 * STD_TEMPORAL_NS_SECOND
+            + values[7] as i128 * 1_000_000
+            + values[8] as i128 * 1_000
+            + values[9] as i128;
+        // Days is bounded only by the total (a days-only span can already
+        // run past 2**32-1 while its total in seconds is still safely in
+        // range, e.g. Duration/max.js's "max days" case), but
+        // hours-through-nanoseconds ALSO each keep an individual
+        // float64-safe-integer cap on top of the total: once BalanceDuration
+        // collapses everything into a single requested largestUnit (e.g.
+        // `.round({largestUnit: "nanoseconds"})`), that one surviving field
+        // must itself be representable, even though the exact total
+        // expressed in seconds is still within the total-based bound --
+        // confirmed by
+        // round/out-of-range-when-converting-from-normalized-duration.js.
         if values.iter().any(|v| *v != 0 && v.signum() != sign)
-            || values[..4].iter().any(|v| v.abs() > 4_294_967_295)
-            || values[4..].iter().any(|v| v.abs() > 9_007_199_254_740_991) {
+            || values[..3].iter().any(|v| v.abs() > 4_294_967_295)
+            || values[4..].iter().any(|v| v.abs() > 9_007_199_254_740_991)
+            || total_ns.abs() > STD_TEMPORAL_DURATION_MAX_NS {
             return Err(Throw::range_error("invalid Temporal duration"));
         }
         return Ok(());
@@ -499,6 +530,12 @@ fn std_temporal_property(i: &mut Interpreter, value: &JsValue, name: &str) -> Re
     else { std_temporal_number(i, property, None).map(Some) }
 }
 
+// Reads the property bag's fields (and validates their raw types) but does
+// NOT regulate out-of-range values or run the final ISO-validity check --
+// that half depends on the overflow option, which for Temporal.*.from() must
+// be read from a *different* object (options) only after these gets on
+// `value` complete (Proxy-observable order). std_temporal_regulate below
+// applies the overflow-dependent half once the caller knows it.
 fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue) -> Result<[i64; 10], Throw> {
     let mut fields = [0; 10];
     if !matches!(kind, StdTemporalKind::Duration | StdTemporalKind::PlainTime) {
@@ -516,6 +553,10 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
             }
         }
         if !present { return Err(Throw::type_error("duration-like object has no fields")); }
+        // Duration never takes an overflow option; its range check is
+        // unconditional, so it runs here rather than in std_temporal_regulate.
+        std_temporal_validate(kind, &fields)?;
+        return Ok(fields);
     } else if kind == StdTemporalKind::PlainTime {
         let mut present = false;
         for (index, name) in ["hour", "minute", "second", "millisecond", "microsecond", "nanosecond"].iter().enumerate() {
@@ -528,6 +569,14 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
     } else {
         let year = std_temporal_property(i, value, "year")?;
         let month = std_temporal_property(i, value, "month")?;
+        // PrepareCalendarFields reads "month" and "day" via
+        // ToPositiveIntegerWithTruncation: a value less than 1 throws a
+        // RangeError immediately, unconditionally of the overflow option --
+        // unlike the *upper* bound (month > 12, day > days-in-month), which
+        // std_temporal_regulate below applies only once overflow is known.
+        if month.is_some_and(|value| value < 1) {
+            return Err(Throw::range_error("month must be a positive integer"));
+        }
         let month_code = i.get_prop(value, "monthCode")?;
         let code_month = if month_code.is_undefined() { None } else {
             let code = i.to_string(&month_code)?;
@@ -540,6 +589,9 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
             return Err(Throw::range_error("month and monthCode disagree"));
         }
         let day = std_temporal_property(i, value, "day")?;
+        if day.is_some_and(|value| value < 1) && kind != StdTemporalKind::PlainYearMonth {
+            return Err(Throw::range_error("day must be a positive integer"));
+        }
         fields[0] = if matches!(kind, StdTemporalKind::PlainMonthDay | StdTemporalKind::PlainTime) { 0 } else {
             year.ok_or_else(|| Throw::type_error("year is required"))?
         };
@@ -561,8 +613,35 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
             }
         }
     }
-    std_temporal_validate(kind, &fields)?;
     Ok(fields)
+}
+
+// RegulateISODate / RegulateISOYearMonth / RegulateISOMonthDay / RegulateTime:
+// under "constrain" (reject == false), out-of-range month/day/time fields
+// clamp into range; under "reject" this is a no-op and the unconditional ISO
+// validity check in std_temporal_validate (called by every caller right after
+// this) throws instead. Split out of std_temporal_bag so a caller that needs
+// to read the overflow option from a *different* object first (Temporal.*.
+// from(item, options)) can do so between extracting item's fields and
+// regulating them, matching spec (and Proxy-observable) property-read order.
+fn std_temporal_regulate(kind: StdTemporalKind, fields: &mut [i64; 10], reject: bool) {
+    if reject || kind == StdTemporalKind::Duration { return; }
+    if kind == StdTemporalKind::PlainTime {
+        fields[3] = fields[3].clamp(0, 23);
+        fields[4] = fields[4].clamp(0, 59);
+        fields[5] = fields[5].clamp(0, 59);
+        for field in &mut fields[6..9] { *field = (*field).clamp(0, 999); }
+        return;
+    }
+    fields[1] = fields[1].clamp(1, 12);
+    let actual_year = if kind == StdTemporalKind::PlainMonthDay { fields[9] } else { fields[0] };
+    fields[2] = fields[2].clamp(1, std_temporal_days_in_month(actual_year, fields[1]));
+    if kind == StdTemporalKind::PlainDateTime {
+        fields[3] = fields[3].clamp(0, 23);
+        fields[4] = fields[4].clamp(0, 59);
+        fields[5] = fields[5].clamp(0, 59);
+        for field in &mut fields[6..9] { *field = (*field).clamp(0, 999); }
+    }
 }
 
 fn std_temporal_parse_date(text: &str, require_day: bool) -> Result<(i64, i64, i64, &str), Throw> {
@@ -810,7 +889,7 @@ fn std_temporal_validate_relative_to_offset(text: &str) -> Result<(), Throw> {
     Ok(())
 }
 
-fn std_temporal_from_fields(i: &mut Interpreter, kind: StdTemporalKind, value: JsValue) -> Result<[i64; 10], Throw> {
+fn std_temporal_from_fields(i: &mut Interpreter, kind: StdTemporalKind, value: JsValue, reject: bool) -> Result<[i64; 10], Throw> {
     if let Ok(data) = std_temporal_record(&value, Some(kind)) { return Ok(data.fields); }
     if let Ok(data) = std_temporal_record(&value, None) {
         let compatible = matches!((kind, data.kind),
@@ -841,24 +920,53 @@ fn std_temporal_from_fields(i: &mut Interpreter, kind: StdTemporalKind, value: J
     }
     match &value {
         JsValue::Str(text) => std_temporal_parse(kind, &text.to_utf8_lossy()),
-        JsValue::Object(_) => std_temporal_bag(i, kind, &value),
+        JsValue::Object(_) => {
+            let mut fields = std_temporal_bag(i, kind, &value)?;
+            std_temporal_regulate(kind, &mut fields, reject);
+            std_temporal_validate(kind, &fields)?;
+            Ok(fields)
+        }
         _ => Err(Throw::type_error("invalid Temporal input")),
     }
 }
 
 fn std_temporal_from(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTemporalKind) -> Result<JsValue, Throw> {
-    let fields = std_temporal_from_fields(i, kind, std_reflect_arg(&args, 0))?;
-    // Every plain type except Duration takes an options bag; validating it here
-    // surfaces both a wrong options type and an invalid overflow value.
-    if kind != StdTemporalKind::Duration {
-        std_temporal_overflow(i, std_reflect_arg(&args, 1))?;
-    }
+    let item = std_reflect_arg(&args, 0);
+    // Three input shapes read `item` and `options` in different, spec-fixed
+    // (and Proxy-observable) orders:
+    //  - a plain property bag: PrepareCalendarFields reads item's own
+    //    properties BEFORE GetTemporalOverflowOption touches options;
+    //  - a string: ParseISODate(item) runs (and can throw RangeError for bad
+    //    syntax) BEFORE options is examined at all;
+    //  - anything else (an existing Temporal record, or a ZonedDateTime being
+    //    converted): GetTemporalOverflowOption(options) is validated first,
+    //    and only then is the already-fully-specified result produced/cloned.
+    // Only the bag case actually lets overflow's *value* affect the result;
+    // the other two validate-and-discard it, matching the original behavior.
+    let is_bag = kind != StdTemporalKind::Duration && item.is_object()
+        && std_temporal_record(&item, None).is_err()
+        && std_epoch_record(&item, Some(StdEpochKind::ZonedDateTime)).is_err();
+    let fields = if is_bag {
+        let mut fields = std_temporal_bag(i, kind, &item)?;
+        let reject = std_temporal_overflow(i, std_reflect_arg(&args, 1))?;
+        std_temporal_regulate(kind, &mut fields, reject);
+        std_temporal_validate(kind, &fields)?;
+        fields
+    } else if matches!(item, JsValue::Str(_)) {
+        let fields = std_temporal_from_fields(i, kind, item, false)?;
+        if kind != StdTemporalKind::Duration { std_temporal_overflow(i, std_reflect_arg(&args, 1))?; }
+        fields
+    } else {
+        let reject = if kind == StdTemporalKind::Duration { false }
+            else { std_temporal_overflow(i, std_reflect_arg(&args, 1))? };
+        std_temporal_from_fields(i, kind, item, reject)?
+    };
     std_temporal_make(i, kind, fields)
 }
 
 fn std_temporal_compare(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTemporalKind) -> Result<JsValue, Throw> {
-    let left = std_temporal_from_fields(i, kind, std_reflect_arg(&args, 0))?;
-    let right = std_temporal_from_fields(i, kind, std_reflect_arg(&args, 1))?;
+    let left = std_temporal_from_fields(i, kind, std_reflect_arg(&args, 0), false)?;
+    let right = std_temporal_from_fields(i, kind, std_reflect_arg(&args, 1), false)?;
     let ordering = if kind == StdTemporalKind::Duration {
         // GetOptionsObject + ToRelativeTemporalObject (spec steps 3-4) run
         // unconditionally -- a wrong options type or a malformed relativeTo
@@ -866,8 +974,20 @@ fn std_temporal_compare(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTempor
         // the parsed relativeTo would otherwise go unused.
         let options = std_reflect_arg(&args, 2);
         let relative = std_temporal_option_value(i, &options, "relativeTo")?;
+        // Same two relativeTo checks as Duration.prototype.round/total: a
+        // property bag's `timeZone` must still be resolved (and can still
+        // throw) even though only the local date is kept, and a relativeTo
+        // string carrying both a bracketed zone annotation and an explicit
+        // numeric UTC offset must be internally consistent.
+        if relative.is_object() {
+            let time_zone = i.get_prop(&relative, "timeZone")?;
+            if !time_zone.is_undefined() { std_epoch_zone_value(i, &time_zone)?; }
+        }
+        if let JsValue::Str(text) = &relative {
+            std_temporal_validate_relative_to_offset(&text.to_utf8_lossy())?;
+        }
         let relative_base = if relative.is_undefined() { None } else {
-            Some(std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative)?)
+            Some(std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative, false)?)
         };
         if left == right {
             // Identical Duration Records (spec step 5): equal even when a
@@ -924,7 +1044,7 @@ temporal_statics!(std_temporal_monthday_from, std_temporal_monthday_compare, Std
 
 fn std_temporal_equals(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_temporal_record(&this, None)?;
-    let other = std_temporal_from_fields(i, data.kind, std_reflect_arg(&args, 0))?;
+    let other = std_temporal_from_fields(i, data.kind, std_reflect_arg(&args, 0), false)?;
     Ok(JsValue::Bool(data.fields == other))
 }
 
@@ -954,7 +1074,7 @@ fn std_temporal_date_to_datetime(i: &mut Interpreter, this: JsValue, args: Vec<J
     let mut fields = std_temporal_record(&this, Some(StdTemporalKind::PlainDate))?.fields;
     let time = std_reflect_arg(&args, 0);
     if !time.is_undefined() {
-        let parts = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time)?;
+        let parts = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time, false)?;
         fields[3..9].copy_from_slice(&parts[3..9]);
     }
     std_temporal_make(i, StdTemporalKind::PlainDateTime, fields)
@@ -1080,19 +1200,28 @@ fn std_temporal_time_text_options(fields: &[i64; 10], digits: Option<usize>, min
     result
 }
 
-fn std_temporal_string_precision(i: &mut Interpreter, option: &JsValue) -> Result<(Option<usize>, bool, Option<i128>, String), Throw> {
+fn std_temporal_string_precision(i: &mut Interpreter, option: &JsValue, allow_minute: bool) -> Result<(Option<usize>, bool, Option<i128>, String), Throw> {
     if !option.is_object() { return Ok((None, false, None, "trunc".to_string())); }
     let digits_value = i.get_prop(option, "fractionalSecondDigits")?;
+    // GetOption dispatches on the ACTUAL type of the value: only a primitive
+    // Number takes the ToNumber branch (then floors, per
+    // GetStringOrNumberOption step 3.b); every other type -- including
+    // Boolean, Null, BigInt, Object and a boxed Number -- goes through
+    // ToString instead (which itself throws TypeError for a Symbol), and
+    // any resulting string other than "auto" is invalid.
     let mut digits = if digits_value.is_undefined() { None }
-        else if let JsValue::Str(text) = &digits_value {
-            if text.to_utf8_lossy() == "auto" { None }
-            else { return Err(Throw::range_error("invalid fractionalSecondDigits")); }
-        } else {
+        else if matches!(digits_value, JsValue::Num(_)) {
             let number = i.to_number(&digits_value)?;
-            if !number.is_finite() || number.fract() != 0.0 || !(0.0..=9.0).contains(&number) {
+            if !number.is_finite() { return Err(Throw::range_error("invalid fractionalSecondDigits")); }
+            let floored = number.floor();
+            if !(0.0..=9.0).contains(&floored) {
                 return Err(Throw::range_error("invalid fractionalSecondDigits"));
             }
-            Some(number as usize)
+            Some(floored as usize)
+        } else {
+            let text = i.to_string(&digits_value)?;
+            if text == "auto" { None }
+            else { return Err(Throw::range_error("invalid fractionalSecondDigits")); }
         };
     let mode = std_temporal_option_string(i, option, "roundingMode")?
         .unwrap_or_else(|| "trunc".to_string());
@@ -1100,11 +1229,11 @@ fn std_temporal_string_precision(i: &mut Interpreter, option: &JsValue) -> Resul
         return Err(Throw::range_error("invalid roundingMode"));
     }
     let unit = std_temporal_option_string(i, option, "smallestUnit")?;
-    let minute_only = unit.as_deref().is_some_and(|name| name.strip_suffix('s').unwrap_or(name) == "minute");
+    let minute_only = allow_minute && unit.as_deref().is_some_and(|name| name.strip_suffix('s').unwrap_or(name) == "minute");
     let step = if let Some(unit) = unit {
         let unit = unit.strip_suffix('s').unwrap_or(&unit);
         digits = match unit {
-            "minute" => Some(0), "second" => Some(0), "millisecond" => Some(3),
+            "minute" if allow_minute => Some(0), "second" => Some(0), "millisecond" => Some(3),
             "microsecond" => Some(6), "nanosecond" => Some(9),
             _ => return Err(Throw::range_error("invalid smallestUnit")),
         };
@@ -1117,15 +1246,25 @@ fn std_temporal_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
     let data = std_temporal_record(&this, None)?;
     let mut v = data.fields;
     let option = std_reflect_arg(&args, 0);
-    let calendar_name = if option.is_undefined() { "auto".to_string() }
-        else if option.is_object() {
+    if !option.is_undefined() && !option.is_object() {
+        return Err(Throw::type_error("Temporal options must be an object"));
+    }
+    // Duration.prototype.toString has no calendarName option (Durations
+    // carry no calendar) -- reading it at all is observable (and wrong)
+    // via a Proxy-like options bag, confirmed by
+    // Duration/prototype/toString/order-of-operations.js, whose expected
+    // property-access log never includes "get options.calendarName".
+    let calendar_name = if data.kind == StdTemporalKind::Duration { "auto".to_string() }
+        else if option.is_undefined() { "auto".to_string() }
+        else {
             let value = i.get_prop(&option, "calendarName")?;
             if value.is_undefined() { "auto".to_string() } else { i.to_string(&value)? }
-        } else { return Err(Throw::type_error("Temporal options must be an object")); };
+        };
     if !matches!(calendar_name.as_str(), "auto" | "always" | "never" | "critical") {
         return Err(Throw::range_error("invalid calendarName"));
     }
-    let (digits, minute_only, step, mode) = std_temporal_string_precision(i, &option)?;
+    let (digits, minute_only, step, mode) =
+        std_temporal_string_precision(i, &option, data.kind != StdTemporalKind::Duration)?;
     if let Some(step) = step {
         if data.kind == StdTemporalKind::PlainTime {
             let rounded = std_temporal_round_integer(std_temporal_time_ns(&v), step, &mode)?;
@@ -1147,7 +1286,7 @@ fn std_temporal_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
         StdTemporalKind::PlainMonthDay => if show_calendar {
             std_temporal_date_text(v[9], v[1], v[2])
         } else { format!("{:02}-{:02}", v[1], v[2]) },
-        StdTemporalKind::Duration => std_temporal_duration_text(&v),
+        StdTemporalKind::Duration => std_temporal_duration_to_string(&v, digits, step, &mode)?,
     };
     if show_calendar && !matches!(data.kind, StdTemporalKind::Duration | StdTemporalKind::PlainTime) {
         if calendar_name == "critical" { text.push_str("[!u-ca=iso8601]"); }
@@ -1156,25 +1295,112 @@ fn std_temporal_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
     Ok(JsValue::str(text))
 }
 
-fn std_temporal_duration_text(fields: &[i64; 10]) -> String {
-    let negative = fields.iter().any(|field| *field < 0);
+// Duration.prototype.toString (TemporalDurationToString in the spec).
+//
+// Two independent mechanisms feed the same day..nanosecond fields:
+//
+//  (A) When an explicit precision was requested (`smallestUnit` or a numeric
+//      `fractionalSecondDigits`, i.e. `step.is_some()`), the whole
+//      day-through-nanosecond span is summed to exact nanoseconds, rounded
+//      to the requested increment/mode, then re-split starting at
+//      `balance_rank`: the rank of the highest-ranked nonzero field, clamped
+//      up to at least "day" (years/months/weeks can't be redistributed
+//      without a `relativeTo`, so they are clamped away from the rounding
+//      but otherwise left untouched). Ranks below "day" are never promoted
+//      further on their own — a duration whose only populated field is
+//      "seconds" stays capped at "second" even when the rounded value
+//      exceeds 60, since balance_rank there is already 6 ("second").
+//  (B) Otherwise (`step.is_none()`, "auto" precision), only a mandatory,
+//      much smaller ns -> us -> ms -> seconds overflow cascade runs, and
+//      minutes/hours/days are never touched.
+//
+// `std_temporal_validate` re-runs the Duration safe-integer/consistent-sign
+// checks afterward, since rounding under mechanism (A) can overflow a field
+// out of the ECMA-262 safe-integer range (float64-representable) even when
+// the original duration was in range.
+fn std_temporal_duration_to_string(
+    fields: &[i64; 10],
+    digits: Option<usize>,
+    step: Option<i128>,
+    mode: &str,
+) -> Result<String, Throw> {
+    let mut f = *fields;
+    let precision_auto = step.is_none();
+    if let Some(step) = step {
+        // `balance_rank` is the rank (0=year..9=nanosecond) that absorbs the
+        // rounded total: the highest-ranked nonzero field, but never
+        // coarser than "day" (years/months/weeks can't be redistributed
+        // without a relativeTo, so a duration with any of those nonzero
+        // still only rebalances day-and-finer -- confirmed by
+        // round-cross-unit-boundary.js, where 1Y11M30D23:59:59.999999999
+        // rounds up into 31D, not into the months). Only ranks
+        // `balance_rank..=9` are summed and rewritten; everything coarser
+        // (years/months/weeks when balance_rank is "day", or nothing, when
+        // balance_rank is coarser than "day" because minutes/hours/days are
+        // themselves all zero) is left exactly as it was -- confirmed by
+        // fractionalseconddigits-number.js, where weeks/days stay
+        // untouched while only the seconds fraction rounds, and by
+        // round-cross-unit-boundary.js's "no balancing if smallest unit is
+        // largest unit" case, where a bare `seconds` field rounds past 60
+        // without ever promoting into minutes.
+        let unit_ns = |rank: usize| -> i128 {
+            match rank {
+                3 => STD_TEMPORAL_NS_DAY,
+                4 => 3_600 * STD_TEMPORAL_NS_SECOND,
+                5 => 60 * STD_TEMPORAL_NS_SECOND,
+                6 => STD_TEMPORAL_NS_SECOND,
+                7 => 1_000_000,
+                8 => 1_000,
+                _ => 1,
+            }
+        };
+        let largest_rank = (0..10).find(|&idx| f[idx] != 0).unwrap_or(9);
+        let balance_rank = largest_rank.max(3);
+        let total_ns: i128 = (balance_rank..10).map(|rank| f[rank] as i128 * unit_ns(rank)).sum();
+        let rounded = std_temporal_round_integer(total_ns, step, mode)?;
+        let sign: i64 = if rounded < 0 { -1 } else { 1 };
+        let mut remainder = rounded.unsigned_abs() as i128;
+        f[balance_rank] = sign * ((remainder / unit_ns(balance_rank)) as i64);
+        remainder %= unit_ns(balance_rank);
+        for rank in (balance_rank + 1)..=9 {
+            f[rank] = sign * ((remainder / unit_ns(rank)) as i64);
+            remainder %= unit_ns(rank);
+        }
+        std_temporal_validate(StdTemporalKind::Duration, &f)?;
+    } else {
+        f[8] += f[9] / 1_000; f[9] %= 1_000;
+        f[7] += f[8] / 1_000; f[8] %= 1_000;
+        f[6] += f[7] / 1_000; f[7] %= 1_000;
+    }
+    let negative = f.iter().any(|value| *value < 0);
     let mut text = if negative { String::from("-P") } else { String::from("P") };
     for (index, suffix) in [(0, "Y"), (1, "M"), (2, "W"), (3, "D")] {
-        if fields[index] != 0 { text.push_str(&format!("{}{suffix}", fields[index].abs())); }
+        if f[index] != 0 { text.push_str(&format!("{}{suffix}", f[index].abs())); }
     }
-    if fields[4..].iter().any(|field| *field != 0) || text == "P" || text == "-P" {
+    // sec-temporaldurationtostring step 21: show the seconds (+fraction)
+    // part when it is itself nonzero, or when the duration has no other
+    // populated component, or whenever a precision was explicitly
+    // requested (even a zero result must still be printed, e.g. "PT0S").
+    let show_seconds = f[6] != 0 || f[7] != 0 || f[8] != 0 || f[9] != 0
+        || f[0..6].iter().all(|value| *value == 0)
+        || !precision_auto;
+    if f[4] != 0 || f[5] != 0 || show_seconds {
         text.push('T');
         for (index, suffix) in [(4, "H"), (5, "M")] {
-            if fields[index] != 0 { text.push_str(&format!("{}{suffix}", fields[index].abs())); }
+            if f[index] != 0 { text.push_str(&format!("{}{suffix}", f[index].abs())); }
         }
-        let fraction = fields[7].abs() * 1_000_000 + fields[8].abs() * 1_000 + fields[9].abs();
-        if fields[6] != 0 || fraction != 0 || text.ends_with('T') {
-            text.push_str(&fields[6].abs().to_string());
-            if fraction != 0 { text.push_str(&format!(".{fraction:09}").trim_end_matches('0')); }
+        if show_seconds {
+            text.push_str(&f[6].abs().to_string());
+            let fraction = f[7].abs() * 1_000_000 + f[8].abs() * 1_000 + f[9].abs();
+            if let Some(count) = digits {
+                if count != 0 { text.push_str(&format!(".{fraction:09}")[..count + 1]); }
+            } else if fraction != 0 {
+                text.push_str(&format!(".{fraction:09}").trim_end_matches('0'));
+            }
             text.push('S');
         }
     }
-    text
+    Ok(text)
 }
 
 fn std_temporal_to_json(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {

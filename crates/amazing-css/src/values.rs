@@ -758,6 +758,42 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         "container" => {
             return parse_container_shorthand(css).is_some().then_some(V::Unparsed);
         }
+        // CSS-30: these five had no dedicated arm at all, so every one of
+        // them fell into the generic accept-anything `Unparsed` case below
+        // (it does not match `margin`/`inset`/`size`/`border`/`spacing`/
+        // `gap`/`padding`) -- `values::parses`, which the WPT
+        // parsing-conformance runner's "valid"/"invalid" dimension calls
+        // directly, reported every invalid value as valid regardless of
+        // content. `crate::computed`'s per-property validators (CSS-30,
+        // `background_values.rs`) are the same ones `expand_declaration`
+        // uses for the computed-value dimension, so both dimensions now
+        // agree on what is accepted.
+        "background-clip" => {
+            return crate::computed::valid_background_clip(css).then_some(V::Unparsed);
+        }
+        "background-origin" => {
+            return crate::computed::valid_background_origin(css).then_some(V::Unparsed);
+        }
+        "background-attachment" => {
+            return crate::computed::valid_background_attachment(css).then_some(V::Unparsed);
+        }
+        "background-repeat" => {
+            return crate::computed::valid_background_repeat(css).then_some(V::Unparsed);
+        }
+        "background-size" => {
+            return crate::computed::valid_background_size(css).then_some(V::Unparsed);
+        }
+        "background-position" => {
+            return crate::computed::valid_background_position(css).then_some(V::Unparsed);
+        }
+        "background-position-x" => {
+            return crate::computed::valid_background_position_axis(css, true)
+                .then_some(V::Unparsed);
+        }
+        "background-position-y" => {
+            return crate::computed::valid_background_position_axis(css, false)
+                .then_some(V::Unparsed);
+        }
         _ => {}
     }
     let physical_property = match property {

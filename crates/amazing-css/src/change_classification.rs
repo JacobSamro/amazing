@@ -38,6 +38,8 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "background-image" |
         "background-origin" |
         "background-position" |
+        "background-position-x" |
+        "background-position-y" |
         "background-repeat" |
         "background-size" |
         "border-bottom-color" |
@@ -266,8 +268,9 @@ mod tests {
                 StyleChangeKind::None => panic!("registered property classified None: {name}"),
             }] += 1;
         }
-        // RC-32 added outline-color/-style/-width/-offset, all PaintOnly.
-        assert_eq!(counts, [16, 44, 125, 31]);
+        // RC-32 added outline-color/-style/-width/-offset and CSS-30 added
+        // `background-position-x`/`-y`, all PaintOnly.
+        assert_eq!(counts, [16, 46, 125, 31]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }

@@ -264,8 +264,9 @@ fn syntax_errors_and_bounds() {
         ("a", "gg"),
         ("a", "uv"),
         (r"\a", "u"),
-        ("(?<x>a)", ""),
-        (r"\p{Letter}", "u"),
+        ("(?<x>a)(?<x>b)", ""),
+        ("(?<1a>a)", ""),
+        (r"\p{Bogus_Property}", "u"),
     ] {
         assert!(Regex::new(p, f).is_err(), "{p}/{f}");
     }
@@ -351,6 +352,113 @@ fn unicode_sets_operations_strings_and_properties() {
     ] {
         assert!(Regex::new(pattern, "v").is_err(), "{pattern}");
     }
+}
+#[test]
+fn unicode_property_escapes_general_category_script_and_binary() {
+    let accepts = [
+        (r"^\p{L}+$", "Hello"),
+        (r"^\p{Letter}+$", "Hello"),
+        (r"^\p{Lu}+$", "HELLO"),
+        (r"^\p{Uppercase_Letter}+$", "HELLO"),
+        (r"^\p{General_Category=Lu}+$", "HELLO"),
+        (r"^\p{gc=Lu}+$", "HELLO"),
+        (r"^\p{LC}+$", "Hello"),
+        (r"^\p{Cased_Letter}+$", "Hello"),
+        (r"^\p{Nd}+$", "0123"),
+        (r"^\p{Script=Greek}+$", "\u{3b1}\u{3b2}\u{3b3}"),
+        (r"^\p{Script=Latin}+$", "abc"),
+        (r"^\p{sc=Latn}+$", "abc"),
+        // Common has no Script_Extensions overrides for digits, so the
+        // Script_Extensions escape must fall back to the plain Script value.
+        (r"^\p{Script_Extensions=Common}+$", "0123"),
+        // U+0300 COMBINING GRAVE ACCENT is explicitly listed with several
+        // scripts in ScriptExtensions.txt, including Greek, though its own
+        // Script is Inherited.
+        (r"^\p{scx=Greek}+$", "\u{300}"),
+        (r"^\p{Alphabetic}+$", "abcABC"),
+        (r"^\p{Alpha}+$", "abcABC"),
+        (r"^\p{White_Space}+$", " \t\n"),
+        (r"^\p{Any}+$", "a1 \u{10ffff}"),
+        (r"^\p{ASCII}+$", "abc\u{7f}"),
+        (r"^\p{Assigned}+$", "abc"),
+    ];
+    for (pattern, input) in accepts {
+        assert!(
+            Regex::new(pattern, "u")
+                .unwrap()
+                .exec(input, 0)
+                .unwrap()
+                .is_some(),
+            "{pattern} should match {input:?}"
+        );
+    }
+    let rejects = [
+        (r"^\P{L}+$", "Hello"),
+        (r"^\p{Lu}+$", "hello"),
+        (r"^\p{Script=Greek}+$", "abc"),
+        (r"^\p{Assigned}+$", "\u{378}"),
+        (r"^\p{ASCII}+$", "\u{80}"),
+    ];
+    for (pattern, input) in rejects {
+        assert!(
+            Regex::new(pattern, "u")
+                .unwrap()
+                .exec(input, 0)
+                .unwrap()
+                .is_none(),
+            "{pattern} should not match {input:?}"
+        );
+    }
+    for property in ["Alphabetic", "Script=Greek", "gc=Lu", "Letter"] {
+        assert!(
+            crate::unicode_props::supported(property),
+            "{property} should be supported"
+        );
+    }
+    assert!(!crate::unicode_props::supported("Not_A_Real_Property"));
+}
+#[test]
+fn named_capture_groups_and_backreferences() {
+    let regex = Regex::new(r"(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})", "").unwrap();
+    assert_eq!(
+        regex.group_names(),
+        &[
+            ("year".into(), 1),
+            ("month".into(), 2),
+            ("day".into(), 3),
+        ]
+    );
+    let m = regex.exec("2024-06-30", 0).unwrap().unwrap();
+    assert_eq!(m.captures[1], Some(0..4));
+    assert_eq!(m.captures[2], Some(5..7));
+    assert_eq!(m.captures[3], Some(8..10));
+
+    // `\k<name>` may reference a group declared later in the pattern.
+    assert_eq!(
+        captures(r"\k<a>(?<a>x)", "", "x"),
+        vec![Some("x".into()), Some("x".into())]
+    );
+    assert!(Regex::new(r"(?<a>x)\k<a>", "")
+        .unwrap()
+        .exec("xx", 0)
+        .unwrap()
+        .is_some());
+    assert!(Regex::new(r"(?<a>x)\k<a>", "")
+        .unwrap()
+        .exec("xy", 0)
+        .unwrap()
+        .is_none());
+
+    // Names accept `$`, `_`, and Unicode ID_Start/ID_Continue (via `\u`
+    // escapes too), but reject an undeclared backreference and duplicates.
+    assert!(Regex::new(r"(?<$_é>a)\k<$_é>", "").is_ok());
+    // Annex B: `\k<name>` is only forced into GroupName/backreference syntax
+    // when the pattern has a named group SOMEWHERE (or is in unicode mode).
+    // With no named groups anywhere, it's a plain identity escape for `k`.
+    assert!(Regex::new(r"\k<undeclared>", "").is_ok());
+    assert!(Regex::new(r"\k<undeclared>", "u").is_err());
+    assert!(Regex::new(r"(?<b>x)\k<undeclared>", "").is_err());
+    assert!(Regex::new(r"(?<a>x)(?<a>y)", "").is_err());
 }
 #[test]
 fn upstream_testharness_patterns() {
@@ -493,4 +601,61 @@ fn annex_b_quantified_assertions_preserve_zero_width_semantics() {
         assert_eq!(captures(r"(?:\b){2}a", flags, "a")[0], Some("a".into()));
     }
     for pattern in ["^*", "$+", r"\b?", r"\B{2}"] { assert!(Regex::new(pattern, "").is_err()); }
+}
+
+#[test]
+fn lookbehind_assertions() {
+    assert_eq!(captures(r"(?<=\$)\d+", "", "$100")[0], Some("100".into()));
+    assert!(Regex::new(r"(?<=\$)\d+", "").unwrap().exec("100", 0).unwrap().is_none());
+    assert_eq!(captures(r"(?<!\$)\b\d+", "", "$100 200")[0], Some("200".into()));
+    // The digits right after `$` fail the negative lookbehind, but the
+    // engine keeps trying later start positions, so "00" (starting past
+    // the first digit) still matches.
+    assert_eq!(captures(r"(?<!\$)\d+", "", "$100")[0], Some("00".into()));
+    // Variable-length lookbehind content.
+    assert_eq!(captures(r"(?<=a+)b", "", "aaab")[0], Some("b".into()));
+    assert!(Regex::new(r"(?<=a+)b", "").unwrap().exec("b", 0).unwrap().is_none());
+    // Capturing groups inside a lookbehind populate the outer match.
+    assert_eq!(
+        captures(r"(?<=(\d+)-)\w+", "", "42-foo"),
+        vec![Some("foo".into()), Some("42".into())]
+    );
+    // Quantifying a lookbehind is a syntax error, same as lookahead.
+    assert!(matches!(Regex::new(r"(?<=a)+", ""), Err(Error::Syntax(_))));
+}
+
+#[test]
+fn inline_modifier_groups() {
+    // `i` scoped on: matches case-insensitively only inside the group.
+    assert!(Regex::new(r"(?i:a)b", "").unwrap().exec("Ab", 0).unwrap().is_some());
+    assert!(Regex::new(r"(?i:a)b", "").unwrap().exec("AB", 0).unwrap().is_none());
+    // `i` scoped off inside an outer case-insensitive match.
+    assert!(Regex::new(r"(?-i:a)b", "i").unwrap().exec("Ab", 0).unwrap().is_none());
+    assert!(Regex::new(r"(?-i:a)b", "i").unwrap().exec("aB", 0).unwrap().is_some());
+    // `s` (dotAll) scoped on: only inside the group does `.` match a newline.
+    assert!(Regex::new(r"(?s:a.)b", "").unwrap().exec("a\nb", 0).unwrap().is_some());
+    assert!(Regex::new(r"a.b", "").unwrap().exec("a\nb", 0).unwrap().is_none());
+    // `m` scoped on: `^`/`$` become line-relative only inside the group.
+    assert!(Regex::new(r"(?m:^b)", "").unwrap().exec("a\nb", 0).unwrap().is_some());
+    assert!(Regex::new(r"^b", "").unwrap().exec("a\nb", 0).unwrap().is_none());
+    // Combining add and remove, and nesting.
+    assert!(Regex::new(r"(?i-s:a.)b", "s").unwrap().exec("A\nb", 0).unwrap().is_none());
+    assert!(Regex::new(r"(?i-s:a.)b", "s").unwrap().exec("AXb", 0).unwrap().is_some());
+    assert!(Regex::new(r"(?i:a(?-i:b))", "").unwrap().exec("Ab", 0).unwrap().is_some());
+    assert!(Regex::new(r"(?i:a(?-i:b))", "").unwrap().exec("AB", 0).unwrap().is_none());
+    // A quantified modifier group behaves like a quantified non-capturing group.
+    assert!(Regex::new(r"(?i:a)+", "").unwrap().exec("aAa", 0).unwrap().is_some());
+    // Syntax errors: unknown modifier letters, duplicates, empty modifier list.
+    assert!(matches!(Regex::new(r"(?x:a)", ""), Err(Error::Syntax(_))));
+    assert!(matches!(Regex::new(r"(?ii:a)", ""), Err(Error::Syntax(_))));
+    assert!(matches!(Regex::new(r"(?i-i:a)", ""), Err(Error::Syntax(_))));
+    assert!(matches!(Regex::new(r"(?-:a)", ""), Err(Error::Syntax(_))));
+}
+
+#[test]
+fn has_indices_flag() {
+    assert!(Flags::parse("d").unwrap().has_indices);
+    assert_eq!(Flags::parse("d").unwrap().as_string(), "d");
+    assert_eq!(Flags::parse("gid").unwrap().as_string(), "dgi");
+    assert!(matches!(Flags::parse("dd"), Err(Error::Syntax(_))));
 }

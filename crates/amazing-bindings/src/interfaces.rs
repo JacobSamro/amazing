@@ -598,7 +598,7 @@ const HTML_BODY: &[Member] = &[
     getter("aLink", O::BodyLegacyColorGet(LC::ActiveLink)), setter("aLink", O::BodyLegacyColorSet(LC::ActiveLink)),
 ];
 const HTML_ELEMENT: &[Member] = &[
-    method("click", O::HTMLElementClick, 0),
+    method("click", O::HTMLElementClick(false), 0),
     getter("onclick", O::HTMLElementOnClick), setter("onclick", O::HTMLElementSetOnClick),
     getter("dataset", O::ElementDataset),
     method("focus", O::ElementFocus, 0),

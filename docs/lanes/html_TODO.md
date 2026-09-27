@@ -1502,3 +1502,228 @@ nextest **166/166 passed, 0 skipped**; full workspace `cargo nextest run
 twice with a stable count both times (2 slow, both pre-existing real-page
 render-timing tests unrelated to this ticket); workspace `cargo test
 --workspace --locked --doc` green, 0 failed across every doctested crate.
+
+## HTML-32 — real-page interleaving, self-closing foreign-content `<script/>`,
+iframe interleaving scoped
+
+Base: local `dev` at `bc59d7cb` (HTML-31's merge, `8bd5cd2d`, plus an
+IA-TESTDRIVER `wpt_harness.rs` conflict resolution and unrelated NET-40
+absorbed by the merge). Brief: iframe interleaving through
+`ResumableParser`; move `cmd/js.rs`'s two real-page script functions
+(`prepare_page_scripts`, `execute_page_scripts_lenient`) onto the interleaved
+parser; the self-closing foreign-content `<script/>` edge case; then the
+largest remaining clusters in the `html/syntax`/`html/semantics/scripting-1`
+sweep. Gate once, zero lost.
+
+### Design: real-page functions onto `run_interleaved_parse`
+
+HTML-31 only wired `cmd/wpt_harness.rs::execute_page` onto
+`run_interleaved_parse`; `cmd/js.rs`'s `prepare_page_scripts` (the strict,
+reftest-facing path) and `execute_page_scripts_lenient` (the lenient,
+real-corpus path) were scoped out because their *callers* already fully
+parsed the page (`amazing_html::parse`/`parse_bytes`) before calling them --
+by the time either function ran, the document-so-far/document-finished
+distinction this ticket exists to fix was already moot; it had to move up a
+layer, to the callers themselves.
+
+- Both functions gained an `html: &str` parameter and now build `host`'s DOM
+  themselves via `run_interleaved_parse`, instead of assuming a caller
+  parsed it first. `host` now starts from an empty `Dom::new()` at every
+  call site.
+- A new `crate::document::decode_html_bytes(bytes, content_type) -> String`
+  (thin wrapper over `amazing_html::encoding::decode`, which cannot fail in
+  its replacement mode) separates decoding from parsing, so a caller that
+  wants the interleaved path can decode once and hand `&str` through without
+  going via `parse_document_bytes`'s whole-document parse.
+- Three call sites (`cmd/render.rs`'s `render_surface` and
+  `render_wpt_surface_after_first_paint`, `cmd/real_pages.rs`'s
+  `cmd_render_page`) now sniff `crate::document::document_kind` *before*
+  parsing at all: HTML documents decode-then-interleave; XML documents keep
+  the existing whole-source `parse_document_bytes` + `require_static_xml()`
+  path unchanged (XML has no interleaved parser and `require_static_xml`
+  needs the finished tree to walk regardless -- XML `<script>` is outright
+  unsupported per that same check).
+- `execute_page_scripts_lenient`'s wall-clock script-phase budget check
+  (IA-LIVE-2) moved *inside* the `run_interleaved_parse` closure, since the
+  closure itself is now what runs each blocking script; once exceeded it
+  returns `Ok(())` for every remaining script without running it (never an
+  `Err`, since that would abort the whole interleaved parse early --
+  `run_interleaved_parse`'s own documented contract -- which is the opposite
+  of this path's "always finish, collect failures" design).
+- Two existing unit tests in `runtime_host_html.rs`
+  (`document_write_from_a_top_level_script_inserts_at_the_parser_insertion_point`,
+  `document_write_after_load_implicitly_reopens_the_document`) pre-built
+  their `host`'s `Dom` via `amazing_html::parse(...)` and called
+  `prepare_page_scripts` with its old 3-argument signature; updated to start
+  from an empty `Dom::new()` and pass that same source string through as the
+  new `html` argument instead -- feeding a non-empty `Dom` as `run_
+  interleaved_parse`'s starting point would hand `ResumableParser` an
+  already-populated arena to build a *second* document's `html`/`head`/
+  `body` skeleton into, which is not what either test intended.
+
+### Fixed: self-closing foreign-content `<script/>`
+
+HTML-31 fixed a non-self-closing SVG `<script>...</script>` never executing
+(it closes through `in_foreign_content`'s generic `EndTag` stack-popping
+match, never through `text_mode`, since foreign content's insertion mode has
+no rawtext/script-data special case for `<script>` at all). The self-closing
+sibling (`<script src="..."/>`, meaningful only with `src` since self-closing
+leaves no room for inline text) has the exact same gap one level up:
+`in_foreign_content`'s `StartTag` branch calls `insert_foreign_element` then,
+for `self_closing`, immediately `self.open.pop()`s it with no classify/pause
+check at all. Fixed with the same guarded hook (not a fragment parse, not
+inside `<template>` content, SVG namespace only -- MathML has no script
+element) right before the pop.
+
+Caught by a new unit test in `resumable.rs`
+(`self_closing_svg_script_pauses_the_same_as_a_normal_one`). First attempt at
+the test used `<script src=a.js/>` (no space, unquoted value) and initially
+failed even after the fix landed -- not a bug in the fix, a bug in the test:
+an unquoted attribute value's terminator set (whitespace, `>`, quote, `<`,
+`=`, backtick) has no `/` in it, so the tokenizer folds the trailing slash
+into the attribute value (`src="a.js/"`) instead of ending the tag
+self-closing at all. Fixed the test to quote the value
+(`<script src="a.js"/>`), which does leave "after attribute value (quoted)"
+state open to recognize the self-closing `/`.
+
+### Scoped out, with a concrete design: iframe interleaving
+
+An iframe's document is not parsed with `ResumableParser` at all today --
+`runtime_host_html.rs::navigate_iframes` still does one whole-source
+`amazing_html::parse`/`parse_bytes`/`parse_xml` call into a *private*, throwaway
+`Dom`, then `Dom::import_inert_document` (`amazing-dom/src/markup.rs`) deep-
+copies every node from that private tree into the shared, JS-visible
+`host.dom` arena as a brand-new `Document` subtree, once, after the whole
+parse is finished. An iframe's own classic scripts only run after that,
+fully deferred (`run_connected_iframe_scripts`), against the finished,
+already-grafted tree -- the same "scripts see the finished document, not the
+document-so-far" bug HTML-31 fixed for the top-level page, still present for
+every iframe.
+
+The reason this cannot reuse HTML-31's swap trick directly: `swap_dom` is
+`std::mem::swap` on the *whole* `Dom` value, which only works because a
+top-level page's parser starts from (and hands back) the entire arena the
+driver holds -- there is nothing else in it yet. An iframe's document has to
+end up as a subtree *inside* an arena (`host.dom`) that already holds the
+parent page (and every sibling iframe, and everything else on the page) --
+swapping the whole arena out to a private `Dom` for the iframe's parser to
+build into, then swapping it back, would make the parent page (and any
+script running on it) vanish for the duration, which is not sound if
+anything else could run concurrently, and more fundamentally: on resume,
+`import_inert_document`'s existing one-shot deep-copy has no notion of
+"graft only the parts built since the last pause" -- it always creates a
+*new* `Document` node and copies the entire source tree under it. Repeating
+that per pause would recreate every already-imported node from scratch each
+time, breaking node identity for anything a script (in the iframe *or* the
+parent, e.g. via `contentDocument`) already holds a live reference to --
+unacceptable, since the entire point of interleaving is that earlier nodes
+keep their identity across a pause.
+
+The real fix needs one of:
+
+1. **Incremental graft-as-you-go**: parse the iframe into its own private
+   `Dom` with `ResumableParser` as usual, but instead of one final
+   `import_inert_document` call, add an incremental import that, at each
+   pause, walks the private tree and imports *only the nodes not yet
+   copied* (a source-to-destination `NodeIdx` map carried across pauses,
+   akin to a tree-diff/patch rather than a fresh deep copy), preserving the
+   identity of every already-imported node. The iframe's script then runs
+   against its already-grafted, connected, live subtree of `host.dom`
+   exactly like a top-level script does today. This is the architecturally
+   "right" answer and keeps one shared arena, but the incremental importer
+   is real new machinery, not a small addition to the existing one-shot
+   `import_node_into`.
+2. **Per-frame private arena** (rejected): give every navigable its own
+   `Dom` for the frame's entire lifetime, not just during parsing, and make
+   `contentDocument`/cross-frame node access resolve across arenas instead
+   of assuming one shared `Dom` per `BrowserDomHost`. Rejected outright:
+   this ripples into layout/paint/compositor and any other lane's code that
+   assumes `host.dom` is the single arena for the whole page, which is
+   well outside this ticket's (or even this lane's) ownership.
+
+Neither is a bulk-cluster-sized change; (1) is a real, dedicated ticket
+(a tree-reconciliation importer, its own tests, then re-wiring
+`navigate_iframes`/`run_connected_iframe_scripts` onto it) rather than an
+extension of this one. No corpus evidence of this gap causing a measured WPT
+loss was hunted for separately in this ticket -- `dom/nodes/
+MutationObserver-*` (the analogous top-level gap's own motivating suite) is
+already in the standing sweep selection and stayed at its post-HTML-31
+zero-loss baseline, so this is a documented architectural gap, not a
+regression, and not blocking this ticket's gate.
+
+### Fixed while triaging: `is_javascript_mime_type`'s missing entries
+
+Investigating the largest *actionable* subtest cluster (`html/semantics/
+scripting-1/the-script-element/script-type-and-language-js.html`, 218
+subtest fails) found that `classic_or_module_script_type`'s (`tree.rs`) and
+`cmd/js.rs`'s `is_classic_javascript_type`'s hand-rolled JavaScript-MIME-type
+lists each had only 8 of mimesniff's 16-entry list
+(<https://mimesniff.spec.whatwg.org/#javascript-mime-type>): both were
+missing `application/x-ecmascript`, `text/x-ecmascript`, and
+`text/javascript1.0` through `text/javascript1.5`. Factored the check out to
+a new shared `amazing_html::is_javascript_mime_type` (the complete list,
+with its own unit test) so both call sites can never drift from each other
+or the spec's list again. This particular file's 218 fails turned out to be
+dominated by a different, much larger gap (below), so this fix alone did
+not move that file's score, but it is a real, independently-verifiable
+correctness fix and in scope regardless.
+
+### Triage: largest remaining `html/syntax`/`html/semantics/scripting-1` clusters
+
+Ranked by non-pass subtest count (`.agents/html/html32_cluster2.py`, a
+per-file ranking script -- the naive per-message clustering this lane used
+for HTML-30's forms corpus turned out to badly over-merge unrelated
+failures here, since many WPT assertion messages are generic enough
+("assert_equals: expected \"...\" but got \"...\"") to match almost any
+string-mismatch anywhere in the corpus once the specific strings are
+normalized away; per-file ranking is the more honest signal for a corpus
+this shaped). The four largest, in order, all turned out to be genuine
+feature gaps or cross-lane territory rather than bulk-fixable bugs:
+
+1. **`html/syntax/parsing/named-character-references.html`, 928 of 1,637
+   captured subtest fails (times out before finishing all ~2,231)**: this
+   crate's own `entities.rs` already documents why -- Phase 1 shipped a
+   ~76-entry pragmatic subset of the WHATWG named-character-reference table
+   plus 15 legacy semicolon-less names, not the full 2,231-entry table,
+   with unknown names deliberately falling through as literal text ("exactly
+   what browsers do for unknown-but-wellformed-looking refs"). Confirmed
+   this is still the single largest cluster in the measured corpus by a wide
+   margin. Generating the full table from the spec's canonical data is a
+   real, mechanical, `amazing-html`-owned task, but it needs a verified data
+   source (the spec's `entities.json`) rather than several thousand
+   hand-typed Unicode mappings risked introducing wrong entries silently --
+   not attempted here. Recommend a dedicated ticket.
+2. **`html/semantics/scripting-1/the-template-element/template-for/
+   template-for-multiple-cases.html` (414) and `.../reflect-html-for.html`
+   (76)**: both test `WICG/declarative-partial-updates`
+   (<https://github.com/WICG/declarative-partial-updates>), an experimental,
+   non-standardized proposal (`<template for>` markers, DOM patch semantics,
+   `Element.streamAppendHTMLUnsafe()`) -- an entirely unimplemented feature,
+   not a bug, and not something to build inside a cluster-triage pass.
+3. **`html/semantics/scripting-1/the-script-element/script-type-and-
+   language-js.html` (456 subtests, 218 non-pass)**: every case, including
+   the baseline `type=""` case that is unambiguously supposed to run,
+   fails the same way. Its harness (`resources/script-type-and-language-
+   js.js`) builds every case with `document.createElement("script")` +
+   `appendChild`, never through the parser -- this measures whether a
+   *dynamically inserted* classic script executes at all, a completely
+   different trigger than anything `ResumableParser`/`run_interleaved_parse`
+   touch (those only run parser-inserted scripts). This engine appears to
+   have no "script insertion reaction" for non-parser-inserted `<script>`
+   elements at all; wiring one up needs a DOM-level insertion hook
+   (`amazing-dom`/`amazing-bindings`, since `appendChild`'s insertion steps
+   live there), not an `amazing-html` change. Cross-lane, not attempted here.
+4. **`html/syntax/parsing/template/clearing-the-stack-back-to-a-given-
+   context/*.html` (33 + 6 + 3 = 42, table/table-body/table-row contexts)**:
+   looked like a tree-builder bug from the filename, but every failure is
+   `table.rows.length`/`table.tBodies.length`/etc. reading as `undefined`
+   -- an `HTMLTableElement` IDL-collection accessor gap (`amazing-bindings`),
+   not `amazing-html`'s tree construction; each file's page builds its table
+   via `newHTMLDocument()` (a document.implementation-created document),
+   which is the detail worth checking first if dom-bindings picks this up.
+
+No amazing-html/amazing-owned cluster large enough to matter was left
+unfixed after item 3 above; every other top-ranked file is one of the four
+buckets above. Routed 1 and 3 as separate findings in `.agents/html/
+questions.md` (2 needs no routing, it is a WICG proposal with no owner
+yet; 4 is a smaller finding folded into the same questions.md entry as 3).

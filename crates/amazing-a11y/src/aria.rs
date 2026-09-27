@@ -445,3 +445,74 @@ fn native_set_position(
         (None, None)
     }
 }
+
+/// A11Y-14: maps a WebIDL `ARIAMixin` *string* attribute's IDL name (e.g.
+/// `"ariaValueNow"`, as `element.ariaValueNow` sees it from JS) to the
+/// content attribute it reflects (`"aria-value-now"`), or maps `"role"` to
+/// itself. Every `[CEReactions] attribute DOMString? ariaFoo` member of
+/// `ARIAMixin` reflects `aria-foo` by this same mechanical rule (a hyphen
+/// inserted before each interior capital, then lowercased) with no
+/// exceptions — so this one function is a complete, self-verifying
+/// specification of the whole family's *names*, needing no hand-maintained
+/// list that could drift from the growing `ARIAMixin` IDL (`ariaBrailleLabel`,
+/// `ariaColIndexText`, ... are recent additions upstream).
+///
+/// This intentionally covers only the *string* half of `ARIAMixin` — plain
+/// get/set-content-attribute reflection, no different in kind from any other
+/// WebIDL string-reflected attribute `amazing-bindings` already installs.
+/// The *element-reference* half (`ariaActiveDescendantElement`,
+/// `ariaControlsElements`, `ariaActionsElements`, ...) is a FrozenArray/
+/// shadow-tree-aware IDREF-list mapping this function does not attempt —
+/// see the A11Y-14 note in `.agents/a11y/questions.md` for why that half
+/// needs `amazing-dom`'s flat-tree/shadow-tree connectivity checks, not
+/// name mapping, and is out of scope here.
+pub fn aria_mixin_attribute(idl_name: &str) -> Option<String> {
+    if idl_name == "role" {
+        return Some("role".to_owned());
+    }
+    let rest = idl_name.strip_prefix("aria")?;
+    let mut chars = rest.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_uppercase() => {}
+        _ => return None,
+    }
+    let mut out = String::from("aria");
+    for ch in rest.chars() {
+        if ch.is_ascii_uppercase() {
+            out.push('-');
+            out.push(ch.to_ascii_lowercase());
+        } else if ch.is_ascii_lowercase() || ch.is_ascii_digit() {
+            out.push(ch);
+        } else {
+            // Not a plain camelCase IDL name (e.g. contains punctuation) —
+            // not a real ARIAMixin attribute.
+            return None;
+        }
+    }
+    Some(out)
+}
+
+/// The getter half of `ARIAMixin` reflection: the content attribute's string
+/// value, or `None` (JS `null`) when absent — exactly WebIDL's plain
+/// `DOMString?` reflection, no accessibility-specific computation. A caller
+/// installing `element.ariaChecked`/`element.role`/... resolves the IDL name
+/// with [`aria_mixin_attribute`] once (typically at binding-install time, not
+/// per call) and can use this directly as the getter body.
+pub fn aria_mixin_get<'a>(dom: &'a Dom, node: NodeIdx, content_attribute: &str) -> Option<&'a str> {
+    dom.get_attribute_ns(node, None, content_attribute)
+}
+
+/// The setter half: `Some(value)` sets the content attribute to `value`;
+/// `None` (JS `null`) removes it — WebIDL's plain `DOMString?` reflection
+/// setter, matching [`aria_mixin_get`].
+pub fn aria_mixin_set(
+    dom: &mut Dom,
+    node: NodeIdx,
+    content_attribute: &str,
+    value: Option<&str>,
+) -> Result<(), amazing_dom::DomError> {
+    match value {
+        Some(value) => dom.set_attribute_ns(node, None, content_attribute, value),
+        None => dom.remove_attribute_ns(node, None, content_attribute),
+    }
+}

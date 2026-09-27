@@ -2353,14 +2353,127 @@ Boundary / not fixed here:
   primitive is public now; the `DomHost`/`closest()` consumer change is
   cross-lane (routed, see Part 2 above).
 
+## CSS-30: background-clip/-origin/-attachment/-repeat/-size/-position grammars
+
+Rebased on local `dev` (`7cfe7780`) first; the rebase was a clean fast-forward
+(CSS-29 was already merged there). Per the coordinator's routing, item 1
+(`Element.closest()`'s `:scope` wiring) stays with dom-bindings: re-confirmed
+on the rebased head that the only call sites
+(`crates/amazing/src/dom_host.rs::BrowserDomHost::matches_selector`,
+`crates/amazing-js/src/interp_builtins.rs::native_dom_closest`) are outside
+`amazing-css`; the crate-side primitive (`matches_in_scope`/
+`matches_pseudo_in_scope`, made `pub` in CSS-29) needs no further change here.
+
+Item 2: took the next-largest tractable grammar-gap cluster in
+css-backgrounds (245 failing after CSS-29), triaged into two families.
+css-text (253, the single largest) is almost entirely unimplemented
+properties from scratch (`text-transform`, `text-wrap`, `hyphens`, `word-break`,
+20-odd more) -- a much bigger "implement N properties" undertaking, set aside
+in favor of the grammar-gap pattern the coordinator pointed at.
+
+**Root cause, `background-clip`** (same shape as CSS-29's box-shadow bug):
+`valid_background_clip` only ever matched a single plain keyword
+(`[Token::Ident(_)]`), so `expand_declaration`'s guard rejected any comma
+list (`"border-box, padding-box"`) or the box+text combination
+(`"border-area text"`, both real, WPT-tested `background-clip` values) and
+fell through to the shared fallback arm that returns an empty `Vec` --
+dropping the declaration entirely, so the computed value defaulted to
+`PropertyMetadata`'s initial `"border-box"` regardless of what was
+specified. `values::parse` had no dedicated arm at all, so the "valid"/
+"invalid" WPT dimension separately over-accepted (the generic
+`margin`/`inset`/`size`/`border`/`spacing`/`gap`/`padding` fallback doesn't
+match `"background-clip"`, so it always returned `Some(Unparsed)`).
+`background-origin`/`-attachment`/`-repeat`/`-size` had no grammar in either
+place: `values::parse` over-accepted the same way, and
+`expand_declaration` had no arm so every value (valid or not) passed straight
+through as literal text with no computed-value canonicalization.
+
+**The grammars**, all in a new `background_values.rs`:
+- `background-clip`: `[ <visual-box> | border-area | text | (<visual-box> |
+  border-area) && text ]#`. Canonical order is box-keyword before `text`
+  regardless of specified order (`"text border-area"` -> `"border-area
+  text"`).
+- `background-origin`/`-attachment`: plain `<visual-box>#`/`<attachment>#`
+  keyword lists, no reordering.
+- `background-repeat`: `<repeat-style>#` (`repeat-x`/`repeat-y`, or 1-2 of
+  `repeat|space|round|no-repeat`); two identical keywords collapse to one at
+  the computed-value stage (`"repeat repeat"` -> `"repeat"`).
+- `background-size`: `<bg-size>#`; a single component's missing second
+  defaults to `auto` (`"1px"` -> `"1px auto"`), but two literal `auto`s
+  collapse back to the single keyword `auto` (`"auto auto"` -> `"auto"`);
+  negative lengths/percentages rejected, calc()-derived values left
+  sign-unchecked at parse time (same policy as CSS-29's box-shadow).
+- `background-position`/`-position-x`/`-position-y` (the last two newly
+  registered as longhands -- they did not exist as properties before this):
+  CSS Backgrounds 3 SS3.9's resolution algorithm. 1-token (keyword or bare
+  length-percentage); 2-token strict pair, swapped only when a keyword's own
+  axis identity requires it (`"top left"` -> `"0% 0%"`, since `top` is a
+  Y-keyword forcing `left` into the X slot); 3-4-token `&&`-combined
+  edge+offset chunks assigned to X/Y by keyword identity, with a lone
+  `center` chunk taking whichever axis the other chunk didn't claim
+  (`"top 17px right -18px"` -> `"calc(100% + 18px) 17px"` -- a
+  right-anchored negative length offset becomes a sign-flipped
+  `calc(100% - <length>)`; a percentage offset resolves as plain arithmetic,
+  e.g. `"right 11% bottom"` -> `"89% 100%"`). The writing-mode-relative
+  `x-start`/`x-end`/`y-start`/`y-end` keywords (CSS Backgrounds 4) have no
+  resolution possible without direction/writing-mode context this crate
+  doesn't carry here, so they stay opaque passthrough -- matching their
+  current (accidentally correct, pre-CSS-30) passing status rather than
+  regressing them.
+
+Every property's validator is wired into both `values::parse` (the
+"valid"/"invalid" WPT dimension) and `expand_declaration`/
+`valid_new_paint_property` (the cascade and var()-substitution "computed"
+dimension) -- the same two-gate discipline CSS-29 established for
+box-shadow, now applied consistently to this whole property family.
+
+Boundary, not fixable here: `em`/`rem`-relative offsets and calc()
+expressions mixing a percentage-free length with a relative unit need the
+div's cascaded `font-size` to resolve to a px number (e.g. `"0.5em"` ->
+`"20px"` at `font-size: 40px`); `wpt_conformance.rs`'s harness casts a lone
+`div { property: specified }` with no other declaration, so these keep
+their literal specified text. Confirmed these were *already* failing before
+CSS-30 (just with different displayed text, since the property had no
+grammar at all previously) -- not a regression, the same documented
+harness limitation as other properties' `em`-dependent computed tests.
+`background-image`'s own invalid-argument cases (`radial-gradient`'s
+negative radii, `cross-fade()`'s percentage range) are a distinct,
+separate gradient-argument-validation task, not touched here.
+
+Moved this cluster into `crates/amazing-css/src/background_values.rs` (same
+reason as CSS-29's `grid_values.rs`/`shadow_values.rs`): `computed.rs` was at
+3,797 lines; the new wiring alone (without the split) would have pushed it
+over 4,000.
+
+Measured (pinned 10-selection WPT parsing-conformance runner, before/after
+on the same rebased base, `7cfe7780`): css-backgrounds 427/672 -> 540/672
+(+113); every other selection unchanged (css-color 151/197, css-values
+58/121, css-cascade 10/10, css-conditional 24/32, css-fonts 477/636,
+css-text 421/674, css-transforms 186/362, css-flexbox 117/166, css-grid
+792/953); TOTAL 2663/3823 -> 2776/3823. Verified **zero lost by test
+identity**: diffed the full sorted FAIL-key sets for css-backgrounds with
+`comm` -- 117 lines resolved, 0 regressed, 4 lines changed displayed text
+only (the `em`-boundary cases above, `FAIL` both before and after).
+
+amazing-css: 356/356 nextest (two tests added for the new grammars; one
+pre-existing property-count assertion in `change_classification.rs` updated
+for the two newly-registered longhands), 4 doctests, both green. Full
+workspace gate (win-001-equivalent, `linux-run.sh`): `cargo nextest run
+--workspace --locked` 3305/3305, `cargo test --workspace --locked --doc`
+4/4. Commit `55657df3`.
+
 ## Next
 
-Biggest clusters first (post-CSS-29): css-text (253 failing), css-transforms
-(176), css-grid's remaining `*-computed.html` shortest-serialization gaps
-(161), css-fonts (159), and `color`'s computed-value canonicalization
-(unblocks `alpha-color-computed.html` and `color-computed.html` together).
-Legacy comma-form `rgb()`/`hsla()` strictness and `sibling-index()`/
-`sibling-count()` remain smaller, later items. Also still open from CSS-25:
-`calc()` infinity/NaN, relative-color channel keywords inside nested
+Biggest clusters first (post-CSS-30): css-text (253 failing, unimplemented
+properties from scratch -- the largest but not a grammar-gap fix), css-grid
+(161, mostly `repeat()`/`fit-content()`/track-list computed-value expansion
+and `grid-row`/`grid-column`'s `<custom-ident>` support), css-transforms
+(176), css-fonts (159), css-values (63), css-flexbox (49), css-color (46),
+css-conditional (8). Within css-backgrounds, the remaining 132 failures are
+mostly the documented `em`/font-context boundary (background-position/-size)
+and `background-image`'s gradient-argument validation (negative
+`radial-gradient` radii, `cross-fade()`'s 0-100% range) -- a distinct task
+from this ticket's list-grammar work. Also still open from CSS-25: `calc()`
+infinity/NaN, relative-color channel keywords inside nested
 `calc()`/`clamp()`, `container` shorthand serialization, `random-item()`,
 and `mediaqueries`' `matchMedia().media` canonical serialization.

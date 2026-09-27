@@ -417,6 +417,12 @@ enum PageCommand {
     QuerySelector(EngineNodeId, String, Reply<Option<EngineNodeId>>),
     QuerySelectorAll(EngineNodeId, String, Reply<Vec<EngineNodeId>>),
     FullAxTree(Reply<Vec<AxNode>>),
+    AccessibilityEnabled(bool, Reply<()>),
+    PartialAxTree(EngineNodeId, bool, Reply<Vec<AxNode>>),
+    ChildAxNodes(String, Reply<Vec<AxNode>>),
+    QueryAxTree(Option<EngineNodeId>, Option<String>, Option<String>, Reply<Vec<AxNode>>),
+    DrainAxNodesUpdated(Reply<Vec<AxNode>>),
+    DrainAxLoadComplete(Reply<Option<AxNode>>),
     DescribeNode(EngineNodeId, u32, Reply<NodeDescription>),
     GetOuterHtml(EngineNodeId, Reply<String>),
     SetAttributeValue(EngineNodeId, String, Option<String>, Reply<()>),
@@ -825,24 +831,30 @@ fn box_model_from(box_: &amazing_layout::LayoutBox) -> BoxModel {
     }
 }
 
-/// Converts the a11y lane's own tree into the CDP-shaped seam, matching the
+/// Converts one a11y-lane node into the CDP-shaped seam, matching the
 /// pattern `amazing-devtools::domains::accessibility` documents: this crate
 /// stays independent of `amazing-a11y`, so the conversion lives entirely on
-/// the driver side.
+/// the driver side. Shared by [`convert_ax_tree`] (the whole-tree case) and
+/// CDP-25's `getPartialAXTree`/`getChildAXNodes`/`queryAXTree`/
+/// `Accessibility.loadComplete`, which each convert a handful of individual
+/// nodes rather than a whole tree.
+fn convert_ax_node(node: &amazing_a11y::AxNode) -> AxNode {
+    AxNode {
+        ax_node_id: node.id.0.to_string(),
+        ignored: false,
+        role: Some(node.role.as_str().to_owned()),
+        name: (!node.name.is_empty()).then(|| node.name.clone()),
+        description: (!node.description.is_empty()).then(|| node.description.clone()),
+        value: None,
+        node: node.dom_node.map(|idx| EngineNodeId(idx.0 as u64)),
+        child_ids: node.children.iter().map(|id| id.0.to_string()).collect(),
+    }
+}
+
+/// Converts the a11y lane's own tree into the CDP-shaped seam, root first
+/// (`amazing_a11y::AxTree::nodes()`'s own preorder, per its doc comment).
 fn convert_ax_tree(tree: &amazing_a11y::AxTree) -> Vec<AxNode> {
-    tree.nodes()
-        .iter()
-        .map(|node| AxNode {
-            ax_node_id: node.id.0.to_string(),
-            ignored: false,
-            role: Some(node.role.as_str().to_owned()),
-            name: (!node.name.is_empty()).then(|| node.name.clone()),
-            description: (!node.description.is_empty()).then(|| node.description.clone()),
-            value: None,
-            node: node.dom_node.map(|idx| EngineNodeId(idx.0 as u64)),
-            child_ids: node.children.iter().map(|id| id.0.to_string()).collect(),
-        })
-        .collect()
+    tree.nodes().iter().map(convert_ax_node).collect()
 }
 
 /// The one piece of state that must live on a single thread: the live DOM and
@@ -936,6 +948,22 @@ struct PageOwner {
     /// and no separate mobile layout mode to switch into. See the module's
     /// "Known limitations".
     device_scale_factor: f64,
+    /// CDP-25: the a11y lane's own stateful watcher (A11Y-14), holding the
+    /// tree from the most recent [`Self::refresh_ax_tree`] checkpoint plus a
+    /// queue of the diff events every checkpoint since the last
+    /// [`Self::drain_ax_nodes_updated`] has produced. A checkpoint is
+    /// recorded on every `Accessibility.*` read (`enable`, `getFullAXTree`,
+    /// `getPartialAXTree`, `getChildAXNodes`, `queryAXTree`) — this driver
+    /// has no continuous mutation-observer hook of its own to key off
+    /// instead (see the module's "Known limitations"), so "did the tree
+    /// change" is only actually checked when a client asks to look at it,
+    /// same as every other on-demand-recomputed piece of state in this file
+    /// (style, layout, matched rules, …).
+    ax_watcher: crate::runtime_host_a11y::AxTreeWatcher,
+    /// One-shot `Accessibility.loadComplete` payload, queued by
+    /// [`Self::accessibility_enabled`] and cleared by
+    /// [`Self::drain_ax_load_complete`]. `None` when nothing is queued.
+    ax_load_complete: Option<AxNode>,
 }
 
 /// One script this driver has seen, classic or module (see
@@ -1210,6 +1238,8 @@ impl PageOwner {
             override_width: None,
             override_fixed_height: None,
             device_scale_factor: 1.0,
+            ax_watcher: crate::runtime_host_a11y::AxTreeWatcher::new(),
+            ax_load_complete: None,
         })
     }
 
@@ -2687,22 +2717,23 @@ impl PageOwner {
 
     /// Computes style + layout (the same minimal `FallbackTextSystem` /
     /// `NoReplacedElements` path `amazing axtree` uses) on the live DOM and
-    /// builds the accessibility tree through the a11y lane's own driver
-    /// adapter, per the ticket's "through `runtime_host_a11y::build_ax_tree`".
-    fn full_ax_tree(&self) -> Result<Vec<AxNode>, HostError> {
+    /// records a fresh checkpoint on [`Self::ax_watcher`] — building the
+    /// tree fresh on the first call, or diffing it against whatever
+    /// checkpoint came before on every later one (CDP-25's
+    /// `AxTreeWatcher`, A11Y-14). Every `Accessibility.*` read funnels
+    /// through this, so a client that calls, say, `getFullAXTree` twice
+    /// with a DOM mutation in between sees that mutation reflected in the
+    /// second call *and* gets a real `Accessibility.nodesUpdated` queued
+    /// for [`Self::drain_ax_nodes_updated`] to report — this driver has no
+    /// continuous mutation-observer hook of its own to key checkpoints off
+    /// instead (see the module's "Known limitations"; filed originally as
+    /// `.agents/devtools/questions.md`'s A11Y-8 hookup note, closed by this
+    /// ticket at this granularity).
+    fn refresh_ax_tree(&mut self) -> amazing_a11y::AxTree {
         let host = self.dom_host.borrow();
         let dom = &host.dom;
-        let mut sources = Vec::new();
-        let _ = crate::page::collect_author_css(dom, amazing_dom::NodeIdx(0), &self.url, &mut sources);
-        let sheets: Vec<amazing_css::Stylesheet> = sources.into_iter().map(|(_, _, sheet)| sheet).collect();
-        let styled = amazing_css::compute_with_environment(
-            dom,
-            &sheets,
-            &amazing_css::MediaEnvironment {
-                viewport_width_px: self.effective_width().max(1.0),
-                ..amazing_css::MediaEnvironment::default()
-            },
-        );
+        let sheets = self.author_sheets(dom);
+        let styled = amazing_css::compute_with_environment(dom, &sheets, &self.media_environment());
         let text = amazing_text::FallbackTextSystem::new();
         let layout = amazing_layout::layout_styled_document(
             dom,
@@ -2712,8 +2743,135 @@ impl PageOwner {
             self.effective_width(),
             self.effective_fixed_height().map(|h| h as f32),
         );
-        let tree = crate::runtime_host_a11y::build_ax_tree(dom, &styled, &layout);
+        self.ax_watcher.record_checkpoint(dom, &styled, &layout);
+        drop(host);
+        self.ax_watcher.current_tree().cloned().expect("record_checkpoint always leaves a current tree")
+    }
+
+    /// `Accessibility.getFullAXTree`. `depth` is accepted but not applied —
+    /// the whole tree is always returned; see the module's "Known
+    /// limitations" (unchanged behavior from before this ticket).
+    fn full_ax_tree(&mut self) -> Result<Vec<AxNode>, HostError> {
+        let tree = self.refresh_ax_tree();
         Ok(convert_ax_tree(&tree))
+    }
+
+    /// `Accessibility.enable`/`disable`. Enabling immediately builds (or
+    /// rebuilds) the tree and queues its root for
+    /// [`Self::drain_ax_load_complete`] — this driver's stand-in for real
+    /// Chrome's page-load-keyed `Accessibility.loadComplete`, since it has
+    /// no separate "page finished loading" signal to fire that from
+    /// instead (see [`Self::ax_load_complete`]'s doc comment). Disabling
+    /// clears anything still queued, matching a client that stopped
+    /// listening.
+    fn accessibility_enabled(&mut self, enabled: bool) {
+        if !enabled {
+            self.ax_load_complete = None;
+            return;
+        }
+        let tree = self.refresh_ax_tree();
+        self.ax_load_complete = tree.root().and_then(|id| tree.node(id)).map(convert_ax_node);
+    }
+
+    /// `Accessibility.getPartialAXTree`: the subtree rooted at `node`
+    /// (`AxTree::walk`'s preorder), plus — when `fetch_relatives` is set —
+    /// every ancestor up to the root first, matching real CDP's "the node,
+    /// its subtree, and (optionally) its ancestor chain" shape.
+    fn partial_ax_tree(&mut self, node: EngineNodeId, fetch_relatives: bool) -> Result<Vec<AxNode>, HostError> {
+        let tree = self.refresh_ax_tree();
+        let ax_id = tree.find_dom(amazing_dom::NodeIdx(node.0 as u32)).ok_or(HostError::NotFound)?;
+        let mut ids = Vec::new();
+        if fetch_relatives {
+            let mut ancestors = Vec::new();
+            let mut current = tree.node(ax_id).and_then(|entry| entry.parent);
+            while let Some(id) = current {
+                ancestors.push(id);
+                current = tree.node(id).and_then(|entry| entry.parent);
+            }
+            ancestors.reverse();
+            ids.extend(ancestors);
+        }
+        ids.extend(tree.walk(Some(ax_id)));
+        Ok(ids.into_iter().filter_map(|id| tree.node(id)).map(convert_ax_node).collect())
+    }
+
+    /// `Accessibility.getChildAXNodes`: the direct children of the node
+    /// named by its string `AXNodeId`, each with its own `childIds` already
+    /// filled in (so a client can keep expanding without another round
+    /// trip per grandchild). `HostError::NotFound` covers both a malformed
+    /// id and one from a stale/earlier tree.
+    fn child_ax_nodes(&mut self, ax_node_id: &str) -> Result<Vec<AxNode>, HostError> {
+        let tree = self.refresh_ax_tree();
+        let raw: u32 = ax_node_id
+            .parse()
+            .map_err(|_| HostError::InvalidParams(format!("bad AXNodeId: {ax_node_id}")))?;
+        let id = amazing_a11y::AxNodeId(raw);
+        if tree.node(id).is_none() {
+            return Err(HostError::NotFound);
+        }
+        Ok(tree.children(id).iter().filter_map(|child| tree.node(*child)).map(convert_ax_node).collect())
+    }
+
+    /// `Accessibility.queryAXTree`: nodes under `node` (`AxTree::walk`
+    /// conveniently already defaults to the whole tree when its start is
+    /// `None`, matching this method's own "the whole tree when node is
+    /// `None`" contract for free) whose accessible name equals
+    /// `accessible_name` (when given) and whose role matches `role`
+    /// case-insensitively (when given) — real Chrome's own CDP role
+    /// strings are already lowercase, so this only makes the match forgiving
+    /// of a client that sends different casing, not a behavior change.
+    fn query_ax_tree(
+        &mut self,
+        node: Option<EngineNodeId>,
+        accessible_name: Option<&str>,
+        role: Option<&str>,
+    ) -> Result<Vec<AxNode>, HostError> {
+        let tree = self.refresh_ax_tree();
+        let start = match node {
+            Some(node) => Some(tree.find_dom(amazing_dom::NodeIdx(node.0 as u32)).ok_or(HostError::NotFound)?),
+            None => None,
+        };
+        Ok(tree
+            .walk(start)
+            .into_iter()
+            .filter_map(|id| tree.node(id))
+            .filter(|entry| accessible_name.is_none_or(|want| entry.name == want))
+            .filter(|entry| role.is_none_or(|want| entry.role.as_str().eq_ignore_ascii_case(want)))
+            .map(convert_ax_node)
+            .collect())
+    }
+
+    /// `Accessibility.nodesUpdated`: every event [`Self::ax_watcher`] has
+    /// queued since the last drain, minus `Removed` ones (real CDP's
+    /// `nodesUpdated` has no removal concept of its own — DOM removal is
+    /// signalled through `DOM.*` separately, matching the a11y lane's own
+    /// `.agents/devtools/questions.md` hookup note), deduplicated by
+    /// `AxNodeId` (a node whose name *and* role both changed in one
+    /// checkpoint gets one `AxEvent` per aspect, but CDP wants one updated
+    /// snapshot per node, not one per aspect) and resolved against the
+    /// *current* tree rather than carried on the event itself, so a node
+    /// that changed twice before ever being drained is reported with its
+    /// latest values, not a stale intermediate one.
+    fn drain_ax_nodes_updated(&mut self) -> Vec<AxNode> {
+        let events = self.ax_watcher.drain_events();
+        if events.is_empty() {
+            return Vec::new();
+        }
+        let Some(tree) = self.ax_watcher.current_tree() else { return Vec::new() };
+        let mut seen = std::collections::HashSet::new();
+        events
+            .iter()
+            .filter(|event| event.kind != amazing_a11y::AxEventKind::Removed)
+            .filter(|event| seen.insert(event.node))
+            .filter_map(|event| tree.node(event.node))
+            .map(convert_ax_node)
+            .collect()
+    }
+
+    /// `Accessibility.loadComplete`: takes whatever [`Self::accessibility_enabled`]
+    /// queued, once.
+    fn drain_ax_load_complete(&mut self) -> Option<AxNode> {
+        self.ax_load_complete.take()
     }
 }
 
@@ -2765,6 +2923,25 @@ fn run_page_thread(mut page: PageOwner, rx: Receiver<PageCommand>) {
             }
             PageCommand::FullAxTree(reply) => {
                 let _ = reply.send(page.full_ax_tree());
+            }
+            PageCommand::AccessibilityEnabled(enabled, reply) => {
+                page.accessibility_enabled(enabled);
+                let _ = reply.send(Ok(()));
+            }
+            PageCommand::PartialAxTree(node, fetch_relatives, reply) => {
+                let _ = reply.send(page.partial_ax_tree(node, fetch_relatives));
+            }
+            PageCommand::ChildAxNodes(id, reply) => {
+                let _ = reply.send(page.child_ax_nodes(&id));
+            }
+            PageCommand::QueryAxTree(node, name, role, reply) => {
+                let _ = reply.send(page.query_ax_tree(node, name.as_deref(), role.as_deref()));
+            }
+            PageCommand::DrainAxNodesUpdated(reply) => {
+                let _ = reply.send(Ok(page.drain_ax_nodes_updated()));
+            }
+            PageCommand::DrainAxLoadComplete(reply) => {
+                let _ = reply.send(Ok(page.drain_ax_load_complete()));
             }
             PageCommand::DescribeNode(node, depth, reply) => {
                 let _ = reply.send(Ok(page.describe_node(node, depth)));
@@ -2981,6 +3158,38 @@ impl DevToolsSession for DriverPageSession {
 
     fn get_full_ax_tree(&mut self, _depth: Option<u32>) -> Result<Vec<AxNode>, HostError> {
         request(&self.sender, PageCommand::FullAxTree)
+    }
+
+    fn accessibility_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        request(&self.sender, |reply| PageCommand::AccessibilityEnabled(enabled, reply))
+    }
+
+    fn get_partial_ax_tree(&mut self, node: EngineNodeId, fetch_relatives: bool) -> Result<Vec<AxNode>, HostError> {
+        request(&self.sender, |reply| PageCommand::PartialAxTree(node, fetch_relatives, reply))
+    }
+
+    fn get_child_ax_nodes(&mut self, ax_node_id: &str) -> Result<Vec<AxNode>, HostError> {
+        let ax_node_id = ax_node_id.to_owned();
+        request(&self.sender, |reply| PageCommand::ChildAxNodes(ax_node_id, reply))
+    }
+
+    fn query_ax_tree(
+        &mut self,
+        node: Option<EngineNodeId>,
+        accessible_name: Option<&str>,
+        role: Option<&str>,
+    ) -> Result<Vec<AxNode>, HostError> {
+        let accessible_name = accessible_name.map(str::to_owned);
+        let role = role.map(str::to_owned);
+        request(&self.sender, |reply| PageCommand::QueryAxTree(node, accessible_name, role, reply))
+    }
+
+    fn drain_ax_nodes_updated(&mut self) -> Vec<AxNode> {
+        request(&self.sender, PageCommand::DrainAxNodesUpdated).unwrap_or_default()
+    }
+
+    fn drain_ax_load_complete(&mut self) -> Option<AxNode> {
+        request(&self.sender, PageCommand::DrainAxLoadComplete).unwrap_or_default()
     }
 
     fn describe_node(&mut self, node: EngineNodeId, depth: u32) -> Result<NodeDescription, HostError> {

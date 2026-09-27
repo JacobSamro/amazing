@@ -281,4 +281,84 @@ into a scratch tempdir and only persist mismatch images under `--output`
 (pass-case PPMs used to accumulate gigabytes per full-selection run on the
 shared `pool-layout` sandbox, per the 2026-09-26 disk-pressure incident).
 
+## LFG-4 — largest remaining mismatch cluster in flex/grid, in bulk (2026-09-27)
+
+Merge base: `855b2ca9` (`dev`, picked up after LFG-3 merged as `ab002ce4`,
+`layout`'s LAYOUT-23/24 re-merge as `512912d5`, and an unrelated
+`amazing`-binary compile break the integrator fixed as `855b2ca9`). Per the
+coordinator: stayed off `position.rs`'s shrink-to-fit path this round
+(`layout` is separately fixing the tables loss it caused, as LAYOUT-24).
+
+Clustered the post-merge flex/grid (1,446) mismatches by WPT subpath. The
+largest bucket by far was `css-grid/grid-lanes` (427-428), inside which
+`subgrid/grid-subgridded-to-grid-lanes` (102) was the single biggest named
+cluster, followed by `track-sizing/auto-repeat` (54), `tentative/item-
+placement` (34) and `item-placement/dense-packing` (33).
+
+1. **Attempted first, kept but ineffective on its own:** `grid.rs`'s
+   `intrinsic_lanes_width` (an atomic-inline Grid Lanes container's own
+   width) summed *every* item's intrinsic width for a row-lanes container
+   (rows explicit, columns the free waterfall axis) as if each item got its
+   own column — correct only with exactly one row track. Rewrote it to
+   mirror `layout_row_lanes`'s real per-row-lane packing (`choose_lane` /
+   `parse_placement`) with intrinsic widths standing in for laid-out outer
+   heights. Verified via `amazing layout` on
+   `grid-lanes/subgrid/grid-subgridded-to-grid-lanes/row/grid-lanes-
+   subgrid-001c.html`: container width went from 184.0 to 93.6 (closer to
+   the reference's 62.8, since the reference's container legitimately uses
+   a *different*, non-masonry algorithm that happens to produce the same
+   pixels for that file's specific numbers — real progress, but a clean
+   isolated before/after sweep (512912d5, with vs. without this one change)
+   showed **zero tests flipped either way** across the whole 1,446-case
+   selection, so it doesn't clear the fuzzy-match bar on its own for that
+   cluster. Kept anyway (strictly more correct, zero regressions) and moved
+   on rather than chase pixel-exact parity with a structurally different
+   reference algorithm for the rest of this ticket's budget.
+2. **Real fix, verified, broader than grid-lanes:** `place_row_flow`'s fully
+   -automatic (both `row`/`col` auto) placement loop — used by *both* plain
+   `display:grid` auto-flow and grid-lanes' explicit-column-track branch —
+   wrapped to the next row only when the *start* column exceeded the wrap
+   `limit` (`if c > limit`), not when the item's whole span would. A
+   spanning item that didn't fit the remaining columns of the current row
+   therefore overflowed into a spurious implicit column past the wrap
+   boundary instead of wrapping, both overflowing the container and
+   creating an extra (usually near-zero-width, since `repeat(auto-fill,…)`
+   sizing is computed independent of it) implicit track. Fixed by computing
+   `last_start = limit - (span - 1)` and wrapping once the start column
+   would exceed *that*, in both the dense (rescan) and sparse (cursor)
+   sub-branches. Verified via `amazing layout` on
+   `grid-lanes/track-sizing/auto-repeat/column-auto-repeat-001.html`
+   (`repeat(auto-fill,100px)` columns, a `grid-column:span 2` item that
+   must wrap to a 3rd row): the spanning item moved from `(208,108)
+   100×100` (wrongly overflowing into an implicit 4th column) to `(8,208)
+   200×100`, now byte-for-byte matching the reference.
+
+Measured on Linux (venus-003, release binary, `run-render-sweep-linux.py`,
+base `855b2ca9`):
+
+| Selection | Before this series | After |
+| --- | --- | --- |
+| flex/grid (1,446) | 702 pass / 744 mismatch | **709 pass / 737 mismatch** (+7, 0 lost) |
+
+Both numbers measured at the same base (`855b2ca9`, lane edits stashed for
+the "before" run) so the +7/0-lost figure is attributable entirely to this
+ticket's two fixes, not to sibling-lane drift; a per-test diff of the two
+`report.json`s confirms 7 gained (all `grid-lanes/track-sizing/auto-repeat`,
+the `place_row_flow` wrap fix) and 0 lost.
+
+Crate gate: `cargo nextest run -p amazing-layout --locked` 372/372 (1
+skipped, venus-003). Workspace gate: `cargo nextest run --workspace
+--locked --no-fail-fast` 3,279/3,279 (2 slow, 15 skipped); doctests all
+`ok` (`amazing-js` 1/1, `amazing-html` 1/1, everything else 0/0). Both
+green on venus-003.
+
+Cross-lane note: mid-ticket, Boat exhausted its 200 sandbox starts/day and
+the fleet moved to direct Linux hosts (`venus-001`/`venus-003`, `worker-2`,
+`k-test`); host routing flapped a few times while the orchestrator tuned
+`scripts/linux-run.sh` live, and one `dev` commit briefly broke the
+`amazing` binary's build (`PageScript.node`, devtools/HTML lanes, fixed
+upstream as `855b2ca9` before this ticket's own numbers were taken) — neither
+was caused by or is owned by this lane; noted for the record, not filed as a
+new question since both were already resolved by the time of the final gate.
+
 

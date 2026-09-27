@@ -99,6 +99,56 @@ fn bounded_pathological_pattern_throws() {
 }
 
 #[test]
+fn named_capture_groups() {
+    truth(
+        r"var m=/(?<year>\d{4})-(?<month>\d{2})/.exec('2024-06');m.groups.year==='2024' && m.groups.month==='06' && m[1]==='2024'",
+    );
+    truth(r"var m=/(?<a>x)?/.exec('y');m.groups.a===undefined && Object.getPrototypeOf(m.groups)===null");
+    truth(r"/(?<a>x)/.exec('y')===null");
+    truth(r"/(?<a>x)\k<a>/.test('xx') && !/(?<a>x)\k<a>/.test('xy')");
+    truth(r"/\k<a>(?<a>x)/.test('x')");
+    truth(r"'2024-06'.replace(/(?<year>\d{4})-(?<month>\d{2})/,'$<month>/$<year>')==='06/2024'");
+    truth(
+        r"'2024-06'.replace(/(?<year>\d{4})-(?<month>\d{2})/,function(full,year,month,index,source,groups){return groups.year+'!'+groups.month;})==='2024!06'",
+    );
+    truth(r"var error=false;try{new RegExp('(?<a>x)(?<a>y)')}catch(e){error=e.name==='SyntaxError'}error");
+    // Annex B: with no named group anywhere in the pattern, `\k<a>` is a
+    // plain identity escape (literal `k`), not a forced backreference.
+    truth(r"new RegExp('\\k<a>').test('k<a>')");
+    truth(r"var error=false;try{new RegExp('(?<b>x)\\k<a>')}catch(e){error=e.name==='SyntaxError'}error");
+}
+#[test]
+fn regexp_escape_static_method() {
+    truth(r"RegExp.escape('foo bar')==='\\x66oo\\x20bar'");
+    truth(r"RegExp.escape('a+b*c')==='\\x61\\+b\\*c'");
+    truth(r"RegExp.escape('1a')==='\\x31a' && RegExp.escape('a1')==='\\x611'");
+    truth(r"new RegExp('^'+RegExp.escape('a.b')+'$').test('a.b') && !new RegExp('^'+RegExp.escape('a.b')+'$').test('axb')");
+    truth(r"RegExp.escape.length===1 && RegExp.escape.name==='escape'");
+    truth(r"var error=false;try{RegExp.escape(1)}catch(e){error=e.name==='TypeError'}error");
+}
+#[test]
+fn symbol_match_search_and_match_all() {
+    truth(r"/a/[Symbol.match]('cat')[0]==='a'");
+    truth(r"/a/g[Symbol.match]('banana').join(',')==='a,a,a'");
+    truth(r"/z/g[Symbol.match]('banana')===null");
+    truth(r"/an/[Symbol.search]('banana')===1");
+    truth(r"/z/[Symbol.search]('banana')===-1");
+    truth(
+        r"var r=/a/g;r.lastIndex=5;r[Symbol.search]('banana');r.lastIndex===5",
+    );
+    truth(
+        r"var it=/a/g[Symbol.matchAll]('banana');var out=[];var step;while(!(step=it.next()).done){out.push(step.value[0]+':'+step.value.index);}out.join(',')==='a:1,a:3,a:5'",
+    );
+    truth(r"var it=/a/g[Symbol.matchAll]('banana');it[Symbol.iterator]()===it");
+    truth(
+        r"var it=/(?<x>a)/g[Symbol.matchAll]('banana');it.next().value.groups.x==='a'",
+    );
+    truth(
+        r"var it=/a/[Symbol.matchAll]('banana');var first=it.next();var second=it.next();first.done===false && first.value[0]==='a' && second.done===true && second.value===undefined",
+    );
+    truth(r"var r=/a/g;r.lastIndex=3;var it=r[Symbol.matchAll]('banana');r.lastIndex===3 && it.next().value.index===3");
+}
+#[test]
 fn templates_in_blocks_and_getter_receivers() {
     truth(r"function f(){return `a${ /[}]/.test('}') }${ `${({a:2}).a}` }`;} f()==='atrue2'");
     truth(
@@ -136,4 +186,79 @@ fn harness_setup_uses_actual_argument_count_and_function_identity() {
 #[test]
 fn harness_completion_some_skips_holes_and_short_circuits() {
     truth("var calls=0;var a=[,2,3];a.some(function(v,k,o){calls++;return v===2 && k===1 && o===a;}) && calls===1 && ![].some(function(){return true;})");
+}
+
+#[test]
+fn lookbehind_assertions_end_to_end() {
+    truth(r"/(?<=\$)\d+/.exec('$100')[0]==='100'");
+    truth(r"/(?<=\$)\d+/.test('100')===false");
+    truth(r"/(?<!\$)\b\d+\b/.test('200')===true && /(?<!\$)\d+/.exec('$100')[0]==='00'");
+    truth(r"/(?<=(\d+)-)\w+/.exec('42-foo')[1]==='42'");
+    truth(r"var error=false;try{new RegExp('(?<=a)+')}catch(e){error=e.name==='SyntaxError'}error");
+}
+
+#[test]
+fn inline_modifier_groups_end_to_end() {
+    truth(r"/(?i:a)b/.test('Ab') && !/(?i:a)b/.test('AB')");
+    truth(r"/(?-i:a)b/i.test('aB') && !/(?-i:a)b/i.test('Ab')");
+    truth(r"/(?s:a.)b/.test('a\nb') && !/a.b/.test('a\nb')");
+    truth(r"/(?m:^b)/.test('a\nb') && !/^b/.test('a\nb')");
+}
+
+#[test]
+fn has_indices_flag_and_indices_property() {
+    truth(r"/a/d.hasIndices===true && /a/.hasIndices===false");
+    truth(r"/a/d.flags==='d'");
+    truth(r"var m=/(?<x>b)c/d.exec('abc');m.indices[0][0]===1 && m.indices[0][1]===3");
+    truth(r"var m=/(?<x>b)c/d.exec('abc');m.indices[1][0]===1 && m.indices[1][1]===2");
+    truth(r"var m=/(?<x>b)?c/d.exec('c');m.indices[1]===undefined");
+    truth(r"var m=/(?<x>b)c/d.exec('abc');m.indices.groups.x[0]===1 && m.indices.groups.x[1]===2");
+    truth(r"/a/.exec('a').indices===undefined");
+}
+
+#[test]
+fn symbol_split() {
+    truth(r"/,/[Symbol.split]('a,b,,c').join('|')==='a|b||c'");
+    truth(r"/,/[Symbol.split]('a,b,c',2).join('|')==='a|b'");
+    truth(r"/(,)/[Symbol.split]('a,b').join('|')==='a|,|b'");
+    truth(r"/(?:)/[Symbol.split]('abc').join('|')==='a|b|c'");
+    truth(r"/,/[Symbol.split]('').length===1 && /,/[Symbol.split]('')[0]===''");
+    truth(r"var r=/a*/[Symbol.split]('ab');r.length===2 && r[0]==='' && r[1]==='b'");
+}
+// Regression coverage for two bugs that were open (and filed cross-lane) at
+// the top of this merge: a subclassed `exec` losing its custom `groups`
+// object's own+inherited properties through `$<name>` replacement, and
+// `String.prototype.split` not delegating to a regexp's `@@split`. Both are
+// fixed as of the `dev` merge this commit carries; kept here as an
+// executable record rather than only in commit prose.
+#[test]
+fn subclassed_exec_groups_flow_through_replace() {
+    truth(
+        r#"
+class FakeRegExp extends RegExp {
+  exec(subject) {
+    const fakeResult = ["ab", "a"];
+    fakeResult.index = 0;
+    fakeResult.groups = { a: "b" };
+    Object.getPrototypeOf(fakeResult.groups).b = "c";
+    return fakeResult;
+  }
+};
+const re = new FakeRegExp();
+const result = re.exec("ab");
+Object.getPrototypeOf(result) === Array.prototype
+  && result.hasOwnProperty("groups")
+  && result.groups.a === "b"
+  && "ab".replace(re, "$<a>") === "b"
+  && "ab".replace(re, "$<b>") === "c"
+"#,
+    );
+}
+#[test]
+fn string_split_delegates_to_regexp() {
+    truth(r#""xab".split(/a|b/).join('|')==='x||'"#);
+}
+#[test]
+fn duplicate_named_group_replace_with_dollar_name() {
+    truth(r#""ab".replace(/(?<x>a)|(?<x>b)/, "[$<x>]")==='[a]b'"#);
 }

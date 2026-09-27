@@ -112,7 +112,7 @@ struct FixtureServer {
 }
 
 impl FixtureServer {
-    fn start(root: PathBuf, generated: Option<(String, Vec<u8>)>) -> Result<Self, String> {
+    fn start(root: PathBuf, generated: Option<(String, Vec<u8>)>, scaffold: bool) -> Result<Self, String> {
         let listener = TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
         listener
             .set_nonblocking(true)
@@ -140,7 +140,7 @@ impl FixtureServer {
                         let root = root.clone();
                         let generated = generated.clone();
                         connections.push(std::thread::spawn(move || {
-                            serve_fixture(stream, &root, generated.as_ref());
+                            serve_fixture(stream, &root, generated.as_ref(), scaffold);
                         }));
                     }
                     Ok(_) => {}
@@ -188,7 +188,7 @@ impl Drop for FixtureServer {
     }
 }
 
-fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String, Vec<u8>)>) {
+fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String, Vec<u8>)>, scaffold: bool) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(15)));
     let mut request = Vec::new();
     while !request.ends_with(b"\r\n\r\n") && request.len() < 16384 {
@@ -204,6 +204,27 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
         .and_then(|line| line.strip_prefix("GET "))
         .and_then(|line| line.split_once(' '))
         .map(|(path, _)| path.to_owned());
+    // NET-41: `cookies/resources/cookie.py` is a dynamic WPT resource (sets
+    // `Set-Cookie` headers from its `?set=` query param, and optionally
+    // 302-redirects via `?location=`) that this static-file fixture cannot
+    // serve as bytes off disk. `cookies/`'s `httpCookieTest`/
+    // `httpRedirectCookieTest` helpers (`cookie-test.js`) round-trip through
+    // it for nearly every test, so it is answered dynamically here, ahead of
+    // the generic static-file path below, and returns directly (its
+    // response shape -- multiple `Set-Cookie` lines, a 302 variant -- does
+    // not fit the single-Content-Type-header write below).
+    if let Some(path) = path.as_deref() {
+        let path_only = path.split('#').next().unwrap_or(path);
+        if let Some((route, query)) = path_only.split_once('?') {
+            if route == "/cookies/resources/cookie.py" {
+                respond_cookie_py(&mut stream, query);
+                return;
+            }
+        } else if path_only == "/cookies/resources/cookie.py" {
+            respond_cookie_py(&mut stream, "");
+            return;
+        }
+    }
     let mut served_name = String::new();
     let body = path.as_deref().and_then(|path| {
         let name = path.split(['?', '#']).next()?.strip_prefix('/')?;
@@ -211,6 +232,24 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
             return None;
         }
         served_name = name.to_owned();
+        // NET-41: `testdriver-vendor.js` is the pinned corpus's intentionally
+        // empty extension point (see `testdriver.js`'s fallback
+        // `test_driver_internal` object) for a browser's real WebDriver-
+        // backed implementations. `cookies/resources/cookie-test.js`'s
+        // `httpCookieTest`/`domCookieTest` helpers call
+        // `test_driver.delete_all_cookies()` before and after almost every
+        // test; without a real implementation that call throws inside an
+        // unresolvable async `Promise` executor and the whole test file
+        // hangs to a harness timeout. This override runs after the real
+        // (empty) `testdriver-vendor.js` would have, patching the specific
+        // method testdriver.js already created a throwing stub for, and
+        // routes it to the native `document.cookie` store
+        // (`runtime_host_net.rs`'s `install_document_cookie`) rather than
+        // replacing the real file, which lane ownership rules mean this
+        // fixture should not otherwise diverge from.
+        if name == "resources/testdriver-vendor.js" {
+            return Some(TESTDRIVER_VENDOR_OVERRIDE.as_bytes().to_vec());
+        }
         if let Some((generated_name, bytes)) = generated
             && name == generated_name.trim_start_matches('/')
         {
@@ -220,7 +259,29 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
         if !file.starts_with(root) || file.metadata().ok()?.len() > FIXTURE_LIMIT as u64 {
             return None;
         }
-        std::fs::read(file).ok()
+        let bytes = std::fs::read(file).ok()?;
+        // NET-42: this generic static-file path served every `.sub.` file's
+        // raw, unsubstituted disk bytes -- including the top-level page
+        // itself, when navigated through `FixtureServer` (no
+        // `AMAZING_WPT_SHIM_ADDR`) rather than skipped entirely (the shim
+        // path never navigates or compares bytes at all). `execute()`
+        // compares the navigated page's rendered bytes against `source()`'s
+        // substituted `expected_html`, so every `.sub.` file failed with
+        // "fixture navigation differed from pinned page bytes" the moment a
+        // real navigation was involved. Apply the same table `source()`
+        // uses, on the same `!scaffold` condition.
+        if !scaffold && name.contains(".sub.") {
+            return Some(match String::from_utf8(bytes) {
+                Ok(mut text) => {
+                    apply_sub_substitution(&mut text);
+                    text.into_bytes()
+                }
+                // Binary `.sub.` resource (shouldn't occur in this corpus):
+                // serve unmodified rather than losing the response entirely.
+                Err(error) => error.into_bytes(),
+            });
+        }
+        Some(bytes)
     });
     let (status, bytes) = match body {
         Some(bytes) if bytes.len() <= FIXTURE_LIMIT => ("200 OK", bytes),
@@ -262,6 +323,189 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
         bytes.len()
     );
     let _ = stream.write_all(&bytes);
+}
+
+/// NET-41: overrides just the method(s) the pinned corpus's real (empty)
+/// `testdriver-vendor.js` leaves for a browser to implement, matching
+/// `test_driver_internal`'s method names in `testdriver.js`. Loaded after
+/// `testdriver.js` in every `cookies/` fixture, so `window.test_driver_internal`
+/// already exists and this only needs to patch the one entry point the
+/// `cookies/` corpus actually exercises. `document.__amazingDeleteAllCookies`
+/// is a getter (not a plain method) installed on `Document.prototype` by
+/// `install_document_cookie` (`runtime_host_net.rs`) -- a data property
+/// installed there at bootstrap was empirically unreachable from a hidden
+/// iframe's own `document`, while a getter, defined the same way `cookie`
+/// itself is, resolves correctly from any frame. This override applies both
+/// where a document's own `<script src>` is read straight off disk
+/// (`source()`, below) and where an iframe/subresource fetch is served over
+/// real HTTP (`serve_fixture`, above) -- `cookie-test.js`'s
+/// `getAndExpireCookiesForDefaultPathTest()` calls `test_driver.delete_all_cookies()`
+/// from both a top-level document and a hidden iframe.
+/// The top document's `testdriver-vendor.js`: IA-TESTDRIVER's driver
+/// (`TESTDRIVER_VENDOR_JS`) followed by NET-41's cookie-store-backed
+/// `delete_all_cookies` (`TESTDRIVER_VENDOR_OVERRIDE`), which replaces the
+/// former's no-op stub. Iframes/subresources get only the latter via
+/// `serve_fixture`, as before.
+fn testdriver_vendor_source() -> String {
+    format!("{TESTDRIVER_VENDOR_JS}\n{TESTDRIVER_VENDOR_OVERRIDE}")
+}
+
+const TESTDRIVER_VENDOR_OVERRIDE: &str = r#"window.test_driver_internal.delete_all_cookies = async function(context = null) {
+    return document.__amazingDeleteAllCookies;
+};
+"#;
+
+/// NET-41: a from-scratch, minimal port of `cookies/resources/cookie.py`
+/// (see `set_cookie`/`main` there) -- decode the `?set=` query param (a
+/// `JSON.stringify`-then-`encodeURIComponent`-encoded string, or array of
+/// strings, of raw `Set-Cookie` header values), echo each one back as a
+/// literal `Set-Cookie` response header, and if `?location=` is present,
+/// 302-redirect to it instead of returning the plain success body. Every
+/// `cookies/` `httpCookieTest`/`httpRedirectCookieTest` round-trips through
+/// this endpoint (`cookie-test.js`).
+fn respond_cookie_py(stream: &mut TcpStream, query: &str) {
+    let mut set_cookies = Vec::new();
+    let mut location = None;
+    for pair in query.split('&') {
+        if pair.is_empty() {
+            continue;
+        }
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        match key {
+            "set" => set_cookies.extend(parse_cookie_json_list(&harness_percent_decode(value))),
+            "location" => location = Some(harness_percent_decode(value)),
+            _ => {}
+        }
+    }
+    let mut header_lines = String::new();
+    for cookie in &set_cookies {
+        header_lines.push_str("Set-Cookie: ");
+        header_lines.push_str(cookie);
+        header_lines.push_str("\r\n");
+    }
+    let (status, body): (&str, &[u8]) = if let Some(location) = &location {
+        header_lines.push_str("Location: ");
+        header_lines.push_str(location);
+        header_lines.push_str("\r\n");
+        ("302 Found", br#"{"redirect": true}"#)
+    } else {
+        ("200 OK", br#"{"success": true}"#)
+    };
+    let _ = write!(
+        stream,
+        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nAccess-Control-Allow-Credentials: true\r\nCache-Control: no-cache\r\n{header_lines}Content-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    let _ = stream.write_all(body);
+}
+
+/// `%XX`-escape decoder for `cookie.py`'s query string, mirroring
+/// `amazing_net::url`'s private decoder (not exported, and this is
+/// harness-only plumbing rather than a reason to widen that crate's public
+/// API). Invalid escapes pass through byte-for-byte.
+fn harness_percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 3 <= bytes.len()
+            && bytes[i + 1].is_ascii_hexdigit()
+            && bytes[i + 2].is_ascii_hexdigit()
+        {
+            let hi = (bytes[i + 1] as char).to_digit(16).unwrap_or(0) as u8;
+            let lo = (bytes[i + 2] as char).to_digit(16).unwrap_or(0) as u8;
+            out.push(hi * 16 + lo);
+            i += 3;
+        } else if bytes[i] == b'+' {
+            out.push(b' ');
+            i += 1;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Decodes one JSON string literal (the `cookie` may be a bare string or an
+/// array of strings per `cookie-test.js`'s `httpCookieTest`), handling the
+/// escapes `JSON.stringify` produces, including `\uXXXX`.
+fn decode_json_string(s: &str) -> String {
+    let chars: Vec<char> = s.trim().chars().collect();
+    let mut i = 0;
+    if i >= chars.len() || chars[i] != '"' {
+        return String::new();
+    }
+    i += 1;
+    let mut out = String::new();
+    while i < chars.len() && chars[i] != '"' {
+        if chars[i] == '\\' && i + 1 < chars.len() {
+            i += 1;
+            match chars[i] {
+                'n' => out.push('\n'),
+                'r' => out.push('\r'),
+                't' => out.push('\t'),
+                'b' => out.push('\u{8}'),
+                'f' => out.push('\u{c}'),
+                '"' => out.push('"'),
+                '\\' => out.push('\\'),
+                '/' => out.push('/'),
+                'u' if i + 4 < chars.len() => {
+                    let hex: String = chars[i + 1..i + 5].iter().collect();
+                    if let Ok(code) = u32::from_str_radix(&hex, 16)
+                        && let Some(ch) = char::from_u32(code)
+                    {
+                        out.push(ch);
+                    }
+                    i += 4;
+                }
+                other => out.push(other),
+            }
+        } else {
+            out.push(chars[i]);
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Parses `cookie-test.js`'s `encodeURIComponent(JSON.stringify(cookie))`
+/// payload, where `cookie` is either a single string or an array of strings
+/// (each becoming one `Set-Cookie` header, in order).
+fn parse_cookie_json_list(text: &str) -> Vec<String> {
+    let text = text.trim();
+    if !text.starts_with('[') {
+        return vec![decode_json_string(text)];
+    }
+    let inner = &text[1..text.rfind(']').unwrap_or(text.len())];
+    let chars: Vec<char> = inner.chars().collect();
+    let mut items = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        while i < chars.len() && (chars[i].is_whitespace() || chars[i] == ',') {
+            i += 1;
+        }
+        if i >= chars.len() || chars[i] != '"' {
+            break;
+        }
+        let start = i;
+        i += 1;
+        while i < chars.len() {
+            if chars[i] == '\\' {
+                i += 2;
+                continue;
+            }
+            if chars[i] == '"' {
+                i += 1;
+                break;
+            }
+            i += 1;
+        }
+        let piece: String = chars[start..i.min(chars.len())].iter().collect();
+        items.push(decode_json_string(&piece));
+    }
+    items
 }
 
 fn quote(value: &str) -> String {
@@ -553,36 +797,63 @@ fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
         }
     }
     let mut text = String::from_utf8(bytes).map_err(|e| e.to_string())?;
+    // NET-41: the top-level document's own `<script src>` tags are read
+    // straight off disk here rather than through `serve_fixture`'s HTTP
+    // path (only an iframe's/subresource's script tags go through real
+    // HTTP), so the `testdriver-vendor.js` override installed there
+    // (`TESTDRIVER_VENDOR_OVERRIDE`, see `serve_fixture`) needs a second
+    // application here to also cover `test_driver.delete_all_cookies()`
+    // calls made directly from the top document (`cookies/resources/
+    // cookie-test.js`'s `httpCookieTest` calls it both ways). This runs
+    // after the pin-verification above, which still checks against the
+    // real (empty) upstream bytes.
+    if !scaffold && path.file_name().is_some_and(|name| name == "testdriver-vendor.js") {
+        text = TESTDRIVER_VENDOR_OVERRIDE.to_string();
+    }
     if !scaffold && path.file_name().is_some_and(|name|
         name.to_string_lossy().contains(".sub.")) {
-        for (placeholder, value) in [
-            ("{{host}}", "web-platform.test"),
-            ("{{ports[http][0]}}", "80"),
-            ("{{ports[http][1]}}", "8001"),
-            ("{{ports[https][0]}}", "443"),
-            ("{{ports[https][1]}}", "8443"),
-            ("{{domains[www2]}}", "www2.web-platform.test"),
-            ("{{domains[www1]}}", "www1.web-platform.test"),
-            ("{{domains[www]}}", "www.web-platform.test"),
-            ("{{hosts[][www]}}", "www.web-platform.test"),
-            ("{{hosts[alt][]}}", "not-web-platform.test"),
-            ("{{hosts[alt][www]}}", "www.not-web-platform.test"),
-            ("{{hosts[alt][www2]}}", "www2.not-web-platform.test"),
-            // NET-38: websockets/constants.sub.js builds its ws:// / wss://
-            // base URL from these; any value routes through StdResolver's
-            // *.web-platform.test host match regardless of the port number.
-            ("{{ports[ws][0]}}", "80"),
-            ("{{ports[wss][0]}}", "443"),
-            ("{{ports[h2][0]}}", "443"),
-            ("{{ports[http-local][0]}}", "80"),
-            ("{{ports[http-public][0]}}", "80"),
-            ("{{ports[https-local][0]}}", "443"),
-            ("{{ports[https-public][0]}}", "443"),
-        ] {
-            text = text.replace(placeholder, value);
-        }
+        apply_sub_substitution(&mut text);
     }
     Ok(text)
+}
+
+/// The `.sub.` placeholder table (WPT's `.sub.` template convention), shared
+/// between `source()` (the top document's own `<script src>`/page bytes,
+/// read straight off disk) and `serve_fixture`'s generic static-file path
+/// (NET-42: an iframe/subresource `.sub.` file, or the top-level `.sub.`
+/// HTML page itself when navigated through `FixtureServer` rather than the
+/// `AMAZING_WPT_SHIM_ADDR` shim -- `execute()`'s real-navigation branch
+/// calls `fetch_page()` and compares the rendered bytes against this same
+/// substituted text, so both call sites must apply the identical table or
+/// every `.sub.` file fails with "fixture navigation differed from pinned
+/// page bytes").
+fn apply_sub_substitution(text: &mut String) {
+    for (placeholder, value) in [
+        ("{{host}}", "web-platform.test"),
+        ("{{ports[http][0]}}", "80"),
+        ("{{ports[http][1]}}", "8001"),
+        ("{{ports[https][0]}}", "443"),
+        ("{{ports[https][1]}}", "8443"),
+        ("{{domains[www2]}}", "www2.web-platform.test"),
+        ("{{domains[www1]}}", "www1.web-platform.test"),
+        ("{{domains[www]}}", "www.web-platform.test"),
+        ("{{hosts[][www]}}", "www.web-platform.test"),
+        ("{{hosts[alt][]}}", "not-web-platform.test"),
+        ("{{hosts[alt][www]}}", "www.not-web-platform.test"),
+        ("{{hosts[alt][www2]}}", "www2.not-web-platform.test"),
+        // NET-38: websockets/constants.sub.js builds its ws:// / wss://
+        // base URL from these; any value routes through StdResolver's
+        // *.web-platform.test host match regardless of the port number.
+        ("{{ports[ws][0]}}", "80"),
+        ("{{ports[wss][0]}}", "443"),
+        ("{{ports[h2][0]}}", "443"),
+        ("{{ports[http-local][0]}}", "80"),
+        ("{{ports[http-public][0]}}", "80"),
+        ("{{ports[https-local][0]}}", "443"),
+        ("{{ports[https-public][0]}}", "443"),
+    ] {
+        *text = text.replace(placeholder, value);
+    }
 }
 /// Window variant of WPT AnyHtmlHandler at revision c2a2fce69e5c2509d9dc28440ec8b42532e5c293.
 /// Template and metadata rules: tools/serve/serve.py AnyHtmlHandler and
@@ -696,7 +967,7 @@ fn execute(options: &Options) -> Result<(), String> {
         let generated =
             (options.test.ends_with(".any.js") || options.test.ends_with(".window.js"))
                 .then(|| (options.test.clone(), expected_html.as_bytes().to_vec()));
-        let fixture = FixtureServer::start(root.clone(), generated)?;
+        let fixture = FixtureServer::start(root.clone(), generated, options.scaffold)?;
         let url = fixture.url(&options.test);
         let page = fetch_page(&mut navigator, &url, true, None)?;
         if page.rendered != expected_html.as_bytes() {
@@ -823,7 +1094,7 @@ fn execute_page(
                 {
                     // IA-TESTDRIVER: not in the pinned upstream checkout; see
                     // `TESTDRIVER_VENDOR_JS`.
-                    (TESTDRIVER_VENDOR_JS.to_string(), src.clone(), false)
+                    (testdriver_vendor_source(), src.clone(), false)
                 }
                 Some(src) => {
                     // HTML-31: a parser-inserted script (typically from
@@ -881,7 +1152,7 @@ fn execute_page(
                 if !options.scaffold && normalized == TESTDRIVER_VENDOR_PATH {
                     // IA-TESTDRIVER: not in the pinned upstream checkout; see
                     // `TESTDRIVER_VENDOR_JS`.
-                    (TESTDRIVER_VENDOR_JS.to_string(), src.clone())
+                    (testdriver_vendor_source(), src.clone())
                 } else {
                     // Same "unsupported resource URL" skip as the blocking-script
                     // closure above, for a deferred/async script's own `src`.

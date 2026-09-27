@@ -12,6 +12,14 @@
 //! 5. `title` as the last resort.
 //!
 //! Cycles are broken with a visited set; the result is whitespace-flattened.
+//!
+//! A11Y-14: the walk operates on the flat tree ([`flat_children`]), so a
+//! shadow host's rendered content (its shadow root's children, or a
+//! `<slot>`'s assigned-or-fallback nodes) is what gets visited — not the
+//! host's own light-DOM children, which are only rendered if `<slot>`-
+//! assigned. `<slot>` itself never contributes its own `aria-label`/
+//! `own_name` (see `collect_child`'s A11Y-14 note); it is always
+//! transparent to its assigned/fallback content.
 
 use amazing_css::StyledDom;
 use amazing_css::selectors::PseudoElement;
@@ -340,6 +348,25 @@ struct ContentFlags {
 /// author's `content: " before "` padding, or a text node's own trailing
 /// space) and — via a forced join separator — invent whitespace that was
 /// never in the source.
+/// A11Y-14 (`accname/name/shadowdom/basic.html`, `.../slot.html`): the
+/// name-from-content walk operates on the *flat tree*
+/// (DOM Standard §3.4), not raw light-DOM children — a shadow host's light
+/// children are not directly rendered, and a `<slot>`'s rendered content is
+/// its assigned nodes, falling back to its own light children when nothing
+/// is assigned. `assigned_nodes(slot, flatten: true, ..)` already resolves
+/// that fallback, so this is a two-way dispatch: shadow host → shadow root's
+/// children; slot → its (possibly-fallback) assigned nodes; anything else →
+/// ordinary light children, unchanged from before shadow DOM existed.
+fn flat_children(ctx: &NameContext<'_>, node: NodeIdx) -> Vec<NodeIdx> {
+    if let Some(shadow_root) = ctx.dom.shadow_root_of_host(node) {
+        return ctx.dom.children(shadow_root).collect();
+    }
+    if ctx.dom.is_html_slot(node) {
+        return ctx.dom.assigned_nodes(node, true, false).unwrap_or_default();
+    }
+    ctx.dom.children(node).collect()
+}
+
 fn collect_content(
     ctx: &NameContext<'_>,
     node: NodeIdx,
@@ -353,7 +380,7 @@ fn collect_content(
     if let Some(before) = ctx.styled.generated_content(node, PseudoElement::Before) {
         push_generated(parts, before);
     }
-    for child in ctx.dom.children(node) {
+    for child in flat_children(ctx, node) {
         collect_child(ctx, node, child, visited, parts, flags);
     }
     // A11Y-13 (w3c/aria PR #1839, `accname/aria-owns.html`): `aria-owns`
@@ -456,7 +483,7 @@ fn collect_child(
                 return;
             }
             if !flags.force_include && !already_visited && is_soft_hidden(ctx, child) {
-                for grandchild in ctx.dom.children(child) {
+                for grandchild in flat_children(ctx, child) {
                     if matches!(ctx.dom.get(grandchild).kind, NodeKind::Element { .. }) {
                         collect_child(ctx, child, grandchild, visited, parts, flags);
                     }
@@ -484,7 +511,17 @@ fn collect_child(
             // substitution applies to the (non-focusable, roving-tabindex)
             // container itself, not to whichever `option` currently holds
             // focus.
-            if flags.embed_control_values
+            // A11Y-14 (`shadowdom/slot.html`, cases 3/4): a `<slot>` has no
+            // accessible-name mapping of its own — HTML-AAM never lets its
+            // `aria-label`/`aria-labelledby` substitute for its rendered
+            // (assigned-or-fallback) content the way `own_name` would for an
+            // ordinary element, so it is always transparent here, ahead of
+            // the `own_name`/value-substitution checks below.
+            if ctx.dom.is_html_slot(child) {
+                let mut branch = visited.clone();
+                branch.push(child);
+                collect_content(ctx, child, &mut branch, parts, flags);
+            } else if flags.embed_control_values
                 && Some(child) != flags.exclude
                 && let Some(value) = control_value(ctx.dom, ctx.ids, child)
             {

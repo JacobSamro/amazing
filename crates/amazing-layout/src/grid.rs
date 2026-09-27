@@ -1123,13 +1123,22 @@ fn place_row_flow(
             }
             // Fully automatic.
             (None, None) => {
+                // A span must fit wholly within the wrap width — checking
+                // only the start column (`c > limit`, the previous form)
+                // let a spanning item that didn't fit the remaining columns
+                // of a row overflow into an implicit column past `limit`
+                // instead of wrapping to the next row (Grid 1 §8.5: the
+                // wrap width bounds the whole occupied span, not just its
+                // start line). `limit` always accommodates the widest
+                // both-auto span, so `last_start` never underflows.
+                let last_start = (limit as u32).saturating_sub(cs - 1).max(1);
                 let (r, c) = if dense {
                     // Reading-order rescan from the grid start; the wrap
                     // limit always accommodates the widest auto span, so a
                     // fitting cell exists — the cap is purely defensive.
                     let mut found = None;
                     'scan: for r in 1..=MAX_GRID_TRACKS as u32 {
-                        for c in 1..=limit as u32 {
+                        for c in 1..=last_start {
                             if occ.fits(r, c, rs, cs, &mut work)? {
                                 found = Some((r, c));
                                 break 'scan;
@@ -1140,7 +1149,7 @@ fn place_row_flow(
                 } else {
                     let (mut r, mut c) = (cur_r, cur_c);
                     loop {
-                        if c > limit as u32 {
+                        if c > last_start {
                             c = 1;
                             r = r.checked_add(1)?;
                             continue;

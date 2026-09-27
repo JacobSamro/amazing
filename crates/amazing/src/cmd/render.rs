@@ -202,15 +202,23 @@ pub(crate) fn render_surface(
     fixed_height: Option<u32>,
     extra_css: &str,
 ) -> Result<amazing_paint::Surface, PageError> {
-    let document = parse_document_bytes(html, html_path, None)?;
-    document.require_static_xml()?;
-    let scripting = document.kind == DocumentKind::Html;
+    // HTML-32: only the HTML path is script-interleaved; XML keeps its
+    // existing whole-source `parse_document_bytes` (`require_static_xml`
+    // needs a fully-built DOM to walk regardless, and there is no XML
+    // equivalent of pausing at a script -- XML script elements are outright
+    // unsupported per `require_static_xml` itself).
+    let kind = crate::document::document_kind(html_path, None);
     let host = Rc::new(RefCell::new(BrowserDomHost {
-        dom: document.dom,
+        dom: amazing_dom::Dom::new(),
         native_forwarded: false,
     }));
-    if scripting {
-        execute_inline_scripts(&host, html_path)?;
+    if kind == DocumentKind::Html {
+        let text = crate::document::decode_html_bytes(html, None);
+        execute_inline_scripts(&host, html_path, &text)?;
+    } else {
+        let document = parse_document_bytes(html, html_path, None)?;
+        document.require_static_xml()?;
+        host.borrow_mut().dom = document.dom;
     }
 
     paint_host_surface(&host, html_path, width, fixed_height, extra_css)
@@ -236,15 +244,21 @@ fn render_wpt_surface_after_first_paint(
     after_first_paint: impl FnOnce(&amazing_paint::Surface),
 ) -> Result<amazing_paint::Surface, PageError> {
     const MAX_REFTEST_FRAMES: u64 = 120;
-    let document = parse_document_bytes(html, html_path, None)?;
-    document.require_static_xml()?;
-    let scripting = document.kind == DocumentKind::Html;
+    // HTML-32: see the matching comment in `render_surface`.
+    let kind = crate::document::document_kind(html_path, None);
     let host = Rc::new(RefCell::new(BrowserDomHost {
-        dom: document.dom,
+        dom: amazing_dom::Dom::new(),
         native_forwarded: false,
     }));
+    let scripting = kind == DocumentKind::Html;
+    if !scripting {
+        let document = parse_document_bytes(html, html_path, None)?;
+        document.require_static_xml()?;
+        host.borrow_mut().dom = document.dom;
+    }
     let mut scheduler = if scripting {
-        let mut scheduler = prepare_page_scripts(&host, html_path, true)?
+        let text = crate::document::decode_html_bytes(html, None);
+        let mut scheduler = prepare_page_scripts(&host, html_path, &text, true)?
             .expect("forced page scheduler");
         scheduler.js.set_viewport_size(width, height);
         // Flush the script task's microtasks and due zero-delay timers before

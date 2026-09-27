@@ -204,7 +204,19 @@ impl Interpreter {
                 }
             }
         }
-        let mut cursor = Some(target.clone());
+        // [[Set]] with a distinct Receiver on a canonical numeric index of an
+        // integer-indexed exotic `target`: IsValidIntegerIndex decides the
+        // outcome directly (10.4.5.5). The generic prototype walk below reads
+        // `own_prop`, which can't see virtual typed-array indices, and would
+        // otherwise walk straight past `target` to a shadowing prototype
+        // accessor that the spec says is unreachable here.
+        let target_index_view = binary_index_view(target, key);
+        if let Some((view, _kind, index)) = &target_index_view {
+            if index.filter(|idx| *idx < binary_length(view)).is_none() {
+                return Ok(true);
+            }
+        }
+        let mut cursor = if target_index_view.is_some() { None } else { Some(target.clone()) };
         while let Some(object) = cursor {
             if let Some(result) = self.window_proxy_set(&object, key, value.clone(), receiver.clone()) { return result; }
             if let Some(result) = self.proxy_set(&object, key, value.clone(), receiver.clone()) { return result; }

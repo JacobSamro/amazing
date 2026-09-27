@@ -45,7 +45,11 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
         })?;
         let mut found = Vec::new();
         for candidate in candidates {
-            let result = host.matches_selector(candidate, &parsed);
+            let result = if op == O::ElementClosest {
+                host.matches_selector_scoped(candidate, &parsed, node)
+            } else {
+                host.matches_selector(candidate, &parsed)
+            };
             if seam_result(host, result)? {
                 found.push(candidate);
                 if op != O::ParentQuerySelectorAll { break; }

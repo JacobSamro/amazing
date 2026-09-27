@@ -247,7 +247,12 @@ pub enum LegacyReflectionKind { String, LegacyString, Url, UsvUrl, Boolean, Unsi
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
-    HTMLElementClick,
+    /// `true` when the click is driver-initiated (e.g. testdriver's
+    /// synthetic `mousedown`/`mouseup`/click sequence, simulating real user
+    /// input) and should dispatch as a trusted event; `false` for an
+    /// ordinary script call to `element.click()`, which the HTML Standard
+    /// always dispatches untrusted.
+    HTMLElementClick(bool),
     HTMLElementOnClick,
     HTMLElementSetOnClick,
     InputIndeterminate,
@@ -800,6 +805,19 @@ pub trait SelectorEngine: BindingHost {
     fn parse_selector(&mut self, selector: &[u16]) -> Result<Self::SelectorHandle, DomError>;
     fn matches_selector(&mut self, element: NodeIdx, selector: &Self::SelectorHandle)
         -> Result<bool, DomError>;
+    /// Like `matches_selector`, but binds `:scope` to `scope` instead of the
+    /// document root. `Element.closest()`'s DOM algorithm matches each
+    /// inclusive ancestor against the selector list with `:scope` bound to
+    /// the ORIGINAL context element throughout the walk, not to whichever
+    /// ancestor is currently being tested (CSS-29 made the primitive this
+    /// needs, `amazing_css::selectors::matches_in_scope`, crate-external
+    /// `pub`). Hosts that don't override this fall back to plain
+    /// `matches_selector` (a `:scope` compound then matches nothing but the
+    /// document root, the pre-existing behavior).
+    fn matches_selector_scoped(&mut self, element: NodeIdx, selector: &Self::SelectorHandle, _scope: NodeIdx)
+        -> Result<bool, DomError> {
+        self.matches_selector(element, selector)
+    }
 }
 
 /// Driver schedules timeouts and runs native fetch/XHR abort subscribers after

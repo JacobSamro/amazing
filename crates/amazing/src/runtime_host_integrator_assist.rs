@@ -52,6 +52,21 @@ pub(super) struct IaRuntime {
     /// still lets a test's *own* assertions after the `set_permission` call
     /// run instead of failing on the setup step alone.
     permissions: std::collections::HashMap<String, String>,
+    /// IA-REAL-3: A11Y-14's live change-event watcher, wired at the call site
+    /// its own doc comment names for this file
+    /// (`runtime_host_a11y.rs::AxTreeWatcher`'s doc comment lists "`amazing
+    /// wpt-harness`'s `test_driver` hooks" alongside a `gui` frame and a
+    /// `BrowserDomHost` as the plausible callers). Every testdriver action
+    /// that can mutate the DOM (`click`, `send_keys`, `action_sequence`)
+    /// records one checkpoint after its own dispatch settles -- the same
+    /// granularity `deliver_mutations` coalesces mutation-observer callbacks
+    /// to, since one testdriver action is exactly one batch of applied
+    /// mutations from the page's point of view. Draining the resulting
+    /// events into a live consumer (CDP's `Accessibility.nodesUpdated`) is
+    /// devtools' own file, not this one -- see `runtime_host_a11y.rs`'s doc
+    /// comment and `.agents/devtools/questions.md`; `ax_watcher_events_for_test`
+    /// below exists only so this producer side has direct test coverage.
+    ax_watcher: crate::runtime_host_a11y::AxTreeWatcher,
 }
 
 impl IaRuntime {
@@ -62,6 +77,7 @@ impl IaRuntime {
             viewport_height_px: default_environment.viewport_height_px,
             created_at: std::time::Instant::now(),
             permissions: std::collections::HashMap::new(),
+            ax_watcher: crate::runtime_host_a11y::AxTreeWatcher::new(),
         }
     }
 }
@@ -316,6 +332,20 @@ impl RuntimeBindingHost<'_> {
         Ok(())
     }
 
+    /// Records one A11Y-14 checkpoint (see `IaRuntime::ax_watcher`'s doc
+    /// comment) from whatever the live document's DOM/style/layout are right
+    /// now. Called once per testdriver action that can mutate the DOM, after
+    /// its own dispatch has fully settled -- never mid-action (e.g. not once
+    /// per character in `send_keys`, not once per tick in `action_sequence`),
+    /// matching the granularity `deliver_mutations` already coalesces
+    /// mutation-observer callbacks to.
+    fn td_record_ax_checkpoint(&mut self) {
+        let (styled, layout) = self.td_layout();
+        let host = self.state.borrow().host.clone();
+        let dom_ref = host.borrow();
+        self.state.borrow_mut().integrator_assist.ax_watcher.record_checkpoint(&dom_ref.dom, &styled, &layout);
+    }
+
     fn td_array_len(&mut self, value: &JsValue) -> Result<u32, Throw> {
         let length = self.js.binding_get_property(value, "length")?;
         let length = self.js.binding_to_number(&length)?;
@@ -415,7 +445,8 @@ impl RuntimeBindingHost<'_> {
                 // checkbox/radio never toggles and a `<label>` never forwards
                 // to its control -- both are driven by activation completion,
                 // not by the event type name alone.
-                invoke(self, Operation::HTMLElementClick, element, &[])?;
+                invoke(self, Operation::HTMLElementClick(true), element, &[])?;
+                self.td_record_ax_checkpoint();
                 Ok(JsValue::Undefined)
             }
             IaNativeEntry::TdSendKeys => {
@@ -428,6 +459,7 @@ impl RuntimeBindingHost<'_> {
                 for ch in text.chars() {
                     self.td_send_char(node, &element, ch)?;
                 }
+                self.td_record_ax_checkpoint();
                 Ok(JsValue::Undefined)
             }
             IaNativeEntry::TdActionSequence => {
@@ -493,7 +525,7 @@ impl RuntimeBindingHost<'_> {
                                             // the actual click operation, not
                                             // just a "click"-named event.
                                             let target = self.wrap_node(node)?;
-                                            invoke(self, Operation::HTMLElementClick, target, &[])?;
+                                            invoke(self, Operation::HTMLElementClick(true), target, &[])?;
                                         }
                                     }
                                     _ => {}
@@ -535,6 +567,7 @@ impl RuntimeBindingHost<'_> {
                         }
                     }
                 }
+                self.td_record_ax_checkpoint();
                 Ok(JsValue::Undefined)
             }
             IaNativeEntry::TdSetPermission => {
@@ -773,17 +806,13 @@ mod tests {
         crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap()
     }
 
-    // NOTE (IA-TESTDRIVER): `__amazing_td_click` runs the real click-activation
-    // path (`Operation::HTMLElementClick`), which toggles the checkbox as a
-    // genuine default action -- but that path's own event dispatch always goes
-    // through `event_bindings::invoke(host, O::DispatchEvent, ...)`, which is
-    // the *script*-triggered dispatch operation and therefore marks the event
-    // untrusted (`DispatchOrigin::Script`, see amazing-dom/src/events.rs:617).
-    // A driver-generated click should be trusted (WebDriver's own "Element
-    // Click" is a real input action, not a script call to `.click()`). Filed
-    // to dom-bindings/questions.md: expose a trusted variant of the
-    // click-activation sequence. Tracked here so a future fix flips this
-    // assertion from `false` to `true` without anyone having to rediscover it.
+    // `__amazing_td_click` runs the real click-activation path
+    // (`Operation::HTMLElementClick(true)`), which toggles the checkbox as a
+    // genuine default action. It now dispatches via
+    // `event_bindings::dispatch_created_event` with `DispatchOrigin::UserAgent`
+    // for driver-initiated clicks (DOM-B-ACT), so the event is trusted --
+    // matching WebDriver's "Element Click", which is a real input action, not
+    // a script call to `.click()`.
     #[test]
     fn td_click_toggles_a_checkbox_via_the_real_click_default_action() {
         let mut scheduler = checkbox_scheduler();
@@ -794,25 +823,76 @@ mod tests {
         scheduler.run_script("__amazing_td_click(document.getElementById('box'))").unwrap();
         assert_eq!(scheduler.run_script("box.checked").unwrap(), JsValue::Bool(true));
         assert_eq!(scheduler.run_script("clicks").unwrap(), JsValue::num(1.0));
-        // Known gap (see comment above): should be 1, currently 0.
-        assert_eq!(scheduler.run_script("trusted_clicks").unwrap(), JsValue::num(0.0));
+        assert_eq!(scheduler.run_script("trusted_clicks").unwrap(), JsValue::num(1.0));
     }
 
-    // NOTE (IA-TESTDRIVER): clicking a `<label>` does not currently forward
-    // activation to its associated control. `Dom::begin_event_dispatch` only
-    // ever calls `prepare_input_activation` on the click's activation target
-    // (amazing-dom/src/events.rs:790-794), and `prepare_input_activation`
-    // (amazing-dom/src/input_activation.rs) returns `None` for anything that
-    // is not an `<input>`, even though `has_html_activation_behavior` already
-    // lists "label" as activation-bearing. `Dom::label_control` exists
-    // (amazing-dom/src/forms.rs:901) but nothing wires it into activation.
-    // Filed to dom-bindings/questions.md. Flip this assertion to `true` once
-    // that lands.
+    // IA-REAL-3: A11Y-14's `AxTreeWatcher`, wired at the call site its own
+    // doc comment (`runtime_host_a11y.rs`) names for this file: every
+    // testdriver action that can mutate the DOM records one checkpoint after
+    // its dispatch settles (`td_record_ax_checkpoint`). A real click toggling
+    // a real checkbox is exactly the kind of accessibility-relevant mutation
+    // this exists to report -- the checked state flip should surface as a
+    // `StateChanged` event on the checkbox's own ax node once drained.
+    // This deliberately does *not* click the native checkbox from
+    // `checkbox_scheduler` to prove the wiring: `amazing_a11y::host::
+    // native_checked` (`crates/amazing-a11y/src/host.rs:140-154`) reads the
+    // `checked` *content attribute*, which a real click never touches (per
+    // spec, clicking sets the checkbox's live "dirty checkedness" -- the
+    // `.checked` IDL property/`Dom::input_checked` -- not the attribute,
+    // which only ever reflects the *default* checkedness from parse time).
+    // So a real click-driven checkbox toggle currently produces no ax
+    // `StateChanged` event at all -- a real `amazing-a11y` gap, filed to
+    // `.agents/integrator-assist/questions.md` with this exact repro, not
+    // fixed here (out of this lane's paths). A `role=checkbox`
+    // `aria-checked` toggle (read from the attribute correctly) exercises
+    // this file's own checkpoint wiring without depending on that fix.
     #[test]
-    fn td_click_on_a_label_does_not_yet_forward_to_its_associated_checkbox() {
+    fn td_click_records_an_ax_state_changed_event_for_an_aria_checked_toggle() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body><div id=box role=checkbox aria-checked=false>x</div></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.run_script(
+            "document.getElementById('box').addEventListener('click', function() { \
+                var box = document.getElementById('box'); \
+                box.setAttribute('aria-checked', box.getAttribute('aria-checked') === 'true' ? 'false' : 'true'); \
+             });"
+        ).unwrap();
+        // First click: the listener toggles `aria-checked` false -> true.
+        // This checkpoint is the watcher's first ever, so it has no
+        // `previous` tree to diff against and builds fresh with no events
+        // regardless (see `AxTreeWatcher::record_checkpoint`) -- expected,
+        // not a bug.
+        scheduler.run_script("__amazing_td_click(document.getElementById('box'))").unwrap();
+        assert!(scheduler.test_bindings().state.borrow_mut().integrator_assist.ax_watcher.drain_events().is_empty());
+        // Second click: the listener toggles it back true -> false, giving
+        // this checkpoint a real change to diff against the first one's
+        // baseline.
+        scheduler.run_script("__amazing_td_click(document.getElementById('box'))").unwrap();
+        let events = scheduler.test_bindings().state.borrow_mut().integrator_assist.ax_watcher.drain_events();
+        assert!(
+            events.iter().any(|event| event.kind == amazing_a11y::AxEventKind::StateChanged
+                && event.role == amazing_a11y::Role::Checkbox),
+            "expected a StateChanged ax event for the checkbox, got: {events:?}"
+        );
+        // A drain is at-most-once: a second drain with no new checkpoint in
+        // between finds nothing left.
+        assert!(scheduler.test_bindings().state.borrow_mut().integrator_assist.ax_watcher.drain_events().is_empty());
+    }
+
+    // Clicking a `<label>` forwards activation to its associated control
+    // (DOM-B-ACT): `prepare_input_activation` (amazing-dom/src/
+    // input_activation.rs) now resolves a label's target via
+    // `Dom::label_control` and recurses to prepare activation on the
+    // resolved control, so the label's own activation behavior toggles the
+    // checkbox exactly as the HTML Standard's label activation behavior
+    // requires.
+    #[test]
+    fn td_click_on_a_label_forwards_to_its_associated_checkbox() {
         let mut scheduler = checkbox_scheduler();
         scheduler.run_script("__amazing_td_click(document.getElementById('lbl'))").unwrap();
-        assert_eq!(scheduler.run_script("document.getElementById('box').checked").unwrap(), JsValue::Bool(false));
+        assert_eq!(scheduler.run_script("document.getElementById('box').checked").unwrap(), JsValue::Bool(true));
     }
 
     #[test]

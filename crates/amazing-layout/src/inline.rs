@@ -2011,15 +2011,49 @@ fn shape_chunk_in_mode(
 
 fn apply_ruby_overhang(units: &mut [ShapedUnit]) {
     for index in 0..units.len() {
-        let left_space = units.get(index.wrapping_sub(1)).map_or(0.0, |unit| match unit {
-            ShapedUnit::Word(word) => ruby_edge_space(word, false),
-            _ => 0.0,
-        });
-        let right_space = units.get(index + 1).map_or(0.0, |unit| match unit {
-            ShapedUnit::Word(word) => word.space_before + ruby_edge_space(word, true),
-            ShapedUnit::Ruby(ruby) => ruby.space_before,
-            _ => 0.0,
-        });
+        // Overhang credit is not limited to the one Word unit immediately
+        // next to the ruby: a run of adjacent whitespace of mixed kinds
+        // (tab, ideographic space, a preserved EOL) can span several
+        // ShapedWord units, because each control character's own advance is
+        // stored as the *next* unit's `space_before`, not folded into a
+        // single unit's text (LAYOUT-26: `ruby-overhang-spaces-007`'s
+        // "あ&Tab;　&#x000A;<ruby>" left edge is three separate units --
+        // "あ", then a Word holding only U+3000 whose `space_before` is the
+        // tab's advance, then the ruby itself, whose own `space_before` is
+        // the EOL's advance). Walk outward through consecutive Word units
+        // that are *entirely* consumed by `ruby_edge_space` (whitespace or
+        // a credited punctuation run all the way to that unit's far edge),
+        // adding each such unit's own `space_before` to bridge to the next
+        // one further out; stop at the first unit with real content left
+        // over after crediting its near edge.
+        let mut left_space = 0.0f32;
+        let mut cursor = index;
+        while cursor > 0 {
+            let ShapedUnit::Word(word) = &units[cursor - 1] else { break };
+            let (credit, exhausted) = ruby_edge_space(word, false);
+            left_space += credit;
+            if !exhausted { break; }
+            left_space += word.space_before;
+            cursor -= 1;
+        }
+        let mut right_space = 0.0f32;
+        let mut cursor = index + 1;
+        loop {
+            match units.get(cursor) {
+                Some(ShapedUnit::Word(word)) => {
+                    right_space += word.space_before;
+                    let (credit, exhausted) = ruby_edge_space(word, true);
+                    right_space += credit;
+                    if !exhausted { break; }
+                    cursor += 1;
+                }
+                Some(ShapedUnit::Ruby(next)) if cursor == index + 1 => {
+                    right_space += next.space_before;
+                    break;
+                }
+                _ => break,
+            }
+        }
         let ShapedUnit::Ruby(ruby) = &mut units[index] else { continue };
         if !ruby.overhang_spaces || ruby.width <= ruby.base_width { continue; }
         let half_excess = (ruby.width - ruby.base_width) * 0.5;
@@ -2033,9 +2067,15 @@ fn apply_ruby_overhang(units: &mut [ShapedUnit]) {
     }
 }
 
-fn ruby_edge_space(word: &ShapedWord, start: bool) -> f32 {
+// Returns the credited advance plus whether the walk reached the word's far
+// edge (every character from the starting edge was whitespace or a single
+// credited punctuation mark) -- the caller uses that to decide whether the
+// run of adjacent whitespace continues into the *next* unit out (LAYOUT-26).
+fn ruby_edge_space(word: &ShapedWord, start: bool) -> (f32, bool) {
     let chars: Vec<_> = word.text.char_indices().collect();
+    let total_chars = chars.len();
     let mut total = 0.0;
+    let mut consumed = 0usize;
     let mut visit = |offset: usize, c: char| {
         let fraction = if c.is_whitespace() { 1.0 }
             else if c == '・' { 0.25 }
@@ -2046,11 +2086,12 @@ fn ruby_edge_space(word: &ShapedWord, start: bool) -> f32 {
         let absolute = word.range.end - word.text.len() + offset;
         total += word.glyphs.iter().filter(|g| g.cluster.start <= absolute && absolute < g.cluster.end)
             .map(|g| inline_advance(g.writing_mode, g.advance_x, g.advance_y)).sum::<f32>() * fraction;
+        consumed += 1;
         fraction == 1.0
     };
     if start { for (offset,c) in chars { if !visit(offset,c) {break;} } }
     else { for (offset,c) in chars.into_iter().rev() { if !visit(offset,c) {break;} } }
-    total
+    (total, consumed == total_chars)
 }
 
 fn trim_combined_edge_spaces<'a>(text: &'a str,

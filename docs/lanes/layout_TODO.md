@@ -1658,6 +1658,100 @@ removed (fixed); all other entries unchanged (same cases, comment updated to
 describe the fix and the LAYOUT-26 follow-up). Full workspace + all five
 corpora gated clean (zero `CORPUS GATE HELD`) both before and after.
 
-Next: LAYOUT-26 (table column-width rounding precision, own-lane, follow-up
-from this ticket), then inline positioned ancestors and fragment containing
-blocks (LAYOUT-25).
+**LAYOUT-26 (2026-09-27): fixed, two independent bugs (base `df103fca`).**
+"~1px rounding drift" was the wrong diagnosis going in -- both root causes
+were exact-pixel logic bugs, not float rounding:
+
+1. `table::layout_wrapper` (the layout entry point for a table wrapped per
+   CSS2.1 §17.4 with its own `position`/`margin`/insets, `table.rs`) computed
+   its offered width as `cbw - margins` unconditionally, ignoring `left`/
+   `right` entirely. For an absolutely positioned table wrapper with *both*
+   insets definite (CSS2.1 10.3.7's "both known" case --
+   `table-anonymous-objects-059`'s reference has `left:1px;right:1px`), this
+   handed the table the *full* containing-block width instead of
+   `cb.w - left - right`, a 2px error that a strict zero-tolerance pixel
+   compare turns into thousands of differing glyph-edge pixels. Fixed by
+   computing that formula directly from `left`/`right` when both resolve to
+   definite lengths, falling through to the original `cbw - margins` for
+   every other case (ordinary in-flow, and shrink-to-fit where at most one
+   inset is known) so `table::layout`'s own authoritative
+   `specified.unwrap_or(available.min(mx)).max(mn)` clamp remains untouched
+   there. Deliberately keyed off `left`/`right` themselves rather than the
+   wrapper's own resolved `width` style: `prepare_sizes` (`position.rs`) also
+   writes a resolved `width` for the shrink-to-fit case, from this box's own
+   `intrinsic_content_widths` estimate -- a good estimate, but not always
+   bit-identical to `table::layout`'s own per-column min/max, and preferring
+   it unconditionally regressed `position/abspos-008` (only one inset set)
+   before this was narrowed to the both-known case. Also applied
+   css-tables-3's `#abspos` "available-size can never exceed the containing
+   block" clamp (`absolute-tables-009.tentative.html`: `left:-100px;right:0`
+   must not stretch the table wider than its 100px containing block).
+2. `apply_ruby_overhang`/`ruby_edge_space` (`inline.rs`) only credited
+   overhang space from the *one* `ShapedWord` unit immediately next to the
+   ruby. A run of adjacent whitespace of mixed kinds (tab, ideographic
+   space, a preserved EOL) can span *several* separate `ShapedWord` units,
+   because each control character's own advance lands in the *next* unit's
+   `space_before` field rather than being folded into one unit's text
+   (`ruby-overhang-spaces-007`'s "あ&Tab;　&#x000A;<ruby>" left edge is three
+   units: "あ", a Word holding only U+3000 whose `space_before` is the tab's
+   advance, then the ruby, whose own `space_before` is the EOL's advance).
+   Fixed by walking outward through consecutive Word units that are
+   *entirely* consumed by `ruby_edge_space` (returns `(credit, exhausted)`
+   now), accumulating each such unit's own `space_before` to bridge past it,
+   stopping at the first unit with real content left after crediting its
+   near edge.
+
+Measured (worker-2, workspace nextest 3274 passed/15 skipped, 11 known-EPERM
+`amazing-ipc-platform`/`amazing-process` sealed-memory failures excluded
+per IPC-12 -- confirmed pre-existing and host-specific, not this ticket's;
+doctests clean including `amazing_js`/`amazing_html`), all five corpora
+before/after with zero `CORPUS GATE HELD`:
+- tables: **271 → 301** (+30; the both-insets-known + css-tables-3 clamp
+  fix). Target of "back to 309" not fully reached -- the remaining 13 losses
+  (`fixed-table-layout-003a03/04`, `table-anonymous-objects-{018,079-086,
+  093,097}`) are the *same* pre-existing set gate.sh already documented
+  before this ticket touched anything (unchanged, not worsened); at least
+  one (`-079`) traced to a *different* mechanism (a plain shrink-to-fit
+  `<div>` measuring nested inline content via the untextured
+  `flex::min/max_content_width` fallback, the same class of bug LAYOUT-24
+  fixed for tables specifically but not for arbitrary nested inline runs --
+  a broader fix was tried and reverted in LAYOUT-24 for introducing 17
+  regressions elsewhere). Left as a follow-up rather than re-attempting that
+  broad fix under this ticket's remaining budget.
+- ruby: **78 → 81** (+3 directly; retained's overlapping selection gained
+  +3 too, 304 → 307). 12 `ruby-overhang-spaces-*` cases now match exactly
+  (0 differing pixels): 002, 005, 006, 007, 009, 012, 014, 016, 017, 021,
+  non-bmp-002, text-spacing-trim-001 -- one more than the 11 originally
+  flagged. `align-003`/`-004`, `vertical-004`/`-005` and `ruby-bidi-002`/
+  `-004` are unrelated, already-documented LFG-3/pre-existing losses, not
+  touched by this mechanism (confirmed unaffected before vs. after this fix).
+- position: 259, writing: 242, retained: 307 -- zero new losses.
+  `abspos-008` (Ian Hickson's canonical shrink-wrap case, zero `<table>`
+  elements) was found already failing on worker-2 even at pure `df103fca`
+  with none of this ticket's code -- a same-host before/after (stashed vs.
+  applied) produced a byte-identical actual PNG (sha256 `1358832a...`,
+  differing_pixels=28513) in both cases, proving this is a host-rendering
+  parity gap against the `before` baseline's capture host (Boat), not a
+  LAYOUT-26 regression. Documented as an accepted exception in `gate.sh`
+  with that evidence rather than chased further.
+
+Infra fixes needed along the way, both in this lane's evidence tooling
+(not committed as separate tickets): `render-linux.py`'s WPT-revision check
+now tolerates a `.git`-less WPT checkout (worker-2/venus-001 extract the
+pinned tree without git metadata, unlike Boat), and `gate.sh` picks
+`~/corpora/wpt-layout` when present else falls back to the shared
+`~/corpora/wpt`.
+
+**Hazard found and worked around, filed to `questions.md` for every lane:**
+`git stash` is shared across every lane's worktree (one repo, `git worktree
+add` checkouts, one `.git/refs/stash`), so an index-based `git stash pop` can
+apply a *different* lane's concurrently-pushed entry instead of your own.
+Hit this directly mid-ticket; recovered without data loss by re-stashing the
+other lane's (compositor's) files with an explicit recovery message and
+re-applying mine by its immutable commit SHA rather than by index. See
+`questions.md`'s URGENT entry for the full account and the recovery
+instructions left for the compositor lane.
+
+Next: the residual 13 table cases and `-079`'s nested-inline shrink-to-fit
+gap (own-lane follow-up, not yet ticketed), then inline positioned ancestors
+and fragment containing blocks (LAYOUT-25).
