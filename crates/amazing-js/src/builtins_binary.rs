@@ -1370,43 +1370,116 @@ fn binary_wait_async_result(i: &mut Interpreter, async_value: bool, value: JsVal
     Ok(object)
 }
 
-fn binary_wait_async_promise(i: &mut Interpreter, settle: Option<&str>) -> Result<JsValue, Throw> {
-    let constructor = i.global_env.resolve("Promise").ok_or_else(|| Throw::type_error("Promise unavailable"))?;
-    match settle {
-        Some(text) => {
-            let resolve = i.get_prop(&constructor, "resolve")?;
-            i.call_value(&resolve, constructor, vec![JsValue::str(text)])
+// This engine is single-threaded: there is no other real agent that could
+// call Atomics.notify while Atomics.wait blocks (blocking is the only thing
+// happening). But a *pending* Atomics.waitAsync promise is a same-thread
+// bookkeeping detail, not a second agent -- the calling script gets control
+// back immediately and can go on to call Atomics.notify itself before the
+// microtask queue ever runs. ATOMICS_WAITERS tracks exactly that: pending
+// waitAsync promises keyed by the buffer they watch and the byte offset
+// within it (matching WaiterList semantics -- two different TypedArray views
+// over the same SharedArrayBuffer at the same byte position share a waiter
+// list), so Atomics.notify can resolve them to "ok" in FIFO order. Holding a
+// clone of the buffer's Rc also means a stale pointer can never alias a new
+// allocation while a waiter for it is still registered.
+struct BinaryWaiter { buffer: Rc<RefCell<BinaryBuffer>>, byte_offset: usize, promise: Obj }
+thread_local! {
+    static ATOMICS_WAITERS: RefCell<Vec<BinaryWaiter>> = RefCell::new(Vec::new());
+}
+fn binary_atomics_register_waiter(view: &BinaryView, byte_offset: usize, promise: Obj) {
+    ATOMICS_WAITERS.with(|w| w.borrow_mut().push(BinaryWaiter { buffer: view.buffer.clone(), byte_offset, promise }));
+}
+fn binary_atomics_wake(i: &mut Interpreter, buffer: &Rc<RefCell<BinaryBuffer>>, byte_offset: usize, max: f64) -> f64 {
+    let mut woken = Vec::new();
+    ATOMICS_WAITERS.with(|w| {
+        let mut waiters = w.borrow_mut();
+        let mut cursor = 0;
+        while cursor < waiters.len() && (woken.len() as f64) < max {
+            if Rc::ptr_eq(&waiters[cursor].buffer, buffer) && waiters[cursor].byte_offset == byte_offset {
+                woken.push(waiters.remove(cursor).promise);
+            } else {
+                cursor += 1;
+            }
         }
-        None => {
-            let executor = Interpreter::native("executor", binary_noop_promise_executor, &i.function_proto);
-            i.construct(&constructor, vec![executor])
-        }
+    });
+    let count = woken.len();
+    for promise in woken {
+        let _ = settle_promise(&promise, PromiseFate::Fulfilled(JsValue::str("ok")), i);
+    }
+    count as f64
+}
+
+// Atomics.wait/waitAsync/notify share ValidateAtomicAccess: the value and
+// timeout arguments are coerced in that order (both able to run user code
+// and observably ordered by validate-arraytype-before-*-coercion.js /
+// symbol-for-timeout-throws.js), and a coercion side effect must never
+// change which index/value/timeout was already fixed.
+fn binary_atomics_value(i: &mut Interpreter, kind: BinaryKind, value_arg: Option<&JsValue>) -> Result<JsValue, Throw> {
+    let value = value_arg.unwrap_or(&JsValue::Undefined);
+    if kind.big() { Ok(Interpreter::bigint_value(i.to_bigint(value)?)) }
+    else { Ok(JsValue::num(i.to_int32(value)? as f64)) }
+}
+fn binary_atomics_equal(old: &JsValue, v: &JsValue) -> bool {
+    match (old, v) {
+        (JsValue::Num(a), JsValue::Num(b)) => a == b,
+        (JsValue::BigInt(a), JsValue::BigInt(b)) => a.as_ref() == b.as_ref(),
+        _ => false,
     }
 }
-fn binary_noop_promise_executor(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    Ok(JsValue::Undefined)
+fn binary_atomics_timeout(i: &mut Interpreter, timeout_arg: Option<&JsValue>) -> Result<f64, Throw> {
+    let q = i.to_number(timeout_arg.unwrap_or(&JsValue::Undefined))?;
+    Ok(if q.is_nan() { f64::INFINITY } else { q.max(0.0) })
+}
+fn binary_atomics_sleep(timeout_ms: f64) {
+    // Honours the timeout for real (rather than resolving instantly), capped
+    // so a huge or infinite requested timeout can never hang a test run --
+    // nothing can wake this synchronous wait early regardless of duration.
+    if timeout_ms > 0.0 {
+        std::thread::sleep(std::time::Duration::from_secs_f64(timeout_ms.min(50.0) / 1000.0));
+    }
+}
+
+fn binary_atomics_wait(i: &mut Interpreter, view: &BinaryView, kind: BinaryKind, index: usize,
+    value_arg: Option<&JsValue>, timeout_arg: Option<&JsValue>,
+) -> Result<JsValue, Throw> {
+    let v = binary_atomics_value(i, kind, value_arg)?;
+    let timeout = binary_atomics_timeout(i, timeout_arg)?;
+    let old = binary_read(view, kind, index * kind.size(), true)?;
+    if !binary_atomics_equal(&old, &v) { return Ok(JsValue::str("not-equal")); }
+    binary_atomics_sleep(timeout);
+    Ok(JsValue::str("timed-out"))
 }
 
 fn binary_wait_async(i: &mut Interpreter, view: &BinaryView, kind: BinaryKind, index: usize,
     value_arg: Option<&JsValue>, timeout_arg: Option<&JsValue>,
 ) -> Result<JsValue, Throw> {
+    let v = binary_atomics_value(i, kind, value_arg)?;
+    let timeout = binary_atomics_timeout(i, timeout_arg)?;
     let old = binary_read(view, kind, index * kind.size(), true)?;
-    let equal = if kind.big() {
-        let value = i.to_bigint(value_arg.unwrap_or(&JsValue::Undefined))?;
-        matches!(&old, JsValue::BigInt(current) if current.as_ref() == &value)
-    } else {
-        let value = i.to_number(value_arg.unwrap_or(&JsValue::Undefined))?;
-        matches!(&old, JsValue::Num(current) if *current == value)
-    };
-    if !equal { return binary_wait_async_result(i, false, JsValue::str("not-equal")); }
-    let timeout = i.to_number(timeout_arg.unwrap_or(&JsValue::Undefined))?;
-    let timeout = if timeout.is_nan() { f64::INFINITY } else { timeout };
+    if !binary_atomics_equal(&old, &v) { return binary_wait_async_result(i, false, JsValue::str("not-equal")); }
     if timeout <= 0.0 { return binary_wait_async_result(i, false, JsValue::str("timed-out")); }
-    // This engine has no other agent to call Atomics.notify, so a finite wait
-    // settles as "timed-out"; an infinite wait stays pending.
-    let promise = if timeout.is_finite() { binary_wait_async_promise(i, Some("timed-out"))? }
-        else { binary_wait_async_promise(i, None)? };
-    binary_wait_async_result(i, true, promise)
+    let promise_value = new_promise(i, PromiseFate::Pending);
+    let promise_obj = promise_object(&promise_value)?;
+    binary_atomics_register_waiter(view, view.offset + index * kind.size(), promise_obj);
+    binary_wait_async_result(i, true, promise_value)
+}
+
+fn binary_atomics_notify(i: &mut Interpreter, view: &BinaryView, kind: BinaryKind, index: usize,
+    count_arg: Option<&JsValue>,
+) -> Result<JsValue, Throw> {
+    // The count argument is coerced -- and can throw -- regardless of
+    // whether the buffer turns out to be shared (non-shared-bufferdata-
+    // count-evaluation-throws.js); only the final outcome depends on that.
+    let count = match count_arg.filter(|value| !matches!(value, JsValue::Undefined)) {
+        None => f64::INFINITY,
+        Some(value) => {
+            let n = i.to_number(value)?;
+            if n.is_nan() { 0.0 } else { n.trunc().max(0.0) }
+        }
+    };
+    if !view.buffer.borrow().shared { return Ok(JsValue::num(0.0)); }
+    let byte_offset = view.offset + index * kind.size();
+    Ok(JsValue::num(binary_atomics_wake(i, &view.buffer, byte_offset, count)))
 }
 
 fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -1431,14 +1504,35 @@ fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
     {
         return Err(Throw::type_error("immutable ArrayBuffer"));
     }
-    if matches!(name.as_str(), "wait" | "waitAsync" | "notify") && !view.buffer.borrow().shared {
-        return Err(Throw::type_error("Atomics wait/notify requires SharedArrayBuffer"));
+    // A detached buffer fails ValidateTypedArray -- common to every
+    // TypedArray-taking operation, including notify, and always checked
+    // before any argument coercion (notify/null-bufferdata-throws.js: the
+    // poisoned index/count args must never be evaluated). This is a
+    // distinct condition from "not shared": notify only returns 0 for a
+    // buffer that is merely non-shared, but still throws for one that is
+    // outright detached.
+    if view.buffer.borrow().detached {
+        return Err(Throw::type_error("detached ArrayBuffer"));
     }
+    // wait/waitAsync require a SharedArrayBuffer up front, before any
+    // index/value/timeout coercion. notify does NOT throw here: it fully
+    // validates index and count and only then returns 0 for a non-shared
+    // buffer (see binary_atomics_notify) -- non-shared-bufferdata-
+    // returns-0.js vs non-shared-bufferdata-throws.js (wait/waitAsync).
+    if matches!(name.as_str(), "wait" | "waitAsync") && !view.buffer.borrow().shared {
+        return Err(Throw::type_error("Atomics wait/waitAsync requires SharedArrayBuffer"));
+    }
+    // ValidateAtomicAccess reads TypedArrayLength before `index` is coerced,
+    // so a coercion side effect that grows, shrinks, resizes or detaches the
+    // buffer must not change the bound this index is checked against
+    // (retrieve-length-before-index-coercion.js, wait/notify/waitAsync and
+    // general Atomics ops alike).
+    let length_before_index = binary_length(&view);
     let index = binary_index(i, args.get(1).unwrap_or(&JsValue::Undefined))?;
-    if index >= binary_length(&view) { return Err(Throw::range_error("Atomics index outside TypedArray")); }
-    if name == "wait" { return Err(Throw::type_error("Atomics.wait cannot block this agent")); }
+    if index >= length_before_index { return Err(Throw::range_error("Atomics index outside TypedArray")); }
+    if name == "wait" { return binary_atomics_wait(i, &view, kind, index, args.get(2), args.get(3)); }
     if name == "waitAsync" { return binary_wait_async(i, &view, kind, index, args.get(2), args.get(3)); }
-    if name == "notify" { return Ok(JsValue::num(0.0)); }
+    if name == "notify" { return binary_atomics_notify(i, &view, kind, index, args.get(2)); }
     let offset = index * kind.size();
     let old = binary_read(&view, kind, offset, true)?;
     if name == "load" { return Ok(old); }

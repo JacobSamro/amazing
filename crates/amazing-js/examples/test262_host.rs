@@ -351,7 +351,12 @@ struct Capabilities {
 const CAPABILITIES: Capabilities = Capabilities {
     module: true,
     asynchronous: true,
-    can_block: false,
+    // Atomics.wait genuinely blocks the calling (sole) agent for the
+    // requested timeout (js-binary JSB-10): this host can suspend, so
+    // CanBlockIsTrue tests are included and the CanBlockIsFalse test
+    // (which assumes a main-thread-style host that cannot suspend at all)
+    // is correctly excluded instead of run-and-failed.
+    can_block: true,
     create_realm: true,
     detach_array_buffer: true,
     gc: false,
