@@ -139,6 +139,25 @@ fn std_epoch_zone(text: &str) -> Result<String, Throw> {
     tz_canonicalize(text).ok_or_else(|| Throw::range_error("invalid Temporal time zone"))
 }
 
+// The Temporal.ZonedDateTime constructor's `timeZone` parameter is resolved
+// via ParseTimeZoneIdentifier, not ToTemporalTimeZoneIdentifier -- a much
+// narrower grammar (a bare TimeZoneIdentifier only: an IANA name or a
+// minute-precision numeric offset) than every other Temporal operation that
+// accepts a time zone (`.from()`, `toZonedDateTime()`, relativeTo, ...),
+// which additionally accept a full ISO date-time string (parsed for its
+// bracket annotation or trailing offset) and a ZonedDateTime instance (reused
+// via its own zone). The constructor accepts neither: a non-string --
+// including a ZonedDateTime instance -- is a TypeError, and a syntactically
+// full date-time string is a RangeError even though the same string is valid
+// input to `.from()`/`toZonedDateTime()`. Confirmed by
+// ZonedDateTime/timezone-iso-string.js.
+fn std_epoch_zone_value_strict(value: &JsValue) -> Result<String, Throw> {
+    match value {
+        JsValue::Str(text) => std_epoch_zone(&text.to_utf8_lossy()),
+        _ => Err(Throw::type_error("time zone must be a string")),
+    }
+}
+
 // ToTemporalTimeZoneIdentifier: unlike a generic ToString coercion, a
 // non-string, non-ZonedDateTime-instance value is a TypeError, not converted
 // through its own toString/valueOf and then rejected as a malformed zone
@@ -205,19 +224,46 @@ fn std_epoch_zone_from_string(text: &str) -> Result<String, Throw> {
             None => Ok("UTC".into()),
         };
     }
-    let start = time.char_indices().find(|(index, c)| *index > 0 && (*c == '+' || *c == '-'))
-        .map(|(index, _)| index).ok_or_else(invalid)?;
-    std_temporal_parse_time(&time[..start], &mut fields)?;
-    let offset_text = &time[start..];
-    if let Some(zone) = annotation {
-        std_epoch_parse_offset(offset_text)?;
-        return std_epoch_zone(zone);
+    match time.char_indices().find(|(index, c)| *index > 0 && (*c == '+' || *c == '-')).map(|(index, _)| index) {
+        Some(start) => {
+            std_temporal_parse_time(&time[..start], &mut fields)?;
+            let offset_text = &time[start..];
+            if let Some(zone) = annotation {
+                std_epoch_parse_offset(offset_text)?;
+                return std_epoch_zone(zone);
+            }
+            let ns = std_epoch_parse_offset(offset_text)?;
+            // TimeZoneNumericUTCOffset (a bare numeric offset used AS the
+            // zone identifier itself, with no bracket annotation) forbids a
+            // seconds/sub-second component syntactically -- "+01:00:00" is
+            // invalid here even though it is numerically identical to
+            // "+01:00" (unlike TimeZoneUTCOffset, the date-time's own exact
+            // offset, which allows arbitrary sub-second precision).
+            // Confirmed by timezone-string-datetime.js's exhaustive
+            // sub-minute-offset sweep, which rejects every zero-second and
+            // zero-fraction variant too, not just non-zero ones.
+            let digits = offset_text.trim_start_matches(['+', '-']);
+            let whole = digits.split(['.', ',']).next().unwrap_or(digits);
+            let has_seconds_syntax = digits.contains(['.', ',']) || whole.len() == 6 || whole.matches(':').count() == 2;
+            if ns % (60 * STD_TEMPORAL_NS_SECOND) != 0 || has_seconds_syntax { return Err(invalid()); }
+            let sign = if ns < 0 { '-' } else { '+' };
+            let minutes = (ns.unsigned_abs() / (60 * STD_TEMPORAL_NS_SECOND as u128)) as i64;
+            Ok(format!("{sign}{:02}:{:02}", minutes / 60, minutes % 60))
+        }
+        None => {
+            // No `Z` and no explicit numeric offset -- the date-time's own
+            // local time carries no zone information of its own, so only a
+            // bracketed annotation can supply the zone (a bare date-time
+            // string with neither is not a time zone identifier at all).
+            // Confirmed by timezone-string-datetime.js: "2021-08-19T17:30"
+            // alone throws, while "2021-08-19T17:30[UTC]" resolves via the
+            // annotation.
+            match annotation {
+                Some(zone) => { std_temporal_parse_time(time, &mut fields)?; std_epoch_zone(zone) }
+                None => Err(invalid()),
+            }
+        }
     }
-    let ns = std_epoch_parse_offset(offset_text)?;
-    if ns % (60 * STD_TEMPORAL_NS_SECOND) != 0 { return Err(invalid()); }
-    let sign = if ns < 0 { '-' } else { '+' };
-    let minutes = (ns.unsigned_abs() / (60 * STD_TEMPORAL_NS_SECOND as u128)) as i64;
-    Ok(format!("{sign}{:02}:{:02}", minutes / 60, minutes % 60))
 }
 
 fn std_epoch_offset(data: &StdEpochData) -> i128 {
@@ -580,7 +626,7 @@ fn std_epoch_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>,
     if !object.borrow().constructed { return Err(Throw::type_error("Temporal constructor requires new")); }
     let epoch_ns = std_epoch_to_nanoseconds(i, &std_reflect_arg(&args, 0))?;
     let zone = if kind == StdEpochKind::ZonedDateTime {
-        let zone = std_epoch_zone_value(i, &std_reflect_arg(&args, 1))?;
+        let zone = std_epoch_zone_value_strict(&std_reflect_arg(&args, 1))?;
         let calendar = std_reflect_arg(&args, 2);
         std_temporal_iso_calendar(i, &calendar)?;
         zone
@@ -988,18 +1034,43 @@ fn std_epoch_start_of_day(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -
 fn std_temporal_plain_to_zoned(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_temporal_record(&this, None)?;
     let input = std_reflect_arg(&args, 0);
-    let zone_value = if data.kind == StdTemporalKind::PlainDate {
-        if !input.is_object() { return Err(Throw::type_error("timeZone property bag required")); }
-        i.get_prop(&input, "timeZone")?
-    } else { input.clone() };
+    // PlainDate.prototype.toZonedDateTime(item): item may be a bare
+    // TimeZoneLike value (string or ZonedDateTime instance) directly, OR an
+    // object with a `timeZone` property (plus an optional `plainTime`). Per
+    // spec, an object whose `timeZone` property is undefined falls back to
+    // treating the WHOLE object as the TimeZoneLike value itself (rather
+    // than throwing) -- confirmed by basic.js/timezone-string.js/
+    // timezone-case-insensitive.js/timezone-wrong-type.js/
+    // no-observable-array-iteration.js/get-start-of-day-throws.js, all of
+    // which pass a bare string (or, for the object form, a `{timeZone,
+    // plainTime}` bag). PlainDateTime.prototype.toZonedDateTime(timeZoneLike,
+    // options) always takes the bare form plus a separate disambiguation
+    // options bag.
+    let (zone_value, time_value) = if data.kind == StdTemporalKind::PlainDate {
+        if input.is_object() {
+            let tz_like = i.get_prop(&input, "timeZone")?;
+            if tz_like.is_undefined() {
+                (input.clone(), JsValue::Undefined)
+            } else {
+                (tz_like, i.get_prop(&input, "plainTime")?)
+            }
+        } else {
+            (input.clone(), JsValue::Undefined)
+        }
+    } else { (input.clone(), JsValue::Undefined) };
     let zone = std_epoch_zone_value(i, &zone_value)?;
     let mut fields = data.fields;
-    if data.kind == StdTemporalKind::PlainDate {
-        let time = i.get_prop(&input, "plainTime")?;
-        if !time.is_undefined() {
-            let parsed = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time, false)?;
-            fields[3..9].copy_from_slice(&parsed[3..9]);
-        }
+    let has_time = data.kind == StdTemporalKind::PlainDate && !time_value.is_undefined();
+    if has_time {
+        let parsed = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time_value, false)?;
+        fields[3..9].copy_from_slice(&parsed[3..9]);
+        // ISODateTimeWithinLimits is checked on the COMBINED date+time (the
+        // date alone, or the time alone, may each be within their own
+        // narrower limits without the combination being valid) --
+        // confirmed by PlainDate/prototype/toZonedDateTime's own family of
+        // `*-outside-valid-iso-range.js`-style tests elsewhere in this
+        // ticket (PlainDateTime.with/withPlainTime).
+        std_temporal_validate(StdTemporalKind::PlainDateTime, &fields)?;
     }
     let options = if data.kind == StdTemporalKind::PlainDate { JsValue::Undefined }
         else { std_reflect_arg(&args, 1) };

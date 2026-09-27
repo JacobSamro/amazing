@@ -852,7 +852,21 @@ fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<[i64; 10], Th
     let mut values = [0; 10];
     match kind {
         StdTemporalKind::PlainTime => {
-            let time = if let Some((_, time)) = text.split_once('T').or_else(|| text.split_once('t')).or_else(|| text.split_once(' ')) {
+            let time = if let Some((date, time)) = text.split_once('T').or_else(|| text.split_once('t')).or_else(|| text.split_once(' ')) {
+                // The date prefix is discarded (PlainTime keeps only the
+                // time-of-day) but is still validated in full when present
+                // -- a syntactically-invalid or out-of-range discarded date
+                // (an extended year of -000000, an out-of-range month/day, a
+                // non-ASCII minus sign, ...) must still throw. Confirmed by
+                // withPlainTime's own year-zero.js and
+                // argument-string-minus-sign.js. An explicit "T" designator
+                // with NO date at all (just "T15:23:30") splits to an empty
+                // date prefix, which is not itself a validation failure --
+                // confirmed by PlainTime.from's own argument-string.js/
+                // argument-string-with-time-designator.js.
+                if !date.is_empty() {
+                    std_temporal_parse_date(date, true)?;
+                }
                 time
             } else { text };
             std_temporal_validate_time_offset(time)?;
