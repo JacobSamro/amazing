@@ -217,11 +217,45 @@ fn std_temporal_add_calendar_cal(cal: &str, base: &[i64; 10], duration: &[i64; 1
     let mut result = *base;
     let (native_year, native_month, native_day, ..) = std_calendar_fields(cal, base[0], base[1], base[2]);
     let target_year = native_year + factor * duration[0];
-    // A years-only add can land the SAME ordinal month on a year with fewer
-    // months (hebrew/chinese/dangi's leap month varies by year) -- clamp
-    // before advancing further, matching this function's own day-overflow
-    // clamp/reject just below.
-    let start_month = native_month.min(std_calendar_months_in_year(cal, target_year));
+    // A years-only step must carry forward the SAME monthCode, not the same
+    // ordinal POSITION: hebrew/chinese/dangi's leap month shifts (or
+    // disappears) depending on which years are leap, so "ordinal 6" in one
+    // year is not the same named month as "ordinal 6" in another (hebrew's
+    // Adar is ordinal 6 in a common year but ordinal 7, after the inserted
+    // Adar I, in a leap year; chinese/dangi's leap month's ordinal position
+    // varies every leap year it occurs in). A plain `min(native_month,
+    // months_in_year(target_year))` clamp -- this function's old approach --
+    // only catches the case where the source ordinal literally exceeds the
+    // target year's month COUNT; it silently mis-resolves every case where
+    // the count is high enough but the leap month's position differs.
+    // std_calendar_resolve_code_ord resolves by the calendar's own monthCode
+    // instead (CalendarDateAdd's real behavior), and reports whether that
+    // exact code exists in the target year -- if it does not (adding a year
+    // to a leap month whose target year has no such leap month), that is
+    // this function's own overflow case, reject/constrain exactly like the
+    // day-overflow check just below. 2026-09-27, confirmed by
+    // leap-months-{chinese,dangi,hebrew}.js and leap-month-{chinese,dangi,
+    // hebrew}-numerical-months.js (ported fix, same root cause class as the
+    // since/until bracket search's own ordinal-position bug, lumen's
+    // diff_date_cal).
+    // std_calendar_resolve_code_ord's non-hebrew branch is chinese/dangi-
+    // specific math (std_calendar_china_resolve_month_ord) -- calling it for
+    // coptic/ethiopic/ethioaa/islamic-*/indian/persian would resolve their
+    // monthCode using the WRONG calendar's algorithm. Those calendars have no
+    // leap MONTH at all (std_calendar_has_leap_months is false for them,
+    // only their day count/13th-month varies), so ordinal position is
+    // already stable year to year and the plain min-clamp below is correct
+    // for them, unchanged from before this fix.
+    let (start_month, month_existed) = if std_calendar_has_leap_months(cal) {
+        let source_code = std_calendar_month_code(cal, base[0], base[1], base[2]);
+        std_calendar_resolve_code_ord(cal, target_year, &source_code)
+            .ok_or_else(|| Throw::range_error("invalid monthCode"))?
+    } else {
+        (native_month.min(std_calendar_months_in_year(cal, target_year)), true)
+    };
+    if !month_existed && reject_overflow {
+        return Err(Throw::range_error("month is invalid in target year"));
+    }
     let (year, month) = std_calendar_advance_ord(cal, target_year, start_month, factor * duration[1]);
     let max_day = std_calendar_month_len(cal, year, month);
     let day = if native_day > max_day {

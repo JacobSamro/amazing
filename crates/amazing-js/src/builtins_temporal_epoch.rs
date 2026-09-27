@@ -1259,8 +1259,21 @@ fn std_epoch_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, 
         return Err(Throw::range_error("date units are not valid for Instant"));
     }
     let result = if data.kind == StdEpochKind::Instant {
+        // Temporal.Instant.prototype.add/subtract take no options parameter
+        // at all (AddDurationToOrSubtractDurationFromInstant): args[1], if
+        // any, is simply never read.
         data.epoch_ns + sign as i128 * std_temporal_duration_time_ns(&duration)
     } else {
+        // 2026-09-27: this used to hardcode `reject_overflow: false`
+        // (constrain), silently ignoring a real `overflow` option in
+        // args[1] -- AddZonedDateTime reads GetTemporalOverflowOption just
+        // like every Plain* kind's own add()/subtract() does. Fixed by
+        // reading it the same way (std_temporal_overflow), confirmed
+        // required by ZonedDateTime/prototype/{add,subtract}/constrain-day-
+        // */leap-year-*.js's own `{ overflow: "reject" }` cases across every
+        // calendar (including the ISO-grid family -- this was never
+        // calendar-specific).
+        let reject = std_temporal_overflow(i, std_reflect_arg(&args, 1))?;
         let local = std_epoch_local_fields(&data)?;
         // (2026-09-27: confirmed required, not parkable -- add()/subtract()
         // must stay calendar-native here to match the calendar-real getter
@@ -1269,7 +1282,7 @@ fn std_epoch_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, 
         // see the getter comment above); only since()/until() (std_temporal_
         // epoch_breakdown_cal, below) is parked, since its bracket search
         // has an unresolved bug for chinese/dangi.)
-        let shifted = std_temporal_add_calendar_cal(&data.calendar, &local, &duration, sign, false)?;
+        let shifted = std_temporal_add_calendar_cal(&data.calendar, &local, &duration, sign, reject)?;
         let time_ns = std_temporal_duration_time_ns(&duration)
             - (duration[2] as i128 * 7 + duration[3] as i128) * STD_TEMPORAL_NS_DAY;
         std_epoch_disambiguate(&data.zone_id, std_temporal_epoch_ns(&shifted), "compatible")?
