@@ -2066,3 +2066,132 @@ failing case is confirmed to actually exercise the min/max-content gap by
 direct inspection first, the same way this one was ruled out. Escalating
 via `questions.md` rather than guessing further or unilaterally digging
 into paint/compositor territory.
+
+## LAYOUT-29 -- root cause found: grid item percentage-height resolution (base `351a03cb`)
+
+The `questions.md` display-list-diff lead filed for the paint/compositor lane on
+this exact cluster was **wrong and has been retracted**. Its diagnostic used
+`layout_document_with_text(html, author_css, width, text)` with `author_css=""`,
+which does not scan the DOM for `<style>` elements the way the real render-wpt
+pipeline (`crates/amazing/src/page.rs`'s `collect_style_text`) does -- so
+`display:grid-lanes`/`display:grid` from both fixtures' `<style>` blocks was
+silently never applied, and the "divergence" found was two documents both
+falling back to plain block flow, not a real signal. Fixed the diagnostic
+(extract `<style>` text, pass it as `author_css`) and re-ran it: with the real
+CSS applied, `row-track-sizing-001-ref.html`'s grid items (ordinary
+`display:grid`, `height:100%`) all came out with `border_box.h == 500` (the
+container's own height) regardless of which row they were placed in, while the
+grid-lanes test side correctly got each item's own row height. That is the bug,
+squarely in `amazing-layout`, not paint/compositor.
+
+**Root cause:** `layout_grid_with_context` (`grid.rs`, ordinary `display:grid`)
+lays out every item once before row sizes are known (to measure contributions
+for track sizing), then finalizes each item's grid-area geometry in a second
+pass. That second pass never updated `it.containing_block_height` to the
+item's own grid-area height (`ah`) -- so a percentage `height` (CSS Grid §10.3:
+a grid item's containing block for percentage resolution is its own grid area)
+kept resolving against whatever `containing_block_height` the item had from the
+premature first pass (empirically, the container's own height). The one
+re-flow branch that did exist only fired for a literal `auto` height with
+`align-self:stretch`, and only to *grow* (`if target_h > it.border_box.h`), so
+a percentage height that had already resolved too large from the stale value
+was never corrected back down. `layout_row_lanes` (the grid-lanes sibling)
+already did this correctly (`it.containing_block_height = Some(area_h)` before
+its own final `layout_block` call) -- `layout_grid_with_context` just never had
+the equivalent line.
+
+**Fix:** set `it.containing_block_height = Some(ah)` as soon as `ah` (the
+item's real grid-area height) is known in the finalize pass, and re-run
+`layout_block` for any item whose own `height` is a percentage (not just
+`auto`+stretch), so it re-resolves against the correct value in either
+direction.
+
+### Measured evidence
+
+- `cargo test -p amazing-layout --locked`: 381 passed, 1 ignored, 0 failed
+  (unchanged from before the fix -- no regressions).
+- `scripts/linux-render-wpt.sh layout css/css-grid --baseline auto --release`
+  (worker-2, base `351a03cb`): **gained=49 lost=4 changed=0 unchanged=890
+  new=2**. The 4 "lost" are the exact same four already-documented
+  pre-existing losses from LAYOUT-28's base-commit check
+  (`abspos/positioned-grid-items-{008,016}`,
+  `abspos/orthogonal-positioned-grid-items-008`,
+  `grid-lanes/.../row-auto-placed-subgrid-inherited-tracks-003`) --
+  unaffected by this change, already confirmed failing at the dev base.
+- Corrected `questions.md` entry with the retraction and this finding, for
+  the record (no cross-lane action needed -- this was ours to fix).
+
+This does not close the whole 97-test "track-sizing" cluster (some of the
+remaining mismatches there are real track-sizing/lane-packing issues), but a
+single percentage-height-resolution bug affecting every `height:100%`/
+percentage-height grid item reference file accounted for a large share of it.
+The Contrib min/max-content-split rewrite is still not shown to be needed by
+any confirmed case; leave it deferred per the correction above.
+
+### css-flexbox "15 pre-existing losses": not flexbox bugs -- evidence drift
+
+The ticket's other half asked to port-first from taffy's `flexbox.rs` to fix
+css-flexbox's 15 pre-existing render-corpus losses (stable across several
+tickets: `flex-inline`, `flexbox_fbfc`, `flexbox_first-line`, the whole
+`flexbox_flex-0-*`-unitless/non-unitless family, `flexbox_inline`,
+`order-with-row-reverse`, `position-fixed-001`). Before porting anything,
+pixel-verified one (`flexbox_flex-0-0-0.html`, the same way as
+`row-track-sizing-001.html` above): with the `<style>`-extraction diagnostic
+fix, its display list is **byte-for-byte structurally identical to its
+reference's** (12 commands, zero divergence) -- the flex algorithm produces
+exactly the right geometry. Cross-checked with a scratch unit test of
+`ItemProps::of`/`main_limits`/`layout_row` against all 5 `flex` shorthand
+variants this family uses (`0 0 0%`, `0 0 0`, `0 0`, `0 2`, `0 1 0%`):
+every one parses correctly and produces the spec-correct item width.
+Checking the checked-in evidence directly confirmed it: `flexbox_flex-0-0-0.html`
+is classified **`pass`** (0 differing pixels) in
+`crates/amazing-shell-gpui/evidence/wpt-render/css-css-flexbox/report.json` --
+it is not even one of the 15 losses; something else in the 15-name list this
+lane has been carrying forward doesn't match the checked-in evidence either.
+
+Re-ran the whole corpus with `--baseline auto` to get the *current* exact 15
+lost names, then compared, name by name, each loss's `actual_sha256` and
+`reference_sha256` against the checked-in baseline's:
+
+```
+same_actual=15/15   ref_changed=15/15
+```
+
+**Every single one of the 15 losses has an unchanged (byte-identical) test
+render and a changed reference render.** The thing under test in each case
+(when there even is flex involved -- `position-fixed-001.html` isn't a flex
+test at all and doesn't belong in this corpus's flexbox coverage in the first
+place) renders exactly as it did when the baseline passed; only the
+*reference* file drifted. Two of the reference files were read directly
+(`flexbox_first-line-ref.html`: `ul{display:block}li{display:inline-block}`
+with long words; `position-fixed-001-ref.html`: plain block text) -- neither
+uses flex, grid, or anything this lane owns. The common thread across the
+reference files (plain block/inline-block text, long words, no flex) points
+at a text/font-rendering environment or line-breaking change elsewhere in the
+engine (most likely the `text`/`text-provider` lane) landing after this
+evidence was captured, not at anything in `amazing-layout`.
+
+**Conclusion: a taffy flexbox port would not fix any of these 15** -- they
+are evidence-baseline drift, not flexbox regressions. Correcting the premise
+this ticket started from (mirroring LAYOUT-28's Contrib correction): not
+starting a taffy `flexbox.rs` port against this list. Filed the drift finding
+in `questions.md` for whoever owns evidence refresh/text rendering; the
+checked-in `css-css-flexbox` evidence should be re-captured once that's
+confirmed benign, which should clear all 15 back to `pass` without any code
+change here.
+
+The largest *real* layout-owned mismatch clusters in the live css-flexbox
+sweep (180 mismatches total, clustered by diff region/tone) are a separate,
+legitimate port target for a follow-up ticket: 37 "medium-region top-left
+lighter than reference", 23 "small-region top-left lighter", 22 "small-region
+top-left same-tone different-shape". Pixel-verified one example from the top
+cluster, `align-self-016.html` (shrink-to-fit item cross-size in a wrapped
+multi-line `column` flex container, floats stacked inside it, spec text in
+the fixture's own `<meta assert>`): display-list diff shows real structural
+divergence (test=14 commands vs ref=6, ref is a plain 200x200 green square).
+Not root-caused further this ticket -- budget went to the grid fix and the
+evidence-drift correction above instead. **Next flexbox step, not started:**
+port taffy's `resolve_flexible_lengths`/cross-size stretch-with-wrap handling
+(`src/compute/flexbox.rs` @ `e661b35980d9644ad8f1df64e183d27e5884533b`, MIT)
+for the multi-line-wrap/shrink-to-fit-cross-size mechanism `align-self-016.html`
+exercises, then re-cluster to see how much of the 37-test cluster it closes.
