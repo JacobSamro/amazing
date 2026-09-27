@@ -586,16 +586,19 @@ fn row_lanes_subgrid_chrome_matches_grid_sizing() {
 }
 
 #[test]
-fn stretch_sized_abspos_with_no_insets_fills_the_containing_block_edge_to_edge() {
+fn stretch_sized_abspos_with_no_insets_fills_from_the_static_anchor_to_the_far_edge() {
     // css-sizing-4 stretch/positioned-non-replaced-1.html: `width/height:
-    // stretch` with no insets on either axis must fill the WHOLE containing
-    // block, starting at the containing block's own edge -- not the box's
-    // static-position anchor. `#inner`'s margin trick deliberately shifts
-    // the static anchor away from `#outer`'s padding-box edge so the two
-    // only coincide if this is implemented correctly; `#outer`'s own
-    // negative margin then places that edge at (-50,-50) in page
-    // coordinates, matching the WPT reference's 100x100 on-page visible
-    // square (the off-page -50..0 portion is clipped by the viewport).
+    // stretch` with no insets on either axis is positioned at the box's
+    // static-position anchor (CSS2.1 SS10.3.7 case 1 / css-position-3
+    // SS3.5.1, unaffected by `stretch`) and fills from there to the
+    // containing block's FAR edge -- not the whole containing block
+    // starting at its own near edge. `#inner`'s margin trick shifts the
+    // static anchor by +50/+50 off `#outer`'s padding-box edge; `#outer`'s
+    // own -50/-50 margin shifts that edge (and so `#target`'s anchor) back
+    // to (0,0) in page coordinates. `#target` then fills from (0,0) to
+    // `#outer`'s far edge at (100,100) -- a 100x100 square exactly matching
+    // the WPT reference's on-page green square, with none of `#outer`'s
+    // own 150x150 box visible past that far edge.
     let (dom, root) = page(
         r#"<body>
 <div id=outer style="display:flow-root;position:relative;width:150px;height:150px;margin-top:-50px;margin-left:-50px">
@@ -608,8 +611,8 @@ fn stretch_sized_abspos_with_no_insets_fills_the_containing_block_edge_to_edge()
         false,
     );
     let target = get(&root, id(&dom, "target"));
-    near(target.border_box.x, -50.0);
-    near(target.border_box.y, -50.0);
-    near(target.border_box.w, 150.0);
-    near(target.border_box.h, 150.0);
+    near(target.border_box.x, 0.0);
+    near(target.border_box.y, 0.0);
+    near(target.border_box.w, 100.0);
+    near(target.border_box.h, 100.0);
 }

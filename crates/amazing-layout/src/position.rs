@@ -195,21 +195,6 @@ fn position_subtree(
             values::resolve_margins_with_units(&child.style, units, containing_block.rect.w);
         // Used sizes are temporary inputs to normal layout, not computed style.
         let computed_style = child.style.clone();
-        // css-sizing-4 stretch-fit-sizing: `prepare_sizes` below overwrites
-        // `width`/`height` in `child.style` with their resolved-px used value
-        // (see `set_used_length`), so a `stretch`/`-webkit-fill-available`
-        // keyword is gone from `child.style` by the time `absolute_origin`
-        // runs later. Read it now, off the still-unmutated computed style.
-        let stretch_axes = (
-            matches!(
-                computed_style.get("width"),
-                Some("stretch" | "-webkit-fill-available")
-            ),
-            matches!(
-                computed_style.get("height"),
-                Some("stretch" | "-webkit-fill-available")
-            ),
-        );
         prepare_sizes(child, containing_block.rect, static_anchor, fonts, text, grid_generates_cb);
         layout_child(
             child,
@@ -236,7 +221,6 @@ fn position_subtree(
             containing_block,
             static_anchor,
             specified_margins,
-            stretch_axes,
             text,
         );
         shift_box(child, x - child.border_box.x, y - child.border_box.y);
@@ -421,19 +405,27 @@ fn prepare_sizes(
         if !stretch && (!auto || replaced) {
             continue;
         }
-        // The static-position anchor fallback determines *position* only
-        // (case 1 of CSS2.1 §10.3.7 / css-position-3 §3.5.1's rule for width
-        // not auto with both insets auto): it must not narrow `stretch`'s
-        // *size*, which -- per css-sizing-4's stretch-fit-sizing -- always
-        // fills the whole containing block minus margin/chrome regardless of
-        // insets. `absolute_origin` below independently resolves the box's
-        // final x/y from `anchor` and this box's own resolved width, so
-        // skipping the fallback here does not lose the position.
-        if property == "width" && start.is_none() && end.is_none() && !stretch {
-            if anchor.right {
-                end = Some(cb.x + cb.w - anchor.x);
-            } else {
-                start = Some(anchor.x - cb.x);
+        // css-sizing-4 stretch-fit-sizing (stretch/positioned-non-replaced-1.html):
+        // when both insets on an axis are auto, `absolute_origin` positions
+        // the box at its static-position anchor (CSS2.1 §10.3.7 case 1 /
+        // css-position-3 §3.5.1), unchanged by `stretch`. `stretch` does NOT
+        // mean "fill the containing block regardless of where that anchor
+        // falls" -- it fills from the anchor to the containing block's FAR
+        // edge, i.e. exactly as far as a one-sided `left:<anchor>` (or
+        // `top:<anchor>`) would let it grow. So the anchor is a real inset
+        // for this size computation too, not position-only: treating it as
+        // the known `start` (or `end`, right-anchored) below makes `available`
+        // subtract it out, on both axes, whether the box is stretch-sized or
+        // shrink-to-fit auto-sized (the latter already relied on this for
+        // `width`; `height` never had an anchor fallback at all, since a
+        // non-stretch auto `height` with both insets auto is content-sized
+        // instead and never reaches `available` below).
+        if start.is_none() && end.is_none() {
+            match property {
+                "width" if anchor.right => end = Some(cb.x + cb.w - anchor.x),
+                "width" => start = Some(anchor.x - cb.x),
+                "height" => start = Some(anchor.y - cb.y),
+                _ => {}
             }
         }
         let available =
@@ -598,11 +590,9 @@ fn absolute_origin(
     containing_block: ContainingBlock,
     anchor: StaticAnchor,
     margins: values::SidesM,
-    stretch_axes: (bool, bool),
     text: Option<&dyn TextSystem>,
 ) -> (f32, f32) {
     let cb = containing_block.rect;
-    let (width_stretches, height_stretches) = stretch_axes;
     let x = Axis {
         extent: cb.w,
         start: resolve_inset(box_, "left", cb.w, text),
@@ -614,7 +604,6 @@ fn absolute_origin(
         static_end: anchor.right,
         end_wins: containing_block.rtl,
         split_negative: false,
-        stretch: width_stretches,
     }
     .solve();
     let y = Axis {
@@ -628,7 +617,6 @@ fn absolute_origin(
         static_end: false,
         end_wins: false,
         split_negative: true,
-        stretch: height_stretches,
     }
     .solve();
     box_.margin = values::SidesM {
