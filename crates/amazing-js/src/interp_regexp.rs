@@ -72,15 +72,31 @@ impl Interpreter {
     fn install_regexp(&mut self) {
         let constructor = Self::native("RegExp", native_regexp, &self.function_proto);
         if let JsValue::Object(object) = &constructor {
-            object
-                .borrow_mut()
-                .set_own("prototype", JsValue::Object(self.regexp_proto.clone()));
+            // `RegExp.prototype` (§22.2.4): unlike an ordinary function's
+            // own `prototype` (writable, non-configurable), this one is
+            // `{ writable: false, enumerable: false, configurable: false }`.
+            // `set_own`'s default (all-true, `Property::data`) was
+            // overwriting whatever `Self::native` had set with the wrong
+            // attributes -- built-ins/RegExp/prototype/S15.10.5.1_A2/A3/A4.js
+            // check exactly this triple via `propertyHelper.js`.
+            let _ = object.borrow_mut().define(
+                "prototype",
+                crate::value::Property {
+                    value: JsValue::Object(self.regexp_proto.clone()),
+                    writable: false,
+                    enumerable: false,
+                    configurable: false,
+                    getter: None,
+                    setter: None,
+                },
+            );
             let _ = object
                 .borrow_mut()
                 .define("length", regexp_property(JsValue::num(2.0), false));
             let escape = Self::native("escape", native_regexp_escape, &self.function_proto);
             if let JsValue::Object(o) = &escape {
                 o.borrow_mut().constructible = false;
+                o.borrow_mut().delete_own("prototype");
                 let _ = o
                     .borrow_mut()
                     .define("length", regexp_property(JsValue::num(1.0), false));
@@ -101,6 +117,7 @@ impl Interpreter {
             let method = Self::native(name, fun, &self.function_proto);
             if let JsValue::Object(o) = &method {
                 o.borrow_mut().constructible = false;
+                o.borrow_mut().delete_own("prototype");
                 let _ = o.borrow_mut().define(
                     "length",
                     regexp_property(JsValue::num(length as f64), false),
@@ -139,6 +156,7 @@ impl Interpreter {
         let compile = Self::native_arity("compile", native_regexp_compile, &self.function_proto, 2);
         if let JsValue::Object(o) = &compile {
             o.borrow_mut().constructible = false;
+            o.borrow_mut().delete_own("prototype");
         }
         let _ = self
             .regexp_proto
@@ -169,6 +187,7 @@ impl Interpreter {
             let method = Self::native(tag_name, fun, &self.function_proto);
             if let JsValue::Object(o) = &method {
                 o.borrow_mut().constructible = false;
+                o.borrow_mut().delete_own("prototype");
                 let length = if symbol == WellKnownSymbol::Split { 2.0 } else { 1.0 };
                 let _ = o
                     .borrow_mut()
@@ -226,6 +245,27 @@ impl Interpreter {
                 prop.getter = Some(getter);
                 let _ = object.borrow_mut().define(key, prop);
             }
+        }
+        // `RegExp[Symbol.species]` (§22.2.5.2): a `get` accessor returning
+        // the receiver unchanged, the same idiom `native_array_species`/
+        // `symbol_method` already establish for Array -- reused verbatim
+        // (both live in the same flat `include!`d module as this file, see
+        // interp.rs) so the accessor function's own `name`/`length`
+        // descriptors match what `built-ins/RegExp/Symbol.species/*.js`
+        // checks without duplicating that bookkeeping here.
+        if let JsValue::Object(object) = &constructor {
+            let getter = symbol_method(self, "get [Symbol.species]", native_regexp_species);
+            let _ = object.borrow_mut().define(
+                WellKnownSymbol::Species.symbol(),
+                crate::value::Property {
+                    value: JsValue::Undefined,
+                    writable: false,
+                    enumerable: false,
+                    configurable: true,
+                    getter: Some(getter),
+                    setter: None,
+                },
+            );
         }
         self.install_regexp_string_iterator_proto();
         self.define_global("RegExp", constructor);
@@ -986,6 +1026,12 @@ fn regexp_exec_abstract(
         Some(m) => regexp_result(i, source.clone(), m, regex.group_names(), regex.flags().has_indices),
         None => Ok(JsValue::Null),
     }
+}
+/// `get RegExp[Symbol.species]` (§22.2.5.2): returns the receiver
+/// unchanged, so a subclass that doesn't override it derives itself rather
+/// than the base `RegExp`.
+fn native_regexp_species(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    Ok(this)
 }
 /// SpeciesConstructor(R, %RegExp%): the constructor `matchAll` builds its
 /// clone from, honoring an overridden `constructor` or `[Symbol.species]`.

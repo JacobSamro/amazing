@@ -153,6 +153,17 @@ impl SetExpr {
                     Member::Digit(invert) => (48..=57).contains(c) != *invert,
                     Member::Word(invert) => word(*c, flags) != *invert,
                     Member::Space(invert) => space(*c) != *invert,
+                    // `class_atom()` (the plain, non-`v`-mode class parser)
+                    // is the only place that constructs `Member::Property`,
+                    // and it never feeds a `SetExpr::Char` -- but the match
+                    // is exhaustive over `Member`, so this arm exists for
+                    // that type-level guarantee. Implemented for real
+                    // (rather than `unreachable!()`) since it costs nothing
+                    // and matches `FoldedClass::contains`'s identical arm.
+                    Member::Property(name, invert) => {
+                        let test = |x: u32| crate::unicode_props::contains(name, x) != *invert;
+                        test(*c) || (flags.ignore_case && crate::unicode_casefold::partners(*c).any(test))
+                    }
                 },
                 _ => false,
             },
@@ -242,6 +253,15 @@ impl FoldedClass {
             Member::Digit(invert) => (48..=57).contains(&c) != *invert,
             Member::Word(invert) => word(c, flags) != *invert,
             Member::Space(invert) => space(c) != *invert,
+            // Same shape as `SetExpr::Property`'s own runtime check (the
+            // `v`-mode path): test the raw code point, then (only under
+            // `i`) its case-fold partners too, rather than pre-canonicalizing
+            // like `Range` does -- `unicode_props::contains` works over raw
+            // Unicode property membership, which isn't itself fold-invariant.
+            Member::Property(name, invert) => {
+                let test = |x: u32| crate::unicode_props::contains(name, x) != *invert;
+                test(c) || (flags.ignore_case && crate::unicode_casefold::partners(c).any(test))
+            }
         }) || self.folded.binary_search(&canon).is_ok();
         yes != self.class.inverted
     }

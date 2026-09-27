@@ -18,10 +18,35 @@ use std::ops::Range;
 
 const MAX_PATTERN: usize = 16_384;
 const MAX_INPUT: usize = 1_048_576;
-const MAX_DEPTH: usize = 64;
+// Recursive-descent parser nesting depth (parser.rs's `atom`/`set_class`,
+// one increment per `(` or nested `[...]` class): a real, finite guard
+// against native stack overflow from a maliciously deep pattern, not a
+// content-size proxy like MAX_INPUT/MAX_SLOTS. 64 was too tight for
+// legitimate patterns -- built-ins/RegExp/S15.10.2.8_A3_T15.js and _T16.js
+// nest 200 plain capturing groups (`(((...hello...)))`, a real-world-shaped
+// stress pattern from a 2009 Mozilla bug report, not adversarial input) and
+// threw "pattern nesting" under the old limit despite matching in a single
+// linear pass with no backtracking. Raised to comfortably clear that with
+// headroom while staying a small, bounded number of recursive call frames
+// (a few hundred bytes each) well inside a normal thread's stack.
+const MAX_DEPTH: usize = 512;
 const MAX_CAPTURES: usize = 128;
 const MAX_CODE: usize = 32_768;
 const MAX_STEPS: usize = 1_000_000;
+// Tried raising this (and the slots cap it guards alongside) to let large
+// greedy matches over property-escapes classes (`/^\p{Alphabetic}+$/u`
+// against a harness string covering that property's ~130k+ code points)
+// clear the backtracking-storage limit instead of throwing RangeError.
+// Measured result: it doesn't help. Each loop iteration still clones a full
+// State (pos + captures + marks) onto the backtrack stack (Node::Repeat's
+// Split/Mark/body/Progress/Jump compilation in vm.rs), so raising the cap
+// just lets ~130k of those clones happen before the 30s test262 timeout
+// fires instead of a RangeError firing in milliseconds -- same pass/fail
+// outcome (still not passing) but far worse for shared-host CPU time.
+// Reverted (see .agents/js-date/log.md, JSD-5 cluster 3): the real fix is an
+// O(1)-per-iteration greedy-loop fast path for simple, capture-free atoms
+// (no per-iteration State clone), which is a VM change too large/risky for
+// this round -- deferred alongside the lookbehind capture-order gap.
 const MAX_STACK: usize = 8_192;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
