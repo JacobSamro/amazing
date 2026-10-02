@@ -801,10 +801,16 @@ pub fn layout_dom_document_with_replaced_in_viewport(
 }
 
 /// Bottom edge of scrollable layout overflow. Absolute descendants contribute;
-/// fixed descendants stay viewport-attached and do not extend document height.
+/// viewport-fixed descendants do not extend document height. Containment
+/// boundaries keep descendant ink/scrollable overflow inside their own scope.
 pub fn layout_overflow_bottom(layout: &LayoutBox) -> f32 {
     let mut bottom =
         layout.border_box.y + layout.border_box.h + layout.margin.bottom.unwrap_or(0.0);
+    // CSS Contain 2 §3.2: visible/clip overflow under layout containment is
+    // ink overflow. Scrollable overflow remains local to that containment
+    // box; paint containment clips it as well. The box itself still occupies
+    // its normal border/margin extent in the ancestor scrollable overflow.
+    if crate::containment::independent_context(&layout.style) { return bottom; }
     for line in &layout.lines {
         bottom = bottom.max(line.y_top + line.height);
     }
