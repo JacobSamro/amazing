@@ -43,6 +43,7 @@ use runtime_host_net::{NetNativeEntry, NetRuntime};
 #[path = "runtime_host_integrator_assist.rs"]
 mod runtime_host_integrator_assist;
 use runtime_host_integrator_assist::{IaNativeEntry, IaRuntime};
+#[path = "runtime_host_modules.rs"] pub(crate) mod modules;
 
 #[path = "runtime_host_messaging.rs"]
 pub(crate) mod runtime_host_messaging;
@@ -92,6 +93,7 @@ enum NativeEntry {
     StorageLockSettled(u64, bool),
     IntegratorAssist(IaNativeEntry),
     Encoding(EncodingOp),
+    CurrentScript,
 }
 
 enum WebObject {
@@ -143,6 +145,7 @@ struct BindingState {
     encoding: Option<runtime_host_encoding::EncodingRealm>,
     net: NetRuntime,
     integrator_assist: IaRuntime,
+    modules: modules::ModuleRuntime,
     /// HTML-29: per-document `document.write`/`writeln` insertion point.
     /// A key present means that document's parser is "active" (its own
     /// top-level scripts are running, or it is inside a `document.open()`/
@@ -247,6 +250,7 @@ impl RuntimeBindings {
     }
 
     pub(crate) fn set_document_url(&self, js: &mut Interpreter, url: &str) {
+        self.set_module_document_base(js, url);
         self.state.borrow_mut().document_url = Some(url.to_owned());
         self.navigate_iframes(js);
     }
@@ -725,6 +729,7 @@ pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> 
             NativeEntry::Messaging(op) => adapter.messaging_invoke(op, this, &args),
             NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
             NativeEntry::IntegratorAssist(entry) => adapter.invoke_integrator_assist(entry, this, &args),
+            NativeEntry::CurrentScript => adapter.module_current_script(this),
             NativeEntry::Encoding(op) => adapter.invoke_encoding(op, this, &args),
         }
     })
@@ -777,6 +782,7 @@ pub(crate) fn install(
         encoding: None,
         net: NetRuntime::new(),
         integrator_assist: IaRuntime::new(),
+        modules: modules::ModuleRuntime::new(),
         write_insertion_points: HashMap::new(),
         active_parsers: HashMap::new(),
         accessor_cache: HashMap::new(),
@@ -823,6 +829,7 @@ pub(crate) fn install(
     fresh.declare_lexical("sessionStorage",session_storage,false)?;
     adapter.js.global_env = fresh;
     adapter.install_net()?;
+    adapter.install_module_loader()?;
     adapter
         .js
         .global_obj

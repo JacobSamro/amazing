@@ -799,6 +799,15 @@ fn source_bytes(root: &Path, path: &Path, scaffold: bool) -> Result<Vec<u8>, Str
     Ok(bytes)
 }
 
+fn module_source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
+    let bytes = source_bytes(root, path, scaffold)?;
+    let mut text = crate::runtime_binding_host::modules::decode_module(&bytes);
+    if !scaffold && path.file_name().is_some_and(|name| name.to_string_lossy().contains(".sub.")) {
+        apply_sub_substitution(&mut text);
+    }
+    Ok(text)
+}
+
 fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
     let mut text = String::from_utf8(source_bytes(root, path, scaffold)?).map_err(|e| e.to_string())?;
     // NET-41: the top-level document's own `<script src>` tags are read
@@ -1056,6 +1065,17 @@ fn execute_page(
         .js
         .set_viewport_size(options.width, options.height);
     scheduler.set_location_url(&url);
+    let module_root = root.to_owned();
+    let scaffold = options.scaffold;
+    scheduler.set_module_source_loader(Rc::new(move |url| {
+        let parsed = amazing_net::url::ParsedUrl::parse(url).map_err(|e| e.to_string())?;
+        if parsed.scheme() == "data" { return crate::runtime_binding_host::modules::fetch_module(url); }
+        let path = local_file(&module_root, &module_root, &parsed.pathname())?;
+        if !matches!(path.extension().and_then(|ext| ext.to_str()), Some("js" | "mjs")) {
+            return Err("module fixture response is not JavaScript".into());
+        }
+        module_source(&module_root, &path, scaffold)
+    }));
     if let Some(state) = history_state {
         let value = scheduler
             .js
@@ -1154,12 +1174,16 @@ fn execute_page(
                         return Ok(());
                     }
                     let harness = path == harness_path;
-                    (source(&root, &path, options.scaffold)?, src.clone(), harness)
+                    let text = if script.kind == crate::cmd::js::ScriptKind::Module {
+                        module_source(&root, &path, options.scaffold)?
+                    } else { source(&root, &path, options.scaffold)? };
+                    (text, src.clone(), harness)
                 }
                 None => (script.body.clone(), "inline script".into(), false),
             };
+            let script_url = scheduler.page_script_url(&url, &script);
             scheduler
-                .run_script(&text)
+                .run_page_script(&script, &text, &script_url)
                 .map_err(|e| format!("{label}: {}", e.describe()))?;
             if harness {
                 if installed {
@@ -1171,13 +1195,29 @@ fn execute_page(
             }
             Ok(())
         })?;
+    // Element load/error handlers must exist before deferred modules settle.
+    let mut handlers = Vec::new();
+    crate::collect_inline_handlers(&host.borrow().dom, amazing_dom::NodeIdx(0), &mut handlers);
+    for (node, event, body) in handlers {
+        scheduler.install_inline_handler(node, &event, &body).map_err(|e| e.describe())?;
+    }
     // `defer`/module and `async` scripts never pause tree construction (see
     // `amazing_html::ScriptMode`); run them, in document order, once the
     // whole document is parsed -- before `DOMContentLoaded`, matching
     // deferred timing. This driver has no real concurrent fetch to race an
     // async script's execution against, so it runs those the same way.
     for script in &deferred {
+        let script_url = scheduler.page_script_url(&url, script);
         let (text, label) = match &script.src {
+            Some(src) if script.kind == crate::cmd::js::ScriptKind::Module => {
+                match scheduler.load_module_source(&script_url) {
+                    Ok(text) => (text, src.clone()),
+                    Err(_) => {
+                        scheduler.finish_module_script(script, None, &script_url, false).map_err(|e| e.describe())?;
+                        continue;
+                    }
+                }
+            }
             Some(src) => {
                 let normalized = src.trim_start_matches('/').replace('\\', "/");
                 if !options.scaffold && normalized == TESTDRIVER_VENDOR_PATH {
@@ -1195,28 +1235,21 @@ fn execute_page(
                     if !options.scaffold && path == testharnessreport_path {
                         continue;
                     }
-                    (source(&root, &path, options.scaffold)?, src.clone())
+                    let text = if script.kind == crate::cmd::js::ScriptKind::Module {
+                        module_source(&root, &path, options.scaffold)?
+                    } else { source(&root, &path, options.scaffold)? };
+                    (text, src.clone())
                 }
             }
             None => (script.body.clone(), "inline deferred/async script".into()),
         };
-        scheduler
-            .run_script(&text)
-            .map_err(|e| format!("{label}: {}", e.describe()))?;
+        let result = scheduler.run_page_script(script, &text, &script_url);
+        if script.kind == crate::cmd::js::ScriptKind::Module {
+            scheduler.finish_module_script(script, result.as_ref().err(), &script_url, true).map_err(|e| e.describe())?;
+        } else { result.map_err(|e| format!("{label}: {}", e.describe()))?; }
     }
     if !installed {
         return Err("no harness script loaded".into());
-    }
-    // HTML-31: inline `on*` handler attributes only exist once their element
-    // has been parsed, so collecting them has to wait until the interleaved
-    // parse above reaches `Eof` (unlike before, when the whole DOM already
-    // existed prior to running any script at all).
-    let mut handlers = Vec::new();
-    crate::collect_inline_handlers(&host.borrow().dom, amazing_dom::NodeIdx(0), &mut handlers);
-    for (node, event, body) in handlers {
-        scheduler
-            .install_inline_handler(node, &event, &body)
-            .map_err(|e| e.describe())?;
     }
     refresh_images(&mut scheduler)?;
     // HTML-31: `host.dom` was empty when `set_location_url` first ran above

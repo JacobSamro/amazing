@@ -114,28 +114,10 @@ pub(super) struct FrameRuntime {
     already_started_scripts: HashSet<NodeIdx>,
 }
 
-/// Classic inline `<script>` bodies in tree order. External `src` and
-/// `type="module"` scripts are not fetched or evaluated for iframe
-/// documents yet; this mirrors the WPT harness's classic-only scheduling.
-struct ChildScript { node: NodeIdx, src: Option<String>, body: String }
-
-/// Classic `<script>` elements in tree order, inline or external.
-/// `type="module"` is still not fetched or evaluated for iframe documents:
-/// the same limitation the top-level WPT harness has for module/async/defer.
-fn collect_classic_scripts(dom: &Dom, node: NodeIdx, out: &mut Vec<ChildScript>) {
+/// Runnable script elements in tree order for the non-interleaved fallback.
+fn collect_classic_scripts(dom: &Dom, node: NodeIdx, out: &mut Vec<crate::cmd::js::PageScript>) {
     if dom.namespace(node) == Some(Namespace::Html) && dom.local_name(node) == Some("script") {
-        let src = dom.get_attribute_ns(node, None, "src").map(str::to_owned);
-        let module = dom.get_attribute_ns(node, None, "type")
-            .is_some_and(|value| value.eq_ignore_ascii_case("module"));
-        if !module {
-            let mut source = String::new();
-            for child in dom.children(node) {
-                if let NodeKind::Text { data } = &dom.get(child).kind { source.push_str(data); }
-            }
-            if src.is_some() || !source.trim().is_empty() {
-                out.push(ChildScript { node, src, body: source });
-            }
-        }
+        if let Some(script) = crate::cmd::js::script_source_from_node(dom, node) { out.push(script); }
         return;
     }
     for child in dom.children(node) { collect_classic_scripts(dom, child, out); }
@@ -467,8 +449,12 @@ impl RuntimeBindings {
             realm
         };
         js.binding_set_realm_origin(realm, &origin)?;
+        let module_base = if matches!(child_url, "about:blank" | "about:srcdoc") {
+            self.state.borrow().document_url.clone().unwrap_or_else(|| "about:blank".into())
+        } else { child_url.to_owned() };
         let state = self.state.clone();
         js.binding_with_realm(realm, |i| {
+            self.set_module_document_base(i, &module_base);
             // `host_native_dispatch` is per-realm state (see JSRT-9's
             // `RealmState`), so a freshly created realm has none until we
             // install one; without this every native binding call in the
@@ -506,6 +492,7 @@ impl RuntimeBindings {
             adapter.install_window_event_target()?;
             adapter.install_selection_global()?;
             adapter.install_net()?;
+            adapter.install_module_loader()?;
             adapter.install_storage_interfaces()?;
             adapter.install_messaging()?;
             // HTML-37: TextDecoder/TextEncoder are stateless-per-instance
@@ -735,7 +722,6 @@ impl RuntimeBindings {
                 };
                 let resolver = state.borrow().frames.resolver.clone();
                 js.binding_with_realm(realm, |i| {
-                    let mut adapter = RuntimeBindingHost { js: i, state: state.clone() };
                     for script in &scripts {
                         // HTML-29: narrows the child document's write
                         // insertion point to right after this script (its
@@ -747,10 +733,14 @@ impl RuntimeBindings {
                         // where a parser would, not at the end of the body.
                         narrow_write_insertion_point_state(&state, document, script.node);
                         match &script.src {
-                            None => { adapter.js.run_script(&script.body)?; }
+                            None => { self.execute_document_script(i, script, &script.body, &child_url)?; }
                             Some(src) => {
-                                if let Some(text) = fetch_child_script(src, &child_url, resolver.as_ref()) {
-                                    adapter.js.run_script(&text)?;
+                                let url = crate::cmd::js::resolve_script_url(&child_url, src);
+                                let text = if script.kind == crate::cmd::js::ScriptKind::Module {
+                                    self.load_module_source(i, &url).ok()
+                                } else { fetch_child_script(src, &child_url, resolver.as_ref()) };
+                                if let Some(text) = text {
+                                    self.execute_document_script(i, script, &text, &url)?;
                                 }
                                 // A fetch failure or unresolvable URL is
                                 // silently skipped, matching how a real
@@ -816,11 +806,18 @@ impl RuntimeBindings {
             };
             let script = { let host = host.borrow(); crate::cmd::js::script_source_from_node(&host.dom, dest_node) };
             let Some(script) = script else { return Ok(()) };
+            let script_url = js.binding_with_realm(realm, |i| Ok(self.page_script_url(i, &script, child_url)))?;
             match &script.src {
-                None => js.binding_with_realm(realm, |i| i.run_script(&script.body).map(|_| ())),
+                None => js.binding_with_realm(realm, |i| self.execute_document_script(i, &script, &script.body, &script_url)),
                 Some(src) => {
-                    if let Some(text) = fetch_child_script(src, child_url, resolver) {
-                        js.binding_with_realm(realm, |i| i.run_script(&text).map(|_| ()))
+                    let url = script_url;
+                    let text = if script.kind == crate::cmd::js::ScriptKind::Module {
+                        js.binding_with_realm(realm, |i| self.load_module_source(i, &url).map_err(Throw::type_error)).ok()
+                    } else { fetch_child_script(src, child_url, resolver) };
+                    if let Some(text) = text {
+                        js.binding_with_realm(realm, |i| self.execute_document_script(i, &script, &text, &url))
+                    } else if script.kind == crate::cmd::js::ScriptKind::Module {
+                        js.binding_with_realm(realm, |i| self.finish_module_script(i, &script, None, &url, false))
                     } else { Ok(()) }
                 }
             }
@@ -1027,15 +1024,8 @@ impl RuntimeBindings {
     /// own candidates before returning here, exactly as reentrant WHATWG
     /// "insert" calls nest).
     ///
-    /// `type="module"` scripts are left untouched entirely -- not marked
-    /// already-started either, matching spec's early-return-without-
-    /// marking for a disqualified type (so fixing the type later and
-    /// reinserting could still let a *classic* rewrite of it run).
-    /// `amazing-js` has a ready `ModuleResolver` hook (`amazing-js/src/
-    /// module.rs`) but nothing in this driver has ever wired it up for ANY
-    /// script context, parser-inserted or dynamic -- a pre-existing gap
-    /// this ticket did not introduce, filed for js-lang/js-runtime in
-    /// `questions.md` rather than attempted here.
+    /// Module scripts use the realm's module registry and UTF-8 transport;
+    /// classic nomodule fallbacks and data blocks remain disqualified.
     ///
     /// Every fetch is synchronous/blocking (`fetch_child_script`, same as
     /// every other script-fetching path in this driver), so `.async`'s
@@ -1064,14 +1054,18 @@ impl RuntimeBindings {
                 (crate::cmd::js::script_source_from_node(&host.dom, node), nomodule, is_module)
             };
             // Neither disqualification marks already-started (see doc
-            // comment above): a data-block/module type, or a `nomodule`
+            // comment above): a data-block type, or a classic `nomodule`
             // script, might still become a runnable classic script later
             // if its attributes change and it is reinserted.
-            if is_module || nomodule { continue; }
+            if nomodule && !is_module { continue; }
             let Some(script) = script else { continue }; // wrong type, or no `src`/empty body
             let root = { let state = self.state.borrow(); state.host.borrow().dom.root(node) };
             self.state.borrow_mut().frames.already_started_scripts.insert(node);
             let (realm, base) = self.realm_and_base_for_document(root);
+            let script_url = match realm {
+                Some(realm) => js.binding_with_realm(realm, |i| Ok(self.page_script_url(i, &script, &base))).unwrap_or_else(|_| base.clone()),
+                None => self.page_script_url(js, &script, &base),
+            };
             let run_body = |js: &mut Interpreter, body: &str| {
                 // A script's own uncaught exception does not stop the page
                 // or suppress its `load` event (that pair reflects fetch
@@ -1080,19 +1074,24 @@ impl RuntimeBindings {
                 // swallows the same `Err` into a diagnostics list rather
                 // than propagating it.
                 let _ = match realm {
-                    Some(realm) => js.binding_with_realm(realm, |i| i.run_script(body).map(|_| ())),
-                    None => js.run_script(body).map(|_| ()),
+                    Some(realm) => js.binding_with_realm(realm, |i| self.execute_document_script(i, &script, body, &script_url)),
+                    None => self.execute_document_script(js, &script, body, &script_url),
                 };
             };
             match &script.src {
                 None => {
                     run_body(js, &script.body);
-                    let _ = self.dispatch_script_event(js, node, "load");
+                    if script.kind == crate::cmd::js::ScriptKind::Classic { let _ = self.dispatch_script_event(js, node, "load"); }
                 }
-                Some(src) => match fetch_child_script(src, &base, resolver.as_ref()) {
+                Some(src) => match if script.kind == crate::cmd::js::ScriptKind::Module {
+                    match realm {
+                        Some(realm) => js.binding_with_realm(realm, |i| self.load_module_source(i, &script_url).map_err(Throw::type_error)).ok(),
+                        None => self.load_module_source(js, &script_url).ok(),
+                    }
+                } else { fetch_child_script(src, &base, resolver.as_ref()) } {
                     Some(text) => {
                         run_body(js, &text);
-                        let _ = self.dispatch_script_event(js, node, "load");
+                        if script.kind == crate::cmd::js::ScriptKind::Classic { let _ = self.dispatch_script_event(js, node, "load"); }
                     }
                     None => { let _ = self.dispatch_script_event(js, node, "error"); }
                 },
@@ -1322,15 +1321,19 @@ impl RuntimeBindingHost<'_> {
         let base = self.state.borrow().document_url.clone();
         let resolver = self.state.borrow().frames.resolver.clone();
         let saved = self.state.borrow().write_insertion_points.get(&document).copied();
-        for script in scripts {
+        let bindings = RuntimeBindings { state: self.state.clone() };
+        for script in &scripts {
             narrow_write_insertion_point_state(&self.state, document, script.node);
-            match script.src {
-                None => { self.js.run_script(&script.body)?; }
+            let base = base.as_deref().unwrap_or("about:blank");
+            match &script.src {
+                None => { bindings.execute_document_script(self.js, script, &script.body, base)?; }
                 Some(src) => {
-                    if let Some(base) = base.as_deref() {
-                        if let Some(text) = fetch_child_script(&src, base, resolver.as_ref()) {
-                            self.js.run_script(&text)?;
-                        }
+                    let url = crate::cmd::js::resolve_script_url(base, src);
+                    let text = if script.kind == crate::cmd::js::ScriptKind::Module {
+                        bindings.load_module_source(self.js, &url).ok()
+                    } else { fetch_child_script(src, base, resolver.as_ref()) };
+                    if let Some(text) = text {
+                        bindings.execute_document_script(self.js, script, &text, &url)?;
                     }
                 }
             }
@@ -2503,8 +2506,8 @@ mod tests {
              make('text/plain', false); \
              make('text/javascript', true); \
              window.ran.join(',')"
-        ).unwrap(), JsValue::str("default,application/javascript"),
-            "only the no-type and JS-MIME-type scripts should run; module/data-block/nomodule must not");
+        ).unwrap(), JsValue::str("default,application/javascript,module"),
+            "classic and module scripts run; data blocks and classic nomodule fallbacks are skipped");
     }
 
     #[test]
