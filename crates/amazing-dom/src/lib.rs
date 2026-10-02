@@ -44,6 +44,7 @@ pub mod range;
 pub mod selection;
 pub mod traversal;
 mod tree;
+mod table;
 mod window_names;
 pub use tree::{DocumentPosition, DomError};
 
