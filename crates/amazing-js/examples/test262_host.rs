@@ -202,7 +202,7 @@ fn emit_module(phase: &str, kind: &str, detail: &str, unsupported: Option<&str>)
 
 fn install_test262_module_loader(
     i: &mut Interpreter, root: &str, path: &str,
-) -> io::Result<(Rc<RefCell<amazing_js::module::ModuleLinker>>, String)> {
+) -> io::Result<(Rc<RefCell<amazing_js::module::ModuleLinker<impl amazing_js::module::ModuleResolver + 'static + use<>>>>, String)> {
     use amazing_js::module::{ModuleLinker, ModulePhase};
     use std::path::Path;
     let root_path = Path::new(&root).canonicalize()?;
@@ -231,9 +231,14 @@ fn install_test262_module_loader(
         }
         let id = canonical.to_string_lossy().into_owned();
         let source = std::fs::read_to_string(canonical).map_err(|error| Throw::type_error(error.to_string()))?;
-        let convert_error = |failure: amazing_js::module::ModuleFailure| match failure.phase {
-            ModulePhase::Parse | ModulePhase::Resolution => Throw::syntax_error(failure.message),
-            _ => failure.thrown.unwrap_or_else(|| Throw::type_error(failure.message)),
+        let convert_error = |failure: amazing_js::module::ModuleFailure| {
+            if let Some(thrown) = failure.thrown {
+                return thrown;
+            }
+            match failure.phase {
+                ModulePhase::Parse | ModulePhase::Resolution => Throw::syntax_error(failure.message),
+                _ => Throw::type_error(failure.message),
+            }
         };
         loader_linker.borrow_mut().link(&id, &source).map_err(convert_error)?;
         ModuleLinker::evaluate_shared(&loader_linker, &id, interpreter).map_err(convert_error)?;
