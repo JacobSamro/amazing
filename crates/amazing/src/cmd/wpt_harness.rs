@@ -216,6 +216,11 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
     if let Some(path) = path.as_deref() {
         let path_only = path.split('#').next().unwrap_or(path);
         if let Some((route, query)) = path_only.split_once('?') {
+            if route == "/encoding/resources/single-byte-raw.py"
+                && source_bytes(root, &root.join("encoding/resources/single-byte-raw.py"), scaffold).is_ok() {
+                respond_single_byte_raw_py(&mut stream, query);
+                return;
+            }
             if route == "/dom/nodes/encoding.py"
                 && source_bytes(root, &root.join("dom/nodes/encoding.py"), scaffold).is_ok() {
                 respond_encoding_py(&mut stream, query);
@@ -225,6 +230,10 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
                 respond_cookie_py(&mut stream, query);
                 return;
             }
+        } else if path_only == "/encoding/resources/single-byte-raw.py"
+            && source_bytes(root, &root.join("encoding/resources/single-byte-raw.py"), scaffold).is_ok() {
+            respond_single_byte_raw_py(&mut stream, "");
+            return;
         } else if path_only == "/dom/nodes/encoding.py"
             && source_bytes(root, &root.join("dom/nodes/encoding.py"), scaffold).is_ok() {
             respond_encoding_py(&mut stream, "");
@@ -443,6 +452,28 @@ fn respond_encoding_py(stream: &mut TcpStream, query: &str) {
     };
     let _ = write!(stream,
         "HTTP/1.1 {status}\r\n{content_type}Content-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+    let _ = stream.write_all(&body);
+}
+
+// Faithful protocol support for pinned encoding/resources/single-byte-raw.py:
+// first byte-valued label, text/plain;charset=<label>, and bytes 0..254.
+// This supplies real HTTP bytes; charset/codec assertions still run in the engine.
+fn respond_single_byte_raw_py(stream: &mut TcpStream, query: &str) {
+    let label = query.split('&').find_map(|pair| {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        (harness_percent_decode_bytes(key) == b"label")
+            .then(|| harness_percent_decode_bytes(value))
+    });
+    let Some(label) = label else {
+        // Same missing-required-argument error shape as the other pinned
+        // GET.first(label) handler, without environment-specific traceback.
+        respond_encoding_py(stream, "");
+        return;
+    };
+    let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=");
+    let _ = stream.write_all(&label);
+    let _ = stream.write_all(b"\r\nContent-Length: 255\r\nConnection: close\r\n\r\n");
+    let body: Vec<u8> = (0..=254).collect();
     let _ = stream.write_all(&body);
 }
 
@@ -1588,7 +1619,7 @@ pub fn run(args: &[String]) -> ExitCode {
 
 #[cfg(test)]
 mod any_window_tests {
-    use super::{any_window_wrapper, decode_document, encoding_fixture_body, respond_encoding_py};
+    use super::{any_window_wrapper, decode_document, encoding_fixture_body, respond_encoding_py, respond_single_byte_raw_py};
 
     #[test]
     fn encoding_fixture_uses_first_label_and_escapes_isomorphic_bytes() {
@@ -1611,6 +1642,37 @@ mod any_window_tests {
         assert!(headers.starts_with("HTTP/1.1 200 OK\r\n"));
         assert!(!headers.to_ascii_lowercase().contains("content-type:"));
         assert_eq!(body, "<!doctype html><meta charset=\"big5\">");
+    }
+
+    #[test]
+    fn single_byte_fixture_serves_exact_bytes_and_first_charset_label() {
+        fn response(query: &str) -> Vec<u8> {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let address = listener.local_addr().unwrap();
+            let query = query.to_owned();
+            let worker = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                respond_single_byte_raw_py(&mut stream, &query);
+            });
+            let mut stream = std::net::TcpStream::connect(address).unwrap();
+            stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+            let mut bytes = Vec::new();
+            std::io::Read::read_to_end(&mut stream, &mut bytes).unwrap();
+            worker.join().unwrap(); bytes
+        }
+        for (query, label) in [("label=%69so-8859-1&label=utf-8", "iso-8859-1"), ("label=", "")] {
+            let bytes = response(query);
+            let split = bytes.windows(4).position(|window| window == b"\r\n\r\n").unwrap();
+            let headers = std::str::from_utf8(&bytes[..split]).unwrap();
+            assert!(headers.starts_with("HTTP/1.1 200 OK\r\n"));
+            assert!(headers.contains(&format!("Content-Type: text/plain;charset={label}\r\n")));
+            assert!(headers.contains("Content-Length: 255"));
+            assert_eq!(&bytes[split + 4..], &(0..=254).collect::<Vec<u8>>());
+        }
+        let missing = response("other=utf-8");
+        assert!(missing.starts_with(b"HTTP/1.1 500 Internal Server Error\r\n"));
+        assert!(missing.windows(b"Content-Type: application/json".len())
+            .any(|part| part == b"Content-Type: application/json"));
     }
 
     #[test]
