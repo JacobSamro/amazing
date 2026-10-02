@@ -1284,4 +1284,42 @@ mod tests {
         assert!(matches!(js.run_script("document.compatMode === 'CSS1Compat' && document.implementation.createHTMLDocument('').compatMode === 'CSS1Compat'").unwrap(), JsValue::Bool(true)));
     }
 
+    #[test]
+    fn installed_table_collections_parts_conversion_and_live_indices() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step = 0; function check(v) { step++; if (!v) throw 'table check ' + step; }
+            const table = document.createElement('table');
+            const rows = table.rows, bodies = table.tBodies;
+            check(rows instanceof HTMLCollection && rows === table.rows && rows.length === 0);
+            table.deleteRow(-1);
+            const first = table.insertRow(undefined);
+            check(bodies === table.tBodies && bodies.length === 1 && rows.length === 1);
+            const cell = first.insertCell(), cells = first.cells;
+            const th = document.createElement('th'); first.appendChild(th);
+            check(cells === first.cells && cells.length === 2 && th.cellIndex === 1);
+            const head = table.createTHead(), hr = head.insertRow();
+            const foot = table.createTFoot(), fr = foot.insertRow();
+            check(rows[0] === hr && rows[1] === first && rows[2] === fr);
+            check(first.rowIndex === 1 && first.sectionRowIndex === 0);
+            check(table.insertRow(-1).parentNode === foot);
+            check(head.rows === head.rows && head.rows[0] === hr);
+            const cap = table.createCaption(); check(cap === table.caption && table.firstChild === cap);
+            let rejected = false; try { table.tHead = bodies[0]; } catch(e) { rejected = e.name === 'HierarchyRequestError'; }
+            check(rejected && table.tHead === head);
+            rejected = false; try { table.caption = head; } catch(e) { rejected = e instanceof TypeError; } check(rejected);
+            first.deleteCell(0); check(cell.cellIndex === -1 && th.cellIndex === 0 && cells.length === 1);
+            const secondBody = table.createTBody(); check(bodies.length === 2 && secondBody.previousSibling === bodies[0]);
+            let converted = 0; const at = { valueOf() { converted++; return 0; } };
+            const newRow = table.insertRow(at); check(converted === 1 && newRow.parentNode === head);
+            table.deleteTHead(); check(table.tHead === null && hr.rowIndex === -1 && hr.sectionRowIndex === 1);
+            check(rows.length === 3); table.caption = null; check(cap.parentNode === null);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
 }

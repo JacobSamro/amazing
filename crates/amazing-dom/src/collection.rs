@@ -4,6 +4,8 @@ use crate::{Dom, DomError, Namespace, NodeIdx, NodeKind};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CollectionFilter {
     Children,
+    HtmlChildren(Vec<String>),
+    TableRows,
     TagName(Vec<u16>),
     TagNameNs(Option<Vec<u16>>, Vec<u16>),
     ClassNames(Vec<Vec<u16>>),
@@ -63,13 +65,15 @@ impl Dom {
             let html_document = self.document_metadata(document)?
                 .map_or(true, |metadata| metadata.content_type == "text/html");
             let nodes: Vec<_> = match filter {
-                CollectionFilter::Children => self.children(root).collect(),
+                CollectionFilter::Children | CollectionFilter::HtmlChildren(_) => self.children(root).collect(),
+                CollectionFilter::TableRows => self.table_rows(root)?,
                 _ => self.tree_order(root).into_iter().skip(1).collect(),
             };
             let items = nodes.into_iter().filter(|node| {
                 let NodeKind::Element { name, namespace, .. } = &self.get(*node).kind else { return false };
                 match &filter {
-                    CollectionFilter::Children => true,
+                    CollectionFilter::Children | CollectionFilter::TableRows => true,
+                    CollectionFilter::HtmlChildren(names) => *namespace == Namespace::Html && names.contains(name),
                     CollectionFilter::TagName(query) => query == &vec![b'*' as u16] || {
                         let actual: Vec<_> = self.qualified_name(*node).unwrap().encode_utf16().collect();
                         if html_document && *namespace == Namespace::Html {

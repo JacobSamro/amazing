@@ -939,6 +939,7 @@ const META: &[Member] = &[
     getter("charset", O::MetaCharset), setter("charset", O::MetaSetCharset),
 ];
 const CELL: &[Member] = &[
+    getter("cellIndex", O::CellIndex),
     getter("colSpan", O::CellColSpan), setter("colSpan", O::CellSetColSpan),
     getter("rowSpan", O::CellRowSpan), setter("rowSpan", O::CellSetRowSpan),
 ];
@@ -1111,6 +1112,14 @@ const LEGACY_SCRIPT_EXTRA: &[Member] = &[
 ];
 const LEGACY_SCRIPT: [Member; (SCRIPT).len() + LEGACY_SCRIPT_EXTRA.len()] = with_legacy_members(SCRIPT, LEGACY_SCRIPT_EXTRA);
 const LEGACY_TABLE_EXTRA: &[Member] = &[
+    getter("caption", O::TableCaption), setter("caption", O::TableSetCaption),
+    method("createCaption", O::TableCreateCaption, 0), method("deleteCaption", O::TableDeleteCaption, 0),
+    getter("tHead", O::TableHead), setter("tHead", O::TableSetHead),
+    method("createTHead", O::TableCreateHead, 0), method("deleteTHead", O::TableDeleteHead, 0),
+    getter("tFoot", O::TableFoot), setter("tFoot", O::TableSetFoot),
+    method("createTFoot", O::TableCreateFoot, 0), method("deleteTFoot", O::TableDeleteFoot, 0),
+    getter("tBodies", O::TableBodies), method("createTBody", O::TableCreateBody, 0),
+    getter("rows", O::TableRows), method("insertRow", O::TableInsertRow, 0), method("deleteRow", O::TableDeleteRow, 1),
     getter("align", O::LegacyReflectGet(I::HTMLTableElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLTableElement, "align", LR::String)),
     getter("border", O::LegacyReflectGet(I::HTMLTableElement, "border", LR::String)), setter("border", O::LegacyReflectSet(I::HTMLTableElement, "border", LR::String)),
     getter("frame", O::LegacyReflectGet(I::HTMLTableElement, "frame", LR::String)), setter("frame", O::LegacyReflectSet(I::HTMLTableElement, "frame", LR::String)),
@@ -1123,6 +1132,7 @@ const LEGACY_TABLE_EXTRA: &[Member] = &[
 ];
 const LEGACY_TABLE: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_TABLE_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_TABLE_EXTRA);
 const LEGACY_TABLESECTION_EXTRA: &[Member] = &[
+    getter("rows", O::SectionRows), method("insertRow", O::SectionInsertRow, 0), method("deleteRow", O::SectionDeleteRow, 1),
     getter("align", O::LegacyReflectGet(I::HTMLTableSectionElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLTableSectionElement, "align", LR::String)),
     getter("ch", O::LegacyReflectGet(I::HTMLTableSectionElement, "char", LR::String)), setter("ch", O::LegacyReflectSet(I::HTMLTableSectionElement, "char", LR::String)),
     getter("chOff", O::LegacyReflectGet(I::HTMLTableSectionElement, "charoff", LR::String)), setter("chOff", O::LegacyReflectSet(I::HTMLTableSectionElement, "charoff", LR::String)),
@@ -1142,6 +1152,8 @@ const LEGACY_TABLECELL_EXTRA: &[Member] = &[
 ];
 const LEGACY_TABLECELL: [Member; (CELL).len() + LEGACY_TABLECELL_EXTRA.len()] = with_legacy_members(CELL, LEGACY_TABLECELL_EXTRA);
 const LEGACY_TABLEROW_EXTRA: &[Member] = &[
+    getter("rowIndex", O::RowIndex), getter("sectionRowIndex", O::RowSectionIndex), getter("cells", O::RowCells),
+    method("insertCell", O::RowInsertCell, 0), method("deleteCell", O::RowDeleteCell, 1),
     getter("align", O::LegacyReflectGet(I::HTMLTableRowElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLTableRowElement, "align", LR::String)),
     getter("ch", O::LegacyReflectGet(I::HTMLTableRowElement, "char", LR::String)), setter("ch", O::LegacyReflectSet(I::HTMLTableRowElement, "char", LR::String)),
     getter("chOff", O::LegacyReflectGet(I::HTMLTableRowElement, "charoff", LR::String)), setter("chOff", O::LegacyReflectSet(I::HTMLTableRowElement, "charoff", LR::String)),

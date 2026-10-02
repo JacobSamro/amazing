@@ -1,0 +1,1711 @@
+{
+  "source": "native-table-candidate",
+  "platform": "Linux Boat pooled dom-bindings",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "directories": [
+    "html/semantics/tabular-data",
+    "dom/nodes"
+  ],
+  "excluded_non_testharness": [
+    "dom/nodes/DOMImplementation-createDocument-with-null-browsing-context-crash.html",
+    "dom/nodes/DOMImplementation-createHTMLDocument-with-null-browsing-context-crash.html",
+    "dom/nodes/Document-contentType/resources/blob.htm",
+    "dom/nodes/Document-createElement-namespace-tests/bare_mathml.html",
+    "dom/nodes/Document-createElement-namespace-tests/bare_mathml.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/bare_svg.html",
+    "dom/nodes/Document-createElement-namespace-tests/bare_svg.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/bare_xhtml.html",
+    "dom/nodes/Document-createElement-namespace-tests/bare_xhtml.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/empty.html",
+    "dom/nodes/Document-createElement-namespace-tests/empty.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/mathml.html",
+    "dom/nodes/Document-createElement-namespace-tests/mathml.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/minimal_html.html",
+    "dom/nodes/Document-createElement-namespace-tests/minimal_html.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/svg.html",
+    "dom/nodes/Document-createElement-namespace-tests/svg.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/xhtml.html",
+    "dom/nodes/Document-createElement-namespace-tests/xhtml.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/xhtml_ns_changed.html",
+    "dom/nodes/Document-createElement-namespace-tests/xhtml_ns_changed.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/xhtml_ns_removed.html",
+    "dom/nodes/Document-createElement-namespace-tests/xhtml_ns_removed.xhtml",
+    "dom/nodes/MutationObserver-nested-crash.html",
+    "dom/nodes/Node-cloneNode-on-inactive-document-crash.html",
+    "dom/nodes/Node-parentNode-iframe.html",
+    "dom/nodes/ParentNode-querySelector-All-content.html",
+    "dom/nodes/ParentNode-querySelector-All-content.xht",
+    "dom/nodes/crashtests/attribute-index-when-no-attributes.html",
+    "dom/nodes/crashtests/childNodes-last_visited-unwrap-crash.html",
+    "dom/nodes/crashtests/document-replaceChild-input-documentElement.html",
+    "dom/nodes/crashtests/documentElement-remove-descendant-query.html",
+    "dom/nodes/crashtests/multiple-append-mutated-in-unload-document.https.html",
+    "dom/nodes/crashtests/multiple-append-mutated-in-unload.https.html",
+    "dom/nodes/getElementsByClassNameFrame.htm",
+    "dom/nodes/insertBefore-iframe-crash.html",
+    "dom/nodes/moveBefore/chrome-338071841-crash.html",
+    "dom/nodes/moveBefore/chrome-433696404-crash.html",
+    "dom/nodes/moveBefore/focus-preserve-render-ref.html",
+    "dom/nodes/moveBefore/focus-preserve-render.html",
+    "dom/nodes/moveBefore/input-moveBefore-crash.html",
+    "dom/nodes/moveBefore/moveBefore-as-flex-item.html",
+    "dom/nodes/moveBefore/moveBefore-iframe-crash.html",
+    "dom/nodes/moveBefore/moveBefore-legend-input-crash.html",
+    "dom/nodes/moveBefore/moveBefore-range-iframe-crash.html",
+    "dom/nodes/moveBefore/moveBefore-subframe-count-crash.html",
+    "dom/nodes/moveBefore/resources/moveBefore-iframe.html",
+    "dom/nodes/node-appendchild-crash.html",
+    "dom/nodes/query-target-in-load-event.part.html",
+    "dom/nodes/remove-from-shadow-host-and-adopt-into-iframe-ref.html",
+    "dom/nodes/remove-from-shadow-host-and-adopt-into-iframe.html",
+    "dom/nodes/replaceWith-document-element-crash.html"
+  ],
+  "binary_sha256": "97a907a0f3aa8830378bdd70972b994143d04ffabff2e9d58bcd35865e03ed00",
+  "results": [
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/attributes-common-to-td-and-th-elements/cellIndex.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 6,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "cellIndex should exist.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "For cells without a parent, cellIndex should be -1.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "For cells whose parent is not a tr, cellIndex should be -1.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "For cells whose parent is not a HTML tr, cellIndex should be -1.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "For cells whose parent is a tr, cellIndex should be the index.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "For cells whose parent is a tr with non td/th sibling, cellIndex should skip those non td/th siblings.",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/historical.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 5,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "table.onsort should not be supported",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "table.sortable should not be supported",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "table.stopSorting should not be supported",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "th.sorted should not be supported",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "th.sort should not be supported",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/processing-model-1/col-span-limits.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 3,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "col span of 1000 must work",
+          "status": 1,
+          "message": "assert_equals: expected (number) 53 but got (undefined) undefined"
+        },
+        {
+          "name": "col span of 1001 must be treated as 1000",
+          "status": 1,
+          "message": "assert_equals: table2 width expected (number) 51 but got (undefined) undefined"
+        },
+        {
+          "name": "colspan must be clamped to [1, 1000] when set via script",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "colspan must be clamped to [1, 1000] when parsing attributes",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "column span must be clamped to [1, 1000] when set via script",
+          "status": 1,
+          "message": "assert_equals: expected 1 but got 0"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/processing-model-1/rowspan-0-quirks.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "clientHeight",
+          "status": 1,
+          "message": "assert_greater_than: expected a number but got a \"undefined\""
+        },
+        {
+          "name": "rowSpan",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/processing-model-1/rowspan-0.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "clientHeight",
+          "status": 1,
+          "message": "assert_greater_than: expected a number but got a \"undefined\""
+        },
+        {
+          "name": "rowSpan",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/processing-model-1/span-limits.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "error",
+      "harness_status": null,
+      "detail": "worker exited: signal: 9 (SIGKILL)",
+      "file_counts": {
+        "pass": 0,
+        "fail": 0,
+        "timeout": 0,
+        "error": 1,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 3,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "colspan of 1000 must work",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "colspan of 1001 must be treated as 1000",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "rowspan of 65534 must work",
+          "status": 1,
+          "message": "value is not callable"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-caption-element/caption_001.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 5,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "first caption element child of the first table element",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "setting caption on a table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "caption IDL attribute is null",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "caption of the third table element should be null",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "dynamically removing caption on a table",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-table-element/caption-methods.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 17,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "createCaption method creates new caption if existing caption is not in html namespace",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "createCaption method returns the first caption element child of the table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "createCaption method creates a new caption and inserts it as the first node of the table element",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "createCaption will not create new caption if one exists",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "createCaption will not copy table's prefix",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "deleteCaption method removes the first caption element child of the table element",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "deleteCaption method not remove caption that is not in html namespace",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting caption rethrows exception",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Assigning a caption to table.caption",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Assigning null to table.caption",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Assigning a non-caption to table.caption",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Assigning a foreign caption to table.caption",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Set table.caption when the table doesn't already have a caption",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Set table.caption when the table has a caption child but with other siblings before it",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Set table.caption when the table has a caption descendant",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Set table.caption when the table has two caption children",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Assigning the caption already in the table to table.caption",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Assigning a caption has a different owner document to table.caption",
+          "status": 1,
+          "message": "assert_equals: expected Element node <table id=\"table13\" style=\"display:none\"><caption id=\"cap... but got Element node <table id=\"table13\" style=\"display:none\"><caption id=\"cap..."
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-table-element/createTBody.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 15,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "No child nodes",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "One tbody child node",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Two tbody child nodes",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "A thead and a tbody child node",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "A tfoot and a tbody child node",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "A tbody and a thead child node",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "A tbody and a tfoot child node",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Two tbody child nodes and a div",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "One HTML and one namespaced tbody child node",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Two nested tbody child nodes",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "A tbody node inside a thead child node",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "A tbody node inside a tfoot child node",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "A tbody node inside a thead child node after a tbody child node",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "A tbody node inside a tfoot child node after a tbody child node",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "A prefixed table creates tbody without prefix",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-table-element/delete-caption.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 6,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "deleteCaption() delete only caption on table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "deleteCaption() returns undefined",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "deleteCaption()",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "deleteCaption() does not throw any exceptions when called on a table without a caption",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "deleteCaption() does not delete captions in descendent tables",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "deleteCaption() handles captions from different namespaces",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-table-element/insertRow-method-01.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "insertRow(): INDEX_SIZE_ERR",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-table-element/insertRow-method-02.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 4,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "table should start out empty",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "insertRow should insert a tr element",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "insertRow should insert a tbody element",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "insertRow(): Empty table",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-table-element/insertRow-method-03.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 3,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "table should start out with two rows",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "insertRow should insert a tr element before the second row",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "insertRow(): non-empty table",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-table-element/remove-row.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 6,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "deleteRow function invalid argument",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "deleteRow function invalid argument bis",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "check normal deleteRow",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "check normal deleteRow bis",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "deleteRow(-1) with no rows",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "deleteRow(0) with no rows",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-table-element/tBodies.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "HTMLTableElement.tBodies",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-table-element/tFoot.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "tFoot tests",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "tFoot tests 1",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-table-element/tHead.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 3,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "tHead tests",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "tHead tests 1",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "tHead tests 2",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-table-element/table-insertRow.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 3,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "insertRow should not copy prefixes",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "insertRow should insert into a tbody, not into a thead, if table.rows is empty",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "insertRow should insert into a tbody, not into a tfoot, if table.rows is empty",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-table-element/table-rows.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 5,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Children of table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Children of thead",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Children of tbody",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Children of tfoot",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Complicated case",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-tbody-element/deleteRow.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 6,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "HTMLTableSectionElement deleteRow(0)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableSectionElement deleteRow(-1)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableSectionElement deleteRow(rows.length)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableSectionElement deleteRow(-2)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableSectionElement deleteRow(-1) with no rows",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableSectionElement deleteRow(0) with no rows",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-tbody-element/insertRow.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 6,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "HTMLTableSectionElement insertRow(0)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableSectionElement insertRow(-1)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableSectionElement insertRow()",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableSectionElement insertRow(rows.length)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableSectionElement insertRow(-2)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableSectionElement insertRow(rows.length + 1)",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-tbody-element/rows.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "'tbody' element, 'rows' attribute",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-tfoot-element/rows.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "'tfoot' element, 'rows' attribute",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-thead-element/rows.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "'thead' element, 'rows' attribute",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-tr-element/cells.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "HTMLTableRowElement cells ignores nested tables and non-HTML elements",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-tr-element/deleteCell.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 6,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "HTMLTableRowElement deleteCell(0)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement deleteCell(-1)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement deleteCell(-2)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement deleteCell(cells.length)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement deleteCell(-1) with no cells",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement deleteCell(0) with no cells",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-tr-element/insertCell.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 7,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "HTMLTableRowElement insertCell(0)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement insertCell(-1)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement insertCell(cells.length)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement insertCell()",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement insertCell(-2)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement insertCell(cells.length + 1)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement insertCell will not copy table's prefix",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-tr-element/rowIndex.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 12,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "HTMLTableRowElement.rowIndex",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement.rowIndex 1",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement.rowIndex 2",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement.rowIndex 3",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement.rowIndex 4",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement.rowIndex 5",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement.rowIndex 6",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement.rowIndex 7",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement.rowIndex 8",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement.rowIndex 9",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement.rowIndex 10",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLTableRowElement.rowIndex 11",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/tabular-data/the-tr-element/sectionRowIndex.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 19,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Row in thead in HTML",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in implicit tbody in HTML",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Other row in implicit tbody in HTML",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in explicit tbody in HTML",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in tfoot in HTML",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in thead in nested table in HTML",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in implicit tbody in nested table in HTML",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in explicit tbody in nested table in HTML",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in script-created table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in script-created div in table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in script-created thead in table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in script-created tbody in table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in script-created tfoot in table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in script-created tr in tbody in table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in script-created td in tr in tbody in table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in script-created nested table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in script-created thead in nested table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in script-created tbody in nested table",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Row in script-created tfoot in nested table",
+          "status": 0,
+          "message": null
+        }
+      ]
+    }
+  ]
+}

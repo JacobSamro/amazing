@@ -1,0 +1,11 @@
+{
+  "crates/amazing-dom/src/table.rs": "fbf4209d584e031a3410c168d7beaaf7c97d6b941168687ec1108ed89c2d2868",
+  "crates/amazing-dom/src/collection.rs": "15e43ebb42ea698e1b222807000d29bbc20bc14202d62f58249dd9e85433419a",
+  "crates/amazing-dom/src/lib.rs": "8f025e9ee7dd22d46bebd1d3afd76d58146c59c59cfe5687385df9b367389634",
+  "crates/amazing-bindings/src/table_bindings.rs": "48ee5c539180409e2376724b2289ac408960113899e4251ff68c21e1dea1da5b",
+  "crates/amazing-bindings/src/host.rs": "af3ad560c228a6f56df70df5997c3a8f8829a1ec26a3a49fffca1abb63539e67",
+  "crates/amazing-bindings/src/interfaces.rs": "a268e0b67a1622ff2cb1b37bab17248782dbd92ebed50ef2e8e97e5237afcc24",
+  "crates/amazing-bindings/src/invoke.rs": "7220694991fa7c6d5d102f83550d6c3b109bed88ef65babb469302da12b5eb1f",
+  "crates/amazing-bindings/src/lib.rs": "a6cbbd42cf3183ab857769f18a0e926ddfe55171d132d8322f7eedcea5a48d42",
+  "crates/amazing/src/runtime_host_dom_bindings.rs": "f9a5e0fe53931d6d1ca5e86e1c0b364a88d884701819438105c57ee8701db655"
+}

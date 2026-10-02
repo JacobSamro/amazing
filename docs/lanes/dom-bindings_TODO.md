@@ -3154,3 +3154,18 @@ zero lost passes by multiplicity. Both charset pages315/315+339/339;451 legacy
 encoding and14XHR assertions preserved. The TTL-interrupted attempt is excluded;
 full exact-source rerun completed. Durable evidence/charset-fixture records
 raw upstream protocol outputs, fixture/source hashes and compact whole-node gate.
+
+### HTML table DOM interfaces
+
+Parent granted whole table/section/row collection and parts area plus cellIndex.
+Fixed base8a816d91; table29-file baseline10pass144fail, whole314nodes12682pass
+298fail6errors. Ordered live filters, parts setters/create/delete methods,
+row/cell mutations and indices written in bulk. No parser or CSS changes.
+Native source hashes and pinned before report in evidence/table-interfaces;
+Final Boat native workspace3534pass17skip,doctests4; table29files10→146pass
+(+136),144→9fail, zero lost; nodes31412682→12686pass (+4),298→293fail,6err,
+zero lost after complete fixed-source343-file recheck restored knownXHRtiming.
+Caption cross-realm wrapper identity remains an externalJS gap. 65,534-row
+span-limits geometry fixture baseline timeout→candidate/recheckSIGKILL with
+no prior passing assertions; preserved honestly in evidence.
+Next: granted HTML serialization audit and whole HTMLBaseElement reflection.
