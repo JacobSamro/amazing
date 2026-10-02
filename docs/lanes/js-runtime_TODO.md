@@ -1035,3 +1035,45 @@ using **76/80 → 77/80**, await-using **93/98 → 94/98**, and try **198/206 �
 This factors the existing attributed Lumen disposal implementation; no new
 upstream code was copied. A single lexical-body entry point prevents the
 ordinary-block and try/catch/finally paths from drifting again.
+
+## JSRT-27 Promise construction capabilities (2026-10-03)
+
+Based on frozen JSRT-26 `d8c33bd2`. Static resolve/reject and all four
+combinators now construct their receiver with a real NewPromiseCapability
+executor rather than substituting an internal promise. The executor captures
+and validates both callbacks and rejects duplicate initialization. Reactions
+dispatch through those callbacks, so custom constructor results retain their
+identity and subclass branding. `then` selects the species constructor; the
+intrinsic default is stored and restored with its realm. `catch` and combinator
+attachment invoke the observable `then` property.
+
+Native Promise construction requires new, preserves the allocated prototype,
+and shares an already-resolved gate between resolving callbacks. Resolving
+with a pending promise cannot be overridden by a later executor rejection.
+Promise.resolve compares the input's constructor before returning it unchanged.
+The capability/PromiseResolve algorithms are ported from Boa's
+`core/engine/src/builtins/promise/mod.rs` at
+`39cd11214ecb366200157dab96b3919e61e9a391` (MIT, copyright Jason Williams),
+adapted to native callback home objects and the existing interpreter construction
+API. No dependencies or value-model fields were added. The upstream notice is
+appended in THIRD_PARTY_NOTICES.md.
+
+Grouped regressions cover custom callbacks, subclass identity, species,
+intrinsic default preservation, executor validation, pending adoption and
+generic then invocation on both interpreter backends. Two prior tests used
+dummy constructors whose returned ordinary objects were incorrectly treated
+as promises; they now use actual Promise subclasses while retaining their
+resolve-observation/rejection assertions. Whole Promise corpus iteration:
+**357/732 → 465/732, 108 gained, zero lost**, crate **472 passed/1 skipped**
+and **1 doctest**. Final evidence: `js-runtime_jsrt27_evidence.json`.
+
+Final Boat workspace: **3518 passed, 17 skipped, 85.286 seconds**, **4
+doctests**. Promise repeated the same **465/732** classification; await
+expressions remained **21/22**. Combined **754 selected cases**, **378 → 486
+passes**, **108 gained**, **zero lost**, no corpus timeouts. The pinned revision
+and full input manifest matched the frozen JSRT-25 full-suite baseline; JSRT-26
+only changed disposal classifications outside these selections.
+
+Next clusters: generic thenable assimilation/jobs, finally callbacks,
+streaming iterator semantics and element already-called guards in combinators.
+Promise.try/withResolvers and keyed combinators remain unimplemented.

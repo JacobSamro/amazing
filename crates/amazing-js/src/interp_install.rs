@@ -385,7 +385,13 @@ impl Interpreter {
             Self::native("isFinite", native_is_finite, &self.function_proto),
         );
         let promise_ctor = Self::native_constructor("Promise", native_promise, &self.function_proto);
+        self.intrinsic_promise_constructor = promise_ctor.clone();
         if let JsValue::Object(o) = &promise_ctor {
+            let getter = symbol_method(self, "get [Symbol.species]", native_array_species);
+            o.borrow_mut().define(WellKnownSymbol::Species.symbol(), Property {
+                value: JsValue::Undefined, writable: false, enumerable: false,
+                configurable: true, getter: Some(getter), setter: None,
+            }).unwrap();
             let _ = self.set_prop(&promise_ctor, "prototype", JsValue::Object(self.promise_proto.clone()));
             self.promise_proto.borrow_mut().define("constructor", symbol_data(promise_ctor.clone(), true, true)).unwrap();
             let _ = self.set_prop(

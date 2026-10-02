@@ -25,6 +25,7 @@ struct RealmState {
     set_proto: Obj,
     date_proto: Obj,
     promise_proto: Obj,
+    intrinsic_promise_constructor: JsValue,
     regexp_proto: Obj,
     host_native_dispatch: Option<Rc<HostNativeDispatch>>,
     host_realm: u64,
@@ -71,6 +72,7 @@ impl RealmState {
             set_proto: i.set_proto.clone(),
             date_proto: i.date_proto.clone(),
             promise_proto: i.promise_proto.clone(),
+            intrinsic_promise_constructor: i.intrinsic_promise_constructor.clone(),
             regexp_proto: i.regexp_proto.clone(),
             host_native_dispatch: i.host_native_dispatch.clone(),
             host_realm: i.host_realm.clone(),
@@ -115,6 +117,7 @@ impl RealmState {
         i.set_proto = self.set_proto;
         i.date_proto = self.date_proto;
         i.promise_proto = self.promise_proto;
+        i.intrinsic_promise_constructor = self.intrinsic_promise_constructor;
         i.regexp_proto = self.regexp_proto;
         i.host_native_dispatch = self.host_native_dispatch;
         i.host_realm = self.host_realm;
