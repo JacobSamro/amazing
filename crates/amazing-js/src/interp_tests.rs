@@ -122,6 +122,21 @@ mod tests {
     }
 
     #[test]
+    fn thenable_jobs_observe_getter_now_and_call_only_at_host_checkpoint() {
+        let mut i = external();
+        i.run_script("var x={get then(){console.log('get');return function(resolve){console.log('call');resolve(7)}}}; Promise.resolve(x).then(v=>console.log(v)); console.log('sync');").unwrap();
+        assert_eq!(&*i.output.borrow(), &["get", "sync"]);
+        let requests = i.take_scheduling_requests();
+        assert_eq!(requests.len(), 1);
+        i.invoke_one_job(job(requests[0])).unwrap();
+        assert_eq!(&*i.output.borrow(), &["get", "sync", "call"]);
+        let reactions = i.take_scheduling_requests();
+        assert_eq!(reactions.len(), 1);
+        i.invoke_one_job(job(reactions[0])).unwrap();
+        assert_eq!(&*i.output.borrow(), &["get", "sync", "call", "7"]);
+    }
+
+    #[test]
     fn promise_chains_enqueue_new_jobs_without_draining_existing_ones() {
         let mut i = external();
         i.run_script("Promise.resolve(1).then(x=>{console.log('P1'); return x+1}).then(()=>console.log('P2')); Promise.resolve(3).then(()=>console.log('Q'));").unwrap();
@@ -1518,6 +1533,29 @@ mod class_name_tests {
                 "var result=false; var resolve; var pending=new Promise(r=>{resolve=r}); var p=new Promise((r,j)=>{r(pending); j(9)}); p.then(v=>{result=v===7},()=>{result=false}); resolve(7);",
                 "var result=false; Promise.prototype.catch.call({then:function(a,b){result=a===undefined && b===7}},7);",
                 "var result=false; function C(executor){executor(v=>{result=v[0]===7},()=>{});} C.resolve=v=>({then:f=>f(v)}); var p=Promise.all.call(C,[7]); result=result && p instanceof C;",
+            ] {
+                let mut i = Interpreter::new();
+                i.run_script_with_backend(source, backend).unwrap_or_else(|error| panic!("{backend:?}: {source}: {error:?}"));
+                i.drain_microtasks().unwrap_or_else(|error| panic!("{backend:?}: {source}: {error:?}"));
+                assert_eq!(i.run_script("result").unwrap(), JsValue::Bool(true), "{backend:?}: {source}");
+            }
+        }
+    }
+
+    #[test]
+    fn promise_resolution_assimilates_thenables_with_fresh_callback_gates() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            for source in [
+                "var result=false; Promise.resolve({then:r=>r(7)}).then(v=>{result=v===7});",
+                "var result=false; Promise.resolve({then:r=>r({then:r=>r(7)})}).then(v=>{result=v===7});",
+                "var result=false; var resolve; var pending=new Promise(r=>{resolve=r}); Promise.resolve({then:(r,j)=>{r(pending);j(9);throw 10}}).then(v=>{result=v===7},()=>{result=false}); resolve(7);",
+                "var result=false; Promise.resolve({get then(){throw 7}}).catch(v=>{result=v===7});",
+                "var result=false; Promise.resolve({then:(r,j)=>{j(7);r(9);throw 10}}).catch(v=>{result=v===7});",
+                "var result=false; Promise.resolve(1).then(()=>({then:r=>r(7)})).then(v=>{result=v===7});",
+                "var result=false; var p=Promise.resolve(1); p.constructor={}; p.then=r=>r(7); Promise.resolve(p).then(v=>{result=v===7});",
+                "var result=false; var resolve; var p=new Promise(r=>{resolve=r}); p.catch(e=>{result=e instanceof TypeError}); resolve(p);",
+                "var result=false; var x={then:7}; Promise.resolve(x).then(v=>{result=v===x});",
+                "var result=false; var log=''; var x={get then(){log+='G';return r=>{log+='T';r(7)}}}; Promise.resolve(x).then(v=>{result=log==='GST' && v===7}); log+='S';",
             ] {
                 let mut i = Interpreter::new();
                 i.run_script_with_backend(source, backend).unwrap_or_else(|error| panic!("{backend:?}: {source}: {error:?}"));

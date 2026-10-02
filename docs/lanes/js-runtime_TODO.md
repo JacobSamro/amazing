@@ -1077,3 +1077,38 @@ only changed disposal classifications outside these selections.
 Next clusters: generic thenable assimilation/jobs, finally callbacks,
 streaming iterator semantics and element already-called guards in combinators.
 Promise.try/withResolvers and keyed combinators remain unimplemented.
+
+## JSRT-28 Promise thenable resolution (2026-10-03)
+
+Based on frozen JSRT-27 `cd3863fd`. Native resolving callbacks now implement
+the complete observable resolution sequence: reject self-resolution with a
+TypeError object; read an object's `then` immediately; reject getter errors;
+fulfill non-callable then properties; otherwise enqueue a thenable job and
+invoke it with the original receiver. Each job creates fresh resolving
+functions sharing a private already-resolved gate. Nested thenables can thus
+resolve independently, while rejection or a thrown exception after the first
+resolution cannot override a still-pending adopted promise. Even an internal
+Promise's observable `then` participates in resolution.
+
+Ported Boa CreateResolvingFunctions/Promise Resolve Functions/
+NewPromiseResolveThenableJob from
+`core/engine/src/builtins/promise/mod.rs` at MIT commit
+`39cd11214ecb366200157dab96b3919e61e9a391`, using existing interpreter-owned
+Microtask jobs and native callback home objects. No Job enum or value-model
+fields changed. A new THIRD_PARTY_NOTICES.md row identifies the new source.
+
+Ten grouped resolution scenarios run on both backends. A separate external
+scheduler proof checks synchronous getter observation, deferred then invocation
+and a separately scheduled reaction. Crate **474 passed/1 skipped**, **1
+doctest**. Final Boat workspace **3520 passed/17 skipped, 68.624 seconds**,
+**4 doctests**. Pinned Promise **465/732 → 520/732**, await expressions
+**21/22 unchanged**, async-function statements **71/74 unchanged**. Combined
+**828 cases, 557 → 612 passes, 55 gained, zero lost**, no timeouts. Promise
+classification and binary hash repeat identically between iteration and final.
+Evidence: `js-runtime_jsrt28_evidence.json`.
+
+VM async consumers retain their earlier callback construction/fast path; the
+VM lane has the helper signature `promise_resolving_functions(&Interpreter,
+&Obj) -> (JsValue, JsValue)` and owns migrating those consumers. Runtime next:
+separate function parameter-expression and body variable environments, in
+coordination with JSVM-12 eager generator initialization.

@@ -1441,8 +1441,7 @@ fn native_promise(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     if let JsValue::Object(instance) = this {
         promise.borrow_mut().proto = instance.borrow().proto.clone();
     }
-    let resolve = promise_callback(i, "", &promise, native_promise_resolve);
-    let reject = promise_callback(i, "", &promise, native_promise_reject);
+    let (resolve, reject) = promise_resolving_functions(i, &promise);
     if let Err(Throw(value)) = i.call_value(&executor, JsValue::Undefined, vec![resolve, reject.clone()]) {
         i.call_value(&reject, JsValue::Undefined, vec![value])?;
     }
@@ -1460,14 +1459,9 @@ fn native_promise_resolve(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     if let Some(target) = current_promise_target(i) {
-        if !claim_promise_resolution(&target) { return Ok(JsValue::Undefined); }
+        if !claim_current_promise_resolution(i, &target) { return Ok(JsValue::Undefined); }
         let value = args.first().cloned().unwrap_or(JsValue::Undefined);
-        if adopt_promise_result(&target, &value, i)? { return Ok(JsValue::Undefined); }
-        settle_promise(
-            &target,
-            PromiseFate::Fulfilled(value),
-            i,
-        )?;
+        resolve_promise_value(i, &target, value)?;
         return Ok(JsValue::Undefined);
     }
     let value = args.first().cloned().unwrap_or(JsValue::Undefined);
@@ -1480,7 +1474,7 @@ fn native_promise_reject(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     if let Some(target) = current_promise_target(i) {
-        if !claim_promise_resolution(&target) { return Ok(JsValue::Undefined); }
+        if !claim_current_promise_resolution(i, &target) { return Ok(JsValue::Undefined); }
         settle_promise(
             &target,
             PromiseFate::Rejected(args.first().cloned().unwrap_or(JsValue::Undefined)),
