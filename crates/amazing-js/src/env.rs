@@ -109,6 +109,9 @@ pub enum EnvKind {
     Function,
     /// Arrow body environment: owns locals but inherits the outer `this`.
     Arrow,
+    /// Non-strict parameter-expression lexical environment. Eval vars belong
+    /// to the outer callee variable environment, not this binding frame.
+    Parameter,
     /// Body variable environment below a parameter-expression environment.
     /// Owns var/eval declarations and inherits this/super from the call frame.
     Var,
@@ -399,6 +402,7 @@ impl EnvHandle {
     /// Keep parameter names protected from eval var declarations while defaults
     /// are evaluated, then allow body var declarations to reuse their cells.
     pub(crate) fn finish_parameter_initialization(&self, name: &str) {
+        if self.kind() == EnvKind::Parameter { return; }
         if let Some(cell) = self.0.borrow().vars.get(name) {
             cell.0.borrow_mut().lexical = false;
         }

@@ -2,10 +2,24 @@
 impl Interpreter {
     fn validate_eval_global_declarations(&self, body: &[ast::Stmt], env: &EnvHandle) -> Result<(), Throw> {
         let scope = env.var_scope();
-        if scope.kind() != EnvKind::Global { return Ok(()); }
         let mut functions = Vec::new();
         let mut variables = Vec::new();
         collect_eval_declarations(body, &mut functions, &mut variables);
+        // Parameter expressions keep formals and arguments in a lexical frame
+        // outside eval's variable environment. Check these bindings before
+        // creating any vars; ordinary block/catch declaration rules keep their
+        // existing handling, including Annex B's simple catch exception.
+        for name in functions.iter().chain(variables.iter()) {
+            let mut cursor = env.clone();
+            while !Rc::ptr_eq(&cursor.0, &scope.0) {
+                if cursor.kind() == EnvKind::Parameter && cursor.has_local_lexical(name) {
+                    return Err(Throw::syntax_error(format!("identifier '{name}' has already been declared")));
+                }
+                let parent = cursor.0.borrow().parent.clone().expect("lexical frame has a variable scope");
+                cursor = parent;
+            }
+        }
+        if scope.kind() != EnvKind::Global { return Ok(()); }
         let global = self.global_obj.borrow();
         for name in functions.iter().chain(variables.iter()) {
             if scope.has_local_lexical(name) {

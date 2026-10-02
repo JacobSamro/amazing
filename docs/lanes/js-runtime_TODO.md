@@ -1149,6 +1149,35 @@ disabled; the unchanged-source workspace retry passed without deleting caches.
 Next coordinated Promise cluster: internal await reaction attachment should
 bypass observable `then` and species, using the native reaction machinery.
 
+### JSRT-29 recovery: parameter lexical environment
+
+The combined `bc9e8388` whole-language gate exposed thirty lost direct-eval
+`arguments` cases that the original function-directory selection missed.
+The original JSRT-29 implementation separated the body environment but omitted
+FunctionDeclarationInstantiation step 20: non-strict functions with parameter
+expressions need a parameter lexical environment before default evaluation.
+Formal names and the implicit arguments binding remain lexical in that frame;
+eval-created vars belong to the callee's outer variable environment. Declaration
+validation checks these parameter bindings atomically before hoisting, so
+`function f(p=eval('var arguments')){let arguments}` throws during initialization.
+The earlier method regression expectation that allowed this declaration was
+incorrect and is restored to SyntaxError. Both AST calls and the coordinated
+VM consumer prepare the parameter environment before bind_params while retaining
+the body split, generator argument suppression and eager generator frame setup.
+The new frame inherits source metadata and transparently resolves this/super.
+
+An initial broadened eval lexical check rejected an existing Annex B simple-catch
+case. The new check is therefore confined to parameter frames; ordinary block
+and catch declaration handling retains its existing behavior. Recovery evidence
+uses the fixed combined base and the full language selection, direct eval and
+all Function constructor families, plus workspace nextest and doctests.
+Final Boat workspace **3638 passed/17 skipped, 74.430 seconds**, **4 doctests**.
+Whole language **23574 → 23694/24572**, direct eval **452 → 572/595**:
+**120 gained and zero lost**, including all thirty reported regressions.
+Function constructor selection **619/653**, unchanged with zero losses.
+Both explicit interpreter backends pass the grouped initialization regressions.
+Evidence: `js-runtime_jsrt29_recovery_evidence.json`.
+
 ## JSRT-30 Internal Promise reactions (2026-10-03)
 
 Frozen base `8d3a4eca`. `perform_promise_then(&mut Interpreter, &Obj,

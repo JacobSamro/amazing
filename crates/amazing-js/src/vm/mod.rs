@@ -1771,6 +1771,7 @@ impl FunctionCode {
         // The helper's boolean suppresses the implicit arguments object. FDI
         // also suppresses it for a generator with no parameter expressions
         // whose body already owns an arguments declaration.
+        let env = i.prepare_function_parameter_environment(&env, &self.0.params, self.0.strict);
         i.bind_params(&env, &self.0.params, args, is_arrow || self.0.skip_generator_arguments, self.0.strict)?;
         let env = i.prepare_function_body_environment(&env, &self.0.params, &self.0.program.hoisted)?;
         if self.0.is_generator {

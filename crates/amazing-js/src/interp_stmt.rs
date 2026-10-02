@@ -2231,6 +2231,7 @@ impl Interpreter {
                 FunctionBody::Expr(x) => {
                     let e = EnvHandle::new(if fun.is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(fun.env.clone()));
                     if !fun.is_arrow { e.bind_this(this); }
+                    let e = self.prepare_function_parameter_environment(&e, &fun.params, strict_function);
                     self.bind_params(&e, &fun.params, args, fun.is_arrow, strict_function)?;
                     let e = self.prepare_function_body_environment(&e, &fun.params, &[])?;
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
@@ -2269,6 +2270,7 @@ impl Interpreter {
                             }
                         }
                     }
+                    let e = self.prepare_function_parameter_environment(&e, &fun.params, strict_function);
                     self.bind_params(&e, &fun.params, args, fun.is_arrow, strict_function)?;
                     let e = self.prepare_ast_function_body_environment(&e, &fun.params, &b.body)?;
                     // Generators/async generators: FunctionDeclarationInstantiation (hoisting)
@@ -2454,7 +2456,8 @@ impl Interpreter {
                     }).unwrap();
                 }
             }
-            e.declare_var("arguments", a)?;
+            if e.kind() == EnvKind::Parameter { e.declare_lexical("arguments", a, true)?; }
+            else { e.declare_var("arguments", a)?; }
         }
         for (i, p) in ps.iter().enumerate() {
             let v = if p.rest {
