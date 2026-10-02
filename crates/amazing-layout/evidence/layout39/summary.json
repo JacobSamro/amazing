@@ -1,0 +1,193 @@
+{
+  "ticket": "LAYOUT-39",
+  "fixed_base": "c5a837a9323a7206a28fb156dbfd67494b0d2778",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "workspace": {
+    "passed": 3537,
+    "skipped": 17,
+    "failed": 0
+  },
+  "doctests_passed": 4,
+  "harness_passed": 7,
+  "directories": [
+    {
+      "subdir": "css/CSS2/floats",
+      "before": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/CSS2/normal-flow",
+      "before": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-contain",
+      "before": {
+        "pass": 134,
+        "mismatch": 95,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 153,
+        "mismatch": 76,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [
+        "css__css-contain__contain-content-001.html",
+        "css__css-contain__contain-content-002.html",
+        "css__css-contain__contain-content-004.html",
+        "css__css-contain__contain-layout-cell-001.html",
+        "css__css-contain__contain-layout-cell-002.html",
+        "css__css-contain__contain-layout-containing-block-absolute-001.html",
+        "css__css-contain__contain-layout-containing-block-fixed-001.html",
+        "css__css-contain__contain-layout-flexbox-001.html",
+        "css__css-contain__contain-layout-formatting-context-margin-001.html",
+        "css__css-contain__contain-layout-grid-001.html",
+        "css__css-contain__contain-layout-ifc-022.html",
+        "css__css-contain__contain-layout-independent-formatting-context-001.html",
+        "css__css-contain__contain-layout-size-003.html",
+        "css__css-contain__contain-paint-containing-block-absolute-001.html",
+        "css__css-contain__contain-paint-containing-block-fixed-001.html",
+        "css__css-contain__contain-paint-ifc-011.html",
+        "css__css-contain__contain-paint-independent-formatting-context-001.html",
+        "css__css-contain__contain-paint-size-003.html",
+        "css__css-contain__contain-strict-003.html"
+      ],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-display",
+      "before": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-sizing",
+      "before": {
+        "pass": 99,
+        "mismatch": 39,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 99,
+        "mismatch": 39,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-tables",
+      "before": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    }
+  ],
+  "totals": {
+    "eligible": 552,
+    "before_pass": 372,
+    "after_pass": 391,
+    "before_mismatch": 180,
+    "after_mismatch": 161,
+    "gained": 19,
+    "lost": 0,
+    "changed": 0,
+    "new": 0,
+    "removed": 0
+  },
+  "candidate-source.sha256": "a16963c6262491fd59cfe3367a98665da699488d79658fc453e90492b0a76e9d  crates/amazing-layout/src/block.rs\n6ee554141c1bc13685996b593bbed0e9e5d216cb00012ea6b052217e51742c58  crates/amazing-layout/src/flex.rs\n388297cf45ef4127bd0c3cd1f7bf8809b32e2bc61a9b0eb4c6f5375eec77ef60  crates/amazing-layout/src/position.rs\n67f2f818ccd6881ae31f9f79a0c56bbe5229c0c5826d52b956c314ade93cbdd6  crates/amazing-layout/src/table.rs\n9893d2bb049f400c152d3d031404af46a05d5488dd5f6ad4333dc85207f9c464  crates/amazing-layout/src/containment.rs",
+  "before-renderer.sha256": "c3d7a557e66c7a5388ce30ae5bfab9f30dec2a03e6a33ce9d40ecc83f6b45a9f  /tmp/amazing-layout36-target/release/amazing",
+  "after-renderer.sha256": "408f54fdb0e17880e21a4afaee7a762b17970a51d37c096a23b435bee9864291  /tmp/amazing-layout36-target/release/amazing"
+}

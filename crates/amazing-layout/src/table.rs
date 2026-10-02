@@ -1135,6 +1135,7 @@ fn cell_baseline(cell: &LayoutBox) -> f32 {
 }
 
 fn first_baseline(b: &LayoutBox) -> Option<f32> {
+    if crate::containment::layout_containment(&b.style) { return None; }
     b.lines
         .first()
         .map(|l| l.baseline)
@@ -1385,6 +1386,9 @@ fn content_widths(
 /// The inline-table baseline belongs to its first row, not the caption or the
 /// last line of its last cell. Empty tables synthesize the bottom grid edge.
 pub(crate) fn inline_baseline(wrapper: &LayoutBox) -> f32 {
+    if crate::containment::layout_containment(&wrapper.style) {
+        return wrapper.border_box.y + wrapper.border_box.h;
+    }
     let table = at(wrapper, &[0]);
     let grid = Grid::new(table);
     let cells = || {

@@ -483,6 +483,9 @@ fn outer_cross(items: &[LayoutBox], i: usize) -> f32 {
 /// The first in-flow line supplies the alignment baseline. A box without a
 /// usable line synthesizes one at its border-box block end.
 pub(crate) fn first_baseline(item: &LayoutBox) -> f32 {
+    if crate::containment::layout_containment(&item.style) {
+        return item.border_box.y + item.border_box.h;
+    }
     if let Some(line) = item.lines.first() {
         return line.baseline;
     }
