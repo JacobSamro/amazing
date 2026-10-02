@@ -1675,6 +1675,7 @@ include!("interp_install.rs");
 include!("interp_symbol.rs");
 include!("interp_builtins.rs");
 include!("interp_promise_capability.rs");
+include!("interp_promise_resolution.rs");
 include!("interp_array.rs");
 include!("interp_array_protocol.rs");
 include!("interp_array_factories.rs");
