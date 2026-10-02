@@ -21,8 +21,8 @@
 //!   WHATWG Encoding codec; see [`encoding`] for sniffing precedence.
 //! - [`IncrementalParser`] accepts already-decoded chunks and finishes only
 //!   when the caller explicitly ends the document.
-//! - Doctype identifiers are preserved; document quirks-mode handling remains
-//!   approximate.
+//! - Doctype identifiers and all three document quirks modes are preserved;
+//!   srcdoc is explicitly locked to no quirks.
 //! - MathML/SVG namespaces and integration points are implemented; some
 //!   foreign attribute-name and namespace adjustments remain incomplete.
 //!
@@ -77,6 +77,8 @@ mod frameset_tests;
 mod tail_mode_tests;
 #[cfg(test)]
 mod scripting_tests;
+#[cfg(test)]
+mod document_mode_tests;
 
 /// Decodes and parses a complete HTML byte stream. `transport_label` is the
 /// optional charset from out-of-band transport metadata.

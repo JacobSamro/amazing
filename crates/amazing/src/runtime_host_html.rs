@@ -651,6 +651,8 @@ impl RuntimeBindings {
                     let imported = host.borrow_mut().dom.import_inert_document(&parsed, &url, &mime, encoding);
                     match imported {
                         Ok(document) => {
+                            let mode = parsed.document_quirks_mode(NodeIdx(0)).unwrap_or(amazing_dom::QuirksMode::NoQuirks);
+                            let _ = host.borrow_mut().dom.set_document_quirks_mode(document, mode);
                             let _ = host.borrow_mut().dom.set_document_ready_state(document, ReadyState::Complete);
                             (Some(document), url, None)
                         }
@@ -817,6 +819,7 @@ impl RuntimeBindings {
         let import = amazing_dom::markup::IncrementalDocumentImport::new(document);
         let mut parser = amazing_html::ResumableParser::new(Dom::new());
         if child_url == "about:srcdoc" { parser.set_srcdoc(); }
+        if !can_run_scripts { parser.set_scripting_mode(amazing_html::ScriptingMode::Disabled); }
         parser.push_source(html);
         let parser = Rc::new(RefCell::new(parser));
         self.register_active_parser(document, parser.clone());
@@ -854,6 +857,10 @@ impl RuntimeBindings {
                 let mut host_ref = host.borrow_mut();
                 import.borrow_mut().sync(&mut host_ref.dom, parser.borrow().dom())
                     .map_err(|error| Throw::type_error(format!("iframe graft: {error:?}")))?;
+                let mode = parser.borrow().dom().document_quirks_mode(NodeIdx(0))
+                    .map_err(|error| Throw::type_error(format!("iframe parser mode: {error:?}")))?;
+                host_ref.dom.set_document_quirks_mode(document, mode)
+                    .map_err(|error| Throw::type_error(format!("iframe document mode: {error:?}")))?;
             }
             match signal {
                 amazing_html::ParseSignal::Eof => break Ok(()),
@@ -1807,6 +1814,52 @@ mod tests {
         }
         assert_eq!(parse_response(b"<root/>", "application/xml", Some("iso-8859-2")).unwrap().1, "ISO-8859-2");
         assert_eq!(amazing_html::encoding::Encoding::Utf8.name(), "utf-8");
+    }
+
+    #[test]
+    fn iframe_scripts_observe_mode_at_each_graft_and_srcdoc_is_no_quirks() {
+        let path = std::env::temp_dir().join(format!("amazing-iframe-mode-{}.html", std::process::id()));
+        std::fs::write(&path, "<script>window.seenMode = document.compatMode;</script><p>child").unwrap();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<!doctype html><iframe src=child.html></iframe><iframe srcdoc='<script>window.seenMode = document.compatMode;</script><p>srcdoc'></iframe>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        let resource = path.clone();
+        scheduler.set_frame_resource_resolver(Rc::new(move |_| Some(resource.to_string_lossy().into_owned())));
+        scheduler.set_location_url("https://example.test/main.html");
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script("document.querySelectorAll('iframe')[0].contentWindow.seenMode + '|' + document.querySelectorAll('iframe')[0].contentDocument.compatMode + '|' + document.querySelectorAll('iframe')[1].contentWindow.seenMode").unwrap(),
+            JsValue::str("BackCompat|BackCompat|CSS1Compat"));
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn root_document_compat_mode_reflects_the_actual_parser_mode() {
+        for (source, expected) in [
+            ("<body><p>no doctype", "BackCompat"),
+            ("<!doctype html><body><p>standard", "CSS1Compat"),
+            ("<!doctype html PUBLIC '-//W3C//DTD XHTML 1.0 Transitional//EN' 'x'><p>limited", "CSS1Compat"),
+        ] {
+            let host = Rc::new(RefCell::new(BrowserDomHost {
+                dom: amazing_html::parse(source), native_forwarded: false,
+            }));
+            let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+            assert_eq!(scheduler.run_script("document.compatMode").unwrap(), JsValue::str(expected));
+        }
+    }
+
+    #[test]
+    fn sandboxed_iframe_uses_disabled_noscript_tree_rules() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<!doctype html><iframe sandbox='allow-same-origin' srcdoc='<noscript><b id=visible>fallback</b></noscript><script>window.shouldNotRun=true;</script>'></iframe>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script("document.querySelector('iframe').contentDocument.getElementById('visible').textContent").unwrap(), JsValue::str("fallback"));
+        assert_eq!(scheduler.run_script("document.querySelector('iframe').contentWindow.shouldNotRun === undefined").unwrap(), JsValue::Bool(true));
     }
 
     fn serve_xml_once(extra_header: &str) -> (String, std::thread::JoinHandle<()>) {

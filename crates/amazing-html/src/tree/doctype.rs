@@ -3,8 +3,7 @@
 // Copyright 2014-2017 The html5ever Project Developers.
 //! WHATWG doctype mode classification, adapted to borrowed std strings.
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum DocumentMode { NoQuirks, LimitedQuirks, Quirks }
+pub(super) use amazing_dom::QuirksMode as DocumentMode;
 
 // These should all be lowercase, for ASCII-case-insensitive matching.
 static QUIRKY_PUBLIC_PREFIXES: &[&str] = &[

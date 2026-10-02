@@ -353,6 +353,13 @@ impl TreeBuilder {
     /// Srcdoc documents keep no-quirks mode regardless of their doctype.
     pub(crate) fn set_srcdoc(&mut self) {
         self.mode_locked = true;
+        self.set_document_mode(doctype::DocumentMode::NoQuirks);
+    }
+
+    fn set_document_mode(&mut self, mode: doctype::DocumentMode) {
+        self.document_mode = mode;
+        self.dom.set_document_quirks_mode(NodeIdx(0), mode)
+            .expect("parser root is a document");
     }
 
     pub(crate) fn set_scripting_mode(&mut self, mode: ScriptingMode) {
@@ -1625,8 +1632,8 @@ impl TreeBuilder {
         match tok {
             Token::Doctype { name, public_id, system_id, force_quirks } => {
                 if !self.mode_locked {
-                    self.document_mode = doctype::classify(name.as_deref(), public_id.as_deref(),
-                        system_id.as_deref(), force_quirks);
+                    self.set_document_mode(doctype::classify(name.as_deref(), public_id.as_deref(),
+                        system_id.as_deref(), force_quirks));
                 }
                 self.dom.doctype = name.clone();
                 self.dom.append_child(NodeIdx(0), NodeKind::DocumentType {
@@ -1638,14 +1645,14 @@ impl TreeBuilder {
             },
             Token::Characters(data) => {
                 if !data.chars().all(is_ws_char) {
-                    if !self.mode_locked { self.document_mode = doctype::DocumentMode::Quirks; }
+                    if !self.mode_locked { self.set_document_mode(doctype::DocumentMode::Quirks); }
                     self.mode = Mode::BeforeHtml;
                     self.before_html(Token::Characters(data));
                 }
             },
             Token::Comment(data) => self.comment_into(NodeIdx(0), &data),
             other => {
-                if !self.mode_locked { self.document_mode = doctype::DocumentMode::Quirks; }
+                if !self.mode_locked { self.set_document_mode(doctype::DocumentMode::Quirks); }
                 self.mode = Mode::BeforeHtml;
                 self.before_html(other);
             },

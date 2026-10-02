@@ -3521,3 +3521,12 @@ all-split streaming decoding are covered. Iframe response sniffing matches
 the exact standard HTML signature table, whitespace and tag boundaries,
 respects nosniff and explicit MIME, and does not claim a full MIME subsystem.
 DOM's faithful encoding.py response handler remains a separate owned ticket.
+
+HTML47 makes the HTML44 doctype classifier's mode persistent through the
+DOM-owned QuirksMode API20a85c17 (on4ce0126d). Parser initial tokens store mode
+before script pauses; source/destination iframe grafts and eager imports
+propagate it explicitly in the owned adapter. Srcdoc locks NoQuirks. Sandbox
+without allow-scripts now selects HTML45 disabled parsing so noscript markup
+is parsed, not merely prevented from executing. API adoption changed no DOM
+owned implementation; its documentation append conflict preserved incoming
+records. Corpus and workspace measurements are recorded under evidence/html47/.
