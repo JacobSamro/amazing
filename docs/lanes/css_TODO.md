@@ -2748,3 +2748,19 @@ overflow-wrap-break-word-span-001 and text-wrap-nowrap-001. Renderer SHA256
 3637ff6fe6be9b87f004549b3a4e228399d1dca9bf32869b60147db6e9b115d3.
 Evidence css39. Completed own PPM scratch removed after maps/reports/logs fetch;
 shared native targets and HOME legacy cache left intact. Next font-variant area.
+
+### CSS40 — whole font-variant feature family
+
+Fixed base CSS39 `209bcc867a3fca80d5333e765371277305f2fa86`.
+CSS Fonts4 §6.4–6.11, §9.3 and §13: seven inherited axes independently cascade;
+normal resets all, none resets all with ligatures disabled; low-level features,
+variation and language override survive. Full feature conflicts/functions and
+reserved custom-ident validation, deferred variables, font reset and derived
+round-trip summary implemented in dedicated bounded modules. Axis serializers
+follow grammar order and preserve case-sensitive alternate feature names.
+Static WPT runner quoted literal chains fixed and SAME runner overlaid on base
+before measurement; never accept a malformed concatenation as CSS.
+Provider callback/physical font-size-adjust metrics queued CSS41 with layout;
+actual-font FromFont resolution must happen before inheritance.
+
+CSS40 final: crate385+example1, workspace3544+4docs; parsing4105→4126/5126 (+21/lost0), wholecss-fonts24/32 before/after (32 unchanged/lost0). Renderer SHA256 b0b5a218de8d81d423dac523cdee56f5c5a5d9410c194404e25671201e2888be. Evidence `crates/amazing-css/evidence/css40/`.
