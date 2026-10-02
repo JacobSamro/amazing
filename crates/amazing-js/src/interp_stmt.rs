@@ -2228,6 +2228,7 @@ impl Interpreter {
                     let e = EnvHandle::new(if fun.is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(fun.env.clone()));
                     if !fun.is_arrow { e.bind_this(this); }
                     self.bind_params(&e, &fun.params, args, fun.is_arrow, strict_function)?;
+                    let e = self.prepare_function_body_environment(&e, &fun.params, &[])?;
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
                     if thread_async {
                         if let Some(promise) = self.start_thread_async_function(FunctionBody::Expr(x.clone()), e.clone(), strict_function) {
@@ -2265,6 +2266,7 @@ impl Interpreter {
                         }
                     }
                     self.bind_params(&e, &fun.params, args, fun.is_arrow, strict_function)?;
+                    let e = self.prepare_ast_function_body_environment(&e, &fun.params, &b.body)?;
                     // Generators/async generators: FunctionDeclarationInstantiation (hoisting)
                     // still runs eagerly, synchronously, right here -- only the body's statements
                     // are deferred, to a pooled coroutine thread that the first `.next()` drives

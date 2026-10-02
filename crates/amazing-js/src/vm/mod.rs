@@ -1772,6 +1772,7 @@ impl FunctionCode {
         // also suppresses it for a generator with no parameter expressions
         // whose body already owns an arguments declaration.
         i.bind_params(&env, &self.0.params, args, is_arrow || self.0.skip_generator_arguments, self.0.strict)?;
+        let env = i.prepare_function_body_environment(&env, &self.0.params, &self.0.program.hoisted)?;
         if self.0.is_generator {
             // FDI runs during the call, while only body execution is deferred.
             // Parameter eval may have created a var binding that conflicts

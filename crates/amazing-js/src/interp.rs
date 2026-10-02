@@ -1360,7 +1360,12 @@ impl Interpreter {
                             // correctly, on every hoist pass this exact static node is visited,
                             // including from a nested/recursive call's own hoist() in between.
                             let key = f.as_ref() as *const ast::FunctionItem as usize;
-                            if blocked.iter().any(|b| b == &n.name) {
+                            // FDI Annex B skips a declaration sharing a
+                            // formal parameter name. With separate body and
+                            // parameter environments, even reserving a new
+                            // undefined placeholder would hide the parameter.
+                            let parameter_conflict = !self.in_eval && self.current_function_param_names().contains(&n.name);
+                            if parameter_conflict || blocked.iter().any(|b| b == &n.name) {
                                 annex_b_eligible_set(|set| { set.remove(&key); });
                             } else {
                                 annex_b_eligible_set(|set| { set.insert(key); });
@@ -1677,6 +1682,7 @@ include!("interp_symbol.rs");
 include!("interp_builtins.rs");
 include!("interp_promise_capability.rs");
 include!("interp_promise_resolution.rs");
+include!("interp_function_environments.rs");
 include!("interp_array.rs");
 include!("interp_array_protocol.rs");
 include!("interp_array_factories.rs");

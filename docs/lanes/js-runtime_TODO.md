@@ -1112,3 +1112,39 @@ VM lane has the helper signature `promise_resolving_functions(&Interpreter,
 &Obj) -> (JsValue, JsValue)` and owns migrating those consumers. Runtime next:
 separate function parameter-expression and body variable environments, in
 coordination with JSVM-12 eager generator initialization.
+
+## JSRT-29 Parameter-expression/body variable environments (2026-10-03)
+
+Frozen base `284dce79`. Functions with parameter expressions now create a
+separate body variable environment after binding parameters. Default closures
+retain the parameter environment; body var declarations that share formal
+names start with copied values. Computed destructuring keys, nested defaults,
+rest bindings, concise arrows, ordinary/async functions and generators use the
+same helper. The new Var environment owns direct-eval declarations and inherits
+this/super from the call frame. Annex B block functions exclude formal names
+before reserving placeholders. Switch declarations participate in collection.
+The VM consumer is one additive call, coordinated with JSVM-12 eager generator
+initialization and its independent removal of parameter-eval compilation guards.
+
+Ported Lumen ContainsExpression/body-environment algorithms from
+`crates/lumen/src/interpreter.rs` at MIT
+`f6c9860d44fa52249cfd647122edea184d32c863`; the source header and a new
+THIRD_PARTY_NOTICES row retain attribution. Normative reference:
+[FunctionDeclarationInstantiation](https://tc39.es/ecma262/multipage/ordinary-and-exotic-objects-behaviours.html#sec-functiondeclarationinstantiation).
+
+Crate **477 passed/1 skipped**, **1 doctest**. Final Boat workspace
+**3523 passed/17 skipped, 67.585 seconds**, **4 doctests**. Pinned functions:
+AST **2432 → 2437/2615**, VM mode **2319 → 2324/2615**; generators:
+AST **565 → 569/586**, VM **564 → 568/586**; async generators unchanged
+AST **1046/1054**, VM **1045/1054**. Unique union **4232 cases**, AST
+**4024 → 4033**, VM **3909 → 3918**, **9 gained and zero lost in each mode**.
+Grouped regressions cover closures, copied bindings, arguments, derived this,
+eval and Annex B. Direct parameter eval uses AST on this fixed base; the VM
+compiler acceptance change belongs to JSVM-12. Evidence:
+`js-runtime_jsrt29_evidence.json`.
+
+Initial workspace linking failed on a shared HOME ICU cache. The coordinator
+fixed MAIN linux-run to use native source/target directories with incremental
+disabled; the unchanged-source workspace retry passed without deleting caches.
+Next coordinated Promise cluster: internal await reaction attachment should
+bypass observable `then` and species, using the native reaction machinery.

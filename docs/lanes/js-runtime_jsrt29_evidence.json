@@ -1,0 +1,128 @@
+{
+  "ticket": "JSRT-29",
+  "base_sha": "284dce79cb1e71d76e6c8df1ef0271cb125fb9da",
+  "linux_host": "Boat bx_bq7wyr6x pool-js-a; final workspace source/target native /tmp",
+  "workspace_nextest": {
+    "passed": 3523,
+    "skipped": 17,
+    "elapsed_seconds": 67.585
+  },
+  "workspace_doctests_passed": 4,
+  "crate_nextest": {
+    "passed": 477,
+    "skipped": 1
+  },
+  "crate_doctests_passed": 1,
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+  "host_sha256": "7498b8b19d01d30607381f4425cd30379e3425b5d88e23814658255c3f530e56",
+  "timeout_seconds": 15.0,
+  "jobs": 4,
+  "ast": {
+    "function": {
+      "selected": 2615,
+      "before_pass": 2432,
+      "after_pass": 2437,
+      "gained": 5,
+      "lost": 0,
+      "gains": [
+        "language/expressions/arrow-function/scope-paramsbody-var-open.js",
+        "language/expressions/function/arguments-with-arguments-lex.js",
+        "language/expressions/function/scope-paramsbody-var-open.js",
+        "language/statements/function/arguments-with-arguments-lex.js",
+        "language/statements/function/scope-paramsbody-var-open.js"
+      ],
+      "classification_sha256": "45f5a792ab21685ada99c07432deae0b47f78c1ce8ac9e8939ffe2cf7e524569"
+    },
+    "generators": {
+      "selected": 586,
+      "before_pass": 565,
+      "after_pass": 569,
+      "gained": 4,
+      "lost": 0,
+      "gains": [
+        "language/expressions/generators/arguments-with-arguments-lex.js",
+        "language/expressions/generators/scope-paramsbody-var-open.js",
+        "language/statements/generators/arguments-with-arguments-lex.js",
+        "language/statements/generators/scope-paramsbody-var-open.js"
+      ],
+      "classification_sha256": "afa3cfb2fe65aa0188b4458025b120e0d46aaa391b308b3e20fe5dbad9643599"
+    },
+    "async-generator": {
+      "selected": 1054,
+      "before_pass": 1046,
+      "after_pass": 1046,
+      "gained": 0,
+      "lost": 0,
+      "gains": [
+
+      ],
+      "classification_sha256": "86ec6c77ca4f4255a6d4444b311b6ced4c3e231397490ce0dcec340566863ae4"
+    },
+    "combined": {
+      "selected": 4232,
+      "before_pass": 4024,
+      "after_pass": 4033,
+      "gained": 9,
+      "lost": 0
+    }
+  },
+  "vm": {
+    "function": {
+      "selected": 2615,
+      "before_pass": 2319,
+      "after_pass": 2324,
+      "gained": 5,
+      "lost": 0,
+      "gains": [
+        "language/expressions/arrow-function/scope-paramsbody-var-open.js",
+        "language/expressions/function/arguments-with-arguments-lex.js",
+        "language/expressions/function/scope-paramsbody-var-open.js",
+        "language/statements/function/arguments-with-arguments-lex.js",
+        "language/statements/function/scope-paramsbody-var-open.js"
+      ],
+      "classification_sha256": "a4f4d7972eb2cac9db7da40c21fa84c37f383b2f4cb1a59ea958c1ab2e8e5956"
+    },
+    "generators": {
+      "selected": 586,
+      "before_pass": 564,
+      "after_pass": 568,
+      "gained": 4,
+      "lost": 0,
+      "gains": [
+        "language/expressions/generators/arguments-with-arguments-lex.js",
+        "language/expressions/generators/scope-paramsbody-var-open.js",
+        "language/statements/generators/arguments-with-arguments-lex.js",
+        "language/statements/generators/scope-paramsbody-var-open.js"
+      ],
+      "classification_sha256": "ee464112d15f401c6729c20d34a41a04538bf9c957c5862c024c64c357a8835e"
+    },
+    "async-generator": {
+      "selected": 1054,
+      "before_pass": 1045,
+      "after_pass": 1045,
+      "gained": 0,
+      "lost": 0,
+      "gains": [
+
+      ],
+      "classification_sha256": "4e51d680c8d4ca067d61b7bdfef37b71213fcdf35cfd0edaef4028a51549e8da"
+    },
+    "combined": {
+      "selected": 4232,
+      "before_pass": 3909,
+      "after_pass": 3918,
+      "gained": 9,
+      "lost": 0
+    }
+  },
+  "upstream": {
+    "repository": "lucid-softworks/lumen",
+    "path": "crates/lumen/src/interpreter.rs",
+    "commit": "f6c9860d44fa52249cfd647122edea184d32c863",
+    "license": "MIT"
+  },
+  "coordination": "Exact additive VM body-environment consumer; JSVM-12 compiler parameter-eval acceptance and generator eager initialization integrate separately. EnvKind::Var preserves transparent this/super and js-lang source-context inheritance.",
+  "infrastructure": "Initial workspace failed missing ICU rlib from shared HOME cache; MAIN wrapper fixed native source/target and disabled incremental. Retried unchanged source passed; no cache deletion."
+}
