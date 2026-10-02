@@ -32,6 +32,38 @@ struct ModuleImportJob {
 mod module_import_job_tests {
     use super::*;
 
+    #[test]
+    fn classic_source_context_survives_later_scripts_and_delayed_closures() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let origins = Rc::new(RefCell::new(Vec::new()));
+            let recorded = origins.clone();
+            i.binding_set_typed_module_loader_hook(Rc::new(move |_, specifier, referrer| {
+                recorded.borrow_mut().push((specifier.to_string(), referrer.to_string()));
+                Ok(JsValue::Undefined)
+            }));
+            i.run_script_with_source_context_and_backend(
+                "let shared=41; var later=()=>import('./first.js'); function nested(){return ()=>import('./nested.js');} var delayed=nested();",
+                "https://example.test/a/source.js", backend,
+            ).unwrap();
+            i.run_script_with_source_context_and_backend(
+                "var other=()=>import('./second.js'); shared++;",
+                "https://example.test/b/source.js", backend,
+            ).unwrap();
+            i.run_script("later();other();delayed();import('./unlocated.js');").unwrap();
+            i.drain_microtasks().unwrap();
+            assert_eq!(&*origins.borrow(), &[
+                ("./first.js".into(), "https://example.test/a/source.js".into()),
+                ("./second.js".into(), "https://example.test/b/source.js".into()),
+                ("./nested.js".into(), "https://example.test/a/source.js".into()),
+                ("./unlocated.js".into(), String::new()),
+            ], "{backend:?}");
+            assert_eq!(i.run_script("shared").unwrap(), JsValue::Num(42.0));
+            assert!(i.run_script_with_source_context("throw 3", "failed.js").is_err());
+            assert!(i.global_env.source_context().is_none());
+        }
+    }
+
     fn take_job(i: &mut Interpreter) -> SchedulingToken {
         let requests = i.take_scheduling_requests();
         assert_eq!(requests.len(), 1);
@@ -99,6 +131,26 @@ mod module_import_job_tests {
 }
 
 impl Interpreter {
+    /// Execute a classic script whose closures retain its originating URL for import().
+    /// This changes handle metadata, preserving the realm's live global binding frame.
+    pub fn run_script_with_source_context(&mut self, source: &str, referrer: &str) -> Result<JsValue, Throw> {
+        let previous = self.global_env.clone();
+        self.global_env = previous.with_source_context(referrer);
+        let result = self.run_script(source);
+        self.global_env = previous;
+        result
+    }
+
+    pub fn run_script_with_source_context_and_backend(
+        &mut self, source: &str, referrer: &str, backend: ExecutionBackend,
+    ) -> Result<JsValue, Throw> {
+        let previous = self.global_env.clone();
+        self.global_env = previous.with_source_context(referrer);
+        let result = self.run_script_with_backend(source, backend);
+        self.global_env = previous;
+        result
+    }
+
     /// Install the driver's loader. `crates/amazing`'s HTML/script-execution driver is the
     /// expected caller; see `questions.md`'s JS-18 item-2 entry for the wiring it still needs on
     /// that side (an `amazing-html`/`dom-bindings`-owned module registry keyed the same way this
@@ -125,7 +177,7 @@ impl Interpreter {
         let referrer = env.resolve("\0module.id");
         let referrer = match &referrer {
             Some(JsValue::Str(s)) => s.to_string(),
-            _ => String::new(),
+            _ => env.source_context().unwrap_or_default().to_string(),
         };
         let specifier_string = match self.to_js_string(&value) {
             Ok(s) => s.to_string(),
