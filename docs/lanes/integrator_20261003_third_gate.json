@@ -1,0 +1,35 @@
+{
+  "source_commit": "f120de608169358b37e7cf2686c38ef9e8bdaa10",
+  "base_commit": "4492af3ffdd2945d2f44c343b882edd81ed59c2a",
+  "summary": {
+    "files": {
+      "unsupported": 170,
+      "pass": 51256,
+      "fail": 2149,
+      "skipped": 294,
+      "timeout": 3
+    }
+  },
+  "gained_files": 1018,
+  "lost_files": [],
+  "gained_variants": 1904,
+  "lost_variants": [],
+  "validated_at": "2026-10-02T23:35:33.663580+00:00",
+  "platform": "Boat Linux",
+  "workspace": {
+    "passed": 3682,
+    "skipped": 17,
+    "doctests_passed": 4
+  },
+  "provenance": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "host_sha256": "771f2c68e5cc879cba9cb39ab3428e465c42d71dcc78b14a32b16812c8f5a57d",
+    "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+    "timeout_seconds": 60.0
+  },
+  "shards": 16,
+  "result_sha256": "e899c588ed6f60f066ad1873740eeeb12a48e7aaa19961385ee3563e4601923a",
+  "workspace_log_sha256": "be241b84f85bb54e8cab30dca6e10ffc458abc11238d8078b784bbbb98dc7131",
+  "runtime_seconds": 578
+}
