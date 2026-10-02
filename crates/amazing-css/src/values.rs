@@ -769,6 +769,7 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         // `background_values.rs`) are the same ones `expand_declaration`
         // uses for the computed-value dimension, so both dimensions now
         // agree on what is accepted.
+        "background-image" => return crate::image_values::valid_background_image(css).then_some(V::Unparsed),
         "background-clip" => {
             return crate::computed::valid_background_clip(css).then_some(V::Unparsed);
         }
