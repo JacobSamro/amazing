@@ -3512,3 +3512,12 @@ per-case before/after results and reproduction live under evidence/html45/.
 Next: canonical document encoding names and unknown-response HTML sniffing
 for DOM's faithful encoding.py iframe fixture, followed by persistent DOM
 quirks-mode integration when the owning DOM API is gated.
+
+HTML46 covers document encoding metadata and the HTML rows of unknown-type
+MIME sniffing. The public canonical_name maps all Encoding variants to
+standard document names without changing lowercase TextDecoder names.
+Meta x-user-defined normalizes to windows-1252; BOM/transport priority and
+all-split streaming decoding are covered. Iframe response sniffing matches
+the exact standard HTML signature table, whitespace and tag boundaries,
+respects nosniff and explicit MIME, and does not claim a full MIME subsystem.
+DOM's faithful encoding.py response handler remains a separate owned ticket.

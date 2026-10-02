@@ -309,6 +309,8 @@ pub struct FunctionCode(Rc<CompiledFunction>);
 struct CompiledFunction {
     name: String,
     params: Vec<crate::ast::Param>,
+    body_lexical_names: Vec<String>,
+    skip_generator_arguments: bool,
     program: Program,
     is_arrow: bool,
     is_generator: bool,
@@ -1766,8 +1768,21 @@ impl FunctionCode {
         // shared with this VM path so both backends bind identically; it
         // already skips the `arguments` object for arrows and for a
         // parameter literally named `arguments`.
-        i.bind_params(&env, &self.0.params, args, is_arrow, self.0.strict)?;
+        // The helper's boolean suppresses the implicit arguments object. FDI
+        // also suppresses it for a generator with no parameter expressions
+        // whose body already owns an arguments declaration.
+        i.bind_params(&env, &self.0.params, args, is_arrow || self.0.skip_generator_arguments, self.0.strict)?;
         if self.0.is_generator {
+            // FDI runs during the call, while only body execution is deferred.
+            // Parameter eval may have created a var binding that conflicts
+            // with a body lexical declaration; report that before returning
+            // the generator, even if it is never resumed.
+            let frame = self.0.program.start_frame(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT)?;
+            for name in &self.0.body_lexical_names {
+                if env.would_conflict_as_lexical(name) {
+                    return Err(Throw::syntax_error(format!("identifier '{name}' has already been declared")));
+                }
+            }
             // Read `functionObject.prototype` now, not before parameters were
             // bound: a parameter default can replace it during
             // FunctionDeclarationInstantiation (just above), and per spec
@@ -1778,7 +1793,7 @@ impl FunctionCode {
                     Some(JsValue::Object(proto)) => Some(proto),
                     _ => None,
                 });
-            return Ok(self.start_generator_with_env(i, env, generator_proto));
+            return Ok(self.generator_object(i, env, generator_proto, Some(frame)));
         }
         if self.0.is_async {
             return self.call_async(i, env);
@@ -1825,6 +1840,12 @@ impl FunctionCode {
         env: EnvHandle,
         generator_proto: Option<Obj>,
     ) -> JsValue {
+        self.generator_object(i, env, generator_proto, None)
+    }
+
+    fn generator_object(&self, i: &Interpreter, env: EnvHandle,
+        generator_proto: Option<Obj>, frame: Option<Box<VmFrame>>) -> JsValue
+    {
         let mut object = JsObject::ordinary();
         object.proto = generator_proto.or_else(|| Some(if self.0.is_async {
             i.async_generator_proto.clone()
@@ -1834,7 +1855,7 @@ impl FunctionCode {
         object.exotic = Exotic::Generator(Rc::new(RefCell::new(GeneratorState {
             code: self.clone(),
             env,
-            frame: None,
+            frame,
             started: false,
             executing: false,
             completion: JsValue::Undefined,
@@ -2134,6 +2155,7 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
         }
         if !state.started && kind != 0 {
             state.started = true;
+            state.frame = None;
             return if kind == 1 { Ok(generator_result(i, value, true)) } else { Err(Throw(value)) };
         }
         if state.started && state.frame.is_none() {
@@ -2145,7 +2167,10 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
             state.frame.take().unwrap()
         } else {
             state.started = true;
-            state.code.0.program.start_frame(i, state.env.clone(), DEFAULT_INSTRUCTION_LIMIT)?
+            match state.frame.take() {
+                Some(frame) => frame,
+                None => state.code.0.program.start_frame(i, state.env.clone(), DEFAULT_INSTRUCTION_LIMIT)?,
+            }
         };
         state.executing = true;
         (state.code.clone(), frame, state.completion.clone())
@@ -2280,6 +2305,7 @@ fn async_generator_drain(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>
         // the generator directly without running any of its code.
         if !state.borrow().started && request.kind != 0 {
             state.borrow_mut().started = true;
+            state.borrow_mut().frame = None;
             if request.kind == 1 {
                 return async_generator_await_return(i, state, request);
             }
@@ -2295,11 +2321,15 @@ fn async_generator_drain(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>
             continue;
         }
         if !state.borrow().started {
+            state.borrow_mut().started = true;
+            if state.borrow().frame.is_some() {
+                let target = request.target.clone();
+                return async_generator_run(i, state, target, request.kind, request.value);
+            }
             let (code, env) = {
                 let s = state.borrow();
                 (s.code.clone(), s.env.clone())
             };
-            state.borrow_mut().started = true;
             match code.0.program.start_frame(i, env, DEFAULT_INSTRUCTION_LIMIT) {
                 Ok(frame) => state.borrow_mut().frame = Some(frame),
                 Err(Throw(error)) => {

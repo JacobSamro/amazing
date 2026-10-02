@@ -308,6 +308,7 @@ impl ComputedStyle {
             self.url_bases.remove(&longhand);
             self.props.insert(longhand, expanded);
         }
+        if property.starts_with("font-synthesis") { font_synthesis::serialize(&mut self.props); }
         let next_zoom = self.get("zoom").and_then(used_zoom_factor).unwrap_or(1.0);
         self.effective_zoom *= next_zoom / prior_zoom;
         self.resolve_typed_units();
@@ -1090,7 +1091,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         property.to_ascii_lowercase()
     };
     if property == "font-synthesis" {
-        return crate::font_properties::expand_synthesis(value).unwrap_or_default();
+        return font_synthesis::expand(value).unwrap_or_default();
     }
     if property == "list-style" {
         if contains_var_function(value) {
@@ -2705,6 +2706,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
     };
     contain_intrinsic::resolve_lengths(&mut style.props, style.root_font_px);
     individual_transforms::resolve(&mut style.props, style.root_font_px);
+    font_synthesis::serialize(&mut style.props);
     style.resolve_relative_colors();
     style.resolve_light_dark(environment);
     let local_zoom = style.props.get("zoom").and_then(|value| used_zoom_factor(value)).unwrap_or(1.0);
@@ -3071,6 +3073,7 @@ fn deferred_inner<'a>(value: &'a str, function: &str) -> Option<&'a str> {
 }
 
 fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()> {
+    if let Some(resolved) = font_synthesis::resolve_deferred(value) { return resolved; }
     if let Some(resolved) = contain_intrinsic::resolve_deferred(value) { return resolved; }
     if let Some(resolved) = logical_border::resolve_deferred(property, value) { return resolved; }
     if let Some(inner) = deferred_inner(value, DEFERRED_LIST_STYLE) {
@@ -3552,3 +3555,6 @@ pub(crate) mod contain_intrinsic;
 
 #[path = "individual_transforms.rs"]
 pub(crate) mod individual_transforms;
+
+#[path = "font_synthesis.rs"]
+pub(crate) mod font_synthesis;

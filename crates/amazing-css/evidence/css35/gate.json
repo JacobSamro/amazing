@@ -1,0 +1,62 @@
+{
+  "ticket": "CSS-35",
+  "base": "0e59c664cdbbd9cdccf064ba66c557a23c79cace",
+  "platform": "Boat Linux native /tmp source+target",
+  "wpt": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "workspace": {
+    "passed": 3527,
+    "skipped": 17,
+    "doctests": 4
+  },
+  "parsing": {
+    "before_pass": 3565,
+    "after_pass": 3599,
+    "total": 4805,
+    "nonliteral_skipped": 169,
+    "gained": [
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"none\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"oblique-only position\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"oblique-only small-caps position\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"oblique-only small-caps\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"oblique-only\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"position\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"small-caps position\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"small-caps\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"style position\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"style small-caps position\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"style small-caps\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"style\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"weight oblique-only small-caps position\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"weight oblique-only small-caps\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"weight oblique-only\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"weight position\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"weight small-caps\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"weight style small-caps position\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"weight style small-caps\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"weight style\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-computed.html: computed font-synthesis: \"weight\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-invalid.html: invalid font-synthesis: \"auto\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-invalid.html: invalid font-synthesis: \"none oblique-only\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-invalid.html: invalid font-synthesis: \"none position\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-invalid.html: invalid font-synthesis: \"none small-caps\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-invalid.html: invalid font-synthesis: \"none style\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-invalid.html: invalid font-synthesis: \"none weight\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-invalid.html: invalid font-synthesis: \"oblique-only none\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-invalid.html: invalid font-synthesis: \"oblique-only style\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-invalid.html: invalid font-synthesis: \"position none\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-invalid.html: invalid font-synthesis: \"small-caps none\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-invalid.html: invalid font-synthesis: \"style none\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-invalid.html: invalid font-synthesis: \"style oblique-only\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-synthesis-style-valid.html: valid font-synthesis-style: \"oblique-only\""
+    ],
+    "lost": []
+  },
+  "render": {
+    "before_pass": 24,
+    "after_pass": 24,
+    "total": 32,
+    "gained": [],
+    "lost": [],
+    "unchanged": 32
+  }
+}
