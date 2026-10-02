@@ -172,6 +172,17 @@ rsync -a --delete --exclude /target --exclude '/target-*' --exclude /out --exclu
 ln -sfn \$HOME/corpora /tmp/amazing-native-src-$LANE/corpora
 cd /tmp/amazing-native-src-$LANE || exit 3
 export CARGO_TARGET_DIR=/tmp/amazing-native-target-$LANE CARGO_INCREMENTAL=0
+# nextest is also snapshot-backed in HOME. A late mmap fault can kill its
+# controller after every test passes; execute a native copy instead.
+# Publish atomically so sibling lanes never truncate a running executable.
+mkdir -p /tmp/amazing-native-tools || exit 3
+if [ ! -x /tmp/amazing-native-tools/cargo-nextest ]; then
+  nextest_source=\$(command -v cargo-nextest) || exit 3
+  nextest_copy=\$(mktemp /tmp/amazing-native-tools/.cargo-nextest.XXXXXX) || exit 3
+  cp \"\$nextest_source\" \"\$nextest_copy\" && chmod +x \"\$nextest_copy\" &&
+    mv -f \"\$nextest_copy\" /tmp/amazing-native-tools/cargo-nextest || { rm -f \"\$nextest_copy\"; exit 3; }
+fi
+export PATH=/tmp/amazing-native-tools:\$PATH
 free=\$(df -Pk ~ | awk 'NR==2{print int(\$4/1048576)}'); if [ \"\$free\" -lt 10 ]; then rm -rf \"\$CARGO_TARGET_DIR\"/*/incremental; find \"\$OUT\" -type f -mmin +120 -size +1M -delete 2>/dev/null; echo \"linux-run: only \${free} GB free; cleared this lane's incremental cache and outputs older than 2 h\" >&2; fi
 $CMD"
   ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"
