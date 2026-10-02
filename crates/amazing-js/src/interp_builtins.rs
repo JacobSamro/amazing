@@ -1636,30 +1636,6 @@ fn native_promise_catch(
         ])
 }
 
-fn native_promise_finally(
-    i: &mut Interpreter,
-    this: JsValue,
-    args: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    let promise = promise_object(&this)?;
-    let callback = args.first().cloned().unwrap_or(JsValue::Undefined);
-    let state = match &promise.borrow().exotic {
-        Exotic::Promise(state) => state.state.clone(),
-        _ => unreachable!(),
-    };
-    if matches!(state, PromiseFate::Pending) {
-        return Ok(this);
-    }
-    if callable_function(&callback).is_some() {
-        i.call_value(&callback, JsValue::Undefined, Vec::new())?;
-    }
-    Ok(match state {
-        PromiseFate::Fulfilled(value) => new_promise(i, PromiseFate::Fulfilled(value)),
-        PromiseFate::Rejected(value) => new_promise(i, PromiseFate::Rejected(value)),
-        PromiseFate::Pending => unreachable!(),
-    })
-}
-
 fn native_data(i: &Interpreter) -> Result<Obj, Throw> {
     i.native_stack
         .last()

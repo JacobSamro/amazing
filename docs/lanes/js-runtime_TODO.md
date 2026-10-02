@@ -1182,3 +1182,34 @@ VM-owned async_resolve_value constructor-get abrupt timing remains a separate
 follow-up. Promise rejection tracking is pre-existing host work. Runtime next:
 port the whole Promise.prototype.finally algorithm (generic Invoke, species,
 deferred callbacks and PromiseResolve-based cleanup settlement).
+
+## JSRT-31 Promise.prototype.finally (2026-10-03)
+
+Frozen base `692f9ff8`. Replaced the synchronous/pending-identity shortcut with
+the whole generic finally algorithm: obtain species, Invoke the receiver's
+then method, create deferred fulfillment/rejection cleanup closures, resolve
+cleanup results with the captured constructor, then preserve the original
+value or reason after cleanup. Cleanup rejection and thrown callbacks override
+the original completion. Non-callable callbacks pass through unchanged.
+
+Ported Boa finally and ThenFinally/CatchFinally closures from the same MIT
+`39cd11214ecb366200157dab96b3919e61e9a391` commit into
+`interp_promise_finally.rs`; header and new notices row identify the port.
+Normative reference:
+[Promise.prototype.finally](https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-promise.prototype.finally).
+The last finally failure exposed VM assignment naming of passed native
+callbacks. The shared inference helper now preserves explicit native names,
+including empty names, without changing its VM consumer signature.
+
+Before grouped regression: **480 existing crate passes plus one failure**,
+cleanup ran before the synchronous marker. After **481 passed/1 skipped**,
+**1 doctest**; nine grouped scenarios run on both backends. Final native Boat
+workspace **3527 passed/17 skipped, 70.507 seconds**, **4 doctests**. Pinned
+Promise **520 → 540/732**, **20 gained, zero lost**; finally **14 → 29/29**.
+Additional gains cover native callback names and reactions that await finally
+cleanup. Await and async-function selections remain unchanged.
+Evidence: `js-runtime_jsrt31_evidence.json`.
+
+The first final gate was green; the native-name correction warranted one
+unchanged-base gate repeat. Runtime next: whole allKeyed/allSettledKeyed area,
+the largest remaining unimplemented Promise cluster (87 pinned cases).

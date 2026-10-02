@@ -1644,6 +1644,10 @@ impl Interpreter {
             // Class names are installed before static elements by NamedEvaluation.
             if object.class_constructor { return; }
             if let Some(function) = &mut object.func {
+                // Native closures have explicit spec-defined names, including
+                // the empty name. Passing one through an assignment cannot
+                // turn it into an anonymous ECMAScript function definition.
+                if matches!(function.body, FunctionBody::Native(_)) { return; }
                 if function.name.is_empty() {
                     function.name = name.to_string();
                     object.define("name", Property {

@@ -1,0 +1,94 @@
+{
+  "ticket": "JSRT-31",
+  "base_sha": "692f9ff8646183ff8219c121d7a7e96b73d252a4",
+  "linux_host": "Boat bx_bq7wyr6x pool-js-a; native /tmp source/target",
+  "workspace_nextest": {
+    "passed": 3527,
+    "skipped": 17,
+    "elapsed_seconds": 70.507
+  },
+  "workspace_doctests_passed": 4,
+  "crate_nextest": {
+    "passed": 481,
+    "skipped": 1
+  },
+  "crate_doctests_passed": 1,
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+  "host_sha256": "725bd9d189d6edbe895705d1bb8c4285b34a243fbdba61a5bd65b36156264df6",
+  "timeout_seconds": 15.0,
+  "jobs": 4,
+  "promise": {
+    "selected": 732,
+    "before_pass": 520,
+    "after_pass": 540,
+    "gained": 20,
+    "lost": 0,
+    "gains": [
+      "built-ins/Promise/allSettled/resolved-then-catch-finally.js",
+      "built-ins/Promise/executor-function-name.js",
+      "built-ins/Promise/prototype/finally/invokes-then-with-function.js",
+      "built-ins/Promise/prototype/finally/invokes-then-with-non-function.js",
+      "built-ins/Promise/prototype/finally/rejected-observable-then-calls-PromiseResolve.js",
+      "built-ins/Promise/prototype/finally/rejected-observable-then-calls.js",
+      "built-ins/Promise/prototype/finally/rejection-reason-override-with-throw.js",
+      "built-ins/Promise/prototype/finally/resolved-observable-then-calls-PromiseResolve.js",
+      "built-ins/Promise/prototype/finally/resolved-observable-then-calls.js",
+      "built-ins/Promise/prototype/finally/species-constructor.js",
+      "built-ins/Promise/prototype/finally/subclass-reject-count.js",
+      "built-ins/Promise/prototype/finally/subclass-resolve-count.js",
+      "built-ins/Promise/prototype/finally/this-value-proxy.js",
+      "built-ins/Promise/prototype/finally/this-value-then-not-callable.js",
+      "built-ins/Promise/prototype/finally/this-value-then-poisoned.js",
+      "built-ins/Promise/prototype/finally/this-value-then-throws.js",
+      "built-ins/Promise/prototype/finally/this-value-thenable.js",
+      "built-ins/Promise/race/resolved-then-catch-finally.js",
+      "built-ins/Promise/reject-function-name.js",
+      "built-ins/Promise/resolve-function-name.js"
+    ],
+    "classification_sha256": "5ef1aa43c4a09d0793026ac3bb80912ed5f94b20ffdee857828954357916329e"
+  },
+  "finally": {
+    "selected": 29,
+    "before_pass": 14,
+    "after_pass": 29
+  },
+  "await": {
+    "selected": 22,
+    "before_pass": 21,
+    "after_pass": 21,
+    "gained": 0,
+    "lost": 0,
+    "gains": [
+
+    ],
+    "classification_sha256": "d1e9de1b5b343dd02911cecd99bfc6ea61e67526512143edc7320361a942b443"
+  },
+  "async-function": {
+    "selected": 382,
+    "before_pass": 328,
+    "after_pass": 328,
+    "gained": 0,
+    "lost": 0,
+    "gains": [
+
+    ],
+    "classification_sha256": "011b5e1391a18040b562f65c7ab711826b5424fe4b6f17bc06ecba39731a57c8"
+  },
+  "combined": {
+    "selected": 1136,
+    "before_pass": 869,
+    "after_pass": 889,
+    "gained": 20,
+    "lost": 0
+  },
+  "upstream": {
+    "repository": "boa-dev/boa",
+    "path": "core/engine/src/builtins/promise/mod.rs",
+    "commit": "39cd11214ecb366200157dab96b3919e61e9a391",
+    "license": "MIT"
+  },
+  "regressions": "Nine grouped scenarios on TreeWalk/Bytecode; before cleanup ran synchronously. Generic receiver, pending chain identity, cleanup promise adoption, rejection override, thrown cleanup, subclass and native callback names.",
+  "gate_repeat": "Initial workspace3527+4docs and Promise+16 zero-loss passed; final remaining name failure justified narrow native function guard and unchanged-base gate repeat, yielding20gains."
+}
