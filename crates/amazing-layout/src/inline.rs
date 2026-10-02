@@ -1588,11 +1588,14 @@ fn shape_chunk_in_mode(
                 source_mappings,
                 font_size,
                 style,
+                font_size_adjust,
                 color,
                 ..
             } if style.text_combine == amazing_text::TextCombine::All
                 && style.writing_mode.uses_vertical_metrics() =>
             {
+                let adjusted = crate::font_policy::adjusted_style(style, *font_size_adjust, text_system);
+                let style = adjusted.as_ref().unwrap_or(style.as_ref());
                 let collapse = matches!(style.white_space,
                     amazing_text::WhiteSpace::Normal
                         | amazing_text::WhiteSpace::NoWrap
@@ -1605,7 +1608,7 @@ fn shape_chunk_in_mode(
                 spans.push(TextSpan {
                     range: start..end,
                     source: node.0,
-                    style: style.as_ref().clone(),
+                    style: style.clone(),
                     boundary_before: ShapingBoundary::Hard,
                 });
                 sources.extend(combined_mappings.iter().map(|mapping| SourceMapping {
@@ -1625,7 +1628,7 @@ fn shape_chunk_in_mode(
                         text_system,
                     )?),
                 );
-                previous_style = Some((node.0, style.as_ref().clone()));
+                previous_style = Some((node.0, style.clone()));
                 previous_after = ShapingBoundary::Hard;
                 continue;
             }
@@ -1679,11 +1682,7 @@ fn shape_chunk_in_mode(
         // without changing the CSS-visible font-size (letter/word spacing
         // and other em-relative values above are already resolved off the
         // unadjusted font_size and must stay that way).
-        let adjusted_style = font_size_adjust.map(|(metric, aspect)| {
-            let mut adjusted = style.as_ref().clone();
-            adjusted.size = text_system.adjusted_font_size(&adjusted, metric, aspect);
-            adjusted
-        });
+        let adjusted_style = crate::font_policy::adjusted_style(style, *font_size_adjust, text_system);
         let style_for_span = adjusted_style.as_ref().unwrap_or(style.as_ref());
         previous_style = Some((node.0, style_for_span.clone()));
         if text.is_empty() {

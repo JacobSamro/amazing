@@ -86,6 +86,7 @@ mod svg_tests;
 mod floats;
 pub mod font;
 mod font_features;
+mod font_policy;
 pub mod grid;
 mod grid_algorithm;
 pub mod inline;
@@ -370,6 +371,8 @@ pub struct RubyText {
     pub source_mappings: Vec<TextSourceMapping>,
     pub font_size: f32,
     pub style: Box<amazing_text::TextStyle>,
+    /// Explicit computed font-size normalization consumed by ruby shaping.
+    pub font_size_adjust: Option<(amazing_text::FontSizeAdjustMetric, f32)>,
     pub color: String,
 }
 
@@ -395,12 +398,8 @@ pub enum InlineNode {
         source_mappings: Vec<TextSourceMapping>,
         font_size: f32,
         style: Box<amazing_text::TextStyle>,
-        /// CSS Fonts 4 `font-size-adjust`, resolved to the metric basis and
-        /// aspect number the shaper's `TextSystem::adjusted_font_size` call
-        /// expects; `None` for `font-size-adjust: none` (the initial value).
-        /// This crate's own `font_properties.rs` grammar only accepts the
-        /// single-value `<number>` syntax today, which is always the
-        /// ex-height basis.
+        /// Explicit computed metric/aspect normalization. Computed CSS size
+        /// stays unchanged; the text provider selects the normalized used size.
         font_size_adjust: Option<(amazing_text::FontSizeAdjustMetric, f32)>,
         /// Used CSS letter spacing in px; applied between visual character units.
         letter_spacing: f32,

@@ -85,6 +85,8 @@ pub(super) fn shape_combined_text(
         source_mappings: source_mappings.to_vec(),
         font_size,
         style: Box::new(inner_style),
+        // The outer text consumer already normalized this style once.
+        font_size_adjust: None,
         color: color.to_owned(),
     };
     let (mut glyphs, mut natural_width, metrics) = shape_ruby_text(&combined, 0.0, text_system)?;

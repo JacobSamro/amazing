@@ -1,0 +1,313 @@
+{
+  "ticket": "LAYOUT-42",
+  "fixed_base": "745f8faada37f63c3447cac50bfd5606a0a7c207",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "workspace": {
+    "passed": 3565,
+    "skipped": 17,
+    "failed": 0
+  },
+  "doctests_passed": 4,
+  "harness_passed": 7,
+  "directories": [
+    {
+      "subdir": "css/CSS2/floats",
+      "before": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/CSS2/normal-flow",
+      "before": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/CSS2/positioning",
+      "before": {
+        "pass": 4,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 4,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-contain",
+      "before": {
+        "pass": 153,
+        "mismatch": 76,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 153,
+        "mismatch": 76,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-display",
+      "before": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-fonts",
+      "before": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-overflow",
+      "before": {
+        "pass": 81,
+        "mismatch": 262,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 81,
+        "mismatch": 262,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-position",
+      "before": {
+        "pass": 45,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 45,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-ruby",
+      "before": {
+        "pass": 52,
+        "mismatch": 15,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 52,
+        "mismatch": 15,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-sizing",
+      "before": {
+        "pass": 99,
+        "mismatch": 39,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 99,
+        "mismatch": 39,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-tables",
+      "before": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-transforms",
+      "before": {
+        "pass": 122,
+        "mismatch": 226,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 122,
+        "mismatch": 226,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    }
+  ],
+  "totals": {
+    "eligible": 1403,
+    "before_pass": 719,
+    "after_pass": 719,
+    "gained": 0,
+    "lost": 0,
+    "changed": 0,
+    "new": 0,
+    "removed": 0
+  },
+  "baseline_renderer_reproduces_layout41": true
+}

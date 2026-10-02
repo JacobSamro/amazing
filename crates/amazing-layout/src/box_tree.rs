@@ -1046,35 +1046,7 @@ fn text_style(
                 .and_then(|length| length.resolve(None)).unwrap_or(0.0),
             writing_mode.uses_vertical_metrics()),
         variations: Vec::new(),
-        synthesis: font_synthesis(style),
-    }
-}
-
-/// CSS Fonts 4 §2.6 `font-size-adjust`. `amazing-css`'s own grammar
-/// (`font_properties.rs`) only accepts `none` or a bare `<number>` today,
-/// which is always the ex-height basis (the single-value syntax); the full
-/// `<metric> <number>` form is not yet parseable there, so every non-`none`
-/// value maps to `FontSizeAdjustMetric::ExHeight`.
-fn font_size_adjust(style: &ComputedStyle) -> Option<(amazing_text::FontSizeAdjustMetric, f32)> {
-    let value = style.get("font-size-adjust")?;
-    if value.eq_ignore_ascii_case("none") {
-        return None;
-    }
-    let aspect = value.trim().parse::<f32>().ok().filter(|n| n.is_finite() && *n >= 0.0)?;
-    Some((amazing_text::FontSizeAdjustMetric::ExHeight, aspect))
-}
-
-/// CSS Fonts 4 §5.5. `amazing-css` expands the `font-synthesis` shorthand
-/// into `font-synthesis-{weight,style,small-caps,position}`, each computed
-/// to `auto` (default, synthesis permitted) or `none`. `amazing-text::
-/// FontSynthesis` carries all four bits the shaper acts on.
-fn font_synthesis(style: &ComputedStyle) -> amazing_text::FontSynthesis {
-    let enabled = |longhand: &str| !style.get(longhand).unwrap_or("auto").eq_ignore_ascii_case("none");
-    amazing_text::FontSynthesis {
-        weight: enabled("font-synthesis-weight"),
-        style: enabled("font-synthesis-style"),
-        small_caps: enabled("font-synthesis-small-caps"),
-        position: enabled("font-synthesis-position"),
+        synthesis: crate::font_policy::synthesis(style),
     }
 }
 
@@ -1113,7 +1085,7 @@ fn inline_text(
         source_mappings,
         font_size,
         style: Box::new(text_style(dom, owner, style, font_size, inline_box)),
-        font_size_adjust: font_size_adjust(style),
+        font_size_adjust: crate::font_policy::size_adjust_request(style),
         letter_spacing: values::style_length_percentage(style, "letter-spacing", font_size, font_size * 0.6)
             .and_then(|length| length.resolve(None)).unwrap_or(0.0),
         tab_size: tab_size(style, font_size),

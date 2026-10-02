@@ -20,14 +20,16 @@ fn shape_ruby_leaf(
     block_offset: f32,
     text_system: &dyn TextSystem,
 ) -> Option<(Vec<GlyphFrag>, f32, amazing_text::FontMetrics)> {
-    let metrics = text_system.metrics(&text.style).ok()?;
+    let adjusted = crate::font_policy::adjusted_style(&text.style, text.font_size_adjust, text_system);
+    let style = adjusted.as_ref().unwrap_or(text.style.as_ref());
+    let metrics = text_system.metrics(style).ok()?;
     if text.text.is_empty() {
         return Some((Vec::new(), 0.0, metrics));
     }
     let spans = [TextSpan {
         range: 0..text.text.len(),
         source: text.node.0,
-        style: text.style.as_ref().clone(),
+        style: style.clone(),
         boundary_before: ShapingBoundary::Hard,
     }];
     let sources = text
@@ -268,13 +270,15 @@ fn ruby_base_break_allowed(
         TextSpan {
             range: 0..boundary,
             source: left.node.0,
-            style: left.style.as_ref().clone(),
+            style: crate::font_policy::adjusted_style(&left.style, left.font_size_adjust, system)
+                .unwrap_or_else(|| left.style.as_ref().clone()),
             boundary_before: ShapingBoundary::Hard,
         },
         TextSpan {
             range: boundary..text.len(),
             source: right.node.0,
-            style: right.style.as_ref().clone(),
+            style: crate::font_policy::adjusted_style(&right.style, right.font_size_adjust, system)
+                .unwrap_or_else(|| right.style.as_ref().clone()),
             boundary_before: ShapingBoundary::Continue,
         },
     ];

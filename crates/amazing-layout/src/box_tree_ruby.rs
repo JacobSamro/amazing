@@ -117,6 +117,7 @@ fn ruby_text(
         source_mappings,
         font_size,
         style: Box::new(text_style(dom, owner, &style, font_size, true)),
+        font_size_adjust: crate::font_policy::size_adjust_request(&style),
         color: style.get("color").unwrap_or("black").to_owned(),
     }
 }
@@ -138,6 +139,7 @@ fn empty_ruby_text(
         source_mappings: Vec::new(),
         font_size,
         style: Box::new(text_style(dom, owner, &style, font_size, true)),
+        font_size_adjust: crate::font_policy::size_adjust_request(&style),
         color: style.get("color").unwrap_or("black").to_owned(),
     }
 }
@@ -356,6 +358,7 @@ impl RubyBuilder<'_> {
         .0;
         result.font_size = size;
         result.style = Box::new(text_style(self.dom, entry.owner, &style, size, true));
+        result.font_size_adjust = crate::font_policy::size_adjust_request(&style);
         result.format = ruby_format(&style, size);
         result.color = style.get("color").unwrap_or("black").to_owned();
         result
