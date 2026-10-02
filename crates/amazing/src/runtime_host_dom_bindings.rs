@@ -827,7 +827,8 @@ mod tests {
             dom: amazing_html::parse("<body><iframe srcdoc='child'></iframe></body>"),
             native_forwarded: false,
         }));
-        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        let mut scheduler = crate::js_scheduler::DriverScheduler::new(host,
+            crate::js_scheduler::JS_CAPACITY).unwrap();
         scheduler.set_location_url("https://example.test/main.html");
         scheduler.run_script("void document.querySelector('iframe')").unwrap();
         scheduler.dispatch_pending_iframe_loads().unwrap();
