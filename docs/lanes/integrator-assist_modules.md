@@ -35,5 +35,9 @@ credential/CORS/referrer policy, and server-dependent WPT response synthesis
 remain separate interfaces. Root DevTools source is instrumented; imported
 dependencies do not yet produce the PageOwner's Network/Debugger events.
 
-Validation results are recorded after the final Boat workspace nextest,
-workspace doctests, and pinned corpus zero-loss gate.
+Final Boat gate for driver `432ba911`: workspace nextest 3564 passed / 17
+skipped; workspace doctests 4 passed. The 111-page corpus now has 35 passing,
+39 failing, 30 timeout, 6 error, 1 unsupported pages and 110 passing subtests.
+The before/after comparison gained 35 files and 108 named subtests with zero
+lost passes at either level. Full classifications and binary/selection hashes
+are committed in `crates/amazing/evidence/module-driver/{before,after}.json`.
