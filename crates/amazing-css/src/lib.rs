@@ -46,6 +46,7 @@ mod computed;
 mod image_values;
 pub mod effects;
 mod font_properties;
+pub mod font_size_adjust;
 pub mod generated;
 pub mod media_queries;
 mod math;

@@ -2634,3 +2634,36 @@ be disabled when the requested font-style is italic; oblique requests retain
 synthesis permission. CSS supplies the distinct canonical policy string.
 References: CSS Fonts 4 §2.8 and pinned WPT
 `css/css-fonts/parsing/font-synthesis-{valid,invalid,computed}.html`.
+
+## CSS-36: font-size-adjust metric grammar and typed consumer seam
+
+Implemented CSS Fonts 5 §3.4's whole metric/value grammar: none, optional
+ex-height/cap-height/ch-width/ic-width/ic-height and number/from-font, scalar
+math, nonnegative computed clamping, default ex-height serialization omission,
+variable/inheritance/unset processing, and font shorthand reset. CSS declarations
+and SVG presentation attributes now share that grammar; an older SVG numeric
+parser previously intercepted font-size-adjust before CSS Fonts validation.
+
+Public `font_size_adjust::{FontSizeAdjust,FontSizeAdjustMetric,FontSizeAdjustAspect}`
+is carried in `values::ComputedValue::FontSizeAdjust`. `resolve_from_font` accepts
+a ratio from the actual first available font (missing font → none); the provider
+supplies standard fallback metrics before calling it. `resolve_math` accepts a
+length-to-px callback for font/viewport/container geometry. Pure and available
+font-length math computes at the existing CSS boundary; from-font and unavailable
+context stay typed. Resolve font-derived ratios before inheritance so children
+inherit the parent's computed numeric aspect rather than selecting another ratio.
+
+Base f865b7b637796e10dae6e491c34558d9bf07223c. Identical corrected CSS-33
+14-selection parsing corpus: 3599 → 3626 / 4805 (+27 exact, lost0); crate371
+passes, Linux workspace3530passes/17skips+4doctests. Full static fonts24/32,
+all32 classifications unchanged/lost0, using CSS35's artifact-bound final map as
+the exact-base before evidence. Durable evidence in `crates/amazing-css/evidence/css36/`.
+Native source/target on Boat, retained outputs fetched immediately.
+
+Consumer request: box_tree's current helper reads only bare numbers and ex-height.
+Adopt all metric variants, obtain first-available-font ratios and geometry for
+context math, and publish resolved values through the normal computed-style cache.
+The seven remaining font-size-adjust computed assertions require six loaded-font
+ratios and one container geometry input; the CSS-only static runner cannot supply
+the fixture's @font-face/document setup. No fixture-specific metric is invented.
+Spec: https://drafts.csswg.org/css-fonts-5/#font-size-adjust-prop.

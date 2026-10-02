@@ -267,6 +267,7 @@ pub enum ComputedValue {
     TextAlign(TextAlign),
     WritingMode(WritingMode),
     Transform(Vec<Transform>),
+    FontSizeAdjust(crate::font_size_adjust::FontSizeAdjust),
     FilterList(crate::effects::FilterList),
     BlendMode(crate::effects::BlendMode),
     /// `isolation: isolate` is true; `auto` is false.

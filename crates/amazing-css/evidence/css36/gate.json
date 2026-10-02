@@ -1,0 +1,56 @@
+{
+  "ticket": "CSS-36",
+  "base": "f865b7b637796e10dae6e491c34558d9bf07223c",
+  "platform": "Boat Linux native /tmp source+target",
+  "wpt": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "baseline_render": "CSS-35 final artifact-bound map, same fixed base",
+  "workspace": {
+    "passed": 3530,
+    "skipped": 17,
+    "doctests": 4
+  },
+  "parsing": {
+    "before_pass": 3599,
+    "after_pass": 3626,
+    "total": 4805,
+    "nonliteral_skipped": 169,
+    "gained": [
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-computed.html: computed font-size-adjust: \"calc(0.5)\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-computed.html: computed font-size-adjust: \"cap-height 0.8\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-computed.html: computed font-size-adjust: \"cap-height calc(-0.5)\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-computed.html: computed font-size-adjust: \"cap-height calc(0.5 + 1)\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-computed.html: computed font-size-adjust: \"cap-height calc(0.5)\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-computed.html: computed font-size-adjust: \"ch-width 0.4\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-computed.html: computed font-size-adjust: \"ex-height 0.5\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-computed.html: computed font-size-adjust: \"ex-height calc(0.5)\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-computed.html: computed font-size-adjust: \"ic-height 1.1\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-computed.html: computed font-size-adjust: \"ic-width 0.9\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"calc(0.5)\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"cap-height 0.8\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"cap-height calc(-0.5)\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"cap-height calc(0.5 + 1)\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"cap-height calc(0.5)\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"cap-height calc(10 + (sign(20cqw - 10px) * 5))\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"cap-height from-font\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"ch-width 0.4\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"ch-width from-font\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"ex-height 0.5\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"ex-height calc(0.5)\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"ex-height from-font\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"from-font\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"ic-height 0.9\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"ic-height from-font\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"ic-width 0.9\"",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-size-adjust-valid.html: valid font-size-adjust: \"ic-width from-font\""
+    ],
+    "lost": []
+  },
+  "render": {
+    "before_pass": 24,
+    "after_pass": 24,
+    "total": 32,
+    "gained": [],
+    "lost": [],
+    "unchanged": 32
+  }
+}

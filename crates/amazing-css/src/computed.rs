@@ -2707,6 +2707,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
     contain_intrinsic::resolve_lengths(&mut style.props, style.root_font_px);
     individual_transforms::resolve(&mut style.props, style.root_font_px);
     font_synthesis::serialize(&mut style.props);
+    crate::font_size_adjust::resolve_css_math(&mut style.props, style.root_font_px);
     style.resolve_relative_colors();
     style.resolve_light_dark(environment);
     let local_zoom = style.props.get("zoom").and_then(|value| used_zoom_factor(value)).unwrap_or(1.0);

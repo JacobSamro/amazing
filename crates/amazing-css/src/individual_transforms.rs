@@ -25,7 +25,7 @@ fn numeric(value: &str, percentage: bool) -> Option<f64> {
 
 /// `sign()` has no percentage basis here. Validate its dimension before
 /// replacing it with a number; at computation resolve font lengths first.
-fn signs(value: &str, font: Option<(f64, f64)>) -> Option<String> {
+pub(crate) fn signs(value: &str, font: Option<(f64, f64)>) -> Option<String> {
     let mut tokens = tokenize(value);
     let mut i = 0;
     while i < tokens.len() {
@@ -40,7 +40,16 @@ fn signs(value: &str, font: Option<(f64, f64)>) -> Option<String> {
             }
             if depth != 0 { return None }
             let inner = format!("calc({})", serialize_computed(&tokens[i + 2..end]));
-            let inner = signs(&inner, font)?;
+            let mut inner = signs(&inner, font)?;
+            if font.is_none() {
+                let tokens = tokenize(&inner).into_iter().map(|token| match token {
+                    Token::Dimension(n, unit) if matches!(unit.to_ascii_lowercase().as_str(),
+                        "vi" | "vb" | "svi" | "svb" | "lvi" | "lvb" | "dvi" | "dvb"
+                        | "cqw" | "cqh" | "cqi" | "cqb" | "cqmin" | "cqmax") => Token::Dimension(n, "px".to_owned()),
+                    token => token,
+                }).collect::<Vec<_>>();
+                inner = serialize_computed(&tokens);
+            }
             let number = if let Some(number) = numeric(&inner, false) { number }
                 else if crate::math::length_percentage(&inner, false) {
                     // Validation establishes the dimension without assuming a
