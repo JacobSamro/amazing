@@ -50,6 +50,8 @@ impl Dom {
             if let Some(metadata) = self.document_metadata(node)?.cloned() {
                 self.set_document_metadata(copy, metadata)?;
             }
+            let mode = self.document_quirks_mode(node)?;
+            self.set_document_quirks_mode(copy, mode)?;
             let ready = self.document_ready_state(node)?;
             self.set_document_ready_state(copy, ready)?;
         }

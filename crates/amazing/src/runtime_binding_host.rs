@@ -2002,6 +2002,7 @@ impl DocumentHost for RuntimeBindingHost<'_> {
         self.dom_document_default_view(document)
     }
     fn document_field(&mut self, document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, Throw> {
+        if field == DocumentField::CompatMode { return self.dom_document_compat_mode(document); }
         if document != NodeIdx(0) {
             let host = self.state.borrow().host.clone();
             let metadata = { host.borrow().dom.document_metadata(document).ok().flatten().cloned() };

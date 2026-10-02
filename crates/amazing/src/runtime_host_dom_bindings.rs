@@ -3,6 +3,11 @@ use super::*;
 use amazing_dom::events::{EventClass, EventId};
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn dom_document_compat_mode(&mut self, document: NodeIdx) -> Result<Vec<u16>, Throw> {
+        let mode = self.with_dom(|dom| dom.document_quirks_mode(document))?;
+        Ok(mode.compat_mode().encode_utf16().collect())
+    }
+
     pub(super) fn dom_resolve_reflected_url(&mut self, input: &[u16]) -> Vec<u16> {
         // URL parsing consumes scalar values even when the content attribute
         // itself is DOMString. Invalid URLs reflect the original string.
@@ -1267,4 +1272,16 @@ mod tests {
         "#).unwrap();
         assert!(matches!(result, JsValue::Bool(true)));
     }
+    #[test]
+    fn document_compat_mode_reads_each_document_mode() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        host.borrow_mut().dom.set_document_quirks_mode(NodeIdx(0), amazing_dom::QuirksMode::Quirks).unwrap();
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host.clone()).unwrap();
+        assert!(matches!(js.run_script("document.compatMode === 'BackCompat'").unwrap(), JsValue::Bool(true)));
+        host.borrow_mut().dom.set_document_quirks_mode(NodeIdx(0), amazing_dom::QuirksMode::LimitedQuirks).unwrap();
+        assert!(matches!(js.run_script("document.compatMode === 'CSS1Compat' && document.implementation.createHTMLDocument('').compatMode === 'CSS1Compat'").unwrap(), JsValue::Bool(true)));
+    }
+
 }
