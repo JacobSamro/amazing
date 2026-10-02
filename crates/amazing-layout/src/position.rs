@@ -77,7 +77,7 @@ pub(crate) fn layout_positioned(
             .map(|style| style.direction == amazing_text::Direction::RightToLeft)
             .unwrap_or_else(|| is_rtl(root)),
     };
-    position_subtree(root, viewport, viewport, true, viewport, fonts, text);
+    position_subtree(root, viewport, viewport, true, viewport, viewport, fonts, text);
 }
 
 fn position_subtree(
@@ -86,6 +86,7 @@ fn position_subtree(
     normal_containing_block: ContainingBlock,
     normal_cb_height_definite: bool,
     inherited_positioned_cb: ContainingBlock,
+    inherited_fixed_cb: ContainingBlock,
     fonts: &FontSource,
     text: Option<&dyn TextSystem>,
 ) {
@@ -110,11 +111,14 @@ fn position_subtree(
     let own_height_definite = box_.style.get("height").is_some_and(|height| {
         !height.eq_ignore_ascii_case("auto") && (!height.contains('%') || normal_cb_height_definite)
     });
+    let contained = crate::containment::independent_context(&box_.style);
+    let descendant_fixed_cb = if contained { own_padding_box } else { inherited_fixed_cb };
     let descendant_positioned_cb = match position_kind(box_) {
         PositionKind::Relative
         | PositionKind::Absolute
         | PositionKind::Fixed
         | PositionKind::Sticky => own_padding_box,
+        PositionKind::Static if contained => own_padding_box,
         PositionKind::Static => inherited_positioned_cb,
     };
     // Grid §10.1: when this grid container generates the abspos containing
@@ -122,7 +126,8 @@ fn position_subtree(
     // an auto-placed axis).
     let grid_generates_cb = matches!(box_.display, crate::Display::Grid)
         && matches!(position_kind(box_),
-            PositionKind::Relative | PositionKind::Absolute | PositionKind::Fixed);
+            PositionKind::Relative | PositionKind::Absolute | PositionKind::Fixed)
+            || (matches!(box_.display, crate::Display::Grid) && contained);
 
     // Capture normal-flow static slots before relative offsets move siblings.
     let anchors: Vec<StaticAnchor> = box_
@@ -139,6 +144,7 @@ fn position_subtree(
                     own_content_box,
                     own_height_definite,
                     descendant_positioned_cb,
+                    descendant_fixed_cb,
                     fonts,
                     text,
                 );
@@ -178,13 +184,14 @@ fn position_subtree(
                 own_content_box,
                 own_height_definite,
                 descendant_positioned_cb,
+                descendant_fixed_cb,
                 fonts,
                 text,
             );
             continue;
         }
         let containing_block = if position_kind(child) == PositionKind::Fixed {
-            viewport
+            descendant_fixed_cb
         } else if grid_generates_cb {
             grid_area_containing_block(box_, child, descendant_positioned_cb)
         } else {
@@ -233,6 +240,7 @@ fn position_subtree(
                 rect: padding_box(child),
                 rtl: is_rtl(child),
             },
+            descendant_fixed_cb,
             fonts,
             text,
         );
@@ -1045,6 +1053,39 @@ mod tests {
             (actual - expected).abs() < 0.01,
             "got {actual}, want {expected}"
         );
+    }
+
+    #[test]
+    fn containment_padding_box_positions_absolute_and_fixed_descendants() {
+        for contain in ["layout", "paint", "content", "strict", "size layout"] {
+            for position in ["absolute", "fixed"] {
+                let (dom, root) = layout(
+                    "<body><div id=outer><div style='position:relative;margin:7px'><div id=inner><div id=target></div></div></div></div></body>",
+                    &format!("body{{margin:0}}#outer{{contain:{contain};width:120px;height:140px;margin:30px;padding:10px;border:2px solid}}#inner{{contain:{contain};width:60px;height:70px;padding:5px;border:3px solid;margin:11px}}#target{{position:{position};left:10%;top:20%;width:10px;height:10px}}"),800.0,600.0);
+                let inner = find_id(&root, &dom, "inner").unwrap();
+                let target = find_id(&root, &dom, "target").unwrap();
+                let cb = padding_box(inner);
+                close(target.border_box.x, cb.x + cb.w * 0.1);
+                close(target.border_box.y, cb.y + cb.h * 0.2);
+            }
+        }
+    }
+
+    #[test]
+    fn relative_descendant_preserves_contained_fixed_block_but_updates_absolute_block() {
+        for visibility in ["auto", "hidden"] {
+            let (dom, root) = layout(
+                "<body><div id=outer><div id=relative><div id=fixed></div><div id=absolute></div></div></div></body>",
+                &format!("body{{margin:0}}#outer{{content-visibility:{visibility};margin:30px;width:120px;height:140px}}#relative{{position:relative;margin:15px;width:60px;height:70px}}#fixed{{position:fixed;left:0;top:0;width:10px;height:10px}}#absolute{{position:absolute;left:0;top:0;width:10px;height:10px}}"),800.0,600.0);
+            let outer = find_id(&root, &dom, "outer").unwrap();
+            let relative = find_id(&root, &dom, "relative").unwrap();
+            let fixed = find_id(&root, &dom, "fixed").unwrap();
+            let absolute = find_id(&root, &dom, "absolute").unwrap();
+            close(fixed.border_box.x, outer.content_box.x);
+            close(fixed.border_box.y, outer.content_box.y);
+            close(absolute.border_box.x, relative.content_box.x);
+            close(absolute.border_box.y, relative.content_box.y);
+        }
     }
 
     #[test]

@@ -815,7 +815,7 @@ fn inline_block_baseline(box_: &LayoutBox) -> f32 {
     let overflow_visible = ["overflow-x", "overflow-y"].into_iter().all(|property| {
         box_.style.get(property).is_none_or(|value| value.eq_ignore_ascii_case("visible"))
     });
-    if overflow_visible {
+    if overflow_visible && !crate::containment::layout_containment(&box_.style) {
         if let Some(baseline) = last_in_flow_baseline(box_) {
             return baseline;
         }
@@ -824,6 +824,7 @@ fn inline_block_baseline(box_: &LayoutBox) -> f32 {
 }
 
 fn last_in_flow_baseline(box_: &LayoutBox) -> Option<f32> {
+    if crate::containment::layout_containment(&box_.style) { return None; }
     if let Some(line) = box_.lines.last() {
         return Some(line.baseline);
     }
@@ -1028,7 +1029,8 @@ fn can_collapse_through(block: &LayoutBox, containing_width: f32) -> bool {
 }
 
 pub(crate) fn establishes_bfc(style: &ComputedStyle) -> bool {
-    if floats::side(style).is_some()
+    if crate::containment::independent_context(style)
+        || floats::side(style).is_some()
         || matches!(
             style.get("display"),
             Some(
@@ -1060,6 +1062,36 @@ mod tests {
     use super::*;
     use crate::font::FontSource;
     use amazing_dom::Dom;
+
+    #[test]
+    fn containment_isolates_child_margins_and_includes_its_floats() {
+        for contain in ["layout", "paint", "content", "strict", "size layout"] {
+            let (dom, root) = layout(
+                "<body><div id=outer><div id=child></div></div><div id=floats><div id=float></div></div></body>",
+                &format!("body{{margin:0}}#outer{{contain:{contain};margin-top:10px}}#child{{height:20px;margin-top:30px;margin-bottom:40px}}#floats{{contain:{contain}}}#float{{float:left;width:20px;height:50px}}"));
+            let outer = find_id(&root, &dom, "outer").unwrap();
+            let child = find_id(&root, &dom, "child").unwrap();
+            close(child.border_box.y - outer.content_box.y, 30.0);
+            let floats = find_id(&root, &dom, "floats").unwrap();
+            if !contain.contains("size") && contain != "strict" {
+                close(outer.content_box.h, 90.0);
+                close(floats.content_box.h, 50.0);
+            }
+        }
+    }
+
+    #[test]
+    fn layout_containment_suppresses_descendant_baselines_but_paint_does_not() {
+        for (contain, suppressed) in [("layout", true), ("content", true), ("strict", true), ("paint", false), ("size", false)] {
+            let mut box_ = LayoutBox::new(None, crate::Display::Block,
+                [("contain".to_owned(), contain.to_owned())].into_iter().collect(), 16.0, 20.0);
+            box_.border_box = crate::Rect { x:0.0, y:10.0, w:50.0, h:40.0 };
+            let mut child = LayoutBox::new(None, crate::Display::Block, ComputedStyle::default(), 16.0, 20.0);
+            child.border_box = crate::Rect { x:0.0, y:15.0, w:20.0, h:5.0 };
+            box_.flow = Flow::Blocks(vec![child]);
+            close(crate::flex::first_baseline(&box_), if suppressed {50.0} else {20.0});
+        }
+    }
 
     #[test]
     fn inline_block_last_baseline_skips_orthogonal_child() {

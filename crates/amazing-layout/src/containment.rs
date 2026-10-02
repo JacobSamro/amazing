@@ -5,6 +5,26 @@
 use amazing_css::ComputedStyle;
 use crate::values::{self, FontRelativeUnits};
 
+/// Layout/paint containment share formatting-context and positioning effects.
+/// Unlike size containment, table cells and table wrappers remain eligible.
+pub(crate) fn layout_containment(style: &ComputedStyle) -> bool {
+    applies_layout(style) && (style.get("contain").unwrap_or("none")
+        .split_ascii_whitespace().any(|v| matches!(v, "layout" | "content" | "strict"))
+        || matches!(style.get("content-visibility"), Some("auto" | "hidden")))
+}
+
+pub(crate) fn independent_context(style: &ComputedStyle) -> bool {
+    layout_containment(style) || (applies_layout(style) && style.get("contain")
+        .is_some_and(|value| value.split_ascii_whitespace().any(|v| v == "paint")))
+}
+
+fn applies_layout(style: &ComputedStyle) -> bool {
+    !matches!(style.get("display"), Some("none" | "contents" | "inline"
+        | "table-row" | "table-row-group" | "table-column" | "table-column-group"
+        | "table-header-group" | "table-footer-group"
+        | "ruby" | "ruby-base" | "ruby-text" | "ruby-base-container" | "ruby-text-container"))
+}
+
 /// None means the axis is not size-contained; Some(0) means containment sizes
 /// that axis as empty. Values are content-box lengths, regardless of box-sizing.
 pub(crate) fn intrinsic_inner_sizes(
@@ -106,6 +126,23 @@ mod tests {
     fn style(entries: &[(&str, &str)]) -> ComputedStyle {
         entries.iter().map(|(k,v)| (k.to_string(), v.to_string())).collect()
     }
+    #[test]
+    fn layout_effects_respect_internal_box_exclusions_and_visibility() {
+        for display in ["block", "inline-block", "table", "inline-table", "table-cell", "table-caption", "flex", "grid"] {
+            for contain in ["layout", "paint", "content", "strict"] {
+                assert!(independent_context(&style(&[("display",display),("contain",contain)])), "{display}/{contain}");
+            }
+        }
+        for display in ["none", "contents", "inline", "table-row", "table-column", "table-row-group", "ruby", "ruby-base", "ruby-text"] {
+            assert!(!independent_context(&style(&[("display",display),("contain","strict")])), "{display}");
+        }
+        for visibility in ["auto", "hidden"] {
+            assert!(layout_containment(&style(&[("content-visibility",visibility)])));
+        }
+        assert!(!layout_containment(&style(&[("contain","paint")])));
+        assert!(!independent_context(&style(&[("contain","size style")])));
+    }
+
     #[test]
     fn independent_axes_and_math_keep_none_distinct_from_omission() {
         for (value, expected) in [
