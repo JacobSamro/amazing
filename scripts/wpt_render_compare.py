@@ -6,7 +6,7 @@ same class of self-contained static reftests the Windows inventory script
 selects (HTML-parser-compatible, local match/mismatch reference, no scripts,
 no embedded resources, no CSS url()/@font-face/@import, no external
 stylesheet), renders each pair with the headless `amazing render-wpt`
-subcommand, pixel-compares the two PPM outputs with the test's `<meta
+subcommand, pixel-compares the PPM outputs with the test's `<meta
 name="fuzzy">` tolerance, and writes one report.json with the same
 classification vocabulary as the Windows runner: pass, mismatch, error,
 timeout, unsupported, crash.
@@ -43,6 +43,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -121,9 +122,9 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def reftest_link(test_path: Path, source: str, wpt_root: Path):
-    """Mirrors Get-ReftestLink: the first <link rel=match|mismatch> tag with
-    a resolvable local href wins; anything else is a specific "why not"."""
+def reftest_links(test_path: Path, source: str, wpt_root: Path):
+    """Resolve every reference, rejecting unsupported links conservatively."""
+    links = []
     for tag in LINK_TAG_RE.finditer(source):
         rel = html_attribute(tag.group(0), "rel")
         href = html_attribute(tag.group(0), "href")
@@ -145,33 +146,37 @@ def reftest_link(test_path: Path, source: str, wpt_root: Path):
             reference_path.relative_to(wpt_root)
         except ValueError:
             return {"supported": False, "reason": "escaping-reference"}
-        return {
-            "supported": True,
+        links.append({
             "relation": relation,
             "reference_path": reference_path,
             "href": href,
-        }
-    return {"supported": False, "reason": "not-reftest"}
+        })
+    return ({"supported": True, "links": links} if links else
+            {"supported": False, "reason": "not-reftest"})
 
 
 def classify_candidate(test_path: Path, wpt_root: Path):
-    """Applies the inventory script's eligibility chain to one document and
-    returns either {"eligible": True, "reference_path", "relation", "href",
-    "testharness"} or {"eligible": False, "reason", "testharness"}."""
+    """Check the test and every reference against static-render eligibility.
+
+    Eligible candidates carry all resolved links. An unsupported alternate
+    cannot silently disappear from a test's match/mismatch requirements.
+    """
     source = test_path.read_text(errors="replace")
     testharness = bool(TESTHARNESS_RE.search(source))
-    link = reftest_link(test_path, source, wpt_root)
+    link = reftest_links(test_path, source, wpt_root)
     if not link["supported"]:
         return {"eligible": False, "reason": link["reason"], "testharness": testharness}
     if test_path.suffix.lower() in XML_EXTENSIONS:
         return {"eligible": False, "reason": "xml-parser-mode", "testharness": testharness}
-    reference_path = link["reference_path"]
-    if not reference_path.is_file():
-        return {"eligible": False, "reason": "missing-reference", "testharness": testharness}
-    if reference_path.suffix.lower() in XML_EXTENSIONS:
-        return {"eligible": False, "reason": "xml-reference-mode", "testharness": testharness}
-    reference_source = reference_path.read_text(errors="replace")
-    combined = source + "\n" + reference_source
+    sources = [source]
+    for reference in link["links"]:
+        reference_path = reference["reference_path"]
+        if not reference_path.is_file():
+            return {"eligible": False, "reason": "missing-reference", "testharness": testharness}
+        if reference_path.suffix.lower() in XML_EXTENSIONS:
+            return {"eligible": False, "reason": "xml-reference-mode", "testharness": testharness}
+        sources.append(reference_path.read_text(errors="replace"))
+    combined = "\n".join(sources)
     if SCRIPT_RE.search(combined) or INLINE_EVENT_HANDLER_RE.search(combined):
         reason = "scripted"
     elif FLAGS_META_RE.search(combined):
@@ -188,9 +193,7 @@ def classify_candidate(test_path: Path, wpt_root: Path):
         return {"eligible": False, "reason": reason, "testharness": testharness}
     return {
         "eligible": True,
-        "reference_path": reference_path,
-        "relation": link["relation"],
-        "href": link["href"],
+        "links": link["links"],
         "testharness": testharness,
     }
 
@@ -217,9 +220,7 @@ def discover(wpt_root: Path, subdir: str, limit: int):
                 {
                     "path": relative,
                     "abs_path": path,
-                    "reference_path": outcome["reference_path"],
-                    "relation": outcome["relation"],
-                    "href": outcome["href"],
+                    "links": outcome["links"],
                     "hash": sha256_hex(relative),
                 }
             )
@@ -361,7 +362,9 @@ def invoke_fixed_render(exe: Path, input_path: Path, output_path: Path, width: i
 
 
 def run_one_test(candidate, exe: Path, wpt_root: Path, run_directory: Path, width: int, height: int, timeout: int):
-    """Renders one reftest pair and classifies it. Pure function of its
+    """Render once, then require any match and every mismatch reference.
+
+    Pure function of its
     arguments (own subprocess calls, own test_directory) so callers can run
     many of these concurrently across threads -- each candidate writes only
     to its own directory_id subdirectory."""
@@ -370,7 +373,6 @@ def run_one_test(candidate, exe: Path, wpt_root: Path, run_directory: Path, widt
     test_directory = run_directory / directory_id
     test_directory.mkdir(parents=True, exist_ok=True)
     test_path = candidate["abs_path"]
-    reference_path = candidate["reference_path"]
     actual_path = test_directory / "actual.ppm"
     reference_output_path = test_directory / "reference.ppm"
     diff_path = test_directory / "diff.ppm"
@@ -384,34 +386,70 @@ def run_one_test(candidate, exe: Path, wpt_root: Path, run_directory: Path, widt
             "classification": actual_run["classification"],
             "detail": actual_run["detail"],
         }
-    reference_run = invoke_fixed_render(
-        exe, reference_path, reference_output_path, width, height, timeout, wpt_root,
-        test_directory / "reference",
-    )
-    if reference_run["classification"] != "rendered":
-        return {
-            "id": test_id,
-            "classification": reference_run["classification"],
-            "actual_sha256": sha256_file(actual_path),
-            "detail": f"reference: {reference_run['detail']}",
-        }
     test_source = test_path.read_text(errors="replace")
     max_difference, total_pixels = fuzzy_limits(test_source)
-    comparison = compare_ppm(actual_path, reference_output_path, diff_path, max_difference, total_pixels)
-    passed = (not comparison["matched"]) if candidate["relation"] == "mismatch" else comparison["matched"]
+    evaluations = []
+    for index, link in enumerate(candidate["links"]):
+        suffix = "" if index == 0 else f"_{index}"
+        reference_output = test_directory / f"reference{suffix}.ppm"
+        diff_output = test_directory / f"diff{suffix}.ppm"
+        reference_run = invoke_fixed_render(
+            exe, link["reference_path"], reference_output, width, height, timeout, wpt_root,
+            test_directory / f"reference{suffix}",
+        )
+        evaluation = {"relation": link["relation"], "reference_href": link["href"],
+                      "satisfied": False}
+        if reference_run["classification"] != "rendered":
+            evaluation.update(render_failed=reference_run["classification"],
+                              detail=f"reference: {reference_run['detail']}")
+        else:
+            comparison = compare_ppm(actual_path, reference_output, diff_output,
+                                     max_difference, total_pixels)
+            evaluation.update(
+                satisfied=(not comparison["matched"] if link["relation"] == "mismatch"
+                           else comparison["matched"]),
+                differing_pixels=comparison["differing_pixels"],
+                max_difference=comparison["max_difference"],
+                reference_sha256=sha256_file(reference_output),
+                diff_sha256=sha256_file(diff_output) if diff_output.is_file() else None,
+                detail=comparison["detail"],
+            )
+        evaluations.append(evaluation)
+    matches = [e for e in evaluations if e["relation"] == "match"]
+    mismatches = [e for e in evaluations if e["relation"] == "mismatch"]
+    passed = (not matches or any(e["satisfied"] for e in matches)) and all(
+        e["satisfied"] for e in mismatches
+    )
+    # An unsuccessful render cannot prove a mismatch. Keep its failure visible
+    # if it is needed for the overall verdict, while allowing alternate matches.
+    failures = [e for e in evaluations if "render_failed" in e and
+                (e["relation"] == "mismatch" or not any(m["satisfied"] for m in matches))]
+    classification = "pass" if passed else failures[0]["render_failed"] if failures else "mismatch"
+    if passed:
+        primary = next(e for e in evaluations if e["satisfied"])
+    elif failures:
+        primary = failures[0]
+    else:
+        # An unmatched alternate is harmless when another match succeeds.
+        # Prefer the failed mismatch requirement when it decides the verdict.
+        primary = next((e for e in mismatches if not e["satisfied"]),
+                       next((e for e in matches if not e["satisfied"]), evaluations[0]))
+    primary_index = evaluations.index(primary)
+    if primary_index and "render_failed" not in primary:
+        # Cluster consumers read plain names; their pixels must describe the
+        # same reference as the compatibility fields in the report.
+        shutil.copyfile(test_directory / f"reference_{primary_index}.ppm", reference_output_path)
+        selected_diff = test_directory / f"diff_{primary_index}.ppm"
+        if selected_diff.is_file():
+            shutil.copyfile(selected_diff, diff_path)
     return {
         "id": test_id,
-        "classification": "pass" if passed else "mismatch",
-        "relation": candidate["relation"],
-        "reference_href": candidate["href"],
-        "differing_pixels": comparison["differing_pixels"],
-        "max_difference": comparison["max_difference"],
+        "classification": classification,
+        **{key: value for key, value in primary.items() if key != "satisfied"},
         "allowed_max_difference": max_difference,
         "allowed_differing_pixels": total_pixels,
         "actual_sha256": sha256_file(actual_path),
-        "reference_sha256": sha256_file(reference_output_path),
-        "diff_sha256": sha256_file(diff_path),
-        "detail": comparison["detail"],
+        "references": evaluations,
     }
 
 

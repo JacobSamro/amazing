@@ -1,0 +1,44 @@
+{
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "test": {
+    "id": "css__CSS2__floats__float-nowrap-4.html",
+    "classification": "mismatch",
+    "relation": "match",
+    "reference_href": "float-nowrap-4-ref.html",
+    "differing_pixels": 4279,
+    "max_difference": 255,
+    "reference_sha256": "b65702503c55578f4b9dd3120a112d7de15f825d45150afa06a345f699e5e78a",
+    "diff_sha256": "6380db30124e521db948af94b1abb29d7aaa12b81dfa238f6445ee60ddb89f3d",
+    "detail": "maxDifference=255/0; totalPixels=4279/0",
+    "allowed_max_difference": 0,
+    "allowed_differing_pixels": 0,
+    "actual_sha256": "406c16060cc31b55ba28ca13b740e6d7a52aa749466f3ab1d74016e1d83324b2",
+    "references": [
+      {
+        "relation": "match",
+        "reference_href": "float-nowrap-4-ref.html",
+        "satisfied": false,
+        "differing_pixels": 4279,
+        "max_difference": 255,
+        "reference_sha256": "b65702503c55578f4b9dd3120a112d7de15f825d45150afa06a345f699e5e78a",
+        "diff_sha256": "6380db30124e521db948af94b1abb29d7aaa12b81dfa238f6445ee60ddb89f3d",
+        "detail": "maxDifference=255/0; totalPixels=4279/0"
+      },
+      {
+        "relation": "match",
+        "reference_href": "float-nowrap-4-ref2.html",
+        "satisfied": false,
+        "differing_pixels": 4279,
+        "max_difference": 255,
+        "reference_sha256": "b65702503c55578f4b9dd3120a112d7de15f825d45150afa06a345f699e5e78a",
+        "diff_sha256": "6380db30124e521db948af94b1abb29d7aaa12b81dfa238f6445ee60ddb89f3d",
+        "detail": "maxDifference=255/0; totalPixels=4279/0"
+      }
+    ]
+  }
+}
