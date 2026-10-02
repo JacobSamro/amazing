@@ -3,7 +3,9 @@ use amazing_dom::{Dom, NodeIdx};
 
 fn style(property: &str, value: &str) -> amazing_css::ComputedStyle {
     let mut dom = Dom::new();
-    let element = dom.create_element(NodeIdx(0), "div");
+    let html = dom.create_element(NodeIdx(0), "html");
+    let body = dom.create_element(html, "body");
+    let element = dom.create_element(body, "div");
     let sheet = parse_stylesheet(&format!("div {{ {property}: {value}; }}"));
     compute(&dom, &[sheet]).get(element).unwrap().clone()
 }
@@ -64,7 +66,9 @@ fn grid_shorthand_carries_subgrid_and_resets_implicit_tracks() {
     let invalid = style("grid", "subgrid 10px / auto");
     assert_eq!(invalid.get("grid-template-rows"), Some("none"));
     let mut dom = Dom::new();
-    let element = dom.create_element(NodeIdx(0), "div");
+    let html = dom.create_element(NodeIdx(0), "html");
+    let body = dom.create_element(html, "body");
+    let element = dom.create_element(body, "div");
     let variable = compute(&dom, &[parse_stylesheet("div { --tracks: subgrid / auto; grid: var(--tracks); }")]);
     assert!(matches!(variable.get(element).unwrap().typed("grid-template-rows"), Some(ComputedValue::Subgrid(_))));
 }
@@ -130,7 +134,9 @@ fn place_shorthands_reach_computed_style_through_the_full_cascade() {
     // that longhand only -- ordinary shorthand/longhand cascade order, not
     // special-cased for `place-*`.
     let mut dom = Dom::new();
-    let element = dom.create_element(NodeIdx(0), "div");
+    let html = dom.create_element(NodeIdx(0), "html");
+    let body = dom.create_element(html, "body");
+    let element = dom.create_element(body, "div");
     let sheet = parse_stylesheet(
         "div { place-items: center; justify-items: end; }",
     );

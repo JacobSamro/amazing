@@ -151,7 +151,7 @@ macro_rules! keywords {
 }
 keywords! {
     Display { None => "none", Contents => "contents", Block => "block", Inline => "inline",
-        Ruby => "ruby", RubyBase => "ruby-base", RubyText => "ruby-text",
+        Ruby => "ruby", BlockRuby => "block ruby", RubyBase => "ruby-base", RubyText => "ruby-text",
         RubyBaseContainer => "ruby-base-container", RubyTextContainer => "ruby-text-container",
         InlineBlock => "inline-block", Flex => "flex", InlineFlex => "inline-flex", Grid => "grid",
         InlineGrid => "inline-grid", GridLanes => "grid-lanes",
@@ -412,6 +412,8 @@ pub(crate) fn display_canonical(css: &str) -> Option<&'static str> {
         ("block", "flex") => Some("flex"),
         ("inline", "grid") => Some("inline-grid"),
         ("block", "grid") => Some("grid"),
+        ("inline", "ruby") => Some("ruby"),
+        ("block", "ruby") => Some("block ruby"),
         ("inline", "table") => Some("inline-table"),
         ("block", "table") => Some("table"),
         ("inline", "grid-lanes") => Some("inline-grid-lanes"),

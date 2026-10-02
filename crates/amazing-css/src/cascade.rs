@@ -760,7 +760,13 @@ fn compute_one(
         candidates.entry(&d.prop).or_default().push(cand);
     }
 
-    resolve_candidate_pool(candidates, parent_style, root_font_px, dom.attrs_of(el), environment)
+    let (mut style, sources) = resolve_candidate_pool(candidates, parent_style, root_font_px, dom.attrs_of(el), environment);
+    let root = pseudo.is_none() && dom.get(el).parent.is_some_and(|parent|
+        matches!(dom.get(parent).kind, amazing_dom::NodeKind::Document));
+    if !matches!(pseudo, Some(PseudoElement::FirstLine | PseudoElement::FirstLetter)) {
+        crate::display::normalize(&mut style, parent_style, root);
+    }
+    (style, sources)
 }
 
 fn source_map(
