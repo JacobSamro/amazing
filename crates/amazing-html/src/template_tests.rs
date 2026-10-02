@@ -14,6 +14,44 @@ fn markup(dom: &Dom, node: NodeIdx) -> String {
 }
 
 #[test]
+fn template_form_end_closes_intervening_elements_without_setting_outer_pointer() {
+    for (source, expected) in [
+        ("A<template><br>BC<form>D<div>E</form>F</div>G</template>H",
+         "A<template><br>BC<form>D<div>E</div></form>FG</template>H"),
+        ("<form id=outer><template><form id=inner>x</form>y</template>z</form>after",
+         "<form id=\"outer\"><template><form id=\"inner\">x</form>y</template>z</form>after"),
+        ("<template><form id=a><form id=b>x</form>y</form>z</template>",
+         "<template><form id=\"a\"><form id=\"b\">x</form>y</form>z</template>"),
+    ] {
+        let input = format!("<!doctype html><body>{source}");
+        let dom = parse(&input);
+        assert_eq!(markup(&dom, dom.document_body(NodeIdx(0)).unwrap().unwrap()), expected);
+        for split in 0..=input.len() {
+            let mut parser = IncrementalParser::new();
+            parser.push_chunk(&input[..split]);
+            parser.push_chunk(&input[split..]);
+            let incremental = parser.finish();
+            assert_eq!(incremental.dump(NodeIdx(0)), dom.dump(NodeIdx(0)));
+        }
+    }
+}
+
+#[test]
+fn ordinary_form_end_removes_noncurrent_form_from_the_stack() {
+    let dom = parse("<!doctype html><body><form><div>x</form>y</div>z");
+    assert_eq!(markup(&dom, dom.document_body(NodeIdx(0)).unwrap().unwrap()),
+        "<form><div>xy</div></form>z");
+}
+
+#[test]
+fn template_table_form_start_is_ignored_and_does_not_capture_later_form() {
+    let dom = parse("<!doctype html><body><template><table><form id=ignored><tr><td>x</td></tr></table></template><form id=after>y</form>");
+    let html = markup(&dom, dom.document_body(NodeIdx(0)).unwrap().unwrap());
+    assert!(!html.contains("ignored"));
+    assert!(html.ends_with("<form id=\"after\">y</form>"));
+}
+
+#[test]
 fn parsed_template_content_is_inert_and_serializes() {
     let mut dom = parse("<body><template><p>A</p>tail</template><p>B</p>");
     let mut found = Vec::new();

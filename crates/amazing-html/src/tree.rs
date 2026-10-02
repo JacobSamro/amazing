@@ -36,6 +36,7 @@ mod in_select;
 mod doctype;
 mod noscript;
 mod in_table;
+mod form;
 
 /// Elements whose start tags never take children (void + obsolete empties).
 // `in_body_start_tag`'s "area" | "br" | "embed" | "img" | "keygen" | "wbr"
@@ -833,10 +834,15 @@ impl TreeBuilder {
     /// Generic scope walk (§13.2.4.3): scan top-down; terminate on a match
     /// or on any terminator.
     fn has_in_specific_scope(&self, name: &str, extra: &[&str]) -> bool {
+        self.has_in_specific_scope_matching(extra, |node|
+            self.dom.namespace(node) == Some(Namespace::Html) && self.dom.name(node) == Some(name))
+    }
+
+    fn has_in_specific_scope_matching(&self, extra: &[&str], matches: impl Fn(NodeIdx) -> bool) -> bool {
         for &node in self.open.iter().rev() {
             let n = self.dom.name(node).unwrap_or("");
             let namespace = self.dom.namespace(node);
-            if namespace == Some(Namespace::Html) && n == name {
+            if matches(node) {
                 return true;
             }
             let is_terminator = match namespace {
@@ -2048,12 +2054,7 @@ impl TreeBuilder {
                 self.frameset_ok = false;
             },
             "form" => {
-                if self.form.is_none() {
-                    self.close_p_element();
-                    let idx = self.insert_element("form", attrs);
-                    self.open.push(idx);
-                    self.form = Some(idx);
-                }
+                self.start_form(attrs);
             },
             "li" => {
                 self.frameset_ok = false;
@@ -2347,15 +2348,7 @@ impl TreeBuilder {
                 }
             },
             "form" => {
-                if let Some(f) = self.form {
-                    if self.stack_contains(f) {
-                        self.generate_implied_end_tags(None);
-                        if self.current() == Some(f) {
-                            self.open.pop();
-                        }
-                    }
-                    self.form = None;
-                }
+                self.end_form();
             },
             "caption" | "table" | "td" | "th" | "tr" | "colgroup" | "tbody"
             | "tfoot" | "thead" => self.any_other_end_tag(name),
