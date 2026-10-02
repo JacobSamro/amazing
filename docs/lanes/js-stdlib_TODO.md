@@ -1907,6 +1907,12 @@ confirmed, 1 passed each, matching prior runs).
   [decision and evidence](js-stdlib_plain_with_calendars.md). PlainDate.with
  22/71→70/71, PlainDateTime.with21/70→69/70, intl402 Temporal1699→1799 (+100),
   zero lost files. Boat workspace3515/17 skipped and4 doctests green.
-- Next calendar gap: port lumen's MIT Umm al-Qura year-start/month-length
-  tables to replace the tabular-civil approximation. Three with-family files
-  remain blocked on the real data; getters/construction/arithmetic also use it.
+- Umm al-Qura table port completed:
+  [decision and evidence](js-stdlib_umalqura.md). Pinned MIT lumen tables cover
+  AH1300–1600, with civil fallback outside; intl402 Temporal1799→1842 (+43),
+  built-ins4487 unchanged, zero lost files. All three remaining with-family
+  files now pass. Boat workspace3515/17 skipped and4 doctests green.
+- The four resumed series total324 gained Temporal files, zero losses;
+  built-ins4487/4603 and intl4021842/2029, stable final repeat classifications.
+  The next largest intl402 cluster is Temporal.toLocaleString across types;
+  it needs coordination with the Intl formatter rather than calendar arithmetic.

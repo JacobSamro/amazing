@@ -17,11 +17,11 @@
 // polynomials) are the standard Meeus/Calendrical-Calculations formulas
 // lumen itself implements from scratch.
 //
-// islamic-umalqura is NOT ported: lumen backs it with a generated data table
-// (`crates/lumen/src/umalqura.rs`) that is out of scope for this port. It is
-// approximated by the tabular islamic-civil algorithm instead (documented at
-// its one call site below) -- a real port of that table is left for a
-// follow-up.
+// Umm al-Qura's year-start and month-length tables are ported separately in
+// builtins_temporal_umalqura.rs; outside their AH1300–1600 coverage the
+// calendar uses the tabular civil fallback, matching the upstream behavior.
+
+mod std_calendar_umalqura { include!("builtins_temporal_umalqura.rs"); }
 
 /// The calendar identifiers Temporal accepts (BCP-47 `ca` values), canonical
 /// spelling. `check_calendar`'s CLDR aliases below map onto this list.
@@ -213,7 +213,7 @@ fn std_calendar_to_13month(year: i64, month: i64, day: i64, epoch: i64) -> (i64,
 
 // ===== Tabular Islamic (islamic-civil / islamic-tbla) ==========================================
 // epoch_days of AH 1-01-01: civil = Julian 622-07-16, astronomical (tbla) = 622-07-15.
-// islamic-umalqura is approximated by the civil algorithm (no upstream data table ported yet).
+// Umm al-Qura uses its observational calendar tables within their coverage.
 const STD_CALENDAR_ISLAMIC_EPOCH: i64 = -492148;
 fn std_calendar_is_islamic(cal: &str) -> bool { cal.starts_with("islamic") }
 fn std_calendar_islamic_epoch(cal: &str) -> i64 {
@@ -242,16 +242,54 @@ fn std_calendar_to_islamic(y: i64, m: i64, d: i64, epoch: i64) -> (i64, i64, i64
     let fixed = epoch + (y - 1) * 354 + (3 + 11 * y).div_euclid(30) + (m - 1) * 29 + m.div_euclid(2) + (d - 1);
     std_temporal_civil_from_epoch_day(fixed)
 }
-/// Calendar-aware Islamic conversions: islamic-umalqura falls back to the
-/// tabular civil algorithm (see the file header note).
+fn std_calendar_umalqura_index(year: i64) -> Option<usize> {
+    if (std_calendar_umalqura::YEAR_START as i64..=std_calendar_umalqura::YEAR_END as i64).contains(&year) {
+        Some((year - std_calendar_umalqura::YEAR_START as i64) as usize)
+    } else { None }
+}
+fn std_calendar_umalqura_month_len(index: usize, month: i64) -> i64 {
+    29 + ((std_calendar_umalqura::MONTH_LENGTHS[index] >> (12 - month)) & 1) as i64
+}
+/// Calendar-aware Islamic conversions. The Umm al-Qura table's end limit
+/// includes every day of its final year; outside the table use civil math.
 fn std_calendar_islamic_from_iso(cal: &str, year: i64, month: i64, day: i64) -> (i64, i64, i64) {
+    if cal == "islamic-umalqura" {
+        let since_origin = std_temporal_epoch_day(year, month, day) - std_calendar_umalqura::EPOCH_OFFSET;
+        let starts = &std_calendar_umalqura::YEAR_STARTS;
+        let end = starts[starts.len() - 1]
+            + 348 + std_calendar_umalqura::MONTH_LENGTHS[starts.len() - 1].count_ones() as i64;
+        if since_origin >= starts[0] && since_origin < end {
+            let index = starts.partition_point(|start| *start <= since_origin) - 1;
+            let mut remaining = since_origin - starts[index];
+            let mut native_month = 1;
+            while native_month < 12 {
+                let length = std_calendar_umalqura_month_len(index, native_month);
+                if remaining < length { break; }
+                remaining -= length;
+                native_month += 1;
+            }
+            return (std_calendar_umalqura::YEAR_START as i64 + index as i64, native_month, remaining + 1);
+        }
+    }
     std_calendar_from_islamic(year, month, day, std_calendar_islamic_epoch(cal))
 }
 fn std_calendar_islamic_to_iso(cal: &str, y: i64, m: i64, d: i64) -> (i64, i64, i64) {
+    if cal == "islamic-umalqura" && (1..=12).contains(&m) {
+        if let Some(index) = std_calendar_umalqura_index(y) {
+            let preceding: i64 = (1..m).map(|month| std_calendar_umalqura_month_len(index, month)).sum();
+            let epoch = std_calendar_umalqura::EPOCH_OFFSET + std_calendar_umalqura::YEAR_STARTS[index]
+                + preceding + d - 1;
+            return std_temporal_civil_from_epoch_day(epoch);
+        }
+    }
     std_calendar_to_islamic(y, m, d, std_calendar_islamic_epoch(cal))
 }
 fn std_calendar_islamic_month_len_for(cal: &str, y: i64, m: i64) -> i64 {
-    let _ = cal;
+    if cal == "islamic-umalqura" && (1..=12).contains(&m) {
+        if let Some(index) = std_calendar_umalqura_index(y) {
+            return std_calendar_umalqura_month_len(index, m);
+        }
+    }
     std_calendar_islamic_month_len(m, std_calendar_islamic_leap(y))
 }
 
@@ -754,8 +792,8 @@ fn std_calendar_fields(cal: &str, year: i64, month: i64, day: i64) -> (i64, i64,
         let (y, m, d) = std_calendar_islamic_from_iso(cal, year, month, day);
         let dim = std_calendar_islamic_month_len_for(cal, y, m);
         let doy = (1..m).map(|mm| std_calendar_islamic_month_len_for(cal, y, mm)).sum::<i64>() + d;
-        let leap = std_calendar_islamic_leap(y);
-        (y, m, d, dim, 12, doy, if leap { 355 } else { 354 }, leap)
+        let year_len = (1..=12).map(|month| std_calendar_islamic_month_len_for(cal, y, month)).sum::<i64>();
+        (y, m, d, dim, 12, doy, year_len, year_len == 355)
     } else if cal == "indian" {
         let (y, m, d) = std_calendar_from_indian(year, month, day);
         let leap = std_temporal_leap(y + 78);
