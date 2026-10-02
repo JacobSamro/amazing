@@ -5,7 +5,7 @@
 // onto Amazing's existing method factory and property/function representation.
 
 impl Interpreter {
-    fn resolve_super_target(
+    fn resolve_member_target(
         &mut self,
         target: &ast::Expr,
         env: &EnvHandle,
@@ -14,8 +14,7 @@ impl Interpreter {
         while let ExprKind::Paren(inner) = &target.kind {
             target = inner;
         }
-        if !matches!(&target.kind, ExprKind::Member { obj, .. } if matches!(obj.kind, ExprKind::Super))
-        {
+        if !matches!(&target.kind, ExprKind::Member { .. }) {
             return Ok(None);
         }
         match self.eval_chain_reference(target, env)? {
@@ -23,9 +22,16 @@ impl Interpreter {
                 base,
                 receiver,
                 key,
-                ..
-            } => Ok(Some(Reference::SuperProperty(base, key, receiver))),
-            _ => unreachable!("super property reference"),
+                super_reference,
+            } => Ok(Some(if super_reference {
+                Reference::SuperProperty(base, key, receiver)
+            } else {
+                Reference::Property(base, key)
+            })),
+            ChainEvaluation::Private { receiver, name } => {
+                Ok(Some(Reference::Private(receiver, name)))
+            }
+            _ => unreachable!("member reference"),
         }
     }
 
@@ -120,10 +126,39 @@ mod object_method_tests {
                 var direct=detached.call(receiver),generator=o.g().next().value;
                 Object.setPrototypeOf(o,{m(){return this.marker+1;}});
                 before===7 && writeOnly && o.marker===11 && direct===9 && generator===11 && lexical()===12;
-            "#, backend).unwrap();
+            "#, backend).unwrap_or_else(|error| panic!("{backend:?}: {}", error.describe()));
             i.drain_microtasks().unwrap();
             assert_eq!(result, JsValue::Bool(true), "{backend:?}");
             assert_eq!(i.run_script("asyncValue").unwrap(), JsValue::num(11.0));
+        }
+    }
+
+    #[test]
+    fn resumed_methods_restore_home_receiver_and_strictness_after_yield_or_await() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let result = i
+                .run_script_with_backend(
+                    r#"
+                var parent={m(){return this.marker;}};
+                var o={__proto__:parent,marker:17,
+                    *g(){'use strict';yield 1;return ()=>super.m();},
+                    async a(){await Promise.resolve();return super.m();}};
+                var iterator=o.g();iterator.next();
+                var arrow=iterator.next().value, asyncValue;
+                o.a().then(v=>asyncValue=v);
+                var after=function(){return this;};
+                var seenTarget,C=class{constructor(){this.p=(async()=>{await Promise.resolve();return new.target;})();}};
+                new C().p.then(v=>seenTarget=v);
+                arrow()===17 && after()===globalThis;
+            "#,
+                    backend,
+                )
+                .unwrap_or_else(|error| panic!("{backend:?}: {}", error.describe()));
+            i.drain_microtasks().unwrap();
+            assert_eq!(result, JsValue::Bool(true), "{backend:?}");
+            assert_eq!(i.run_script("asyncValue").unwrap(), JsValue::num(17.0));
+            assert_eq!(i.run_script("seenTarget===C").unwrap(), JsValue::Bool(true));
         }
     }
 

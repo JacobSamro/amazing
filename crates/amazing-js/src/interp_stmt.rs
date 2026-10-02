@@ -1515,7 +1515,7 @@ impl Interpreter {
         let (reference, old) = if op == ast::AssignOp::Assign {
             if let Some(name) = event_handler::identifier_name(t) {
                 (self.name_reference(e, name)?, JsValue::Undefined)
-            } else if let Some(reference) = self.resolve_super_target(t, e)? {
+            } else if let Some(reference) = self.resolve_member_target(t, e)? {
                 (reference, JsValue::Undefined)
             } else { self.resolve_reference(t, e)? }
         } else { self.resolve_reference(t, e)? };
@@ -1679,9 +1679,13 @@ impl Interpreter {
         target: &ast::Expr,
         env: &EnvHandle,
     ) -> Result<(Reference, JsValue), Throw> {
-        if let Some(reference) = self.resolve_super_target(target, env)? {
-            let Reference::SuperProperty(base, key, receiver) = &reference else { unreachable!() };
-            let value = self.get_prop_receiver(base, key, receiver.clone())?;
+        if let Some(reference) = self.resolve_member_target(target, env)? {
+            let value = match &reference {
+                Reference::SuperProperty(base, key, receiver) => self.get_prop_receiver(base, key, receiver.clone())?,
+                Reference::Property(base, key) => self.get_prop(base, key)?,
+                Reference::Private(base, name) => private_field_get(self, base, name)?,
+                Reference::Binding(_) => unreachable!(),
+            };
             return Ok((reference, value));
         }
         match &target.kind {
@@ -1827,7 +1831,7 @@ impl Interpreter {
     fn assign_target(&mut self, t: &ast::Expr, v: JsValue, e: &EnvHandle) -> Result<(), Throw> {
         let reference = if let Some(name) = event_handler::identifier_name(t) {
             self.name_reference(e, name)?
-        } else if let Some(reference) = self.resolve_super_target(t, e)? { reference }
+        } else if let Some(reference) = self.resolve_member_target(t, e)? { reference }
         else { self.resolve_reference(t, e)?.0 };
         self.put_reference(reference, v, e)
     }

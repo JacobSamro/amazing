@@ -159,6 +159,7 @@ pub struct HostResponse {
     pub headers: Vec<(String, String)>,
 }
 
+#[derive(Clone)]
 struct CallFrame {
     this: JsValue,
     home: Option<Obj>,

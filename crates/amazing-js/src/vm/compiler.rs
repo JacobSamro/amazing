@@ -1426,6 +1426,13 @@ impl Compiler {
                     self.program.references += 1;
                     self.emit(Instruction::ResolvePrivateWrite(slot, object, name.name.clone()));
                     slot
+                } else if let Some((obj, prop)) = public_member_target(target) {
+                    let object = self.expression(obj)?;
+                    let key = self.member_key(object, prop, true)?;
+                    let slot = self.program.references;
+                    self.program.references += 1;
+                    self.emit(Instruction::ResolveMemberWrite(slot, object, key));
+                    slot
                 } else { self.reference(target)?.0 };
                 let value = if let Some(name) = super::super::event_handler::identifier_name(target) {
                     self.named_class_expression(value, KeyOperand::Static(name.into()))?
@@ -1626,6 +1633,14 @@ fn unsupported_statement(kind: &StmtKind) -> &'static str {
         StmtKind::Labeled { .. } => "labeled statement",
         StmtKind::Class(_) => "class",
         _ => "statement kind",
+    }
+}
+
+fn public_member_target(mut target: &Expr) -> Option<(&Expr, &ast::MemberProp)> {
+    while let ExprKind::Paren(inner) = &target.kind { target = inner; }
+    match &target.kind {
+        ExprKind::Member { obj, prop, optional: false } if !matches!(prop, ast::MemberProp::Private(_)) => Some((obj, prop)),
+        _ => None,
     }
 }
 

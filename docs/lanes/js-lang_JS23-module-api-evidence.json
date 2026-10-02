@@ -39,5 +39,15 @@
     "Ambiguous star exports must be omitted from namespaces",
     "Dynamic Function/eval source locator propagation"
   ],
-  "language_gate": "Fresh whole-language before/after underway on fixed7e3 dependency; no final language zero-loss claim in this checkpoint"
+  "language_gate": "Shared JS23 final whole-language gate: +82files/+160variants, zero losses/timeouts, with full evidence in js-lang_JS23-evidence.json.",
+  "subsequent_authoritative_root_gate": {
+    "baseline_passing_pages": 35,
+    "baseline_passing_subtests": 110,
+    "passing_pages": 34,
+    "passing_subtests": 109,
+    "lost_pages": 1,
+    "lost_subtests": 1,
+    "case": "instantiation-error-4.html",
+    "diagnosis": "Nondeterministic root-link error choice/propagated failure identity, queued JS24. No deadline waiver; root holds module pushes."
+  }
 }
