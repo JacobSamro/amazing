@@ -299,7 +299,7 @@ pub fn compute_with_environment(
     author_sheets: &[Stylesheet],
     environment: &MediaEnvironment,
 ) -> StyledDom {
-    compute_with_optional_animations(dom, author_sheets, None, environment)
+    compute_with_optional_animations(dom, author_sheets, None, environment, None)
 }
 
 /// Computes the document with compositor samples in the animation and
@@ -309,7 +309,7 @@ pub fn compute_with_animations(
     author_sheets: &[Stylesheet],
     animated: &AnimatedValues,
 ) -> StyledDom {
-    compute_with_optional_animations(dom, author_sheets, Some(animated), &MediaEnvironment::default())
+    compute_with_optional_animations(dom, author_sheets, Some(animated), &MediaEnvironment::default(), None)
 }
 
 pub fn compute_with_animations_and_environment(
@@ -318,7 +318,17 @@ pub fn compute_with_animations_and_environment(
     animated: &AnimatedValues,
     environment: &MediaEnvironment,
 ) -> StyledDom {
-    compute_with_optional_animations(dom, author_sheets, Some(animated), environment)
+    compute_with_optional_animations(dom, author_sheets, Some(animated), environment, None)
+}
+
+/// Compute with actual first-font metrics before elements and pseudos inherit.
+/// Animation samples share this context; inherited numeric aspects stay fixed
+/// even when a descendant selects a different font family.
+pub fn compute_with_font_metrics(
+    dom: &Dom, author_sheets: &[Stylesheet], environment: &MediaEnvironment,
+    animated: Option<&AnimatedValues>, context: &dyn crate::font_metric_context::FontMetricContext,
+) -> StyledDom {
+    compute_with_optional_animations(dom, author_sheets, animated, environment, Some(context))
 }
 
 fn compute_with_optional_animations(
@@ -326,6 +336,7 @@ fn compute_with_optional_animations(
     author_sheets: &[Stylesheet],
     animated: Option<&AnimatedValues>,
     environment: &MediaEnvironment,
+    font_metrics: Option<&dyn crate::font_metric_context::FontMetricContext>,
 ) -> StyledDom {
     // Compile UA + author rules up front; invalid selectors drop their rule.
     let ua_rules = compile_sheets(&[parse_stylesheet(UA_SHEET)], true, environment);
@@ -350,6 +361,7 @@ fn compute_with_optional_animations(
         &pseudo_targets,
         animated,
         environment,
+        font_metrics,
         &mut out,
     );
     crate::generated::resolve_document(dom, &mut out, author_sheets, environment);
@@ -367,10 +379,11 @@ fn style_subtree(
     pseudo_targets: &[bool; 5],
     animated: Option<&AnimatedValues>,
     environment: &MediaEnvironment,
+    font_metrics: Option<&dyn crate::font_metric_context::FontMetricContext>,
     out: &mut StyledDom,
 ) {
     if dom.name(node).is_some() {
-        let (style, sources) = compute_one(
+        let (mut style, sources) = compute_one(
             dom,
             node,
             parent_style,
@@ -382,6 +395,7 @@ fn style_subtree(
             animated,
             environment,
         );
+        crate::font_metric_context::resolve(&mut style, node, None, font_metrics);
         let descendant_root_font_px = if dom.name(node) == Some("html") {
             style
                 .get("font-size")
@@ -406,7 +420,7 @@ fn style_subtree(
             if matches!(pseudo, PseudoElement::FirstLine | PseudoElement::FirstLetter) && !matched {
                 continue;
             }
-            let (pseudo_style, _) = compute_one(
+            let (mut pseudo_style, _) = compute_one(
                 dom,
                 node,
                 Some(&style),
@@ -418,6 +432,7 @@ fn style_subtree(
                 None,
                 environment,
             );
+            crate::font_metric_context::resolve(&mut pseudo_style, node, Some(pseudo), font_metrics);
             let has_content =
                 !matches!(pseudo_style.get("content"), None | Some("normal" | "none"));
             let visible = style.get("display") != Some("none");
@@ -446,6 +461,7 @@ fn style_subtree(
                 pseudo_targets,
                 animated,
                 environment,
+                font_metrics,
                 out,
             );
         }
@@ -466,6 +482,7 @@ fn style_subtree(
                 pseudo_targets,
                 animated,
                 environment,
+                font_metrics,
                 out,
             );
         }
@@ -482,7 +499,7 @@ use context::{CompiledRule, compile_sheets};
 
 #[path = "cascade_invalidation.rs"]
 mod invalidation;
-pub use invalidation::{recompute_roots, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch};
+pub use invalidation::{recompute_roots, recompute_roots_with_font_metrics, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch};
 
 #[path = "presentational_hints.rs"]
 mod hints;

@@ -73,6 +73,7 @@ enum CustomValue {
 /// preserve their case-sensitive names for inheritance and `var()` lookup.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ComputedStyle {
+    pub(crate) font_size_adjust_inherited: bool,
     pub(crate) display_before_blockification: Option<String>,
     pub(crate) contents_parent_display: Option<String>,
     props: BTreeMap<String, String>,
@@ -88,6 +89,7 @@ pub struct ComputedStyle {
 impl Default for ComputedStyle {
     fn default() -> Self {
         Self {
+            font_size_adjust_inherited: false,
             display_before_blockification: None,
             contents_parent_display: None,
             props: BTreeMap::new(),
@@ -324,6 +326,7 @@ impl ComputedStyle {
             self.author_specified.remove(&longhand);
             self.relative_colors.remove(&longhand);
             self.url_bases.remove(&longhand);
+            if longhand == "font-size-adjust" { self.font_size_adjust_inherited = false; }
             self.props.insert(longhand, expanded);
         }
         if property.starts_with("font-variant") || property == "font" { crate::font_variant::serialize(&mut self.props); }
@@ -2684,6 +2687,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
     let mut properties = BTreeMap::new();
     let mut inherited_typed = BTreeMap::new();
     let mut relative_colors = BTreeMap::new();
+    let mut font_size_adjust_inherited = false;
     for property in PROPERTIES {
         let parent_value = parent.and_then(|style| style.get(property.name));
         let specified = cascaded.remove(property.name);
@@ -2699,6 +2703,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
                 environment,
             ),
         };
+        if property.name == "font-size-adjust" { font_size_adjust_inherited = inherits && parent.is_some(); }
         if relative_color_uses_currentcolor(&value) || color_mix_currentcolor(&value) {
             relative_colors.insert(property.name.to_owned(), value.clone());
         } else if (specified.as_deref().is_some_and(|value| matches!(css_wide_keyword(value), Some(CssWide::Inherit | CssWide::Unset))) ||
@@ -2738,6 +2743,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
     drop(resolver);
     inherited_custom.extend(resolved_local);
     let mut style = ComputedStyle {
+        font_size_adjust_inherited,
         display_before_blockification: None,
         contents_parent_display: None,
         props: properties,

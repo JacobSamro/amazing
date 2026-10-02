@@ -206,7 +206,7 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "unicode-bidi" |
         "vertical-align" |
         "white-space-collapse" | "white-space-trim" | "text-wrap" | "text-wrap-mode" | "text-wrap-style" |
-        "text-autospace" | "text-spacing" | "text-spacing-trim" | "hyphens" | "hanging-punctuation" |
+        "text-autospace" | "text-spacing" | "text-spacing-trim" | "hanging-punctuation" |
         "wrap-before" | "wrap-after" | "wrap-inside" | "word-space-transform" | "text-justify" | "text-group-align" |
         "white-space" |
         "widows" |

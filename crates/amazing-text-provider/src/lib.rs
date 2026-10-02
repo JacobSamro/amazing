@@ -517,6 +517,14 @@ impl TextProvider {
         Ok(None)
     }
 
+    /// Physical first-available-font aspect ratio for CSS font-size-adjust.
+    /// This ignores paragraph orientation and returns None without an actual
+    /// selected font. Missing metric/glyph fallbacks follow CSS Fonts.
+    pub fn font_size_adjust_ratio(&self, style: &TextStyle, metric: FontSizeAdjustMetric) -> Option<f32> {
+        let index = self.matching_font_with_space_policy(style, Some(" "), true)?;
+        font_relative_metrics::aspect_ratio(&self.fonts[index], style, metric)
+    }
+
     pub fn font_face_registrations(&self) -> &[FontFaceRegistration] {
         &self.face_rules
     }
@@ -607,17 +615,7 @@ impl TextSystem for TextProvider {
         if aspect == 0.0 {
             return 0.0;
         }
-        let Some(index) = self.matching_font_with_space_policy(style, Some(" "), true) else {
-            return style.size;
-        };
-        let relative = font_relative_metrics::for_font(&self.fonts[index], style);
-        let metric_px = match metric {
-            FontSizeAdjustMetric::ExHeight => relative.x_height,
-            FontSizeAdjustMetric::CapHeight => relative.cap_height,
-            FontSizeAdjustMetric::ChWidth => relative.ch_advance,
-            FontSizeAdjustMetric::IcWidth | FontSizeAdjustMetric::IcHeight => relative.ic_advance,
-        };
-        let ratio = metric_px / style.size;
+        let Some(ratio) = self.font_size_adjust_ratio(style, metric) else { return style.size; };
         if ratio.is_finite() && ratio > 0.0 {
             style.size * aspect / ratio
         } else {

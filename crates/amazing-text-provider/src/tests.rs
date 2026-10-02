@@ -214,7 +214,7 @@ fn synthetic_font_with_metrics_and_color(
 /// glyphs: `lower` to glyph 1, `upper` to glyph 2. Exercises the
 /// small-caps synthesis substitution path end to end through real cmap
 /// bytes, the way the rest of this file's synthetic fonts exercise GSUB.
-fn synthetic_font_with_case_pair(lower: char, upper: char) -> Vec<u8> {
+pub(super) fn synthetic_font_with_case_pair(lower: char, upper: char) -> Vec<u8> {
     let one_glyph = |x_max: u16, y_max: u16| {
         let mut glyph = vec![0u8; 10];
         glyph[0..2].copy_from_slice(&be16(1));

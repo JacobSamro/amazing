@@ -856,6 +856,16 @@ fn collect_compound(compound: &Compound, effect: InvalidationSet, index: &mut Fe
 /// Recompute only coalesced roots and their inherited-style descendants.
 /// Unknown dependencies or a stylesheet epoch change use the full oracle path.
 pub fn recompute_roots(dom: &Dom, old_styles: &StyledDom, roots: RecalcRoots) -> StyleDelta {
+    recompute_roots_with_optional_font_metrics(dom, old_styles, roots, None)
+}
+
+/// Incremental counterpart of `compute_with_font_metrics`, resolving every
+/// recalculated root/pseudo before inheriting into its affected descendants.
+pub fn recompute_roots_with_font_metrics(dom: &Dom, old_styles: &StyledDom, roots: RecalcRoots, context: &dyn crate::font_metric_context::FontMetricContext) -> StyleDelta {
+    recompute_roots_with_optional_font_metrics(dom, old_styles, roots, Some(context))
+}
+
+fn recompute_roots_with_optional_font_metrics(dom: &Dom, old_styles: &StyledDom, roots: RecalcRoots, font_metrics: Option<&dyn crate::font_metric_context::FontMetricContext>) -> StyleDelta {
     let full = roots.full || roots.stylesheet_epoch != roots.context.epoch;
     let mut work: BTreeSet<NodeIdx> = roots.roots.into_iter().collect();
     if !full {
@@ -899,7 +909,10 @@ pub fn recompute_roots(dom: &Dom, old_styles: &StyledDom, roots: RecalcRoots) ->
         }
     }
     let (styles, recalculated) = if full {
-        let styles = compute_with_environment(dom, &roots.context.author_sheets, &roots.environment);
+        let styles = match font_metrics {
+            Some(context) => compute_with_font_metrics(dom, &roots.context.author_sheets, &roots.environment, None, context),
+            None => compute_with_environment(dom, &roots.context.author_sheets, &roots.environment),
+        };
         let mut nodes: Vec<_> = styles.styles.keys().copied().map(NodeIdx).collect();
         nodes.sort();
         (styles, nodes)
@@ -955,6 +968,7 @@ pub fn recompute_roots(dom: &Dom, old_styles: &StyledDom, roots: RecalcRoots) ->
                 &pseudo_targets,
                 None,
                 &roots.environment,
+                font_metrics,
                 &mut out,
             );
         }
