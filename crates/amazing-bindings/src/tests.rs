@@ -2074,6 +2074,36 @@ fn node_base_uri_uses_first_document_base_and_document_url_fallback() {
 }
 
 #[test]
+fn hyperlink_components_reinitialize_and_write_back_live_href() {
+    let mut h = Host::default();
+    let root = h.dom.create_element(NodeIdx(0), "div");
+    for tag in ["a", "area"] {
+        let link = h.dom.create_element(root, tag);
+        assert_eq!(call(&mut h, O::HyperlinkProtocol, V::Node(link), &[]), str_value(":"));
+        call(&mut h, O::HyperlinkSetSearch, V::Node(link), &[str_value("?ignored")]);
+        assert!(h.dom.attribute_utf16(link, "href").is_none());
+        call(&mut h, O::ElementSetHref, V::Node(link), &[str_value("https://user:secret@example.test:8443/path?old#mark")]);
+        for (op, expected) in [(O::HyperlinkOrigin, "https://example.test:8443"),
+            (O::HyperlinkProtocol, "https:"), (O::HyperlinkUsername, "user"),
+            (O::HyperlinkPassword, "secret"), (O::HyperlinkHost, "example.test:8443"),
+            (O::HyperlinkHostname, "example.test"), (O::HyperlinkPort, "8443"),
+            (O::HyperlinkPathname, "/path"), (O::HyperlinkSearch, "?old"),
+            (O::HyperlinkHash, "#mark")] {
+            assert_eq!(call(&mut h, op, V::Node(link), &[]), str_value(expected));
+        }
+        call(&mut h, O::HyperlinkSetSearch, V::Node(link), &[str_value("?€#")]);
+        assert_eq!(call(&mut h, O::HyperlinkSearch, V::Node(link), &[]), str_value("?%E2%82%AC%23"));
+        assert_eq!(call(&mut h, O::HyperlinkHash, V::Node(link), &[]), str_value("#mark"));
+        call(&mut h, O::HyperlinkSetHash, V::Node(link), &[str_value("#")]);
+        assert_eq!(call(&mut h, O::HyperlinkHash, V::Node(link), &[]), str_value(""));
+        call(&mut h, O::HyperlinkSetSearch, V::Node(link), &[str_value("?")]);
+        assert_eq!(call(&mut h, O::HyperlinkSearch, V::Node(link), &[]), str_value(""));
+        assert!(h.dom.attribute_utf16(link, "href").unwrap().ends_with(&[63, 35]));
+    }
+    assert!(invoke(&mut h, O::HyperlinkSearch, V::Node(root), &[]).is_err());
+}
+
+#[test]
 fn element_specific_reflection_handles_urls_enums_numbers_and_rel_list() {
     let mut h = Host::default();
     let root = h.dom.create_element(NodeIdx(0), "div");

@@ -2042,6 +2042,9 @@ impl UrlReflection for RuntimeBindingHost<'_> {
     fn resolve_url(&mut self, input: &[u16]) -> Result<Vec<u16>, Throw> {
         Ok(self.dom_resolve_reflected_url(input))
     }
+    fn resolve_element_url(&mut self, element: NodeIdx, input: &[u16]) -> Result<Vec<u16>, Throw> {
+        self.dom_resolve_element_url(element, input)
+    }
 }
 
 // Keep the three JSRT-3 facade calls in one place. Native callbacks must use
