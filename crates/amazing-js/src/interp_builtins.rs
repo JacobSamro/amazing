@@ -1,3 +1,7 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/promise/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT:
+// JSRT-30 optional result-capability completion in Promise reaction jobs.
+
 fn native_object(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     if let (Some(new_target), Some(active)) = (i.current_new_target(), i.native_stack.last()) {
         let is_object_constructor = active.borrow().func.as_ref().is_some_and(|function|
@@ -1537,14 +1541,23 @@ fn run_promise_reaction(reaction: PendingReaction, fate: PromiseFate, i: &mut In
         (None, PromiseFate::Rejected(value)) => PromiseFate::Rejected(value),
         (_, PromiseFate::Pending) => PromiseFate::Pending,
     };
-    if matches!(reaction.capability.borrow().exotic, Exotic::Promise(_)) {
+    let Some(capability) = reaction.capability else {
+        // Internal await handlers resume their suspended body and have no
+        // chained promise to resolve. Surface an unexpected host abrupt
+        // completion instead of creating or settling an observable promise.
+        return match result {
+            PromiseFate::Rejected(value) => Err(Throw(value)),
+            _ => Ok(()),
+        };
+    };
+    if matches!(capability.borrow().exotic, Exotic::Promise(_)) {
       if let PromiseFate::Fulfilled(value) = &result {
-        if adopt_promise_result(&reaction.capability, value, i)? {
+        if adopt_promise_result(&capability, value, i)? {
             return Ok(());
         }
       }
     }
-    settle_promise(&reaction.capability, result, i)
+    settle_promise(&capability, result, i)
 }
 
 fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) -> Result<bool, Throw> {
@@ -1569,12 +1582,12 @@ fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) 
             if let Exotic::Promise(state) = &mut object.exotic {
                 state.fulfill_reactions.push(PendingReaction {
                     handler: None,
-                    capability: capability.clone(),
+                    capability: Some(capability.clone()),
                     is_reject_handler: false,
                 });
                 state.reject_reactions.push(PendingReaction {
                     handler: None,
-                    capability: capability.clone(),
+                    capability: Some(capability.clone()),
                     is_reject_handler: true,
                 });
             }
@@ -1582,7 +1595,7 @@ fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) 
         PromiseFate::Fulfilled(value) => i.enqueue_promise_job(PromiseJob {
             reaction: PendingReaction {
                 handler: None,
-                capability: capability.clone(),
+                capability: Some(capability.clone()),
                 is_reject_handler: false,
             },
             fate: PromiseFate::Fulfilled(value),
@@ -1590,7 +1603,7 @@ fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) 
         PromiseFate::Rejected(value) => i.enqueue_promise_job(PromiseJob {
             reaction: PendingReaction {
                 handler: None,
-                capability: capability.clone(),
+                capability: Some(capability.clone()),
                 is_reject_handler: true,
             },
             fate: PromiseFate::Rejected(value),
@@ -1607,48 +1620,7 @@ fn native_promise_then(
     let promise = promise_object(&this)?;
     let constructor = promise_species_constructor(i, &this)?;
     let result = new_promise_capability(i, &constructor)?;
-    let fulfilled = args.get(0).filter(|value| callable_function(value).is_some()).cloned();
-    let rejected = args.get(1).filter(|value| callable_function(value).is_some()).cloned();
-    let state = {
-        let mut object = promise.borrow_mut();
-        let state = match &mut object.exotic {
-            Exotic::Promise(state) => state,
-            _ => unreachable!(),
-        };
-        match &state.state {
-            PromiseFate::Pending => {
-                state.fulfill_reactions.push(PendingReaction {
-                    handler: fulfilled.clone(),
-                    capability: result.clone(),
-                    is_reject_handler: false,
-                });
-                state.reject_reactions.push(PendingReaction {
-                    handler: rejected.clone(),
-                    capability: result.clone(),
-                    is_reject_handler: true,
-                });
-                None
-            }
-            PromiseFate::Fulfilled(value) => Some(PromiseFate::Fulfilled(value.clone())),
-            PromiseFate::Rejected(value) => Some(PromiseFate::Rejected(value.clone())),
-        }
-    };
-    if let Some(fate) = state {
-        let reaction = if matches!(fate, PromiseFate::Fulfilled(_)) {
-            PendingReaction {
-                handler: fulfilled.clone(),
-                capability: result.clone(),
-                is_reject_handler: false,
-            }
-        } else {
-            PendingReaction {
-                handler: rejected.clone(),
-                capability: result.clone(),
-                is_reject_handler: true,
-            }
-        };
-        i.enqueue_promise_job(PromiseJob { reaction, fate })?;
-    }
+    perform_promise_then(i, &promise, args.first().cloned(), args.get(1).cloned(), Some(result.clone()))?;
     Ok(capability_promise(&result))
 }
 

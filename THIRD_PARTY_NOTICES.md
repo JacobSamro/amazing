@@ -22,6 +22,7 @@ the table, once per license.
 | [boa-dev/boa](https://github.com/boa-dev/boa) (`core/engine/src/builtins/promise/mod.rs`) | `39cd11214ecb366200157dab96b3919e61e9a391` | MIT | Copyright (c) 2019 Jason Williams | `crates/amazing-js/src/interp_promise_capability.rs` (JSRT-27: Promise capability construction and resolution) |
 | [boa-dev/boa](https://github.com/boa-dev/boa) (`core/engine/src/builtins/promise/mod.rs`) | `39cd11214ecb366200157dab96b3919e61e9a391` | MIT | Copyright (c) 2019 Jason Williams | `crates/amazing-js/src/interp_promise_resolution.rs` (JSRT-28: resolving functions and thenable jobs) |
 | [lucid-softworks/lumen](https://github.com/lucid-softworks/lumen) (`crates/lumen/src/interpreter.rs`) | `f6c9860d44fa52249cfd647122edea184d32c863` | MIT | Copyright (c) 2026 Lucid Softworks limited | `crates/amazing-js/src/interp_function_environments.rs` (JSRT-29: ContainsExpression and parameter/body environment separation) |
+| [boa-dev/boa](https://github.com/boa-dev/boa) (`core/engine/src/builtins/promise/mod.rs`) | `39cd11214ecb366200157dab96b3919e61e9a391` | MIT | Copyright (c) 2019 Jason Williams | `crates/amazing-js/src/interp_promise_reactions.rs`, `crates/amazing-js/src/interp_builtins.rs` (JSRT-30: internal PerformPromiseThen and optional reaction capability) |
 
 ## MIT License
 

@@ -855,8 +855,8 @@ fn thread_async_function_step(
             let awaited = vm::async_resolve_value(i, value);
             let fulfilled = thread_async_callback(i, state.clone(), false);
             let rejected = thread_async_callback(i, state, true);
-            let then = i.get_prop(&awaited, "then")?;
-            i.call_value(&then, awaited, vec![fulfilled, rejected])?;
+            let promise = promise_object(&awaited)?;
+            perform_promise_then(i, &promise, Some(fulfilled), Some(rejected), None)?;
             Ok(())
         }
         Suspend::Done(value) => vm::async_complete(i, &target, value),
@@ -1133,6 +1133,23 @@ mod thread_generator_tests {
         let mut i = Interpreter::new();
         let err = i.run_script("function* g() {} new g();").unwrap_err();
         assert!(matches!(err.0, JsValue::Object(_)));
+    }
+
+    #[test]
+    fn ast_await_uses_internal_promise_reactions() {
+        for source in [
+            "var result=0,reads=0;var p=Promise.resolve(7);Object.defineProperty(p,'then',{get(){reads++;throw 99}});async function f(){with({}){} return await p} f().then(v=>result=v);",
+            "var result=0,reads=0,resolve;var p=new Promise(r=>resolve=r);Object.defineProperty(p,'then',{get(){reads++;throw 99}});async function f(){with({}){} return await p} f().then(v=>result=v);resolve(7);",
+            "var result=0,reads=0;var p=Promise.reject(7);Object.defineProperty(p,'then',{get(){reads++;throw 99}});async function f(){with({}){} try{await p}catch(v){return v}} f().then(v=>result=v);",
+            "var result=0,reads=0;var p=Promise.resolve(7);Object.defineProperty(Promise,Symbol.species,{get(){reads++;throw 99}});async function f(){with({}){} result=await p} f();",
+        ] {
+            let mut i = Interpreter::new();
+            // Async function bodies are independently compiled even for a
+            // TreeWalk script; with forces the coroutine-owned consumer.
+            i.run_script_with_backend(source, ExecutionBackend::TreeWalk).unwrap();
+            i.drain_microtasks().unwrap();
+            assert_eq!(i.run_script("result===7 && reads===0").unwrap(), JsValue::Bool(true), "{source}");
+        }
     }
 
     #[test]
