@@ -3065,6 +3065,14 @@ then candidate workspace nextest/doctests + full same corpus with zero-loss
 comparison. All runs use Boat after user steering; the preliminary k-test build
 was cancelled before tests and is not evidence.
 
+Completed on source `20b74057`: Boat native checkout/target workspace nextest
+3520 passed/17 skipped, doctests4/4. Full314-file dom/nodes corpus11385->12028
+passing assertions,1593->951 failing,643 gained/zero lost. Of these642 come
+from iframe defaultView association (createElementNS+220,querySelectorAll+284,
+matches+69,webkitMatchesSelector+69); one XHR assertion recovery is not credited
+to this fix. Evidence `amazing-bindings/evidence/iframe-default-view/`. Earlier
+HOME-FUSE missingrlib/SIGBUS attempts are excluded from proof.
+
 ### HTML-requested namespace attribute dump fidelity
 
 The HTML lane measured ten foreign-content mismatches whose expanded attributes
