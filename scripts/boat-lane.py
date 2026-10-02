@@ -36,6 +36,7 @@ from pathlib import Path
 
 BOAT = os.path.expanduser("~/.ascii/bin/boat")
 TEMPLATE = os.environ.get("BOAT_TEMPLATE", "amazing-builder")
+RUN_TTL_SECONDS = "7200"
 REPO = Path(__file__).resolve().parent.parent
 MAIN = Path(
     subprocess.run(
@@ -145,7 +146,7 @@ def _name_of(sid: str) -> str:
 
 def _boat(*args: str, timeout: int = 180) -> dict:
     out = subprocess.run(
-        [BOAT, *args, "--json"], capture_output=True, text=True, timeout=timeout
+        [BOAT, "--no-update", *args, "--json"], capture_output=True, text=True, timeout=timeout
     ).stdout
     rows = [json.loads(l) for l in out.splitlines() if l.startswith("{")]
     for row in rows:
@@ -227,7 +228,7 @@ def heal(lane: str) -> dict:
         return d
     print(f"boat-lane: {sid} filesystem broken (lazyfs); restarting it", file=sys.stderr)
     boat("stop", sid, timeout=240)
-    boat("resume", sid, "--no-auto-stop", "--type", type_of(lane), timeout=300)
+    boat("resume", sid, "--ttl", RUN_TTL_SECONDS, "--type", type_of(lane), timeout=300)
     return wait_ready(sid)
 
 
@@ -277,7 +278,7 @@ def _ensure_locked(lane: str, size: str) -> str:
         except SystemExit:
             d = None
     if d is None or d.get("state") in ("deleted", "error"):
-        created = boat("new", "--from", TEMPLATE, "--type", size, "--no-auto-stop",
+        created = boat("new", "--from", TEMPLATE, "--type", size, "--ttl", RUN_TTL_SECONDS,
                        "-e", f"AMAZING_LANE={lane}")
         sid = created.get("id")
         m[lane] = sid
@@ -292,7 +293,7 @@ def _ensure_locked(lane: str, size: str) -> str:
                 break
     if d is not None and d.get("state") in STOPPED:
         extra = ("--type", size) if d.get("type") and d.get("type") != size else ()
-        boat("resume", sid, "--no-auto-stop", *extra, timeout=300)
+        boat("resume", sid, "--ttl", RUN_TTL_SECONDS, *extra, timeout=300)
         print(f"boat-lane: resumed {sid} for {lane}"
               + (f" as {size} (was {d.get('type')})" if extra else ""), file=sys.stderr)
     return sid

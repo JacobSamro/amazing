@@ -32,6 +32,7 @@ MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-
 LANE="${1:?usage: linux-run.sh <lane> [--host H] [--ref REF] [--no-slot] -- <command>}"
 shift
 HOST="" REF="" SLOT=1
+if [ -e "$MAIN/.agents/.boat-only" ]; then HOST=boat; fi
 while [ $# -gt 0 ]; do
   case "$1" in
     --host) HOST="$2"; shift 2 ;;
@@ -42,6 +43,10 @@ while [ $# -gt 0 ]; do
     *) echo "linux-run: unknown option $1" >&2; exit 2 ;;
   esac
 done
+if [ -e "$MAIN/.agents/.boat-only" ] && [ "$HOST" != boat ]; then
+  echo "linux-run: this fleet is configured for Boat only; use --host boat" >&2
+  exit 2
+fi
 [ $# -gt 0 ] || [ "${WHICH:-0}" = 1 ] || { echo "linux-run: no command given" >&2; exit 2; }
 CMD="$*"
 
@@ -147,8 +152,8 @@ if [ "$HOST" = boat ]; then
     trap '$BSSH "$BOAT_HOST" "rm -f $LEASE" 2>/dev/null; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"' EXIT
     $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE &&
       { [ -e amazing/wt/$LANE/Cargo.toml ] || [ ! -e amazing/Cargo.toml ] ||
-        tar -C amazing -cf - --exclude=./target --exclude=./wt --exclude=./out --exclude=./corpora . | tar -C amazing/wt/$LANE -xf -; }" &&
-    rsync -rlpDz --checksum --delete --exclude .git --exclude /target --exclude /out --exclude /corpora \
+        tar -C amazing -cf - --exclude=./target --exclude='./target-*' --exclude=./wt --exclude=./out --exclude=./corpora --exclude=./.git --exclude=./.agents . | tar -C amazing/wt/$LANE -xf -; }" &&
+    rsync -rlpDz --checksum --delete --exclude .git --exclude /target --exclude '/target-*' --exclude /out --exclude /corpora \
       --exclude /.agents --exclude /.opencode --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/wt/$LANE/" &&
     { ok=1; break; }
     echo "linux-run[$LANE]: setup attempt $attempt on $BOAT_ID failed" >&2
