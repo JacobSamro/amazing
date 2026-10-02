@@ -1,6 +1,52 @@
 use amazing_encoding::{decode, encode, encoding_for_label, sniff_bom, Decoder, Encoding};
 
 #[test]
+fn utf16_eof_clears_incomplete_surrogate_and_byte_together() {
+    for encoding in [Encoding::Utf16Le, Encoding::Utf16Be] {
+        for (units, results) in [
+            (vec![0xD800, 0x0041], vec!["", "�", "�", "�", "�A"]),
+            (vec![0x0041, 0x0000], vec!["", "�", "A", "A�", "A\0"]),
+            (vec![0xDC00], vec!["", "�", "�"]),
+            (vec![0xD83D, 0xDE00], vec!["", "�", "�", "�", "😀"]),
+        ] {
+            let bytes: Vec<u8> = units.iter().flat_map(|unit: &u16|
+                if encoding == Encoding::Utf16Le { unit.to_le_bytes() } else { unit.to_be_bytes() }).collect();
+            for length in 0..=bytes.len() {
+                let input = &bytes[..length];
+                let expected = results[length];
+                for split in 0..=input.len() {
+                    let mut decoder = Decoder::new(encoding, false);
+                    let mut output = String::new();
+                    decoder.push(&input[..split], &mut output).unwrap();
+                    decoder.push(&input[split..], &mut output).unwrap();
+                    decoder.finish(&mut output).unwrap();
+                    assert_eq!(output, expected, "{encoding:?} input{input:?} split{split}");
+                    decoder.finish(&mut output).unwrap();
+                    assert_eq!(output, expected);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn fatal_errors_consume_bad_bytes_but_preserve_iso2022_mode() {
+    let mut utf8 = Decoder::new(Encoding::Utf8, true);
+    let mut output = String::new();
+    assert_eq!(utf8.push(&[0xC0], &mut output).unwrap_err().byte_offset, 0);
+    assert_eq!(utf8.push(&[0xFF], &mut output).unwrap_err().byte_offset, 1);
+    utf8.finish(&mut output).unwrap();
+    assert_eq!(output, "");
+    for (selector, byte, expected) in [(b'J', 0x7E, "‾"), (b'I', 0x42, "ﾂ")] {
+        let mut decoder = Decoder::new(Encoding::Iso2022Jp, true);
+        assert!(decoder.push(&[0x1B,b'(',selector,0xFF], &mut output).is_err());
+        output.clear();
+        decoder.push(&[byte], &mut output).unwrap();
+        assert_eq!(output, expected);
+    }
+}
+
+#[test]
 fn standard_vectors_for_every_codec_family() {
     let vectors: &[(Encoding, &[u8], &str)] = &[
         (Encoding::Utf8, b"\xE2\x82\xAC", "€"),
