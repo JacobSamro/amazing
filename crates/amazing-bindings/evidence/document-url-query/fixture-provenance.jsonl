@@ -1,0 +1,6 @@
+{"test": "encoding/unsupported-encodings.any.js", "raw_sha256": "e40c58a455527ee78ce33bd7972f31c4fa00f5fcc31d8fbaa57a6c405cb9ddfd"}
+{"test": "encoding/big5-encoder.html", "raw_sha256": "0d12de658370727092899ba8e6357b54a263838171ade191645b3a0290383176"}
+{"test": "encoding/legacy-mb-tchinese/big5/big5-enc-ascii.html", "raw_sha256": "abed596201152838e161b151f7379572a03c0dc5db5f1e9473c9c92da1d55316"}
+{"test": "encoding/legacy-mb-schinese/gbk/gbk-encoder.html", "raw_sha256": "967636872dd1db8ec4a0e20f4bb785d165dd45a0c58cf7139ace84296ab19d8f"}
+{"test": "encoding/legacy-mb-schinese/gb18030/gb18030-encoder.html", "raw_sha256": "83a43443a87fa43adb8cb5dc518b3661e5ec4424d463ea7e36dd5499180c778f"}
+{"test": "encoding/iso-2022-jp-encoder.html", "raw_sha256": "904fc0bc930138c6490c7243591a01a1476376e890c923cfe58fe9004f6fbabf"}

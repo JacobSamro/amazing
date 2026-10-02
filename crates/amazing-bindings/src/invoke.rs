@@ -172,6 +172,9 @@ pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + Doc
 fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + DocumentHost + UrlReflection>(
     host: &mut H, operation: O, receiver: H::Value, args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    if crate::hyperlink_bindings::handles(operation) {
+        return crate::hyperlink_bindings::invoke(host, operation, receiver, args);
+    }
     if crate::form_reflection::handles(operation) {
         return crate::form_reflection::invoke(host, operation, receiver, args);
     }

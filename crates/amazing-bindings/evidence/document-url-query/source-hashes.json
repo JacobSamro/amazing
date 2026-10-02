@@ -1,0 +1,12 @@
+{
+  "crates/amazing-bindings/src/hyperlink_bindings.rs": "619a626187acf155294611e8d2b9a7b4007152961d922cd87a4333e031461a50",
+  "crates/amazing-bindings/src/element_reflection.rs": "7680dee39849c21fbd1334b5aa7b1f931af2390c2125643d8e6bb4dc3ffa3b47",
+  "crates/amazing-bindings/src/host.rs": "e63fbdd5ae0525525c7ecd52129a7fa814312ab36f6e1ca296525643de01d499",
+  "crates/amazing-bindings/src/interfaces.rs": "891de7b67a31e129cd9471e6436a3c79d32916a2580e025f612c07ca0f3c7251",
+  "crates/amazing-bindings/src/invoke.rs": "de6ae176212dc4943ea3ba6b6a2edddc0e04706e42b0e79f76b844d3bdb33a07",
+  "crates/amazing-bindings/src/lib.rs": "84e44d36e96942d63d6aa1ca168f9708d4835e2f25cd95a435fedecdb676c57c",
+  "crates/amazing-bindings/src/tests.rs": "4401922dfea4a1afa0c734bbe90d20839738a8eab7ac04b116308e1a7b07e990",
+  "crates/amazing/src/cmd/wpt_harness.rs": "fc7f859d6b7a469961066303aba783b8030c59e784058ab783d11556845200b6",
+  "crates/amazing/src/runtime_binding_host.rs": "1cbb7c160db90f8d2e031cf02f1f9b8355dbdeb7adb75b30ab62eaf058b6d4b5",
+  "crates/amazing/src/runtime_host_dom_bindings.rs": "a74e9c311a6f057ad3ebde2f346194b6ed2095f0e8a014b3f66cb6b14d43ed47"
+}

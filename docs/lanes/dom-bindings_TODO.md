@@ -3084,3 +3084,31 @@ regression mixes null, XLink, XML and XMLNS attributes. This is a diagnostic
 fidelity correction; any html5lib measurement gain must be distinguished from
 parser behavior changes. HTML's corpus measures it; the current DOM workspace
 and node gate includes its native test.
+
+### Document URL query encoding and hyperlink components
+
+Adopted NET43's existing `ParsedUrl` query-encoder seam and driver helper;
+no URL parser or codec algorithm is duplicated. Reflected element URLs use
+the owner document's URL, first base href, and character set. HTML a/area now
+expose all hyperlink components, with USV conversion before reinitialization,
+opaque-path/credential early returns, and existing URL component setters.
+
+The installed WPT runner previously rejected non-UTF-8 page bytes and assigned
+UTF-8 metadata even to explicitly legacy-encoded HTML. It now verifies the raw
+fixture bytes before decoding through the existing HTML decoder; BOM/meta
+encodings supply both parser text and document metadata. The existing UTF-8
+fixture default is preserved. Template substitutions keep their existing UTF-8
+contract. Generated any/window wrappers still declare UTF-8.
+
+Baseline: fixed `20b74057`, 451 selected legacy encoding assertions fail;
+unsupported-encoding XHR assertions pass14/14. Initial hyperlink-only candidate
+passed127/451, exposing324 failures caused by the runner's UTF-8 metadata.
+Final native Boat workspace3523passed/17skipped, doctests4/4. Full314nodes
+12028passing/951failing/6subtesterrors, zero gained/lost assertions against
+the previous ticket. Legacy encoding0->451passing/451->0failing; XHR14/14
+unchanged. Evidence under `amazing-bindings/evidence/document-url-query/`.
+
+Reference: HTML [hyperlink component API](https://html.spec.whatwg.org/multipage/links.html#htmlhyperlinkelementutils)
+and [encoding-parsing URLs](https://html.spec.whatwg.org/multipage/urls-and-fetching.html#encoding-parsing-a-url),
+consulted2026-10-03. Component search mutation uses the URL parser's ordinary
+UTF-8 query override; resolving href uses the document character encoding.
