@@ -1,0 +1,1 @@
+{"revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293", "suite": "html/syntax/serializing-html-fragments", "selected_total": 8, "subtests": {"pass": 352, "fail": 23, "timeout": 0, "notrun": 0, "error": 0}, "files": {"pass": 4, "fail": 4, "timeout": 0, "error": 0, "unsupported": 0}, "raw_sha256": "847ee9e442327539f3c2033ec9592e460c1e7fc7c83182e3722c9655ee603298"}

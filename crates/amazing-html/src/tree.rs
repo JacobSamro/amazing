@@ -323,8 +323,10 @@ impl Default for TreeBuilder {
 
 impl TreeBuilder {
     pub fn new() -> Self {
+        let mut dom = Dom::new();
+        dom.set_document_scripting_enabled(NodeIdx(0), true).expect("parser root is a document");
         Self {
-            dom: Dom::new(),
+            dom,
             custom_element_host: None,
             mode: Mode::Initial,
             scripting_mode: ScriptingMode::Enabled,
@@ -365,12 +367,15 @@ impl TreeBuilder {
 
     pub(crate) fn set_scripting_mode(&mut self, mode: ScriptingMode) {
         self.scripting_mode = mode;
+        self.dom.set_document_scripting_enabled(NodeIdx(0), mode == ScriptingMode::Enabled)
+            .expect("parser root is a document");
     }
 
     /// Starts a document parse with a preconfigured DOM registry and host.
     pub fn with_custom_element_host(dom: Dom, host: Box<dyn ParserCustomElementHost>) -> Self {
         let mut builder = Self::new();
         builder.dom = dom;
+        builder.set_scripting_mode(ScriptingMode::Enabled);
         builder.custom_element_host = Some(host);
         builder
     }
@@ -383,6 +388,7 @@ impl TreeBuilder {
     pub(crate) fn from_dom(dom: Dom) -> Self {
         let mut builder = Self::new();
         builder.dom = dom;
+        builder.set_scripting_mode(ScriptingMode::Enabled);
         builder
     }
 

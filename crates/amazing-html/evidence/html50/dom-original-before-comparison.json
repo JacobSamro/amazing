@@ -1,0 +1,39 @@
+{
+  "selected": 314,
+  "gained": 6,
+  "lost": 0,
+  "unchanged": false,
+  "gained_records": [
+    [
+      "dom/nodes/processing-instruction-attributes.html",
+      "00338d7760484c92e8a7d43fda0f65e7013c39a537617f2bccb1dffd60e73ba3",
+      1
+    ],
+    [
+      "dom/nodes/processing-instruction-attributes.html",
+      "4d074f6d7f0cee369d5679547b2014de61790f94fbc43661167f0e8d4bf4b9e1",
+      1
+    ],
+    [
+      "dom/nodes/processing-instruction-attributes.html",
+      "671b6b32cd8a1272e08b6d35d18353582fd7fa267ce5b2e698c0880966f9467a",
+      1
+    ],
+    [
+      "dom/nodes/processing-instruction-attributes.html",
+      "7bd6db4aee4e60031a3ec1a0acb398b484f7d983f418bd3b02e601b0339cc48c",
+      1
+    ],
+    [
+      "dom/nodes/processing-instruction-attributes.html",
+      "df79ed763e226dce3dceec5a0f81c42cf2f547e55d92162f5ab497edaaf415b0",
+      1
+    ],
+    [
+      "dom/nodes/processing-instruction-attributes.html",
+      "e1f83284d14161bc9c47193af3b2d80bb283e8abc8ed8eaaa0bd0fc174956221",
+      1
+    ]
+  ],
+  "lost_records": []
+}

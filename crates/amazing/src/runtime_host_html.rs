@@ -661,6 +661,10 @@ impl RuntimeBindings {
             // after (WPT's `iframe-nosrc.html` "contentDocument should not
             // be changed" exercises exactly this ordering).
             if let Some(document) = document {
+                // Scripting belongs to the browsing context, including
+                // XML/XHTML and the synchronous initial about:blank document.
+                let enabled = !(sandbox.sandboxed && !sandbox.allow_scripts);
+                let _ = host.borrow_mut().dom.set_document_scripting_enabled(document, enabled);
                 let _ = self.ensure_realm(js, node, document, &url, sandbox);
             }
             let mut state = self.state.borrow_mut();
@@ -858,6 +862,8 @@ impl RuntimeBindings {
                     .map_err(|error| Throw::type_error(format!("iframe parser mode: {error:?}")))?;
                 host_ref.dom.set_document_quirks_mode(document, mode)
                     .map_err(|error| Throw::type_error(format!("iframe document mode: {error:?}")))?;
+                host_ref.dom.set_document_scripting_enabled(document, can_run_scripts)
+                    .map_err(|error| Throw::type_error(format!("iframe scripting context: {error:?}")))?;
             }
             match signal {
                 amazing_html::ParseSignal::Eof => break Ok(()),
@@ -1312,7 +1318,10 @@ impl RuntimeBindingHost<'_> {
         if !self.state.borrow().write_insertion_points.contains_key(&document) {
             self.reopen_document(document)?;
         }
-        let parsed = amazing_html::parse_fragment("body", text)
+        let scripting_enabled = self.with_dom(|dom| dom.document_scripting_enabled(document))?;
+        let mode = if scripting_enabled { amazing_html::ScriptingMode::Enabled }
+            else { amazing_html::ScriptingMode::Disabled };
+        let parsed = amazing_html::parse_fragment_with_scripting_mode("body", Namespace::Html, text, mode)
             .map_err(|_| Throw::type_error("Unable to parse document.write markup"))?;
         let anchor = self.state.borrow().write_insertion_points.get(&document).copied();
         let children = self.with_dom(|dom| {
@@ -1337,6 +1346,7 @@ impl RuntimeBindingHost<'_> {
             dom.pre_insert(fragment, parent, before)?;
             Ok(children)
         })?;
+        if !scripting_enabled { return Ok(()); }
         let mut scripts = Vec::new();
         {
             let state = self.state.borrow();
@@ -1863,6 +1873,59 @@ mod tests {
         scheduler.dispatch_pending_iframe_loads().unwrap();
         assert_eq!(scheduler.run_script("document.querySelector('iframe').contentDocument.getElementById('visible').textContent").unwrap(), JsValue::str("fallback"));
         assert_eq!(scheduler.run_script("document.querySelector('iframe').contentWindow.shouldNotRun === undefined").unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn iframe_scripting_state_comes_from_context_for_html_xml_xhtml_and_blank() {
+        let xml = std::env::temp_dir().join(format!("amazing-scripting-context-{}.xml", std::process::id()));
+        let xhtml = xml.with_extension("xhtml");
+        std::fs::write(&xml, "<root/>").unwrap();
+        std::fs::write(&xhtml, "<html xmlns='http://www.w3.org/1999/xhtml'><body/></html>").unwrap();
+        for (sandbox, expected) in [("", true), (" sandbox='allow-scripts allow-same-origin'", true),
+            (" sandbox='allow-same-origin'", false), (" sandbox", false)] {
+            for (source, mime) in [("", "text/html"), (" srcdoc='<noscript><b>x</b></noscript>'", "text/html"),
+                (" src='child.xml'", "application/xml"), (" src='child.xhtml'", "application/xhtml+xml")] {
+                let host = Rc::new(RefCell::new(BrowserDomHost {
+                    dom: amazing_html::parse(&format!("<!doctype html><iframe{sandbox}{source}></iframe>")), native_forwarded: false,
+                }));
+                let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+                let xml_path = xml.clone(); let xhtml_path = xhtml.clone();
+                scheduler.set_frame_resource_resolver(Rc::new(move |url| Some(
+                    if url.ends_with(".xhtml") { xhtml_path.to_string_lossy().into_owned() }
+                    else { xml_path.to_string_lossy().into_owned() })));
+                let documents = Rc::new(RefCell::new(Vec::new()));
+                let observed = documents.clone();
+                scheduler.set_child_navigation_hook(Rc::new(move |navigation| {
+                    if let Some(document) = navigation.document { observed.borrow_mut().push(document); }
+                }));
+                scheduler.set_location_url("https://example.test/main.html");
+                scheduler.run_script("void document.querySelector('iframe')").unwrap();
+                assert!(!documents.borrow().is_empty());
+                for &document in documents.borrow().iter() {
+                    let dom = &host.borrow().dom;
+                    assert_eq!(dom.document_scripting_enabled(document).unwrap(), expected, "{source}{sandbox}");
+                    assert_eq!(dom.document_metadata(document).unwrap().unwrap().content_type, mime);
+                }
+                scheduler.dispatch_pending_iframe_loads().unwrap();
+                for &document in documents.borrow().iter() {
+                    assert_eq!(host.borrow().dom.document_scripting_enabled(document).unwrap(), expected);
+                }
+            }
+        }
+        std::fs::remove_file(xml).unwrap(); std::fs::remove_file(xhtml).unwrap();
+    }
+
+    #[test]
+    fn inert_document_write_uses_disabled_noscript_and_does_not_execute_scripts() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<!doctype html><body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        assert_eq!(scheduler.run_script(r#"
+            var inert = document.implementation.createHTMLDocument('inert');
+            inert.write('<noscript><b id="fallback">visible</b></noscript><script>window.inertWriteRan=true;</script>');
+            inert.getElementById('fallback').textContent === 'visible' && window.inertWriteRan === undefined;
+        "#).unwrap(), JsValue::Bool(true));
     }
 
     fn serve_xml_once(extra_header: &str) -> (String, std::thread::JoinHandle<()>) {

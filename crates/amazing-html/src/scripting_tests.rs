@@ -1,6 +1,44 @@
 use super::*;
 
 #[test]
+fn configured_scripting_mode_is_durable_across_all_parser_entry_points() {
+    let source = "<body><noscript><b>x</b></noscript>";
+    for mode in [ScriptingMode::Enabled, ScriptingMode::Disabled] {
+        let expected = mode == ScriptingMode::Enabled;
+        let full = parse_with_scripting_mode(source, mode);
+        assert_eq!(full.document_scripting_enabled(NodeIdx(0)).unwrap(), expected);
+        assert_eq!(parse_bytes_with_scripting_mode(source.as_bytes(), None, mode)
+            .document_scripting_enabled(NodeIdx(0)).unwrap(), expected);
+        for split in 0..=source.len() {
+            let mut text = IncrementalParser::new();
+            text.set_scripting_mode(mode);
+            text.push_chunk(&source[..split]); text.push_chunk(&source[split..]);
+            assert_eq!(text.finish().document_scripting_enabled(NodeIdx(0)).unwrap(), expected);
+            let mut bytes = IncrementalByteParser::new(None);
+            bytes.set_scripting_mode(mode);
+            bytes.push_chunk(&source.as_bytes()[..split]); bytes.push_chunk(&source.as_bytes()[split..]);
+            assert_eq!(bytes.finish().document_scripting_enabled(NodeIdx(0)).unwrap(), expected);
+        }
+        let mut parser = ResumableParser::new(Dom::new());
+        parser.set_scripting_mode(mode);
+        assert_eq!(parser.dom().document_scripting_enabled(NodeIdx(0)).unwrap(), expected);
+        parser.push_source(source);
+        assert_eq!(parser.run(), ParseSignal::Eof);
+        assert_eq!(parser.dom().document_scripting_enabled(NodeIdx(0)).unwrap(), expected);
+        for fragment in [
+            parse_fragment_with_scripting_mode("noscript", Namespace::Html, "<b>x</b>", mode).unwrap(),
+            parse_fragment_with_shadow_roots_and_scripting_mode("noscript", "<b>x</b>", mode).unwrap(),
+        ] {
+            assert_eq!(fragment.document_scripting_enabled(NodeIdx(0)).unwrap(), expected);
+            assert_eq!(fragment.name(fragment.children(NodeIdx(0)).next().unwrap()),
+                if expected { None } else { Some("b") });
+        }
+    }
+    assert_eq!(parse(source).document_scripting_enabled(NodeIdx(0)).unwrap(), true);
+    assert_eq!(parse_xml("<root/>").unwrap().document_scripting_enabled(NodeIdx(0)).unwrap(), false);
+}
+
+#[test]
 fn disabled_noscript_handles_head_metadata_comments_and_body_markup() {
     let source = "<head><noscript><meta name=x><!--c--><style>a<b</style></noscript><body><noscript><b>x</b></noscript>";
     let dom = parse_with_scripting_mode(source, ScriptingMode::Disabled);

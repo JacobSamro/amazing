@@ -261,6 +261,8 @@ fn parse_fragment_inner(
         })
         .ok_or_else(|| "fragment root was not constructed".to_owned())?;
     let mut fragment = Dom::new();
+    fragment.set_document_scripting_enabled(NodeIdx(0), scripting_mode == ScriptingMode::Enabled)
+        .expect("fragment root is a document");
     for child in source.children(root) {
         clone_subtree(&source, child, &mut fragment, NodeIdx(0));
     }

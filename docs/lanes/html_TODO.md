@@ -3573,3 +3573,30 @@ API1e8cbad9 already delivered DOM. NextHTML50 adopts gated DOM scripting-state
 API, records configured parser mode and actual browsing-context/sandbox mode
 for HTML/XML/XHTML iframes; inert parsers/createHTMLDocument/clones remain
 disabled, fragments consume actual owner document state.
+
+HTML50 final fixed dependency ba5ec2f5 plus gated serializer811ce5ea: every
+HTML parser entry point stores configured scripting mode; iframe state uses
+actual sandbox context for HTML/XML/XHTML/blank before callbacks and after
+grafts; inert document.write parses disabled noscript and skips scripts.
+Native Boat586owned/6skip3567workspace/17skip4docs. Tree1894/1894 and1930/6
+unsupported retained; encoding19412268/354 and syntax722694/14 unchanged.
+Matched wholeDOM31412363/280→12369/274 (+6 serializer), serialization8
+352/23→372/3 (+20 serializer), zero lost passing multiplicities including
+against initial10s DOM baseline. Fresh charset/table adoption baseline gains
+(+654DOM,+44syntax) and serializer gains stay separate from HTML50 glue.
+Evidence/html50 retains complete compact statuses, comparisons and frozen
+binary hashes. Corrected empty selection and restored XHR deadline in a
+whole matched25s comparison; no pass waived.
+
+HTML51 next whole area: synchronous active document.write parsing/visibility,
+current adjusted insertion/drop semantics for nonempty document targets,
+and live parser nodes reparented across documents. Runtime currently queues
+active-parser writes until the writing script returns; escaping.html and
+ambiguous-ampersand.html query inserted nodes before that return. DOM importer
+reverse_sync explicitly detaches unmapped external-document ancestry and
+sync has a documented reverted forward-reparent pass (cycle regression).
+Coordinate identity/validated retry semantics with DOM owner, preserve all
+cycle fixtures, and gate whole72 syntax +8serialization +314nodes +194encoding
+and trees. Current WHATWG parsing section consulted2026-10-03: element
+insertion must drop already-parented/cyclic/nonempty-document targets;
+doctype append requires neither existing doctype nor element child.
