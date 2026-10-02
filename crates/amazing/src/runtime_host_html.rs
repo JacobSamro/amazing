@@ -1106,6 +1106,15 @@ impl RuntimeBindings {
 type IncrementalImportRef = Rc<RefCell<amazing_dom::markup::IncrementalDocumentImport>>;
 
 impl RuntimeBindingHost<'_> {
+    /// A navigated child document retains its associated WindowProxy even
+    /// when a parent-realm script reads the document's defaultView.
+    pub(super) fn iframe_document_window(&self, document: NodeIdx) -> Option<JsValue> {
+        let state = self.state.borrow();
+        let frame = state.frames.documents.iter()
+            .find_map(|(frame, entry)| (entry.document == Some(document)).then_some(frame))?;
+        state.frames.windows.get(frame).map(|(_, proxy)| proxy.clone())
+    }
+
     /// `[LegacyFactoryFunction=Option]` from the HTML standard: builds a
     /// detached `<option>` with text, value, default-selected and selectedness.
     pub(super) fn install_html_form_globals(&mut self) -> Result<(), Throw> {
