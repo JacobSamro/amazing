@@ -14,8 +14,9 @@
 //!   `props` itself is never tombstoned or compacted -- slot indices stay plain
 //!   `usize` positions, which `amazing-js/src/vm/fast_path.rs`'s inline-cache
 //!   slot accessors (`own_data_slot`/`own_slot_index`/`set_own_data_slot`)
-//!   depend on; `delete_own` still shifts (`Vec::remove`) and still bumps
-//!   `shape_version`, exactly as before, invalidating any cached slot.
+//!   depend on; interior deletion shifts (`Vec::remove`), while tail deletion
+//!   pops without moving other slots. Both bump `shape_version`, invalidating
+//!   any cached slot.
 //! - Arrays are ordinary objects whose `"length"` property is kept in sync
 //!   by the array operations; there is no dense-elements fast path to
 //!   invalidate.
@@ -1193,14 +1194,18 @@ impl JsObject {
             if !self.props[pos].1.configurable {
                 return false;
             }
-            self.props.remove(pos);
-            // `Vec::remove` shifts every later entry down by one slot; rebuild
-            // the index rather than patch it in place, matching the removal's
-            // own O(n) cost (delete is not the audited hot path -- get/set/
-            // define/own_keys are).
-            self.prop_index = self.props.iter().enumerate()
-                .map(|(index, (k, _))| (k.clone(), index))
-                .collect();
+            if pos == self.props.len() - 1 {
+                // Descending array truncation commonly removes the tail.
+                // No remaining slot moves, so preserve its index entries.
+                self.props.pop();
+                self.prop_index.remove(&key);
+            } else {
+                self.props.remove(pos);
+                // Interior removal shifts later entries down by one slot.
+                self.prop_index = self.props.iter().enumerate()
+                    .map(|(index, (k, _))| (k.clone(), index))
+                    .collect();
+            }
             self.shape_version = self.shape_version.wrapping_add(1);
             true
         } else {
@@ -1398,6 +1403,25 @@ mod tests {
         o.set_own("y", JsValue::Null);
         assert!(o.delete_own("y"));
         assert!(o.get_own("y").is_none());
+    }
+
+    #[test]
+    fn repeated_deletion_preserves_lookup_order_and_invalidates_cached_slots() {
+        let mut o = JsObject::ordinary();
+        for name in ["a", "b", "c", "d"] { o.set_own(name, JsValue::Str(name.into())); }
+        let version = o.shape_version;
+        assert!(o.delete_own("d"));
+        assert!(o.delete_own("b"));
+        assert!(o.delete_own("c"));
+        assert_eq!(o.shape_version, version.wrapping_add(3));
+        assert_eq!(o.get_own("a"), Some(JsValue::Str("a".into())));
+        for name in ["b", "c", "d"] { assert!(o.get_own(name).is_none()); }
+        o.set_own("b", JsValue::num(7.0));
+        assert_eq!(o.own_keys(), vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(o.get_own("b"), Some(JsValue::num(7.0)));
+        assert!(o.delete_own("b"));
+        assert!(o.delete_own("a"));
+        assert!(o.own_keys().is_empty());
     }
 
     #[test]

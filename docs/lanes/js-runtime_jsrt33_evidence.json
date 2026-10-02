@@ -1,0 +1,552 @@
+{
+  "ticket": "JSRT-33",
+  "base_sha": "7785c29573f2ac11a96d9e0727549de46aed5a3d",
+  "linux_host": "Boat pool-js-a; native source/target /tmp",
+  "workspace_nextest": {
+    "passed": 3639,
+    "skipped": 17,
+    "elapsed_seconds": 69.741
+  },
+  "workspace_doctests_passed": 4,
+  "selections": {
+    "array": {
+      "selected": 3332,
+      "before_files": {
+        "pass": 3226,
+        "fail": 105,
+        "timeout": 0,
+        "unsupported": 1
+      },
+      "after_files": {
+        "pass": 3226,
+        "fail": 105,
+        "timeout": 0,
+        "unsupported": 1
+      },
+      "timeout_seconds": 15.0,
+      "jobs": 4,
+      "classification_sha256": "8f564251bf0ac91c86e0f306cb83a763f7ee40e74ce19adae1ff42aadb867da7",
+      "elapsed_seconds": 16.305,
+      "gains": [
+
+      ],
+      "losses": [
+
+      ]
+    },
+    "object": {
+      "selected": 3414,
+      "before_files": {
+        "pass": 3338,
+        "fail": 75,
+        "timeout": 0,
+        "unsupported": 1
+      },
+      "after_files": {
+        "pass": 3338,
+        "fail": 75,
+        "timeout": 0,
+        "unsupported": 1
+      },
+      "timeout_seconds": 15.0,
+      "jobs": 4,
+      "classification_sha256": "e8e2114e545ee1439f137fa7a2299a798a3fc610bec1bb77205b4a1d5b58ab8f",
+      "elapsed_seconds": 10.439,
+      "gains": [
+
+      ],
+      "losses": [
+
+      ]
+    },
+    "delete": {
+      "selected": 452,
+      "before_files": {
+        "pass": 414,
+        "fail": 38,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after_files": {
+        "pass": 414,
+        "fail": 38,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "timeout_seconds": 15.0,
+      "jobs": 4,
+      "classification_sha256": "3c4839f4efbd14f1db52b3e85504f6815886a43d0bbe0bbacf84715efb210aa5",
+      "elapsed_seconds": 3.014,
+      "gains": [
+
+      ],
+      "losses": [
+
+      ]
+    },
+    "codepoint": {
+      "selected": 12,
+      "before_files": {
+        "pass": 12,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after_files": {
+        "pass": 12,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "timeout_seconds": 15.0,
+      "jobs": 4,
+      "classification_sha256": "a956a599e7b7bfff1d9c1086a003bcae56c3e148a03963e2396790dc62033beb",
+      "elapsed_seconds": 3.353,
+      "gains": [
+
+      ],
+      "losses": [
+
+      ]
+    },
+    "apply": {
+      "selected": 48,
+      "before_files": {
+        "pass": 48,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after_files": {
+        "pass": 48,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "timeout_seconds": 15.0,
+      "jobs": 4,
+      "classification_sha256": "a118dbb446be6535523398ba3293ce27d2add40cc2fe5ed8b7474f7638e63d30",
+      "elapsed_seconds": 2.707,
+      "gains": [
+
+      ],
+      "losses": [
+
+      ]
+    },
+    "regexp": {
+      "selected": 2063,
+      "before_files": {
+        "pass": 1590,
+        "fail": 26,
+        "timeout": 447,
+        "unsupported": 0
+      },
+      "after_files": {
+        "pass": 1694,
+        "fail": 26,
+        "timeout": 343,
+        "unsupported": 0
+      },
+      "timeout_seconds": 5.0,
+      "jobs": 8,
+      "classification_sha256": "86c555b820bd65ca0c0553eaf7f0cf5484427399d4661c9de2f614ebf315a682",
+      "elapsed_seconds": 563.195,
+      "gains": [
+        "built-ins/RegExp/CharacterClassEscapes/character-class-digit-class-escape-negative-cases.js",
+        "built-ins/RegExp/CharacterClassEscapes/character-class-non-digit-class-escape-positive-cases.js",
+        "built-ins/RegExp/CharacterClassEscapes/character-class-non-whitespace-class-escape-positive-cases.js",
+        "built-ins/RegExp/CharacterClassEscapes/character-class-non-word-class-escape-positive-cases.js",
+        "built-ins/RegExp/CharacterClassEscapes/character-class-whitespace-class-escape-negative-cases.js",
+        "built-ins/RegExp/property-escapes/generated/ASCII.js",
+        "built-ins/RegExp/property-escapes/generated/ASCII_Hex_Digit.js",
+        "built-ins/RegExp/property-escapes/generated/Alphabetic.js",
+        "built-ins/RegExp/property-escapes/generated/Any.js",
+        "built-ins/RegExp/property-escapes/generated/Assigned.js",
+        "built-ins/RegExp/property-escapes/generated/Bidi_Control.js",
+        "built-ins/RegExp/property-escapes/generated/Bidi_Mirrored.js",
+        "built-ins/RegExp/property-escapes/generated/Changes_When_Lowercased.js",
+        "built-ins/RegExp/property-escapes/generated/Changes_When_NFKC_Casefolded.js",
+        "built-ins/RegExp/property-escapes/generated/Changes_When_Titlecased.js",
+        "built-ins/RegExp/property-escapes/generated/Deprecated.js",
+        "built-ins/RegExp/property-escapes/generated/Emoji.js",
+        "built-ins/RegExp/property-escapes/generated/Emoji_Component.js",
+        "built-ins/RegExp/property-escapes/generated/Emoji_Presentation.js",
+        "built-ins/RegExp/property-escapes/generated/Extended_Pictographic.js",
+        "built-ins/RegExp/property-escapes/generated/Extender.js",
+        "built-ins/RegExp/property-escapes/generated/General_Category_-_Format.js",
+        "built-ins/RegExp/property-escapes/generated/General_Category_-_Initial_Punctuation.js",
+        "built-ins/RegExp/property-escapes/generated/General_Category_-_Other_Letter.js",
+        "built-ins/RegExp/property-escapes/generated/Grapheme_Base.js",
+        "built-ins/RegExp/property-escapes/generated/Grapheme_Extend.js",
+        "built-ins/RegExp/property-escapes/generated/Hex_Digit.js",
+        "built-ins/RegExp/property-escapes/generated/IDS_Binary_Operator.js",
+        "built-ins/RegExp/property-escapes/generated/IDS_Trinary_Operator.js",
+        "built-ins/RegExp/property-escapes/generated/ID_Continue.js",
+        "built-ins/RegExp/property-escapes/generated/ID_Start.js",
+        "built-ins/RegExp/property-escapes/generated/Ideographic.js",
+        "built-ins/RegExp/property-escapes/generated/Join_Control.js",
+        "built-ins/RegExp/property-escapes/generated/Logical_Order_Exception.js",
+        "built-ins/RegExp/property-escapes/generated/Lowercase.js",
+        "built-ins/RegExp/property-escapes/generated/Math.js",
+        "built-ins/RegExp/property-escapes/generated/Noncharacter_Code_Point.js",
+        "built-ins/RegExp/property-escapes/generated/Pattern_Syntax.js",
+        "built-ins/RegExp/property-escapes/generated/Pattern_White_Space.js",
+        "built-ins/RegExp/property-escapes/generated/Quotation_Mark.js",
+        "built-ins/RegExp/property-escapes/generated/Radical.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Adlam.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Ahom.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Anatolian_Hieroglyphs.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Arabic.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Balinese.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Bamum.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Batak.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Bhaiksuki.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Bopomofo.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Brahmi.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Buginese.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Inscriptional_Pahlavi.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Inscriptional_Parthian.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Katakana.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Khitan_Small_Script.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Syloti_Nagri.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Tai_Yo.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Takri.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Tamil.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Tangsa.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Tibetan.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Tifinagh.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Tirhuta.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Toto.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Tulu_Tigalari.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Ugaritic.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Unknown.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Vithkuqi.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Warang_Citi.js",
+        "built-ins/RegExp/property-escapes/generated/Script_-_Yezidi.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Adlam.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Arabic.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Armenian.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Bamum.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Bassa_Vah.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Batak.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Bengali.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Bopomofo.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Braille.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Buginese.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Buhid.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Canadian_Aboriginal.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Caucasian_Albanian.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Chakma.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Cherokee.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Chorasmian.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Common.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Cuneiform.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Cypriot.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Deseret.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Medefaidrin.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Tibetan.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Tifinagh.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Toto.js",
+        "built-ins/RegExp/property-escapes/generated/Script_Extensions_-_Ugaritic.js",
+        "built-ins/RegExp/property-escapes/generated/Sentence_Terminal.js",
+        "built-ins/RegExp/property-escapes/generated/Soft_Dotted.js",
+        "built-ins/RegExp/property-escapes/generated/Terminal_Punctuation.js",
+        "built-ins/RegExp/property-escapes/generated/Unified_Ideograph.js",
+        "built-ins/RegExp/property-escapes/generated/Uppercase.js",
+        "built-ins/RegExp/property-escapes/generated/Variation_Selector.js",
+        "built-ins/RegExp/property-escapes/generated/White_Space.js",
+        "built-ins/RegExp/property-escapes/generated/XID_Start.js"
+      ],
+      "losses": [
+
+      ]
+    }
+  },
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+  "host_sha256": "c491ce36b546ede0a655e90f775a4e5b7e7feba83592bb55b86fccb96fa50301",
+  "unique_union": {
+    "selected": 9305,
+    "before_pass": 8614,
+    "after_pass": 8718,
+    "gained": 104,
+    "lost": 0
+  },
+  "unchanged_full_profile": {
+    "before": {
+      "binary_sha256": "403d0b1ceb87be707d800d24090d26b435f7f6d8c2e5cff7a366f31ebf892ec4",
+      "helper_sha256": "76d46c1f38486ae94c4757646cefa64716b03fce3df7576be4c87d37b88c02f5",
+      "elapsed_seconds": 95.65771906600003,
+      "exit_code": 0,
+      "stdout": "TEST262_PRINT \"construction 65536 5014ms length 65536\"\nTEST262_PRINT \"regexp Any 65536 1ms matched true\"\nTEST262_PRINT \"regexp nonASCII 65536 1ms matched true\"\nTEST262_PRINT \"construction 1114112 90590ms length 2162688\"\nTEST262_PRINT \"regexp Any 1114112 19ms matched true\"\nTEST262_PRINT \"regexp nonASCII 1114112 17ms matched true\"\n\nTEST262_RESULT {\"protocol\":1,\"phase\":\"complete\",\"error_type\":\"\",\"detail\":\"\",\"unsupported\":null}\n",
+      "stderr": "",
+      "mode": "default engine; standalone phase timing, no conformance claim"
+    },
+    "after": {
+      "binary_sha256": "c491ce36b546ede0a655e90f775a4e5b7e7feba83592bb55b86fccb96fa50301",
+      "helper_sha256": "76d46c1f38486ae94c4757646cefa64716b03fce3df7576be4c87d37b88c02f5",
+      "elapsed_seconds": 4.554709000000003,
+      "exit_code": 0,
+      "stdout": "TEST262_PRINT \"construction 65536 247ms length 65536\"\nTEST262_PRINT \"regexp Any 65536 1ms matched true\"\nTEST262_PRINT \"regexp nonASCII 65536 1ms matched true\"\nTEST262_PRINT \"construction 1114112 4255ms length 2162688\"\nTEST262_PRINT \"regexp Any 1114112 19ms matched true\"\nTEST262_PRINT \"regexp nonASCII 1114112 17ms matched true\"\n\nTEST262_RESULT {\"protocol\":1,\"phase\":\"complete\",\"error_type\":\"\",\"detail\":\"\",\"unsupported\":null}\n",
+      "stderr": "",
+      "mode": "default engine; standalone phase timing, no conformance claim"
+    }
+  },
+  "independent_diagnostics": {
+    "note": "Before is VM-owned a1d5c8a reference; after is this frozen runtime base plus tail patch. Diagnostic only; same-base full helper above is authoritative.",
+    "before": {
+      "base": "a1d5c8a2285f2881e690c1eee0a0c84dce72a4e0",
+      "host_sha256": "586a8d84e288f51872834df378ef343a8f0ff9c7df3fb19e3588ada9cd264fbb",
+      "records": [
+        {
+          "backend": "default",
+          "case": "numeric_loop",
+          "n": 100000,
+          "expected": 4999950000,
+          "wall_seconds": 0.100049,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=97\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "default",
+          "case": "array_growth",
+          "n": 30000,
+          "expected": 30000,
+          "wall_seconds": 0.092481,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=88\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "default",
+          "case": "array_truncate",
+          "n": 3,
+          "expected": 30000,
+          "wall_seconds": 2.290127,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=2286\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "default",
+          "case": "object_tail_delete",
+          "n": 10000,
+          "expected": 0,
+          "wall_seconds": 0.754851,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=751\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "default",
+          "case": "codepoint_apply",
+          "n": 20,
+          "expected": 200000,
+          "wall_seconds": 0.08711,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=84\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "default",
+          "case": "buildString_scaled",
+          "n": 30000,
+          "expected": 30000,
+          "wall_seconds": 2.385523,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=2381\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "opt_in_vm",
+          "case": "numeric_loop",
+          "n": 100000,
+          "expected": 4999950000,
+          "wall_seconds": 0.080541,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=77\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "opt_in_vm",
+          "case": "array_growth",
+          "n": 30000,
+          "expected": 30000,
+          "wall_seconds": 0.093394,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=89\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "opt_in_vm",
+          "case": "array_truncate",
+          "n": 3,
+          "expected": 30000,
+          "wall_seconds": 2.499221,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=2494\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "opt_in_vm",
+          "case": "object_tail_delete",
+          "n": 10000,
+          "expected": 0,
+          "wall_seconds": 0.775607,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=771\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "opt_in_vm",
+          "case": "codepoint_apply",
+          "n": 20,
+          "expected": 200000,
+          "wall_seconds": 0.092819,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=88\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "opt_in_vm",
+          "case": "buildString_scaled",
+          "n": 30000,
+          "expected": 30000,
+          "wall_seconds": 2.486493,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=2479\",\"unsupported\":null}\n",
+          "stderr": ""
+        }
+      ]
+    },
+    "after": {
+      "base": "7785c29573f2ac11a96d9e0727549de46aed5a3d",
+      "host_sha256": "c491ce36b546ede0a655e90f775a4e5b7e7feba83592bb55b86fccb96fa50301",
+      "records": [
+        {
+          "backend": "default",
+          "case": "numeric_loop",
+          "n": 100000,
+          "expected": 4999950000,
+          "wall_seconds": 0.100793,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=96\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "default",
+          "case": "array_growth",
+          "n": 30000,
+          "expected": 30000,
+          "wall_seconds": 0.095097,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=92\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "default",
+          "case": "array_truncate",
+          "n": 3,
+          "expected": 30000,
+          "wall_seconds": 0.097221,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=93\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "default",
+          "case": "object_tail_delete",
+          "n": 10000,
+          "expected": 0,
+          "wall_seconds": 0.036597,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=33\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "default",
+          "case": "codepoint_apply",
+          "n": 20,
+          "expected": 200000,
+          "wall_seconds": 0.09977,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=95\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "default",
+          "case": "buildString_scaled",
+          "n": 30000,
+          "expected": 30000,
+          "wall_seconds": 0.122137,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=118\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "opt_in_vm",
+          "case": "numeric_loop",
+          "n": 100000,
+          "expected": 4999950000,
+          "wall_seconds": 0.079875,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=75\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "opt_in_vm",
+          "case": "array_growth",
+          "n": 30000,
+          "expected": 30000,
+          "wall_seconds": 0.088509,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=84\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "opt_in_vm",
+          "case": "array_truncate",
+          "n": 3,
+          "expected": 30000,
+          "wall_seconds": 0.090418,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=87\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "opt_in_vm",
+          "case": "object_tail_delete",
+          "n": 10000,
+          "expected": 0,
+          "wall_seconds": 0.039916,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=36\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "opt_in_vm",
+          "case": "codepoint_apply",
+          "n": 20,
+          "expected": 200000,
+          "wall_seconds": 0.094969,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=91\",\"unsupported\":null}\n",
+          "stderr": ""
+        },
+        {
+          "backend": "opt_in_vm",
+          "case": "buildString_scaled",
+          "n": 30000,
+          "expected": 30000,
+          "wall_seconds": 0.117472,
+          "returncode": 0,
+          "response": "\nTEST262_RESULT {\"protocol\":1,\"phase\":\"runtime\",\"error_type\":\"String\",\"detail\":\"elapsed=113\",\"unsupported\":null}\n",
+          "stderr": ""
+        }
+      ]
+    }
+  }
+}
