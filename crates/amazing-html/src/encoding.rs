@@ -6,6 +6,43 @@
 
 pub use amazing_encoding::Encoding;
 
+/// Encoding Standard name exposed by Document.characterSet and legacy aliases.
+/// TextDecoder.encoding deliberately uses the lowercase Encoding::name instead.
+pub fn canonical_name(encoding: Encoding) -> &'static str {
+    match encoding {
+        Encoding::Utf8 => "UTF-8",
+        Encoding::Ibm866 => "IBM866",
+        Encoding::Iso88592 => "ISO-8859-2",
+        Encoding::Iso88593 => "ISO-8859-3",
+        Encoding::Iso88594 => "ISO-8859-4",
+        Encoding::Iso88595 => "ISO-8859-5",
+        Encoding::Iso88596 => "ISO-8859-6",
+        Encoding::Iso88597 => "ISO-8859-7",
+        Encoding::Iso88598 => "ISO-8859-8",
+        Encoding::Iso88598I => "ISO-8859-8-I",
+        Encoding::Iso885910 => "ISO-8859-10",
+        Encoding::Iso885913 => "ISO-8859-13",
+        Encoding::Iso885914 => "ISO-8859-14",
+        Encoding::Iso885915 => "ISO-8859-15",
+        Encoding::Iso885916 => "ISO-8859-16",
+        Encoding::Koi8R => "KOI8-R",
+        Encoding::Koi8U => "KOI8-U",
+        Encoding::Gbk => "GBK",
+        Encoding::Big5 => "Big5",
+        Encoding::EucJp => "EUC-JP",
+        Encoding::Iso2022Jp => "ISO-2022-JP",
+        Encoding::ShiftJis => "Shift_JIS",
+        Encoding::EucKr => "EUC-KR",
+        Encoding::Utf16Be => "UTF-16BE",
+        Encoding::Utf16Le => "UTF-16LE",
+        Encoding::Macintosh | Encoding::Windows874 | Encoding::Windows1250
+        | Encoding::Windows1251 | Encoding::Windows1252 | Encoding::Windows1253
+        | Encoding::Windows1254 | Encoding::Windows1255 | Encoding::Windows1256
+        | Encoding::Windows1257 | Encoding::Windows1258 | Encoding::XMacCyrillic
+        | Encoding::Gb18030 | Encoding::Replacement | Encoding::XUserDefined => encoding.name(),
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Source {
     Bom,
@@ -159,6 +196,7 @@ fn prescan_meta(bytes: &[u8]) -> Option<Encoding> {
             {
                 return Some(match encoding {
                     Encoding::Utf16Le | Encoding::Utf16Be => Encoding::Utf8,
+                    Encoding::XUserDefined => Encoding::Windows1252,
                     other => other,
                 });
             }
@@ -216,6 +254,28 @@ mod tests {
     use super::*;
     use crate::{parse, parse_bytes};
     use amazing_dom::NodeIdx;
+
+    #[test]
+    fn meta_user_defined_normalizes_without_changing_transport_or_codec_labels() {
+        for prefix in ["<meta charset=x-user-defined><p>",
+            "<meta http-equiv=content-type content='text/html; charset=x-user-defined'><p>"] {
+            let mut bytes = prefix.as_bytes().to_vec();
+            bytes.push(0x80);
+            let decoded = decode(&bytes, None);
+            assert_eq!(decoded.encoding, Encoding::Windows1252);
+            assert!(decoded.text.ends_with('€'));
+            let expected = parse_bytes(&bytes, None).dump(amazing_dom::NodeIdx(0));
+            for split in 0..=bytes.len() {
+                let mut parser = crate::IncrementalByteParser::new(None);
+                parser.push_chunk(&bytes[..split]);
+                parser.push_chunk(&bytes[split..]);
+                assert_eq!(parser.finish().dump(amazing_dom::NodeIdx(0)), expected);
+            }
+            let transported = decode(&bytes, Some("x-user-defined"));
+            assert_eq!(transported.encoding, Encoding::XUserDefined);
+            assert!(transported.text.ends_with('\u{f780}'));
+        }
+    }
 
     #[test]
     fn bom_beats_transport_and_meta_and_is_removed() {
