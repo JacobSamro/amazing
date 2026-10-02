@@ -1107,6 +1107,17 @@ fn resolve_candidate_pool<'a>(
             style.mirror_logical(&logical, physicals[index]);
         }
     }
+    for axis in ["inline", "block"] {
+        for edge in ["start", "end"] {
+            let margin = format!("margin-{axis}-{edge}");
+            let side = physical_margin_for(&margin, rtl, writing_mode).strip_prefix("margin-").unwrap();
+            for component in ["width", "style", "color"] {
+                style.mirror_logical(&format!("border-{axis}-{edge}-{component}"),
+                    &format!("border-{side}-{component}"));
+            }
+        }
+    }
+    computed::logical_border::serialize_shorthands(&mut style);
     let mut sources = sources;
     for (logical, horizontal, vertical_name) in [
         ("inline-size", "width", "height"),
