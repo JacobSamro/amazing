@@ -1936,6 +1936,17 @@ mod tests {
              var el = frame.contentWindow.document.createElement('div'); \
              el.localName === 'div' && el instanceof frame.contentWindow.Element"
         ).unwrap(), JsValue::Bool(true));
+        assert_eq!(scheduler.run_script(
+            "var child = frame.contentDocument; \
+             child.defaultView === frame.contentWindow && \
+             child.defaultView.document === child && \
+             child.defaultView.DOMException === frame.contentWindow.DOMException"
+        ).unwrap(), JsValue::Bool(true));
+        assert_eq!(scheduler.run_script(
+            "var caught; try { child.createElementNS('bad', 'xml:x'); } \
+             catch (e) { caught = e; } \
+             caught.constructor === child.defaultView.DOMException"
+        ).unwrap(), JsValue::Bool(true));
         std::fs::remove_file(&path).unwrap();
     }
 
