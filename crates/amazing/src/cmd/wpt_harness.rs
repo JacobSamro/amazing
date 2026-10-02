@@ -820,6 +820,24 @@ fn local_file(root: &Path, base: &Path, source: &str) -> Result<PathBuf, String>
     }
     Ok(file)
 }
+/// Resolve classic fixture fetches from the same captured URL used by the
+/// script's immutable import locator. Queries require WPT's HTTP response
+/// pipeline and remain unsupported by this direct-file path.
+fn script_file(root: &Path, url: &str) -> Result<PathBuf, String> {
+    let parsed = amazing_net::url::ParsedUrl::parse(url).map_err(|e| e.to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.query().is_some() {
+        return Err(format!("unsupported resource URL: {url}"));
+    }
+    local_file(root, root, &parsed.pathname())
+}
+
+fn is_testdriver_vendor_url(url: &str) -> bool {
+    amazing_net::url::ParsedUrl::parse(url).is_ok_and(|url| {
+        matches!(url.scheme(), "http" | "https") && url.query().is_none()
+            && url.pathname() == format!("/{TESTDRIVER_VENDOR_PATH}")
+    })
+}
+
 fn source_bytes(root: &Path, path: &Path, scaffold: bool) -> Result<Vec<u8>, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     // A marker-pinned (non-git, venus tarball) checkout already proved its
@@ -1186,9 +1204,10 @@ fn execute_page(
     // could ever have produced.
     let deferred = crate::cmd::js::run_interleaved_parse(&host, &mut scheduler, &html,
         |scheduler, script| {
+            let script_url = scheduler.page_script_url(&url, &script);
             let (text, label, harness) = match &script.src {
                 Some(src) if !options.scaffold
-                    && src.trim_start_matches('/').replace('\\', "/") == TESTDRIVER_VENDOR_PATH =>
+                    && is_testdriver_vendor_url(&script_url) =>
                 {
                     // IA-TESTDRIVER: not in the pinned upstream checkout; see
                     // `TESTDRIVER_VENDOR_JS`.
@@ -1209,7 +1228,7 @@ fn execute_page(
                     // rest of its scripts over one script's failed fetch --
                     // it just never runs that one and moves on. Match both:
                     // skip this script rather than erroring the whole page.
-                    let path = match local_file(&root, file.parent().unwrap(), src) {
+                    let path = match script_file(&root, &script_url) {
                         Ok(path) => path,
                         Err(e) if is_unsupported_resource_url(&e) => return Ok(()),
                         Err(e) => return Err(e),
@@ -1228,7 +1247,6 @@ fn execute_page(
                 }
                 None => (script.body.clone(), "inline script".into(), false),
             };
-            let script_url = scheduler.page_script_url(&url, &script);
             scheduler
                 .run_page_script(&script, &text, &script_url)
                 .map_err(|e| format!("{label}: {}", e.describe()))?;
@@ -1266,15 +1284,14 @@ fn execute_page(
                 }
             }
             Some(src) => {
-                let normalized = src.trim_start_matches('/').replace('\\', "/");
-                if !options.scaffold && normalized == TESTDRIVER_VENDOR_PATH {
+                if !options.scaffold && is_testdriver_vendor_url(&script_url) {
                     // IA-TESTDRIVER: not in the pinned upstream checkout; see
                     // `TESTDRIVER_VENDOR_JS`.
                     (testdriver_vendor_source(), src.clone())
                 } else {
                     // Same "unsupported resource URL" skip as the blocking-script
                     // closure above, for a deferred/async script's own `src`.
-                    let path = match local_file(&root, file.parent().unwrap(), src) {
+                    let path = match script_file(&root, &script_url) {
                         Ok(path) => path,
                         Err(e) if is_unsupported_resource_url(&e) => continue,
                         Err(e) => return Err(e),
@@ -1607,6 +1624,46 @@ mod any_window_tests {
         let fallback = decode_document("<p>é".as_bytes());
         assert_eq!(fallback.encoding, amazing_html::encoding::Encoding::Utf8);
         assert_eq!(fallback.text, "<p>é");
+    }
+
+    #[test]
+    fn classic_fixture_fetch_and_import_locator_share_mutable_document_base() {
+        use amazing_js::DomHost;
+        use std::{cell::RefCell, rc::Rc};
+        let directory = std::env::temp_dir().join(format!("amazing-wpt-script-base-{}", std::process::id()));
+        std::fs::create_dir_all(directory.join("alpha")).unwrap();
+        std::fs::create_dir_all(directory.join("beta")).unwrap();
+        std::fs::write(directory.join("alpha/main.js"), "window.loaded='alpha';var delayed=()=>import('./dependency.js');").unwrap();
+        std::fs::write(directory.join("beta/main.js"), "window.loaded='beta';").unwrap();
+        let root = directory.canonicalize().unwrap();
+        let host = Rc::new(RefCell::new(crate::BrowserDomHost {
+            dom: amazing_html::parse("<base href='/alpha/'><script src='main.js'></script>"),
+            native_forwarded: false,
+        }));
+        let node = host.borrow_mut().query_selector("script").unwrap();
+        let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        let page = "http://web-platform.test/pages/index.html";
+        scheduler.set_location_url(page);
+        scheduler.set_module_source_loader(Rc::new(|url| {
+            assert_eq!(url, "http://web-platform.test/alpha/dependency.js");
+            Ok("export const value=7".into())
+        }));
+        let script = crate::cmd::js::PageScript { node: amazing_dom::NodeIdx(node),
+            src: Some("main.js".into()), body: String::new(), kind: crate::cmd::js::ScriptKind::Classic };
+        let url = scheduler.page_script_url(page, &script);
+        let text = super::source(&root, &super::script_file(&root, &url).unwrap(), true).unwrap();
+        scheduler.run_page_script(&script, &text, &url).unwrap();
+        scheduler.run_script("document.querySelector('base').setAttribute('href','/beta/');delayed().then(ns=>window.imported=ns.value)").unwrap();
+        scheduler.pump_at(std::time::Duration::ZERO, false).unwrap();
+        assert_eq!(scheduler.run_script("loaded+':'+imported").unwrap(), amazing_js::value::JsValue::str("alpha:7"));
+        let later = scheduler.page_script_url(page, &script);
+        let text = super::source(&root, &super::script_file(&root, &later).unwrap(), true).unwrap();
+        scheduler.run_page_script(&script, &text, &later).unwrap();
+        assert_eq!(scheduler.run_script("loaded").unwrap(), amazing_js::value::JsValue::str("beta"));
+        assert!(super::script_file(&root, &(later.clone()+"?pipe=trickle(d1)")).unwrap_err().starts_with("unsupported resource URL:"));
+        assert!(super::is_testdriver_vendor_url("http://web-platform.test/resources/testdriver-vendor.js#fragment"));
+        assert!(!super::is_testdriver_vendor_url("http://web-platform.test/alpha/resources/testdriver-vendor.js"));
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
