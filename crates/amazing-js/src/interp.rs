@@ -331,6 +331,9 @@ pub struct Interpreter {
     vm_strict_stack: Vec<bool>,
     direct_eval_call: bool,
     direct_eval_env: Option<EnvHandle>,
+    /// Active script captured across realm switches or builtin job callbacks.
+    /// Some(None) masks an unrelated script running the microtask checkpoint.
+    active_source_override: Option<Option<Rc<str>>>,
     in_eval: bool,
     dom_host: Option<Rc<RefCell<dyn DomHost>>>,
     dom_listeners: Vec<DomListener>,
@@ -533,6 +536,7 @@ impl Interpreter {
             vm_strict_stack: Vec::new(),
             direct_eval_call: false,
             direct_eval_env: None,
+            active_source_override: None,
             in_eval: false,
             dom_host: None,
             dom_listeners: Vec::new(),
@@ -1676,6 +1680,7 @@ include!("interp_realms.rs");
 include!("interp_eval_declarations.rs");
 include!("interp_window_proxy.rs");
 include!("interp_module_host.rs");
+include!("interp_source_context.rs");
 include!("interp_proxy.rs");
 include!("interp_property_access.rs");
 include!("interp_equality.rs");

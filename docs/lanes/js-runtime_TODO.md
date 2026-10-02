@@ -1273,3 +1273,31 @@ same frozen base. Remaining 343 deadline cases need further general work.
 Evidence: `js-runtime_jsrt33_evidence.json`; runnable diagnostic:
 `js-runtime_array_profile.py`. Next priority: dynamic Function and indirect
 eval active source-location capture. Keyed Promise WIP remains preserved.
+
+## JSRT-34 Dynamic compilation source locations (2026-10-03)
+
+Frozen base `f120de608169358b37e7cf2686c38ef9e8bdaa10`. Dynamic Function
+constructors and indirect eval now capture the active script/module location
+while retaining their realm's global binding frame. All four constructor
+families share this behavior. Promise reactions capture their registration
+location and restore it around the handler, including an explicit absent
+location that masks an unrelated checkpoint script. Cross-realm invocation
+preserves the calling script location without changing realm bindings.
+This follows [HTML HostMakeJobCallback](https://html.spec.whatwg.org/multipage/webappapis.html#hostmakejobcallback).
+
+The implementation reads existing saved callable frame metadata; it changes
+no VM code or invocation tokens. Adopting the coherent base supplied the
+previously landed resumed-frame context support. Three grouped regressions
+exercise both backends, delayed dynamic constructors, resumed generators,
+indirect eval, Promise callbacks, foreign realms, module locations and absent
+locations. An initial explicit-Bytecode fixture used unsupported `with`;
+seeding that AST fallback separately corrected the fixture before the final
+gate, without changing production behavior.
+
+Final Boat workspace **3685 passed/17 skipped, 71.567 seconds**, **4 doctests**;
+the workspace includes **516 amazing-js tests**. Matched 15-second/4-job
+selections: whole language **23803/24572**, Function **619/653**, Promise
+**540/732**, all unchanged with **zero lost passes and zero timeouts**.
+Unique union **25945 cases**, **24950 passing before and after**, zero losses.
+Evidence: `js-runtime_jsrt34_evidence.json`. Next: resume the preserved whole
+allKeyed/allSettledKeyed Promise area on this coherent base.

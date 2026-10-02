@@ -936,6 +936,8 @@ pub enum PromiseFate {
 #[derive(Debug, Clone)]
 pub struct PendingReaction {
     pub handler: Option<JsValue>,
+    /// HostMakeJobCallback's active script; metadata only, no GC edges.
+    pub source_context: Option<Rc<str>>,
     /// Chained .then result; internal await reactions have no result capability.
     pub capability: Option<Obj>,
     /// `true` when this is the reject path of a `then(on_ful, on_rej)` pair.

@@ -1141,7 +1141,7 @@ fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<Js
     } else {
         crate::parse_script(&source)
     }.map_err(|error| Throw::syntax_error(error.to_string()))?;
-    let global = i.global_env.global_scope();
+    let global = i.global_with_active_source_context();
     let caller = if direct { i.direct_eval_env.take().unwrap_or_else(|| global.clone()) }
         else { global.clone() };
     let strict = (direct && i.strict_eval_context) || has_use_strict_directive(&program.body);
@@ -1523,6 +1523,7 @@ fn settle_promise(target: &Obj, fate: PromiseFate, i: &mut Interpreter) -> Resul
 }
 
 fn run_promise_reaction(reaction: PendingReaction, fate: PromiseFate, i: &mut Interpreter) -> Result<(), Throw> {
+    let previous_source = std::mem::replace(&mut i.active_source_override, Some(reaction.source_context));
     let result = match (reaction.handler, fate) {
         (Some(handler), PromiseFate::Fulfilled(value)) => {
             match i.call_value(&handler, JsValue::Undefined, vec![value]) {
@@ -1541,6 +1542,7 @@ fn run_promise_reaction(reaction: PendingReaction, fate: PromiseFate, i: &mut In
         (None, PromiseFate::Rejected(value)) => PromiseFate::Rejected(value),
         (_, PromiseFate::Pending) => PromiseFate::Pending,
     };
+    i.active_source_override = previous_source;
     let Some(capability) = reaction.capability else {
         // Internal await handlers resume their suspended body and have no
         // chained promise to resolve. Surface an unexpected host abrupt
@@ -1582,11 +1584,13 @@ fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) 
             if let Exotic::Promise(state) = &mut object.exotic {
                 state.fulfill_reactions.push(PendingReaction {
                     handler: None,
+                    source_context: None,
                     capability: Some(capability.clone()),
                     is_reject_handler: false,
                 });
                 state.reject_reactions.push(PendingReaction {
                     handler: None,
+                    source_context: None,
                     capability: Some(capability.clone()),
                     is_reject_handler: true,
                 });
@@ -1595,6 +1599,7 @@ fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) 
         PromiseFate::Fulfilled(value) => i.enqueue_promise_job(PromiseJob {
             reaction: PendingReaction {
                 handler: None,
+                source_context: None,
                 capability: Some(capability.clone()),
                 is_reject_handler: false,
             },
@@ -1603,6 +1608,7 @@ fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) 
         PromiseFate::Rejected(value) => i.enqueue_promise_job(PromiseJob {
             reaction: PendingReaction {
                 handler: None,
+                source_context: None,
                 capability: Some(capability.clone()),
                 is_reject_handler: true,
             },
@@ -3431,7 +3437,7 @@ fn native_dynamic_function(i: &mut Interpreter, args: Vec<JsValue>, prefix: &str
     if let ast::StmtKind::Function(function) = &script.body[0].kind {
         let previous_strict = i.strict_eval_context;
         i.strict_eval_context = false;
-        let value = i.make_function(function, &i.global_env.global_scope());
+        let value = i.make_function(function, &i.global_with_active_source_context());
         i.strict_eval_context = previous_strict;
         Ok(value)
     } else {

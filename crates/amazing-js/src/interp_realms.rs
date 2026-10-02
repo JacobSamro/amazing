@@ -315,8 +315,13 @@ impl Interpreter {
         let entry = self.entry_realm;
         self.entry_realm.get_or_insert(target);
         self.realm_callers.push(if entry.is_some() { caller } else { target });
+        let previous_source = if target != caller {
+            let source = self.active_source_context();
+            Some(std::mem::replace(&mut self.active_source_override, Some(source)))
+        } else { None };
         let result = self.binding_with_realm(target, |i|
             i.call_value_with_new_target_inner(function, receiver, args, new_target, caller));
+        if let Some(previous_source) = previous_source { self.active_source_override = previous_source; }
         self.realm_callers.pop();
         self.entry_realm = entry;
         result

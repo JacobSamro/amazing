@@ -9,13 +9,16 @@ fn perform_promise_then(
     on_rejected: Option<JsValue>,
     result_capability: Option<Obj>,
 ) -> Result<(), Throw> {
+    let source_context = i.active_source_context();
     let fulfilled = PendingReaction {
         handler: on_fulfilled.filter(|value| callable_function(value).is_some()),
+        source_context: source_context.clone(),
         capability: result_capability.clone(),
         is_reject_handler: false,
     };
     let rejected = PendingReaction {
         handler: on_rejected.filter(|value| callable_function(value).is_some()),
+        source_context,
         capability: result_capability,
         is_reject_handler: true,
     };
