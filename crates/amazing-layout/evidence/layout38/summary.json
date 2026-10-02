@@ -1,0 +1,209 @@
+{
+  "ticket": "LAYOUT-38",
+  "fixed_base": "b038b9c60469acb48910d8ec7a0fdeb052f1255b",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "workspace": {
+    "passed": 3532,
+    "skipped": 17,
+    "failed": 0
+  },
+  "doctests_passed": 4,
+  "harness_passed": 7,
+  "directories": [
+    {
+      "subdir": "css/CSS2/floats",
+      "before": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/CSS2/normal-flow",
+      "before": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-contain",
+      "before": {
+        "pass": 108,
+        "mismatch": 121,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 134,
+        "mismatch": 95,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [
+        "css__css-contain__contain-inline-size-fieldset.html",
+        "css__css-contain__contain-size-011.html",
+        "css__css-contain__contain-size-061.html",
+        "css__css-contain__contain-size-062.html",
+        "css__css-contain__contain-size-064.html",
+        "css__css-contain__contain-size-block-001.html",
+        "css__css-contain__contain-size-block-002.html",
+        "css__css-contain__contain-size-block-003.html",
+        "css__css-contain__contain-size-block-004.html",
+        "css__css-contain__contain-size-fieldset-001.html",
+        "css__css-contain__contain-size-fieldset-003.html",
+        "css__css-contain__contain-size-flex-001.html",
+        "css__css-contain__contain-size-flexbox-001.html",
+        "css__css-contain__contain-size-grid-001.html",
+        "css__css-contain__contain-size-grid-005.html",
+        "css__css-contain__contain-size-inline-block-001.html",
+        "css__css-contain__contain-size-inline-block-002.html",
+        "css__css-contain__contain-size-inline-block-003.html",
+        "css__css-contain__contain-size-inline-block-004.html",
+        "css__css-contain__contain-size-inline-flex-001.html",
+        "css__css-contain__contain-size-multicol-002.html",
+        "css__css-contain__contain-size-multicol-003.html",
+        "css__css-contain__contain-size-scrollbars-001.html",
+        "css__css-contain__contain-size-select-elem-001.html",
+        "css__css-contain__contain-size-select-elem-003.html",
+        "css__css-contain__contain-size-table-caption-001.html"
+      ],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-display",
+      "before": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-sizing",
+      "before": {
+        "pass": 91,
+        "mismatch": 47,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 99,
+        "mismatch": 39,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [
+        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-002.html",
+        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-007.html",
+        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-008.html",
+        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-010.html",
+        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-015.html",
+        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-016.html",
+        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-021.html",
+        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-026.html"
+      ],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-tables",
+      "before": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    }
+  ],
+  "candidate-source.sha256": "b3109cf7136e00fbe314aadb1b12604ccba0fb8be786f257eec9afb6fddbe3ba  crates/amazing-layout/src/block.rs\n836d487c01fb6a591a648aaf5fdb66b9af51496d808537742ff99cffab49db15  crates/amazing-layout/src/flex.rs\n7f40fac8b83b7183e70d1cc37211c99febee34a9309592d35f5f74cdcb22ac14  crates/amazing-layout/src/grid.rs\n1fe8e88c9b48f12f28ef7f399b3c7ba8a330fd92a697fca68b0d4961a77235b5  crates/amazing-layout/src/lib.rs\nd4169a589d75134b6b3a710c08d8c94e5bca6ab0f4b7cde5faf0e1002e209c23  crates/amazing-layout/src/containment.rs",
+  "before-renderer.sha256": "838f455f11d889b1e052f7739ba057cbcc1dfebdedca546af25f6b2e16ba7b3b  /tmp/amazing-layout36-target/release/amazing",
+  "after-renderer.sha256": "c3d7a557e66c7a5388ce30ae5bfab9f30dec2a03e6a33ce9d40ecc83f6b45a9f  /tmp/amazing-layout36-target/release/amazing",
+  "totals": {
+    "eligible": 552,
+    "before_pass": 338,
+    "after_pass": 372,
+    "before_mismatch": 214,
+    "after_mismatch": 180,
+    "gained": 34,
+    "lost": 0,
+    "changed": 0,
+    "new": 0,
+    "removed": 0
+  }
+}
