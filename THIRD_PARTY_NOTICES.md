@@ -50,3 +50,5 @@ reproduced in the table row for that upstream.
 
 | servo/html5ever | MIT | Copyright (c) 2014 The html5ever Project Developers | `crates/amazing-html/src/tree/noscript.rs` — complete in-head-noscript insertion mode adapted from `html5ever/src/tree_builder/rules.rs` at `6db7bbf1c4dfaecd28731950d427e40c8b911bef` |
 | boa-dev/boa @ 39cd11214ecb366200157dab96b3919e61e9a391 | MIT | Copyright (c) 2019 Jason Williams | Optional-chain receiver, short-circuit and final-link delete algorithms adapted from core/engine/src/bytecompiler/mod.rs into crates/amazing-js/src/interp_optional_chain.rs. |
+
+| boa-dev/boa @ 39cd11214ecb366200157dab96b3919e61e9a391 | MIT | Copyright (c) 2019 Jason Williams | Object-literal method definition name/HomeObject operations adapted from core/engine/src/bytecompiler/expression/object_literal.rs into crates/amazing-js/src/interp_object_methods.rs. |

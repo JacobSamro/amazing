@@ -842,8 +842,7 @@ impl Program {
                         let key = key.resolve(&registers)?;
                         let JsValue::Object(target) = &registers[*object] else { unreachable!() };
                         let method = code.instantiate(i, env);
-                        let JsValue::Object(callable) = &method else { unreachable!() };
-                        callable.borrow_mut().func.as_mut().unwrap().home = Some(target.clone());
+                        i.configure_object_method(&method, &registers[*object], &key, *kind, &code.0.params);
                         if matches!(kind, crate::ast::MethodKind::Get | crate::ast::MethodKind::Set) {
                             let mut property = target.borrow().own_prop(&key).cloned()
                                 .filter(|property| property.getter.is_some() || property.setter.is_some())
@@ -1653,6 +1652,7 @@ impl FunctionCode {
             // of the enclosing (derived) constructor's.
             if let Some(frame) = i.frames.last() {
                 let mut arrow = handle.borrow_mut();
+                arrow.func.as_mut().unwrap().home = frame.home.clone();
                 arrow.lexical_super_constructor = frame.super_constructor.clone();
                 arrow.lexical_new_target = frame.new_target.clone();
             }

@@ -1041,7 +1041,7 @@ impl Interpreter {
                             };
                             if let ast::PropValue::Method(method) = &p.value {
                                 if matches!(method.kind, ast::MethodKind::Get | ast::MethodKind::Set) {
-                                    let function_value = self.method_value(method, env, false);
+                                    let function_value = self.object_method_value(method, env, &o, &k);
                                     let JsValue::Object(object) = &o else { unreachable!() };
                                     let mut property = object.borrow().own_prop(&k).cloned()
                                         .filter(|property| property.getter.is_some() || property.setter.is_some())
@@ -1087,7 +1087,7 @@ impl Interpreter {
                                 ast::PropValue::CoverInitializedName { .. } => {
                                     return Err(Throw::syntax_error("cover initialized name outside assignment pattern"));
                                 }
-                                ast::PropValue::Method(m) => self.method_value(m, env, false),
+                                ast::PropValue::Method(m) => self.object_method_value(m, env, &o, &k),
                             };
                             // A non-computed colon definition of __proto__ sets
                             // [[Prototype]] rather than creating an own property.
@@ -1187,6 +1187,10 @@ impl Interpreter {
                 let f = self.eval_expr(callee, env)?;
                 let a = self.eval_args(args, env)?;
                 self.construct(&f, a)
+            }
+            ExprKind::Member { obj, .. } if matches!(obj.kind, ExprKind::Super) => {
+                let reference = self.eval_chain_reference(e, env)?;
+                self.chain_value(reference)
             }
             ExprKind::Member {
                 obj,
@@ -1511,6 +1515,8 @@ impl Interpreter {
         let (reference, old) = if op == ast::AssignOp::Assign {
             if let Some(name) = event_handler::identifier_name(t) {
                 (self.name_reference(e, name)?, JsValue::Undefined)
+            } else if let Some(reference) = self.resolve_super_target(t, e)? {
+                (reference, JsValue::Undefined)
             } else { self.resolve_reference(t, e)? }
         } else { self.resolve_reference(t, e)? };
         if op == ast::AssignOp::Assign {
@@ -1673,6 +1679,11 @@ impl Interpreter {
         target: &ast::Expr,
         env: &EnvHandle,
     ) -> Result<(Reference, JsValue), Throw> {
+        if let Some(reference) = self.resolve_super_target(target, env)? {
+            let Reference::SuperProperty(base, key, receiver) = &reference else { unreachable!() };
+            let value = self.get_prop_receiver(base, key, receiver.clone())?;
+            return Ok((reference, value));
+        }
         match &target.kind {
             ExprKind::Ident(identifier) => {
                 let name = &identifier.name;
@@ -1806,12 +1817,18 @@ impl Interpreter {
                 }
             }
             Reference::Private(base, name) => private_field_set(self, &base, &name, value),
+            Reference::SuperProperty(base, key, receiver) => {
+                let JsValue::Object(object) = base else { return Err(Throw::type_error("nullish super prototype")); };
+                if self.set_with_receiver(&object, &key, value, receiver)? || !self.strict_eval_context { Ok(()) }
+                else { Err(Throw::type_error("cannot assign to super property")) }
+            }
         }
     }
     fn assign_target(&mut self, t: &ast::Expr, v: JsValue, e: &EnvHandle) -> Result<(), Throw> {
         let reference = if let Some(name) = event_handler::identifier_name(t) {
             self.name_reference(e, name)?
-        } else { self.resolve_reference(t, e)?.0 };
+        } else if let Some(reference) = self.resolve_super_target(t, e)? { reference }
+        else { self.resolve_reference(t, e)?.0 };
         self.put_reference(reference, v, e)
     }
 
@@ -2664,6 +2681,7 @@ impl Interpreter {
         let handle = Obj(Rc::new(RefCell::new(o)));
         if let Some(frame) = self.frames.last() {
             let mut arrow = handle.borrow_mut();
+            arrow.func.as_mut().unwrap().home = frame.home.clone();
             arrow.lexical_super_constructor = frame.super_constructor.clone();
             arrow.lexical_new_target = frame.new_target.clone();
         }

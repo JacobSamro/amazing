@@ -90,7 +90,7 @@ impl Interpreter {
         let value = match &reference {
             Reference::Binding(name) => env.resolve(name).unwrap_or(JsValue::Undefined),
             Reference::Property(base, key) => self.get_prop(base, key)?,
-            Reference::Private(_, _) => unreachable!("identifier reference"),
+            Reference::Private(_, _) | Reference::SuperProperty(_, _, _) => unreachable!("identifier reference"),
         };
         Ok((reference, value))
     }

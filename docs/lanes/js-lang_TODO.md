@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-22 — optional-chain references and browser source metadata**.
+Frontier: **JS-23 — object method home objects and canonical module failures**.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
@@ -1614,3 +1614,36 @@ exact host/classification hashes and gain lists are in
 `f86b814d6f74e9ffc1eff29dece4d8f6456da539`. The integrator explicitly owns the
 combined full-tree Test262 gate; duplicate lane full sweeps were cancelled before
 completion. Source and target ran on native `/tmp` storage through the main wrapper.
+
+
+## JS-23 — object method home objects and canonical module failures
+
+Fixed base `d20f78dd3fbbaed160c3670fa1123518583bb026`. Object-literal ordinary,
+getter/setter, generator and async methods receive their object as HomeObject,
+exact UTF-16/symbol names, leading-required parameter length and standard
+name/length descriptors. Arrows retain lexical HomeObject. Super references
+carry both the home prototype and actual this receiver through property reads,
+calls, assignment and updates; plain assignment avoids reading its getter.
+Grouped references retain these semantics. The VM owner granted one lexical
+home copy and a non-suspending super-reference TreeEval dispatch; suspending
+super operations remain a separately coordinated VM follow-up.
+
+Method-definition metadata operations are adapted from MIT `boa-dev/boa`,
+`core/engine/src/bytecompiler/expression/object_literal.rs`, pinned commit
+`39cd11214ecb366200157dab96b3919e61e9a391`. Upstream property-key naming and
+SetHomeObject operations map onto Amazing's existing function factory and
+property gateways. License verified at this commit; the new helper's header and
+an appended third-party notice accompany the code.
+
+The separate browser module API follow-up preserves canonical SyntaxError
+object identity across direct and nested parse failures, distinguishes typed
+parser/static-link errors from host-owned resolver errors, and rolls back all
+records newly inserted by a failed link transaction. Completed earlier records
+remain intact. Two module and two both-backend method regressions cover these
+contracts. Embedding error conversion must prefer `failure.thrown`, as documented
+in [js-lang_JS21-interface.md](js-lang_JS21-interface.md); browser and Test262
+adapters remain owned by their respective integrators.
+
+The first 60-second baseline was interrupted by the sandbox's finite TTL and
+is incomplete evidence. Its replacement and the shared after gate use the same
+fixed base and native `/tmp` source/target on the renewed Boat sandbox.

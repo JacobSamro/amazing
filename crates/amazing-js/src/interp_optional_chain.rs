@@ -7,7 +7,7 @@
 enum ChainEvaluation {
     ShortCircuit,
     Value(JsValue),
-    Property { base: JsValue, receiver: JsValue, key: PropertyKey },
+    Property { base: JsValue, receiver: JsValue, key: PropertyKey, super_reference: bool },
     Private { receiver: JsValue, name: crate::value::PrivateName },
 }
 
@@ -25,7 +25,7 @@ impl Interpreter {
         match reference {
             ChainEvaluation::ShortCircuit => Ok(JsValue::Undefined),
             ChainEvaluation::Value(value) => Ok(value),
-            ChainEvaluation::Property { base, receiver, key } => self.get_prop_receiver(&base, &key, receiver),
+            ChainEvaluation::Property { base, receiver, key, .. } => self.get_prop_receiver(&base, &key, receiver),
             ChainEvaluation::Private { receiver, name } => private_field_get(self, &receiver, &name),
         }
     }
@@ -82,7 +82,7 @@ impl Interpreter {
                     (MemberProp::Computed(_), Some(value)) => self.to_property_key(&value)?,
                     _ => unreachable!(),
                 };
-                Ok(ChainEvaluation::Property { base, receiver, key })
+                Ok(ChainEvaluation::Property { base, receiver, key, super_reference: matches!(obj.kind, ExprKind::Super) })
             }
             ExprKind::Call { callee, args, optional } => {
                 if matches!(callee.kind, ExprKind::Super) {
@@ -103,6 +103,7 @@ impl Interpreter {
 
     fn delete_chain(&mut self, expression: &ast::Expr, env: &EnvHandle) -> Result<JsValue, Throw> {
         match self.eval_chain_reference(expression, env)? {
+            ChainEvaluation::Property { super_reference: true, .. } => Err(Throw::reference_error("cannot delete super property")),
             ChainEvaluation::Property { base, key, .. } => self.delete_member_value(base, key),
             ChainEvaluation::Private { .. } => Err(Throw::syntax_error("private members cannot be deleted")),
             ChainEvaluation::ShortCircuit | ChainEvaluation::Value(_) => Ok(JsValue::Bool(true)),
