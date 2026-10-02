@@ -1,0 +1,91 @@
+{
+  "ticket": "JSRT-32",
+  "base_sha": "addab721147a7e79fb2049cece42dafda56c2802",
+  "linux_host": "Boat pool-js-a, native /tmp source and target",
+  "workspace_nextest": {
+    "passed": 3686,
+    "skipped": 17,
+    "elapsed_seconds": 69.348
+  },
+  "workspace_doctests_passed": 4,
+  "upstream": {
+    "repo": "boa-dev/boa",
+    "path": "core/engine/src/builtins/promise/mod.rs",
+    "sha": "39cd11214ecb366200157dab96b3919e61e9a391",
+    "license": "MIT"
+  },
+  "unique_union": {
+    "selected": 1133,
+    "before_pass": 913,
+    "after_pass": 1000,
+    "gained": 87,
+    "lost": 0
+  },
+  "gain_clusters": {
+    "allKeyed": 44,
+    "allSettledKeyed": 43
+  },
+  "selections": {
+    "Promise": {
+      "before_files": {
+        "pass": 550,
+        "fail": 192,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after_files": {
+        "pass": 637,
+        "fail": 105,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": 87,
+      "lost": 0,
+      "classification_sha256": "21403fa6dfb5133db3ff202f796ada8b7ef74f9c8df8206c315b8b1f504d0f29",
+      "elapsed_seconds": 5.857
+    },
+    "await-expression": {
+      "before_files": {
+        "pass": 9,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after_files": {
+        "pass": 9,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": 0,
+      "lost": 0,
+      "classification_sha256": "db96d54dfb5b893bd718755c5958b207966fda4fa4cd536ff13f1f9c4b528907",
+      "elapsed_seconds": 2.437
+    },
+    "async-function": {
+      "before_files": {
+        "pass": 354,
+        "fail": 28,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after_files": {
+        "pass": 354,
+        "fail": 28,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": 0,
+      "lost": 0,
+      "classification_sha256": "e30b684c9a19d5d544ed5d718623aa1ef2500f86e68321e7250b779e6c81c311",
+      "elapsed_seconds": 2.997
+    }
+  },
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+  "timeout_seconds": 15.0,
+  "jobs": 4,
+  "host_sha256": "fb2e28a124b4f9fcb710f159630df7f11165b2501a601fbcb1fde43cbdef2588",
+  "before_host_sha256": "b8c71fe021b34139b19e72a95bf9a99933bb187f08879a95a0f2ef40c6ec5b4a"
+}

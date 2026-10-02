@@ -435,6 +435,10 @@ impl Interpreter {
                 "any",
                 Self::native("any", native_promise_any, &self.function_proto),
             );
+            o.borrow_mut().define("allKeyed", symbol_data(
+                Self::native_arity("allKeyed", native_promise_all_keyed, &self.function_proto, 1), true, true)).unwrap();
+            o.borrow_mut().define("allSettledKeyed", symbol_data(
+                Self::native_arity("allSettledKeyed", native_promise_all_settled_keyed, &self.function_proto, 1), true, true)).unwrap();
         }
         self.define_global("Promise", promise_ctor);
         let _ = self.set_prop(

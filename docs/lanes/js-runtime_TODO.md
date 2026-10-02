@@ -1301,3 +1301,33 @@ selections: whole language **23803/24572**, Function **619/653**, Promise
 Unique union **25945 cases**, **24950 passing before and after**, zero losses.
 Evidence: `js-runtime_jsrt34_evidence.json`. Next: resume the preserved whole
 allKeyed/allSettledKeyed Promise area on this coherent base.
+
+## JSRT-32 Keyed Promise combinators (resumed 2026-10-03)
+
+Frozen base `addab721147a7e79fb2049cece42dafda56c2802`. The preserved whole
+`Promise.allKeyed` and `Promise.allSettledKeyed` implementation was transplanted
+onto the coherent FDI, VM-await and source-context base. The algorithms are
+ported from Boa's Promise implementation at
+`39cd11214ecb366200157dab96b3919e61e9a391` (MIT); the source header and appended
+`THIRD_PARTY_NOTICES.md` row record the port. No dependencies were introduced.
+
+The methods use actual constructor capabilities and cache the constructor's
+resolve method. They snapshot own keys, then read each current descriptor and
+enumerable value, preserving symbols and property getter order. Per-element
+native closures share an already-called flag; a sentinel counter tolerates
+synchronous callbacks while enumeration continues. Results have a null
+prototype, and settled entries retain ordinary status/value or status/reason
+records. Abrupt operations reject through the capability. A grouped regression
+covers both backends, subclasses, duplicate callbacks, removed keys, symbols,
+`__proto__`, invalid inputs and empty dictionaries. Normative reference:
+[Await Dictionary proposal](https://tc39.es/proposal-await-dictionary/).
+
+Final Boat workspace **3686 passed/17 skipped, 69.348 seconds**, **4 doctests**.
+Matched 15-second/4-job Promise substring selection **550 → 637/742**,
+**87 gained, zero lost**: allKeyed **44/44**, allSettledKeyed **43/43**.
+The selection includes ten passing language Promise cases in addition to the
+732 builtin files. Await-expression **9/9** and async-function **354/382**
+remain unchanged. Unique union **1133 cases**, **913 → 1000 passing**,
+**87 gained, zero lost**, no timeouts. Evidence:
+`js-runtime_jsrt32_evidence.json`. Next: contextual direct-eval parser consumer,
+coordinated with the VM invocation metadata and decorators lane.

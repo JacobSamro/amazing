@@ -3,7 +3,7 @@
 // Promise.prototype.finally and its then/catch closures adapted to Amazing's
 // native callback home objects, species construction and resolution helpers.
 
-fn finally_callback(
+fn promise_callback_with_data(
     i: &Interpreter, callback: crate::value::NativeFn, data: &Obj, arity: usize,
 ) -> JsValue {
     let function = Interpreter::native_arity("", callback, &i.function_proto, arity);
@@ -21,8 +21,8 @@ fn native_promise_finally(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
         let data = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
         data.borrow_mut().set_own("constructor", constructor);
         data.borrow_mut().set_own("onFinally", on_finally);
-        (finally_callback(i, native_then_finally, &data, 1),
-            finally_callback(i, native_catch_finally, &data, 1))
+        (promise_callback_with_data(i, native_then_finally, &data, 1),
+            promise_callback_with_data(i, native_catch_finally, &data, 1))
     } else { (on_finally.clone(), on_finally) };
     let then = i.get_prop(&this, "then")?;
     i.call_value(&then, this, vec![fulfilled, rejected])
@@ -44,7 +44,7 @@ fn run_finally_cleanup(i: &mut Interpreter, args: Vec<JsValue>, rejected: bool) 
     let promise = promise_resolve_constructor(i, &constructor, result)?;
     let captured = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
     captured.borrow_mut().set_own("value", args.first().cloned().unwrap_or(JsValue::Undefined));
-    let thunk = finally_callback(i, if rejected { native_finally_throw } else { native_finally_value }, &captured, 0);
+    let thunk = promise_callback_with_data(i, if rejected { native_finally_throw } else { native_finally_value }, &captured, 0);
     let then = i.get_prop(&promise, "then")?;
     i.call_value(&then, promise, vec![thunk])
 }

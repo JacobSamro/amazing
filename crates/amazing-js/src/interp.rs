@@ -1691,6 +1691,7 @@ include!("interp_promise_capability.rs");
 include!("interp_promise_resolution.rs");
 include!("interp_promise_reactions.rs");
 include!("interp_promise_finally.rs");
+include!("interp_promise_keyed.rs");
 include!("interp_function_environments.rs");
 include!("interp_array.rs");
 include!("interp_array_protocol.rs");
