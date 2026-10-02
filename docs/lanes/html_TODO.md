@@ -3436,3 +3436,12 @@ skipped, 0 failed**. `cargo test --workspace --locked --doc`: 31 doc-test
 suites, all `test result: ok`, 0 failed (per the coordinator's "use a
 workspace-wide nextest in your final gate, not just the three crates"
 instruction, replacing HTML-41's three-crate scope).
+
+HTML46 covers document encoding metadata and the HTML rows of unknown-type
+MIME sniffing. The public canonical_name maps all Encoding variants to
+standard document names without changing lowercase TextDecoder names.
+Meta x-user-defined normalizes to windows-1252; BOM/transport priority and
+all-split streaming decoding are covered. Iframe response sniffing matches
+the exact standard HTML signature table, whitespace and tag boundaries,
+respects nosniff and explicit MIME, and does not claim a full MIME subsystem.
+DOM's faithful encoding.py response handler remains a separate owned ticket.

@@ -240,7 +240,13 @@ fn same_origin(parent: &str, child: &str) -> bool {
 fn content_type(response: &amazing_net::Response, logical_url: &str,
     local_file: bool) -> Option<String> {
     let mime = response.content_type().unwrap_or("").to_ascii_lowercase();
-    if mime != "application/octet-stream" && !mime.is_empty() {
+    let unknown = matches!(mime.as_str(), "" | "unknown/unknown" | "application/unknown" | "*/*");
+    let no_sniff = response.headers.get("x-content-type-options")
+        .is_some_and(|value| value.split(',').next().unwrap_or("").trim().eq_ignore_ascii_case("nosniff"));
+    if unknown && !no_sniff && has_html_signature(&response.body) {
+        return Some("text/html".into());
+    }
+    if mime != "application/octet-stream" && !unknown {
         return Some(mime);
     }
     if !local_file { return None; }
@@ -253,6 +259,21 @@ fn content_type(response: &amazing_net::Response, logical_url: &str,
         Some("html") | Some("htm") => Some("text/html".into()),
         _ => None,
     }
+}
+
+/// HTML rows of MIME Sniffing §7.1. Match only the resource header, ignoring
+/// the five whitespace bytes; a tag terminator is SPACE or '>', never '/'.
+fn has_html_signature(body: &[u8]) -> bool {
+    let header = &body[..body.len().min(1445)];
+    let start = header.iter().position(|byte| !matches!(byte, 9 | 10 | 12 | 13 | 32))
+        .unwrap_or(header.len());
+    let header = &header[start..];
+    const PATTERNS: &[&[u8]] = &[b"<!DOCTYPE HTML", b"<HTML", b"<HEAD", b"<SCRIPT",
+        b"<IFRAME", b"<H1", b"<DIV", b"<FONT", b"<TABLE", b"<A", b"<STYLE",
+        b"<TITLE", b"<B", b"<BODY", b"<BR", b"<P", b"<!--"];
+    PATTERNS.iter().any(|pattern| header.get(..pattern.len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(pattern))
+        && header.get(pattern.len()).is_some_and(|byte| matches!(byte, b' ' | b'>')))
 }
 
 /// HTML-34: `navigate_iframes`'s fetch/decide-mime step hands back either an
@@ -280,14 +301,14 @@ enum LoadedChildDocument {
 fn parse_response(body: &[u8], mime: &str, charset: Option<&str>) -> Result<(Dom, &'static str), String> {
     if mime == "text/html" {
         let decoded = amazing_html::encoding::decode(body, charset);
-        return Ok((amazing_html::parse_bytes(body, charset), decoded.encoding.name()));
+        return Ok((amazing_html::parse_bytes(body, charset), amazing_html::encoding::canonical_name(decoded.encoding)));
     }
     if matches!(mime, "text/xml" | "application/xml" | "application/xhtml+xml")
         || mime.ends_with("+xml") {
         let decoded = amazing_html::encoding::decode(body, charset);
         let parsed = amazing_html::parse_xml(&decoded.text)
             .map_err(|error| format!("XML parse failed: {error:?}"))?;
-        return Ok((parsed, decoded.encoding.name()));
+        return Ok((parsed, amazing_html::encoding::canonical_name(decoded.encoding)));
     }
     Err(format!("unsupported iframe media type: {mime}"))
 }
@@ -603,7 +624,7 @@ impl RuntimeBindings {
                 if mime == "text/html" {
                     let decoded = amazing_html::encoding::decode(&response.body, charset);
                     return Ok(LoadedChildDocument::Deferred { source: decoded.text,
-                        url: document_url, mime, encoding: decoded.encoding.name() });
+                        url: document_url, mime, encoding: amazing_html::encoding::canonical_name(decoded.encoding) });
                 }
                 let (parsed, encoding) = parse_response(&response.body, &mime, charset)?;
                 Ok(LoadedChildDocument::Eager { parsed, url: document_url, mime, encoding })
@@ -1728,6 +1749,64 @@ mod tests {
     use crate::{dom_host::BrowserDomHost, js_scheduler::{DriverScheduler, JS_CAPACITY}};
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::{Shutdown, TcpListener};
+
+    fn response_with_mime(mime: Option<&str>, no_sniff: bool) -> amazing_net::Response {
+        let mut headers = amazing_net::Headers::new();
+        if let Some(mime) = mime { headers.append("content-type", mime.into()).unwrap(); }
+        if no_sniff { headers.append("x-content-type-options", "NoSniff".into()).unwrap(); }
+        amazing_net::Response { url: "https://example.test/encoding.py?label=big5".into(),
+            status: 200, reason: "OK".into(), headers,
+            body: b"<!doctype html><meta charset=big5><body>decoded".to_vec() }
+    }
+
+    #[test]
+    fn missing_or_unknown_response_mime_sniffs_real_html_bytes_and_encoding() {
+        for supplied in [None, Some("unknown/unknown"), Some("application/unknown"), Some("*/*")] {
+            let response = response_with_mime(supplied, false);
+            let mime = content_type(&response, &response.url, false).unwrap();
+            assert_eq!(mime, "text/html");
+            let (dom, encoding) = parse_response(&response.body, &mime, None).unwrap();
+            assert!(dom.dump(amazing_dom::NodeIdx(0)).contains("decoded"));
+            assert_eq!(encoding, "Big5");
+        }
+    }
+
+    #[test]
+    fn explicit_mime_and_nosniff_are_authoritative_for_html_signatures() {
+        for mime in ["text/plain", "application/octet-stream", "image/png", "application/xml"] {
+            let response = response_with_mime(Some(mime), false);
+            let actual = content_type(&response, &response.url, false);
+            assert_eq!(actual.as_deref(), if mime == "application/octet-stream" { None } else { Some(mime) });
+        }
+        assert_eq!(content_type(&response_with_mime(None, true), "https://example.test/page", false), None);
+        let response = response_with_mime(Some("text/html"), true);
+        assert_eq!(content_type(&response, &response.url, false).as_deref(), Some("text/html"));
+    }
+
+    #[test]
+    fn html_signature_matching_uses_exact_whitespace_and_tag_boundaries() {
+        for html in ["<!doctype html>", " \t\n\u{c}\r<HTML lang=en>", "<p>", "<!-- comment -->", "<sCrIpT >"] {
+            assert!(has_html_signature(html.as_bytes()), "{html:?}");
+        }
+        for other in ["<htmlish>", "<html/>", "<html\t>", "<!--comment-->", "prefix<html>", "\u{b}<html>", "<html", "<?xml version='1.0'?>", ""] {
+            assert!(!has_html_signature(other.as_bytes()), "{other:?}");
+        }
+        assert!(!has_html_signature(format!("{}<html>", " ".repeat(1445)).as_bytes()));
+    }
+
+    #[test]
+    fn iframe_document_metadata_uses_canonical_names_after_decode_precedence() {
+        for (bytes, transport, name) in [
+            (&b"\xef\xbb\xbf<p>bom"[..], Some("big5"), "UTF-8"),
+            (&b"<meta charset=big5><p>meta"[..], None, "Big5"),
+            (&b"<meta charset=big5><p>transport"[..], Some("shift_jis"), "Shift_JIS"),
+            (&b"<p>fallback"[..], None, "windows-1252"),
+        ] {
+            assert_eq!(parse_response(bytes, "text/html", transport).unwrap().1, name);
+        }
+        assert_eq!(parse_response(b"<root/>", "application/xml", Some("iso-8859-2")).unwrap().1, "ISO-8859-2");
+        assert_eq!(amazing_html::encoding::Encoding::Utf8.name(), "utf-8");
+    }
 
     fn serve_xml_once(extra_header: &str) -> (String, std::thread::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
