@@ -29,9 +29,9 @@ pub(super) fn expand_font_sheets(
             warnings.push(format!("font stylesheet import limit at {url}"));
             return;
         }
-        if !seen.insert(url.to_owned()) {
-            return;
-        }
+        // Distinct inline sheets share a document URL. Preserve every root
+        // source; URL deduplication below applies only to recursive imports.
+        seen.insert(url.to_owned());
         for imported in import_urls(source) {
             let resolved = super::resolve_font_url(url, &imported);
             if seen.contains(&resolved) {

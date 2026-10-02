@@ -48,8 +48,10 @@ pub(crate) fn cmd_style(args: &[String]) -> ExitCode {
         }
     }
 
+    let font_sheets = sources.iter().map(|(source, sheet)| (source.clone(), sheet.base_url.clone().unwrap_or_else(|| html_path.clone()))).collect::<Vec<_>>();
+    let page_text = load_page_text_from_sheets(&font_sheets, html_path);
     let (_, sheets): (Vec<_>, Vec<_>) = sources.into_iter().unzip();
-    let styled = amazing_css::compute(&dom, &sheets);
+    let styled = crate::font_metrics::compute(&dom, &sheets, &amazing_css::MediaEnvironment::default(), None, &page_text.provider);
 
     print_styled(&dom, amazing_dom::NodeIdx(0), 0, &styled);
     ExitCode::SUCCESS
@@ -126,15 +128,15 @@ pub(crate) fn cmd_layout(args: &[String]) -> ExitCode {
         }
     }
 
+    let font_sheets = sources.iter().map(|(source, sheet)| (source.clone(), sheet.base_url.clone().unwrap_or_else(|| html_path.clone()))).collect::<Vec<_>>();
+    let page_text = load_page_text_from_sheets(&font_sheets, html_path);
     let (_, sheets): (Vec<_>, Vec<_>) = sources.into_iter().unzip();
-    let styled = amazing_css::compute_with_environment(&dom, &sheets,
+    let styled = crate::font_metrics::compute(&dom, &sheets,
         &amazing_css::MediaEnvironment {
             viewport_width_px: width.max(1.0),
             ..amazing_css::MediaEnvironment::default()
-        });
-    let fonts = amazing_layout::font::FontSource::fallback();
-    let mut root = amazing_layout::box_tree::build_layout_tree(&dom, &styled, &fonts);
-    amazing_layout::block::layout_root_in_viewport(&mut root, width, None, &fonts);
+        }, None, &page_text.provider);
+    let root = amazing_layout::layout_styled_document(&dom, &styled, &page_text.provider, &amazing_layout::NoReplacedElements, width, None);
     print!("{}", amazing_layout::dump_layout(&dom, &root));
     ExitCode::SUCCESS
 }
@@ -361,13 +363,15 @@ fn sample_animation_frame(
     let dom = host.borrow();
     let mut sources = Vec::new();
     collect_author_css(&dom.dom, amazing_dom::NodeIdx(0), html_path, &mut sources)?;
+    let font_sheets = sources.iter().map(|(source, url, _)| (source.clone(), url.clone())).collect::<Vec<_>>();
+    let page_text = load_page_text_from_sheets(&font_sheets, html_path);
     let sheets = sources.into_iter().map(|(_, _, sheet)| sheet).collect::<Vec<_>>();
     let environment = amazing_css::MediaEnvironment {
         viewport_width_px: width.max(1) as f32,
         viewport_height_px: height.max(1) as f32,
         ..amazing_css::MediaEnvironment::default()
     };
-    animations.frame_with_environment(&dom.dom, &sheets, &environment, now_ms)
+    animations.frame_with_font_metrics(&dom.dom, &sheets, &environment, &page_text.provider, now_ms)
         .map_err(PageError::Render)
 }
 
@@ -424,6 +428,8 @@ fn paint_host_surface_with_updates(
         viewport_height_px: fixed_height.unwrap_or(600).max(1) as f32,
         ..amazing_css::MediaEnvironment::default()
     };
+    let page_text = std::cell::OnceCell::new();
+    let page_text = || page_text.get_or_init(|| load_page_text_from_sheets(&font_sheets, html_path));
     // Font discovery retains each sheet's URL; style computation retains each
     // sheet owner's implicit scope root.
 
@@ -439,24 +445,23 @@ fn paint_host_surface_with_updates(
         if let Some(surface) = coordinator.try_property_only(&dom.dom, &sheets, viewport, &journal) {
             return Ok(surface);
         }
-        let candidate = coordinator.candidate(&dom.dom, &sheets, viewport, journal);
+        let candidate = coordinator.candidate_with_font_metrics(&dom.dom, &sheets, viewport, journal, &page_text().provider);
         let styled = candidate.styles.clone();
         coordinator.commit(&dom.dom, &sheets, viewport, &styled);
         let media = load_page_media(&dom.dom, html_path, &styled);
-        let page_text = load_page_text_from_sheets(&font_sheets, html_path);
         let paint = PagePaint { media: &media, dom: &dom.dom, styles: &styled };
         coordinator.update_layout_production(&dom.dom, &styled, candidate,
-            &page_text.provider, &paint, width, fixed_height.map(|height| height as f32));
+            &page_text().provider, &paint, width, fixed_height.map(|height| height as f32));
         let height = fixed_height.unwrap_or_else(||
             amazing_layout::layout_overflow_bottom(coordinator.layout_root())
                 .ceil().clamp(1.0, 8192.0) as u32);
         return match coordinator.compositor_candidate(&dom.dom, viewport.0, height,
-            &page_text.provider, &paint, None) {
+            &page_text().provider, &paint, None) {
             Ok(frame) => Ok(frame.pixels),
             Err(_) => {
                 coordinator.reset_scene();
                 Ok(amazing_paint::paint_document_with_text_resources(
-                    coordinator.layout_root(), viewport.0, height, &page_text.provider, &paint))
+                    coordinator.layout_root(), viewport.0, height, &page_text().provider, &paint))
             }
         };
     }
@@ -472,27 +477,26 @@ fn paint_host_surface_with_updates(
                 return Ok(surface);
             }
         }
-        let candidate = coordinator.candidate(&dom.dom, &sheets, viewport, journal);
-        let full = amazing_css::compute_with_environment(&dom.dom, &sheets, &environment);
+        let candidate = coordinator.candidate_with_font_metrics(&dom.dom, &sheets, viewport, journal, &page_text().provider);
+        let full = crate::font_metrics::compute(&dom.dom, &sheets, &environment, None, &page_text().provider);
         style_divergence = crate::render_oracle::first_style_mismatch(&dom.dom, &candidate.styles, &full);
         crate::render_oracle::report_style_work(&candidate);
         coordinator.commit(&dom.dom, &sheets, viewport, &full);
         style_candidate = Some(candidate);
     }
-    let styled = amazing_css::compute_with_animations_and_environment(
-        &dom.dom, &sheets, animated, &environment);
+    let styled = crate::font_metrics::compute(
+        &dom.dom, &sheets, &environment, Some(animated), &page_text().provider);
     let mut media = crate::page::load_page_media_in_viewport(&dom.dom, html_path, &styled, width, 1.0);
     for warning in &media.warnings {
         eprintln!("amazing render: {warning}");
     }
-    let page_text = load_page_text_from_sheets(&font_sheets, html_path);
-    for warning in &page_text.warnings {
+    for warning in &page_text().warnings {
         eprintln!("amazing render: {warning}");
     }
     let mut root = amazing_layout::layout_styled_document(
         &dom.dom,
         &styled,
-        &page_text.provider,
+        &page_text().provider,
         &media,
         width,
         fixed_height.map(|height| height as f32),
@@ -501,7 +505,7 @@ fn paint_host_surface_with_updates(
         x: 0.0, y: 0.0, width, height: fixed_height.unwrap_or(600) as f32,
     }) > 0 {
         root = amazing_layout::layout_styled_document(
-            &dom.dom, &styled, &page_text.provider, &media,
+            &dom.dom, &styled, &page_text().provider, &media,
             width, fixed_height.map(|height| height as f32),
         );
     }
@@ -520,7 +524,7 @@ fn paint_host_surface_with_updates(
         let (geometry, paint_update) = coordinator.update_layout_and_paint(
             &dom.dom, &styled, style_candidate.expect("oracle style candidate"),
             style_divergence.is_some(), &root, width.max(1.0) as u32, page_height,
-            &page_text.provider, &paint, width, fixed_height.map(|height| height as f32),
+            &page_text().provider, &paint, width, fixed_height.map(|height| height as f32),
         );
         eprintln!("amazing oracle: layout outcome={:?} dirty={} changed={} paint={:?}",
             geometry.outcome, geometry.dirty.len(), geometry.changed.len(),
@@ -533,27 +537,27 @@ fn paint_host_surface_with_updates(
         let layout_divergence = crate::render_oracle::first_layout_mismatch(coordinator.layout_root(), &root);
         let candidate = coordinator.compositor_candidate(
             &dom.dom, width.max(1.0) as u32, page_height,
-            &page_text.provider, &paint, paint_update.as_ref(),
+            &page_text().provider, &paint, paint_update.as_ref(),
         );
         let work = coordinator.last_work();
         eprintln!("amazing oracle: work style_calls={} layout_calls={} paint_view_calls={} style_recalculated={} layout_dirty={} layout_full={} paint_changed={} paint_full={} tile_uploads={} tiles_dirtied={}",
             work.style_rebuild_calls, work.layout_update_calls, work.paint_view_rebuild_calls,
             work.style_recalculated, work.layout_dirty, work.layout_full,
             work.paint_changed, work.paint_full, work.tile_uploads, work.tiles_dirtied);
-        let full_styles = amazing_css::compute_with_animations_and_environment(
-            &dom.dom, &sheets, animated, &environment);
+        let full_styles = crate::font_metrics::compute(
+            &dom.dom, &sheets, &environment, Some(animated), &page_text().provider);
         let full_root = amazing_layout::layout_styled_document(
-            &dom.dom, &full_styles, &page_text.provider, &media,
+            &dom.dom, &full_styles, &page_text().provider, &media,
             width, fixed_height.map(|height| height as f32),
         );
         let full_paint = PagePaint { media: &media, dom: &dom.dom, styles: &full_styles };
         let full_view = amazing_paint::display_list_view::DisplayListView::with_dom_generations(
-            &full_root, width.max(1.0) as u32, page_height, &page_text.provider,
+            &full_root, width.max(1.0) as u32, page_height, &page_text().provider,
             &full_paint, &amazing_paint::controls::NoControls, &dom.dom,
         );
         let full_items = crate::render_oracle::PaintSnapshot::from_view(&full_view);
         let full = amazing_paint::paint_document_with_text_resources(
-            &full_root, width.max(1.0) as u32, page_height, &page_text.provider, &full_paint,
+            &full_root, width.max(1.0) as u32, page_height, &page_text().provider, &full_paint,
         );
         let divergence = style_divergence
             .or_else(|| crate::render_oracle::first_style_mismatch(&dom.dom, &styled, &full_styles))
@@ -594,7 +598,7 @@ fn paint_host_surface_with_updates(
         return Ok(full);
     }
     Ok(amazing_paint::paint_document_with_text_resources(
-        &root, width.max(1.0) as u32, page_height, &page_text.provider, &paint,
+        &root, width.max(1.0) as u32, page_height, &page_text().provider, &paint,
     ))
 }
 

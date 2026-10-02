@@ -11,6 +11,7 @@ mod gui;
 mod js_scheduler;
 mod navigator;
 mod page;
+mod font_metrics;
 mod render_oracle;
 mod runtime_binding_host;
 mod runtime_host_a11y;

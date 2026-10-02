@@ -4,7 +4,7 @@
 //! A fresh style, layout and paint result at the same frozen DOM epoch remains
 //! the pixel reference until the retained path has exact parity.
 use amazing_compositor::{Compositor, CssCompositorTimeline, PaintDelta, PaintItemKey, PaintViewRasterMode, PaintViewSource, PixelParity, Presenter, ReferenceCpuPresenter, TileRasterMode, TileRasterPool, TileRasterRequest, classify_pixel_parity};
-use amazing_css::{AnimatedValues, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MediaEnvironment, MutationKind, RenderMutation as StyleMutation, StyleChangeKind, StyleDelta, StyleInvalidator, StyledDom, Stylesheet, recompute_roots, selectors::PseudoElement};
+use amazing_css::{AnimatedValues, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MediaEnvironment, MutationKind, RenderMutation as StyleMutation, StyleChangeKind, StyleDelta, StyleInvalidator, StyledDom, Stylesheet, selectors::PseudoElement};
 use amazing_css::animation::AnimationMainThreadEvent;
 use amazing_dom::{Dom, NodeIdx};
 use amazing_dom::render_mutation::{RenderMutation, RenderMutationKind};
@@ -405,6 +405,10 @@ impl RenderCoordinator {
     /// Drain only the journal prefix visible at this boundary. Node generation
     /// is checked against the prior cache before allowing a CSS root update.
     pub(crate) fn candidate(&mut self, dom: &Dom, sheets: &[Stylesheet], viewport: (u32, u32), journal: Vec<RenderMutation>) -> StyleCandidate {
+        self.candidate_with_font_metrics(dom, sheets, viewport, journal, &amazing_text_provider::TextProvider::new())
+    }
+
+    pub(crate) fn candidate_with_font_metrics(&mut self, dom: &Dom, sheets: &[Stylesheet], viewport: (u32, u32), journal: Vec<RenderMutation>, provider: &amazing_text_provider::TextProvider) -> StyleCandidate {
         let environment = MediaEnvironment {
             viewport_width_px: viewport.0 as f32,
             viewport_height_px: viewport.1.max(1) as f32,
@@ -429,14 +433,14 @@ impl RenderCoordinator {
         };
         if full {
             return StyleCandidate {
-                styles: amazing_css::compute_with_environment(dom, sheets, &environment), mutations,
+                styles: crate::font_metrics::compute(dom, sheets, &environment, None, provider), mutations,
                 recalculated: dom.node_count(), full_fallback: true,
                 changed: BTreeMap::new(), change_kinds: BTreeMap::new(), inputs,
             };
         }
         let changes = journal.iter().map(|entry| self.to_style_mutation(entry)).collect::<Vec<_>>();
         let roots = self.invalidator.as_ref().unwrap().collect(&changes, self.stylesheet_epoch);
-        let delta = recompute_roots(dom, self.previous.as_ref().unwrap(), roots);
+        let delta = amazing_css::recompute_roots_with_font_metrics(dom, self.previous.as_ref().unwrap(), roots, &crate::font_metrics::FontMetrics { dom, provider });
         StyleCandidate {
             styles: delta.styles,
             mutations,

@@ -1,0 +1,24 @@
+{
+  "base": "f120de608169358b37e7cf2686c38ef9e8bdaa10",
+  "baseline": "5d77bc8cf0c6a715d3f200a610303030e7bb2769",
+  "candidate_dependencies": "20f99e79",
+  "platform": "Linux Boat",
+  "boat": "bx_9g5gdw9m",
+  "workspace_pass": 3690,
+  "workspace_skip": 17,
+  "doctests_pass": 4,
+  "workspace_seconds": 100.217,
+  "before": {
+    "pass": 24,
+    "mismatch": 8,
+    "files": 32
+  },
+  "after": {
+    "pass": 24,
+    "mismatch": 8,
+    "files": 32
+  },
+  "gained": 0,
+  "lost": 0,
+  "changed": 0
+}

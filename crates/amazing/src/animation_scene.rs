@@ -53,7 +53,13 @@ impl AnimationScene {
         environment: &amazing_css::MediaEnvironment,
         now_ms: f64,
     ) -> Result<AnimationFrameOutput, String> {
-        let styled = amazing_css::compute_with_environment(dom, sheets, environment);
+        self.frame_with_font_metrics(dom, sheets, environment, &amazing_text_provider::TextProvider::new(), now_ms)
+    }
+
+    pub(crate) fn frame_with_font_metrics(&mut self, dom: &Dom, sheets: &[Stylesheet],
+        environment: &amazing_css::MediaEnvironment, provider: &amazing_text_provider::TextProvider, now_ms: f64,
+    ) -> Result<AnimationFrameOutput, String> {
+        let styled = crate::font_metrics::compute(dom, sheets, environment, None, provider);
         self.frame_from_styles(dom, &styled, sheets, now_ms)
     }
 

@@ -2206,8 +2206,8 @@ impl PageOwner {
     fn computed_style_for_node(&self, node: EngineNodeId) -> Result<Vec<(String, String)>, HostError> {
         let host = self.dom_host.borrow();
         let dom = &host.dom;
-        let sheets = self.author_sheets(dom);
-        let styled = amazing_css::compute_with_environment(dom, &sheets, &self.media_environment());
+        let (sheets, page_text) = crate::font_metrics::load(dom, &self.url);
+        let styled = crate::font_metrics::compute(dom, &sheets, &self.media_environment(), None, &page_text.provider);
         let style = styled
             .get(amazing_dom::NodeIdx(node.0 as u32))
             .ok_or(HostError::NotFound)?;
@@ -2276,19 +2276,19 @@ impl PageOwner {
         Ok(Some(text))
     }
 
-    /// Computes style + the same fallback layout `full_ax_tree` uses, then
+    /// Computes style and layout using the registered page font provider, then
     /// hit-tests it. Returns `HostError::NotFound` when `(x, y)` misses every
     /// box (e.g. outside the page).
     fn hit_test_node(&self, x: f64, y: f64) -> Result<EngineNodeId, HostError> {
         let host = self.dom_host.borrow();
         let dom = &host.dom;
-        let sheets = self.author_sheets(dom);
-        let styled = amazing_css::compute_with_environment(dom, &sheets, &self.media_environment());
-        let text = amazing_text::FallbackTextSystem::new();
+        let (sheets, page_text) = crate::font_metrics::load(dom, &self.url);
+        let styled = crate::font_metrics::compute(dom, &sheets, &self.media_environment(), None, &page_text.provider);
+        let text = &page_text.provider;
         let layout = amazing_layout::layout_styled_document(
             dom,
             &styled,
-            &text,
+            text,
             &amazing_layout::NoReplacedElements,
             self.effective_width(),
             self.effective_fixed_height().map(|h| h as f32),
@@ -2299,7 +2299,7 @@ impl PageOwner {
             .ok_or(HostError::NotFound)
     }
 
-    /// Computes style + the same fallback layout `hit_test_node`/
+    /// Computes style and the same page-font layout `hit_test_node`/
     /// `full_ax_tree` use, then finds `node`'s own laid-out box
     /// (`find_box_for_node`) and converts it to a CDP box model
     /// (`DOM.getBoxModel`). `HostError::NotFound` covers both an unknown
@@ -2309,13 +2309,13 @@ impl PageOwner {
     fn get_box_model(&self, node: EngineNodeId) -> Result<BoxModel, HostError> {
         let host = self.dom_host.borrow();
         let dom = &host.dom;
-        let sheets = self.author_sheets(dom);
-        let styled = amazing_css::compute_with_environment(dom, &sheets, &self.media_environment());
-        let text = amazing_text::FallbackTextSystem::new();
+        let (sheets, page_text) = crate::font_metrics::load(dom, &self.url);
+        let styled = crate::font_metrics::compute(dom, &sheets, &self.media_environment(), None, &page_text.provider);
+        let text = &page_text.provider;
         let layout = amazing_layout::layout_styled_document(
             dom,
             &styled,
-            &text,
+            text,
             &amazing_layout::NoReplacedElements,
             self.effective_width(),
             self.effective_fixed_height().map(|h| h as f32),
@@ -2657,8 +2657,8 @@ impl PageOwner {
         Ok(Screenshot { data: amazing_canvas::encode_png(&image), format: ScreenshotFormat::Png })
     }
 
-    /// Computes style + layout (the same minimal `FallbackTextSystem` /
-    /// `NoReplacedElements` path `amazing axtree` uses) on the live DOM and
+    /// Computes style and layout with actual page fonts and
+    /// `NoReplacedElements` on the live DOM and
     /// records a fresh checkpoint on [`Self::ax_watcher`] — building the
     /// tree fresh on the first call, or diffing it against whatever
     /// checkpoint came before on every later one (CDP-25's
@@ -2674,13 +2674,13 @@ impl PageOwner {
     fn refresh_ax_tree(&mut self) -> amazing_a11y::AxTree {
         let host = self.dom_host.borrow();
         let dom = &host.dom;
-        let sheets = self.author_sheets(dom);
-        let styled = amazing_css::compute_with_environment(dom, &sheets, &self.media_environment());
-        let text = amazing_text::FallbackTextSystem::new();
+        let (sheets, page_text) = crate::font_metrics::load(dom, &self.url);
+        let styled = crate::font_metrics::compute(dom, &sheets, &self.media_environment(), None, &page_text.provider);
+        let text = &page_text.provider;
         let layout = amazing_layout::layout_styled_document(
             dom,
             &styled,
-            &text,
+            text,
             &amazing_layout::NoReplacedElements,
             self.effective_width(),
             self.effective_fixed_height().map(|h| h as f32),

@@ -195,9 +195,9 @@ pub(crate) fn ax_tree_for_page(
         viewport_height_px: fixed_height.unwrap_or(600).max(1) as f32,
         ..amazing_css::MediaEnvironment::default()
     };
-    let styled = amazing_css::compute_with_environment(&dom, &sheets, &environment);
-    let media = load_page_media_in_viewport(&dom, &base_url, &styled, width, 1.0);
     let page_text = load_page_text_from_sheets(&font_sheets, &base_url);
+    let styled = crate::font_metrics::compute(&dom, &sheets, &environment, None, &page_text.provider);
+    let media = load_page_media_in_viewport(&dom, &base_url, &styled, width, 1.0);
     let layout = amazing_layout::layout_styled_document(
         &dom,
         &styled,

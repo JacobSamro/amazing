@@ -576,23 +576,20 @@ mod windows {
                 eprintln!("amazing gui: stylesheet refresh failed: {error}");
                 return;
             }
-            let sheets = font_sheets.iter().map(|(source, url)| {
-                let mut sheet = amazing_css::parse_stylesheet(source);
-                sheet.base_url = Some(url.clone());
-                sheet
-            }).collect::<Vec<_>>();
+            let sheets = font_sheets.iter().map(|(_, _, sheet)| sheet.clone()).collect::<Vec<_>>();
             let environment = amazing_css::MediaEnvironment {
                 viewport_width_px: width.max(1) as f32,
                 viewport_height_px: viewport_height,
                 ..amazing_css::MediaEnvironment::default()
             };
-            let styled = amazing_css::compute_with_animations_and_environment(
-                &host_ref.dom, &sheets, runtime.animations.animated(), &environment);
+            let font_sources = font_sheets.iter().map(|(source, url, _)| (source.clone(), url.clone())).collect::<Vec<_>>();
+            let page_text = load_page_text_from_sheets(&font_sources, &page);
+            let styled = crate::font_metrics::compute(
+                &host_ref.dom, &sheets, &environment, Some(runtime.animations.animated()), &page_text.provider);
             let mut media = load_page_media_in_viewport(&host_ref.dom, &page, &styled, width.max(1) as f32, 1.0);
             for warning in &media.warnings {
                 eprintln!("amazing gui: {warning}");
             }
-            let page_text = load_page_text_from_sheets(&font_sheets, &page);
             for warning in &page_text.warnings {
                 eprintln!("amazing gui: {warning}");
             }
@@ -709,6 +706,8 @@ mod windows {
         }
 
         fn pump_timers(&mut self) {
+            let width = self.width;
+            let viewport_height = self.viewport_height.max(1) as f32;
             let page = self.tab().current_url().unwrap_or("").to_owned();
             let mut fired = false;
             let mut render_output: Option<amazing_compositor::AnimationFrameOutput> = None;
@@ -733,12 +732,11 @@ mod windows {
                         if collect_author_css(&dom.dom, NodeIdx(0), page, &mut sources).is_err() {
                             return;
                         }
-                        let sheets = sources.into_iter().map(|(source, url)| {
-                            let mut sheet = amazing_css::parse_stylesheet(&source);
-                            sheet.base_url = Some(url);
-                            sheet
-                        }).collect::<Vec<_>>();
-                        match animations.frame(&dom.dom, &sheets, now_ms) {
+                        let sheets = sources.iter().map(|(_, _, sheet)| sheet.clone()).collect::<Vec<_>>();
+                        let font_sources = sources.iter().map(|(source, url, _)| (source.clone(), url.clone())).collect::<Vec<_>>();
+                        let text = load_page_text_from_sheets(&font_sources, page);
+                        let environment = amazing_css::MediaEnvironment { viewport_width_px: width.max(1) as f32, viewport_height_px: viewport_height, ..Default::default() };
+                        match animations.frame_with_font_metrics(&dom.dom, &sheets, &environment, &text.provider, now_ms) {
                             Ok(output) => *output_slot = Some(output),
                             Err(error) => *error_slot = Some(error),
                         }
@@ -973,50 +971,9 @@ mod windows {
         String::from_utf16_lossy(&buffer[..written.max(0) as usize])
     }
 
-    fn collect_author_css(
-        dom: &Dom,
-        node: NodeIdx,
-        page: &str,
-        out: &mut Vec<(String, String)>,
-    ) -> Result<(), String> {
-        if dom.name(node) == Some("style") {
-            let mut source = String::new();
-            for child in dom.children(node) {
-                if let NodeKind::Text { data } = &dom.get(child).kind {
-                    source.push_str(data);
-                }
-            }
-            out.push((source, page.to_owned()));
-            return Ok(());
-        }
-        if dom.name(node) == Some("link") {
-            let attrs = dom.attrs_of(node).unwrap_or(&[]);
-            let rel = attrs
-                .iter()
-                .find(|(name, _)| name == "rel")
-                .map(|(_, value)| value.to_ascii_lowercase())
-                .unwrap_or_default();
-            if rel
-                .split_ascii_whitespace()
-                .any(|token| token == "stylesheet")
-                && let Some(href) = attrs
-                    .iter()
-                    .find(|(name, _)| name == "href")
-                    .map(|(_, value)| value)
-            {
-                let url = resolve_script_url(page, href);
-                let response = amazing_net::fetch(&url, &amazing_net::FetchOptions::default())
-                    .map_err(|error| format!("stylesheet {href}: {error}"))?;
-                let css = response
-                    .text()
-                    .ok_or_else(|| format!("stylesheet {href} was not text"))?;
-                out.push((css, response.url));
-            }
-        }
-        for child in dom.children(node) {
-            collect_author_css(dom, child, page, out)?;
-        }
-        Ok(())
+    fn collect_author_css(dom: &Dom, node: NodeIdx, page: &str,
+        out: &mut Vec<(String, String, amazing_css::Stylesheet)>) -> Result<(), String> {
+        crate::page::collect_author_css(dom, node, page, out).map_err(|error| error.to_string())
     }
 
     fn collect_scripts(dom: &Dom, node: NodeIdx, scripts: &mut Vec<PageScript>) {
@@ -1154,33 +1111,30 @@ mod windows {
             let host_ref = host.borrow();
             collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut font_sheets)?;
         }
-        let sheets = font_sheets.iter().map(|(source, url)| {
-            let mut sheet = amazing_css::parse_stylesheet(source);
-            sheet.base_url = Some(url.clone());
-            sheet
-        }).collect::<Vec<_>>();
+        let sheets = font_sheets.iter().map(|(_, _, sheet)| sheet.clone()).collect::<Vec<_>>();
         let environment = amazing_css::MediaEnvironment {
             viewport_width_px: width.max(1) as f32,
             viewport_height_px: 700.0,
             ..amazing_css::MediaEnvironment::default()
         };
+        let font_sources = font_sheets.iter().map(|(source, url, _)| (source.clone(), url.clone())).collect::<Vec<_>>();
+        let page_text = load_page_text_from_sheets(&font_sources, input);
         let mut animations = AnimationScene::new();
         let animation_started = Instant::now();
         let initial_animation = {
             let host_ref = host.borrow();
-            animations.frame_with_environment(&host_ref.dom, &sheets, &environment, 0.)?
+            animations.frame_with_font_metrics(&host_ref.dom, &sheets, &environment, &page_text.provider, 0.)?
         };
         for event in &initial_animation.events {
             js.dispatch_animation_event(event).map_err(|error| error.describe())?;
         }
         let host_ref = host.borrow();
-        let styled = amazing_css::compute_with_animations_and_environment(
-            &host_ref.dom, &sheets, animations.animated(), &environment);
+        let styled = crate::font_metrics::compute(
+            &host_ref.dom, &sheets, &environment, Some(animations.animated()), &page_text.provider);
         let mut media = load_page_media_in_viewport(&host_ref.dom, input, &styled, width.max(1) as f32, 1.0);
         for warning in &media.warnings {
             eprintln!("amazing gui: {warning}");
         }
-        let page_text = load_page_text_from_sheets(&font_sheets, input);
         for warning in &page_text.warnings {
             eprintln!("amazing gui: {warning}");
         }

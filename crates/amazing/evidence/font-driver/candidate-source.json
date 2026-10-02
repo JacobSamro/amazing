@@ -1,0 +1,12 @@
+{
+  "crates/amazing/src/animation_scene.rs": "ccd46c41ba7b5d9f6eaecc03117bb54b21e05a8677a547c7ee919cbd65b1e4ea",
+  "crates/amazing/src/cmd/render.rs": "e1d33c3edb57da1c4340392ca118040d21eb84e7c0217c8065a19cbe1dceff92",
+  "crates/amazing/src/font_loader.rs": "289bd63329bb39f7f9d46b0f292247a9152adad7cb1dd6cad664bb327db3d2a3",
+  "crates/amazing/src/font_metrics.rs": "beb5599edb8586a050f7a5e5f82a9e4b7d977b3bbb937ecbe15815ab246e46d7",
+  "crates/amazing/src/gui.rs": "d6af8e260164a3f5b9d6dce5075d7df9974194f0bc4c4a714635a08bf5498e7d",
+  "crates/amazing/src/main.rs": "8c3ec471a29ff84b5c4aa533bec24b54dc2cf2fd143a33a629020c29f50540e9",
+  "crates/amazing/src/render_oracle.rs": "d226b94651f79aa2f7dee93784fced124d851e28cafcae79656c9298c51cb204",
+  "crates/amazing/src/runtime_host_a11y.rs": "f1e1a525233b3fc25fcaf4318caafaf9456f4b894be3acc685b5bbf969786e46",
+  "crates/amazing/src/runtime_host_devtools.rs": "5c64b35f4aa21f81c23fe721c506aeeed4e51efc3f9579d89d9438eadb69f9ba",
+  "crates/amazing/tests/fixtures/font-metrics-space.ttf": "f9cb904d8909bb4b2b5c39c7b7b170554e5651b4b9a3bc623c0315f7963c27ea"
+}
