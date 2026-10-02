@@ -275,6 +275,7 @@ pub struct Interpreter {
     pub set_proto: Obj,
     pub date_proto: Obj,
     pub promise_proto: Obj,
+    intrinsic_promise_constructor: JsValue,
     pub regexp_proto: Obj,
     /// %Error.prototype%, kept as a stored field so the `stack` accessor's
     /// setter can compare its receiver against the exact home object
@@ -494,6 +495,7 @@ impl Interpreter {
             set_proto,
             date_proto,
             promise_proto,
+            intrinsic_promise_constructor: JsValue::Undefined,
             regexp_proto,
             error_proto,
             output: RefCell::new(Vec::new()),
@@ -1673,6 +1675,7 @@ include!("interp_equality.rs");
 include!("interp_install.rs");
 include!("interp_symbol.rs");
 include!("interp_builtins.rs");
+include!("interp_promise_capability.rs");
 include!("interp_array.rs");
 include!("interp_array_protocol.rs");
 include!("interp_array_factories.rs");

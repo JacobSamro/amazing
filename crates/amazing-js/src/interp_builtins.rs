@@ -1422,23 +1422,29 @@ fn promise_callback(
     target: &Obj,
     f: crate::value::NativeFn,
 ) -> JsValue {
-    let value = Interpreter::native(name, f, &i.function_proto);
+    let value = Interpreter::native_arity(name, f, &i.function_proto, 1);
     if let JsValue::Object(o) = &value {
         o.borrow_mut().promise_target = Some(target.clone());
     }
     value
 }
 
-fn native_promise(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn native_promise(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if i.current_new_target().is_none() {
+        return Err(Throw::type_error("Promise requires new"));
+    }
     let executor = args.first().cloned().unwrap_or(JsValue::Undefined);
     if callable_function(&executor).is_none() {
         return Err(Throw::type_error("Promise resolver is not a function"));
     }
     let promise = promise_object(&new_promise(i, PromiseFate::Pending))?;
-    let resolve = promise_callback(i, "resolve", &promise, native_promise_resolve);
-    let reject = promise_callback(i, "reject", &promise, native_promise_reject);
-    if let Err(Throw(value)) = i.call_value(&executor, JsValue::Undefined, vec![resolve, reject]) {
-        settle_promise(&promise, PromiseFate::Rejected(value), i)?;
+    if let JsValue::Object(instance) = this {
+        promise.borrow_mut().proto = instance.borrow().proto.clone();
+    }
+    let resolve = promise_callback(i, "", &promise, native_promise_resolve);
+    let reject = promise_callback(i, "", &promise, native_promise_reject);
+    if let Err(Throw(value)) = i.call_value(&executor, JsValue::Undefined, vec![resolve, reject.clone()]) {
+        i.call_value(&reject, JsValue::Undefined, vec![value])?;
     }
     Ok(JsValue::Object(promise))
 }
@@ -1450,10 +1456,11 @@ fn current_promise_target(i: &Interpreter) -> Option<Obj> {
 
 fn native_promise_resolve(
     i: &mut Interpreter,
-    _: JsValue,
+    this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     if let Some(target) = current_promise_target(i) {
+        if !claim_promise_resolution(&target) { return Ok(JsValue::Undefined); }
         let value = args.first().cloned().unwrap_or(JsValue::Undefined);
         if adopt_promise_result(&target, &value, i)? { return Ok(JsValue::Undefined); }
         settle_promise(
@@ -1464,19 +1471,16 @@ fn native_promise_resolve(
         return Ok(JsValue::Undefined);
     }
     let value = args.first().cloned().unwrap_or(JsValue::Undefined);
-    if matches!(value, JsValue::Object(ref o) if matches!(o.borrow().exotic, Exotic::Promise(_))) {
-        Ok(value)
-    } else {
-        Ok(new_promise(i, PromiseFate::Fulfilled(value)))
-    }
+    promise_resolve_constructor(i, &this, value)
 }
 
 fn native_promise_reject(
     i: &mut Interpreter,
-    _: JsValue,
+    this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     if let Some(target) = current_promise_target(i) {
+        if !claim_promise_resolution(&target) { return Ok(JsValue::Undefined); }
         settle_promise(
             &target,
             PromiseFate::Rejected(args.first().cloned().unwrap_or(JsValue::Undefined)),
@@ -1484,13 +1488,16 @@ fn native_promise_reject(
         )?;
         return Ok(JsValue::Undefined);
     }
-    Ok(new_promise(
-        i,
-        PromiseFate::Rejected(args.first().cloned().unwrap_or(JsValue::Undefined)),
-    ))
+    let capability = new_promise_capability(i, &this)?;
+    finish_promise_capability(&capability,
+        PromiseFate::Rejected(args.first().cloned().unwrap_or(JsValue::Undefined)), i)?;
+    Ok(capability_promise(&capability))
 }
 
 fn settle_promise(target: &Obj, fate: PromiseFate, i: &mut Interpreter) -> Result<(), Throw> {
+    if !matches!(target.borrow().exotic, Exotic::Promise(_)) {
+        return finish_promise_capability(target, fate, i);
+    }
     let reactions = {
         let mut object = target.borrow_mut();
         let state = match &mut object.exotic {
@@ -1536,10 +1543,12 @@ fn run_promise_reaction(reaction: PendingReaction, fate: PromiseFate, i: &mut In
         (None, PromiseFate::Rejected(value)) => PromiseFate::Rejected(value),
         (_, PromiseFate::Pending) => PromiseFate::Pending,
     };
-    if let PromiseFate::Fulfilled(value) = &result {
+    if matches!(reaction.capability.borrow().exotic, Exotic::Promise(_)) {
+      if let PromiseFate::Fulfilled(value) = &result {
         if adopt_promise_result(&reaction.capability, value, i)? {
             return Ok(());
         }
+      }
     }
     settle_promise(&reaction.capability, result, i)
 }
@@ -1551,7 +1560,7 @@ fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) 
     if Rc::ptr_eq(&source.0, &capability.0) {
         settle_promise(
             capability,
-            PromiseFate::Rejected(JsValue::str("promise resolution cycle")),
+            PromiseFate::Rejected(Throw::type_error("promise resolution cycle").0),
             i,
         )?;
         return Ok(true);
@@ -1602,7 +1611,8 @@ fn native_promise_then(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let promise = promise_object(&this)?;
-    let result = promise_object(&new_promise(i, PromiseFate::Pending))?;
+    let constructor = promise_species_constructor(i, &this)?;
+    let result = new_promise_capability(i, &constructor)?;
     let fulfilled = args.get(0).filter(|value| callable_function(value).is_some()).cloned();
     let rejected = args.get(1).filter(|value| callable_function(value).is_some()).cloned();
     let state = {
@@ -1645,7 +1655,7 @@ fn native_promise_then(
         };
         i.enqueue_promise_job(PromiseJob { reaction, fate })?;
     }
-    Ok(JsValue::Object(result))
+    Ok(capability_promise(&result))
 }
 
 fn native_promise_catch(
@@ -1653,14 +1663,11 @@ fn native_promise_catch(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    native_promise_then(
-        i,
-        this,
-        vec![
+    let then = i.get_prop(&this, "then")?;
+    i.call_value(&then, this, vec![
             JsValue::Undefined,
             args.first().cloned().unwrap_or(JsValue::Undefined),
-        ],
-    )
+        ])
 }
 
 fn native_promise_finally(
@@ -1929,7 +1936,8 @@ fn attach_combinator(
     let promise = i.call_value(resolve, c.clone(), vec![input])?;
     let on_fulfill = combinator_callback(i, "combinatorFulfill", fulfill, state, index);
     let on_reject = combinator_callback(i, "combinatorReject", reject, state, index);
-    native_promise_then(i, promise, vec![on_fulfill, on_reject])?;
+    let then = i.get_prop(&promise, "then")?;
+    i.call_value(&then, promise, vec![on_fulfill, on_reject])?;
     Ok(())
 }
 
@@ -1937,12 +1945,8 @@ fn attach_combinator(
 /// `allSettled`, `any`), per ECMA-262 27.2.4.1/4.2/4.3/4.7:
 ///  1. If IsConstructor(C) is false, throw a TypeError (synchronous -- no
 ///     capability exists yet to reject).
-///  2. Let promiseCapability be NewPromiseCapability(C). We do not construct a
-///     real `C` instance here (true subclass branding via Construct(C,
-///     executor) is a separate, deeper gap shared with `new Promise()`
-///     itself's `new.target` handling); the internal pending promise created
-///     here stands in as the capability's promise, which is what every
-///     observable Promise.all/race/allSettled/any test actually inspects.
+///  2. Let promiseCapability be NewPromiseCapability(C), constructing C with
+///     an executor that captures its resolve/reject functions.
 ///  3. Let promiseResolve be GetPromiseResolve(C) (Get + callable check).
 ///  4+ Perform the combinator body (GetIterator/iterate + per-element
 ///     Call(promiseResolve, C, [next])).
@@ -1959,7 +1963,7 @@ fn combinator_entry(
             "Promise combinator called on a non-constructor",
         ));
     }
-    let target = promise_object(&new_promise(i, PromiseFate::Pending))?;
+    let target = new_promise_capability(i, this)?;
     let resolve = match i.get_prop(this, "resolve") {
         Ok(value) if callable_function(&value).is_some() => value,
         Ok(_) => {
@@ -1968,17 +1972,17 @@ fn combinator_entry(
                 PromiseFate::Rejected(Throw::type_error("resolve is not a function").0),
                 i,
             )?;
-            return Ok(JsValue::Object(target));
+            return Ok(capability_promise(&target));
         }
         Err(Throw(value)) => {
             settle_promise(&target, PromiseFate::Rejected(value), i)?;
-            return Ok(JsValue::Object(target));
+            return Ok(capability_promise(&target));
         }
     };
     if let Err(Throw(value)) = body(i, &target, this, &resolve) {
         settle_promise(&target, PromiseFate::Rejected(value), i)?;
     }
-    Ok(JsValue::Object(target))
+    Ok(capability_promise(&target))
 }
 
 fn native_promise_all(

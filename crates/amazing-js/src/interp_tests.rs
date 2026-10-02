@@ -989,7 +989,7 @@ mod tests {
     fn promise_combinators_reject_when_resolve_is_not_callable() {
         let mut i = Interpreter::new();
         i.run_script(
-            "function C(exec){exec(()=>{},()=>{})} C.resolve=1; Promise.all.call(C, []).catch(e=>console.log(e instanceof TypeError));",
+            "class C extends Promise {} C.resolve=1; Promise.all.call(C, []).catch(e=>console.log(e instanceof TypeError));",
         )
         .unwrap();
         assert_eq!(&*i.output.borrow(), &["true".to_string()]);
@@ -999,7 +999,7 @@ mod tests {
     fn promise_combinators_invoke_the_constructors_own_resolve() {
         let mut i = Interpreter::new();
         i.run_script(
-            "let calls=[]; function C(exec){exec(()=>{},()=>{})} C.prototype=Promise.prototype; \
+            "let calls=[]; class C extends Promise {} \
              C.resolve=function(v){calls.push(v); return Promise.resolve(v*10);}; \
              Promise.all.call(C, [1,2]).then(v=>console.log(v.join(','), calls.join(',')));",
         )
@@ -1498,6 +1498,31 @@ mod class_name_tests {
             ] {
                 let mut i = Interpreter::new();
                 assert_eq!(i.run_script_with_backend(source, backend).unwrap_or_else(|error| panic!("{backend:?}: {source}: {error:?}")), JsValue::Bool(true), "{backend:?}: {source}");
+            }
+        }
+    }
+
+    #[test]
+    fn promise_capabilities_observe_constructors_and_species() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            for source in [
+                "var result=false; function C(executor){executor(v=>{result=v===7},()=>{});} var p=Promise.resolve.call(C,7); result=result && p instanceof C;",
+                "var result=false; function C(executor){executor(()=>{},v=>{result=v===9});} var p=Promise.reject.call(C,9); result=result && p instanceof C;",
+                "var result=false; function C(executor){executor(v=>{result=v.length===0},()=>{});} C.resolve=Promise.resolve; var p=Promise.all.call(C,[]); result=result && p instanceof C;",
+                "var result=false; class C extends Promise {} var p=C.resolve(7); result=p instanceof C && C.resolve(p)===p && Promise.resolve(p)!==p;",
+                "var result=false; var p=Promise.resolve(5); function C(executor){executor(v=>{result=v===6 && branded},()=>{});} p.constructor={[Symbol.species]:C}; var q=p.then(v=>v+1); var branded=q instanceof C;",
+                "var result=false; var p=Promise.resolve(7); p.constructor={}; var original=Promise; Promise=function(){throw 1}; var q=p.then(); result=q instanceof original;",
+                "var result=false; try { Promise(()=>{}); } catch(e){result=e instanceof TypeError;}",
+                "var result=false; try { Promise.all.call(function(executor){executor(1,2)},[]); } catch(e){result=e instanceof TypeError;}",
+                "var result=false; function C(executor){executor(()=>{},()=>{}); executor(()=>{},()=>{});} try{Promise.resolve.call(C,1)}catch(e){result=e instanceof TypeError;}",
+                "var result=false; var resolve; var pending=new Promise(r=>{resolve=r}); var p=new Promise((r,j)=>{r(pending); j(9)}); p.then(v=>{result=v===7},()=>{result=false}); resolve(7);",
+                "var result=false; Promise.prototype.catch.call({then:function(a,b){result=a===undefined && b===7}},7);",
+                "var result=false; function C(executor){executor(v=>{result=v[0]===7},()=>{});} C.resolve=v=>({then:f=>f(v)}); var p=Promise.all.call(C,[7]); result=result && p instanceof C;",
+            ] {
+                let mut i = Interpreter::new();
+                i.run_script_with_backend(source, backend).unwrap_or_else(|error| panic!("{backend:?}: {source}: {error:?}"));
+                i.drain_microtasks().unwrap_or_else(|error| panic!("{backend:?}: {source}: {error:?}"));
+                assert_eq!(i.run_script("result").unwrap(), JsValue::Bool(true), "{backend:?}: {source}");
             }
         }
     }
