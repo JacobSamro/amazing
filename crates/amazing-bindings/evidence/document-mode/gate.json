@@ -1,0 +1,46 @@
+{
+  "base": "4ce0126d",
+  "platform": "Boat native source/target",
+  "nextest": {
+    "pass": 3525,
+    "skip": 17
+  },
+  "doctests": {
+    "pass": 4
+  },
+  "nodes": {
+    "files": 314,
+    "pass": 12028,
+    "fail": 951,
+    "subtest_errors": 6,
+    "diff": {
+      "gained": 0,
+      "lost": 0
+    },
+    "classifications": {
+      "unsupported": 26,
+      "pass": 183,
+      "timeout": 17,
+      "fail": 82,
+      "error": 6
+    }
+  },
+  "encoding": {
+    "pass": 451,
+    "fail": 0,
+    "xhr_pass": 14
+  },
+  "binary_sha256": "011690ab52dfd98f931d0ab7f24d79a5e351d8ed909fcb7ef66a0c6bd496e60e",
+  "initial_run": {
+    "nodes_pass": 12027,
+    "lost": 1,
+    "known_timing_case": "dom/nodes/Document-contentType/contentType/xhr_responseType_document.html"
+  },
+  "source_hashes": {
+    "crates/amazing-dom/src/lib.rs": "f58355aca1acb4bf7bbe272d4a64a2ccb084f17418dca90aac5b9bc26f487e1d",
+    "crates/amazing-dom/src/document_surface.rs": "54fdb29066a367967053144f60109612c70bc666bece67b1d55c47eabd6c55b2",
+    "crates/amazing-dom/src/range_contents.rs": "84189cfd12c39b14d80e452e61f06b81fb654a13d0571155d1d364e7c88d1c37",
+    "crates/amazing/src/runtime_binding_host.rs": "05f56b0502ebaae4ca04f0a9e6dca49f2bdabe1090314cbd8456c540b063def8",
+    "crates/amazing/src/runtime_host_dom_bindings.rs": "292c52baefb3954a4971a01fc0f7cf7ef8c6970ba2d1a64c106c68eed5338712"
+  }
+}

@@ -3112,3 +3112,22 @@ Reference: HTML [hyperlink component API](https://html.spec.whatwg.org/multipage
 and [encoding-parsing URLs](https://html.spec.whatwg.org/multipage/urls-and-fetching.html#encoding-parsing-a-url),
 consulted2026-10-03. Component search mutation uses the URL parser's ordinary
 UTF-8 query override; resolving href uses the document character encoding.
+
+### Parser-owned document mode storage
+
+HTML43/44's doctype classifier needs durable DOM mode storage. Exported
+`QuirksMode::{NoQuirks,LimitedQuirks,Quirks}`, `document_quirks_mode(document)`
+and `set_document_quirks_mode(document,mode)`. New documents default NoQuirks;
+clones preserve mode; generation-tagged side-table entries cannot affect
+recycled node slots. `document.compatMode` now reads this state for every
+document, including inert documents without driver metadata. Only Quirks
+reports BackCompat. HTML owns parser classification and its integration.
+Fixed4ce0126d Boat native gate3525passed/17skipped, doctests4/4; full314nodes
+12028pass/951fail/6subtesterrors, zero lost/gained, encoding451/451 andXHR14/14.
+Initial corpus run timed out the known intermittent XHR responseType case;
+complete314-file rerun restored it. Evidence/document-mode/gate.json records
+both outcomes. Native tests cover cloning/reuse and installed root/inert
+compatMode. No upstream algorithm copied.
+Reference: DOM [compatMode](https://dom.spec.whatwg.org/#dom-document-compatmode),
+consulted2026-10-03: document mode distinguishes no, limited, and full quirks;
+compatMode exposes BackCompat only for full quirks.

@@ -3,6 +3,14 @@ use crate::{Dom, DomError, Namespace, NodeIdx, NodeKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReadyState { Loading, Interactive, Complete }
+/// Parser-selected document mode; limited quirks still reports CSS1Compat.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuirksMode { NoQuirks, LimitedQuirks, Quirks }
+impl QuirksMode {
+    pub fn compat_mode(self) -> &'static str {
+        if self == Self::Quirks { "BackCompat" } else { "CSS1Compat" }
+    }
+}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DocumentMetadata {
     pub url: String,
@@ -25,6 +33,21 @@ fn collapsed(value: &[u16]) -> Vec<u16> {
     result
 }
 impl Dom {
+    /// New and inert documents default to no quirks until their parser sets a mode.
+    pub fn document_quirks_mode(&self, document: NodeIdx) -> Result<QuirksMode, DomError> {
+        self.document_checked(document)?;
+        let generation = self.node_generations[document.0 as usize];
+        Ok(self.document_modes.iter().find(|(node, version, _)|
+            *node == document && *version == generation).map_or(QuirksMode::NoQuirks, |(_, _, mode)| *mode))
+    }
+    pub fn set_document_quirks_mode(&mut self, document: NodeIdx, mode: QuirksMode) -> Result<(), DomError> {
+        self.document_checked(document)?;
+        let generation = self.node_generations[document.0 as usize];
+        if let Some(entry) = self.document_modes.iter_mut().find(|(node, _, _)| *node == document) {
+            *entry = (document, generation, mode);
+        } else { self.document_modes.push((document, generation, mode)); }
+        Ok(())
+    }
     pub fn document_metadata(&self, document: NodeIdx) -> Result<Option<&DocumentMetadata>, DomError> {
         self.document_checked(document)?;
         Ok(self.document_metadata.iter().find(|(node, _)| *node == document).map(|(_, data)| data))
@@ -157,6 +180,24 @@ impl Dom {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn document_modes_clone_and_do_not_leak_into_reused_slots() {
+        let mut dom = Dom::new();
+        assert_eq!(dom.document_quirks_mode(NodeIdx(0)), Ok(QuirksMode::NoQuirks));
+        let document = dom.create_document();
+        dom.set_document_quirks_mode(document, QuirksMode::Quirks).unwrap();
+        let copy = dom.clone_node(document, false).unwrap();
+        assert_eq!(dom.document_quirks_mode(copy), Ok(QuirksMode::Quirks));
+        dom.set_document_quirks_mode(document, QuirksMode::LimitedQuirks).unwrap();
+        assert_eq!(dom.document_quirks_mode(copy), Ok(QuirksMode::Quirks));
+        assert_eq!(dom.document_quirks_mode(document).unwrap().compat_mode(), "CSS1Compat");
+        dom.retire_unreachable_node(document).unwrap();
+        let reused = dom.create_document();
+        assert_eq!(reused, document);
+        assert_eq!(dom.document_quirks_mode(reused), Ok(QuirksMode::NoQuirks));
+        let text = dom.alloc_unattached(NodeKind::Text { data: String::new() });
+        assert_eq!(dom.set_document_quirks_mode(text, QuirksMode::Quirks), Err(DomError::TypeError));
+    }
     #[test]
     fn html_title_body_and_readiness_follow_tree() {
         let mut dom = Dom::new();
