@@ -1013,6 +1013,9 @@ fn std_epoch_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     };
     let mut month_seen: Option<i64> = None;
     let mut month_code_text: Option<String> = None;
+    let mut era_text: Option<String> = None;
+    let mut era_year: Option<i64> = None;
+    let mut year_seen: Option<i64> = None;
     let mut offset_field = std_epoch_offset_text(std_epoch_offset(&data));
     let mut present = false;
     // Each field's own lower bound (day/month >= 1, every time field >= 0) is
@@ -1029,12 +1032,15 @@ fn std_epoch_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         if value < minimum { return Err(Throw::range_error("Temporal field out of range")); }
         Ok(value)
     };
-    for key in ["day", "hour", "microsecond", "millisecond", "minute", "month", "monthCode",
+    for key in ["day", "era", "eraYear", "hour", "microsecond", "millisecond", "minute", "month", "monthCode",
         "nanosecond", "offset", "second", "year"] {
+        if matches!(key, "era" | "eraYear") && !std_calendar_uses_era(view_cal) { continue; }
         let raw = i.get_prop(&like, key)?;
         if raw.is_undefined() { continue; }
         match key {
             "day" => { cal_day = number_field(i, raw, 1)?; present = true; }
+            "era" => { era_text = Some(i.to_string(&raw)?.to_ascii_lowercase()); present = true; }
+            "eraYear" => { era_year = Some(std_temporal_number(i, raw, None)?); present = true; }
             "hour" => { merged[3] = number_field(i, raw, 0)?; present = true; }
             "microsecond" => { merged[7] = number_field(i, raw, 0)?; present = true; }
             "millisecond" => { merged[6] = number_field(i, raw, 0)?; present = true; }
@@ -1050,7 +1056,7 @@ fn std_epoch_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
             "nanosecond" => { merged[8] = number_field(i, raw, 0)?; present = true; }
             "offset" => { offset_field = std_epoch_string_field(i, raw)?; present = true; }
             "second" => { merged[5] = number_field(i, raw, 0)?; present = true; }
-            "year" => { cal_year = std_temporal_number(i, raw, None)?; present = true; }
+            "year" => { cal_year = std_temporal_number(i, raw, None)?; year_seen = Some(cal_year); present = true; }
             _ => unreachable!(),
         }
     }
@@ -1068,14 +1074,26 @@ fn std_epoch_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     if !matches!(offset_option.as_str(), "prefer" | "use" | "ignore" | "reject") {
         return Err(Throw::range_error("invalid offset option"));
     }
+    // Supplied era fields replace the receiver's year and era pair together;
+    // a partial pair cannot inherit its missing half from the receiver.
+    if era_text.is_some() || era_year.is_some() {
+        cal_year = std_temporal_resolve_era_year(view_cal, &era_text, era_year, year_seen)?
+            .ok_or_else(|| Throw::type_error("year is required"))?;
+    }
+    // Changing only the year preserves the receiver's monthCode, rather
+    // than its ordinal position, across years with different leap months.
+    if month_seen.is_none() && month_code_text.is_none() {
+        month_code_text = Some(std_calendar_month_code(view_cal, merged[0], merged[1], merged[2]));
+    }
     // InterpretTemporalDateTimeFields's calendar-dependent step: resolve
     // monthCode against the receiver's own calendar (iso8601 and every
     // non-leap-month calendar have no "M##L" leap-month code at all; hebrew/
     // chinese/dangi do) now that options has been read in full.
     if let Some(text) = month_code_text {
         if is_month_structure && std_calendar_has_leap_months(view_cal) {
-            let (ordinal, _existed) = std_calendar_resolve_code_ord(view_cal, cal_year, &text)
+            let (ordinal, existed) = std_calendar_resolve_code_ord(view_cal, cal_year, &text)
                 .ok_or_else(|| Throw::range_error("invalid monthCode"))?;
+            if reject_overflow && !existed { return Err(Throw::range_error("leap month is absent in this year")); }
             // 2026-09-27: see the matching fix and comment at
             // std_temporal_bag_resolve_calendar's identical check
             // (builtins_temporal.rs) -- the disagreement check must not be
@@ -1130,10 +1148,10 @@ fn std_epoch_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     };
     std_temporal_validate(StdTemporalKind::PlainDateTime, &merged)?;
     let local_ns = std_temporal_epoch_ns(&merged);
+    let offset_ns = std_epoch_parse_offset(&offset_field)?;
     let epoch_ns = if offset_option == "ignore" {
         std_epoch_disambiguate(&data.zone_id, local_ns, &disambiguation)?
     } else {
-        let offset_ns = std_epoch_parse_offset(&offset_field)?;
         match offset_option.as_str() {
             "use" => local_ns - offset_ns,
             "reject" => tz_possible_epoch_ns(&data.zone_id, local_ns).into_iter()

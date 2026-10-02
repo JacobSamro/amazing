@@ -1892,3 +1892,27 @@ Workspace gate: `cargo nextest run --workspace --locked --no-fail-fast`
 3,399/3,399 pass (3 slow, 17 skipped, 0 failed); `cargo test --workspace
 --locked --doc` all green (`amazing_js`/`amazing_html` doctests individually
 confirmed, 1 passed each, matching prior runs).
+
+## 2026-10-03 resumed calendar work
+
+- ZonedDateTime.with era/monthCode merging and ethioaa year consistency:
+  [decision and evidence](js-stdlib_zoned-with.md). Temporal+55 passing files,
+  zero losses; one Umm al-Qura with failure still needs real calendar data.
+- PlainYearMonth native-calendar arithmetic, with, since/until and parsing:
+  [decision and evidence](js-stdlib_yearmonth_calendars.md). Assigned intl402
+  methods68/190→190/190; total intl402 Temporal1573→1699 (+126), built-ins4487
+  unchanged, zero losses. Combined Boat workspace3515 passed/17 skipped and
+  four doctests green, on fixed base2eb1229a.
+- PlainDate/PlainDateTime native-calendar field merging completed:
+  [decision and evidence](js-stdlib_plain_with_calendars.md). PlainDate.with
+ 22/71→70/71, PlainDateTime.with21/70→69/70, intl402 Temporal1699→1799 (+100),
+  zero lost files. Boat workspace3515/17 skipped and4 doctests green.
+- Umm al-Qura table port completed:
+  [decision and evidence](js-stdlib_umalqura.md). Pinned MIT lumen tables cover
+  AH1300–1600, with civil fallback outside; intl402 Temporal1799→1842 (+43),
+  built-ins4487 unchanged, zero lost files. All three remaining with-family
+  files now pass. Boat workspace3515/17 skipped and4 doctests green.
+- The four resumed series total324 gained Temporal files, zero losses;
+  built-ins4487/4603 and intl4021842/2029, stable final repeat classifications.
+  The next largest intl402 cluster is Temporal.toLocaleString across types;
+  it needs coordination with the Intl formatter rather than calendar arithmetic.
