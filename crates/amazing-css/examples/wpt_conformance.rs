@@ -173,6 +173,13 @@ fn run_file(path: &Path, tally: &mut Tally) {
                 tally.record(ok, || format!("{display}: invalid {property}: {value:?} unexpectedly parsed"));
             }
             Mode::Computed => {
+                // Omitted expected means specified; an explicitly present
+                // dynamic expression cannot be evaluated by this static runner.
+                // Never manufacture a pass by replacing it with specified.
+                if call.len() > 2 && call[2].is_none() {
+                    tally.skipped_non_literal += 1;
+                    continue;
+                }
                 let Some(expected) = call.get(2).and_then(Option::as_ref).or(Some(value)) else {
                     tally.skipped_non_literal += 1;
                     continue;
