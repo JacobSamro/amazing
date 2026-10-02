@@ -1098,6 +1098,67 @@ fn jsvm15_object_spread_operands_suspend_without_losing_literal_state() {
 }
 
 #[test]
+fn jsvm16_await_uses_internal_reactions_across_all_driver_boundaries() {
+    let forms = [
+        ("async function f(){try{return await p}catch(e){return 'error:'+e}} var output=f();", false, true, false),
+        ("async function* f(){try{yield await p}catch(e){yield 'error:'+e}} var output=f().next();", true, true, false),
+        ("async function* f(){yield 1;throw 99} var it=f();it.next();var output=it.return(p);", true, false, true),
+        ("async function* f(){throw 99} var output=f().return(p);", true, false, true),
+        ("async function* f(){} var it=f();it.next();var output=it.return(p);", true, false, true),
+    ];
+    let inputs = [
+        ("var p=Promise.resolve(7);", "", false),
+        ("var p=Promise.reject(9);", "", true),
+        ("var release;var p=new Promise(function(r){release=r});", "release(7);", false),
+        ("var release;var p=new Promise(function(r,j){release=j});", "release(9);", true),
+    ];
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        for (form, iterator, catches, done) in forms {
+            for (input, release, rejects) in inputs {
+                for poison_then in [false, true] {
+                    let poison = if poison_then {
+                        "Object.defineProperty(p,'then',{get:function(){thenGets++;throw 97}});"
+                    } else { "" };
+                    let source = format!(r#"
+                        var thenGets=0,speciesGets=0,constructorGets=0;
+                        {input}
+                        Object.defineProperty(p,'constructor',{{get:function(){{constructorGets++;return Promise}}}});
+                        {poison}
+                        Object.defineProperty(Promise,Symbol.species,{{get:function(){{speciesGets++;throw 98}},configurable:true}});
+                        {form}
+                        {release}
+                    "#);
+                    let mut i = Interpreter::new();
+                    i.run_script_with_backend(&source, backend).unwrap_or_else(|error|
+                        panic!("{backend:?}: {form}: {input}: {poison_then}: {error:?}"));
+                    for name in ["thenGets", "speciesGets"] {
+                        assert_eq!(i.global_env.resolve(name), Some(JsValue::num(0.0)), "{form}: {name}");
+                    }
+                    assert_eq!(i.global_env.resolve("constructorGets"), Some(JsValue::num(1.0)), "{form}");
+                    let Some(JsValue::Object(output)) = i.global_env.resolve("output") else { unreachable!() };
+                    let fate = match &output.borrow().exotic {
+                        Exotic::Promise(state) => state.state.clone(),
+                        _ => panic!("async result must be a Promise"),
+                    };
+                    if rejects && !catches {
+                        assert!(matches!(fate, PromiseFate::Rejected(JsValue::Num(9.0))), "{form}: {fate:?}");
+                    } else {
+                        let PromiseFate::Fulfilled(value) = fate else { panic!("{form}: {fate:?}") };
+                        let expected = if rejects { JsValue::str("error:9") } else { JsValue::num(7.0) };
+                        if iterator {
+                            assert_eq!(i.get_prop(&value, "value").unwrap(), expected, "{form}");
+                            assert_eq!(i.get_prop(&value, "done").unwrap(), JsValue::Bool(done), "{form}");
+                        } else {
+                            assert_eq!(value, expected, "{form}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn jsvm14_class_declarations_share_atomic_expression_lowering() {
     let sources = [
         r#"function* g(){class A {x=1; #p=2; get(){return this.x+this.#p} static n=4; static {this.n++}} yield [new A().get(),A.n,A.name].join(',')} g().next().value;"#,

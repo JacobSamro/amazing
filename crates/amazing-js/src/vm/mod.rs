@@ -10,7 +10,7 @@ mod patterns;
 #[cfg(test)]
 mod tests;
 
-use super::{callable_function, for_iteration_env, new_promise, promise_resolving_functions, reference_name, settle_promise, Interpreter, Reference};
+use super::{callable_function, for_iteration_env, new_promise, perform_promise_then, promise_resolving_functions, reference_name, settle_promise, Interpreter, Reference};
 use crate::ast::{BinOp, ForLeft, UnOp, VarKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::tokens::{Numeric, Span};
@@ -1990,8 +1990,7 @@ fn async_continue(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>, kind:
             let awaited = async_resolve_value(i, value);
             let fulfilled = async_handler(i, state.clone(), false);
             let rejected = async_handler(i, state, true);
-            let then = i.get_prop(&awaited, "then")?;
-            i.call_value(&then, awaited, vec![fulfilled, rejected])?;
+            async_attach_reactions(i, awaited, fulfilled, rejected)?;
         }
         Ok(FrameOutcome::Completed(value)) => {
             async_complete(i, &target, value)?;
@@ -2026,6 +2025,18 @@ pub(crate) fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValu
         let _ = settle_promise(target, rejection(i, error), i);
     }
     promise
+}
+
+/// Await attaches reactions internally to its intrinsic Promise. It creates
+/// no public `then` result, reads no observable `then` or species property,
+/// and does not resolve a discarded capability with the handler's return.
+fn async_attach_reactions(
+    i: &mut Interpreter, promise: JsValue, fulfilled: JsValue, rejected: JsValue,
+) -> Result<(), Throw> {
+    let JsValue::Object(promise) = promise else {
+        unreachable!("async_resolve_value always returns an intrinsic Promise")
+    };
+    perform_promise_then(i, &promise, Some(fulfilled), Some(rejected), None)
 }
 
 pub(crate) fn async_complete(i: &mut Interpreter, target: &Obj, value: JsValue) -> Result<(), Throw> {
@@ -2324,8 +2335,7 @@ fn async_generator_run(
         let awaited = async_resolve_value(i, value);
         let fulfilled = async_generator_step_handler(i, state.clone(), target.clone(), false);
         let rejected = async_generator_step_handler(i, state, target, true);
-        let then = i.get_prop(&awaited, "then")?;
-        i.call_value(&then, awaited, vec![fulfilled, rejected])?;
+        async_attach_reactions(i, awaited, fulfilled, rejected)?;
         return Ok(());
     }
     if let Some(dst) = frame.yield_dst.take() {
@@ -2375,8 +2385,7 @@ fn async_generator_run(
             let awaited = async_resolve_value(i, value);
             let fulfilled = async_generator_step_handler(i, state.clone(), target.clone(), false);
             let rejected = async_generator_step_handler(i, state, target, true);
-            let then = i.get_prop(&awaited, "then")?;
-            i.call_value(&then, awaited, vec![fulfilled, rejected])?;
+            async_attach_reactions(i, awaited, fulfilled, rejected)?;
             Ok(())
         }
         Ok(FrameOutcome::Suspended) => unreachable!("unbounded async generator slice suspended"),
@@ -2416,8 +2425,7 @@ fn async_generator_await_return(
         "asyncGeneratorAwaitReturnFulfilled", async_generator_return_fulfilled);
     let rejected = async_generator_callback(i, state.clone(), request.target.clone(),
         "asyncGeneratorAwaitReturnRejected", async_generator_return_rejected);
-    let then = i.get_prop(&awaited, "then");
-    let chained = then.and_then(|then| i.call_value(&then, awaited, vec![fulfilled, rejected]));
+    let chained = async_attach_reactions(i, awaited, fulfilled, rejected);
     if let Err(Throw(error)) = chained {
         state.borrow_mut().awaiting = false;
         settle_promise(&request.target, rejection(i, error), i)?;

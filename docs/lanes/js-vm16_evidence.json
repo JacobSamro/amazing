@@ -1,0 +1,22 @@
+{
+  "ticket": "JSVM-16",
+  "base": "d573359a2ea5b66ca435754cbcaf198f24809c1a",
+  "platform": "Linux Boat; native /tmp source and target",
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "workspace": {"passed": 3639, "skipped": 17, "doctests_passed": 4},
+  "before_host_sha256": "a6a5800d6954ff73dda30b37831d4fd015bdce649b8a303ea4f5d1f6009f20c7",
+  "after_host_sha256": "586a8d84e288f51872834df378ef343a8f0ff9c7df3fb19e3588ada9cd264fbb",
+  "timeout_seconds": 20,
+  "jobs": 8,
+  "affected": [
+    {"selection": "language/", "files": 24572, "before_passed": 23574, "after_passed": 23575, "before_classification_sha256": "ba24557a1f6c4e1e43c8735af03587ddd18d782d57df80e71e6938dcd881a01c", "after_classification_sha256": "1cd02c3f70f256951f296bef1bdc199930ebcee86002f159fe208650847deffa"},
+    {"selection": "built-ins/Promise", "files": 732, "before_passed": 540, "after_passed": 540, "classification_sha256": "5ef1aa43c4a09d0793026ac3bb80912ed5f94b20ffdee857828954357916329e"},
+    {"selection": "built-ins/Generator", "files": 84, "before_passed": 84, "after_passed": 84, "classification_sha256": "a56b732d31df90e72640a23144c69ac9fdc037124be3aa07f6d6d8cbd3e898e3"},
+    {"selection": "built-ins/AsyncGenerator", "files": 71, "before_passed": 71, "after_passed": 71, "classification_sha256": "260b08bf16f382b9c159641363d2c04159529ee9475f4dc0003441ea6ddf5e71"}
+  ],
+  "combined": {"selected_files": 25459, "before_passed": 24269, "after_passed": 24270, "gained": 1, "lost": 0},
+  "gained_files": ["language/expressions/await/await-monkey-patched-promise.js"],
+  "scope": "Four VM internal await subscriptions use shared PerformPromiseThen with absent result capability; no compiler or shared interpreter edits.",
+  "regressions": "80 script-backend/driver/input/poison combinations check pending and settled fulfillment/rejection, own then, intrinsic species, constructor reads and iterator completion.",
+  "limitation": "Constructor-get abrupt timing remains a separate coordinated PromiseResolve boundary. Existing fixed combined-base direct-eval arguments regressions remain runtime-owned recovery."
+}
