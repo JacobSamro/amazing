@@ -914,6 +914,10 @@ impl Interpreter {
     }
 
     pub fn eval_expr(&mut self, e: &ast::Expr, env: &EnvHandle) -> Result<JsValue, Throw> {
+        if optional_chain_link(e) {
+            let reference = self.eval_chain_reference(e, env)?;
+            return self.chain_value(reference);
+        }
         match &e.kind {
             ExprKind::PrivateName(_) => Err(Throw::type_error(
                 "private names are not yet supported by the runtime",
@@ -927,8 +931,8 @@ impl Interpreter {
                 // 13.3.11.1 Runtime Semantics: Evaluation. `resolve_tag_callee`
                 // preserves the MemberExpression/Ident `this` binding exactly
                 // like an ordinary call's callee (`call_expr`'s own logic);
-                // anything else (a nested CallExpression, a parenthesized
-                // expression, ...) is a plain GetValue with `this` undefined.
+                // parentheses retain a property reference while plain values
+                // and call results use `this` undefined.
                 let (f, this) = self.resolve_tag_callee(tag, env)?;
                 let template_object = self.get_template_object(template)?;
                 let mut argv = Vec::with_capacity(1 + template.exprs.len());
@@ -1291,6 +1295,7 @@ impl Interpreter {
                 let value = self.eval_expr(x, env)?;
                 self.unary_value(op, value)
             }
+            ast::UnOp::Delete if optional_chain_link(x) => self.delete_chain(x, env),
             ast::UnOp::Delete => match &x.kind {
                 ExprKind::Paren(inner) => self.unary(op, inner, env),
                 ExprKind::Ident(name) => self.delete_scoped_name(env, &name.name),
@@ -1300,44 +1305,7 @@ impl Interpreter {
                     let _ = self.eval_expr(obj, env)?;
                     Err(Throw::syntax_error("private members cannot be deleted"))
                 }
-                ExprKind::Member { obj, prop, .. } => {
-                    let o = self.eval_expr(obj, env)?;
-                    let k = self.member_key(prop, env)?;
-                    if let JsValue::Object(o) = o {
-                        if let Some(result) = self.window_proxy_delete(&o, &k) {
-                            let deleted = result?;
-                            if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete WindowProxy property")); }
-                            return Ok(JsValue::Bool(deleted));
-                        }
-                        if let Some(result) = self.proxy_delete(&o, &k) {
-                            let deleted = result?;
-                            if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete proxy property")); }
-                            return Ok(JsValue::Bool(deleted));
-                        }
-                        if matches!(o.borrow().exotic, Exotic::ModuleNamespace(_)) {
-                            if o.borrow().own_prop(&k).is_some() {
-                                return Err(Throw::type_error("module namespace export cannot be deleted"));
-                            }
-                            return Ok(JsValue::Bool(true));
-                        }
-                        if let Some(deleted) = binary_delete_index(&o, &k) {
-                            if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete typed array index")); }
-                            return Ok(JsValue::Bool(deleted));
-                        }
-                        if let Some(deleted) = match k.as_string() {
-                            Some(name) => self.legacy_delete(&o, name)?,
-                            None => None,
-                        } {
-                            Ok(JsValue::Bool(deleted))
-                        } else {
-                            let deleted = o.borrow_mut().delete_own(&k);
-                            if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete non-configurable property")); }
-                            Ok(JsValue::Bool(deleted))
-                        }
-                    } else {
-                        Ok(JsValue::Bool(true))
-                    }
-                }
+                ExprKind::Member { .. } => self.delete_chain(x, env),
                 _ => {
                     self.eval_expr(x, env)?;
                     Ok(JsValue::Bool(true))
@@ -1999,45 +1967,14 @@ impl Interpreter {
             }
             return Ok(result);
         }
-        let (f, this) = if let ExprKind::Member {
-            obj,
-            prop,
-            optional: m,
-        } = &c.kind
-        {
-            let o = self.eval_expr(obj, e)?;
-            if (optional || *m) && (o.is_null() || o.is_undefined()) {
-                return Ok(JsValue::Undefined);
-            }
-            let receiver = if matches!(&obj.kind, ExprKind::Super) {
-                e.resolve_this_checked()?
-            } else {
-                o.clone()
-            };
-            let function = if let MemberProp::Private(identifier) = prop {
-                let name = e.resolve_private(&identifier.name).ok_or_else(|| {
-                    Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
-                })?;
-                private_field_get(self, &receiver, &name)?
-            } else {
-                // Same non-optional nullish-base throw as the plain-read Member arm in
-                // eval_expr (JS-19): `null.method()`'s property read must throw here, not
-                // fall through to "value is not callable" from calling `undefined` below.
-                let k = self.member_key(prop, e)?;
-                if o.is_null() || o.is_undefined() {
-                    return Err(Throw::type_error("cannot access a property on nullish value"));
-                }
-                self.get_prop(&o, &k)?
-            };
-            (function, receiver)
-        } else if let Some(name) = event_handler::identifier_name(c) {
-            self.scoped_call(e, name)?
-        } else {
-            (self.eval_expr(c, e)?, JsValue::Undefined)
-        };
+        let Some((f, this)) = self.chain_callee(c, e)? else { return Ok(JsValue::Undefined); };
         if optional && (f.is_null() || f.is_undefined()) {
             return Ok(JsValue::Undefined);
         }
+        self.invoke_expression_call(c, args, optional, f, this, e)
+    }
+
+    fn invoke_expression_call(&mut self, c: &ast::Expr, args: &[ast::Expr], optional: bool, f: JsValue, this: JsValue, e: &EnvHandle) -> Result<JsValue, Throw> {
         let argv = self.eval_args(args, e)?;
         let previous_direct_eval = self.direct_eval_call;
         let previous_direct_eval_env = self.direct_eval_env.take();
@@ -2048,6 +1985,43 @@ impl Interpreter {
         self.direct_eval_env = previous_direct_eval_env;
         result
     }
+    fn delete_member_value(&mut self, o: JsValue, k: PropertyKey) -> Result<JsValue, Throw> {
+        if let JsValue::Object(o) = o {
+            if let Some(result) = self.window_proxy_delete(&o, &k) {
+                let deleted = result?;
+                if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete WindowProxy property")); }
+                return Ok(JsValue::Bool(deleted));
+            }
+            if let Some(result) = self.proxy_delete(&o, &k) {
+                let deleted = result?;
+                if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete proxy property")); }
+                return Ok(JsValue::Bool(deleted));
+            }
+            if matches!(o.borrow().exotic, Exotic::ModuleNamespace(_)) {
+                if o.borrow().own_prop(&k).is_some() {
+                    return Err(Throw::type_error("module namespace export cannot be deleted"));
+                }
+                return Ok(JsValue::Bool(true));
+            }
+            if let Some(deleted) = binary_delete_index(&o, &k) {
+                if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete typed array index")); }
+                return Ok(JsValue::Bool(deleted));
+            }
+            if let Some(deleted) = match k.as_string() {
+                Some(name) => self.legacy_delete(&o, name)?,
+                None => None,
+            } {
+                Ok(JsValue::Bool(deleted))
+            } else {
+                let deleted = o.borrow_mut().delete_own(&k);
+                if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete non-configurable property")); }
+                Ok(JsValue::Bool(deleted))
+            }
+        } else {
+            Ok(JsValue::Bool(true))
+        }
+    }
+
     fn eval_args(&mut self, xs: &[ast::Expr], e: &EnvHandle) -> Result<Vec<JsValue>, Throw> {
         let mut out = Vec::new();
         for x in xs {
@@ -2072,43 +2046,9 @@ impl Interpreter {
             }
         }
     }
-    /// Resolves a tagged-template's `tag` expression to (function, this),
-    /// preserving the MemberExpression/Identifier `this` binding exactly like
-    /// an ordinary call's own callee resolution in `call_expr` above (mirrors
-    /// its Member/scoped_call/plain-eval branches deliberately, rather than
-    /// sharing them): a tag can never carry `?.` or trigger direct-`eval`
-    /// bookkeeping, both of which are `call_expr`-only concerns per the
-    /// grammar, so duplicating the ~15 lines here is safer than threading an
-    /// extra flag through already-verified call-expression code.
+    /// Tags preserve property references, including parenthesized optional chains.
     fn resolve_tag_callee(&mut self, c: &ast::Expr, e: &EnvHandle) -> Result<(JsValue, JsValue), Throw> {
-        if let ExprKind::Member { obj, prop, optional } = &c.kind {
-            let o = self.eval_expr(obj, e)?;
-            if *optional && (o.is_null() || o.is_undefined()) {
-                return Ok((JsValue::Undefined, JsValue::Undefined));
-            }
-            let receiver = if matches!(&obj.kind, ExprKind::Super) {
-                e.resolve_this_checked()?
-            } else {
-                o.clone()
-            };
-            let function = if let MemberProp::Private(identifier) = prop {
-                let name = e.resolve_private(&identifier.name).ok_or_else(|| {
-                    Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
-                })?;
-                private_field_get(self, &receiver, &name)?
-            } else {
-                let k = self.member_key(prop, e)?;
-                if o.is_null() || o.is_undefined() {
-                    return Err(Throw::type_error("cannot access a property on nullish value"));
-                }
-                self.get_prop(&o, &k)?
-            };
-            Ok((function, receiver))
-        } else if let Some(name) = event_handler::identifier_name(c) {
-            self.scoped_call(e, name)
-        } else {
-            Ok((self.eval_expr(c, e)?, JsValue::Undefined))
-        }
+        Ok(self.chain_callee(c, e)?.unwrap_or((JsValue::Undefined, JsValue::Undefined)))
     }
 
     /// 13.2.8.1 GetTemplateObject: builds, once per template literal site per

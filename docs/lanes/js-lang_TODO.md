@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-21 — queued module loading and a reentrant shared registry**.
+Frontier: **JS-22 — optional-chain references and browser source metadata**.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
@@ -1568,3 +1568,49 @@ The classic-script wire protocol still has no filename/root. Its fixture
 resolution needs a separately approved additive source-context extension;
 legacy classic framing is unchanged. General async-module sibling concurrency
 and in-progress async import graphs remain beyond this synchronous evaluator.
+
+## JS-22 — optional-chain references and browser source metadata
+
+Fixed base `680822e95c355415bd0541f7caf57780af95dbb1` after clean JS-21 merged
+ancestry. Ordinary calls and optional chains now share a reference evaluator:
+a short circuit stays distinct from an actual `undefined` property value,
+propagates across the remaining ungrouped links, skips computed keys/arguments,
+and terminates at parentheses. References preserve method receivers through
+parentheses and tagged calls; delete acts on the final property without reading
+its getter, returns true on a short circuit and throws on a grouped nullish base.
+The VM owner granted exactly one `Paren` discovery arm in its existing whole-chain
+TreeEval dispatch; no AST variant, direct-eval/FDI or Promise implementation edits.
+
+The chain/receiver/delete control flow is adapted as a whole from MIT
+`boa-dev/boa`, `core/engine/src/bytecompiler/mod.rs`, commit
+`39cd11214ecb366200157dab96b3919e61e9a391`, functions
+`compile_optional_preserve_this`, `compile_optional_delete` and their link
+operations. Its VM jumps/registers map onto a tree-walker reference/short-circuit
+result; all property, private-name, call, realm and delete operations use Amazing's
+own gateways. License verified at the pinned commit; header and appended notice
+are in the same optional-chain commit. Specification:
+[Optional Chains](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-optional-chains).
+
+Browser engine APIs are a separate commit: immutable source locator metadata on
+EnvHandle shares the same live binding Rc, inherited by child/captured scopes.
+`run_script_with_source_context` and its backend variant preserve delayed import
+referrers after other classic scripts run; ordinary run_script retains an empty
+locator. The parent also granted `ModuleResolver::source_url(id)->Option<String>`
+(default None), allowing opt-in browser import.meta.url for roots/dependencies
+while unique inline registry IDs stay separate and Test262 metadata stays unchanged.
+Driver adoption remains with integrator-assist; classic Test262 framing is unchanged.
+
+Four new regressions (including both backends) cover skipped work, grouping,
+receivers and final-getter-free deletion, delayed closure origins with shared
+global bindings, failed-script restoration, and opt-in URL/inline record identity.
+One shared final Boat gate for the API and optional-chain commits: owned
+**482 → 486 passed / one skipped**, **one doctest**; workspace **3551 passed /
+17 skipped**, **31 doctest suites / four passed**. Whole language including
+Annex B (24590 selected files), matching 60-second deadlines: **23353 → 23363
+passing files**, **43461 → 43481 passing variants**, **10 file / 20 variant
+gains**, **zero losses**, **zero timeouts**. Input and runner hashes match;
+exact host/classification hashes and gain lists are in
+[js-lang_JS22-evidence.json](js-lang_JS22-evidence.json). The API dependency is
+`f86b814d6f74e9ffc1eff29dece4d8f6456da539`. The integrator explicitly owns the
+combined full-tree Test262 gate; duplicate lane full sweeps were cancelled before
+completion. Source and target ran on native `/tmp` storage through the main wrapper.

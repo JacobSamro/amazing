@@ -46,3 +46,5 @@ Ported Apache-2.0 code is used under the Apache License, Version 2.0
 reproduced in the table row for that upstream.
 
 | servo/html5ever | MIT | Copyright (c) 2014 The html5ever Project Developers; source copyright 2014-2017 The html5ever Project Developers | `crates/amazing-html/src/tree/doctype.rs` — doctype mode tables and classification adapted from `html5ever/src/tree_builder/data.rs` at `6db7bbf1c4dfaecd28731950d427e40c8b911bef` |
+
+| boa-dev/boa @ 39cd11214ecb366200157dab96b3919e61e9a391 | MIT | Copyright (c) 2019 Jason Williams | Optional-chain receiver, short-circuit and final-link delete algorithms adapted from core/engine/src/bytecompiler/mod.rs into crates/amazing-js/src/interp_optional_chain.rs. |
