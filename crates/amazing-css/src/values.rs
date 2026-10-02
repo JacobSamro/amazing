@@ -159,7 +159,13 @@ keywords! {
         TableRow => "table-row", TableCell => "table-cell", TableRowGroup => "table-row-group",
         TableHeaderGroup => "table-header-group", TableFooterGroup => "table-footer-group",
         TableColumn => "table-column", TableColumnGroup => "table-column-group",
-        TableCaption => "table-caption", ListItem => "list-item", FlowRoot => "flow-root" }
+        TableCaption => "table-caption", ListItem => "list-item", FlowRoot => "flow-root",
+        RunIn => "run-in", RunInFlowRoot => "run-in flow-root", RunInFlex => "run-in flex",
+        RunInGrid => "run-in grid", RunInGridLanes => "run-in grid-lanes",
+        RunInTable => "run-in table", RunInRuby => "run-in ruby",
+        InlineListItem => "inline list-item", RunInListItem => "run-in list-item",
+        FlowRootListItem => "flow-root list-item", InlineFlowRootListItem => "inline flow-root list-item",
+        RunInFlowRootListItem => "run-in flow-root list-item" }
     Float { None => "none", Left => "left", Right => "right", InlineStart => "inline-start", InlineEnd => "inline-end" }
     Clear { None => "none", Left => "left", Right => "right", Both => "both", InlineStart => "inline-start", InlineEnd => "inline-end" }
     Alignment { Auto => "auto", Normal => "normal", Start => "start", End => "end", FlexStart => "flex-start", FlexEnd => "flex-end",
@@ -398,26 +404,76 @@ fn integer(css: &str) -> Option<i32> {
 pub(crate) fn display_canonical(css: &str) -> Option<&'static str> {
     let tokens = tokenize(css);
     let words = significant(&tokens);
-    let [Token::Ident(outer), Token::Ident(inner)] = words.as_slice() else {
-        return None;
-    };
-    let outer = outer.to_ascii_lowercase();
-    let inner = inner.to_ascii_lowercase();
-    match (outer.as_str(), inner.as_str()) {
+    if let [Token::Ident(word)] = words.as_slice() {
+        let word = word.to_ascii_lowercase();
+        let single = match word.as_str() {
+            "none" => Some("none"), "contents" => Some("contents"),
+            "inline-block" => Some("inline-block"), "inline-table" => Some("inline-table"),
+            "inline-flex" => Some("inline-flex"), "inline-grid" => Some("inline-grid"),
+            "inline-grid-lanes" => Some("inline-grid-lanes"),
+            "table-row" => Some("table-row"), "table-cell" => Some("table-cell"),
+            "table-row-group" => Some("table-row-group"), "table-header-group" => Some("table-header-group"),
+            "table-footer-group" => Some("table-footer-group"), "table-column" => Some("table-column"),
+            "table-column-group" => Some("table-column-group"), "table-caption" => Some("table-caption"),
+            "ruby-base" => Some("ruby-base"), "ruby-text" => Some("ruby-text"),
+            "ruby-base-container" => Some("ruby-base-container"), "ruby-text-container" => Some("ruby-text-container"),
+            _ => None,
+        };
+        if single.is_some() { return single; }
+    }
+    let mut outer = None;
+    let mut inner = None;
+    let mut list = false;
+    if words.is_empty() || words.len() > 3 { return None; }
+    for token in &words {
+        let Token::Ident(word) = token else { return None };
+        let word = word.to_ascii_lowercase();
+        match word.as_str() {
+            "block" | "inline" | "run-in" => {
+                if outer.replace(word).is_some() { return None; }
+            }
+            "flow" | "flow-root" | "table" | "flex" | "grid" | "ruby" | "grid-lanes" => {
+                if inner.replace(word).is_some() { return None; }
+            }
+            "list-item" if !list => list = true,
+            _ => return None,
+        }
+    }
+    let inner = inner.as_deref().unwrap_or("flow");
+    let outer = outer.as_deref().unwrap_or(if inner == "ruby" && !list { "inline" } else { "block" });
+    if list {
+        return match (outer, inner) {
+            ("block", "flow") => Some("list-item"),
+            ("inline", "flow") => Some("inline list-item"),
+            ("run-in", "flow") => Some("run-in list-item"),
+            ("block", "flow-root") => Some("flow-root list-item"),
+            ("inline", "flow-root") => Some("inline flow-root list-item"),
+            ("run-in", "flow-root") => Some("run-in flow-root list-item"),
+            _ => None,
+        };
+    }
+    match (outer, inner) {
         ("inline", "flow") => Some("inline"),
         ("block", "flow") => Some("block"),
+        ("run-in", "flow") => Some("run-in"),
         ("inline", "flow-root") => Some("inline-block"),
         ("block", "flow-root") => Some("flow-root"),
+        ("run-in", "flow-root") => Some("run-in flow-root"),
         ("inline", "flex") => Some("inline-flex"),
         ("block", "flex") => Some("flex"),
+        ("run-in", "flex") => Some("run-in flex"),
         ("inline", "grid") => Some("inline-grid"),
         ("block", "grid") => Some("grid"),
+        ("run-in", "grid") => Some("run-in grid"),
         ("inline", "ruby") => Some("ruby"),
         ("block", "ruby") => Some("block ruby"),
+        ("run-in", "ruby") => Some("run-in ruby"),
         ("inline", "table") => Some("inline-table"),
         ("block", "table") => Some("table"),
+        ("run-in", "table") => Some("run-in table"),
         ("inline", "grid-lanes") => Some("inline-grid-lanes"),
         ("block", "grid-lanes") => Some("grid-lanes"),
+        ("run-in", "grid-lanes") => Some("run-in grid-lanes"),
         _ => None,
     }
 }

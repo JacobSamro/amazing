@@ -80,12 +80,13 @@ fn grid_lanes_display_stays_typed() {
         ("inline grid-lanes", Display::InlineGridLanes),
         ("inline   grid-lanes", Display::InlineGridLanes),
         ("inline-grid-lanes", Display::InlineGridLanes),
+        ("grid-lanes inline", Display::InlineGridLanes),
     ] {
         let result = style("display", value);
-        assert_eq!(result.get("display"), Some(if value.starts_with("inline ") { "inline-grid-lanes" } else { value }));
+        assert_eq!(result.get("display"), Some(if expected == Display::InlineGridLanes { "inline-grid-lanes" } else { value }));
         assert_eq!(result.typed("display"), Some(&ComputedValue::Display(expected)));
     }
-    for value in ["grid-lanes inline", "inline-grid-lanes grid", "inline grid-lanes block"] {
+    for value in ["inline-grid-lanes grid", "inline grid-lanes block"] {
         let result = style("display", value);
         assert_eq!(result.get("display"), Some("block"), "{value}");
     }
