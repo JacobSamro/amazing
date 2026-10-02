@@ -1,0 +1,29 @@
+{
+  "ticket": "JSVM-14",
+  "base": "9785e236ef2f9290ed78d8638c89f0afa166eac3",
+  "platform": "Linux Boat; native /tmp source and target",
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "workspace": {"passed": 3591, "skipped": 17, "doctests_passed": 4},
+  "before_host_sha256": "e06c3f24eab7afd045e6daeaecbb1002b6264ab40ea0a42f3ea1eb3fc0d320b9",
+  "after_host_sha256": "23120489fbdd7fc23339eaf5257bea02321f9adb9ab04f00694ab21f2cd3d461",
+  "timeout_seconds": 20,
+  "jobs": 8,
+  "affected": [
+    {"selection": "language/", "files": 24572, "before_passed": 23348, "after_passed": 23348, "classification_sha256": "d789b4ea26f1dbf40d3e9f25d3445f4d63ee0f8f5a9fb729cd5ebaaae131b7a9"},
+    {"selection": "built-ins/Function", "files": 515, "before_passed": 501, "after_passed": 501, "classification_sha256": "e7c59576c88c79f3fd22f045610cc287034c1c685addc6dea10f0a027891e5ed"},
+    {"selection": "built-ins/AsyncFunction", "files": 18, "before_passed": 18, "after_passed": 18, "classification_sha256": "169dfba5de940eb8aa2e0f17270fc618992bf5bf1bced2a1c363ccac9f2117db"},
+    {"selection": "built-ins/GeneratorFunction", "files": 23, "before_passed": 23, "after_passed": 23, "classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f"},
+    {"selection": "built-ins/AsyncGeneratorFunction", "files": 23, "before_passed": 23, "after_passed": 23, "classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a"}
+  ],
+  "combined": {"selected_files": 25151, "before_passed": 23913, "after_passed": 23913, "gained": 0, "lost": 0},
+  "compile_attempts_before": {"total": 22482, "compiled": 22382, "fallback": 100},
+  "compile_attempts_after": {"total": 22482, "compiled": 22382, "fallback": 100},
+  "remaining_reasons": {"spread": 56, "expression kind": 14, "yield": 10, "statement kind": 10, "class field or static block": 8, "member access": 2},
+  "rejection_contexts": 100,
+  "findings": [
+    "All eight class-field/static-block rejected shapes suspend class computed keys; whole-coroutine guard remains necessary.",
+    "Object spread source is wrapped as ObjElem::Spread(ExprKind::Spread(inner)); compiler must unwrap it before native source lowering."
+  ],
+  "coverage": "Explicit bytecode regressions cover ordinary class declarations with fields/private elements/static blocks; existing corpus fallback passes are not counted as new gains.",
+  "porting": "Reuses existing native and tree-evaluator class machinery; no upstream code copied."
+}

@@ -618,10 +618,11 @@ fn jsvm10_lexical_for_heads_match() {
 #[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
-        "changed = 1; class A { x=7; }",
-        "changed = 1; class A { static { 1; } }",
+        "changed = 1; function* g(){class A extends (yield 1) {x=7}}",
+        "changed = 1; function* g(){class A {[yield 1]=7; static {1;}}}",
         // for/while/for-of/for-await-of/labeled break/continue are all VM-
-        // compilable as of JSVM-10; these three cover constructs the
+        // compilable as of JSVM-10; ordinary class fields/static blocks
+        // compile as of JSVM-14. These three cover constructs the
         // compiler still declines, keeping this test's actual point (atomic
         // whole-program rejection before hoisting or side effects) real.
         "changed = 1; with ({}) { 1; }",
@@ -1046,6 +1047,37 @@ fn async_await_rejection_runs_catch_and_finally() {
     interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
     assert_eq!(interpreter.global_env.resolve("log"), Some(JsValue::str("ef")));
     assert_eq!(interpreter.global_env.resolve("result"), Some(JsValue::num(7.0)));
+}
+
+#[test]
+fn jsvm14_class_declarations_share_atomic_expression_lowering() {
+    let sources = [
+        r#"function* g(){class A {x=1; #p=2; get(){return this.x+this.#p} static n=4; static {this.n++}} yield [new A().get(),A.n,A.name].join(',')} g().next().value;"#,
+        r#"function* g(){class Base {x=2} class A extends Base {y=3; static nameSeen=A.name} yield [new A().x,new A().y,A.nameSeen].join(',')} g().next().value;"#,
+        r#"function* g(){var caught=false;try{class A {static x=A; static {throw 9}}}catch(e){caught=e===9} yield caught} g().next().value;"#,
+    ];
+    let expected = [JsValue::str("3,5,A"), JsValue::str("2,3,A"), JsValue::Bool(true)];
+    for (source, expected) in sources.into_iter().zip(expected) {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            assert_eq!(Interpreter::new().run_script_with_backend(source, backend).unwrap(), expected);
+        }
+        let program = parse_script(source).unwrap();
+        let crate::ast::StmtKind::Function(function) = &program.body[0].kind else { unreachable!() };
+        assert!(compile_function_item(function, program.body[0].span, false).is_ok());
+    }
+    for declaration in ["async function f", "async function* f"] {
+        let return_or_yield = if declaration.contains('*') { "yield" } else { "return" };
+        let invoke = if declaration.contains('*') { "f().next().then(function(r){result=r.value})" } else { "f().then(function(r){result=r})" };
+        let source = format!("var result; {declaration}(){{class A{{x=42;static{{this.ok=true}}}} await 0; {return_or_yield} new A().x}} {invoke};");
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut interpreter = Interpreter::new();
+            interpreter.run_script_with_backend(&source, backend).unwrap();
+            assert_eq!(interpreter.global_env.resolve("result"), Some(JsValue::num(42.0)));
+        }
+    }
+    let program = parse_script("function* g(){class A extends (yield 1){x=2}}").unwrap();
+    let crate::ast::StmtKind::Function(function) = &program.body[0].kind else { unreachable!() };
+    assert!(compile_function_item(function, program.body[0].span, false).is_err());
 }
 
 #[test]

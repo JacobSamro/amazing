@@ -23,7 +23,7 @@ const MAX_DEPTH: usize = 64;
 
 /// Opt-in measurement of actual runtime generator/async compilation attempts.
 /// Append-only output lets Test262 host subprocesses share a single log.
-fn record_compile_attempt(result: &Result<FunctionCode, CompileError>) {
+fn record_compile_attempt(result: &Result<FunctionCode, CompileError>, params: &[ast::Param], body: &ast::Block) {
     if let Some(path) = std::env::var_os("AMAZING_JS_VM_COMPILE_LOG") {
         use std::io::Write;
         if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
@@ -31,6 +31,16 @@ fn record_compile_attempt(result: &Result<FunctionCode, CompileError>) {
             // Format before appending so subprocesses cannot interleave the
             // reason and newline as separate writes.
             let _ = file.write_all(format!("{reason}\n").as_bytes());
+        }
+    }
+    // Optional rejection context ranks the remaining fallback shapes without
+    // changing the compact acceptance log used by existing gate evidence.
+    if let Err(error) = result {
+        if let Some(path) = std::env::var_os("AMAZING_JS_VM_REJECT_CONTEXT") {
+            use std::io::Write;
+            if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+                let _ = file.write_all(format!("{error:?}\tparams={params:?}\tbody={body:?}\n").as_bytes());
+            }
         }
     }
 }
@@ -76,7 +86,7 @@ pub(crate) fn compile_class_method(method: &ast::ClassMethod, strict: bool) -> R
         is_async: method.is_async,
         is_generator: method.is_generator,
     }, method.span);
-    if method.is_async || method.is_generator { record_compile_attempt(&result); }
+    if method.is_async || method.is_generator { record_compile_attempt(&result, &method.params, &method.body); }
     let mut code = result?;
     Rc::get_mut(&mut code.0).expect("new method code").is_method = true;
     Ok(code)
@@ -88,7 +98,7 @@ pub(crate) fn compile_function_item(function: &ast::FunctionItem, span: Span, st
     let mut compiler = Compiler::new(false);
     compiler.strict = strict;
     let result = compiler.compile_function(function, span);
-    if function.is_async || function.is_generator { record_compile_attempt(&result); }
+    if function.is_async || function.is_generator { record_compile_attempt(&result, &function.params, &function.body); }
     result
 }
 
@@ -108,7 +118,7 @@ pub(crate) fn compile_async_body(body: &ast::Block, strict: bool) -> Result<Func
         is_async: true,
         is_generator: false,
     }, body.span);
-    record_compile_attempt(&result);
+    record_compile_attempt(&result, &[], body);
     result
 }
 
@@ -623,9 +633,12 @@ impl Compiler {
             }
             StmtKind::Class(class) => {
                 let name = class.name.as_ref().ok_or_else(|| self.error(statement.span, "anonymous class declaration"))?;
-                let code = self.compile_class(class, statement.span)?;
-                let dst = self.register(statement.span)?;
-                self.emit(Instruction::MakeClass(dst, code));
+                // Class expressions already preserve fields, static blocks
+                // and private elements through the shared evaluator whenever
+                // the heritage/computed keys cannot suspend this frame. Use
+                // that same atomic lowering for a declaration's value.
+                let expression = Expr::new(ExprKind::Class(class.clone()), statement.span);
+                let dst = self.expression(&expression)?;
                 self.emit(Instruction::Declare(name.name.clone(), dst, VarKind::Let));
             }
             StmtKind::Block(block) => {
