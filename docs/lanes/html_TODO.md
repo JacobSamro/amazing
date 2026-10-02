@@ -3600,3 +3600,18 @@ cycle fixtures, and gate whole72 syntax +8serialization +314nodes +194encoding
 and trees. Current WHATWG parsing section consulted2026-10-03: element
 insertion must drop already-parented/cyclic/nonempty-document targets;
 doctype append requires neither existing doctype nor element child.
+
+HTML51 final: bounded streaming written input preserves partial tokens and
+nested insertion boundaries without EOF. Main arena swaps and iframe grafts
+publish nodes before document.write returns; nested blocking scripts execute
+synchronously and original tail stays suspended. Shared fresh-element drop
+checks and conditional initial doctype append obey changed document targets.
+Native Boat591owned/6skip3572workspace/17skip4docs. Syntax72 +2 genuinewrite
+assertions2694/14→2696/12; serialization8 +1 mainwrite372/3→373/2; whole314nodes,
+194encoding and1930expanded/1894CLI tree passes retained, zero losses.
+Evidence/html51 has complete compact classifications and gated binary hashes.
+Ten cross-document/nonempty importer failures remain DOM-owned coordinated,
+preserving all previously passing cycles; no DOM edits. NextHTML52 wholeWindow
+frames/length/indices/parent/top precedes captured fallback53, per parent.
+Shared NativeEntry HtmlWindowGet/HtmlWindowReplaceableSet variants and two
+dispatch arms precisely granted; all context logic/install stays ownedHTML.

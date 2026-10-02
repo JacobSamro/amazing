@@ -1,4 +1,28 @@
 use super::*;
+use amazing_dom::NodeKind;
+
+#[test]
+fn parser_drops_doctype_and_elements_into_nonempty_document_targets() {
+    for (preexisting, expected_doctype) in [(None, Some("html")), (Some(NodeKind::DocumentType {
+        name: "existing".into(), public_id: String::new(), system_id: String::new(),
+    }), Some("existing")), (Some(NodeKind::Element {
+        name: "existing".into(), attrs: Vec::new(), namespace: Namespace::Html,
+    }), None)] {
+        let mut dom = Dom::new();
+        if let Some(node) = preexisting { dom.append_child(NodeIdx(0), node); }
+        let mut parser = ResumableParser::new(dom);
+        parser.push_source("<!doctype html><html><body><p>x</p></body></html>");
+        assert_eq!(parser.run(), ParseSignal::Eof);
+        let dom = parser.dom();
+        let children: Vec<_> = dom.children(NodeIdx(0)).collect();
+        assert_eq!(children.iter().filter(|&&n| matches!(dom.get(n).kind, NodeKind::Element { .. })).count(), 1);
+        let doctype = dom.document_doctype(NodeIdx(0)).unwrap().map(|node| match &dom.get(node).kind {
+            NodeKind::DocumentType { name, .. } => name.as_str(), _ => unreachable!(),
+        });
+        assert_eq!(doctype, expected_doctype);
+        if expected_doctype.is_none() { assert_eq!(dom.name(children[0]), Some("existing")); }
+    }
+}
 
 #[test]
 fn configured_scripting_mode_is_durable_across_all_parser_entry_points() {

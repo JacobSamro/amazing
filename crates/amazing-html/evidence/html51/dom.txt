@@ -1,0 +1,1 @@
+{"revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293", "suite": "dom/nodes", "selected_total": 314, "subtests": {"pass": 12369, "fail": 275, "timeout": 0, "notrun": 0, "error": 0}, "files": {"pass": 154, "fail": 70, "timeout": 15, "error": 6, "unsupported": 69}, "raw_sha256": "e550e6f258d3a22d66712753aa84bd0c0e8cc9f324c136fe10e645e854c7b2ef"}

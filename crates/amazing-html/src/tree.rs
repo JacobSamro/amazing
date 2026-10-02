@@ -832,7 +832,7 @@ impl TreeBuilder {
             self.dom.set_attribute_expanded(idx, Some(uri), prefix, local_name, &value)
                 .expect("foreign attribute table has valid expanded identities");
         }
-        self.dom.attach_before(parent, before, idx);
+        self.insert_parser_element(parent, before, idx);
         self.open.push(idx);
         idx
     }
@@ -902,6 +902,19 @@ impl TreeBuilder {
     }
 
     // ---- insertion primitives (§13.2.6.1) ----
+
+    /// Parser insertion silently drops an element after a script has made
+    /// its target full or cyclic, rather than surfacing a DOM exception.
+    fn insert_parser_element(&mut self, parent: NodeIdx, before: Option<NodeIdx>, node: NodeIdx) {
+        if self.dom.get(node).parent.is_some()
+            || self.dom.is_host_including_inclusive_ancestor(node, parent)
+            || (matches!(self.dom.get(parent).kind, NodeKind::Document)
+                && self.dom.document_element(parent).ok().flatten().is_some())
+            || before.is_some_and(|child| self.dom.get(child).parent != Some(parent)) {
+            return;
+        }
+        self.dom.attach_before(parent, before, node);
+    }
 
     /// Appropriate insertion location `(parent, before-sibling)`. Honours
     /// the foster flag when the current node is table family: the node lands
@@ -1023,7 +1036,7 @@ impl TreeBuilder {
             // both precede insertion of the token's children.
             let _ = self.dom.finish_custom_element_upgrade(idx, definition, constructed);
         }
-        self.dom.attach_before(parent, before, idx);
+        self.insert_parser_element(parent, before, idx);
         // With no host, a preexisting definition remains eligible for a
         // later DOM-14 upgrade. With no definition this is a no-op.
         if construction.is_none() { self.dom.queue_custom_element_upgrade(idx); }
@@ -1056,6 +1069,7 @@ impl TreeBuilder {
             return;
         }
         let (parent, before) = self.insertion_place();
+        if matches!(self.dom.get(parent).kind, NodeKind::Document) { return; }
         let merge_target = match before {
             Some(b) => self.dom.get(b).prev_sibling,
             None => self.dom.last_child(parent),
@@ -1454,12 +1468,7 @@ impl TreeBuilder {
             // full rather than erroring; `last_node` is left detached.
             self.dom.detach(last_node);
             let (parent, before) = self.adjusted_insertion_place_for(common);
-            let cyclic = self.dom.is_host_including_inclusive_ancestor(last_node, parent);
-            let document_full = matches!(self.dom.get(parent).kind, NodeKind::Document)
-                && self.dom.document_element(parent).ok().flatten().is_some();
-            if !cyclic && !document_full {
-                self.dom.attach_before(parent, before, last_node);
-            }
+            self.insert_parser_element(parent, before, last_node);
 
             // Clone the formatting element; adopt furthest block's children.
             let (fname, fattrs) = self.elem_name_attrs(fe_idx);
@@ -1647,12 +1656,16 @@ impl TreeBuilder {
                     self.set_document_mode(doctype::classify(name.as_deref(), public_id.as_deref(),
                         system_id.as_deref(), force_quirks));
                 }
-                self.dom.doctype = name.clone();
-                self.dom.append_child(NodeIdx(0), NodeKind::DocumentType {
-                    name: name.unwrap_or_default(),
-                    public_id: public_id.unwrap_or_default(),
-                    system_id: system_id.unwrap_or_default(),
-                });
+                let full = self.dom.children(NodeIdx(0)).any(|child|
+                    matches!(self.dom.get(child).kind, NodeKind::DocumentType { .. } | NodeKind::Element { .. }));
+                if !full {
+                    self.dom.doctype = name.clone();
+                    self.dom.append_child(NodeIdx(0), NodeKind::DocumentType {
+                        name: name.unwrap_or_default(),
+                        public_id: public_id.unwrap_or_default(),
+                        system_id: system_id.unwrap_or_default(),
+                    });
+                }
                 self.mode = Mode::BeforeHtml;
             },
             Token::Characters(data) => {

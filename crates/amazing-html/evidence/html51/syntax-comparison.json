@@ -1,0 +1,19 @@
+{
+  "selected": 72,
+  "gained": 2,
+  "lost": 0,
+  "unchanged": false,
+  "gained_records": [
+    [
+      "html/syntax/parsing/ambiguous-ampersand.html",
+      "27c594f4a0900e8981d5a388cc3e91260990cf9f00d2e94237fdebc929b900c4",
+      1
+    ],
+    [
+      "html/syntax/parsing/ambiguous-ampersand.html",
+      "e55fc932152e5a339b62cf64f7dc7139b64d5982937ae31a9852861dab8e08ab",
+      1
+    ]
+  ],
+  "lost_records": []
+}

@@ -86,6 +86,7 @@ impl SandboxFlags {
 #[derive(Default)]
 pub(super) struct FrameRuntime {
     documents: HashMap<NodeIdx, FrameDocument>,
+    parser_imports: HashMap<NodeIdx, IncrementalImportRef>,
     /// `(frame, document, fire_load_events)`. `fire_load_events` is false
     /// only for an iframe with neither `src` nor `srcdoc`: its initial
     /// `about:blank` is created for `contentDocument`/`contentWindow` to see,
@@ -851,6 +852,7 @@ impl RuntimeBindings {
             }
         };
         let import = Rc::new(RefCell::new(import));
+        state.borrow_mut().frames.parser_imports.insert(document, import.clone());
         let outcome: Result<(), Throw> = loop {
             let signal = parser.borrow_mut().run();
             deferred_events.extend(parser.borrow_mut().take_deferred_or_async());
@@ -891,6 +893,7 @@ impl RuntimeBindings {
                 }
             }
         };
+        state.borrow_mut().frames.parser_imports.remove(&document);
         self.unregister_active_parser(document);
         outcome?;
         if can_run_scripts {
@@ -1271,11 +1274,61 @@ impl RuntimeBindingHost<'_> {
         // document once its own interleaved parse has reached `Eof`).
         let parser = self.state.borrow().active_parsers.get(&document).cloned();
         if let Some(parser) = parser {
-            parser.borrow_mut().write(&text);
+            self.write_into_active_parser(document, &parser, &text)?;
             return Ok(JsValue::Undefined);
         }
         self.write_into_document(document, &text)?;
         Ok(JsValue::Undefined)
+    }
+
+    fn write_into_active_parser(&mut self, document: NodeIdx,
+        parser: &Rc<RefCell<amazing_html::ResumableParser>>, text: &str) -> Result<(), Throw> {
+        let host = self.state.borrow().host.clone();
+        let import = self.state.borrow().frames.parser_imports.get(&document).cloned();
+        parser.borrow_mut().begin_write(text);
+        loop {
+            // Top-level parsing shares the arena by swapping. Child parsing
+            // uses the registered identity-preserving importer in both directions.
+            {
+                let mut parser = parser.borrow_mut();
+                let mut host = host.borrow_mut();
+                if let Some(import) = &import {
+                    if let Err(error) = import.borrow_mut().reverse_sync(parser.dom_mut(), &host.dom) {
+                        parser.end_write();
+                        return Err(Throw::type_error(format!("document.write reverse graft: {error:?}")));
+                    }
+                } else { parser.swap_dom(&mut host.dom); }
+            }
+            let script = parser.borrow_mut().run_write();
+            {
+                let mut parser = parser.borrow_mut();
+                let mut host = host.borrow_mut();
+                if let Some(import) = &import {
+                    if let Err(error) = import.borrow_mut().sync(&mut host.dom, parser.dom()) {
+                        if script.is_some() { parser.end_write(); }
+                        return Err(Throw::type_error(format!("document.write graft: {error:?}")));
+                    }
+                } else { parser.swap_dom(&mut host.dom); }
+            }
+            let Some(source_node) = script else { return Ok(()); };
+            let node = match &import { Some(import) => import.borrow().imported(source_node), None => Some(source_node) };
+            let script = node.and_then(|node| crate::cmd::js::script_source_from_node(&host.borrow().dom, node));
+            let outcome = if let Some(script) = script {
+                let body = match script.src {
+                    None => Some(script.body),
+                    Some(src) => {
+                        let state = self.state.borrow();
+                        state.document_url.as_deref().and_then(|base|
+                            fetch_child_script(&src, base, state.frames.resolver.as_ref()))
+                    }
+                };
+                match body { Some(body) => self.js.run_script(&body).map(|_| ()), None => Ok(()) }
+            } else { Ok(()) };
+            if let Err(error) = outcome {
+                parser.borrow_mut().end_write();
+                return Err(error);
+            }
+        }
     }
 
     /// Replaces `document`'s entire content with a fresh, empty
@@ -2770,5 +2823,42 @@ mod tests {
              window.ran"
         ).unwrap(), JsValue::num(1.0),
             "textContent/src set after a script already ran must not re-trigger it");
+    }
+    fn synchronous_write_fixture() -> &'static str {
+        r#"<!doctype html><body><script>
+            window.syncPass = true;
+            document.write('<div id="written">&am');
+            syncPass = syncPass && !!document.getElementById('written')
+                && document.getElementById('written').textContent === '';
+            document.write('p;</div>');
+            syncPass = syncPass && document.getElementById('written').textContent === '&';
+            document.write('<scr' + 'ipt>document.write("<i id=inner>inner</i>");'
+                + 'window.nestedVisible=!!document.getElementById("inner");</scr' + 'ipt><b id=outer>outer</b>');
+            syncPass = syncPass && nestedVisible && !!document.getElementById('outer')
+                && document.getElementById('tail') === null;
+        </script><p id=tail>tail</p>"#
+    }
+
+    #[test]
+    fn active_top_level_write_is_visible_before_return_and_preserves_tail() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        crate::cmd::js::run_interleaved_parse(&host, &mut scheduler, synchronous_write_fixture(),
+            |scheduler, script| scheduler.run_script(&script.body).map(|_| ()).map_err(|e| format!("{e:?}"))).unwrap();
+        assert_eq!(scheduler.run_script("syncPass && !!document.getElementById('tail')").unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn active_iframe_write_grafts_synchronously_and_nested_writes_keep_identity() {
+        let mut dom = amazing_html::parse("<!doctype html><iframe></iframe>");
+        let frame = dom.children(dom.document_body(NodeIdx(0)).unwrap().unwrap()).next().unwrap();
+        dom.set_attribute(frame, "srcdoc", synchronous_write_fixture()).unwrap();
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        scheduler.run_script("void document.querySelector('iframe')").unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script("document.querySelector('iframe').contentWindow.syncPass && !!document.querySelector('iframe').contentDocument.getElementById('tail')").unwrap(), JsValue::Bool(true));
     }
 }

@@ -48,6 +48,8 @@ pub struct ResumableParser {
     builder: TreeBuilder,
     tokenizer: Tokenizer,
     deferred_or_async: Vec<(NodeIdx, ScriptMode)>,
+    write_inputs: Vec<(Vec<char>, bool)>,
+    write_insertion_point: Option<usize>,
 }
 
 impl ResumableParser {
@@ -60,6 +62,8 @@ impl ResumableParser {
             builder: TreeBuilder::from_dom(dom),
             tokenizer: Tokenizer::new(Vec::new()),
             deferred_or_async: Vec::new(),
+            write_inputs: Vec::new(),
+            write_insertion_point: None,
         }
     }
 
@@ -98,6 +102,7 @@ impl ResumableParser {
             let eof = tree::feed_with_tokenizer_feedback(&mut self.builder, &mut self.tokenizer, tok);
             self.deferred_or_async.extend(self.builder.take_script_events());
             if let Some(node) = self.builder.take_pending_script() {
+                self.write_insertion_point = Some(self.tokenizer.cursor());
                 return ParseSignal::Script(node);
             }
             if eof {
@@ -120,6 +125,38 @@ impl ResumableParser {
             text
         };
         self.tokenizer.insert_chars_at_cursor(text.chars());
+    }
+
+    /// Begins synchronous document.write tokenization, bounded by its input
+    /// insertion point. Incomplete tokens remain pending for subsequent writes
+    /// or the original source; exhausting this input does not signal EOF.
+    pub fn begin_write(&mut self, text: &str) {
+        let text = text.replace("\r\n", "\n").replace('\r', "\n");
+        let point = self.write_insertion_point.unwrap_or_else(|| self.tokenizer.cursor());
+        self.write_inputs.push(self.tokenizer.begin_write_input(point, &text));
+    }
+
+    /// Returns a parser-blocking script, or None after all currently written
+    /// input is consumed. The driver can execute a nested script and call this
+    /// again; nested begin_write/run_write pairs preserve the outer boundary.
+    pub fn run_write(&mut self) -> Option<NodeIdx> {
+        assert!(!self.write_inputs.is_empty(), "no active document.write input");
+        while let Some(token) = self.tokenizer.next_available() {
+            tree::feed_with_tokenizer_feedback(&mut self.builder, &mut self.tokenizer, token);
+            self.deferred_or_async.extend(self.builder.take_script_events());
+            if let Some(node) = self.builder.take_pending_script() {
+                self.write_insertion_point = Some(self.tokenizer.cursor());
+                return Some(node);
+            }
+        }
+        self.end_write();
+        None
+    }
+
+    /// Restores suspended input if the embedding abandons a written script.
+    pub fn end_write(&mut self) {
+        let (tail, finished) = self.write_inputs.pop().expect("active document.write input");
+        self.write_insertion_point = Some(self.tokenizer.end_write_input(tail, finished));
     }
 
     /// Swaps the DOM under construction with `other`. A driver calls this
@@ -172,6 +209,44 @@ impl ResumableParser {
 mod tests {
     use super::*;
     use amazing_dom::NodeIdx;
+
+    #[test]
+    fn synchronous_writes_preserve_partial_tokens_order_and_original_tail() {
+        for chunks in [vec!["<div id=x>&amp;</div>"],
+            vec!["<di", "v id=x>", "&am", "p;", "</div>"]] {
+            let mut parser = ResumableParser::new(Dom::new());
+            parser.push_source("<body><script>first</script><p id=tail>tail</p>");
+            assert!(matches!(parser.run(), ParseSignal::Script(_)));
+            for chunk in chunks {
+                parser.begin_write(chunk);
+                assert_eq!(parser.run_write(), None);
+                assert!(!parser.dom().dump(NodeIdx(0)).contains("tail"));
+            }
+            let written = parser.dom().dump(NodeIdx(0));
+            assert!(written.contains("<div id=\"x\">"), "{written}");
+            assert!(written.contains("\"&\""), "{written}");
+            assert_eq!(parser.run(), ParseSignal::Eof);
+            assert!(parser.dom().dump(NodeIdx(0)).contains("<p id=\"tail\">"));
+        }
+    }
+
+    #[test]
+    fn nested_written_scripts_restore_each_input_boundary_without_eof() {
+        let mut parser = ResumableParser::new(Dom::new());
+        parser.push_source("<body><script>first</script><p id=tail>tail</p>");
+        assert!(matches!(parser.run(), ParseSignal::Script(_)));
+        parser.begin_write("<script>nested</script><b id=outer>outer</b>");
+        assert!(parser.run_write().is_some());
+        parser.begin_write("<i id=inner>inner</i>");
+        assert_eq!(parser.run_write(), None);
+        assert!(!parser.dom().dump(NodeIdx(0)).contains("outer"));
+        assert_eq!(parser.run_write(), None);
+        let written = parser.dom().dump(NodeIdx(0));
+        assert!(written.contains("<i id=\"inner\">"));
+        assert!(written.contains("<b id=\"outer\">"));
+        assert!(!written.contains("tail"));
+        assert_eq!(parser.run(), ParseSignal::Eof);
+    }
 
     /// The whole point: a script observes the DOM as constructed so far, not
     /// the finished document -- the node after it does not exist yet.

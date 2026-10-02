@@ -262,6 +262,26 @@ impl Tokenizer {
         self.input.extend(tail);
     }
 
+    pub(crate) fn cursor(&self) -> usize { self.pos }
+
+    /// Temporarily bounds document.write input without synthesizing EOF.
+    /// The insertion point can follow an incomplete token's current cursor.
+    pub(crate) fn begin_write_input(&mut self, insertion_point: usize, text: &str) -> (Vec<char>, bool) {
+        assert!(self.pos <= insertion_point && insertion_point <= self.input.len());
+        let tail = self.input.split_off(insertion_point);
+        let finished = self.input_finished;
+        self.input_finished = false;
+        self.input.extend(text.chars());
+        (tail, finished)
+    }
+
+    pub(crate) fn end_write_input(&mut self, tail: Vec<char>, finished: bool) -> usize {
+        let insertion_point = self.input.len();
+        self.input.extend(tail);
+        self.input_finished = finished;
+        insertion_point
+    }
+
     pub(crate) fn set_allow_cdata(&mut self, allow: bool) {
         self.allow_cdata = allow;
     }
