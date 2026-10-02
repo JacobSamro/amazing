@@ -66,7 +66,14 @@ for K in $(seq 0 $((N - 1))); do
       test -s \"\$OUT/shard-$SHA-$TAG.json\"" > "$OUTDIR/.shard-$SHA-$TAG-$K.log" 2>&1
     D="$(mktemp -d)"
     "$MAIN/scripts/lane-fetch.sh" "$LANE" "$D" "amazing/out/$LANE/shard-$SHA-$TAG.json" &&
-      mv "$D/shard-$SHA-$TAG.json" "$OUTDIR/.shard-$SHA-$TAG-$K.json"; rm -rf "$D"
+      python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["shard"] == sys.argv[2]; assert d["records"] and d["host_sha256"] and d["input_sha256"]' "$D/shard-$SHA-$TAG.json" "$K/$N" &&
+      mv "$D/shard-$SHA-$TAG.json" "$OUTDIR/.shard-$SHA-$TAG-$K.json"
+    if [ ! -s "$OUTDIR/.shard-$SHA-$TAG-$K.json" ]; then
+      echo "test262-boat: shard $K fetch incomplete; keeping $LANE running for recovery" >&2
+      rm -rf "$D"
+      exit 1
+    fi
+    rm -rf "$D"
     # Shards are single-use: stop now instead of billing 5 idle minutes.
     # ...unless another run already holds this shard (its lane lock), which a
     # stop would kill mid-run.
