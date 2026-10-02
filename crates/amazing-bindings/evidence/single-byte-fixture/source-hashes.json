@@ -1,0 +1,11 @@
+{
+  "baseline": {
+    "commit": "04ffdf76",
+    "crates/amazing/src/cmd/wpt_harness.rs": "6dcb882a566dc79ea3307a4a34fbbc966289cce703da9aa9007863398ea536a9",
+    "actual_native_matches_commit": true
+  },
+  "candidate": {
+    "commit": "3c39ed7e",
+    "crates/amazing/src/cmd/wpt_harness.rs": "8273769d0bfb7f0e85ed7a9d9f5d466dfed831d4c279c2a59175e6a271921230"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "encoding": {
+    "before": {
+      "pass": 12268,
+      "fail": 354,
+      "error": 0
+    },
+    "after": {
+      "pass": 12396,
+      "fail": 226,
+      "error": 0
+    },
+    "gained": 128,
+    "lost": 0
+  },
+  "nodes": {
+    "before": {
+      "pass": 12692,
+      "fail": 287,
+      "error": 6
+    },
+    "after": {
+      "pass": 12692,
+      "fail": 287,
+      "error": 6
+    },
+    "gained": 0,
+    "lost": 0
+  },
+  "base": "04ffdf76",
+  "candidate": "3c39ed7e",
+  "workspace_pass": 3649,
+  "workspace_skipped": 17,
+  "doctests_pass": 4,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "before_binary": "b0776db596a5657006c1470a8ab3238f1bb92e009c53e0319ada012d3207ce68",
+  "after_binary": "e9c85765df0428d259ef66871e29568d6e06ee6992816a397c2653704ffc90a9",
+  "test_name_hash": "SHA256 of exact UTF16LE code units (surrogatepass)",
+  "remaining_single_byte_xhr_errors": {
+    "Network(Transport)": 40
+  }
+}

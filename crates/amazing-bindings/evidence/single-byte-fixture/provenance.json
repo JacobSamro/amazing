@@ -1,0 +1,11 @@
+{
+  "upstream_url": "https://raw.githubusercontent.com/web-platform-tests/wpt/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/encoding/resources/single-byte-raw.py",
+  "sha256": "343b935a880b2737d4509aafca8a54175204fbe2f56cb09692338f62d477c2d9",
+  "response": {
+    "status": 200,
+    "header": "Content-Type: text/plain;charset=<first label bytes>",
+    "body_length": 255,
+    "body_sha256": "3f8591112c6bbe5c963965954e293108b7208ed2af893e500d859368c654eabe"
+  },
+  "scope": "faithful fixture protocol only; no source/metadata or module URL hunks"
+}

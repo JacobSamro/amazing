@@ -3201,3 +3201,18 @@ creator inheritance. Frozen-base history/CSP policy and product navigation
 remain separate. Evidence: amazing-bindings/evidence/base-reflection.
 Next: faithful single-byte fixture protocol, then parent-granted whole importer
 validated reparenting/document moves coordinated with HTML51.
+
+
+### Faithful single-byte HTTP fixture
+
+Fixed codec dependency 04ffdf76 (adopted HTML49 d6f1d1ed, BASE b67b9d94).
+Pinned single-byte-raw.py first-label Content-Type plus 255 bytes (0..254),
+empty/missing argument behavior, source guard and native socket protocol checks.
+Exact candidate 3c39ed7e gate: Boat workspace 3649 passed/17 skipped, four docs.
+Whole194 encoding 12268/354 → 12396/226 (+128), zero loss; whole314 DOM nodes
+12692/287/6 unchanged with all accepted BASE passes retained. The 128 raw-Python
+body mismatches now pass; 40 existing XHR Network(Transport) errors remain.
+All168 TextDecoder single-byte assertions retained. No fixture rewrite or codec
+algorithm change. Evidence: amazing-bindings/evidence/single-byte-fixture.
+Next: parent-granted validation-aware incremental importer/reparent/document
+moves, coordinated with HTML51; effective base hook for captured HTML52 fallback.
