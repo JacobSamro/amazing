@@ -3045,3 +3045,22 @@ Tooling note for whoever reruns this: a private `wpt-harness` root under `$OUT` 
 `.pinned-c2a2fce` marker file at its root (present in the shared `~/corpora/wpt`, not produced by
 a plain `git clone`/`cp`) or the harness errors `"No such file or directory"` before running
 anything at all.
+
+## DOM-B iframe Document.defaultView (resume base 2eb1229a)
+
+The HTML lane isolated the remaining XML/XHTML createElementNS failure cause to
+`dom_document_default_view`: the driver only associated the root document with
+its window. Its HTML-owned `iframe_document_window` helper maps live child
+document IDs onto their cached stable WindowProxy. The DOM adapter now consults
+that mapping before preserving root-window and inert-document behavior. Added a
+srcdoc identity/inert-null installed regression; HTML's XML regression checks
+child WindowProxy, document and DOMException constructor identity.
+
+Reference: HTML [defaultView getter](https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-document-defaultview),
+consulted 2026-10-02: null for documents without browsing contexts, otherwise the
+browsing context's WindowProxy. No upstream code ported.
+
+Measurements pending: fixed-base full dom/nodes corpus plus owned tests/docs,
+then candidate workspace nextest/doctests + full same corpus with zero-loss
+comparison. All runs use Boat after user steering; the preliminary k-test build
+was cancelled before tests and is not evidence.
