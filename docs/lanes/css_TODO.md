@@ -2764,3 +2764,25 @@ Provider callback/physical font-size-adjust metrics queued CSS41 with layout;
 actual-font FromFont resolution must happen before inheritance.
 
 CSS40 final: crate385+example1, workspace3544+4docs; parsing4105→4126/5126 (+21/lost0), wholecss-fonts24/32 before/after (32 unchanged/lost0). Renderer SHA256 b0b5a218de8d81d423dac523cdee56f5c5a5d9410c194404e25671201e2888be. Evidence `crates/amazing-css/evidence/css40/`.
+
+### CSS41 — actual first-font normalization context
+
+Fixed base CSS40 `da0e41f05f7d5a5e458bb5747db0a3bebf427bca`. Parent grants
+narrow `amazing-text-provider` physical metric consumer; provider remains free
+of CSS dependencies. `FontMetricContext::aspect_ratio` takes element/pseudo,
+computed selection and typed metric; `contextual_length_px` optionally supplies
+actual glyph/context units in numeric math. Full/animation/pseudo and partial/
+full incremental recompute resolve before descendants inherit. Inherited aspects
+never re-select a child's different font, including unresolved symbolic math.
+Missing actual first font produces none; no context explicitly retains symbolic
+values. Driver must install context before initial style and keep it on every
+recompute; root owns actual font loading and all driver/CSSOM adapters.
+Provider query `font_size_adjust_ratio(TextStyle, FontSizeAdjustMetric)` measures
+physical U+0030 horizontal width and U+6C34 horizontal/vertical advances in fixed
+orientations, using standard missing-glyph fallbacks. Existing dynamic
+`adjusted_font_size` reuses the same ratios; no text trait extension needed.
+Grouped regression fixtures distinguish 0.5em width from 1em height over all
+five writing modes/three text orientations, inheritance/pseudos/font reselection,
+actual glyph-unit math, no-font defaults, animation and incremental rebuild.
+
+CSS41 final: workspace3550/17skip+4docs; parsing4126/5126unchanged/lost0; fonts24/32unchanged/lost0. Six grouped regressions, including actualanisotropic metrics atzero CSSsize andunresolvedinheritedmathprovenance. Evidence `crates/amazing-css/evidence/css41/`. Driveradapter root-owned pending; no installed FromFont claim.

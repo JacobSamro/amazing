@@ -174,6 +174,8 @@ pub(crate) fn resolve_css_math(properties: &mut std::collections::BTreeMap<Strin
     let font = properties.get("font-size").and_then(|css| css.strip_suffix("px"))
         .and_then(|value| value.parse().ok()).unwrap_or(16.0);
     let resolved = value.resolve_math(|n, unit| {
+        // Actual glyph metrics must wait for the font context, not generic em guesses.
+        if matches!(unit, "ex" | "cap" | "ch" | "ic" | "rex" | "rcap" | "rch" | "ric") { return None; }
         let length = crate::values::LengthPercentage::parse(&format!("{n}{unit}"))?;
         let mut typed = crate::values::ComputedValue::LengthPercentage(length);
         crate::values::resolve_font_units(&mut typed, font, root, false);

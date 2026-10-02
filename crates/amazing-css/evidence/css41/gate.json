@@ -1,0 +1,30 @@
+{
+  "ticket": "CSS-41",
+  "base": "da0e41f05f7d5a5e458bb5747db0a3bebf427bca",
+  "platform": "Boat Linux native /tmp source+target",
+  "renderer_sha256": "336901f3cfdca9e9853e7465b12b8bec9381154c641d95420c5622751be6feeb",
+  "crate_iteration_passed": 490,
+  "crate_iteration_skipped": 2,
+  "workspace": 3550,
+  "workspace_skipped": 17,
+  "doctests": 4,
+  "new_grouped_regressions": 6,
+  "parsing": {
+    "before": 4126,
+    "after": 4126,
+    "total": 5126,
+    "non_literal_skipped": 169,
+    "gained": [],
+    "lost": []
+  },
+  "render": {
+    "before_pass": 24,
+    "after_pass": 24,
+    "total": 32,
+    "gained": [],
+    "lost": [],
+    "unchanged": 32
+  },
+  "installed_driver_context": false,
+  "cross_lane_owner": "root driver adapter"
+}

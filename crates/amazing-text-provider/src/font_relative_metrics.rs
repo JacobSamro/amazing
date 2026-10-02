@@ -17,6 +17,32 @@ pub(super) fn for_font(font: &FontRecord, style: &TextStyle) -> FontRelativeMetr
     result
 }
 
+/// CSS Fonts normalization uses physical glyph advances, not `ch`/`ic`
+/// inline-axis units. Font lookup has already selected the first actual font.
+pub(super) fn aspect_ratio(font: &FontRecord, style: &TextStyle, metric: amazing_text::FontSizeAdjustMetric) -> Option<f32> {
+    use amazing_text::{Direction, FontSizeAdjustMetric, TextOrientation, WritingMode};
+    if !style.size.is_finite() || style.size < 0.0 { return None; }
+    let mut physical = style.clone();
+    // A zero CSS size still has a font-design aspect ratio; probe at one px.
+    if physical.size == 0.0 { physical.size = 1.0; }
+    let size = physical.size;
+    physical.direction = Direction::LeftToRight;
+    physical.writing_mode = WritingMode::HorizontalTb;
+    physical.text_orientation = TextOrientation::Upright;
+    let px = match metric {
+        FontSizeAdjustMetric::ExHeight => for_font(font, &physical).x_height,
+        FontSizeAdjustMetric::CapHeight => for_font(font, &physical).cap_height,
+        FontSizeAdjustMetric::ChWidth => glyph_advance(font, &physical, '0').unwrap_or(size * 0.5),
+        FontSizeAdjustMetric::IcWidth => glyph_advance(font, &physical, '水').unwrap_or(size),
+        FontSizeAdjustMetric::IcHeight => {
+            physical.writing_mode = WritingMode::VerticalRl;
+            glyph_advance(font, &physical, '水').unwrap_or(size)
+        }
+    };
+    let ratio = px / size;
+    (ratio.is_finite() && ratio >= 0.0).then_some(ratio)
+}
+
 fn glyph_advance(font: &FontRecord, style: &TextStyle, character: char) -> Option<f32> {
     let text = character.to_string();
     if !font_covers(font, &text) {
@@ -105,6 +131,36 @@ mod tests {
             size: 16.0,
             ..TextStyle::default()
         }
+    }
+
+    #[test]
+    fn normalization_metrics_are_physical_in_every_paragraph_mode() {
+        use amazing_text::{TextOrientation, WritingMode};
+        let mut provider = TextProvider::new();
+        provider.register_web_font(WebFont { family: "Physical".into(), weight: 400, stretch: 100, slant: FontSlant::Normal, format: FontFormat::OpenType, bytes: crate::tests::synthetic_font_with_case_pair(' ', '水') }).unwrap();
+        let mut style = TextStyle { families: vec!["Physical".into()], size: 20.0, ..TextStyle::default() };
+        let width = provider.font_size_adjust_ratio(&style, FontSizeAdjustMetric::IcWidth).unwrap();
+        let height = provider.font_size_adjust_ratio(&style, FontSizeAdjustMetric::IcHeight).unwrap();
+        assert!((width - 0.5).abs() < 0.01, "{width}");
+        assert!((height - 1.0).abs() < 0.01, "{height}");
+        for mode in [WritingMode::HorizontalTb, WritingMode::VerticalRl, WritingMode::VerticalLr, WritingMode::SidewaysRl, WritingMode::SidewaysLr] {
+            for orientation in [TextOrientation::Mixed, TextOrientation::Upright, TextOrientation::Sideways] {
+                style.writing_mode = mode; style.text_orientation = orientation;
+                assert_eq!(provider.font_size_adjust_ratio(&style, FontSizeAdjustMetric::IcWidth), Some(width));
+                assert_eq!(provider.font_size_adjust_ratio(&style, FontSizeAdjustMetric::IcHeight), Some(height));
+                assert!((provider.adjusted_font_size(&style, FontSizeAdjustMetric::IcWidth, width) - 20.0).abs() < 0.05);
+                assert!((provider.adjusted_font_size(&style, FontSizeAdjustMetric::IcHeight, 0.6) - 12.0).abs() < 0.05);
+            }
+        }
+        let mut zero = TextProvider::new();
+        zero.register_web_font(WebFont { family: "Physical".into(), weight: 400, stretch: 100, slant: FontSlant::Normal, format: FontFormat::OpenType, bytes: crate::tests::synthetic_font_with_case_pair(' ', '0') }).unwrap();
+        assert!((zero.font_size_adjust_ratio(&style, FontSizeAdjustMetric::ChWidth).unwrap() - 0.5).abs() < 0.01);
+        assert_eq!(TextProvider::new().font_size_adjust_ratio(&style, FontSizeAdjustMetric::IcHeight), None);
+        style.size = 0.0;
+        assert_eq!(provider.font_size_adjust_ratio(&style, FontSizeAdjustMetric::IcWidth), Some(width));
+        assert_eq!(provider.font_size_adjust_ratio(&style, FontSizeAdjustMetric::IcHeight), Some(height));
+        style.size = f32::NAN;
+        assert_eq!(provider.font_size_adjust_ratio(&style, FontSizeAdjustMetric::IcHeight), None);
     }
 
     #[test]
