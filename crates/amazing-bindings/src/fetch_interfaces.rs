@@ -150,6 +150,10 @@ pub enum FetchObject {
 pub enum HeaderIterationKind { Keys, Values, Entries }
 
 pub trait FetchHost: BindingHost {
+    /// Encoding Standard decode: BOM overrides the final MIME charset.
+    fn fetch_xhr_decode_text(&self, bytes: &[u8], _charset: Option<&str>) -> String {
+        String::from_utf8_lossy(bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(bytes)).into_owned()
+    }
     fn fetch_native(
         &mut self,
         name: &'static str,
@@ -1160,10 +1164,10 @@ pub fn invoke<H: FetchHost>(
 }
 
 
-struct Utf8Decoder;
-impl XhrTextDecoder for Utf8Decoder {
-    fn decode(&self, bytes: &[u8], _charset: Option<&str>) -> String {
-        String::from_utf8_lossy(bytes).into_owned()
+struct HostDecoder<'a, H>(&'a H);
+impl<H: FetchHost> XhrTextDecoder for HostDecoder<'_, H> {
+    fn decode(&self, bytes: &[u8], charset: Option<&str>) -> String {
+        self.0.fetch_xhr_decode_text(bytes, charset)
     }
 }
 fn xhr_invoke<H: FetchHost>(host: &mut H, op: FetchOperation,
@@ -1285,7 +1289,7 @@ fn xhr_invoke<H: FetchHost>(host: &mut H, op: FetchOperation,
                     XhrResponseType::Json => "json", XhrResponseType::ArrayBuffer => "arraybuffer",
                     XhrResponseType::Document => "document", XhrResponseType::Blob => "blob" }),
                 O::XhrResponseText => {
-                    let value = xhr.response_text(&Utf8Decoder).map_err(|e| host.fetch_xhr_error(e))?;
+                    let value = xhr.response_text(&HostDecoder(&*host)).map_err(|e| host.fetch_xhr_error(e))?;
                     string(host, &value)
                 },
                 O::XhrResponseXml => {
@@ -1296,7 +1300,7 @@ fn xhr_invoke<H: FetchHost>(host: &mut H, op: FetchOperation,
                 }
                 O::XhrResponse if xhr.response_type() == XhrResponseType::Document =>
                     host.fetch_xhr_document(receiver, xhr),
-                O::XhrResponse => match xhr.response(&Utf8Decoder).map_err(|e| host.fetch_xhr_error(e))? {
+                O::XhrResponse => match xhr.response(&HostDecoder(&*host)).map_err(|e| host.fetch_xhr_error(e))? {
                     XhrResponseValue::Text(value) => string(host, &value),
                     XhrResponseValue::ArrayBuffer(bytes) => host.fetch_array_buffer(bytes),
                     XhrResponseValue::Blob(blob) => host.blob_new(blob),

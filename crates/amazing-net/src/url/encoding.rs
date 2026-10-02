@@ -27,8 +27,11 @@ impl PercentEncodeSet {
     }
 }
 pub fn percent_encode(input: &str, set: PercentEncodeSet) -> String {
+    percent_encode_bytes(input.as_bytes(), set)
+}
+pub(super) fn percent_encode_bytes(input: &[u8], set: PercentEncodeSet) -> String {
     let mut result = String::new();
-    for b in input.bytes() {
+    for &b in input {
         if set.contains(b) {
             use std::fmt::Write;
             write!(result, "%{b:02X}").unwrap();

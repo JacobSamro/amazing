@@ -1,4 +1,4 @@
-//! Basic URL parser, UTF-8, without setter state overrides. Each enum arm is
+//! Basic URL parser with an optional document query encoder. Each enum arm is
 //! the corresponding named WHATWG state; validation errors recover unless the
 //! algorithm explicitly returns failure. Inputs are scalar-value strings.
 use super::encoding::{percent_encode, PercentEncodeSet as Set};
@@ -64,6 +64,7 @@ pub(super) fn parse(
     input: &str,
     base: Option<&ParsedUrl>,
     idna: &dyn IdnaProvider,
+    query_encoder: Option<&dyn Fn(&str) -> Vec<u8>>,
 ) -> Result<ParsedUrl, ParseError> {
     let chars: Vec<char> = input
         .trim_matches(|c: char| c <= ' ')
@@ -449,18 +450,26 @@ pub(super) fn parse(
                 None => (),
             },
             State::Query => {
+                // Encode the complete buffer, rather than one scalar at a time:
+                // ISO-2022-JP maintains escape state until the buffer is flushed.
+                if c.is_none() || c == Some('#') {
+                    let bytes = if special && !matches!(url.scheme.as_str(), "ws" | "wss") {
+                        query_encoder.map(|encode| encode(&buffer))
+                    } else {
+                        None
+                    };
+                    let encoded = super::encoding::percent_encode_bytes(
+                        bytes.as_deref().unwrap_or(buffer.as_bytes()),
+                        if special { Set::SpecialQuery } else { Set::Query },
+                    );
+                    url.query.as_mut().unwrap().push_str(&encoded);
+                    buffer.clear();
+                }
                 if c == Some('#') {
                     url.fragment = Some(String::new());
                     state = State::Fragment;
                 } else if let Some(p) = c {
-                    url.query.as_mut().unwrap().push_str(&percent_encode(
-                        &p.to_string(),
-                        if special {
-                            Set::SpecialQuery
-                        } else {
-                            Set::Query
-                        },
-                    ));
+                    buffer.push(p);
                 }
             }
             State::Fragment => {
