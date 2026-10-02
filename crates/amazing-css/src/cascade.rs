@@ -393,7 +393,7 @@ fn style_subtree(
         };
         for (pseudo, requested) in PseudoElement::STYLED.into_iter().zip(pseudo_targets) {
             if !*requested
-                && !(pseudo == PseudoElement::Marker && style.get("display") == Some("list-item"))
+                && !(pseudo == PseudoElement::Marker && style.get("display").is_some_and(crate::is_list_item_display))
             {
                 continue;
             }
@@ -423,7 +423,7 @@ fn style_subtree(
             let visible = style.get("display") != Some("none");
             let applies = match pseudo {
                 PseudoElement::Before | PseudoElement::After => has_content,
-                PseudoElement::Marker => style.get("display") == Some("list-item")
+                PseudoElement::Marker => style.get("display").is_some_and(crate::is_list_item_display)
                     && pseudo_style.get("content") != Some("none")
                     && (has_content || pseudo_style.get("list-style-type") != Some("none")
                         || pseudo_style.get("list-style-image") != Some("none")),

@@ -7,17 +7,25 @@ pub fn blockified_display(display: &str) -> String {
     let lower = display.trim().to_ascii_lowercase();
     let css = crate::values::display_canonical(&lower).unwrap_or(&lower);
     match css {
-        "inline" | "inline-block" | "table-row" | "table-cell" | "table-row-group"
+        "run-in" | "run-in flow-root" | "inline" | "inline-block" | "table-row" | "table-cell" | "table-row-group"
         | "table-header-group" | "table-footer-group" | "table-column"
         | "table-column-group" | "table-caption" | "ruby-base" | "ruby-text"
         | "ruby-base-container" | "ruby-text-container" => "block".into(),
-        "inline-flex" => "flex".into(),
-        "inline-grid" => "grid".into(),
-        "inline-grid-lanes" => "grid-lanes".into(),
-        "inline-table" => "table".into(),
-        "ruby" => "block ruby".into(),
+        "inline list-item" | "run-in list-item" | "inline flow-root list-item"
+        | "run-in flow-root list-item" => "list-item".into(),
+        "inline-flex" | "run-in flex" => "flex".into(),
+        "inline-grid" | "run-in grid" => "grid".into(),
+        "inline-grid-lanes" | "run-in grid-lanes" => "grid-lanes".into(),
+        "inline-table" | "run-in table" => "table".into(),
+        "ruby" | "run-in ruby" => "block ruby".into(),
         _ => css.into(),
     }
+}
+
+/// Whether a valid display value carries the list-item marker flag.
+pub fn is_list_item_display(display: &str) -> bool {
+    crate::values::display_canonical(display).is_some_and(|canonical|
+        canonical.split_ascii_whitespace().any(|word| word == "list-item"))
 }
 
 pub(crate) fn normalize(style: &mut ComputedStyle, parent: Option<&ComputedStyle>, root: bool) {

@@ -2697,3 +2697,27 @@ Identical corrected 15-selection harness3779→3783/5126 (+4/lost0).
 Full display27/35, tables59/82, sizing91/138, contain108/229; all484
 classifications unchanged/lost0. Evidence css37. Layout consumer adoption
 routed; next area is complete unordered outer/inner/list-item display grammar.
+
+## CSS-38 — complete CSS Display 3 keyword grammar
+
+Parses the unordered outer/inner pair and the optional list-item flag as one
+area: both keyword orders and all six permutations of three keywords, default
+outer/inner axes, root/position/flex contextual fixups, and duplicate/incompatible
+component rejection. Computed text uses legacy shortest aliases, canonical
+outer/inner order and preserves the marker flag. Typed display includes run-in
+inner variants and all six list-item outer/inner forms. The public
+is_list_item_display helper supports generated marker styles for compound
+values; normalizing marker parents continues to use ordinary CSS inheritance.
+
+Run-in reparenting/inlinification and compound list-item layout consumers are
+routed to layout as a separate box-tree scope. CSS grammar does not pretend
+to implement those geometry algorithms. Existing grid-lanes serialization is
+retained to avoid breaking its installed consumers; the pinned tentative
+Display4 computed fixture wants inline grid-lanes rather than the existing
+inline-grid-lanes alias and remains a documented serialization mismatch.
+Spec: https://drafts.csswg.org/css-display-3/#the-display-properties
+
+Final CSS38 on base452323a9: CSS378, Boat workspace3537passes/17skips
++4docs; identical15selection3783→3928/5126 (+145 exact/lost0).
+Full display27/35,tables59/82,sizing91/138,contain108/229 all484 unchanged/lost0.
+Evidence css38. Continue CSS Text policy validation cluster.
