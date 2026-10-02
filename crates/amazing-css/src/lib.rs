@@ -48,6 +48,7 @@ pub mod effects;
 mod display;
 pub use display::{blockified_display, is_list_item_display};
 mod font_properties;
+mod text_properties;
 pub mod font_size_adjust;
 pub mod generated;
 pub mod media_queries;

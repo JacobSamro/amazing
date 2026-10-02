@@ -2721,3 +2721,30 @@ Final CSS38 on base452323a9: CSS378, Boat workspace3537passes/17skips
 +4docs; identical15selection3783→3928/5126 (+145 exact/lost0).
 Full display27/35,tables59/82,sizing91/138,contain108/229 all484 unchanged/lost0.
 Evidence css38. Continue CSS Text policy validation cluster.
+
+## CSS-39 — CSS Text 4 policy grammar and overlapping shorthands
+
+Bulk keyword grammar for text transforms, whitespace collapse/trim, wrapping
+mode/style, autospace/spacing trim, breaking/hyphenation, hanging punctuation,
+word-space-transform, text justification/group alignment and wrap controls.
+White-space, text-wrap and text-spacing expand into independently cascading
+axes, including deferred var() values and CSS-wide defaulting. Computed aliases
+are reconstructed from the winning inherited longhands; white-space and
+text-wrap share only mode, and white-space never resets wrap style. Trim is
+non-inherited. Legacy whitespace aliases remain available to existing layout
+consumers; string/typed alias synchronization also runs after inheritance and
+layout-time synthesis. word-wrap is a true alias of overflow-wrap.
+
+Grammar validates duplicate/conflicting flags, canonical order and explicit
+insert/replace exclusivity. New policies carry metadata and layout invalidation
+severity. This commit exposes policy values; new autospace, trim, balancing,
+run-in wrapping and transform shaping algorithms remain lower consumer work,
+not fabricated CSS parsing passes. Spec: https://drafts.csswg.org/css-text-4/
+
+Final CSS39 fixed CSS38 base56703574: CSS382, Boat workspace3541passes/17skips
++4docs; identical15selection3928→4105/5126 (+177 exact/lost0).
+Whole css-text235→238/445 (+3/lost0): overflow-wrap-anywhere-span-001,
+overflow-wrap-break-word-span-001 and text-wrap-nowrap-001. Renderer SHA256
+3637ff6fe6be9b87f004549b3a4e228399d1dca9bf32869b60147db6e9b115d3.
+Evidence css39. Completed own PPM scratch removed after maps/reports/logs fetch;
+shared native targets and HOME legacy cache left intact. Next font-variant area.

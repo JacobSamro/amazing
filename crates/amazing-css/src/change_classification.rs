@@ -205,6 +205,9 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "top" |
         "unicode-bidi" |
         "vertical-align" |
+        "white-space-collapse" | "white-space-trim" | "text-wrap" | "text-wrap-mode" | "text-wrap-style" |
+        "text-autospace" | "text-spacing" | "text-spacing-trim" | "hyphens" | "hanging-punctuation" |
+        "wrap-before" | "wrap-after" | "wrap-inside" | "word-space-transform" | "text-justify" | "text-group-align" |
         "white-space" |
         "widows" |
         "width" |
@@ -274,8 +277,9 @@ mod tests {
             }] += 1;
         }
         // RC-32 added outline-color/-style/-width/-offset and CSS-30 added
-        // `background-position-x`/`-y`, all PaintOnly.
-        assert_eq!(counts, [16, 46, 129, 34]);
+        // `background-position-x`/`-y`, all PaintOnly. CSS39 adds thirteen
+        // registered text policy axes, all Layout.
+        assert_eq!(counts, [16, 46, 142, 34]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }
