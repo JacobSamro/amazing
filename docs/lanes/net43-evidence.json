@@ -1,0 +1,1403 @@
+{
+   "after" : {
+      "fetch/api/abort/general.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 1,
+            "notrun" : 0,
+            "pass" : 47,
+            "timeout" : 0
+         },
+         "status" : "timeout"
+      },
+      "fetch/api/basic/header-value-combining.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 6,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/historical.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 3,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/mode-same-origin.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 8,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/request-head.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/request-headers-nonascii.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/request-headers.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 25,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/scheme-about.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 7,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/scheme-others.sub.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 16,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/stream-safe-creation.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 63,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/text-utf8.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 30,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/cors/cors-basic.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 3,
+            "timeout" : 0
+         },
+         "status" : "timeout"
+      },
+      "fetch/api/cors/cors-preflight.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 6,
+            "timeout" : 0
+         },
+         "status" : "timeout"
+      },
+      "fetch/api/credentials/cookies.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 7,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/header-setcookie.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 24,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/header-values-normalize.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 62,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/header-values.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 8,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-basic.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 23,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-casing.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 4,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-combine.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 6,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-errors.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 18,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-forbidden-override.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 90,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-no-cors.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 1,
+            "notrun" : 0,
+            "pass" : 7,
+            "timeout" : 0
+         },
+         "status" : "fail"
+      },
+      "fetch/api/headers/headers-normalize.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 3,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-structure.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 8,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/redirect/redirect-mode.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 14,
+            "timeout" : 0
+         },
+         "status" : "timeout"
+      },
+      "fetch/api/request/forbidden-method.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 6,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/request/request-bad-port.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 83,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/request/request-consume.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 45,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/request/request-error.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 22,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/request/request-init-002.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 8,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/request/request-init-priority.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 8,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/response/json.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 2,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/response/response-consume-empty.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 14,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/response/response-error.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 10,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/response/response-init-001.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 9,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/response/response-static-error.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 2,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/response/response-static-redirect.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 11,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/event-load.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/event-progress.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "timeout"
+      },
+      "xhr/event-readystatechange-loaded.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "timeout"
+      },
+      "xhr/event-timeout.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/getallresponseheaders-cookies.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/getallresponseheaders.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 7,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/getresponseheader-chunked-trailer.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/getresponseheader.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 6,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/responsetype.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 50,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/send-redirect.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 34,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-after-send.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-allow-empty-value.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 3,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-allow-whitespace-in-value.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 4,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-before-open.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-bogus-name.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 71,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-bogus-value.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 5,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-case-insensitive.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 2,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-combining.window.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-content-type.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 34,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-header-allowed.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 10,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-header-forbidden.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 2,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-open-setrequestheader.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/status-basic.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 27,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      }
+   },
+   "base" : "9d0b42d0",
+   "before" : {
+      "fetch/api/abort/general.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 1,
+            "notrun" : 0,
+            "pass" : 47,
+            "timeout" : 0
+         },
+         "status" : "timeout"
+      },
+      "fetch/api/basic/header-value-combining.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 6,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/historical.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 3,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/mode-same-origin.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 8,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/request-head.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/request-headers-nonascii.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/request-headers.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 25,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/scheme-about.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 7,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/scheme-others.sub.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 16,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/stream-safe-creation.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 63,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/basic/text-utf8.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 30,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/cors/cors-basic.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 3,
+            "timeout" : 0
+         },
+         "status" : "timeout"
+      },
+      "fetch/api/cors/cors-preflight.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 6,
+            "timeout" : 0
+         },
+         "status" : "timeout"
+      },
+      "fetch/api/credentials/cookies.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 5,
+            "timeout" : 0
+         },
+         "status" : "timeout"
+      },
+      "fetch/api/headers/header-setcookie.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 24,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/header-values-normalize.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 62,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/header-values.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 8,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-basic.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 23,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-casing.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 4,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-combine.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 6,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-errors.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 18,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-forbidden-override.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 90,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-no-cors.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 1,
+            "notrun" : 0,
+            "pass" : 7,
+            "timeout" : 0
+         },
+         "status" : "fail"
+      },
+      "fetch/api/headers/headers-normalize.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 3,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/headers/headers-structure.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 8,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/redirect/redirect-mode.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 11,
+            "timeout" : 0
+         },
+         "status" : "timeout"
+      },
+      "fetch/api/request/forbidden-method.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 6,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/request/request-bad-port.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 83,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/request/request-consume.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 45,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/request/request-error.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 22,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/request/request-init-002.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 8,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/request/request-init-priority.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 8,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/response/json.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 2,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/response/response-consume-empty.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 14,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/response/response-error.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 10,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/response/response-init-001.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 9,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/response/response-static-error.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 2,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "fetch/api/response/response-static-redirect.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 11,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/event-load.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/event-progress.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "timeout"
+      },
+      "xhr/event-readystatechange-loaded.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "timeout"
+      },
+      "xhr/event-timeout.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/getallresponseheaders-cookies.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/getallresponseheaders.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 7,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/getresponseheader-chunked-trailer.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/getresponseheader.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 6,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/responsetype.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 50,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/send-redirect.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 34,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-after-send.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-allow-empty-value.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 3,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-allow-whitespace-in-value.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 4,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-before-open.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-bogus-name.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 71,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-bogus-value.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 5,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-case-insensitive.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 2,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-combining.window.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-content-type.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 34,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-header-allowed.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 10,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-header-forbidden.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 2,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/setrequestheader-open-setrequestheader.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 1,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      },
+      "xhr/status-basic.htm" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 27,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      }
+   },
+   "doctests" : {
+      "failed" : 0,
+      "passed" : 4
+   },
+   "encoding_after" : {
+      "encoding/legacy-mb-japanese/iso-2022-jp/iso-2022-jp-encoder.html" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "error"
+      },
+      "encoding/legacy-mb-schinese/gb18030/gb18030-encoder.html" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 254,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "fail"
+      },
+      "encoding/legacy-mb-schinese/gbk/gbk-encoder.html" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 49,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "fail"
+      },
+      "encoding/legacy-mb-tchinese/big5/big5-encoder.html" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "error"
+      },
+      "encoding/unsupported-encodings.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 14,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      }
+   },
+   "encoding_before" : {
+      "encoding/legacy-mb-japanese/iso-2022-jp/iso-2022-jp-encoder.html" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "error"
+      },
+      "encoding/legacy-mb-schinese/gb18030/gb18030-encoder.html" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 254,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "fail"
+      },
+      "encoding/legacy-mb-schinese/gbk/gbk-encoder.html" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 49,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "fail"
+      },
+      "encoding/legacy-mb-tchinese/big5/big5-encoder.html" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "error"
+      },
+      "encoding/unsupported-encodings.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 4,
+            "notrun" : 0,
+            "pass" : 10,
+            "timeout" : 0
+         },
+         "status" : "fail"
+      }
+   },
+   "encoding_complete_after" : {
+      "encoding/big5-encoder.html" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 13,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "fail"
+      },
+      "encoding/iso-2022-jp-encoder.html" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 12,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "fail"
+      },
+      "encoding/legacy-mb-schinese/gb18030/gb18030-encoder.html" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 254,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "fail"
+      },
+      "encoding/legacy-mb-schinese/gbk/gbk-encoder.html" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 49,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "fail"
+      },
+      "encoding/legacy-mb-tchinese/big5/big5-enc-ascii.html" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 123,
+            "notrun" : 0,
+            "pass" : 0,
+            "timeout" : 0
+         },
+         "status" : "fail"
+      },
+      "encoding/unsupported-encodings.any.js" : {
+         "counts" : {
+            "error" : 0,
+            "fail" : 0,
+            "notrun" : 0,
+            "pass" : 14,
+            "timeout" : 0
+         },
+         "status" : "pass"
+      }
+   },
+   "nextest" : {
+      "failed" : 0,
+      "passed" : 3518,
+      "skipped" : 17
+   },
+   "platform" : "Boat pool-sys native ext4"
+}
