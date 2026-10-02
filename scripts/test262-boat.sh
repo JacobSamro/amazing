@@ -6,7 +6,7 @@
 # tree; each shard stops its sandbox as soon as its result is copied back.
 #
 # Usage: scripts/test262-boat.sh <ref> <tag> [--shards N] [--baseline BASE.json]
-#                              [--resume] [--lane-prefix NAME]
+#                              [--resume] [--lane-prefix NAME] [--runner-ref REF]
 #   Writes .agents/test262/t262-<shortsha>-<tag>.json (merged) and prints lost/gained
 #   against the baseline. Exit 1 when a baseline pass was lost.
 
@@ -14,13 +14,14 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")"
 REF="${1:?usage: test262-boat.sh <ref> <tag> [--shards N] [--baseline BASE.json]}"; TAG="${2:?tag}"; shift 2
-N=4 BASE="" RESUME=0 LANE_PREFIX=t262-shard
+N=4 BASE="" RESUME=0 LANE_PREFIX=t262-shard RUNNER_REF=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --shards) N="$2"; shift 2 ;;
     --baseline) BASE="$2"; shift 2 ;;
     --resume) RESUME=1; shift ;;
     --lane-prefix) LANE_PREFIX="$2"; shift 2 ;;
+    --runner-ref) RUNNER_REF="$2"; shift 2 ;;
     *) echo "test262-boat: unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -31,7 +32,11 @@ OUT="$OUTDIR/t262-$SHA-$TAG.json"
 T0=$(date +%s)
 
 # Always run the current runner (with --shard), whatever the ref ships.
-RUNNER_B64="$(base64 < "$REPO/scripts/test262.py" | tr -d '\n')"
+if [ -n "$RUNNER_REF" ]; then
+  RUNNER_B64="$(git -C "$MAIN" show "$RUNNER_REF:scripts/test262.py" | base64 | tr -d '\n')" || exit 2
+else
+  RUNNER_B64="$(base64 < "$REPO/scripts/test262.py" | tr -d '\n')"
+fi
 
 pids=()
 for K in $(seq 0 $((N - 1))); do
