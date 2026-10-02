@@ -1,0 +1,118 @@
+{
+  "ticket": "CSS-37",
+  "base": "3347187de074bac70d0a33e76431e06eab66b90c",
+  "platform": "Boat Linux native /tmp source+target",
+  "wpt": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "harness": "Identical html/body/div computed target runner overlaid on fixed-base baseline",
+  "workspace": {
+    "passed": 3534,
+    "skipped": 17,
+    "doctests": 4
+  },
+  "crate": {
+    "passed": 375
+  },
+  "parsing": {
+    "before_pass": 3779,
+    "after_pass": 3783,
+    "total": 5126,
+    "nonliteral_skipped": 169,
+    "gained": [
+      "FAIL /home/user/corpora/wpt/css/css-display/parsing/display-computed.html: computed display: \"block ruby\"",
+      "FAIL /home/user/corpora/wpt/css/css-display/parsing/display-computed.html: computed display: \"inline ruby\"",
+      "FAIL /home/user/corpora/wpt/css/css-display/parsing/display-valid.html: valid display: \"block ruby\"",
+      "FAIL /home/user/corpora/wpt/css/css-display/parsing/display-valid.html: valid display: \"inline ruby\""
+    ],
+    "lost": []
+  },
+  "render": {
+    "css-display": {
+      "before": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "unchanged": 35,
+      "total": 35
+    },
+    "css-tables": {
+      "before": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "unchanged": 82,
+      "total": 82
+    },
+    "css-sizing": {
+      "before": {
+        "pass": 91,
+        "mismatch": 47,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 91,
+        "mismatch": 47,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "unchanged": 138,
+      "total": 138
+    },
+    "css-contain": {
+      "before": {
+        "pass": 108,
+        "mismatch": 121,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 108,
+        "mismatch": 121,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "unchanged": 229,
+      "total": 229
+    }
+  }
+}

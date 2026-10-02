@@ -2667,3 +2667,33 @@ The seven remaining font-size-adjust computed assertions require six loaded-font
 ratios and one container geometry input; the CSS-only static runner cannot supply
 the fixture's @font-face/document setup. No fixture-specific metric is invented.
 Spec: https://drafts.csswg.org/css-fonts-5/#font-size-adjust-prop.
+
+## CSS-37 — contextual display blockification
+
+CSS Display 3 §2.7–2.8 normalizes computed display for roots, floats,
+absolute/fixed positioning and flex/grid children, including children flattened
+through nested display:contents. None/contents suppress boxes; root contents
+computes to block. Inner flex/grid/table/ruby modes survive, inline flow-root
+loses flow-root as required, and layout-internal types become block flow.
+Absolute/fixed positioning computes float:none. Contextual fixups preserve
+winning author provenance and synchronize string/typed computed values.
+
+Public blockified_display(&str)->String supports layout synthetic styles;
+ComputedStyle::display_before_blockification()->Option<&str> preserves the
+pre-fixup value for CSS2 hypothetical static positions. Context-free resolve
+and synthetic styles keep this metadata absent. Nearest generated parent display
+is carried privately across contents and incremental cached styles.
+
+Static WPT computed targets now use html/body/div rather than making div the
+root. Baseline overlays exactly this runner on CSS36 3347187d; both sides use
+identical 15-selection fixtures and skipped nonliteral-expected arguments.
+Grouped tests cover all display families, contexts, nested contents and
+incremental parent display changes. Three pre-existing inline/ruby test fixtures
+were corrected to target an actual descendant rather than the document root.
+Spec: https://drafts.csswg.org/css-display-3/#transformations
+
+Final CSS37 Boat gate: workspace3534passes/17skips +4docs, CSS375.
+Identical corrected 15-selection harness3779→3783/5126 (+4/lost0).
+Full display27/35, tables59/82, sizing91/138, contain108/229; all484
+classifications unchanged/lost0. Evidence css37. Layout consumer adoption
+routed; next area is complete unordered outer/inner/list-item display grammar.

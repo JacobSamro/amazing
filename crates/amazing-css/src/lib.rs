@@ -45,6 +45,8 @@ mod change_classification;
 mod computed;
 mod image_values;
 pub mod effects;
+mod display;
+pub use display::blockified_display;
 mod font_properties;
 pub mod font_size_adjust;
 pub mod generated;

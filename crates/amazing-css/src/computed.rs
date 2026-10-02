@@ -69,6 +69,8 @@ enum CustomValue {
 /// preserve their case-sensitive names for inheritance and `var()` lookup.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ComputedStyle {
+    pub(crate) display_before_blockification: Option<String>,
+    pub(crate) contents_parent_display: Option<String>,
     props: BTreeMap<String, String>,
     typed: BTreeMap<String, ComputedValue>,
     custom: BTreeMap<String, CustomValue>,
@@ -82,6 +84,8 @@ pub struct ComputedStyle {
 impl Default for ComputedStyle {
     fn default() -> Self {
         Self {
+            display_before_blockification: None,
+            contents_parent_display: None,
             props: BTreeMap::new(),
             typed: BTreeMap::new(),
             custom: BTreeMap::new(),
@@ -95,6 +99,16 @@ impl Default for ComputedStyle {
 }
 
 impl ComputedStyle {
+    pub(crate) fn set_contextual_value(&mut self, property: &str, css: &str) {
+        self.props.insert(property.into(), css.into());
+        self.typed.insert(property.into(), values::parse(property, css).unwrap_or(ComputedValue::Unparsed));
+    }
+
+    /// Display before contextual blockification, for hypothetical static positions.
+    pub fn display_before_blockification(&self) -> Option<&str> {
+        self.display_before_blockification.as_deref()
+    }
+
     pub(crate) fn apply_compositor_values(
         &mut self,
         opacity: Option<f32>,
@@ -2695,6 +2709,8 @@ pub(crate) fn resolve_with_root_attrs_environment(
     drop(resolver);
     inherited_custom.extend(resolved_local);
     let mut style = ComputedStyle {
+        display_before_blockification: None,
+        contents_parent_display: None,
         props: properties,
         typed: BTreeMap::new(),
         custom: inherited_custom,

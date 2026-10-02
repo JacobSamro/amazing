@@ -198,7 +198,9 @@ fn run_file(path: &Path, tally: &mut Tally) {
 
 fn computed_text(property: &str, value: &str) -> Option<String> {
     let mut dom = Dom::new();
-    let root = dom.create_element(NodeIdx(0), "div");
+    let html = dom.create_element(NodeIdx(0), "html");
+    let body = dom.create_element(html, "body");
+    let root = dom.create_element(body, "div");
     let css = format!("div {{ {property}: {value} }}");
     let styles = compute(&dom, &[parse_stylesheet(&css)]);
     let style: &ComputedStyle = styles.get(root)?;

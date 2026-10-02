@@ -84,7 +84,9 @@ fn existing_flex_math_constants_remain_available_to_layout() {
 #[test]
 fn ruby_display_roles_survive_typed_computation() {
     let mut dom = Dom::new();
-    let element = dom.create_element(NodeIdx(0), "div");
+    let html = dom.create_element(NodeIdx(0), "html");
+    let body = dom.create_element(html, "body");
+    let element = dom.create_element(body, "div");
     for role in [
         "ruby",
         "ruby-base",
