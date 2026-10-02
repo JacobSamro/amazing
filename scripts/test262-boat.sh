@@ -33,11 +33,23 @@ pids=()
 for K in $(seq 0 $((N - 1))); do
   (
     "$REPO/scripts/linux-run.sh" "t262-shard-$K" --ref "$SHA" -- "
-      cargo build -p amazing-js --example test262_host --release --locked 2>&1 | grep -E '^error' -A7 | head -20
+      set -euo pipefail
+      export CARGO_TARGET_DIR=/tmp/amazing-target-t262-shard-$K CARGO_INCREMENTAL=0
+      mkdir -p /tmp/amazing-src-t262-shard-$K
+      rsync -a --delete --exclude /target --exclude '/target-*' --exclude /corpora --exclude /out ./ /tmp/amazing-src-t262-shard-$K/
+      ln -sfn \"\$HOME/corpora\" /tmp/amazing-src-t262-shard-$K/corpora
+      cd /tmp/amazing-src-t262-shard-$K
+      cargo build -p amazing-js --example test262_host --release --locked >\"\$OUT/shard-$SHA-$TAG-build.log\" 2>&1 || {
+        tail -40 \"\$OUT/shard-$SHA-$TAG-build.log\"; exit 1;
+      }
       echo $RUNNER_B64 | base64 -d > /tmp/t262runner.py
+      set +e
       python3 /tmp/t262runner.py \"\$TEST262_ROOT\" --binary \"\$CARGO_TARGET_DIR/release/examples/test262_host\" \
         --jobs \$JOBS --timeout 60 --shard $K/$N --output \$OUT/shard-$SHA-$TAG.json >/dev/null 2>&1
-      echo shard-$K-exit=\$?" > "$OUTDIR/.shard-$SHA-$TAG-$K.log" 2>&1
+      result=\$?
+      set -e
+      echo shard-$K-exit=\$result
+      test -s \"\$OUT/shard-$SHA-$TAG.json\"" > "$OUTDIR/.shard-$SHA-$TAG-$K.log" 2>&1
     D="$(mktemp -d)"
     "$MAIN/scripts/lane-fetch.sh" "t262-shard-$K" "$D" "amazing/out/t262-shard-$K/shard-$SHA-$TAG.json" &&
       mv "$D/shard-$SHA-$TAG.json" "$OUTDIR/.shard-$SHA-$TAG-$K.json"; rm -rf "$D"
