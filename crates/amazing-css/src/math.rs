@@ -3,13 +3,14 @@
 use crate::syntax::{Token, tokenize};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Kind { Number, Length, Percentage, LengthPercentage }
+enum Kind { Number, Length, Percentage, LengthPercentage, Angle }
 impl Kind {
     fn add(self, other: Self) -> Option<Self> {
         use Kind::*;
         match (self, other) {
             (Number, Number) => Some(Number),
             (Length, Length) => Some(Length),
+            (Angle, Angle) => Some(Angle),
             (Percentage, Percentage) => Some(Percentage),
             (Length | Percentage | LengthPercentage, Length | Percentage | LengthPercentage) => Some(LengthPercentage),
             _ => None,
@@ -60,7 +61,7 @@ impl Parser {
                 self.expression_plain()?;
                 matches!(self.eat(), Some(Token::CloseParen)).then_some(false)
             }
-            _ => self.expression_plain().map(|_| false),
+            _ => self.expression_plain().filter(|kind| *kind != Kind::Angle).map(|_| false),
         }
     }
 
@@ -95,7 +96,7 @@ impl Parser {
         self.allow_size = !any;
         let calculation = self.expression();
         self.allow_size = saved;
-        calculation.is_some() && matches!(self.eat(), Some(Token::CloseParen))
+        calculation.is_some_and(|kind| kind != Kind::Angle) && matches!(self.eat(), Some(Token::CloseParen))
     }
     fn expression(&mut self) -> Option<Kind> {
         let mut left = self.product()?;
@@ -133,6 +134,7 @@ impl Parser {
             Token::Dimension(n, unit) if n.is_finite() => {
                 let css = format!("{n}{unit}");
                 crate::values::LengthPercentage::parse(&css).map(|_| Kind::Length)
+                    .or_else(|| crate::values::Angle::parse(&css).map(|_| Kind::Angle))
             }
             // `size` names the calc-size basis inside its calculation.
             Token::Ident(name) if self.allow_size && name.eq_ignore_ascii_case("size") => {
@@ -329,4 +331,20 @@ pub(crate) fn font_size_px(css: &str, parent_px: f64, root_px: f64) -> Option<f6
     let value = parser.atom()?.length()?;
     parser.skip();
     (parser.pos == parser.tokens.len()).then_some(value)
+}
+
+/// A pure number or percentage math value, without a length basis.
+pub(crate) fn number_percentage(css: &str, percentage: bool) -> bool {
+    let mut parser = Parser { tokens: tokenize(css), pos: 0, allow_size: false };
+    let kind = parser.atom();
+    parser.skip();
+    parser.pos == parser.tokens.len() && (kind == Some(Kind::Number)
+        || (percentage && kind == Some(Kind::Percentage)))
+}
+
+pub(crate) fn angle(css: &str) -> bool {
+    let mut parser = Parser { tokens: tokenize(css), pos: 0, allow_size: false };
+    let kind = parser.atom();
+    parser.skip();
+    parser.pos == parser.tokens.len() && kind == Some(Kind::Angle)
 }

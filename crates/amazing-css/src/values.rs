@@ -668,6 +668,7 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         // math (CSS Color 4 SS4.5, CSS Values 4 SS10) -- not just a bare
         // number as before, which silently dropped every calc()/percentage/
         // min()/max()/clamp() opacity to the initial value 1.
+        "translate" | "rotate" | "scale" => return crate::computed::individual_transforms::valid(property, css).then_some(V::Unparsed),
         "opacity" | "fill-opacity" => return alpha_value(css).map(|n| V::Number(n.clamp(0.0, 1.0))),
         "flex-grow" | "flex-shrink" => {
             // The existing layout solver supports these math constants. Keep

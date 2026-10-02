@@ -240,6 +240,7 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "list-style-type" |
         "position" |
         "quotes" |
+        "translate" | "rotate" | "scale" |
         "transform-style" |
         "transition-behavior" |
         "transition-delay" |
@@ -274,7 +275,7 @@ mod tests {
         }
         // RC-32 added outline-color/-style/-width/-offset and CSS-30 added
         // `background-position-x`/`-y`, all PaintOnly.
-        assert_eq!(counts, [16, 46, 129, 31]);
+        assert_eq!(counts, [16, 46, 129, 34]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }

@@ -945,6 +945,9 @@ const PROPERTIES: &[PropertyMetadata] = &[
         initial: "none",
         inherited: false,
     },
+    PropertyMetadata { name: "translate", initial: "none", inherited: false },
+    PropertyMetadata { name: "rotate", initial: "none", inherited: false },
+    PropertyMetadata { name: "scale", initial: "none", inherited: false },
     PropertyMetadata {
         name: "transform-style",
         initial: "flat",
@@ -2701,6 +2704,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
         url_bases: parent.map(|parent| parent.url_bases.clone()).unwrap_or_default(),
     };
     contain_intrinsic::resolve_lengths(&mut style.props, style.root_font_px);
+    individual_transforms::resolve(&mut style.props, style.root_font_px);
     style.resolve_relative_colors();
     style.resolve_light_dark(environment);
     let local_zoom = style.props.get("zoom").and_then(|value| used_zoom_factor(value)).unwrap_or(1.0);
@@ -3545,3 +3549,6 @@ pub(crate) mod logical_border;
 
 #[path = "contain_intrinsic.rs"]
 pub(crate) mod contain_intrinsic;
+
+#[path = "individual_transforms.rs"]
+pub(crate) mod individual_transforms;
