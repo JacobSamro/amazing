@@ -21,6 +21,9 @@ enum Op {
     Any(Flags),
     Class(Rc<FoldedClass>, Flags),
     Set(Rc<CompiledSet>, Flags),
+    /// A deterministic, capture-free atom needs only one retry frame for
+    /// every possible repetition endpoint, rather than a snapshot per point.
+    RepeatAtom(Box<Op>, usize, Option<usize>, bool),
     Start(Flags),
     End(Flags),
     Boundary(bool, Flags),
@@ -42,15 +45,44 @@ enum Op {
 struct FoldedClass {
     class: Class,
     folded: Vec<u32>,
+    properties: Vec<Option<crate::unicode_props::Lookup>>,
 }
 #[derive(Debug, Clone)]
 struct CompiledSet {
     expression: SetExpr,
     strings: HashMap<u32, Vec<Vec<u32>>>,
     empty: bool,
+    properties: HashMap<String, crate::unicode_props::Lookup>,
 }
 impl CompiledSet {
     fn new(expression: &SetExpr, flags: Flags) -> Self {
+        fn resolve(expression: &SetExpr, out: &mut HashMap<String, crate::unicode_props::Lookup>) {
+            match expression {
+                SetExpr::Property(name, _) => {
+                    if let Some(property) = crate::unicode_props::lookup(name) {
+                        out.insert(name.clone(), property);
+                    }
+                }
+                SetExpr::Char(Member::Property(name, _)) => {
+                    if let Some(property) = crate::unicode_props::lookup(name) {
+                        out.insert(name.to_string(), property);
+                    }
+                }
+                SetExpr::Union(terms) | SetExpr::Intersect(terms) => {
+                    for term in terms {
+                        resolve(term, out);
+                    }
+                }
+                SetExpr::Subtract(left, right) => {
+                    resolve(left, out);
+                    resolve(right, out);
+                }
+                SetExpr::Complement(term) => resolve(term, out),
+                _ => {}
+            }
+        }
+        let mut properties = HashMap::new();
+        resolve(expression, &mut properties);
         fn collect(expression: &SetExpr, out: &mut Vec<Vec<u32>>) {
             match expression {
                 SetExpr::String(s) => out.push(s.clone()),
@@ -91,6 +123,7 @@ impl CompiledSet {
             expression: expression.clone(),
             strings,
             empty,
+            properties,
         }
     }
     fn ends(&self, input: &[u16], pos: usize, flags: Flags) -> Vec<usize> {
@@ -118,7 +151,10 @@ impl CompiledSet {
                     }
                 }
             }
-            if self.expression.contains(&[first], flags) {
+            if self
+                .expression
+                .contains_cached(&[first], flags, Some(&self.properties))
+            {
                 ends.push(end);
             }
         }
@@ -130,6 +166,20 @@ impl CompiledSet {
 }
 impl SetExpr {
     fn contains(&self, sequence: &[u32], flags: Flags) -> bool {
+        self.contains_cached(sequence, flags, None)
+    }
+    fn contains_cached(
+        &self,
+        sequence: &[u32],
+        flags: Flags,
+        properties: Option<&HashMap<String, crate::unicode_props::Lookup>>,
+    ) -> bool {
+        let property_contains = |name: &str, cp: u32| match properties {
+            Some(properties) => properties
+                .get(name)
+                .is_some_and(|property| property.contains(cp)),
+            None => crate::unicode_props::contains(name, cp),
+        };
         match self {
             Self::Char(member) => match sequence {
                 [c] => match member {
@@ -161,8 +211,10 @@ impl SetExpr {
                     // (rather than `unreachable!()`) since it costs nothing
                     // and matches `FoldedClass::contains`'s identical arm.
                     Member::Property(name, invert) => {
-                        let test = |x: u32| crate::unicode_props::contains(name, x) != *invert;
-                        test(*c) || (flags.ignore_case && crate::unicode_casefold::partners(*c).any(test))
+                        let test = |x: u32| property_contains(name, x) != *invert;
+                        test(*c)
+                            || (flags.ignore_case
+                                && crate::unicode_casefold::partners(*c).any(test))
                     }
                 },
                 _ => false,
@@ -191,7 +243,7 @@ impl SetExpr {
                         // direct-membership-only test can't express that.
                         [c] => {
                             let test = |x: u32| {
-                                let hit = crate::unicode_props::contains(name, x);
+                                let hit = property_contains(name, x);
                                 if *invert {
                                     !hit
                                 } else {
@@ -211,14 +263,22 @@ impl SetExpr {
                     }
                 }
             }
-            Self::Union(terms) => terms.iter().any(|term| term.contains(sequence, flags)),
+            Self::Union(terms) => terms
+                .iter()
+                .any(|term| term.contains_cached(sequence, flags, properties)),
             Self::Intersect(terms) => {
-                !terms.is_empty() && terms.iter().all(|term| term.contains(sequence, flags))
+                !terms.is_empty()
+                    && terms
+                        .iter()
+                        .all(|term| term.contains_cached(sequence, flags, properties))
             }
             Self::Subtract(left, right) => {
-                left.contains(sequence, flags) && !right.contains(sequence, flags)
+                left.contains_cached(sequence, flags, properties)
+                    && !right.contains_cached(sequence, flags, properties)
             }
-            Self::Complement(term) => sequence.len() == 1 && !term.contains(sequence, flags),
+            Self::Complement(term) => {
+                sequence.len() == 1 && !term.contains_cached(sequence, flags, properties)
+            }
         }
     }
 }
@@ -244,25 +304,40 @@ impl FoldedClass {
         Self {
             class: class.clone(),
             folded,
+            properties: class
+                .members
+                .iter()
+                .map(|member| match member {
+                    Member::Property(name, _) => crate::unicode_props::lookup(name),
+                    _ => None,
+                })
+                .collect(),
         }
     }
     fn contains(&self, c: u32, flags: Flags) -> bool {
         let canon = canonical(c, flags);
-        let yes = self.class.members.iter().any(|m| match m {
-            Member::Range(lo, hi) => (*lo..=*hi).contains(&canon),
-            Member::Digit(invert) => (48..=57).contains(&c) != *invert,
-            Member::Word(invert) => word(c, flags) != *invert,
-            Member::Space(invert) => space(c) != *invert,
-            // Same shape as `SetExpr::Property`'s own runtime check (the
-            // `v`-mode path): test the raw code point, then (only under
-            // `i`) its case-fold partners too, rather than pre-canonicalizing
-            // like `Range` does -- `unicode_props::contains` works over raw
-            // Unicode property membership, which isn't itself fold-invariant.
-            Member::Property(name, invert) => {
-                let test = |x: u32| crate::unicode_props::contains(name, x) != *invert;
-                test(c) || (flags.ignore_case && crate::unicode_casefold::partners(c).any(test))
-            }
-        }) || self.folded.binary_search(&canon).is_ok();
+        let yes = self
+            .class
+            .members
+            .iter()
+            .zip(&self.properties)
+            .any(|(m, property)| match m {
+                Member::Range(lo, hi) => (*lo..=*hi).contains(&canon),
+                Member::Digit(invert) => (48..=57).contains(&c) != *invert,
+                Member::Word(invert) => word(c, flags) != *invert,
+                Member::Space(invert) => space(c) != *invert,
+                // Same shape as `SetExpr::Property`'s own runtime check (the
+                // `v`-mode path): test the raw code point, then (only under
+                // `i`) its case-fold partners too, rather than pre-canonicalizing
+                // like `Range` does -- `unicode_props::contains` works over raw
+                // Unicode property membership, which isn't itself fold-invariant.
+                Member::Property(_, invert) => {
+                    let test =
+                        |x: u32| property.is_some_and(|property| property.contains(x)) != *invert;
+                    test(c) || (flags.ignore_case && crate::unicode_casefold::partners(c).any(test))
+                }
+            })
+            || self.folded.binary_search(&canon).is_ok();
         yes != self.class.inverted
     }
 }
@@ -428,6 +503,17 @@ impl Compiler {
                 if *min > MAX_CODE || max.is_some_and(|n| n > MAX_CODE) {
                     return Err(Error::Limit("quantifier expansion"));
                 }
+                let deterministic = match n.as_ref() {
+                    Node::Char(_) | Node::Any | Node::Class(_) => true,
+                    Node::Set(expression) => !expression.has_strings(),
+                    _ => false,
+                };
+                if *greedy && deterministic {
+                    self.node(n)?;
+                    let atom = self.code.pop().expect("atom instruction");
+                    self.emit(Op::RepeatAtom(Box::new(atom), *min, *max, *greedy))?;
+                    return Ok(());
+                }
                 for _ in 0..*min {
                     self.clear(n)?;
                     self.node(n)?;
@@ -533,6 +619,24 @@ struct State {
     captures: Vec<Option<usize>>,
     marks: Vec<Option<usize>>,
 }
+struct Frame {
+    state: State,
+    // Remaining endpoints are adjacent code points and have identical
+    // captures/marks. Keep their furthest endpoint instead of snapshots.
+    repeat: Option<(usize, bool)>,
+}
+
+fn previous_index(input: &[u16], pos: usize, unicode: bool) -> usize {
+    if unicode
+        && pos >= 2
+        && (0xDC00..=0xDFFF).contains(&input[pos - 1])
+        && (0xD800..=0xDBFF).contains(&input[pos - 2])
+    {
+        pos - 2
+    } else {
+        pos - 1
+    }
+}
 pub(crate) struct Budget {
     steps: usize,
     saved: usize,
@@ -621,7 +725,7 @@ fn run(
         captures,
         marks: vec![None; program.marks],
     };
-    let mut stack: Vec<State> = Vec::new();
+    let mut stack: Vec<Frame> = Vec::new();
     loop {
         budget.step()?;
         let mut success = true;
@@ -656,6 +760,62 @@ fn run(
                     success = false;
                 }
             }
+            Op::RepeatAtom(atom, min, max, greedy) => {
+                let mut end = state.pos;
+                let mut minimum = (*min == 0).then_some(end);
+                let mut count = 0;
+                while max.is_none_or(|max| count < max) {
+                    let Some((cp, next)) = point(input, end, flags.unicode_mode()) else {
+                        break;
+                    };
+                    budget.step()?;
+                    let matched = match atom.as_ref() {
+                        Op::Char(c, f) => canonical(*c, *f) == canonical(cp, *f),
+                        Op::Any(f) => f.dot_all || !line(cp),
+                        Op::Class(class, f) => class.contains(cp, *f),
+                        Op::Set(set, f) => {
+                            set.expression
+                                .contains_cached(&[cp], *f, Some(&set.properties))
+                        }
+                        _ => unreachable!("deterministic atom"),
+                    };
+                    if !matched {
+                        break;
+                    }
+                    end = next;
+                    count += 1;
+                    if count == *min {
+                        minimum = Some(end);
+                    }
+                }
+                if let Some(minimum) = minimum {
+                    let selected = if *greedy { end } else { minimum };
+                    if minimum != end {
+                        if budget.saved >= MAX_STACK
+                            || budget.slots + state.captures.len() + state.marks.len() + 3
+                                > 1_048_576
+                        {
+                            return Err(Error::Limit("backtracking storage"));
+                        }
+                        let mut alternative = state.clone();
+                        alternative.pc += 1;
+                        alternative.pos = if *greedy {
+                            previous_index(input, selected, flags.unicode_mode())
+                        } else {
+                            advance_index(input, selected, flags.unicode_mode())
+                        };
+                        stack.push(Frame {
+                            state: alternative,
+                            repeat: Some((if *greedy { minimum } else { end }, *greedy)),
+                        });
+                        budget.saved += 1;
+                        budget.slots += state.captures.len() + state.marks.len() + 3;
+                    }
+                    state.pos = selected;
+                } else {
+                    success = false;
+                }
+            }
             Op::Class(c, cflags) => {
                 if let Some((next, end)) = point(input, state.pos, flags.unicode_mode()) {
                     if c.contains(next, *cflags) {
@@ -680,7 +840,10 @@ fn run(
                         let mut alternative = state.clone();
                         alternative.pos = end;
                         alternative.pc += 1;
-                        stack.push(alternative);
+                        stack.push(Frame {
+                            state: alternative,
+                            repeat: None,
+                        });
                         budget.saved += 1;
                         budget.slots += state.captures.len() + state.marks.len() + 3;
                     }
@@ -690,8 +853,7 @@ fn run(
                 }
             }
             Op::Start(sflags) => {
-                success =
-                    state.pos == 0 || (sflags.multiline && line(input[state.pos - 1] as u32))
+                success = state.pos == 0 || (sflags.multiline && line(input[state.pos - 1] as u32))
             }
             Op::End(eflags) => {
                 success = state.pos == input.len()
@@ -727,7 +889,10 @@ fn run(
                 }
                 let mut alternative = state.clone();
                 alternative.pc = *b;
-                stack.push(alternative);
+                stack.push(Frame {
+                    state: alternative,
+                    repeat: None,
+                });
                 budget.saved += 1;
                 budget.slots += state.captures.len() + state.marks.len() + 3;
                 state.pc = *a;
@@ -742,8 +907,15 @@ fn run(
             Op::Mark(id) => state.marks[*id] = Some(state.pos),
             Op::Progress(id) => success = state.marks[*id] != Some(state.pos),
             Op::Look(n, positive) => {
-                let result =
-                    run(n, input, state.pos, state.captures.clone(), flags, budget, None)?;
+                let result = run(
+                    n,
+                    input,
+                    state.pos,
+                    state.captures.clone(),
+                    flags,
+                    budget,
+                    None,
+                )?;
                 success = result.is_some() == *positive;
                 if *positive {
                     if let Some(result) = result {
@@ -818,10 +990,23 @@ fn run(
         }
         if success {
             state.pc += 1;
-        } else if let Some(next) = stack.pop() {
-            budget.saved -= 1;
-            budget.slots -= next.captures.len() + next.marks.len() + 3;
-            state = next;
+        } else if let Some(frame) = stack.pop() {
+            state = frame.state;
+            if let Some((limit, greedy)) = frame.repeat.filter(|(limit, _)| *limit != state.pos) {
+                let mut alternative = state.clone();
+                alternative.pos = if greedy {
+                    previous_index(input, state.pos, flags.unicode_mode())
+                } else {
+                    advance_index(input, state.pos, flags.unicode_mode())
+                };
+                stack.push(Frame {
+                    state: alternative,
+                    repeat: Some((limit, greedy)),
+                });
+            } else {
+                budget.saved -= 1;
+                budget.slots -= state.captures.len() + state.marks.len() + 3;
+            }
         } else {
             return Ok(None);
         }

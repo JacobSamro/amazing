@@ -87,3 +87,49 @@ timing benchmark is possible, then measure lead 1's caching fix against
 real wall-clock time on the actual `property-escapes/generated/*.js` files
 (via `scripts/linux-run.sh js-date -- '<test262 run>'`), not just the
 isolated microbenchmark, before claiming a fix.
+
+## JSD-6: deterministic repetitions and cached properties (2026-10-03)
+
+Fixed base `2eb1229a`. The early storage wall was the independent
+`MAX_STACK = 8192` bound, not erroneous slot accounting. Added a dedicated
+instruction for greedy repetitions of deterministic, capture-free atoms:
+characters, dot, classes and character sets without strings. It scans each
+code point once and saves a single retry frame whose endpoint walks backward
+on suffix failure. This preserves continuation-before-earlier-repetition
+ordering from [ECMA-262 RepeatMatcher](https://tc39.es/ecma262/multipage/text-processing.html#sec-repeatmatcher).
+Captures and marks share identical snapshots at every endpoint because the
+optimized atom cannot write them. Lazy repeats, groups, assertions and string
+sets retain generic execution.
+
+Unicode properties resolve once during compilation to static range slices;
+Script_Extensions also resolves its explicit, overridden and fallback ranges.
+The input bound and JS adapter now admit 4,194,304 UTF-16 units, and the work
+budget is 8,388,608, enough for a linear scan over the full Unicode repertoire
+(2,162,688 units). Ambiguous matching still has the existing frame/slot bounds.
+No code was ported from an upstream engine.
+
+Measured on Boat `pool-js-date`, large (8 vCPU/16 GB), baremetal:
+
+- Complete RegExp selection including Annex B at 5 seconds: before 1501
+  pass / 21 fail / 440 timeout; after 1502 / 13 / 447. Before used 4 jobs;
+  after used 8, so elapsed times (1113.3 / 568.356 seconds) are not an
+  engine speed comparison. Seven storage failures became harness deadlines.
+- One gained passing file: `S15.10.2_A1_T1.js` (XML shallow parsing).
+  Zero lost passing paths against the latest full-push baseline (1501
+  pass / 34 fail / 427 timeout at 60 seconds).
+- Final workspace: 3517 nextest passed, 17 skipped, 73.928 seconds; four
+  doctests passed. All 1502 baseline/new passing RegExp files also passed
+  a 60-second recheck (5.187 seconds total) using the unchanged runner on
+  copies of the original pinned files and all harness helpers.
+- The long-repeat regression, covering a 2,162,688-unit property match,
+  suffix retries, captures and astral endpoints, passed in 0.624 seconds.
+
+Durable classifications and hashes: `js-date_jsd6_evidence.json`. Recheck
+recipe: `bash docs/lanes/js-date_gate.sh` after the full before/after run.
+
+The remaining generated-property deadlines are still open. `buildString`
+constructs roughly 1.1 million code points through ordinary JS loops, which
+run interpreted by default. js-vm confirmed ordinary VM compilation needs
+`AMAZING_JS_VM=1`, and its current 10-million-instruction fuel can itself
+expire on this loop. Bulk timing/default-VM feasibility is routed to js-vm.
+Do not count opt-in VM measurements as default-engine gains.

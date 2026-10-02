@@ -9,7 +9,9 @@ fn regexp_error(error: amazing_regex::Error) -> Throw {
     }
 }
 fn regexp_units(source: impl Into<crate::value::JsString>) -> Result<Vec<u16>, Throw> {
-    const MAX_UNITS: usize = 1_048_576;
+    // Match the regex engine's bounded input capacity, including a string
+    // containing every Unicode code point (2,162,688 UTF-16 units).
+    const MAX_UNITS: usize = 4_194_304;
     let source = source.into();
     let units = source.units().to_vec();
     if units.len() > MAX_UNITS {
