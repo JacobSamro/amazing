@@ -3436,3 +3436,20 @@ skipped, 0 failed**. `cargo test --workspace --locked --doc`: 31 doc-test
 suites, all `test result: ok`, 0 failed (per the coordinator's "use a
 workspace-wide nextest in your final gate, not just the three crates"
 instruction, replacing HTML-41's three-crate scope).
+
+## HTML-44 — doctype mode recovery (in progress)
+
+Ported the complete doctype mode tables and classification from
+servo/html5ever `html5ever/src/tree_builder/data.rs` at
+`6db7bbf1c4dfaecd28731950d427e40c8b911bef` (html5ever-v0.35.0).
+Verified that commit's LICENSE-MIT: copyright 2014 The html5ever Project
+Developers. Adapted tendril/Doctype references to borrowed std strings and
+our parser's mode enum; no crate dependency added. The port header and an
+appended THIRD_PARTY_NOTICES row are required parts of this series.
+
+The parser keeps its document mode internally: a missing/quirky doctype
+leaves `<p>` open on `<table>`, while standards and limited-quirks doctypes
+close it. Fragment parsing defaults to no-quirks. Srcdoc uses a new explicit
+ResumableParser configuration and keeps no-quirks regardless of doctype.
+DOM document-mode storage remains a cross-lane follow-up so compatMode and
+layout can share the result. Pending Boat gate after pool recovery.

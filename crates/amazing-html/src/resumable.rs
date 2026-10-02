@@ -63,6 +63,12 @@ impl ResumableParser {
         }
     }
 
+    /// Configure a srcdoc navigation before feeding its source. Its document
+    /// stays in no-quirks mode, including when the doctype is missing.
+    pub fn set_srcdoc(&mut self) {
+        self.builder.set_srcdoc();
+    }
+
     /// Feeds the whole, already-decoded document source (newline-normalized
     /// exactly like `parse`). Call once, before the first `run`.
     pub fn push_source(&mut self, src: &str) {
@@ -278,5 +284,22 @@ mod tests {
         // (rather than the fragment builder trying to hand back a pause with
         // nowhere for a fragment-parsing caller to send it) is the assertion.
         assert!(dom.dump(NodeIdx(0)).contains("<script>"));
+    }
+
+    #[test]
+    fn srcdoc_keeps_standards_table_recovery_with_missing_or_quirky_doctype() {
+        for source in ["<p><table>", "<!DOCTYPE html PUBLIC 'html'><p><table>"] {
+            for srcdoc in [false, true] {
+                let mut parser = ResumableParser::new(Dom::new());
+                if srcdoc { parser.set_srcdoc(); }
+                parser.push_source(source);
+                assert_eq!(parser.run(), ParseSignal::Eof);
+                let dom = parser.dom();
+                let nodes = dom.tree_order(NodeIdx(0));
+                let paragraph = nodes.iter().copied().find(|&n| dom.name(n) == Some("p")).unwrap();
+                let table = nodes.iter().copied().find(|&n| dom.name(n) == Some("table")).unwrap();
+                assert_eq!(dom.get(table).parent == Some(paragraph), !srcdoc, "{source}, srcdoc={srcdoc}");
+            }
+        }
     }
 }

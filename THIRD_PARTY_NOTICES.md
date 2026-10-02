@@ -42,3 +42,5 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 Ported Apache-2.0 code is used under the Apache License, Version 2.0
 (https://www.apache.org/licenses/LICENSE-2.0). Any upstream `NOTICE` file content is
 reproduced in the table row for that upstream.
+
+| servo/html5ever | MIT | Copyright (c) 2014 The html5ever Project Developers; source copyright 2014-2017 The html5ever Project Developers | `crates/amazing-html/src/tree/doctype.rs` — doctype mode tables and classification adapted from `html5ever/src/tree_builder/data.rs` at `6db7bbf1c4dfaecd28731950d427e40c8b911bef` |

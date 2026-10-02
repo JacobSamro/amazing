@@ -12,8 +12,7 @@
 //! - `noscript` content is parsed as raw text regardless of scripting flag.
 //! - Foreign content implements namespace-aware SVG/MathML tree construction
 //!   and integration points, but not every foreign-attribute adjustment.
-//! - Quirks-mode differences are not modelled; the no-quirks rules always
-//!   apply (e.g. `<table>` always closes an open `<p>`).
+//! - Doctype mode classification controls quirks-specific tree recovery.
 //!
 //! The tokenizer owns RAWTEXT/RCDATA switching (script/style/textarea/
 //! title), so this module only implements the "text" insertion-mode
@@ -33,6 +32,7 @@ use crate::tokenizer::{Token, Tokenizer};
 // keep the same field/const/helper access they had before the split.
 mod foreign;
 mod in_select;
+mod doctype;
 mod in_table;
 
 /// Elements whose start tags never take children (void + obsolete empties).
@@ -174,6 +174,8 @@ pub struct TreeBuilder {
     form: Option<NodeIdx>,
     #[allow(dead_code)]
     frameset_ok: bool,
+    document_mode: doctype::DocumentMode,
+    mode_locked: bool,
     /// pre/listing/textarea: strip one leading U+000A from the next token.
     skip_next_lf: bool,
     /// Foster-parenting flag; set while processing table-fallback content
@@ -328,6 +330,8 @@ impl TreeBuilder {
             head: None,
             form: None,
             frameset_ok: true,
+            document_mode: doctype::DocumentMode::NoQuirks,
+            mode_locked: false,
             skip_next_lf: false,
             foster: false,
             fmt: Vec::new(),
@@ -340,6 +344,11 @@ impl TreeBuilder {
             pending_script: None,
             script_events: Vec::new(),
         }
+    }
+
+    /// Srcdoc documents keep no-quirks mode regardless of their doctype.
+    pub(crate) fn set_srcdoc(&mut self) {
+        self.mode_locked = true;
     }
 
     /// Starts a document parse with a preconfigured DOM registry and host.
@@ -1607,7 +1616,11 @@ impl TreeBuilder {
 
     fn initial(&mut self, tok: Token) {
         match tok {
-            Token::Doctype { name, public_id, system_id, force_quirks: _ } => {
+            Token::Doctype { name, public_id, system_id, force_quirks } => {
+                if !self.mode_locked {
+                    self.document_mode = doctype::classify(name.as_deref(), public_id.as_deref(),
+                        system_id.as_deref(), force_quirks);
+                }
                 self.dom.doctype = name.clone();
                 self.dom.append_child(NodeIdx(0), NodeKind::DocumentType {
                     name: name.unwrap_or_default(),
@@ -1618,12 +1631,14 @@ impl TreeBuilder {
             },
             Token::Characters(data) => {
                 if !data.chars().all(is_ws_char) {
+                    if !self.mode_locked { self.document_mode = doctype::DocumentMode::Quirks; }
                     self.mode = Mode::BeforeHtml;
                     self.before_html(Token::Characters(data));
                 }
             },
             Token::Comment(data) => self.comment_into(NodeIdx(0), &data),
             other => {
+                if !self.mode_locked { self.document_mode = doctype::DocumentMode::Quirks; }
                 self.mode = Mode::BeforeHtml;
                 self.before_html(other);
             },
@@ -2088,7 +2103,7 @@ impl TreeBuilder {
                 self.frameset_ok = false;
             },
             "table" => {
-                self.close_p_element();
+                if self.document_mode != doctype::DocumentMode::Quirks { self.close_p_element(); }
                 self.insert_and_push("table", attrs);
                 self.frameset_ok = false;
                 self.mode = Mode::InTable;
@@ -2655,7 +2670,7 @@ fn fragment_insertion_mode(context: &str) -> Mode {
     match context {
         "html" => Mode::BeforeHead,
         "frameset" => Mode::InFrameset,
-        "select" => Mode::InSelect,
+        "select" => Mode::InBody,
         "template" => Mode::InTemplate,
         "table" => Mode::InTable,
         "tbody" | "thead" | "tfoot" => Mode::InTableBody,
