@@ -37,13 +37,17 @@ impl RuntimeBindingHost<'_> {
                 (metadata.map(|data| data.url.clone()).unwrap_or_else(|| "about:blank".into()),
                     metadata.map(|data| data.character_set.clone()).unwrap_or_else(|| "UTF-8".into()))
             };
-            (url, charset, host.dom.document_base_href(document).ok().flatten())
+            // HTMLBaseElement.href uses fallback document URL, ignoring itself
+            // and every other base element (HTML #the-base-element).
+            let is_base = host.dom.namespace_uri(element) == Some("http://www.w3.org/1999/xhtml")
+                && host.dom.local_name(element) == Some("base");
+            (url, charset, if is_base { None } else { host.dom.document_base_href(document).ok().flatten() })
         };
         let encoder = |query: &str| super::runtime_host_net::encode_document_query(query, &charset);
         let mut base = amazing_net::ParsedUrl::parse(&document_url).ok();
         if let (Some(url), Some(href)) = (&base, base_href) {
             if let Ok(resolved) = url.resolve_with_query_encoder(&String::from_utf16_lossy(&href), &encoder) {
-                base = Some(resolved);
+                if !matches!(resolved.scheme(), "data" | "javascript") { base = Some(resolved); }
             }
         }
         let scalar = String::from_utf16_lossy(input);
@@ -1346,6 +1350,45 @@ mod tests {
             true; } catch(e) { String(e)+" step="+step; }
         "#).unwrap();
         assert!(matches!(result, JsValue::Bool(true)), "{result:?}");
+    }
+
+    #[test]
+    fn base_reflection_uses_fallback_url_and_preserves_webidl_strings() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = super::super::install(&mut js, host.clone()).unwrap();
+        bindings.set_document_url(&mut js, "https://example.test/dir/page?old#fragment");
+        let result = js.run_script(r#"
+            let step=0;function check(v){step++;if(!v)throw 'base reflection '+step;}
+            const root=document.createElement('html');document.appendChild(root);
+            const first=document.createElement('base'),second=document.createElement('base');
+            check(first.href==='https://example.test/dir/page?old');check(first.target==='');
+            first.href='nested/';root.appendChild(first);second.href='next';root.appendChild(second);
+            check(first.href==='https://example.test/dir/nested/');
+            check(second.href==='https://example.test/dir/next');
+            const a=document.createElement('a');a.href='next';check(a.href==='https://example.test/dir/nested/next');
+            first.href='http://[';check(first.href==='http://[');check(a.href==='https://example.test/dir/next');
+            first.href='data:text/plain,hello';check(a.href==='https://example.test/dir/next');
+            first.href='javascript:alert(1)';check(a.href==='https://example.test/dir/next');
+            second.href='\uD800';check(second.getAttribute('href')==='\uFFFD');
+            second.target='\uD800';check(second.target==='\uD800');
+            let converted=0;second.target={toString(){converted++;return '_parent';}};check(converted===1&&second.target==='_parent');
+            let rejected=false;try{Object.getOwnPropertyDescriptor(HTMLBaseElement.prototype,'href').get.call(a);}catch(e){rejected=e instanceof TypeError;}check(rejected);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+        let doc = host.borrow_mut().dom.create_document();
+        host.borrow_mut().dom.set_document_metadata(doc, amazing_dom::document_surface::DocumentMetadata {
+            url:"https://child.test/base/page".into(),content_type:"text/html".into(),character_set:"Shift_JIS".into(),
+        }).unwrap();
+        let base=host.borrow_mut().dom.create_element_ns_in(doc,Some("http://www.w3.org/1999/xhtml"),"base").unwrap();
+        let other=host.borrow_mut().dom.create_element_ns_in(doc,Some("http://www.w3.org/1999/xhtml"),"base").unwrap();
+        host.borrow_mut().dom.set_attribute(other,"href","https://ignored.test/").unwrap();
+        host.borrow_mut().dom.pre_insert(other,doc,None).unwrap();
+        let resolved=RuntimeBindingHost { js:&mut js,state:bindings.state.clone() }
+            .dom_resolve_element_url(base,&"next?あ".encode_utf16().collect::<Vec<_>>()).unwrap();
+        assert_eq!(String::from_utf16(&resolved).unwrap(),"https://child.test/base/next?%82%A0");
     }
 
 }

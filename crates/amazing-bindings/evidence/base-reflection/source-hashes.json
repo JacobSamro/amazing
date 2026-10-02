@@ -1,0 +1,5 @@
+{
+  "crates/amazing-bindings/src/element_reflection.rs": "2708593f29743bd3a5f3cfec3e7880f02e0fa81470f65fec33f4b6d795e3bc82",
+  "crates/amazing-bindings/src/interfaces.rs": "f79b0281d79fdc1eec4e4acda3e40e330c1fc5395b2e7b5a7da194844c159372",
+  "crates/amazing/src/runtime_host_dom_bindings.rs": "127683ff419d30231c10a54b89eff3cfcdbb80169db13218a8d324b4364111cc"
+}

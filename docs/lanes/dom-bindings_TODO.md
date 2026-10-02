@@ -3184,3 +3184,20 @@ Template contents appropriate inert owner-document model and full XML serializer
 are separate gaps; no guessed template bool or relaxed XML validity. Final Linux3641pass17skip/docs4; serialization352/23→372/3 (+20), nodes12686/293→12692/288 (+6), zero loss after whole322 unchanged-source recheck restored known XHR deadline assertion. Evidence: amazing-bindings/evidence/html-serialization.
 Queued parent-granted follow-ups: whole HTMLBaseElement reflection/fallback URL;
 then faithful pinned single-byte-raw.py fixture protocol (actual body/header).
+
+
+### HTMLBaseElement reflection and fallback resolution
+
+Fixed 811ce5ea. Added href USVString and target DOMString reflection with
+namespace/receiver checks; absent/relative/invalid href resolves against the
+owner document URL metadata, independently of every base element. Prohibited
+data/javascript first bases fall back for general reflected URLs. Native
+checks cover multiple bases, conversions and cross-document Shift_JIS queries.
+Boat workspace 3642 passed/17 skipped, four doctests. Whole pinned base directory
+3/13 → 13/3 (+10), zero loss; whole314 DOM nodes retain 12692/288/6 accepted
+passes with zero gains/losses after complete325-file XHR timing recheck.
+HTML owner will add actual captured about:blank/srcdoc fallback state; no guessed
+creator inheritance. Frozen-base history/CSP policy and product navigation
+remain separate. Evidence: amazing-bindings/evidence/base-reflection.
+Next: faithful single-byte fixture protocol, then parent-granted whole importer
+validated reparenting/document moves coordinated with HTML51.

@@ -1270,7 +1270,12 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLHtmlElement, name: "HTMLHtmlElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_HTML },
     D { interface: I::HTMLHeadElement, name: "HTMLHeadElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLTitleElement, name: "HTMLTitleElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLBaseElement, name: "HTMLBaseElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLBaseElement, name: "HTMLBaseElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("href", O::LegacyReflectGet(I::HTMLBaseElement, "href", LR::UsvUrl)),
+        setter("href", O::LegacyReflectSet(I::HTMLBaseElement, "href", LR::UsvUrl)),
+        getter("target", O::LegacyReflectGet(I::HTMLBaseElement, "target", LR::String)),
+        setter("target", O::LegacyReflectSet(I::HTMLBaseElement, "target", LR::String)),
+    ] },
     D { interface: I::HTMLLinkElement, name: "HTMLLinkElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_LINK },
     D { interface: I::HTMLMetaElement, name: "HTMLMetaElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_META },
     D { interface: I::HTMLStyleElement, name: "HTMLStyleElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_STYLE },

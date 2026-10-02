@@ -171,7 +171,13 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
         Kind::Signed(default) => Ok(host.number(value.as_deref().and_then(html_reflection::signed_long)
             .unwrap_or(default) as f64)),
         Kind::Url | Kind::UsvUrl => {
-            let Some(value) = value else { return host.string(&[]) };
+            // Base href parses an absent attribute as the empty URL against the
+            // fallback base, unlike ordinary reflected URL attributes.
+            let value = match value {
+                Some(value) => value,
+                None if spec.interface == Some(Interface::HTMLBaseElement) => Vec::new(),
+                None => return host.string(&[]),
+            };
             let value = if matches!(spec.kind, Kind::UsvUrl) { String::from_utf16_lossy(&value).encode_utf16().collect() } else { value };
             let resolved = host.resolve_element_url(node, &value)?;
             host.string(&resolved)

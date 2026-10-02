@@ -1,0 +1,5968 @@
+{
+  "dom/nodes/Attr-prefix-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Attr-prefix.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 6,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/CharacterData-appendChild.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 9,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/CharacterData-appendData.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 14,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/CharacterData-data.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 16,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/CharacterData-deleteData.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 18,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/CharacterData-insertData.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 18,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/CharacterData-remove.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 12,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/CharacterData-replaceData.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 34,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/CharacterData-substringData.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 28,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/CharacterData-surrogates.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 8,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ChildNode-after.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 45,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ChildNode-before.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 45,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ChildNode-replaceWith.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 33,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Comment-constructor.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 15,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 2,
+    "detail": null
+  },
+  "dom/nodes/Comment-in-doctype.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/DOMImplementation-createDocument.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 434,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/DOMImplementation-createDocumentType.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 82,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/DOMImplementation-createHTMLDocument-with-saved-implementation.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/DOMImplementation-createHTMLDocument.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 13,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/DOMImplementation-hasFeature.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 137,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-URL.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-adoptNode-DocumentFragment-with-host.window.js": {
+    "status": "pass",
+    "counts": {
+      "pass": 7,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-adoptNode.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 4,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-characterSet-normalization-1.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 315,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-characterSet-normalization-2.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 339,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-constructor.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 5,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/contenttype_bmp.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/contenttype_css.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/contenttype_datauri_02.html": {
+    "status": "error",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 1,
+      "unsupported": 0
+    },
+    "harness_status": null,
+    "detail": "ReferenceError: parent is not defined"
+  },
+  "dom/nodes/Document-contentType/contentType/contenttype_gif.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/contenttype_html.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/contenttype_javascripturi.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/contenttype_jpg.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/contenttype_mimeheader_01.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/contenttype_mimeheader_02.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/contenttype_png.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/contenttype_txt.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/contenttype_xml.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/createDocument.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/createHTMLDocument.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-contentType/contentType/xhr_responseType_document.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 2,
+    "detail": null
+  },
+  "dom/nodes/Document-createAttribute.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 36,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-createCDATASection-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Document-createCDATASection.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-createComment.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 6,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-createElement-namespace.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 45,
+      "fail": 6,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-createElement.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 147,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-createElementNS.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 596,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-createEvent-touchevent.window.js": {
+    "status": "pass",
+    "counts": {
+      "pass": 3,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-createEvent.https.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 270,
+      "fail": 3,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 6
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-createProcessingInstruction-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Document-createProcessingInstruction.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 12,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-createTextNode.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 6,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-createTreeWalker.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 5,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-doctype.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-getElementById.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 18,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-getElementsByClassName.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-getElementsByTagName-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Document-getElementsByTagName.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 16,
+      "fail": 2,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-getElementsByTagNameNS.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 14,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-implementation.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Document-importNode.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 5,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/DocumentFragment-constructor.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/DocumentFragment-getElementById.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 5,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/DocumentFragment-querySelectorAll-after-modification.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/DocumentType-literal-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/DocumentType-literal.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/DocumentType-remove.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 4,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-childElement-null-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Element-childElement-null.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-childElementCount-dynamic-add-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Element-childElementCount-dynamic-add.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-childElementCount-dynamic-remove-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Element-childElementCount-dynamic-remove.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-childElementCount-nochild-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Element-childElementCount-nochild.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-childElementCount-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Element-childElementCount.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-children.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-classlist.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1420,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-closest.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 29,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-firstElementChild-entity-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Element-firstElementChild-namespace-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Element-firstElementChild-namespace.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-firstElementChild-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Element-firstElementChild.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-getElementsByClassName.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 3,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-getElementsByTagName-change-document-HTMLNess.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 2,
+    "detail": null
+  },
+  "dom/nodes/Element-getElementsByTagName.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 17,
+      "fail": 2,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-getElementsByTagNameNS.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 16,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-hasAttribute.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-hasAttributes.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-insertAdjacentElement.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 6,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-insertAdjacentText.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 6,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-lastElementChild-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Element-lastElementChild.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-matches-namespaced-elements.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 4,
+      "fail": 2,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-matches.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 658,
+      "fail": 11,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-nextElementSibling-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Element-nextElementSibling.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-previousElementSibling-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Element-previousElementSibling.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-remove.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 4,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-removeAttribute.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-removeAttributeNS.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-setAttribute-crbug-1138487.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-setAttribute.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-siblingElement-null-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Element-siblingElement-null.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-tagName.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 6,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Element-webkitMatchesSelector.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 658,
+      "fail": 11,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/MutationObserver-attributes.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 42,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/MutationObserver-callback-arguments.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/MutationObserver-characterData.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 22,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/MutationObserver-childList.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 40,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/MutationObserver-cross-realm-callback-report-exception.html": {
+    "status": "error",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 1,
+      "unsupported": 0
+    },
+    "harness_status": null,
+    "detail": "inline script: ReferenceError: frames is not defined"
+  },
+  "dom/nodes/MutationObserver-disconnect.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/MutationObserver-document.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 1,
+      "fail": 3,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/MutationObserver-inner-outer.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 3,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/MutationObserver-sanity.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 16,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/MutationObserver-takeRecords.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 3,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/MutationObserver-textContent.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 4,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-appendChild-cereactions-vs-script.window.js": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-appendChild.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 8,
+      "fail": 3,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-baseURI.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 9,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-childNodes-cache-2.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-childNodes-cache.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-childNodes.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 5,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-cloneNode-XMLDocument.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-cloneNode-document-allow-declarative-shadow-roots.window.js": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-cloneNode-document-with-doctype.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 3,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-cloneNode-external-stylesheet-no-bc.sub.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-cloneNode-svg.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 4,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-cloneNode.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 135,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-compareDocumentPosition.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1444,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-constants.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 8,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-contains.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1482,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-insertBefore.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 40,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-isConnected-shadow-dom.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-isConnected.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 1,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-isEqualNode-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Node-isEqualNode.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 9,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-isSameNode.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 9,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-lookupNamespaceURI.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 75,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-lookupPrefix.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Node-mutation-adoptNode.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-nodeName-xhtml.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Node-nodeName.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 6,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-nodeValue.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 7,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-normalize.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 4,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-parentElement.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 12,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-parentNode.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 4,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-properties.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 726,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-removeChild.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 19,
+      "fail": 9,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-replaceChild.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 29,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Node-textContent.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 81,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/NodeList-Iterable.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 8,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/NodeList-live-mutations.window.js": {
+    "status": "pass",
+    "counts": {
+      "pass": 4,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/NodeList-static-length-getter-tampered-1.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": null,
+    "detail": "worker deadline exceeded; completed subtests retained"
+  },
+  "dom/nodes/NodeList-static-length-getter-tampered-2.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": null,
+    "detail": "worker deadline exceeded; completed subtests retained"
+  },
+  "dom/nodes/NodeList-static-length-getter-tampered-3.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": null,
+    "detail": "worker deadline exceeded; completed subtests retained"
+  },
+  "dom/nodes/NodeList-static-length-getter-tampered-indexOf-1.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": null,
+    "detail": "worker deadline exceeded; completed subtests retained"
+  },
+  "dom/nodes/NodeList-static-length-getter-tampered-indexOf-2.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": null,
+    "detail": "worker deadline exceeded; completed subtests retained"
+  },
+  "dom/nodes/NodeList-static-length-getter-tampered-indexOf-3.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": null,
+    "detail": "worker deadline exceeded; completed subtests retained"
+  },
+  "dom/nodes/ParentNode-append.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 25,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ParentNode-children.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ParentNode-prepend.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 22,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ParentNode-querySelector-All-xht.xht": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/ParentNode-querySelector-All.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 1885,
+      "fail": 90,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ParentNode-querySelector-case-insensitive.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ParentNode-querySelector-escapes.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 66,
+      "fail": 2,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ParentNode-querySelector-scope.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 2,
+      "fail": 2,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ParentNode-querySelectorAll-removed-elements.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ParentNode-querySelectors-exclusive.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ParentNode-querySelectors-namespaces.html": {
+    "status": "error",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 1,
+      "unsupported": 0
+    },
+    "harness_status": null,
+    "detail": "inline script: [object]"
+  },
+  "dom/nodes/ParentNode-querySelectors-space-and-dash-attribute-value.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ParentNode-replaceChildren.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 29,
+      "fail": 2,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/ProcessingInstruction-escapes-1.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/ProcessingInstruction-in-doctype.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/ProcessingInstruction-literal-1.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/ProcessingInstruction-literal-2.xhtml": {
+    "status": "unsupported",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 1
+    },
+    "harness_status": null,
+    "detail": "unsupported: classic-script .html/.htm or window .any.js/.window.js tests only"
+  },
+  "dom/nodes/Text-constructor.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 15,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 2,
+    "detail": null
+  },
+  "dom/nodes/Text-splitText.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 6,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/Text-wholeText.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/adoption.window.js": {
+    "status": "fail",
+    "counts": {
+      "pass": 5,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/append-on-Document.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 5,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/attach-shadow-realm-after-adoption.html": {
+    "status": "error",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 1,
+      "unsupported": 0
+    },
+    "harness_status": null,
+    "detail": "inline script: TypeError: cannot access a property on nullish value"
+  },
+  "dom/nodes/attributes-namednodemap-cross-document.window.js": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 2,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/attributes-namednodemap.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 8,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/attributes.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 67,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/case.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 285,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/create-element-realm-after-adoption.html": {
+    "status": "error",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 1,
+      "unsupported": 0
+    },
+    "harness_status": null,
+    "detail": "inline script: TypeError: cannot access a property on nullish value"
+  },
+  "dom/nodes/getElementsByClassName-01.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-02.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-03.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-04.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-05.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-06.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-07.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-08.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-09.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-12.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-13.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-14.htm": {
+    "status": "fail",
+    "counts": {
+      "pass": 1,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-15.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-16.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-17.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-18.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-19.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-20.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-21.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-22.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-23.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-24.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-25.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-26.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-27.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-28.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-29.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-30.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-31.htm": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-32.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 4,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-empty-set.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 3,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/getElementsByClassName-whitespace-class-names.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 26,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insert-adjacent.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 14,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-append-form-and-script-from-fragment.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-append-meta-referrer-and-script-from-fragment.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 2,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-appendChild-script-and-button-from-div.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-appendChild-script-and-custom-from-fragment.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-appendChild-script-and-default-style-meta-from-fragment.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-appendChild-script-and-div-from-fragment.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-appendChild-script-and-iframe.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 1,
+      "fail": 3,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-appendChild-script-and-source-from-fragment.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-appendChild-script-and-style.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 5,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-appendChild-script-in-script.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-appendChild-script-with-mutation-observer-takeRecords.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-appendChild-text-and-script-in-style.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-appendChild-text-in-script.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-appendChild-three-scripts-from-fragment.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/Node-appendChild-three-scripts.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/blur-event.window.js": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/insertion-removing-steps-iframe.window.js": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 4,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/insertion-removing-steps-script.window.js": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/later-script-removed-by-earlier-script.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/insertion-removing-steps/script-does-not-run-on-child-removal.window.js": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/Node-moveBefore.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 31,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/child-style-preserve.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/continue-css-animation-left.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 2,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/continue-css-animation-transform.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 2,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/continue-css-transition-left-pseudo.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/continue-css-transition-left.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/continue-css-transition-transform-pseudo.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/continue-css-transition-transform.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/css-animation-commit-styles.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 2,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/css-transition-cross-document.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 2,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/css-transition-cross-shadow.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/css-transition-to-disconnected-document.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/css-transition-trigger.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/custom-element-move-reactions.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 7,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/fieldset-child-blur-event.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/fieldset-child-date-input-blur-event.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/fire-focusin-focusout.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 1,
+      "fail": 4,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/focus-preserve.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 1,
+      "fail": 3,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/focus-within.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 3,
+      "fail": 2,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/fullscreen-preserve.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/hover-style-update.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 2,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/iframe-document-preserve.window.js": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 2,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/listed-form-element-reset.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/live-range-updates.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 3,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/modal-dialog.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/moveBefore-dir.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/moveBefore-from-light-to-shadow.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/moveBefore-id-map.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 4,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/moveBefore-lang.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/moveBefore-name-map.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 3,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/moveBefore-nodeiterator.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/moveBefore-option-recalc-style.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/moveBefore-selector-matching.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/moveBefore-shadow-inside.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/moveBefore-shadow-root.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/moveBefore-size-query.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/mutation-observer.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/nonce.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/object-crash-regression.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/pointer-events.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/popover-preserve.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/preserve-render-blocking-script.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/preserve-render-blocking-style.html": {
+    "status": "error",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "error": 1,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": "ReferenceError: getComputedStyle is not defined"
+  },
+  "dom/nodes/moveBefore/relevant-mutations.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 2,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/role-updates-after-move.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/script-move-before.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/select-option-optgroup.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 1,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/selection-preserve.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 6,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/slotchange-events.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 4,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/style-applies.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/moveBefore/throws-exception.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/name-validation.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 5,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/node-creation-realm.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 13,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/node-realm-adoption-after-frame-removal.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 3,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/node-realm-mixed-across-adoption.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 4,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/node-realm-preserved-across-adoption.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 5,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/node-realm-preserved-across-frameless-adoption.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 4,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/prepend-on-Document.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 5,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/processing-instruction-attributes.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 123,
+      "fail": 17,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/query-target-in-load-event.html": {
+    "status": "timeout",
+    "counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 0,
+      "timeout": 1,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 2,
+    "detail": null
+  },
+  "dom/nodes/querySelector-empty-id.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/querySelector-id-nth-child.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 2,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/querySelector-mixed-case.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/remove-and-adopt-thcrash.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/remove-next-sibling-during-replace-with.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/remove-unscopable.html": {
+    "status": "fail",
+    "counts": {
+      "pass": 0,
+      "fail": 6,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 0,
+      "fail": 1,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/rootNode.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 5,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  },
+  "dom/nodes/svg-template-querySelector.html": {
+    "status": "pass",
+    "counts": {
+      "pass": 3,
+      "fail": 0,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "file_counts": {
+      "pass": 1,
+      "fail": 0,
+      "timeout": 0,
+      "error": 0,
+      "unsupported": 0
+    },
+    "harness_status": 0,
+    "detail": null
+  }
+}

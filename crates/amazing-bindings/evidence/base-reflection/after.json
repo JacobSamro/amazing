@@ -1,0 +1,477 @@
+{
+  "source": "811ce5ea-plus-base-reflection",
+  "platform": "Linux Boat pooled dom-bindings",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "directories": [
+    "html/semantics/document-metadata/the-base-element",
+    "dom/nodes"
+  ],
+  "excluded_non_testharness": [
+    "dom/nodes/DOMImplementation-createDocument-with-null-browsing-context-crash.html",
+    "dom/nodes/DOMImplementation-createHTMLDocument-with-null-browsing-context-crash.html",
+    "dom/nodes/Document-contentType/resources/blob.htm",
+    "dom/nodes/Document-createElement-namespace-tests/bare_mathml.html",
+    "dom/nodes/Document-createElement-namespace-tests/bare_mathml.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/bare_svg.html",
+    "dom/nodes/Document-createElement-namespace-tests/bare_svg.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/bare_xhtml.html",
+    "dom/nodes/Document-createElement-namespace-tests/bare_xhtml.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/empty.html",
+    "dom/nodes/Document-createElement-namespace-tests/empty.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/mathml.html",
+    "dom/nodes/Document-createElement-namespace-tests/mathml.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/minimal_html.html",
+    "dom/nodes/Document-createElement-namespace-tests/minimal_html.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/svg.html",
+    "dom/nodes/Document-createElement-namespace-tests/svg.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/xhtml.html",
+    "dom/nodes/Document-createElement-namespace-tests/xhtml.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/xhtml_ns_changed.html",
+    "dom/nodes/Document-createElement-namespace-tests/xhtml_ns_changed.xhtml",
+    "dom/nodes/Document-createElement-namespace-tests/xhtml_ns_removed.html",
+    "dom/nodes/Document-createElement-namespace-tests/xhtml_ns_removed.xhtml",
+    "dom/nodes/MutationObserver-nested-crash.html",
+    "dom/nodes/Node-cloneNode-on-inactive-document-crash.html",
+    "dom/nodes/Node-parentNode-iframe.html",
+    "dom/nodes/ParentNode-querySelector-All-content.html",
+    "dom/nodes/ParentNode-querySelector-All-content.xht",
+    "dom/nodes/crashtests/attribute-index-when-no-attributes.html",
+    "dom/nodes/crashtests/childNodes-last_visited-unwrap-crash.html",
+    "dom/nodes/crashtests/document-replaceChild-input-documentElement.html",
+    "dom/nodes/crashtests/documentElement-remove-descendant-query.html",
+    "dom/nodes/crashtests/multiple-append-mutated-in-unload-document.https.html",
+    "dom/nodes/crashtests/multiple-append-mutated-in-unload.https.html",
+    "dom/nodes/getElementsByClassNameFrame.htm",
+    "dom/nodes/insertBefore-iframe-crash.html",
+    "dom/nodes/moveBefore/chrome-338071841-crash.html",
+    "dom/nodes/moveBefore/chrome-433696404-crash.html",
+    "dom/nodes/moveBefore/focus-preserve-render-ref.html",
+    "dom/nodes/moveBefore/focus-preserve-render.html",
+    "dom/nodes/moveBefore/input-moveBefore-crash.html",
+    "dom/nodes/moveBefore/moveBefore-as-flex-item.html",
+    "dom/nodes/moveBefore/moveBefore-iframe-crash.html",
+    "dom/nodes/moveBefore/moveBefore-legend-input-crash.html",
+    "dom/nodes/moveBefore/moveBefore-range-iframe-crash.html",
+    "dom/nodes/moveBefore/moveBefore-subframe-count-crash.html",
+    "dom/nodes/moveBefore/resources/moveBefore-iframe.html",
+    "dom/nodes/node-appendchild-crash.html",
+    "dom/nodes/query-target-in-load-event.part.html",
+    "dom/nodes/remove-from-shadow-host-and-adopt-into-iframe-ref.html",
+    "dom/nodes/remove-from-shadow-host-and-adopt-into-iframe.html",
+    "dom/nodes/replaceWith-document-element-crash.html",
+    "html/semantics/document-metadata/the-base-element/crashtests/base-with-speculation-rules-onerror.html",
+    "html/semantics/document-metadata/the-base-element/example.html",
+    "html/semantics/document-metadata/the-base-element/example2.html"
+  ],
+  "binary_sha256": "940b41ba99616ce212a249ea3e9e1fed21824863fd4e61e933911f04dd3db873",
+  "results": [
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/document-metadata/the-base-element/base-data.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 3,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "First <base> has a data: URL so fallback is used",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "First <base> is removed so second is used",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Dynamically inserted first <base> has a data: URL so fallback is used",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/document-metadata/the-base-element/base-javascript.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 3,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "First <base> has a javascript: URL so fallback is used",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "First <base> is removed so second is used",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Dynamically inserted first <base> has a javascript: URL so fallback is used",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/document-metadata/the-base-element/base_about_blank.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "base element in about:blank document should resolve against its fallback base URI",
+          "status": 1,
+          "message": "frames is not defined"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/document-metadata/the-base-element/base_href_empty.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "The value of the href attribute must be the document's address if it is empty",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "The src attribute of the img element must relative to document's address",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/document-metadata/the-base-element/base_href_invalid.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "base element with unparseable href should have .href getter return attr value",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/document-metadata/the-base-element/base_href_specified.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "The href attribute of the base element is specified",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "The src attribute of the img element must relative to the href attribute of the base element",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/document-metadata/the-base-element/base_href_unspecified.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "The value of the href attribute must be the document's address if it is unspecified",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "The src attribute of the img element must relative to document's address",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/document-metadata/the-base-element/base_multiple.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "timeout",
+      "harness_status": 2,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 0,
+        "timeout": 1,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": []
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/document-metadata/the-base-element/base_srcdoc.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "base element in srcdoc document should resolve against its fallback base URI",
+          "status": 1,
+          "message": "frames is not defined"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/document-metadata/the-base-element/base_target_does_not_affect_iframe_src_navigation.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "error",
+      "harness_status": null,
+      "detail": "ReferenceError: top is not defined",
+      "file_counts": {
+        "pass": 0,
+        "fail": 0,
+        "timeout": 0,
+        "error": 1,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": []
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/semantics/document-metadata/the-base-element/base_target_does_not_affect_location_assignment.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 25000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "base_target_does_not_affect_location_assignment",
+          "status": 1,
+          "message": "cannot access a property on nullish value"
+        }
+      ]
+    }
+  ]
+}

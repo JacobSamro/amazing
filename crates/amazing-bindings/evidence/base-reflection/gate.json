@@ -1,0 +1,38 @@
+{
+  "base": {
+    "baseline": {
+      "pass": 3,
+      "fail": 13,
+      "error": 0
+    },
+    "after": {
+      "pass": 13,
+      "fail": 3,
+      "error": 0
+    },
+    "gained": 10,
+    "lost": 0
+  },
+  "nodes": {
+    "baseline": {
+      "pass": 12691,
+      "fail": 287,
+      "error": 6
+    },
+    "after": {
+      "pass": 12692,
+      "fail": 288,
+      "error": 6
+    },
+    "gained": 0,
+    "lost": 0
+  },
+  "base_commit": "811ce5ea",
+  "workspace_pass": 3642,
+  "workspace_skipped": 17,
+  "doctests_pass": 4,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "before_binary": "37529409321e0801d6491669bd5d20105b391266e7ab1c080a28392c63479adc",
+  "after_binary": "940b41ba99616ce212a249ea3e9e1fed21824863fd4e61e933911f04dd3db873",
+  "nodes_secondary_guard": "Accepted serializer zero-loss report12692/288, since baseline missed knownXHRdeadline assertion"
+}
