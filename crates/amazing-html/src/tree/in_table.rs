@@ -110,10 +110,7 @@ impl TreeBuilder {
                 }
             },
             "form" => {
-                if self.form.is_none() {
-                    let idx = self.insert_element("form", attrs);
-                    self.form = Some(idx);
-                }
+                self.insert_table_form(attrs);
             },
             _ => {
                 self.foster = true;

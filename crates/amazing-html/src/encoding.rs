@@ -232,10 +232,13 @@ fn extract_content_charset(value: &[u8]) -> Option<&[u8]> {
                 j += 1;
             }
             let start = j;
+            if let Some(quote) = quote {
+                let end = value[start..].iter().position(|byte| *byte == quote)?;
+                return Some(&value[start..start + end]);
+            }
             while j < value.len()
                 && !ascii_space(value[j])
                 && value[j] != b';'
-                && Some(value[j]) != quote
             {
                 j += 1;
             }
@@ -254,6 +257,23 @@ mod tests {
     use super::*;
     use crate::{parse, parse_bytes};
     use amazing_dom::NodeIdx;
+
+    #[test]
+    fn content_charset_requires_the_matching_quote_before_using_a_label() {
+        for content in ["charset=\"windows-1251", "charset='windows-1251", "charset=\"windows-1251'"] {
+            assert_eq!(extract_content_charset(content.as_bytes()), None);
+        }
+        assert_eq!(extract_content_charset(b"text/html; charset=' windows-1250 '; other=x"), Some(&b" windows-1250 "[..]));
+        assert_eq!(extract_content_charset(b"text/html; charset=windows-1250; other=x"), Some(&b"windows-1250"[..]));
+        let bytes = b"<!doctype html><meta http-equiv=Content-Type content='charset=\"windows-1251'><meta charset=windows-1250><p>\x80";
+        assert_eq!(decode(bytes, None).encoding, Encoding::Windows1250);
+        for split in 0..=bytes.len() {
+            let mut parser = crate::IncrementalByteParser::new(None);
+            parser.push_chunk(&bytes[..split]);
+            parser.push_chunk(&bytes[split..]);
+            assert_eq!(parser.finish().dump(NodeIdx(0)), parse_bytes(bytes, None).dump(NodeIdx(0)));
+        }
+    }
 
     #[test]
     fn meta_user_defined_normalizes_without_changing_transport_or_codec_labels() {

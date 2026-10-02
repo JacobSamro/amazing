@@ -97,7 +97,8 @@ pub(super) fn classify(
         (Some(p), _) if contains_pfx(QUIRKY_PUBLIC_PREFIXES, p) => Quirks,
         (Some(p), _) if contains_pfx(LIMITED_QUIRKY_PUBLIC_PREFIXES, p) => LimitedQuirks,
         (Some(p), s) if contains_pfx(HTML4_PUBLIC_PREFIXES, p) => {
-            if s.is_none() { Quirks } else { LimitedQuirks }
+            // Current HTML treats empty system identifiers as missing here.
+            if s.is_none_or(str::is_empty) { Quirks } else { LimitedQuirks }
         },
         _ => NoQuirks,
     }

@@ -3530,3 +3530,20 @@ without allow-scripts now selects HTML45 disabled parsing so noscript markup
 is parsed, not merely prevented from executing. API adoption changed no DOM
 owned implementation; its documentation append conflict preserved incoming
 records. Corpus and workspace measurements are recorded under evidence/html47/.
+
+HTML48 expands the gate to all72 pinned html/syntax/parsing pages. Initial
+319a3636 baseline2646passing/62failing assertions,36pass14fail2timeout1error
+19unsupported files. The43 table-template failures are blocked by missing
+DOM table.rows/row.cells and table-part APIs, routed to DOM rather than claimed
+as parser bugs. Current bounded parser cluster: complete template-aware form
+start/end rules ported from MIT html5ever rules.rs6db7bbf1c4dfaecd28731950d427e40c8b911bef,
+quoted meta charset termination, and current HTML empty-system-ID quirks rules
+(spec consulted2026-10-03). The form port gets its own file/header/newnotice;
+empty-system-ID classification is a current-spec delta from the old upstream
+classifier, preserving the actual doctype identifier strings. No DOM/runner
+fixture substitutions or expected-name metadata injection.
+# HTML48 final gate
+
+- Fixed base319a3636: 575 owned/6skip,3550 workspace/17skip,4docs on native Boat.
+- Whole62 tree files1894/1894; expanded1930pass6unsupported identical; fullencoding194files12216/406 unchanged,zero lost passes.
+- Actual syntax72pages2646/62→2650/58,4parsergains0loss; evidence/html48 records fullbefore/after. Remaining43table assertions and5dynamicgraft assertions routedDOM.

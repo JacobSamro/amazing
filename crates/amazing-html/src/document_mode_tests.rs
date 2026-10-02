@@ -7,6 +7,8 @@ const CASES: &[(&str, QuirksMode)] = &[
     ("<!doctype html PUBLIC '-//W3C//DTD XHTML 1.0 Transitional//EN' 'x'><p>x", QuirksMode::LimitedQuirks),
     ("<!doctype html PUBLIC '-//W3C//DTD HTML 4.01 Transitional//EN' 'x'><p>x", QuirksMode::LimitedQuirks),
     ("<!doctype html PUBLIC '-//W3C//DTD HTML 4.01 Transitional//EN'><p>x", QuirksMode::Quirks),
+    ("<!doctype html PUBLIC '-//W3C//DTD HTML 4.01 Transitional//EN' ''><p>x", QuirksMode::Quirks),
+    ("<!doctype html PUBLIC '-//W3C//DTD HTML 4.01 Frameset//EN' ''><p>x", QuirksMode::Quirks),
     ("<!doctype other><p>x", QuirksMode::Quirks),
     ("<!-- lead --> \n<p>x", QuirksMode::Quirks),
     ("", QuirksMode::Quirks),
