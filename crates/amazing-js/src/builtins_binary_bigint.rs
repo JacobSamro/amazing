@@ -319,7 +319,8 @@ impl Interpreter {
         }
     }
     fn install_bigint_builtins(&mut self) {
-        let constructor = Self::native("BigInt", bigint_constructor, &self.function_proto);
+        // BigInt has [[Construct]] even though invoking it with new throws.
+        let constructor = Self::native_constructor("BigInt", bigint_constructor, &self.function_proto);
         let JsValue::Object(function) = &constructor else { unreachable!() };
         let prototype = self.bigint_proto.clone();
         binary_configure_constructor(function, "BigInt", 1, &prototype);

@@ -42,7 +42,7 @@ impl Interpreter {
             let mut prototype = JsObject::ordinary();
             prototype.proto = Some(self.object_proto.clone());
             let prototype = Obj(Rc::new(RefCell::new(prototype)));
-            let function = Self::native(name, constructor, &self.function_proto);
+            let function = Self::native_constructor(name, constructor, &self.function_proto);
             if let JsValue::Object(object) = &function {
                 object.borrow_mut().define("name", symbol_data(JsValue::str(name), false, true)).unwrap();
                 object.borrow_mut().define("length", symbol_data(JsValue::num(length as f64), false, true)).unwrap();

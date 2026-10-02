@@ -58,7 +58,7 @@ impl Interpreter {
         let mut string = JsObject::ordinary();
         string.proto = Some(base.clone());
         let string = Obj(Rc::new(RefCell::new(string)));
-        let constructor = Self::native("Iterator", std_iterator_constructor, &self.function_proto);
+        let constructor = Self::native_constructor("Iterator", std_iterator_constructor, &self.function_proto);
         if let JsValue::Object(object) = &constructor {
             object.borrow_mut().define("name", symbol_data(JsValue::str("Iterator"), false, true)).unwrap();
             object.borrow_mut().define("length", symbol_data(JsValue::num(0.0), false, true)).unwrap();

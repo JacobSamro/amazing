@@ -14,7 +14,7 @@ struct IntlSegmentIteratorState { input: String, granularity: String, pieces: Ve
 
 impl Interpreter {
     fn install_intl_segmenter(&mut self, namespace: &Obj) {
-        let constructor = Self::native("Segmenter", intl_segmenter_ctor, &self.function_proto);
+        let constructor = Self::native_constructor("Segmenter", intl_segmenter_ctor, &self.function_proto);
         let JsValue::Object(function) = &constructor else { unreachable!() };
         let JsValue::Object(prototype) = function.borrow().get_own("prototype").unwrap() else { unreachable!() };
         prototype.borrow_mut().proto = Some(self.object_proto.clone());

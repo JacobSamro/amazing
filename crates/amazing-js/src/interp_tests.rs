@@ -1382,6 +1382,42 @@ mod tests {
             assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")), JsValue::Bool(true), "{source}");
         }
     }
+    #[test]
+    fn native_functions_only_spec_constructors_have_construct() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(r#"
+            var methods = [eval, parseInt, Math.abs, Object.keys, Array.from,
+                Array.prototype.push, Promise.resolve, Promise.all,
+                Map.prototype.get, Set.prototype.add, String.prototype.charAt];
+            for (var f of methods) {
+                if (Object.prototype.hasOwnProperty.call(f, 'prototype')) throw Error('prototype: ' + f.name);
+            }
+            for (var f of methods) {
+                var rejected = false;
+                try { Reflect.construct(function(){}, [], f); }
+                catch (e) { rejected = e instanceof TypeError; }
+                if (!rejected) throw Error('constructible: ' + f.name);
+                rejected = false;
+                try { Reflect.construct(function(){}, [], f.bind(null)); }
+                catch (e) { rejected = e instanceof TypeError; }
+                if (!rejected) throw Error('bound constructible: ' + f.name);
+            }
+            var constructors = [Object, Function, Array, Number, String, Boolean,
+                Error, TypeError, Date, RegExp, Promise, Map, Set, WeakMap,
+                WeakSet, ArrayBuffer, DataView, Uint8Array, Proxy,
+                Intl.Collator, Intl.NumberFormat, Temporal.PlainDate, Symbol, BigInt];
+            for (var c of constructors) Reflect.construct(function(){}, [], c);
+            // These have [[Construct]], but their constructor bodies always throw.
+            for (var c of [Symbol, BigInt]) {
+                var rejected = false;
+                try { new c(); } catch (e) { rejected = e instanceof TypeError; }
+                if (!rejected) throw Error('constructor body: ' + c.name);
+                Reflect.construct(function(){}, [], c.bind(null));
+            }
+            true
+        "#).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(result, JsValue::Bool(true));
+    }
 }
 
 // Class NamedEvaluation (§15.7.14 ClassTail): regression coverage for the

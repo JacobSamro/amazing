@@ -95,7 +95,7 @@ impl Interpreter {
             } else {
                 native_disposable_stack_constructor
             };
-            let constructor = Self::native(name, constructor, &self.function_proto);
+            let constructor = Self::native_constructor(name, constructor, &self.function_proto);
             if let JsValue::Object(object) = &constructor {
                 object.borrow_mut().define("name", symbol_data(JsValue::str(name), false, true)).unwrap();
                 object.borrow_mut().define("length", symbol_data(JsValue::num(0.0), false, true)).unwrap();

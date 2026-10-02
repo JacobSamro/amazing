@@ -473,7 +473,7 @@ fn intl_duration_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsV
 
 impl Interpreter {
     fn install_intl_duration(&mut self, namespace: &Obj) {
-        let constructor = Self::native("DurationFormat", intl_duration_ctor, &self.function_proto);
+        let constructor = Self::native_constructor("DurationFormat", intl_duration_ctor, &self.function_proto);
         let JsValue::Object(function) = &constructor else { unreachable!() };
         let JsValue::Object(prototype) = function.borrow().get_own("prototype").unwrap() else { unreachable!() };
         prototype.borrow_mut().proto = Some(self.object_proto.clone());

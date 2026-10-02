@@ -175,7 +175,7 @@ fn proxy_revocable(i: &mut Interpreter, _this: JsValue, args: Vec<JsValue>) -> R
 
 impl Interpreter {
     fn install_proxy(&mut self) {
-        let constructor = Self::native_arity("Proxy", proxy_constructor, &self.function_proto, 2);
+        let constructor = Self::native_constructor_arity("Proxy", proxy_constructor, &self.function_proto, 2);
         if let JsValue::Object(object) = &constructor {
             // Proxy has no own "prototype" property, unlike ordinary
             // constructors (ECMA-262 has no Proxy.prototype).

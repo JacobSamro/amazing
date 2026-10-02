@@ -128,7 +128,7 @@ fn std_number_receiver(this: JsValue) -> Result<f64, Throw> {
 
 impl Interpreter {
     fn install_std_number_math(&mut self) {
-        let replacement = Interpreter::native("Number", std_number_constructor, &self.function_proto);
+        let replacement = Interpreter::native_constructor("Number", std_number_constructor, &self.function_proto);
         self.define_global("Number", replacement.clone());
         if let JsValue::Object(number) = replacement {
             number.borrow_mut().define("length", symbol_data(JsValue::num(1.0), false, true)).unwrap();
