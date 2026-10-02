@@ -120,7 +120,7 @@ fn std_calendar_era_to_native_year(cal: &str, era: &str, era_year: i64) -> Optio
             "aa" | "mundi" => Some(era_year - 5500),
             _ => None,
         },
-        "ethioaa" if era == "aa" => Some(era_year - 5500),
+        "ethioaa" if matches!(era, "aa" | "mundi") => Some(era_year),
         _ if std_calendar_is_islamic(cal) => match era {
             "ah" => Some(era_year),
             "bh" => Some(1 - era_year),
@@ -683,7 +683,7 @@ fn std_calendar_has_leap_months(cal: &str) -> bool { matches!(cal, "hebrew" | "c
 /// The ISO (year, month, day) for a month-structure calendar's own (year,
 /// month, day) [ordinal month for hebrew/chinese/dangi].
 fn std_calendar_to_iso(cal: &str, y: i64, m: i64, d: i64) -> (i64, i64, i64) {
-    if std_calendar_is_13month(cal) { std_calendar_to_13month(y, m, d, std_calendar_13month_epoch(cal)) }
+    if std_calendar_is_13month(cal) { std_calendar_to_13month(if cal == "ethioaa" { y - 5500 } else { y }, m, d, std_calendar_13month_epoch(cal)) }
     else if std_calendar_is_islamic(cal) { std_calendar_islamic_to_iso(cal, y, m, d) }
     else if cal == "hebrew" { std_calendar_hebrew_to_iso(y, m, d) }
     else if cal == "persian" { std_calendar_to_persian(y, m, d) }
@@ -749,7 +749,7 @@ fn std_calendar_fields(cal: &str, year: i64, month: i64, day: i64) -> (i64, i64,
         let leap = y.rem_euclid(4) == 3;
         let dim = if m <= 12 { 30 } else if leap { 6 } else { 5 };
         let doy = 30 * (m - 1) + d;
-        (y, m, d, dim, 13, doy, if leap { 366 } else { 365 }, leap)
+        (if cal == "ethioaa" { y + 5500 } else { y }, m, d, dim, 13, doy, if leap { 366 } else { 365 }, leap)
     } else if std_calendar_is_islamic(cal) {
         let (y, m, d) = std_calendar_islamic_from_iso(cal, year, month, day);
         let dim = std_calendar_islamic_month_len_for(cal, y, m);
