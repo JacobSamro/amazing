@@ -52,6 +52,9 @@ impl ModuleFailure {
 /// Identifiers must be stable: they are the keys used to break dependency cycles.
 pub trait ModuleResolver {
     fn resolve(&self, specifier: &str, referrer: &str) -> Result<(String, String), String>;
+    /// Browser hosts can expose a URL distinct from an inline record's unique identifier.
+    /// The default leaves import.meta unchanged for non-browser embeddings.
+    fn source_url(&self, _id: &str) -> Option<String> { None }
 }
 
 impl<F> ModuleResolver for F
@@ -351,6 +354,9 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             module_env.bind_this(JsValue::Undefined);
             let mut meta = JsObject::ordinary();
             meta.proto = Some(engine.object_proto.clone());
+            if let Some(url) = self.resolver.source_url(record_id) {
+                let _ = meta.define("url", Property::data(JsValue::str(url)));
+            }
             module_env
                 .declare_lexical("\0import.meta", JsValue::object(meta), false)
                 .map_err(ModuleFailure::runtime)?;
@@ -987,6 +993,35 @@ mod tests {
         assert_eq!(result["set"], JsValue::Bool(false));
         assert_eq!(result["deleted"], JsValue::Bool(false));
         assert_eq!(result["unchanged"], JsValue::num(1.0));
+    }
+
+    #[test]
+    fn source_url_metadata_is_opt_in_and_distinct_from_record_identity() {
+        struct BrowserResolver;
+        impl ModuleResolver for BrowserResolver {
+            fn resolve(&self, _: &str, _: &str) -> Result<(String, String), String> {
+                Ok(("external-record".into(), "export const url=import.meta.url;".into()))
+            }
+            fn source_url(&self, id: &str) -> Option<String> {
+                Some(match id {
+                    "external-record" => "https://example.test/dep.js",
+                    _ => "https://example.test/document.html",
+                }.into())
+            }
+        }
+        let mut linker = ModuleLinker::new(BrowserResolver);
+        let mut root = Interpreter::new();
+        let source = "import {url} from 'dep'; export const own=import.meta.url; export const dependency=url; export const meta=import.meta;";
+        linker.link("inline-record-1", source).unwrap();
+        linker.link("inline-record-2", "export const meta=import.meta;").unwrap();
+        let first = linker.evaluate("inline-record-1", &mut root).unwrap();
+        let second = linker.evaluate("inline-record-2", &mut root).unwrap();
+        assert_eq!(first["own"], JsValue::str("https://example.test/document.html"));
+        assert_eq!(first["dependency"], JsValue::str("https://example.test/dep.js"));
+        assert_ne!(first["meta"], second["meta"]);
+        let mut plain = ModuleLinker::new(|_: &str, _: &str| Err("unresolved".into()));
+        plain.link("plain", "export const absent=!('url' in import.meta);").unwrap();
+        assert_eq!(plain.evaluate("plain", &mut root).unwrap()["absent"], JsValue::Bool(true));
     }
 
     #[test]
