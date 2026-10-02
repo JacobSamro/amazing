@@ -3199,3 +3199,65 @@ No code was changed this pass -- research only (spec doc read, full
 cross-script grep for schema dependents). Picking up the next largest
 triage cluster is explicitly deferred until this is scoped in a future
 brief.
+
+### LAYOUT-36 implementation (2026-10-03)
+
+The harness now discovers every match/mismatch link, applies the static-resource
+eligibility checks to every reference, renders the test once, and evaluates
+match references with OR and mismatch references with AND. A failed reference
+render never proves a mismatch; a successful alternate match may still prove
+the match group. Per-reference render failures and pixel comparisons appear in
+an additive `references` array. Existing compatibility fields and unsuffixed
+cluster artifacts describe the same selected reference (the first satisfied
+reference on passes; a required render failure, failed mismatch, or failed
+match otherwise). Harmless unmatched alternatives never determine a failing
+mixed-reference test's compatibility artifacts.
+
+Seven Linux-only harness regression checks live in
+`crates/amazing-layout/evidence/layout36/test_reftests.py`. The engine itself
+is unchanged. The fixed base is `2eb1229a`.
+
+### LAYOUT-36 measured result
+
+Boat sandbox `bx_shgjh66q`, 8 vCPUs, Linux x86_64. A fresh ext4 target
+(`/tmp/amazing-layout36-target`) passed **3515 workspace tests / 17 skipped**,
+**4 doctests**, and **7 harness regression checks**, with zero failures.
+Inherited and newly created HOME/FUSE targets produced missing-crate artifact
+errors; those failed runs are excluded. The credited renderer was rebuilt in
+release mode in the fresh target, SHA256
+`26b2c803a4a8c1bed3fa1dcf741fbdea6b6b5f14b20ba27db3475147b96563e0`.
+
+Pinned WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, viewport 800×600.
+The old and new harnesses both ran against that same fresh renderer, with
+four concurrent pipelines and 20-second render timeouts. All **323 eligible
+tests** retained their classification: **223 pass / 100 mismatch**, zero
+error/timeout/unsupported/crash and zero gained/lost/changed/new/removed.
+
+| Full directory | Before pass / mismatch | After pass / mismatch |
+| --- | --- | --- |
+| CSS2/floats | 28 / 11 | 28 / 11 |
+| CSS2/normal-flow | 24 / 5 | 24 / 5 |
+| css-tables | 54 / 28 | 54 / 28 |
+| css-sizing | 90 / 48 | 90 / 48 |
+| css-display | 27 / 8 | 27 / 8 |
+
+The planned alternate-reference explanation for `float-nowrap-4.html` is
+**disproved**. Both valid references produce the identical PPM SHA256
+`b65702503c55578f4b9dd3120a112d7de15f825d45150afa06a345f699e5e78a`;
+both differ from the test by **4279 pixels**. The actual PPM SHA256 is
+`406c16060cc31b55ba28ca13b740e6d7a52aa749466f3ab1d74016e1d83324b2`.
+The test's float starts at y=8, while each reference starts it at y=27;
+the following text has the same 19-pixel displacement. This is a real
+renderer defect, so the existing mismatch remains and no gain is claimed.
+
+Root cause for the next layout ticket: the first-float branch in
+`flatten_inline()` pushes to `blocks_out` before flushing already buffered
+outer text. LAYOUT-35's nested-nowrap box-tree test asserts `[float, unified
+text]`, although its comment promises a float *after* the preceding "Some".
+The standalone reference orders `[outer text, float, inner nowrap text]`.
+Correct the outer-prefix flush while preserving uninterrupted ancestor nowrap
+runs, then measure the full float and layout regression corpora again.
+
+Durable evidence: [summary](../../crates/amazing-layout/evidence/layout36/summary.json),
+ten before/after compact classification maps in the same directory, and
+[both reference comparisons](../../crates/amazing-layout/evidence/layout36/float-nowrap-4.json).
