@@ -1148,3 +1148,37 @@ fixed MAIN linux-run to use native source/target directories with incremental
 disabled; the unchanged-source workspace retry passed without deleting caches.
 Next coordinated Promise cluster: internal await reaction attachment should
 bypass observable `then` and species, using the native reaction machinery.
+
+## JSRT-30 Internal Promise reactions (2026-10-03)
+
+Frozen base `8d3a4eca`. `perform_promise_then(&mut Interpreter, &Obj,
+Option<JsValue>, Option<JsValue>, Option<Obj>) -> Result<(), Throw>` attaches
+native fulfillment/rejection reactions directly. Native Promise.prototype.then
+passes its actual capability record; internal AST coroutine await passes no
+result capability. Pending and settled promises share the helper and existing
+scheduler, preserving reaction order without reading observable then/species.
+Empty-capability jobs ignore normal handler results instead of assimilating
+them into an unnecessary chained promise. An unexpected abrupt host callback
+completion propagates through the existing job error path.
+
+Ported Boa PerformPromiseThen and optional reaction-capability completion at
+MIT `39cd11214ecb366200157dab96b3919e61e9a391`, with headers and a new notices
+row. Normative reference:
+[PerformPromiseThen](https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-performpromisethen).
+Parent granted the exact optional PendingReaction field; the VM owner approved
+conditional tracing if needed. No reaction tracing consumer exists on this
+fixed base, so no GC files changed. VM await drivers are reserved for its next
+consumer ticket. AST tests force a coroutine with a with statement because
+eligible async bodies compile independently of the script backend.
+
+Crate **480 passed/1 skipped**, **1 doctest**; final native Boat workspace
+**3526 passed/17 skipped, 67.079 seconds**, **4 doctests**. Whole pinned Promise
+**520/732**, await expressions **21/22**, async-function selection **328/382**
+remain unchanged with zero lost passes. Internal tests cover pending/settled
+fulfillment/rejection order, ignored handler return thenables, poisoned await
+then getters and species. Evidence: `js-runtime_jsrt30_evidence.json`.
+
+VM-owned async_resolve_value constructor-get abrupt timing remains a separate
+follow-up. Promise rejection tracking is pre-existing host work. Runtime next:
+port the whole Promise.prototype.finally algorithm (generic Invoke, species,
+deferred callbacks and PromiseResolve-based cleanup settlement).

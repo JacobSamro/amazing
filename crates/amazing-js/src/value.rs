@@ -931,12 +931,12 @@ pub enum PromiseFate {
     Rejected(JsValue),
 }
 
-/// One queued `then` reaction: callback + resolution capability placeholder.
+/// One queued Promise reaction: callback and optional result capability.
 #[derive(Debug, Clone)]
 pub struct PendingReaction {
     pub handler: Option<JsValue>,
-    /// Which promise the reaction settles (chained .then result).
-    pub capability: Obj,
+    /// Chained .then result; internal await reactions have no result capability.
+    pub capability: Option<Obj>,
     /// `true` when this is the reject path of a `then(on_ful, on_rej)` pair.
     pub is_reject_handler: bool,
 }

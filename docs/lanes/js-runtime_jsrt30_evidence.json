@@ -1,0 +1,65 @@
+{
+  "ticket": "JSRT-30",
+  "base_sha": "8d3a4eca5bfebb69eae23899fd49aee0f461ca31",
+  "linux_host": "Boat bx_bq7wyr6x pool-js-a; native /tmp source/target",
+  "workspace_nextest": {
+    "passed": 3526,
+    "skipped": 17,
+    "elapsed_seconds": 67.079
+  },
+  "workspace_doctests_passed": 4,
+  "crate_nextest": {
+    "passed": 480,
+    "skipped": 1
+  },
+  "crate_doctests_passed": 1,
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+  "host_sha256": "b7a9102b0457c75898952f1c6f8326aa155c5a699adf6ee4bed2bc9b73b54f2f",
+  "timeout_seconds": 15.0,
+  "jobs": 4,
+  "await": {
+    "selected": 22,
+    "before_pass": 21,
+    "after_pass": 21,
+    "gained": 0,
+    "lost": 0,
+    "classification_sha256": "d1e9de1b5b343dd02911cecd99bfc6ea61e67526512143edc7320361a942b443"
+  },
+  "async-function": {
+    "selected": 382,
+    "before_pass": 328,
+    "after_pass": 328,
+    "gained": 0,
+    "lost": 0,
+    "classification_sha256": "011b5e1391a18040b562f65c7ab711826b5424fe4b6f17bc06ecba39731a57c8"
+  },
+  "promise": {
+    "selected": 732,
+    "before_pass": 520,
+    "after_pass": 520,
+    "gained": 0,
+    "lost": 0,
+    "classification_sha256": "0b90405591abf27eba63802f0c021e49803a7284496a6b196222ffb796e4635c"
+  },
+  "combined": {
+    "selected": 1136,
+    "before_pass": 869,
+    "after_pass": 869,
+    "gained": 0,
+    "lost": 0
+  },
+  "upstream": {
+    "repository": "boa-dev/boa",
+    "path": "core/engine/src/builtins/promise/mod.rs",
+    "commit": "39cd11214ecb366200157dab96b3919e61e9a391",
+    "license": "MIT"
+  },
+  "coordination": "Parent granted narrow PendingReaction optional capability; VM owns separate await consumer migration. No GC reaction tracing references on fixed base.",
+  "limitations": [
+    "Host rejection tracking is pre-existing",
+    "VM async_resolve_value constructor-get abrupt timing is a separate follow-up",
+    "Whole Test262 selections unchanged; new internal/AST fallback regressions pass"
+  ]
+}
