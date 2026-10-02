@@ -25,6 +25,7 @@ pub(crate) enum EncodingOp {
     TextDecoderIgnoreBomGetter,
     TextEncoderConstructor,
     TextEncoderEncode,
+    TextEncoderEncodeInto,
     TextEncoderEncodingGetter,
 }
 
@@ -164,6 +165,9 @@ impl RuntimeBindingHost<'_> {
                         "Failed to construct 'TextDecoder': The encoding label provided ('{label}') is invalid."
                     )));
                 };
+                if encoding == Encoding::Replacement {
+                    return Err(Throw::range_error("The replacement encoding is not supported by TextDecoder."));
+                }
                 let options = args.get(1).cloned().unwrap_or(JsValue::Undefined);
                 let fatal = self.encoding_dict_bool(&options, "fatal", false)?;
                 let ignore_bom = self.encoding_dict_bool(&options, "ignoreBOM", false)?;
@@ -238,6 +242,30 @@ impl RuntimeBindingHost<'_> {
                 self.encoding_receiver(&this, KIND_TEXT_ENCODER)?;
                 Ok(JsValue::str("utf-8"))
             }
+            EncodingOp::TextEncoderEncodeInto => {
+                self.encoding_receiver(&this, KIND_TEXT_ENCODER)?;
+                if args.len() < 2 { return Err(Throw::type_error("encodeInto requires source and destination")); }
+                // WebIDL converts the USVString before validating the view;
+                // conversion may detach the destination through user code.
+                let units = self.js.binding_to_dom_string(&args[0])?;
+                let source = String::from_utf16_lossy(&units);
+                let destination = &args[1];
+                let capacity = self.js.binding_uint8_array_info(destination)?
+                    .ok_or_else(|| Throw::type_error("encodeInto destination must be a Uint8Array"))?;
+                let mut bytes = Vec::with_capacity(capacity.min(source.len()));
+                let mut read = 0;
+                for scalar in source.chars() {
+                    if scalar.len_utf8() > capacity - bytes.len() { break; }
+                    let mut encoded = [0; 4];
+                    bytes.extend_from_slice(scalar.encode_utf8(&mut encoded).as_bytes());
+                    read += scalar.len_utf16();
+                }
+                self.js.binding_write_uint8_array(destination, 0, &bytes)?;
+                let result = self.js.binding_create_object(None)?;
+                self.define_data_property(&result, "read", JsValue::num(read as f64), true, true, true)?;
+                self.define_data_property(&result, "written", JsValue::num(bytes.len() as f64), true, true, true)?;
+                Ok(result)
+            }
         }
     }
 
@@ -251,13 +279,6 @@ impl RuntimeBindingHost<'_> {
     /// (the Streams-API transform-stream wrappers) -- this engine has no
     /// `ReadableStream`/`WritableStream`/`TransformStream` at all yet, a
     /// separate, much bigger cross-cutting gap, not specific to encoding.
-    /// `TextEncoder.prototype.encodeInto` is also not implemented: it needs
-    /// to write into a *caller-supplied* `Uint8Array`'s existing backing
-    /// store in place, and `amazing-js`'s public binding surface
-    /// (`binding_buffer_source_bytes`/`binding_create_uint8_array`) only
-    /// offers read-a-snapshot/allocate-fresh, not write-into-existing --
-    /// filed in `questions.md` for js-binary rather than reaching into that
-    /// crate's private `BinaryState` internals from here.
     pub(super) fn install_text_codec(&mut self) -> Result<(), Throw> {
         self.encoding_ensure();
         let global = self.js.binding_global_object();
@@ -288,6 +309,8 @@ impl RuntimeBindingHost<'_> {
         self.define_data_property(&prototype, "constructor", constructor.clone(), true, false, true)?;
         let encode = self.native("encode", 0, NativeEntry::Encoding(EncodingOp::TextEncoderEncode), HostCallPolicy::CallOnly);
         self.define_data_property(&prototype, "encode", encode, true, false, true)?;
+        let encode_into = self.native("encodeInto", 2, NativeEntry::Encoding(EncodingOp::TextEncoderEncodeInto), HostCallPolicy::CallOnly);
+        self.define_data_property(&prototype, "encodeInto", encode_into, true, false, true)?;
         let getter = self.native("encoding", 0, NativeEntry::Encoding(EncodingOp::TextEncoderEncodingGetter), HostCallPolicy::CallOnly);
         self.define_accessor_property(&prototype, "encoding", Some(getter), None, true, true)?;
         self.define_data_property(&global, "TextEncoder", constructor.clone(), true, false, true)?;
@@ -300,6 +323,48 @@ impl RuntimeBindingHost<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_encoder_encode_into_preserves_scalar_boundaries_and_view_edges() {
+        assert_eq!(run(r#"
+            var encoder = new TextEncoder(), buffer = new ArrayBuffer(8);
+            var all = new Uint8Array(buffer); all.fill(9);
+            var view = new Uint8Array(buffer, 2, 4);
+            var a = encoder.encodeInto('😀A', view);
+            var b = encoder.encodeInto('😀', new Uint8Array(3));
+            var c = encoder.encodeInto('\uD800A', new Uint8Array(4));
+            a.read === 2 && a.written === 4 && b.read === 0 && b.written === 0 &&
+            c.read === 2 && c.written === 4 && all[0] === 9 && all[1] === 9 &&
+            all[2] === 240 && all[5] === 128 && all[6] === 9 && all[7] === 9;
+        "#), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn text_encoder_encode_into_rejects_invalid_views_and_missing_arguments() {
+        assert_eq!(run(r#"
+            var encoder = new TextEncoder(), rejected = 0;
+            for (var value of [new Int8Array(2), new Uint8ClampedArray(2), new Uint16Array(2), new DataView(new ArrayBuffer(2)), new ArrayBuffer(2), {}, null]) {
+                try { encoder.encodeInto('A', value); } catch (error) { if (error instanceof TypeError) rejected++; }
+            }
+            try { encoder.encodeInto('A'); } catch (error) { if (error instanceof TypeError) rejected++; }
+            rejected === 8;
+        "#), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn text_decoder_fatal_stream_recovers_consumed_errors_and_keeps_mode() {
+        assert_eq!(run(r#"
+            var d = new TextDecoder('utf-8', {fatal:true}), failures = 0;
+            try { d.decode(new Uint8Array([192]), {stream:true}); } catch(e) { failures++; }
+            try { d.decode(new Uint8Array([255]), {stream:true}); } catch(e) { failures++; }
+            var cleared = d.decode() === '';
+            var j = new TextDecoder('iso-2022-jp', {fatal:true});
+            try { j.decode(new Uint8Array([27,40,74,255]), {stream:true}); } catch(e) { failures++; }
+            var roman = j.decode(new Uint8Array([126])) === '\u203e';
+            try { new TextDecoder('replacement'); } catch(e) { if(e instanceof RangeError) failures++; }
+            cleared && roman && failures === 4;
+        "#), JsValue::Bool(true));
+    }
 
     fn run(script: &str) -> JsValue {
         let dom = amazing_html::parse("<!DOCTYPE html><html><head></head><body></body></html>");

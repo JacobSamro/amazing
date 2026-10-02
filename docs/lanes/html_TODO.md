@@ -3547,3 +3547,29 @@ fixture substitutions or expected-name metadata injection.
 - Fixed base319a3636: 575 owned/6skip,3550 workspace/17skip,4docs on native Boat.
 - Whole62 tree files1894/1894; expanded1930pass6unsupported identical; fullencoding194files12216/406 unchanged,zero lost passes.
 - Actual syntax72pages2646/62→2650/58,4parsergains0loss; evidence/html48 records fullbefore/after. Remaining43table assertions and5dynamicgraft assertions routedDOM.
+
+HTML49 whole codec API cluster (parent grant2026-10-03): runtime_host_encoding.rs
+TextDecoder error-state/constructor constraints and TextEncoder.encodeInto;
+precise builtins_binary.rs genuine Uint8Array host info/write API helpers,
+without VM/value changes. Complete encoding194 and all existing binary
+ArrayBuffer/SharedArrayBuffer/TypedArray/DataView/Atomics selections gate before
+and after, plus workspace/docs and whole parser corpora. UTF16 EOF clears
+pending high surrogate+partial byte in one error; fatal error consumes malformed
+bytes before returning while preserving ISO2022 mode. TextDecoder adapter
+already correctly retains streaming decoder state; stale core pending bytes
+were the actual fatal-stream error source. Replacement codec remains valid for
+HTML decoding but is rejected by the TextDecoder constructor. encodeInto
+converts source before destination validation and writes complete UTF8 scalars
+through an existing view, returning consumed UTF16 units/written bytes.
+
+HTML49 final native gate:1050owned7skip3556workspace17skip4docs; encoding194
+12216/406→12268/354,52actual gains0loss (42encodeInto,6replacementconstructor,
+4UTF16/fatalstream). Tree1894/1894 and expanded1930/6unsupported unchanged;
+syntax72 byte-identical2650/58. Allfive backing-store binary selections
+identical:6486pass158fail230unsupportedvariants,zero lostpasses. Durable
+evidence/html49 includes full selected variant classifications and exact
+encoding name-hash status records. Standalone shadow fragment explicit-mode
+API1e8cbad9 already delivered DOM. NextHTML50 adopts gated DOM scripting-state
+API, records configured parser mode and actual browsing-context/sandbox mode
+for HTML/XML/XHTML iframes; inert parsers/createHTMLDocument/clones remain
+disabled, fragments consume actual owner document state.

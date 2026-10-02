@@ -317,7 +317,7 @@ mod tests {
                 None
             )
             .text,
-            "<p>��"
+            "<p>�"
         );
         assert_eq!(
             decode(&[0xfe, 0xff, 0, b'<', 0, b'p', 0, b'>'], Some("utf-8")).text,

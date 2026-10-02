@@ -40,9 +40,9 @@ impl Decoder {
         while !self.pending.is_empty() {
             let mut step = self.step();
             if matches!(step, Step::Need) && final_input {
-                let n = if matches!(self.encoding, Encoding::Utf16Le | Encoding::Utf16Be)
-                    && self.pending.len() == 3 { 2 }
-                    else if self.encoding == Encoding::Iso2022Jp { 1 }
+                // UTF-16 EOF clears both the leading surrogate and leading
+                // byte together, producing one error even when both exist.
+                let n = if self.encoding == Encoding::Iso2022Jp { 1 }
                     else { self.pending.len() };
                 step = Step::Error(n);
             }
@@ -55,7 +55,15 @@ impl Decoder {
                     output.push(char::from_u32(b).expect("index scalar")); n
                 }
                 Step::Error(n) => {
-                    if self.fatal { return Err(DecodeError { byte_offset: self.offset }); }
+                    if self.fatal {
+                        // The handler consumed/reset the malformed sequence
+                        // before reporting it. Preserve only restored bytes
+                        // and codec state for a subsequent streaming call.
+                        let byte_offset = self.offset;
+                        self.pending.drain(..n);
+                        self.offset += n;
+                        return Err(DecodeError { byte_offset });
+                    }
                     output.push('\u{FFFD}'); n
                 }
             };

@@ -402,6 +402,31 @@ impl Interpreter {
         let buffer = self.binding_create_array_buffer(bytes)?;
         self.binary_new_view(binary_obj(&buffer)?, 0, None, Some(BinaryKind::Uint8))
     }
+    /// Validate the internal Uint8Array view brand for a host operation.
+    /// Prototype identity is deliberately irrelevant, including across realms.
+    pub fn binding_uint8_array_info(&self, value: &JsValue) -> Result<Option<usize>, Throw> {
+        let JsValue::Object(object) = value else { return Ok(None); };
+        let Some(BinaryState::View(view)) = binary_state(object) else { return Ok(None); };
+        if view.kind != Some(BinaryKind::Uint8) { return Ok(None); }
+        if binary_view_out_of_bounds(&view) {
+            return Err(Throw::type_error("detached or out-of-bounds Uint8Array"));
+        }
+        Ok(Some(binary_view_bytes(&view)))
+    }
+    /// Write through an existing Uint8Array's view, preserving bytes outside it.
+    pub fn binding_write_uint8_array(&mut self, value: &JsValue, offset: usize, bytes: &[u8]) -> Result<(), Throw> {
+        let length = self.binding_uint8_array_info(value)?
+            .ok_or_else(|| Throw::type_error("destination is not a Uint8Array"))?;
+        if offset.checked_add(bytes.len()).is_none_or(|end| end > length) {
+            return Err(Throw::range_error("write exceeds Uint8Array view"));
+        }
+        let Some(BinaryState::View(view)) = binary_state(&binary_obj(value)?) else { unreachable!(); };
+        let mut buffer = view.buffer.borrow_mut();
+        if buffer.immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
+        let start = view.offset + offset;
+        buffer.bytes[start..start + bytes.len()].copy_from_slice(bytes);
+        Ok(())
+    }
     /// Return a byte snapshot of an ArrayBuffer or ArrayBufferView for host
     /// bindings. A detached backing store is an error even for an empty view.
     pub fn binding_buffer_source_bytes(&self, value: &JsValue) -> Result<Option<Vec<u8>>, Throw> {
@@ -1582,6 +1607,46 @@ fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
 #[cfg(test)]
 mod binary_tests {
     use super::*;
+
+    #[test]
+    fn binding_uint8_writes_observe_brand_and_view_bounds() {
+        let mut i = Interpreter::new();
+        let buffer = i.binding_create_array_buffer(vec![9; 8]).unwrap();
+        let value = i.binary_new_view(binary_obj(&buffer).unwrap(), 2, Some(3), Some(BinaryKind::Uint8)).unwrap();
+        assert_eq!(i.binding_uint8_array_info(&value).unwrap(), Some(3));
+        i.binding_write_uint8_array(&value, 1, &[1, 2]).unwrap();
+        assert_eq!(i.binding_buffer_source_bytes(&buffer).unwrap().unwrap(), [9,9,9,1,2,9,9,9]);
+        assert!(i.binding_write_uint8_array(&value, 2, &[1,2]).is_err());
+        assert!(i.binding_write_uint8_array(&value, usize::MAX, &[1]).is_err());
+        i.binding_write_uint8_array(&value, 3, &[]).unwrap();
+        for kind in [None, Some(BinaryKind::Int8), Some(BinaryKind::Uint8Clamped), Some(BinaryKind::Uint16)] {
+            let other = i.binary_new_view(binary_obj(&buffer).unwrap(), 0, Some(8), kind).unwrap();
+            assert_eq!(i.binding_uint8_array_info(&other).unwrap(), None);
+            assert!(i.binding_write_uint8_array(&other, 0, &[]).is_err());
+        }
+        assert_eq!(i.binding_uint8_array_info(&buffer).unwrap(), None);
+        assert_eq!(i.binding_uint8_array_info(&JsValue::Undefined).unwrap(), None);
+        // Altering the prototype cannot change the internal view brand.
+        binary_obj(&value).unwrap().borrow_mut().proto = None;
+        assert_eq!(i.binding_uint8_array_info(&value).unwrap(), Some(3));
+        i.binding_detach_array_buffer(&buffer).unwrap();
+        assert!(i.binding_uint8_array_info(&value).is_err());
+        assert!(i.binding_write_uint8_array(&value, 0, &[]).is_err());
+        let mut other_realm = Interpreter::new();
+        let foreign = other_realm.binding_create_uint8_array(vec![8; 2]).unwrap();
+        assert_eq!(i.binding_uint8_array_info(&foreign).unwrap(), Some(2));
+        i.binding_write_uint8_array(&foreign, 0, &[4]).unwrap();
+        assert_eq!(other_realm.binding_buffer_source_bytes(&foreign).unwrap().unwrap(), [4,8]);
+        let shared = i.binary_new_buffer(vec![7; 4], 4, false, true);
+        let shared_view = i.binary_new_view(binary_obj(&shared).unwrap(), 1, Some(2), Some(BinaryKind::Uint8)).unwrap();
+        i.binding_write_uint8_array(&shared_view, 0, &[5,6]).unwrap();
+        assert_eq!(binary_buffer(&shared).unwrap().borrow().bytes, [7,5,6,7]);
+        let resizable = i.binary_new_buffer(vec![0; 4], 8, true, false);
+        let fixed = i.binary_new_view(binary_obj(&resizable).unwrap(), 2, Some(2), Some(BinaryKind::Uint8)).unwrap();
+        binary_buffer(&resizable).unwrap().borrow_mut().bytes.truncate(3);
+        assert!(i.binding_uint8_array_info(&fixed).is_err());
+        assert!(i.binding_write_uint8_array(&fixed, 0, &[]).is_err());
+    }
 
     #[test]
     fn binding_array_buffer_contains_exact_bytes() {
