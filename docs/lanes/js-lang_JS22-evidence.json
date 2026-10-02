@@ -1,0 +1,145 @@
+{
+  "ticket": "JS-22",
+  "base_sha": "680822e95c355415bd0541f7caf57780af95dbb1",
+  "api_commit": "f86b814d6f74e9ffc1eff29dece4d8f6456da539",
+  "gate_scope": "Both source-context API and optional-chain changes were present in this single final gate. Whole language including Annex B; integrator owns combined full-tree Test262.",
+  "platform": {
+    "os": "Linux",
+    "service": "Boat",
+    "sandbox": "bx_2n57r7zz",
+    "pool": "pool-js-b",
+    "source": "native /tmp/amazing-js-lang-js22/src",
+    "target": "native /tmp/amazing-js-lang-js22/target"
+  },
+  "workspace": {
+    "passed": 3551,
+    "skipped": 17,
+    "failed": 0,
+    "doctest_suites": 31,
+    "doctests_passed": 4,
+    "doctests_failed": 0
+  },
+  "owned": {
+    "before_passed": 482,
+    "after_passed": 486,
+    "skipped": 1,
+    "failed": 0,
+    "doctests_passed": 1
+  },
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "selected_files": 24590,
+  "before": {
+    "files": {
+      "pass": 23353,
+      "fail": 1211,
+      "timeout": 0,
+      "unsupported": 26,
+      "skipped": 29282
+    },
+    "variants": {
+      "pass": 43461,
+      "fail": 1917,
+      "timeout": 0,
+      "unsupported": 52,
+      "skipped": 0
+    },
+    "classification_sha256": "54d2172838d502159c7505c6d56c1ab8267f6f8f003ff39672b04f98125960e8",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "host_sha256": "694adac93f106231f2e9caa245d4cb39c43cc98b158eac116e3f1e604d174078",
+    "timeout_seconds": 60,
+    "jobs": 8,
+    "filter": "language"
+  },
+  "after": {
+    "files": {
+      "pass": 23363,
+      "fail": 1201,
+      "timeout": 0,
+      "unsupported": 26,
+      "skipped": 29282
+    },
+    "variants": {
+      "pass": 43481,
+      "fail": 1897,
+      "timeout": 0,
+      "unsupported": 52,
+      "skipped": 0
+    },
+    "classification_sha256": "112633065e5b006c73509345b49d7b0f8379979af2b51a245c9eba559bb45c76",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "host_sha256": "a452dd9b27d45fd67066a9b8fff16483a548b45c3991aade282bfcb297ffcf12",
+    "timeout_seconds": 60,
+    "jobs": 8,
+    "filter": "language"
+  },
+  "passing_gains": {
+    "files": 10,
+    "variants": 20,
+    "file_paths": [
+      "language/expressions/class/elements/private-field-after-optional-chain.js",
+      "language/expressions/delete/delete-unresolvable-base-object-reference-throws-typeerror.js",
+      "language/expressions/delete/member-computed-reference-null.js",
+      "language/expressions/delete/member-computed-reference-undefined.js",
+      "language/expressions/delete/member-identifier-reference-null.js",
+      "language/expressions/delete/member-identifier-reference-undefined.js",
+      "language/expressions/delete/super-property-uninitialized-this.js",
+      "language/expressions/optional-chaining/optional-call-preserves-this.js",
+      "language/expressions/optional-chaining/short-circuiting.js",
+      "language/statements/class/elements/private-field-after-optional-chain.js"
+    ],
+    "variant_keys": [
+      "language/expressions/class/elements/private-field-after-optional-chain.js#non-strict",
+      "language/expressions/class/elements/private-field-after-optional-chain.js#strict",
+      "language/expressions/delete/delete-unresolvable-base-object-reference-throws-typeerror.js#non-strict",
+      "language/expressions/delete/delete-unresolvable-base-object-reference-throws-typeerror.js#strict",
+      "language/expressions/delete/member-computed-reference-null.js#non-strict",
+      "language/expressions/delete/member-computed-reference-null.js#strict",
+      "language/expressions/delete/member-computed-reference-undefined.js#non-strict",
+      "language/expressions/delete/member-computed-reference-undefined.js#strict",
+      "language/expressions/delete/member-identifier-reference-null.js#non-strict",
+      "language/expressions/delete/member-identifier-reference-null.js#strict",
+      "language/expressions/delete/member-identifier-reference-undefined.js#non-strict",
+      "language/expressions/delete/member-identifier-reference-undefined.js#strict",
+      "language/expressions/delete/super-property-uninitialized-this.js#non-strict",
+      "language/expressions/delete/super-property-uninitialized-this.js#strict",
+      "language/expressions/optional-chaining/optional-call-preserves-this.js#non-strict",
+      "language/expressions/optional-chaining/optional-call-preserves-this.js#strict",
+      "language/expressions/optional-chaining/short-circuiting.js#non-strict",
+      "language/expressions/optional-chaining/short-circuiting.js#strict",
+      "language/statements/class/elements/private-field-after-optional-chain.js#non-strict",
+      "language/statements/class/elements/private-field-after-optional-chain.js#strict"
+    ]
+  },
+  "passing_losses": {
+    "files": 0,
+    "variants": 0
+  },
+  "optional_chaining": {
+    "before_passing_files": 35,
+    "after_passing_files": 37
+  },
+  "normalization": null,
+  "upstream": {
+    "repository": "boa-dev/boa",
+    "path": "core/engine/src/bytecompiler/mod.rs",
+    "commit": "39cd11214ecb366200157dab96b3919e61e9a391",
+    "license": "MIT",
+    "copyright": "Copyright (c) 2019 Jason Williams",
+    "algorithms": [
+      "compile_optional_preserve_this",
+      "compile_optional_delete",
+      "compile_optional_item_kind"
+    ]
+  },
+  "scratch": {
+    "before": "js22-language-before.json",
+    "after": "js22-language-after.json",
+    "diff": "js22-language-diff.json"
+  },
+  "limitations": [
+    "No classic Test262 wire protocol change; browser driver adoption is owned by integrator-assist.",
+    "VM chains containing suspension continue using existing compiler/interpreter fallback behavior."
+  ]
+}

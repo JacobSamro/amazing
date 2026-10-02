@@ -1632,6 +1632,7 @@ fn key_may_suspend(key: &ast::PropKey) -> bool {
 
 fn in_optional_chain(expression: &Expr) -> bool {
     match &expression.kind {
+        ExprKind::Paren(inner) => in_optional_chain(inner),
         ExprKind::Member { obj, optional, .. } => *optional || in_optional_chain(obj),
         ExprKind::Call { callee, optional, .. } => *optional || in_optional_chain(callee),
         _ => false,

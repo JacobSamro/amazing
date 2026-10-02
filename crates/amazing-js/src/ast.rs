@@ -31,8 +31,6 @@
 //! - `import`/`export` (the parser rejects them; modules are a later
 //!   milestone) and therefore top-level `await` context.
 //! - `for await (... of ...)` (async iteration).
-//! - Optional-chain short-circuit grouping: `optional` flags are recorded
-//!   per link but the runtime grouping semantics are the interpreter's job.
 //! - Tagged templates, decorators,
 //!   `new.target`/`import.meta` meta properties, `with` statements
 //!   (Annex B), getters/setters via `Object` literal `__proto__` special
