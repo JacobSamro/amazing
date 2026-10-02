@@ -3,6 +3,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn try_catch_finally_dispose_resources_at_each_lexical_boundary() {
+        let cases = [
+            ("try { using x = { [Symbol.dispose]() { throw 'dispose'; } }; throw 'body'; } catch (e) { e.error + ':' + e.suppressed; }", "dispose:body"),
+            ("var log = ''; try { using x = { [Symbol.dispose]() { log += 'D'; } }; log += 'T'; } finally { log += 'F'; } log", "TDF"),
+            ("var log = ''; try { throw 0; } catch (e) { using x = { [Symbol.dispose]() { log += 'D'; } }; log += 'C'; } finally { log += 'F'; } log", "CDF"),
+            ("var log = ''; try { log += 'T'; } finally { using x = { [Symbol.dispose]() { log += 'D'; } }; log += 'F'; } log += 'A'; log", "TFDA"),
+            ("var log = ''; try { using a = { [Symbol.dispose]() { log += 'A'; } }; using b = { [Symbol.dispose]() { log += 'B'; } }; log += 'T'; } finally { log += 'F'; } log", "TBAF"),
+            ("var log = ''; try { try { throw 'body'; } catch (e) { using x = { [Symbol.dispose]() { log += 'D'; throw 'dispose'; } }; log += 'C'; } finally { log += 'F'; } } catch (e) { log += e; } log", "CDFdispose"),
+            ("var log = ''; try { try { throw 'body'; } finally { using x = { [Symbol.dispose]() { log += 'D'; throw 'dispose'; } }; log += 'F'; } } catch (e) { log += e; } log", "FDdispose"),
+            ("var log = ''; try { using x = { [Symbol.dispose]() { log += 'O'; } }; try { using y = { [Symbol.dispose]() { log += 'I'; } }; log += 'T'; } finally { log += 'F'; } log += 'A'; } finally { log += 'E'; } log", "TIFAOE"),
+            ("var log = ''; try { try { throw null; } catch ({x}) { log += 'C'; } finally { log += 'F'; } } catch (e) { log += 'E'; } log", "FE"),
+        ];
+        let mut failures = Vec::new();
+        for (source, expected) in cases {
+            let mut i = Interpreter::new();
+            match i.run_script_with_backend(source, ExecutionBackend::TreeWalk) {
+                Ok(actual) if actual == JsValue::str(expected) => {},
+                actual => failures.push(format!("{source}\nexpected {expected:?}, observed {actual:?}")),
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+    }
+
+    #[test]
     fn class_static_method_parameters_and_setter_length() {
         let mut i = Interpreter::new();
         let result = i.run_script(

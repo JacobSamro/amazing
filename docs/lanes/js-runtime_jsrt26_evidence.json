@@ -1,0 +1,79 @@
+{
+  "ticket": "JSRT-26",
+  "base": "d9029d63ee1a8ffd61820c25c339548f17269413",
+  "host": "Boat pool-js-a bx_bq7wyr6x",
+  "workspace_nextest": {
+    "passed": 3517,
+    "skipped": 17,
+    "seconds": 69.142
+  },
+  "workspace_doctests": 4,
+  "regression_scenarios": 9,
+  "regression_before": "undefined:undefined; all try/catch/finally disposal order cases omitted cleanup",
+  "regression_after": "all nine scenarios pass",
+  "selected_cases": 384,
+  "before_passes": 367,
+  "after_passes": 369,
+  "gained": 2,
+  "lost": 0,
+  "selections": {
+    "using": {
+      "cases": 80,
+      "before": {
+        "pass": 76,
+        "fail": 4
+      },
+      "after": {
+        "pass": 77,
+        "fail": 3
+      },
+      "gained": 1,
+      "lost": 0,
+      "gains": [
+        "language/statements/using/throws-suppressederror-if-multiple-errors-during-disposal.js"
+      ],
+      "host_sha256": "0599e78e8595882609d9e92fa241942be6b07fcc820ff1a9d7b3dd963fd3f428",
+      "classification_sha256": "70c56ea897198a5e4d92f9a80aeceac37990812dc954ca242f383f80d270e1ab"
+    },
+    "await-using": {
+      "cases": 98,
+      "before": {
+        "pass": 93,
+        "fail": 5
+      },
+      "after": {
+        "pass": 94,
+        "fail": 4
+      },
+      "gained": 1,
+      "lost": 0,
+      "gains": [
+        "language/statements/await-using/throws-suppressederror-if-multiple-errors-during-disposal.js"
+      ],
+      "host_sha256": "0599e78e8595882609d9e92fa241942be6b07fcc820ff1a9d7b3dd963fd3f428",
+      "classification_sha256": "d8d84bae5bd28ffc9c3658ac784eac4400eefba85f2defa3615dd2b4e88b7eff"
+    },
+    "try": {
+      "cases": 206,
+      "before": {
+        "pass": 198,
+        "fail": 8
+      },
+      "after": {
+        "pass": 198,
+        "fail": 8
+      },
+      "gained": 0,
+      "lost": 0,
+      "gains": [
+
+      ],
+      "host_sha256": "0599e78e8595882609d9e92fa241942be6b07fcc820ff1a9d7b3dd963fd3f428",
+      "classification_sha256": "54a9ac2cd62f66dd2a264fc85a3d1b3e75d96a7a09c92ad3b10d17b76fb48455"
+    }
+  },
+  "notes": [
+    "Existing attributed block-disposal algorithm reused; no new upstream port.",
+    "Catch binding/hoist abrupt completion now reaches finally."
+  ]
+}

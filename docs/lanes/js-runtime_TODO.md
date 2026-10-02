@@ -1011,3 +1011,27 @@ at 60s/jobs4 on the same binary and sandbox. Evidence:
 Spec references: [builtin function objects](https://tc39.es/ecma262/multipage/ordinary-and-exotic-objects-behaviours.html#sec-built-in-function-objects),
 [Symbol](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-symbol-constructor),
 [BigInt](https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-bigint-constructor).
+
+## JSRT-26 try/catch/finally resource disposal (2026-10-03)
+
+Based on committed JSRT-25 `d9029d63`. js-vm's parity probe showed that the
+AST evaluator returned `undefined:undefined` instead of `dispose:body` when
+a try-body resource disposal and the body both threw. Try/catch/finally
+called `exec_stmts` directly, skipping the disposal boundary already used by
+ordinary blocks. The shared `exec_stmts_with_disposal` now evaluates every
+lexical body with its own resource frame, disposing before entering the
+following catch/finally clause. Catch binding/hoist errors also become the
+completion processed by finally rather than returning early.
+
+Nine grouped TreeWalk regressions cover the original suppressed error,
+try/catch/finally ordering, LIFO cleanup, nested boundaries, disposal throws
+and abrupt catch binding. Bulk before run reproduced the original symptom
+and all eight initial disposal scenarios. The final Linux Boat workspace
+passed **3517 nextest tests, 17 skipped**, plus **4 doctests**. Pinned Test262
+using **76/80 → 77/80**, await-using **93/98 → 94/98**, and try **198/206 →
+198/206**: **384 cases, 367 → 369 passes, 2 gained, zero lost**. Evidence:
+`js-runtime_jsrt26_evidence.json`.
+
+This factors the existing attributed Lumen disposal implementation; no new
+upstream code was copied. A single lexical-body entry point prevents the
+ordinary-block and try/catch/finally paths from drifting again.
