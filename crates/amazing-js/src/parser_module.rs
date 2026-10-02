@@ -74,7 +74,8 @@ impl Parser {
     ) -> Result<ImportDeclaration, SyntaxError> {
         self.bump(); // import
         let phase = if (self.word("source")
-            && (matches!(self.nth(1).kind, TokenKind::Ident(_))
+            && ((matches!(self.nth(1).kind, TokenKind::Ident(_))
+                && matches!(self.nth(2).kind, TokenKind::Ident(ref name) if name == "from"))
                 || self.nth_punct(1, Punct::Star)
                 || self.nth_punct(1, Punct::Lbrace)))
             || (self.word("defer") && self.nth_punct(1, Punct::Star))
