@@ -4,6 +4,35 @@ fn u(input: &str) -> ParsedUrl {
     ParsedUrl::parse(input).unwrap()
 }
 #[test]
+fn document_encoding_applies_to_whole_query_only() {
+    use std::cell::RefCell;
+    let calls = RefCell::new(Vec::new());
+    let encoder = |text: &str| {
+        calls.borrow_mut().push(text.to_owned());
+        // A stateful legacy encoding's complete output, including reset bytes.
+        b"\x1b$B$\"$$\x1b(B'%26%23128512%3B".to_vec()
+    };
+    let url = ParsedUrl::parse_with_query_encoder(
+        "https://example.com/あ?あい'😀#あ", None, &encoder,
+    ).unwrap();
+    assert_eq!(calls.borrow().as_slice(), ["あい'😀"]);
+    assert_eq!(url.pathname(), "/%E3%81%82");
+    assert_eq!(url.query(), Some("%1B$B$%22$$%1B(B%27%26%23128512%3B"));
+    assert_eq!(url.fragment(), Some("%E3%81%82"));
+    calls.borrow_mut().clear();
+    for input in ["ws://example.com/?あ", "wss://example.com/?あ", "custom:opaque?あ"] {
+        let parsed = ParsedUrl::parse_with_query_encoder(input, None, &encoder).unwrap();
+        assert_eq!(parsed.query(), Some("%E3%81%82"));
+    }
+    assert!(calls.borrow().is_empty());
+    let inherited = url.resolve_with_query_encoder("#new", &encoder).unwrap();
+    assert_eq!(inherited.query(), url.query());
+    assert!(calls.borrow().is_empty());
+    let replaced = url.resolve_with_query_encoder("?あい'😀", &encoder).unwrap();
+    assert_eq!(replaced.query(), url.query());
+    assert_eq!(calls.borrow().as_slice(), ["あい'😀"]);
+}
+#[test]
 fn percent_encode_sets_match_their_distinct_boundaries() {
     let input = " \"#<>?^`{}/:;=@[\\]|$%&+,é\0";
     assert_eq!(

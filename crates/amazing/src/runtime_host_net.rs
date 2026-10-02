@@ -1179,7 +1179,37 @@ impl amazing_fetch::NetworkOrCache for FetchDataOnly {
     }
 }
 
+fn decode_xhr_text(bytes: &[u8], charset: Option<&str>) -> String {
+    use amazing_encoding::{decode, encoding_for_label, sniff_bom, Encoding};
+    let (encoding, skip) = sniff_bom(bytes).unwrap_or_else(|| (
+        charset.and_then(encoding_for_label).unwrap_or(Encoding::Utf8), 0,
+    ));
+    decode(&bytes[skip..], encoding, false).expect("replacement decoding cannot fail")
+}
+
+/// URL percent-encode-after-encoding input, preserving a stateful encoder
+/// across scalars and writing the URL-specific escape on encoding errors.
+pub(super) fn encode_document_query(input: &str, charset: &str) -> Vec<u8> {
+    use amazing_encoding::{encoding_for_label, Encoder, Encoding};
+    let encoding = match encoding_for_label(charset).unwrap_or(Encoding::Utf8) {
+        Encoding::Utf16Le | Encoding::Utf16Be | Encoding::Replacement => Encoding::Utf8,
+        encoding => encoding,
+    };
+    let mut encoder = Encoder::new(encoding, true);
+    let mut bytes = Vec::new();
+    for scalar in input.chars() {
+        if let Err(error) = encoder.push(scalar.encode_utf8(&mut [0; 4]), &mut bytes) {
+            bytes.extend_from_slice(format!("%26%23{}%3B", error.code_point).as_bytes());
+        }
+    }
+    encoder.finish(&mut bytes).expect("encoder flush cannot fail");
+    bytes
+}
+
 impl FetchHost for RuntimeBindingHost<'_> {
+    fn fetch_xhr_decode_text(&self, bytes: &[u8], charset: Option<&str>) -> String {
+        decode_xhr_text(bytes, charset)
+    }
     fn fetch_native(
         &mut self,
         name: &'static str,
@@ -1668,6 +1698,23 @@ impl FetchHost for RuntimeBindingHost<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn document_query_encoder_keeps_state_and_url_error_escapes() {
+        assert_eq!(super::encode_document_query("あい", "iso-2022-jp"), b"\x1b$B$\"$$\x1b(B");
+        assert_eq!(super::encode_document_query("‽", "shift_jis"), b"%26%238253%3B");
+        assert_eq!(super::encode_document_query("é", "UTF-16LE"), "é".as_bytes());
+        assert_eq!(super::encode_document_query("\x1b", "iso-2022-jp"), b"%26%2365533%3B");
+        assert_eq!(super::encode_document_query("€", "windows-1252"), b"\x80");
+    }
+    #[test]
+    fn xhr_text_sniffs_bom_before_charset_and_defaults_unknown_labels() {
+        assert_eq!(super::decode_xhr_text(b"\xff\xfeA\0", Some("UTF-32")), "A");
+        assert_eq!(super::decode_xhr_text(b"\xfe\xff\0A", Some("windows-1252")), "A");
+        assert_eq!(super::decode_xhr_text(b"\xef\xbb\xbf\xc3\xa9", Some("UTF-16LE")), "é");
+        assert_eq!(super::decode_xhr_text(b"\x80", Some("windows-1252")), "€");
+        assert_eq!(super::decode_xhr_text(b"\xc3\xa9", Some("UTF-32")), "é");
+        assert_eq!(super::decode_xhr_text(b"\xff", None), "�");
+    }
     use std::{cell::RefCell, rc::Rc};
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};

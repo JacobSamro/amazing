@@ -47,7 +47,26 @@ impl ParsedUrl {
         base: Option<&Self>,
         idna: &dyn IdnaProvider,
     ) -> Result<Self, ParseError> {
-        parser::parse(input, base, idna)
+        parser::parse(input, base, idna, None)
+    }
+    /// Parse a document URL using its output encoding for the query only.
+    /// The callback receives the complete query and must encode unrepresentable
+    /// scalars as ASCII `%26%23<decimal>%3B` (URL Standard encoding-error
+    /// escape); existing percent escapes are preserved. UTF-16 and replacement encodings must be normalized
+    /// to UTF-8 by the caller. Non-special and WebSocket URLs always use UTF-8.
+    pub fn parse_with_query_encoder(
+        input: &str,
+        base: Option<&Self>,
+        encoder: &dyn Fn(&str) -> Vec<u8>,
+    ) -> Result<Self, ParseError> {
+        parser::parse(input, base, &Idna, Some(encoder))
+    }
+    pub fn resolve_with_query_encoder(
+        &self,
+        input: &str,
+        encoder: &dyn Fn(&str) -> Vec<u8>,
+    ) -> Result<Self, ParseError> {
+        Self::parse_with_query_encoder(input, Some(self), encoder)
     }
     pub fn resolve(&self, input: &str) -> Result<Self, ParseError> {
         Self::parse_with_base(input, Some(self))

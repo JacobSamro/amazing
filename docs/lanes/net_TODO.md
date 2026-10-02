@@ -1685,3 +1685,54 @@ Linux gate (one `scripts/linux-run.sh net` call): workspace nextest **2735 passe
 timeout**, and `xhr/open-method-case-sensitive.htm` **2/9 -> 9/9**. This is a
 Fetch/XHR transport fix, not just XHR: any custom method reaches the wire
 verbatim. NET-32 ends at this normalization boundary.
+
+## NET-43 — document query encoding and XHR text decoding
+
+Fixed base `9d0b42d0`. WHATWG URL query state now buffers the whole query,
+then calls `ParsedUrl::parse_with_query_encoder`'s injected encoder only for
+special non-WebSocket URLs. Relative resolution has the equivalent
+`resolve_with_query_encoder` entry point. Existing URL constructor/parser
+entry points stay UTF-8. Paths, fragments, hosts and inherited queries retain
+their prior behavior. Net remains independent of encoding codecs.
+
+Driver helper `runtime_host_net::encode_document_query` retains an Encoding
+Standard encoder across scalar pushes, flushes ISO-2022-JP escape state, maps
+UTF-16/replacement output encodings to UTF-8, and produces the URL algorithm's
+`%26%23<decimal>%3B` encoding-error escape. The codec's nonfatal HTML numeric
+reference fallback cannot be used directly here. DOM-owned hyperlink getters
+must opt into this helper using their document's stored character set.
+
+XHR binding `HostDecoder` delegates to `FetchHost::fetch_xhr_decode_text`;
+the net driver sniffs UTF-8/UTF-16 BOMs first, then uses the final MIME charset,
+then defaults unsupported labels to UTF-8, decoding with replacement. Both
+responseText and textual response use the same bridge. Narrow edits to legacy
+net-owned `fetch_interfaces.rs` were explicitly granted by the integrator.
+Regression coverage includes whole-query state, URL scheme exceptions,
+relative/inherited queries, ISO-2022-JP state/error behavior, Windows-1252,
+unsupported labels and BOM/charset conflicts. No upstream code was ported.
+
+Spec references: https://url.spec.whatwg.org/#query-state and
+https://url.spec.whatwg.org/#string-percent-encode-after-encoding,
+https://xhr.spec.whatwg.org/#text-response.
+
+Validation uses Boat pool-sys, native ext4 target `/tmp/amazing-target-net`.
+Before: net/fetch nextest 455 passed, no failures/skips; crate doctests zero.
+NET37 batch emits 61 reports: 53 pass, 1 fail, 7 timeout; 968 passing and 2
+failing subtests. Encoding baseline: unsupported encodings 10/14; GBK 0/49;
+GB18030 0/254. Two initial guessed Big5/ISO paths produced resource errors,
+so those were corrected in the durable batch script and are not baseline proof.
+Full-workspace nextest/doctest and after corpora results pending.
+
+Final Boat gate: workspace nextest **3518 passed / 0 failed / 17 skipped**;
+workspace doctests **4 passed / 0 failed**. NET37 corpus: **54/61 files**
+(1 fail, 6 timeout), **973 passing / 2 failing subtests**; zero lost passing
+files versus baseline, one file changed timeout to pass. XHR unsupported
+encodings improved **10/14 -> 14/14**, gaining all four UTF-32-label/BOM cases.
+GBK and GB18030 are unchanged until DOM uses the query API. This ticket's
+net-only boundary is complete; hyperlink adoption remains routed.
+
+Durable compact before/after classifications and counts are recorded in
+`docs/lanes/net43-evidence.json`. The complete encoding batch also measures
+Big5 and ISO-2022-JP; the actual pinned ASCII Big5 fixture lives below
+`encoding/legacy-mb-tchinese/big5/`, not at the encoding root. No gains are
+claimed for these URL fixtures until the DOM getter adoption is installed.
