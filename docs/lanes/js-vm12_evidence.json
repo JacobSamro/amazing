@@ -1,0 +1,40 @@
+{
+  "ticket": "JSVM-12",
+  "base": "4bc63427",
+  "platform": "Linux Boat; native /tmp source and target",
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "workspace": {"passed": 3519, "skipped": 17, "doctests_passed": 4},
+  "broad": {
+    "timeout_seconds": 10,
+    "jobs": 8,
+    "elapsed_seconds": 1273.305,
+    "files": {"pass": 49700, "fail": 3265, "timeout": 444, "unsupported": 169, "skipped": 294},
+    "host_sha256": "34927f5e25fa30665ef643246e28497b7aba79ca3bb9395b9ce3bd045c2d5b25",
+    "classification_sha256": "15df2728b81c5608e74ef3e92ec71d813935ed96032a83049976102fdc9fb75f",
+    "note": "Before final arguments-object metadata correction; final whole affected corpus classifications are identical."
+  },
+  "compile_attempts": {
+    "total": 28054,
+    "compiled": 27953,
+    "fallback": 101,
+    "parameter_direct_eval_before": 128,
+    "parameter_direct_eval_after": 0,
+    "remaining": {"spread": 56, "expression kind": 14, "yield": 11, "statement kind": 10, "class field or static block": 8, "member access": 2}
+  },
+  "final_host_sha256": "d0f9048fea4e95e25b4a9a83d680b9a965d099c79bc29111ba8af21effeb982b",
+  "final_affected": [
+    {"selection": "language/", "files": 24572, "passed": 23304, "timeout_seconds": 20, "classification_sha256": "8bfb82d98427509acb06c983868f7137395d0145a2240a8f873ec8696185debc"},
+    {"selection": "built-ins/Generator", "files": 84, "passed": 84, "timeout_seconds": 20, "classification_sha256": "a56b732d31df90e72640a23144c69ac9fdc037124be3aa07f6d6d8cbd3e898e3"},
+    {"selection": "built-ins/AsyncGenerator", "files": 71, "passed": 71, "timeout_seconds": 20, "classification_sha256": "260b08bf16f382b9c159641363d2c04159529ee9475f4dc0003441ea6ddf5e71"},
+    {"selection": "built-ins/Function", "files": 515, "passed": 501, "timeout_seconds": 20, "classification_sha256": "e7c59576c88c79f3fd22f045610cc287034c1c685addc6dea10f0a027891e5ed"},
+    {"selection": "built-ins/eval", "files": 10, "passed": 8, "timeout_seconds": 20, "classification_sha256": "1a72003cbbb9dd0655c342d28ffdfa654278c7a76509513a4716e1a3110606d5"}
+  ],
+  "deadline_rechecks": [
+    {"selection": "built-ins/decode", "files": 111, "passed": 109, "timeout_seconds": 60, "classification_sha256": "01a6aebda062b05b17fce1bf4b24c105d54c933c5d7ddc1d3ad7f1f5493b9f11"},
+    {"selection": "staging/sm/Date/dst-offset-caching", "files": 8, "passed": 8, "timeout_seconds": 60, "classification_sha256": "e86c5261bed5088c6691fab69d322549961579fa968353ebadfdb5b739e45ceb"},
+    {"selection": "staging/sm/TypedArray/", "files": 96, "passed": 69, "timeout_seconds": 60, "classification_sha256": "d7e497075b572e59b8a37ff1bac09082b6acc6c670f9fe06a822a5d5ab05d806"}
+  ],
+  "combined": {"pass": 49711, "fail": 3265, "timeout": 433, "unsupported": 169, "skipped": 294, "gained": 0, "lost": 0},
+  "baseline": "JSVM-11 full run overlaid with its final language, ERM and URI/DST/regress deadline rechecks",
+  "follow_up": "Shared parameter/body environment separation is owned by js-runtime; this ticket preserves the existing evaluator boundary."
+}

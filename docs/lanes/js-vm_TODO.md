@@ -826,3 +826,48 @@ and eager environment preparation in compiled-function metadata first.
 
 Specification references: [destructuring assignment](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-destructuring-assignment)
 and [DisposeResources](https://tc39.es/ecma262/multipage/abstract-operations.html#sec-disposeresources).
+
+## JSVM-12: eager generator initialization and parameter eval
+
+Fixed base: JSVM-11 `4bc63427`. Compiled functions retain their own body lexical
+names. A generator call binds parameters, eagerly creates its frame and hoists
+its declarations, then validates lexical conflicts before returning its iterator.
+Only body instructions remain deferred. First resume reuses that frame; return
+or throw before first resume discards it without executing the body.
+
+The parameter compiler probe now accepts direct eval through the existing
+evaluator path. Parameter binding itself still uses the same interpreter helper.
+No shared interpreter files changed and no upstream code was copied. The
+existing `block_lexical_names` helper supplies metadata without duplicating its
+ported implementation.
+
+Regressions cover synchronous parameter-eval conflicts
+for sync/async generators; inspection of eagerly hoisted var/function bindings
+before first resume; suppression of unnecessary arguments objects; and pre-start
+return/throw never executing the eagerly prepared body.
+
+The existing shared evaluator conflates parameter and body variable environments;
+`scope-paramsbody-var-open.js` already fails. This series preserves that boundary
+and its existing conflict behavior. Separating those environments requires a
+runtime follow-up coordinated with the shared regression expectations.
+
+### Measured gate (Boat, fixed base `4bc63427`)
+
+- Final workspace nextest **3519/3519 passed**, 17 skipped; workspace doctests
+  **4 passed**. All source and target directories used native `/tmp` storage.
+- Full pinned Test262 at 10 seconds: **49700 passed**. Eleven deadline losses
+  against JSVM-11's combined base were rechecked in whole URI, DST and staging
+  TypedArray clusters at 60 seconds; all eleven recovered. Combined result:
+  **49711 passed, zero gained, zero lost** against JSVM-11.
+- After the last arguments-object metadata correction, the whole language
+  selection (23304/24572), Generator (84/84), AsyncGenerator (71/71), Function
+  (501/515) and eval (8/10) selections had classifications identical to both
+  the full run and the prior ticket base. This ticket improves VM coverage
+  without claiming new semantic passes.
+- Runtime compile attempts: **27953 compiled / 28054 attempts**, **101 fallbacks**.
+  Parameter direct eval fell from **128 to zero**. Other reasons remain spread
+  56, expression kind 14, yield 11, statement kind 10, class field/static block
+  8, member access 2. Counts come from the broad run before the final metadata
+  correction, which does not change compiler acceptance.
+
+Compact durable evidence: [js-vm12_evidence.json](js-vm12_evidence.json).
