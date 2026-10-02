@@ -1,0 +1,157 @@
+{
+  "base": "e23ad2406671163c75ef48acc93cbc9322cb2231",
+  "sandbox": "bx_shgjh66q",
+  "vcpus": 8,
+  "source_filesystem": "ext4 (/tmp/amazing-layout37-source)",
+  "target": "/tmp/amazing-layout36-target",
+  "gate": {
+    "nextest_summary": "Summary [  75.836s] 3517 tests run: 3517 passed (1 slow), 17 skipped",
+    "nextest_passed": 3517,
+    "nextest_skipped": 17,
+    "doctests_passed": 4,
+    "harness_output": ".......\n----------------------------------------------------------------------\nRan 7 tests in 0.009s\n\nOK",
+    "failed": 0,
+    "harness_passed": 7
+  },
+  "suites": {
+    "css-CSS2-floats": {
+      "before": {
+        "pass": 28,
+        "mismatch": 11,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "comparison": {
+        "gained": 1,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 38,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    "css-CSS2-normal-flow": {
+      "before": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "comparison": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 29,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    "css-css-tables": {
+      "before": {
+        "pass": 54,
+        "mismatch": 28,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 54,
+        "mismatch": 28,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "comparison": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 82,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    "css-css-sizing": {
+      "before": {
+        "pass": 90,
+        "mismatch": 48,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 90,
+        "mismatch": 48,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "comparison": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 138,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    "css-css-display": {
+      "before": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "comparison": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 35,
+        "new": 0,
+        "removed": 0
+      }
+    }
+  },
+  "before_renderer_sha256": "26b2c803a4a8c1bed3fa1dcf741fbdea6b6b5f14b20ba27db3475147b96563e0",
+  "after_renderer_sha256": "8882f2d3379e5c1efc9d4315d2874e4e0febe1c92e173a7204c9eaf7f6d590bd",
+  "source_sha256": "56aedaad81aa133f6e66c75729f34e3a39aa90098371d6af28add9ef784653a2",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "baseline_source_sha256": "a1a84880e380af53c981715ce42fabc1534c963bfcc5a75cb42da8a122ced1ef"
+}
