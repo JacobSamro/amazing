@@ -249,15 +249,7 @@ impl Interpreter {
                         }
                     }
                 }
-                // A block is a disposal boundary only when it directly declares a `using` /
-                // `await using` resource (spec: BlockDeclarationInstantiation's disposal capability).
-                if !b.body.iter().any(stmt_declares_resource) {
-                    return self.exec_stmts(&b.body, &e);
-                }
-                self.using_stack.push(Vec::new());
-                let result = self.exec_stmts(&b.body, &e);
-                let frame = self.using_stack.pop().unwrap_or_default();
-                self.dispose_frame(frame, result)
+                self.exec_stmts_with_disposal(&b.body, &e)
             }
             StmtKind::If { cond, then, els } => {
                 self.completion = JsValue::Undefined;
@@ -542,6 +534,19 @@ impl Interpreter {
             }
         }
         Ok(Flow::Normal)
+    }
+
+    /// Lexical block evaluation shared by ordinary and try/catch/finally blocks.
+    /// Each body's resources must finish before its completion enters the next
+    /// catch/finally clause, and must not register in an enclosing scope's frame.
+    fn exec_stmts_with_disposal(&mut self, body: &[ast::Stmt], env: &EnvHandle) -> Result<Flow, Throw> {
+        if !body.iter().any(stmt_declares_resource) {
+            return self.exec_stmts(body, env);
+        }
+        self.using_stack.push(Vec::new());
+        let result = self.exec_stmts(body, env);
+        let frame = self.using_stack.pop().unwrap_or_default();
+        self.dispose_frame(frame, result)
     }
 
     /// GetDisposeMethod (explicit resource management, spec 27.3.1): `@@asyncDispose` (falling
@@ -863,8 +868,11 @@ impl Interpreter {
     }
     fn exec_try(&mut self, t: &ast::TryStmt, env: &EnvHandle) -> Result<Flow, Throw> {
         let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-        self.hoist(&t.block.body, env)?;
-        let mut out = match self.exec_stmts(&t.block.body, &e) {
+        let result = (|| {
+            self.hoist(&t.block.body, env)?;
+            self.exec_stmts_with_disposal(&t.block.body, &e)
+        })();
+        let mut out = match result {
             Ok(x) => Ok(x),
             // A coroutine-backed generator's `.return(v)` completion at a suspended `yield`
             // inside this try block is smuggled through this same `Err` channel (see
@@ -877,11 +885,13 @@ impl Interpreter {
                 let th = self.normalize_throw(th);
                 if let Some(c) = &t.catch {
                     let ce = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-                    if let Some(binding) = &c.binding {
-                        self.bind_pattern(binding, th.0, ast::VarKind::Let, &ce)?;
-                    }
-                    self.hoist_catch_body(c, env)?;
-                    self.exec_stmts(&c.body.body, &ce)
+                    (|| {
+                        if let Some(binding) = &c.binding {
+                            self.bind_pattern(binding, th.0, ast::VarKind::Let, &ce)?;
+                        }
+                        self.hoist_catch_body(c, env)?;
+                        self.exec_stmts_with_disposal(&c.body.body, &ce)
+                    })()
                 } else {
                     Err(th)
                 }
@@ -889,8 +899,11 @@ impl Interpreter {
         };
         if let Some(f) = &t.finally {
             let fe = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-            self.hoist(&f.body, env)?;
-            match self.exec_stmts(&f.body, &fe) {
+            let result = (|| {
+                self.hoist(&f.body, env)?;
+                self.exec_stmts_with_disposal(&f.body, &fe)
+            })();
+            match result {
                 Ok(Flow::Normal) => {}
                 Ok(x) => out = Ok(x),
                 Err(e) => out = Err(e),
