@@ -43,6 +43,7 @@ pub mod color;
 mod counter_styles;
 mod change_classification;
 mod computed;
+mod image_values;
 pub mod effects;
 mod font_properties;
 pub mod generated;

@@ -1,0 +1,77 @@
+{
+  "base": "03e13e3f7b0d5370b93bfc3d5a0525424c41dcf2",
+  "platform": "Linux",
+  "sandbox": "bx_shgjh66q",
+  "target": "/tmp/amazing-target-css",
+  "crate_tests": 360,
+  "crate_doctests": 0,
+  "workspace_tests": {
+    "passed": 3519,
+    "skipped": 17,
+    "failed": 0
+  },
+  "workspace_doctests": 4,
+  "parsing": {
+    "before": 3235,
+    "after": 3248,
+    "total": 4506,
+    "gained": [
+      "FAIL /home/user/corpora/wpt/css/css-backgrounds/parsing/background-image-invalid.html: invalid background-image: \"cross-fade(-1% red, green)\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-backgrounds/parsing/background-image-invalid.html: invalid background-image: \"cross-fade(101% red, green)\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-backgrounds/parsing/background-image-invalid.html: invalid background-image: \"cross-fade(1px red, green)\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-backgrounds/parsing/background-image-invalid.html: invalid background-image: \"cross-fade(auto blue, 50% red)\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-backgrounds/parsing/background-image-invalid.html: invalid background-image: \"cross-fade(calc(1% + 1px) red, green)\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-backgrounds/parsing/background-image-invalid.html: invalid background-image: \"none, auto\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-backgrounds/parsing/background-image-invalid.html: invalid background-image: \"radial-gradient(20px -30px at center, red, blue)\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-backgrounds/parsing/background-image-invalid.html: invalid background-image: \"radial-gradient(circle -10px at center, red, blue)\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-backgrounds/parsing/background-image-invalid.html: invalid background-image: \"radial-gradient(ellipse -20px 30px at center, red, blue)\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-backgrounds/parsing/background-image-invalid.html: invalid background-image: \"repeating-radial-gradient(-10px at center, red, blue)\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-backgrounds/parsing/background-image-invalid.html: invalid background-image: \"repeating-radial-gradient(-20% 30% at center, red, blue)\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-backgrounds/parsing/background-image-invalid.html: invalid background-image: \"repeating-radial-gradient(20px -30px ellipse at center, red, blue)\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-images/parsing/image-function-invalid.html: invalid background-image: \"image()\" unexpectedly parsed"
+    ],
+    "lost": []
+  },
+  "render": {
+    "backgrounds": {
+      "before": {
+        "pass": 75,
+        "mismatch": 59,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 75,
+        "mismatch": 59,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "lost": [],
+      "gained": []
+    },
+    "images": {
+      "before": {
+        "pass": 92,
+        "mismatch": 49,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 92,
+        "mismatch": 49,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "lost": [],
+      "gained": []
+    }
+  }
+}

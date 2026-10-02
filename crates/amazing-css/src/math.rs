@@ -191,6 +191,15 @@ pub(crate) fn length_percentage(css: &str, allow_percentage: bool) -> bool {
     }
 }
 
+/// A percentage-only math expression; unlike length-percentage, a length
+/// dimension cannot be combined with percentage arguments here.
+pub(crate) fn percentage(css: &str) -> bool {
+    let mut parser = Parser { tokens: tokenize(css), pos: 0, allow_size: false };
+    let kind = parser.atom();
+    parser.skip();
+    kind == Some(Kind::Percentage) && parser.pos == parser.tokens.len()
+}
+
 /// Validate a CSS Values 5 `calc-size( <calc-size-basis>, <calc-sum> )`
 /// expression without resolving its intrinsic `size` keyword. The caller keeps
 /// the canonical serialized text for the layout used-value stage.
