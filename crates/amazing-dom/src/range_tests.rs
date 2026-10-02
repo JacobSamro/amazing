@@ -224,7 +224,7 @@ fn clone_partial_contents_preserves_source_and_node_attributes() {
     let f = d.range_clone_contents(r).unwrap();
     assert_eq!(
         d.dump(f),
-        "#document-fragment\n  <left>\n    \"cd\"\n  <mid>\n    \"middle\"\n  <right>\n    \"ef\"\n"
+        "#document-fragment\n  <left urn:x a=\"v\">\n    \"cd\"\n  <mid>\n    \"middle\"\n  <right>\n    \"ef\"\n"
     );
     assert_eq!(d.dump(root), before);
     assert_eq!(d.range(r).unwrap(), bounds);
