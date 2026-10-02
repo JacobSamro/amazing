@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _ATTR_RE = re.compile(r' ((?:(?:xml|xlink|xmlns) )?[^\s="]+)="((?:[^"])*)"')
+_ATTRIBUTE_LINE_RE = re.compile(r'(?:(?:xml|xlink|xmlns) )?[^\s="]+=".*"')
 
 
 def _normalize_tag_attrs(content: str) -> str:
@@ -96,7 +97,7 @@ def canonical_expected(document: str) -> list[tuple[int, str]]:
         # Phase 1 CLI intentionally dumps only the tree rooted at #document.
         if content.startswith("<!DOCTYPE"):
             continue
-        if "=" in content and not content.startswith(("<", '"')):
+        if _ATTRIBUTE_LINE_RE.fullmatch(content):
             # html5lib serializes attributes as child-indented lines while
             # Amazing's CLI renders them inline in the element start tag.
             for position in range(len(result) - 1, -1, -1):
