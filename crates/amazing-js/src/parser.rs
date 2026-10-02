@@ -113,6 +113,35 @@ mod js10_grammar_tests {
     }
 
     #[test]
+    fn source_import_context_distinguishes_default_bindings_from_phase_bindings() {
+        for source in [
+            "import source from 'ordinary'; import from from 'ordinary';",
+            "import\nsource\nfrom\n'ordinary'; import\nfrom\nfrom\n'ordinary';",
+        ] {
+            let module = parse_module(source).unwrap();
+            for item in &module.items {
+                let ModuleItem::Import(import) = item else { panic!("import") };
+                assert_eq!(import.phase, None);
+                assert_eq!(import.bindings[0].imported, "default");
+            }
+            let ModuleItem::Import(first) = &module.items[0] else { unreachable!() };
+            let ModuleItem::Import(second) = &module.items[1] else { unreachable!() };
+            assert_eq!(first.bindings[0].local.name, "source");
+            assert_eq!(second.bindings[0].local.name, "from");
+        }
+        for source in [
+            "import source source from 'phase';",
+            "import source from from 'phase';",
+            "import\nsource\nvalue\nfrom\n'phase';",
+        ] {
+            let module = parse_module(source).unwrap();
+            let ModuleItem::Import(import) = &module.items[0] else { panic!("import") };
+            assert_eq!(import.phase.as_deref(), Some("source"));
+            assert_eq!(import.bindings.len(), 1);
+        }
+    }
+
+    #[test]
     fn phase_import_and_for_await_are_distinct_ast_nodes() {
         let script = parse_script("import.source('./x.js');").unwrap();
         assert!(matches!(&script.body[0].kind, StmtKind::Expression(Expr { kind: ExprKind::DynamicImportPhase { phase, .. }, .. }) if phase == "source"));
