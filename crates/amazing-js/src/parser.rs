@@ -64,6 +64,9 @@ mod module;
 #[path = "parser_event_handler.rs"]
 mod event_handler;
 pub use event_handler::parse_event_handler;
+#[path = "parser_eval.rs"]
+mod eval;
+pub use eval::{parse_eval, EvalContext};
 
 /// Parses a full script; static imports and exports require [`parse_module`].
 pub fn parse_script(src: &str) -> Result<Program, SyntaxError> {

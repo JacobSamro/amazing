@@ -768,12 +768,7 @@ impl Parser {
         }
         // Plain identifier reference.
         let id = self.expect_ident()?;
-        if id.name == "arguments" && (self.in_class_field_initializer > 0 || self.in_static_block > 0) {
-            return Err(self.err_at(
-                id.span.start,
-                "arguments is forbidden in a class field initializer",
-            ));
-        }
+        self.validate_arguments_reference(&id)?;
         Ok(Expr::new(ExprKind::Ident(id), self.span_from(start)))
     }
 
@@ -1054,6 +1049,8 @@ impl Parser {
             }));
         }
         if self.at_punct(Punct::LParen) {
+            let saved_field = std::mem::replace(&mut self.in_class_field_initializer, 0);
+            let saved_super = std::mem::replace(&mut self.super_call_allowed, false);
             let saved_super_property = self.super_property_allowed;
             self.super_property_allowed = true;
             let saved_async = self.in_async;
@@ -1072,6 +1069,8 @@ impl Parser {
                     self.in_new_target -= 1;
                     self.in_static_block = saved_static_block;
                     self.super_property_allowed = saved_super_property;
+                    self.in_class_field_initializer = saved_field;
+                    self.super_call_allowed = saved_super;
                     return Err(error);
                 }
             };
@@ -1080,6 +1079,8 @@ impl Parser {
             self.in_new_target -= 1;
             self.in_static_block = saved_static_block;
             self.super_property_allowed = saved_super_property;
+            self.in_class_field_initializer = saved_field;
+            self.super_call_allowed = saved_super;
             let body = body?;
             let own_strict_directive = has_use_strict(&body);
             self.validate_method_params(
@@ -1114,6 +1115,7 @@ impl Parser {
                 if self.forbidden_binding_name(&id.name) {
                     return Err(self.err_at(id.span.start, "reserved shorthand property name"));
                 }
+                self.validate_arguments_reference(id)?;
                 if self.eat_punct(Punct::Eq) {
                     let default = self.parse_assignment_with_in()?;
                     let binding = id.clone();

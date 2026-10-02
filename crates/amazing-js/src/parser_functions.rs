@@ -25,6 +25,12 @@ impl Parser {
         self.in_generator = saved_generator;
         self.in_static_block = saved_static_block;
         let name = name?;
+        let saved_field = self.in_class_field_initializer;
+        let saved_super = self.super_call_allowed;
+        let saved_super_property = self.super_property_allowed;
+        self.in_class_field_initializer = 0;
+        self.super_call_allowed = false;
+        self.super_property_allowed = false;
         self.in_static_block = 0;
         self.in_async = usize::from(is_async);
         self.in_generator = usize::from(is_generator);
@@ -35,16 +41,13 @@ impl Parser {
             self.in_generator = saved_generator;
             self.in_new_target -= 1;
             self.in_static_block = saved_static_block;
+            self.in_class_field_initializer = saved_field;
+            self.super_call_allowed = saved_super;
+            self.super_property_allowed = saved_super_property;
         }
         let params = params?;
         self.in_function += 1;
-        let saved_field = self.in_class_field_initializer;
-        let saved_super = self.super_call_allowed;
-        let saved_super_property = self.super_property_allowed;
         let saved_formals = self.in_formal_params;
-        self.in_class_field_initializer = 0;
-        self.super_call_allowed = false;
-        self.super_property_allowed = false;
         self.in_formal_params = 0;
         let saved_control = (std::mem::take(&mut self.labels),
             std::mem::replace(&mut self.loop_depth, 0),
@@ -407,6 +410,12 @@ impl Parser {
             {
                 return Err(self.err_at(start, "class constructors cannot be async or generators"));
             }
+            let actual_kind = if kind == MethodKind::Method && !is_static
+                && prop_key_name(&key) == Some("constructor") { MethodKind::Constructor } else { kind };
+            let saved_field = std::mem::replace(&mut self.in_class_field_initializer, 0);
+            let saved_super = self.super_call_allowed;
+            self.super_call_allowed = actual_kind == MethodKind::Constructor
+                && self.class_heritage.last().copied().unwrap_or(false);
             let saved_super_property = self.super_property_allowed;
             self.super_property_allowed = true;
             let saved_async = self.in_async;
@@ -425,24 +434,13 @@ impl Parser {
                     self.in_new_target -= 1;
                     self.in_static_block = saved_static_block;
                     self.super_property_allowed = saved_super_property;
+                    self.in_class_field_initializer = saved_field;
+                    self.super_call_allowed = saved_super;
                     return Err(error);
                 }
             };
-            let actual_kind = if kind == MethodKind::Method
-                && !is_static
-                && prop_key_name(&key) == Some("constructor")
-            {
-                MethodKind::Constructor
-            } else {
-                kind
-            };
             self.validate_accessor_arity(actual_kind, &params, start)?;
             self.declare_private(&key, actual_kind, is_static)?;
-            let saved_field = self.in_class_field_initializer;
-            let saved_super = self.super_call_allowed;
-            self.in_class_field_initializer = 0;
-            self.super_call_allowed = actual_kind == MethodKind::Constructor
-                && self.class_heritage.last().copied().unwrap_or(false);
             let body = self.with_fn_context(is_async, is_generator, |p| p.parse_function_block());
             self.in_new_target -= 1;
             self.in_static_block = saved_static_block;

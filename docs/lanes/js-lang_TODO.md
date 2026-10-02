@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-24 — ordered module graphs and root-specific linking failures**.
+Frontier: **JS-25 — contextual eval parsing and caller metadata integration**.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
@@ -1699,3 +1699,16 @@ controller SIGBUS after all test PASS lines is retained as incomplete; the
 unchanged source repeat with native nextest completed successfully. Exact
 hashes, selection and gains are in [js-lang_JS24-evidence.json](js-lang_JS24-evidence.json).
 The integrator independently gates the installed111-page module corpus.
+
+
+### JS-25 — contextual eval parsing
+
+Add public `parser::EvalContext` / `parse_eval` for lexical super, new.target,
+private names, strictness and class-initializer arguments restrictions. Keep
+Script grammar controls independent of caller function kind. Restore ordinary
+function/method lexical boundaries before parameter initializers as well as
+bodies. Reject initializer arguments shorthand consistently with references.
+Runtime owns native-eval context capture/execution after source locator34;
+VM17 owns invocation identity and factory/caller metadata. No shared callee or
+environment edits in this parser series. Interface and grouped source tests:
+[js-lang_JS25-interface.md](js-lang_JS25-interface.md).

@@ -4,7 +4,7 @@ use super::*;
 impl Parser {
     // ----- program & statements -------------------------------------------
 
-    pub(super) fn parse_program(mut self) -> Result<Program, SyntaxError> {
+    pub(super) fn parse_program(&mut self) -> Result<Program, SyntaxError> {
         let start = self.cur_loc();
         let mut body = Vec::new();
         let mut in_directive_prologue = true;
