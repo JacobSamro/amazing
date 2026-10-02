@@ -24,6 +24,12 @@ fn groups(tokens: &[Token]) -> Option<Vec<&[Token]>> {
     out.iter().all(|group| !group.is_empty()).then_some(out)
 }
 
+pub(crate) fn valid_image_source(value: &str) -> bool {
+    groups(&tokenize(value)).is_some_and(|layers| layers.len() == 1 && layers.into_iter().all(|layer| {
+        matches!(layer, [Token::Ident(name)] if name.eq_ignore_ascii_case("none")) || image(layer, 0)
+    }))
+}
+
 pub(crate) fn valid_background_image(value: &str) -> bool {
     groups(&tokenize(value)).is_some_and(|layers| layers.into_iter().all(|layer| {
         matches!(layer, [Token::Ident(name)] if name.eq_ignore_ascii_case("none"))

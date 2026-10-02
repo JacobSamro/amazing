@@ -838,6 +838,7 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         p if crate::computed::contain_intrinsic::is_longhand(p) || p == "contain-intrinsic-size" => {
             return crate::computed::contain_intrinsic::valid(p, css).then_some(V::Unparsed);
         }
+        p if crate::border_image::supported(p) => return crate::border_image::canonical(p, css).map(|_| V::Unparsed),
         "background-image" => return crate::image_values::valid_background_image(css).then_some(V::Unparsed),
         "background-clip" => {
             return crate::computed::valid_background_clip(css).then_some(V::Unparsed);

@@ -2786,3 +2786,18 @@ five writing modes/three text orientations, inheritance/pseudos/font reselection
 actual glyph-unit math, no-font defaults, animation and incremental rebuild.
 
 CSS41 final: workspace3550/17skip+4docs; parsing4126/5126unchanged/lost0; fonts24/32unchanged/lost0. Six grouped regressions, including actualanisotropic metrics atzero CSSsize andunresolvedinheritedmathprovenance. Evidence `crates/amazing-css/evidence/css41/`. Driveradapter root-owned pending; no installed FromFont claim.
+
+### CSS42 — whole border-image family
+
+Fixed CSS41 `b90e214731d495100f828e0b52c2dc900566e944`. CSS Backgrounds3 §5
+(https://drafts.csswg.org/css-backgrounds-3/#border-images): five noninherited
+axes and unordered atomic shorthand groups, strict slash/fill/numeric/image
+grammar, independent cascade/defaults/deferred variables and global-border reset.
+Side borders preserve image axes. Pure arithmetic, percentages and actual
+em/rem/absolute lengths resolve before typed values; contextual units remain
+explicit. Cross-sheet variable inheritance retains the parent's image URL base.
+No painter consumer exists yet; route to paint owner after CSS commit. Existing
+static WPT runner omits fixture fonts/containing geometry; no fabricated contexts.
+Evidence `crates/amazing-css/evidence/css42/`; final bulk gate pending.
+
+CSS42 final: CSS393, workspace3553/17skip+4docs; identical15selection4126→4163/5126 (+37/lost0); wholebackgrounds75/134 unchanged/all134stable/lost0. Renderer215feb8660fefe52a17351ba78709d51c2b3957737443d1cbecd1396ba3a6e6c. Own completed PPM scratch removed after durablemaps/logs fetched; sharedtargets preserved. Next positions/origin grammar family.

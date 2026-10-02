@@ -1064,7 +1064,7 @@ fn resolve_candidate_pool<'a>(
         .filter(|(_, candidate)| candidate.author_declaration)
         .map(|(property, _)| *property)
         .collect();
-    let url_bases: Vec<_> = ["content", "list-style-image"]
+    let url_bases: Vec<_> = ["content", "list-style-image", "border-image-source"]
         .into_iter()
         .map(|property| (property, champs.get(property).copied()))
         .collect();
@@ -1075,11 +1075,11 @@ fn resolve_candidate_pool<'a>(
     let mut style = computed::resolve_with_root_attrs_environment(parent_style, cascaded, root_font_px, attrs, environment);
     for (property, winner) in url_bases {
         let base = match winner {
-            Some(candidate) if candidate.value.trim().eq_ignore_ascii_case("inherit") ||
-                (property == "list-style-image" && candidate.value.trim().eq_ignore_ascii_case("unset")) => {
+            Some(candidate) if matches!(computed::substituted_css_wide(&style, property, candidate.value), Some(computed::CssWide::Inherit)) ||
+                (computed::is_inherited_property(property) && matches!(computed::substituted_css_wide(&style, property, candidate.value), Some(computed::CssWide::Unset))) => {
                 parent_style.and_then(|parent| parent.url_base(property))
             }
-            Some(candidate) if candidate.value.trim().eq_ignore_ascii_case("initial") => None,
+            Some(candidate) if matches!(computed::substituted_css_wide(&style, property, candidate.value), Some(computed::CssWide::Initial | computed::CssWide::Unset)) => None,
             Some(candidate) => candidate.base_url,
             None if property == "list-style-image" => parent_style.and_then(|parent| parent.url_base(property)),
             None => None,

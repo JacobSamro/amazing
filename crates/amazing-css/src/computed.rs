@@ -37,6 +37,8 @@ mod shadow_values;
 mod text_policy;
 #[path = "font_variant_policy.rs"]
 mod font_variant_policy;
+#[path = "border_image_policy.rs"]
+mod border_image_policy;
 // CSS-29: `box-shadow`'s `<shadow>` list grammar moved out too, for the same
 // reason as `grid_values` above (kept this file under the 4,000-line policy
 // after the box-shadow-invalid.html fix). Only `valid_box_shadow` crosses
@@ -329,6 +331,7 @@ impl ComputedStyle {
             if longhand == "font-size-adjust" { self.font_size_adjust_inherited = false; }
             self.props.insert(longhand, expanded);
         }
+        if property.starts_with("border-image") || property == "border" { crate::border_image::serialize_properties(&mut self.props); }
         if property.starts_with("font-variant") || property == "font" { crate::font_variant::serialize(&mut self.props); }
         if property.starts_with("font-synthesis") { font_synthesis::serialize(&mut self.props); }
         if crate::text_properties::supported(property) {
@@ -411,6 +414,12 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "transition-timing-function", initial: "ease", inherited: false },
     PropertyMetadata { name: "transition-delay", initial: "0s", inherited: false },
     PropertyMetadata { name: "transition-behavior", initial: "normal", inherited: false },
+    PropertyMetadata { name: "border-image", initial: "none", inherited: false },
+    PropertyMetadata { name: "border-image-source", initial: "none", inherited: false },
+    PropertyMetadata { name: "border-image-slice", initial: "100%", inherited: false },
+    PropertyMetadata { name: "border-image-width", initial: "1", inherited: false },
+    PropertyMetadata { name: "border-image-outset", initial: "0", inherited: false },
+    PropertyMetadata { name: "border-image-repeat", initial: "stretch", inherited: false },
     PropertyMetadata { name: "background-image", initial: "none", inherited: false },
     PropertyMetadata { name: "background-position", initial: "0% 0%", inherited: false },
     PropertyMetadata { name: "background-position-x", initial: "0%", inherited: false },
@@ -1135,6 +1144,12 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         return text_policy::expand(&property, value).unwrap_or_default();
     }
     if property == "word-wrap" { return expand_declaration("overflow-wrap", value); }
+    if property == "border-image" { return border_image_policy::expand(value).unwrap_or_default(); }
+    if property == "border" {
+        let Some(mut values) = border_image_policy::reset(value) else { return Vec::new(); };
+        for side in SIDES { values.extend(expand_side_border(&format!("border-{side}"), value).unwrap_or_default()); }
+        return values;
+    }
     if property == "font-variant" { return font_variant_policy::expand(value).unwrap_or_default(); }
     if property == "font-synthesis" {
         return font_synthesis::expand(value).unwrap_or_default();
@@ -2759,6 +2774,8 @@ pub(crate) fn resolve_with_root_attrs_environment(
     individual_transforms::resolve(&mut style.props, style.root_font_px);
     font_synthesis::serialize(&mut style.props);
     crate::font_variant::serialize(&mut style.props);
+    let border_image_root = if parent.is_none() { style.props.get("font-size").and_then(|css|css.strip_suffix("px")).and_then(|n|n.parse().ok()).unwrap_or(style.root_font_px) } else { style.root_font_px };
+    crate::border_image::resolve_properties(&mut style.props, border_image_root);
     crate::text_properties::serialize(&mut style.props);
     crate::font_size_adjust::resolve_css_math(&mut style.props, style.root_font_px);
     style.resolve_relative_colors();
@@ -2805,6 +2822,15 @@ pub(crate) fn substituted_rollback(
     if property.starts_with("--") || !contains_var_function(value) {
         return None;
     }
+    match substituted_css_wide(style, property, value) {
+        Some(CssWide::Revert) => Some(Rollback::Origin),
+        Some(CssWide::RevertLayer) => Some(Rollback::Layer),
+        _ => None,
+    }
+}
+
+/// URL provenance needs CSS-wide inheritance after shorthand/var expansion.
+pub(crate) fn substituted_css_wide(style: &ComputedStyle, property: &str, value: &str) -> Option<CssWide> {
     let local = BTreeMap::new();
     let cycles = BTreeSet::new();
     let mut resolver = CustomResolver {
@@ -2817,11 +2843,7 @@ pub(crate) fn substituted_rollback(
     let tokens = resolver.substitute(&tokenize(value))?;
     let value = serialize_computed(&tokens);
     let value = resolve_deferred_shorthand(property, &value).ok()?;
-    match css_wide_keyword(&value) {
-        Some(CssWide::Revert) => Some(Rollback::Origin),
-        Some(CssWide::RevertLayer) => Some(Rollback::Layer),
-        _ => None,
-    }
+    css_wide_keyword(&value)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -2932,6 +2954,8 @@ fn compute_normal_value(
         crate::animation::canonical(property.name, &computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "font-size" {
         computed_font_size(&computed, parent, root_font_px).unwrap_or(computed)
+    } else if crate::border_image::supported(property.name) {
+        crate::border_image::canonical(property.name, &computed).unwrap_or(computed)
     } else if crate::font_properties::is_audited_longhand(property.name) {
         crate::font_properties::canonical(property.name, &computed).unwrap_or(computed)
     } else if matches!(property.name, "font-feature-settings" | "font-variant-ligatures") {
@@ -3092,6 +3116,7 @@ fn computed_opacity(value: &str) -> Option<String> {
 
 fn valid_new_paint_property(property: &str, value: &str) -> bool {
     match property {
+        property if crate::border_image::supported(property) => crate::border_image::canonical(property, value).is_some(),
         property if contain_intrinsic::is_longhand(property) => contain_intrinsic::valid(property, value),
         "background-image" => crate::image_values::valid_background_image(value),
         "background-clip" => valid_background_clip(value),
@@ -3132,6 +3157,7 @@ fn deferred_inner<'a>(value: &'a str, function: &str) -> Option<&'a str> {
 }
 
 fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()> {
+    if let Some(resolved) = border_image_policy::resolve_deferred(property, value) { return resolved; }
     if let Some(resolved) = font_variant_policy::resolve_deferred(property, value) { return resolved; }
     if let Some(resolved) = text_policy::resolve_deferred(property, value) { return resolved; }
     if let Some(resolved) = font_synthesis::resolve_deferred(value) { return resolved; }

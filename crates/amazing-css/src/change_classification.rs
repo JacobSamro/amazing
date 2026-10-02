@@ -35,6 +35,7 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "background-attachment" |
         "background-clip" |
         "background-color" |
+        "border-image" | "border-image-source" | "border-image-slice" | "border-image-width" | "border-image-outset" | "border-image-repeat" |
         "background-image" |
         "background-origin" |
         "background-position" |
@@ -278,8 +279,9 @@ mod tests {
         }
         // RC-32 added outline-color/-style/-width/-offset and CSS-30 added
         // `background-position-x`/`-y`, all PaintOnly. CSS39 adds thirteen
-        // registered text policy axes, all Layout.
-        assert_eq!(counts, [16, 46, 142, 34]);
+        // registered text policy axes, all Layout. CSS42 adds six image-border
+        // properties, all PaintOnly.
+        assert_eq!(counts, [16, 52, 142, 34]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }

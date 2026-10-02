@@ -49,6 +49,7 @@ mod display;
 pub use display::{blockified_display, is_list_item_display};
 mod font_properties;
 mod font_variant;
+mod border_image;
 mod text_properties;
 pub mod font_size_adjust;
 pub mod font_metric_context;
