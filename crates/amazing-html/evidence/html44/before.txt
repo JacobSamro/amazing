@@ -1,0 +1,221 @@
+html5lib/WPT tree subset: 1936 discovered
+  files:   adoption01.dat, adoption02.dat, blocks.dat, comments01.dat, doctype01.dat, domjs-unsafe.dat, entities01.dat, entities02.dat, foreign-fragment.dat, html5test-com.dat, inbody01.dat, isindex.dat, main-element.dat, math.dat, menuitem-element.dat, namespace-sensitivity.dat, noscript01.dat, pending-spec-changes-plain-text-unsafe.dat, pending-spec-changes.dat, plain-text-unsafe.dat, processing-instructions.dat, quirks01.dat, ruby.dat, scriptdata01.dat, scripted_adoption01.dat, scripted_ark.dat, scripted_foster01.dat, scripted_webkit01.dat, search-element.dat, svg.dat, tables01.dat, template.dat, tests1.dat, tests10.dat, tests11.dat, tests12.dat, tests14.dat, tests15.dat, tests16.dat, tests17.dat, tests18.dat, tests19.dat, tests2.dat, tests20.dat, tests21.dat, tests22.dat, tests23.dat, tests24.dat, tests25.dat, tests26.dat, tests3.dat, tests4.dat, tests5.dat, tests6.dat, tests7.dat, tests8.dat, tests9.dat, tests_innerHTML_1.dat, tricky01.dat, void-in-phrasing.dat, webkit01.dat, webkit02.dat
+  passed:  1851
+  failed:  43
+  skipped: 42
+  measured pass rate: 1851/1894 (97.73%)
+
+FAIL plain-text-unsafe.dat case 19
+  data:     '<svg>\x00</svg><frameset>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<frameset>')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<svg svg>'), (3, '"�"')]
+
+FAIL plain-text-unsafe.dat case 20
+  data:     '<svg>\x00 </svg><frameset>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<frameset>')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<svg svg>'), (3, '"� "')]
+
+FAIL quirks01.dat case 2
+  data:     '<!DOCTYPE html SYSTEM "http://www.ibm.com/data/dtd/v11/ibmxhtml1-transitional.dtd"><p><table>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (3, '<table>')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (2, '<table>')]
+
+FAIL quirks01.dat case 3
+  data:     '<!DOCTYPE html PUBLIC "html"><p><table>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (3, '<table>')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (2, '<table>')]
+
+FAIL quirks01.dat case 4
+  data:     '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2//EN"\n   "http://www.w3.org/TR/html4/strict.dtd"><p><table>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (3, '<table>')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (2, '<table>')]
+
+FAIL ruby.dat case 11
+  data:     '<html><ruby>a<rtc>b<rb></ruby></html>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<ruby>'), (3, '"a"'), (3, '<rtc>'), (4, '"b"'), (3, '<rb>')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<ruby>'), (3, '"a"'), (3, '<rtc>'), (4, '"b"'), (4, '<rb>')]
+
+FAIL ruby.dat case 13
+  data:     '<html><ruby>a<rtc>b<rtc></ruby></html>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<ruby>'), (3, '"a"'), (3, '<rtc>'), (4, '"b"'), (3, '<rtc>')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<ruby>'), (3, '"a"'), (3, '<rtc>'), (4, '"b"'), (4, '<rtc>')]
+
+FAIL search-element.dat case 1
+  data:     '<!doctype html><p>foo<search>bar<p>baz'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (3, '"foo"'), (2, '<search>'), (3, '"bar"'), (3, '<p>'), (4, '"baz"')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (3, '"foo"'), (3, '<search>'), (4, '"bar"'), (2, '<p>'), (3, '"baz"')]
+
+FAIL template.dat case 77
+  data:     '<body><template><i><menu>Foo</i>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<template>'), (3, 'content'), (4, '<i>'), (4, '<menu>'), (5, '<i>'), (6, '"Foo"')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<template>'), (3, 'content'), (4, '<i>'), (3, '<menu>'), (4, '<i>'), (5, '"Foo"')]
+
+FAIL template.dat case 102
+  data:     '<body><table><tr><td><select><template>Foo</template><caption>A</table>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<table>'), (3, '<tbody>'), (4, '<tr>'), (5, '<td>'), (6, '<select>'), (7, '<template>'), (8, 'content'), (9, '"Foo"'), (3, '<caption>'), (4, '"A"')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<table>'), (3, '<tbody>'), (4, '<tr>'), (5, '<td>'), (6, '<select>'), (7, '<template>'), (8, 'content'), (9, '"Foo"'), (7, '"A"')]
+
+FAIL tests10.dat case 23
+  data:     '<!DOCTYPE html><body xlink:href=foo><svg xlink:href=foo></svg>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo">'), (2, '<svg svg xlink href="foo">')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo">'), (2, '<svg svg>')]
+
+FAIL tests10.dat case 24
+  data:     '<!DOCTYPE html><body xlink:href=foo xml:lang=en><svg><g xml:lang=en xlink:href=foo></g></svg>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo" xml:lang="en">'), (2, '<svg svg>'), (3, '<svg g xlink href="foo" lang="en">')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo" xml:lang="en">'), (2, '<svg svg>'), (3, '<svg g>')]
+
+FAIL tests10.dat case 25
+  data:     '<!DOCTYPE html><body xlink:href=foo xml:lang=en><svg><g xml:lang=en xlink:href=foo /></svg>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo" xml:lang="en">'), (2, '<svg svg>'), (3, '<svg g xlink href="foo" lang="en">')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo" xml:lang="en">'), (2, '<svg svg>'), (3, '<svg g>')]
+
+FAIL tests10.dat case 26
+  data:     '<!DOCTYPE html><body xlink:href=foo xml:lang=en><svg><g xml:lang=en xlink:href=foo />bar</svg>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo" xml:lang="en">'), (2, '<svg svg>'), (3, '<svg g xlink href="foo" lang="en">'), (3, '"bar"')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo" xml:lang="en">'), (2, '<svg svg>'), (3, '<svg g>'), (3, '"bar"')]
+
+FAIL tests10.dat case 31
+  data:     '<div><svg><path><foreignObject><math></div>a'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<div>'), (3, '<svg svg>'), (4, '<svg path>'), (5, '<svg foreignObject>'), (6, '<math math>'), (7, '"a"')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<div>'), (3, '<svg svg>'), (4, '<svg path>'), (5, '<svg foreignObject>'), (6, '<math math>'), (2, '"a"')]
+
+FAIL tests17.dat case 5
+  data:     '<!doctype html><table><caption><select><tr>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<table>'), (3, '<caption>'), (4, '<select>'), (3, '<tbody>'), (4, '<tr>')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<table>'), (3, '<caption>'), (4, '<select>')]
+
+FAIL tests18.dat case 24
+  data:     '<!doctype html><table><tr><style></script></style>abc'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '"abc"'), (2, '<table>'), (3, '<tbody>'), (4, '<tr>'), (5, '<style>'), (6, '"</script>"')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<style>'), (3, '"</script>"'), (2, '"abc"'), (2, '<table>'), (3, '<tbody>'), (4, '<tr>')]
+
+FAIL tests18.dat case 25
+  data:     '<!doctype html><table><tr><script></style></script>abc'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '"abc"'), (2, '<table>'), (3, '<tbody>'), (4, '<tr>'), (5, '<script>'), (6, '"</style>"')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<script>'), (3, '"</style>"'), (2, '"abc"'), (2, '<table>'), (3, '<tbody>'), (4, '<tr>')]
+
+FAIL tests19.dat case 18
+  data:     '<html><ruby>a<rtc>b<rt>c<rb>d</ruby></html>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<ruby>'), (3, '"a"'), (3, '<rtc>'), (4, '"b"'), (4, '<rt>'), (5, '"c"'), (3, '<rb>'), (4, '"d"')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<ruby>'), (3, '"a"'), (3, '<rtc>'), (4, '"b"'), (4, '<rt>'), (5, '"c"'), (4, '<rb>'), (5, '"d"')]
+
+FAIL tests2.dat case 7
+  data:     '<!DOCTYPE html><frameset> te st'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<frameset>'), (2, '"  "')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<frameset>')]
+
+FAIL tests2.dat case 8
+  data:     '<!DOCTYPE html><frameset></frameset> te st'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<frameset>'), (1, '"  "')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<frameset>')]
+
+FAIL tests2.dat case 60
+  data:     '<!DOCTYPE html><!--x--'
+  expected: [(0, '<!-- x -->'), (0, '<html>'), (1, '<head>'), (1, '<body>')]
+  actual:   [(0, '<!-- x-- -->'), (0, '<html>'), (1, '<head>'), (1, '<body>')]
+
+FAIL tests20.dat case 42
+  data:     '<p><table></p>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (3, '<p>'), (3, '<table>')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (2, '<p>'), (2, '<table>')]
+
+FAIL tests23.dat case 1
+  data:     '<p><font size=4><font color=red><font size=4><font size=4><font size=4><font size=4><font size=4><font color=red><p>X'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (3, '<font size="4">'), (4, '<font color="red">'), (5, '<font size="4">'), (6, '<font size="4">'), (7, '<font size="4">'), (8, '<font size="4">'), (9, '<font size="4">'), (10, '<font color="red">'), (2, '<p>'), (3, '<font color="red">'), (4, '<font size="4">'), (5, '<font size="4">'), (6, '<font size="4">'), (7, '<font color="red">'), (8, '"X"')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (3, '<font size="4">'), (4, '<font color="red">'), (5, '<font size="4">'), (6, '<font size="4">'), (7, '<font size="4">'), (8, '<font size="4">'), (9, '<font size="4">'), (10, '<font color="red">'), (2, '<p>'), (3, '<font size="4">'), (4, '<font color="red">'), (5, '<font size="4">'), (6, '<font size="4">'), (7, '<font size="4">'), (8, '<font color="red">'), (9, '"X"')]
+
+FAIL tests23.dat case 3
+  data:     '<p><font size=4><font size=4><font size=4><font size="5"><font size=4><p>X'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (3, '<font size="4">'), (4, '<font size="4">'), (5, '<font size="4">'), (6, '<font size="5">'), (7, '<font size="4">'), (2, '<p>'), (3, '<font size="4">'), (4, '<font size="4">'), (5, '<font size="5">'), (6, '<font size="4">'), (7, '"X"')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (3, '<font size="4">'), (4, '<font size="4">'), (5, '<font size="4">'), (6, '<font size="5">'), (7, '<font size="4">'), (2, '<p>'), (3, '<font size="4">'), (4, '<font size="4">'), (5, '<font size="4">'), (6, '<font size="5">'), (7, '<font size="4">'), (8, '"X"')]
+
+FAIL tests3.dat case 24
+  data:     '<p><table></table>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (3, '<table>')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), (2, '<table>')]
+
+FAIL tests6.dat case 8
+  data:     '<frameset></frameset>\nfoo'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<frameset>'), (1, '"\n"')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<frameset>')]
+
+FAIL tests6.dat case 16
+  data:     '<table><caption><td>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<table>'), (3, '<caption>'), (3, '<tbody>'), (4, '<tr>'), (5, '<td>')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<table>'), (3, '<caption>')]
+
+FAIL tests6.dat case 40
+  data:     '<table><tbody></body></caption></col></colgroup></html></td></th></tr>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<table>'), (3, '<tbody>')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<table>'), (3, '<tbody>'), (4, '<tbody>'), (4, '<tbody>'), (4, '<tbody>')]
+
+FAIL tests7.dat case 2
+  data:     '<!doctype html><table><title>X</title></table>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<title>'), (3, '"X"'), (2, '<table>')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<table>'), (3, '<title>'), (4, '"X"')]
+
+FAIL tests7.dat case 13
+  data:     '<!doctype html><table><TBODY><script> <tr>x </script> </table>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<table>'), (3, '<tbody>'), (4, '<script>'), (5, '" <tr>x "'), (4, '" "')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<script>'), (3, '" <tr>x "'), (2, '<table>'), (3, '<tbody>'), (4, '" "')]
+
+FAIL tests9.dat case 24
+  data:     '<!DOCTYPE html><body xlink:href=foo><math xlink:href=foo></math>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo">'), (2, '<math math xlink href="foo">')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo">'), (2, '<math math>')]
+
+FAIL tests9.dat case 25
+  data:     '<!DOCTYPE html><body xlink:href=foo xml:lang=en><math><mi xml:lang=en xlink:href=foo></mi></math>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo" xml:lang="en">'), (2, '<math math>'), (3, '<math mi xlink href="foo" lang="en">')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo" xml:lang="en">'), (2, '<math math>'), (3, '<math mi>')]
+
+FAIL tests9.dat case 26
+  data:     '<!DOCTYPE html><body xlink:href=foo xml:lang=en><math><mi xml:lang=en xlink:href=foo /></math>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo" xml:lang="en">'), (2, '<math math>'), (3, '<math mi xlink href="foo" lang="en">')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo" xml:lang="en">'), (2, '<math math>'), (3, '<math mi>')]
+
+FAIL tests9.dat case 27
+  data:     '<!DOCTYPE html><body xlink:href=foo xml:lang=en><math><mi xml:lang=en xlink:href=foo />bar</math>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo" xml:lang="en">'), (2, '<math math>'), (3, '<math mi xlink href="foo" lang="en">'), (3, '"bar"')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body xlink:href="foo" xml:lang="en">'), (2, '<math math>'), (3, '<math mi>'), (3, '"bar"')]
+
+FAIL tests_innerHTML_1.dat case 77
+  data:     '<keygen><option>'
+  expected: [(0, '<keygen>'), (0, '<option>')]
+  actual:   [(0, '<option>')]
+
+FAIL tests_innerHTML_1.dat case 78
+  data:     '<textarea><option>'
+  expected: [(0, '<textarea>'), (1, '"<option>"')]
+  actual:   [(0, '<option>')]
+
+FAIL webkit01.dat case 14
+  data:     '<rdar://problem/6869687>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<rdar: 6869687="" problem="">')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<rdar: /problem="" 6869687="">')]
+
+FAIL webkit01.dat case 45
+  data:     '<img <="" FAIL>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<img fail="">'), (3, '<=""')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<img <="" fail="">')]
+
+FAIL webkit02.dat case 19
+  data:     '<option><XH<optgroup></optgroup>'
+  expected: [(0, '<option>'), (1, '<xh<optgroup>')]
+  actual:   [(0, '<option>')]
+
+FAIL webkit02.dat case 23
+  data:     '<svg xml:base xml:lang xml:space xml:baaah definitionurl>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<svg svg definitionurl="" lang="" space="" xml:baaah="" xml:base="">')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<svg svg definitionurl="" xml:baaah="" xml:base="">')]
+
+FAIL webkit02.dat case 24
+  data:     '<math definitionurl xlink:title xlink:show>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<math math definitionURL="" show="" title="">')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<math math definitionURL="">')]
+
+FAIL webkit02.dat case 49
+  data:     '<font><select><option>a</option></font></select>'
+  expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<font>'), (3, '<select>'), (4, '<option>'), (5, '"a"')]
+  actual:   [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<font>'), (2, '<select>'), (3, '<font>'), (4, '<option>'), (5, '"a"')]

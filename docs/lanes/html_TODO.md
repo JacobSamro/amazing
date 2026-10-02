@@ -3437,7 +3437,7 @@ suites, all `test result: ok`, 0 failed (per the coordinator's "use a
 workspace-wide nextest in your final gate, not just the three crates"
 instruction, replacing HTML-41's three-crate scope).
 
-## HTML-44 — doctype mode recovery (in progress)
+## HTML-44 — doctype mode recovery and current select rules
 
 Ported the complete doctype mode tables and classification from
 servo/html5ever `html5ever/src/tree_builder/data.rs` at
@@ -3452,4 +3452,48 @@ leaves `<p>` open on `<table>`, while standards and limited-quirks doctypes
 close it. Fragment parsing defaults to no-quirks. Srcdoc uses a new explicit
 ResumableParser configuration and keeps no-quirks regardless of doctype.
 DOM document-mode storage remains a cross-lane follow-up so compatMode and
-layout can share the result. Pending Boat gate after pool recovery.
+layout can share the result. Native Linux gate completed after pool recovery.
+
+## HTML-43 — parser failure clusters and namespace measurement recovery
+
+Fixed base `2eb1229a`, prepared parser commit `fd091afb`. The whole pinned
+html5lib corpus has 62 source files, 1936 discovered cases and 1894 eligible
+cases after skipping 42 scripting-mode cases. The baseline was 1851 passed
+and 43 failed. The first bulk parser repair reached 1870 passed (+19), with
+zero former passes lost; tokenizer EOF comment and solidus fixes add two
+parser passes. Expanded foreign-attribute dump support separately corrects
+four measured cases, and namespace-aware comparator correction `04305a52`
+corrects six more. These dump/comparator gains do not represent new parser
+behavior. Measurements remain ported html5lib tree-construction coverage,
+not credit for running unmodified WPT.
+
+Boat's resumed HOME filesystem produced missing/corrupt rlibs, SIGBUS and
+transport errors. The resumed gate copies sources into `/tmp/amazing-src-html`
+and builds into `/tmp/amazing-target-html`; durable logs remain under `$OUT`.
+The source copy excludes only root target directories, preserving the actual
+`amazing-devtools/src/domains/target.rs` module. DOM uses separate native
+source/target paths on the shared pool.
+
+The HTML44 select-context correction made the bounded legacy `InSelect`
+mode unreachable: current select fragments use the in-body algorithm, so
+ordinary elements such as div are retained. Regression `6573f70a` updates
+that oracle and the foreign-attribute dump oracle. The current select rules
+also require select as a default-scope terminator, skipping select during
+insertion-mode reset, and ignoring input/nested select starts in a virtual
+select fragment context. Commit `21a7f275` completes these rules and adds
+three regressions.
+
+Final engine source gate: **549 owned tests passed, 6 skipped; 3521 workspace
+tests passed, 17 skipped; 4 doctests passed**. Full CLI corpus with final
+comparator `243381b0`: **1894/1894 passed, 0 failed, 42 script variants
+skipped**, versus 1851/1894 before; zero former passes lost. The **43 gains
+split into 32 parser fixes and 11 reporting fixes** (four expanded dumps,
+six namespace comparisons, one adversarial attribute-line comparison).
+HTML43 contributes 21 parser gains; HTML44 contributes 11. Corpus evidence,
+manifest and compact gate summary live under `evidence/html44/`.
+
+Next area: explicit scripting-disabled parser configuration. An initial
+decoded-input probe of all 1936 cases passes 1905; 25 failures are disabled
+noscript parsing and six require actual JavaScript execution. Those six
+execution cases remain explicitly unsupported by the parser-only probe.
+The previously measured 1894 cases all pass through the probe unchanged.
