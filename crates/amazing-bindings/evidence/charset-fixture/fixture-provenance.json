@@ -1,0 +1,6 @@
+{
+  "dom/nodes/encoding.py": "3352c583c7bba2eaab19eb57499a410d5e6462f55961c08d0ee9055c8fee4952",
+  "dom/nodes/characterset-helper.js": "4cae447dfbe35b3fd4315394ff4ee48b8a52aecd2febe52a304a1b99e71940cf",
+  "dom/nodes/Document-characterSet-normalization-1.html": "5e32e996e8c55ac086428e0ed5fb2e1a3372c2c6523dc3285422b98b638225ed",
+  "dom/nodes/Document-characterSet-normalization-2.html": "e25a229ea535dc419140461f1af37d0b607a3c3c6d48fe0a286e878e9cd08555"
+}

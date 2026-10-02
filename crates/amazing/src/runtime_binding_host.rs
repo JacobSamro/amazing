@@ -889,9 +889,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
             };
             (amazing_html::parse_xml(&source).map_err(|_| DomError::SyntaxError)?, encoding)
         } else { return Err(DomError::NotSupportedError); };
-        let character_set = if detected_encoding == amazing_html::encoding::Encoding::Utf8 {
-            "UTF-8"
-        } else { detected_encoding.name() };
+        let character_set = amazing_html::encoding::canonical_name(detected_encoding);
         let host = self.state.borrow().host.clone();
         let result = host.borrow_mut().dom.import_inert_document(&parsed, url, &mime,
             character_set);
