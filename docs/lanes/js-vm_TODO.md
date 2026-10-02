@@ -966,3 +966,27 @@ These are deltas against the frozen combined base, which has a separately
 runtime-owned direct-eval arguments regression under repair; this series does
 not claim recovery of those earlier combined-head passes. Compact durable
 evidence: [js-vm15_evidence.json](js-vm15_evidence.json).
+
+## JSVM-16: internal await reaction attachment
+
+Fixed base JSVM-15 `d573359a`. Four VM await boundaries now attach fulfilled and
+rejected callbacks with the shared PerformPromiseThen helper and no result
+capability: async function await, async generator await, return resumption at a
+suspended yield, and never-started/completed generator return. Intrinsic
+PromiseResolve wrapping remains unchanged. No observable then/species reads or
+unused chained Promise are introduced by internal subscription.
+
+Regressions cover all boundaries with settled and pending fulfillment/rejection,
+throwing own then and intrinsic species getters, constructor observation, and
+iterator completion. Native Boat final workspace **3639 passed**,17 skipped;
+doctests **4 passed**. Whole language/Promise/Generator/AsyncGenerator before/after
+**24269 -> 24270 /25459 passed**, **one gained, zero lost**. The gain is
+`language/expressions/await/await-monkey-patched-promise.js`; other classifications
+are unchanged. Constructor-get abrupt timing remains a separately coordinated
+PromiseResolve boundary follow-up. Compact evidence:
+[js-vm16_evidence.json](js-vm16_evidence.json).
+
+Next JSVM-17, explicitly requested by the parent: general ordinary-function
+compilation/default policy, fuel and VM loop/property fast paths. Runtime owns
+numeric-array/fromCodePoint/apply algorithms after urgent parameter-environment
+repair. No Test262 harness special cases; measure general workload and zero losses.
