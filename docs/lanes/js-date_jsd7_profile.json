@@ -1,0 +1,10 @@
+{
+  "binary_sha256": "ee1c17ea12c382d5f3ac3a1db54a3a838c26ae08c9c3086d2d0c4ee51f715647",
+  "helper_sha256": "76d46c1f38486ae94c4757646cefa64716b03fce3df7576be4c87d37b88c02f5",
+  "elapsed_seconds": 96.32776456800002,
+  "exit_code": 0,
+  "stdout": "TEST262_PRINT \"construction 65536 4819ms length 65536\"\nTEST262_PRINT \"regexp Any 65536 1ms matched true\"\nTEST262_PRINT \"regexp nonASCII 65536 1ms matched true\"\nTEST262_PRINT \"construction 1114112 91455ms length 2162688\"\nTEST262_PRINT \"regexp Any 1114112 18ms matched true\"\nTEST262_PRINT \"regexp nonASCII 1114112 18ms matched true\"\n\nTEST262_RESULT {\"protocol\":1,\"phase\":\"complete\",\"error_type\":\"\",\"detail\":\"\",\"unsupported\":null}\n",
+  "stderr": "",
+  "mode": "default engine; standalone phase timing, no conformance claim",
+  "fixed_source_sha": "bc9e83889a46392e1001352023eb997efc9ab0c8"
+}

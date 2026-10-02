@@ -1,7 +1,10 @@
+// Portions ported from ridiculousfish/regress (src/ir.rs, src/cursor.rs,
+// src/classicalbacktrack.rs) @ 771e6c8fa1e472ef86c45b5206b37fa4e4494e25, MIT.
+// Copyright (c) 2020 ridiculous_fish. Adapted to Amazing UTF-16 instructions.
 use crate::parser::{Class, Member, Node, SetExpr};
 use crate::{
-    advance_index, canonical, line, point, space, word, Error, Flags, Match, MAX_CODE, MAX_STACK,
-    MAX_STEPS,
+    Error, Flags, MAX_CODE, MAX_STACK, MAX_STEPS, Match, advance_index, canonical, line, point,
+    space, word,
 };
 use std::collections::HashMap;
 use std::ops::Range;
@@ -11,6 +14,7 @@ use std::rc::Rc;
 pub(crate) struct Program {
     code: Vec<Op>,
     marks: usize,
+    backward: bool,
 }
 #[derive(Debug, Clone)]
 enum Op {
@@ -34,9 +38,7 @@ enum Op {
     Mark(usize),
     Progress(usize),
     Look(Box<Program>, bool),
-    /// A lookbehind assertion, matched by re-running its nested program from
-    /// every candidate start position at or before the current position,
-    /// requiring it to end exactly there (see `run`'s `required_end`).
+    /// Execute a nested reverse program once at the assertion position.
     LookBehind(Box<Program>, bool),
     Backref(Vec<usize>, Flags),
     Accept,
@@ -55,7 +57,7 @@ struct CompiledSet {
     properties: HashMap<String, crate::unicode_props::Lookup>,
 }
 impl CompiledSet {
-    fn new(expression: &SetExpr, flags: Flags) -> Self {
+    fn new(expression: &SetExpr, flags: Flags, backward: bool) -> Self {
         fn resolve(expression: &SetExpr, out: &mut HashMap<String, crate::unicode_props::Lookup>) {
             match expression {
                 SetExpr::Property(name, _) => {
@@ -111,7 +113,14 @@ impl CompiledSet {
         for sequence in candidates {
             if sequence.len() > 1 && expression.contains(&sequence, flags) {
                 strings
-                    .entry(canonical(sequence[0], flags))
+                    .entry(canonical(
+                        if backward {
+                            *sequence.last().unwrap()
+                        } else {
+                            sequence[0]
+                        },
+                        flags,
+                    ))
                     .or_default()
                     .push(sequence);
             }
@@ -126,15 +135,20 @@ impl CompiledSet {
             properties,
         }
     }
-    fn ends(&self, input: &[u16], pos: usize, flags: Flags) -> Vec<usize> {
+    fn ends(&self, input: &[u16], pos: usize, flags: Flags, backward: bool) -> Vec<usize> {
         let mut ends = Vec::new();
-        if let Some((first, end)) = point(input, pos, true) {
+        if let Some((first, end)) = next_point(input, pos, true, backward) {
             if let Some(strings) = self.strings.get(&canonical(first, flags)) {
                 for sequence in strings {
                     let mut index = pos;
                     let mut matched = true;
-                    for expected in sequence {
-                        if let Some((actual, next)) = point(input, index, true) {
+                    for offset in 0..sequence.len() {
+                        let expected = &sequence[if backward {
+                            sequence.len() - 1 - offset
+                        } else {
+                            offset
+                        }];
+                        if let Some((actual, next)) = next_point(input, index, true, backward) {
                             if canonical(actual, flags) == canonical(*expected, flags) {
                                 index = next;
                             } else {
@@ -244,11 +258,7 @@ impl SetExpr {
                         [c] => {
                             let test = |x: u32| {
                                 let hit = property_contains(name, x);
-                                if *invert {
-                                    !hit
-                                } else {
-                                    hit
-                                }
+                                if *invert { !hit } else { hit }
                             };
                             // Same two-binary-search swap as `Member::Range`
                             // above: this is exactly `test` of each of `c`'s
@@ -345,6 +355,7 @@ struct Compiler {
     code: Vec<Op>,
     marks: usize,
     flags: Flags,
+    backward: bool,
     remaining: usize,
     classes: HashMap<usize, Rc<FoldedClass>>,
 }
@@ -353,6 +364,7 @@ pub(crate) fn compile(ast: &Node, _captures: usize, flags: Flags) -> Result<Prog
         code: Vec::new(),
         marks: 0,
         flags,
+        backward: false,
         remaining: MAX_CODE,
         classes: HashMap::new(),
     };
@@ -363,6 +375,7 @@ pub(crate) fn compile(ast: &Node, _captures: usize, flags: Flags) -> Result<Prog
     Ok(Program {
         code: c.code,
         marks: c.marks,
+        backward: false,
     })
 }
 impl Compiler {
@@ -455,7 +468,7 @@ impl Compiler {
             }
             Node::Set(expression) => {
                 self.emit(Op::Set(
-                    Rc::new(CompiledSet::new(expression, self.flags)),
+                    Rc::new(CompiledSet::new(expression, self.flags, self.backward)),
                     self.flags,
                 ))?;
             }
@@ -472,13 +485,20 @@ impl Compiler {
                 self.emit(Op::Backref(ids.clone(), self.flags))?;
             }
             Node::Group(i, n) => {
-                self.emit(Op::Save(i * 2))?;
+                // Reverse captures enter at the end and leave at the start.
+                self.emit(Op::Save(i * 2 + usize::from(self.backward)))?;
                 self.node(n)?;
-                self.emit(Op::Save(i * 2 + 1))?;
+                self.emit(Op::Save(i * 2 + usize::from(!self.backward)))?;
             }
             Node::Seq(ns) => {
-                for n in ns {
-                    self.node(n)?;
+                // Regress reverse_cats: reverse concatenation, not alternatives.
+                for offset in 0..ns.len() {
+                    let index = if self.backward {
+                        ns.len() - 1 - offset
+                    } else {
+                        offset
+                    };
+                    self.node(&ns[index])?;
                 }
             }
             Node::Alt(ns) => {
@@ -548,6 +568,7 @@ impl Compiler {
                     code: Vec::new(),
                     marks: 0,
                     flags: self.flags,
+                    backward: false,
                     remaining: self.remaining,
                     classes: self.classes.clone(),
                 };
@@ -559,6 +580,7 @@ impl Compiler {
                     Box::new(Program {
                         code: nested.code,
                         marks: nested.marks,
+                        backward: false,
                     }),
                     *positive,
                 ))?;
@@ -568,6 +590,7 @@ impl Compiler {
                     code: Vec::new(),
                     marks: 0,
                     flags: self.flags,
+                    backward: true,
                     remaining: self.remaining,
                     classes: self.classes.clone(),
                 };
@@ -579,6 +602,7 @@ impl Compiler {
                     Box::new(Program {
                         code: nested.code,
                         marks: nested.marks,
+                        backward: true,
                     }),
                     *positive,
                 ))?;
@@ -637,6 +661,29 @@ fn previous_index(input: &[u16], pos: usize, unicode: bool) -> usize {
         pos - 1
     }
 }
+// Adapted from Regress cursor::next: direction affects consumption only;
+// anchors and nested assertion direction remain tied to the original input.
+fn next_point(input: &[u16], pos: usize, unicode: bool, backward: bool) -> Option<(u32, usize)> {
+    if backward {
+        if pos == 0 {
+            return None;
+        }
+        let start = previous_index(input, pos, unicode);
+        point(input, start, unicode).map(|(value, _)| (value, start))
+    } else {
+        point(input, pos, unicode)
+    }
+}
+
+fn retry_index(input: &[u16], pos: usize, unicode: bool, backward: bool, greedy: bool) -> usize {
+    // Greedy retries move opposite consumption (Regress GreedyLoop1Char).
+    if greedy != backward {
+        previous_index(input, pos, unicode)
+    } else {
+        advance_index(input, pos, unicode)
+    }
+}
+
 pub(crate) struct Budget {
     steps: usize,
     saved: usize,
@@ -689,7 +736,6 @@ pub(crate) fn search(
             vec![None; (captures + 1) * 2],
             flags,
             budget,
-            None,
         )? {
             let groups = result
                 .captures
@@ -717,7 +763,6 @@ fn run(
     captures: Vec<Option<usize>>,
     flags: Flags,
     budget: &mut Budget,
-    required_end: Option<usize>,
 ) -> Result<Option<State>, Error> {
     let mut state = State {
         pc: 0,
@@ -730,16 +775,15 @@ fn run(
         budget.step()?;
         let mut success = true;
         match &program.code[state.pc] {
-            Op::Accept => match required_end {
-                Some(end) if end != state.pos => success = false,
-                _ => {
-                    budget.saved -= stack.len();
-                    budget.slots -= stack.len() * (state.captures.len() + state.marks.len() + 3);
-                    return Ok(Some(state));
-                }
-            },
+            Op::Accept => {
+                budget.saved -= stack.len();
+                budget.slots -= stack.len() * (state.captures.len() + state.marks.len() + 3);
+                return Ok(Some(state));
+            }
             Op::Char(c, cflags) => {
-                if let Some((next, end)) = point(input, state.pos, flags.unicode_mode()) {
+                if let Some((next, end)) =
+                    next_point(input, state.pos, flags.unicode_mode(), program.backward)
+                {
                     if canonical(*c, *cflags) == canonical(next, *cflags) {
                         state.pos = end;
                     } else {
@@ -750,7 +794,9 @@ fn run(
                 }
             }
             Op::Any(aflags) => {
-                if let Some((c, end)) = point(input, state.pos, flags.unicode_mode()) {
+                if let Some((c, end)) =
+                    next_point(input, state.pos, flags.unicode_mode(), program.backward)
+                {
                     if aflags.dot_all || !line(c) {
                         state.pos = end;
                     } else {
@@ -765,7 +811,9 @@ fn run(
                 let mut minimum = (*min == 0).then_some(end);
                 let mut count = 0;
                 while max.is_none_or(|max| count < max) {
-                    let Some((cp, next)) = point(input, end, flags.unicode_mode()) else {
+                    let Some((cp, next)) =
+                        next_point(input, end, flags.unicode_mode(), program.backward)
+                    else {
                         break;
                     };
                     budget.step()?;
@@ -799,11 +847,13 @@ fn run(
                         }
                         let mut alternative = state.clone();
                         alternative.pc += 1;
-                        alternative.pos = if *greedy {
-                            previous_index(input, selected, flags.unicode_mode())
-                        } else {
-                            advance_index(input, selected, flags.unicode_mode())
-                        };
+                        alternative.pos = retry_index(
+                            input,
+                            selected,
+                            flags.unicode_mode(),
+                            program.backward,
+                            *greedy,
+                        );
                         stack.push(Frame {
                             state: alternative,
                             repeat: Some((if *greedy { minimum } else { end }, *greedy)),
@@ -817,7 +867,9 @@ fn run(
                 }
             }
             Op::Class(c, cflags) => {
-                if let Some((next, end)) = point(input, state.pos, flags.unicode_mode()) {
+                if let Some((next, end)) =
+                    next_point(input, state.pos, flags.unicode_mode(), program.backward)
+                {
                     if c.contains(next, *cflags) {
                         state.pos = end;
                     } else {
@@ -828,7 +880,7 @@ fn run(
                 }
             }
             Op::Set(set, sflags) => {
-                let ends = set.ends(input, state.pos, *sflags);
+                let ends = set.ends(input, state.pos, *sflags, program.backward);
                 if let Some((&first, alternatives)) = ends.split_first() {
                     for &end in alternatives.iter().rev() {
                         if budget.saved >= MAX_STACK
@@ -875,6 +927,8 @@ fn run(
                     point(input, previous, flags.unicode_mode())
                         .is_some_and(|(c, _)| word(c, *bflags))
                 };
+                // Assertions inspect the original string sides even in a
+                // reverse program; direction changes consumption only.
                 let right = point(input, state.pos, flags.unicode_mode())
                     .is_some_and(|(c, _)| word(c, *bflags));
                 success = (left != right) == *positive;
@@ -906,50 +960,12 @@ fn run(
             Op::Clear(start, end) => state.captures[*start..*end].fill(None),
             Op::Mark(id) => state.marks[*id] = Some(state.pos),
             Op::Progress(id) => success = state.marks[*id] != Some(state.pos),
-            Op::Look(n, positive) => {
-                let result = run(
-                    n,
-                    input,
-                    state.pos,
-                    state.captures.clone(),
-                    flags,
-                    budget,
-                    None,
-                )?;
+            Op::Look(n, positive) | Op::LookBehind(n, positive) => {
+                let result = run(n, input, state.pos, state.captures.clone(), flags, budget)?;
                 success = result.is_some() == *positive;
                 if *positive {
                     if let Some(result) = result {
                         state.captures = result.captures;
-                    }
-                }
-            }
-            Op::LookBehind(n, positive) => {
-                let target = state.pos;
-                let mut found = None;
-                // Ascending order: the leftmost candidate start is the one a
-                // real backward/reversed matcher would pick first, since it
-                // corresponds to a greedy quantifier inside the lookbehind
-                // consuming as much as possible (e.g. `(?<=(\d+)-)` on
-                // "42-x" should capture "42", not "2").
-                for candidate in 0..=target {
-                    budget.step()?;
-                    if let Some(result) = run(
-                        n,
-                        input,
-                        candidate,
-                        state.captures.clone(),
-                        flags,
-                        budget,
-                        Some(target),
-                    )? {
-                        found = Some(result.captures);
-                        break;
-                    }
-                }
-                success = found.is_some() == *positive;
-                if *positive {
-                    if let Some(captures) = found {
-                        state.captures = captures;
                     }
                 }
             }
@@ -963,17 +979,23 @@ fn run(
                         _ => None,
                     }
                 });
-                if let Some((mut a, b)) = bound {
+                if let Some((a, b)) = bound {
+                    let mut capture = if program.backward { b } else { a };
                     let mut pos = state.pos;
-                    while a < b {
+                    while if program.backward {
+                        capture > a
+                    } else {
+                        capture < b
+                    } {
                         budget.step()?;
-                        let left = point(input, a, flags.unicode_mode());
-                        let right = point(input, pos, flags.unicode_mode());
+                        let left =
+                            next_point(input, capture, flags.unicode_mode(), program.backward);
+                        let right = next_point(input, pos, flags.unicode_mode(), program.backward);
                         match (left, right) {
                             (Some((c, next)), Some((d, end)))
                                 if canonical(c, *rflags) == canonical(d, *rflags) =>
                             {
-                                a = next;
+                                capture = next;
                                 pos = end;
                             }
                             _ => {
@@ -994,11 +1016,13 @@ fn run(
             state = frame.state;
             if let Some((limit, greedy)) = frame.repeat.filter(|(limit, _)| *limit != state.pos) {
                 let mut alternative = state.clone();
-                alternative.pos = if greedy {
-                    previous_index(input, state.pos, flags.unicode_mode())
-                } else {
-                    advance_index(input, state.pos, flags.unicode_mode())
-                };
+                alternative.pos = retry_index(
+                    input,
+                    state.pos,
+                    flags.unicode_mode(),
+                    program.backward,
+                    greedy,
+                );
                 stack.push(Frame {
                     state: alternative,
                     repeat: Some((limit, greedy)),

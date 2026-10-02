@@ -133,3 +133,45 @@ run interpreted by default. js-vm confirmed ordinary VM compilation needs
 `AMAZING_JS_VM=1`, and its current 10-million-instruction fuel can itself
 expire on this loop. Bulk timing/default-VM feasibility is routed to js-vm.
 Do not count opt-in VM measurements as default-engine gains.
+
+
+## JSD-7: construction diagnostic and reverse lookbehind (2026-10-03)
+
+Fixed base `bc9e8388`. Default-engine unchanged pinned regExpUtils buildString:
+65,536 code points take 4,819ms; 1,114,112 take 91,455ms and yield 2,162,688
+UTF-16 units. Any/nonASCII matcher scans of the full output take 18ms each.
+The 441 generated-property timeout files are primarily JS construction cost;
+general numeric-loop/array-write/apply/codepoint acceleration is routed to
+js-runtime/VM. The probe reads the original pinned helper, changes no harness
+or test bytes, and makes no conformance claim.
+
+Owned matching cluster: the forward lookbehind approximation tries every
+prefix start, producing quadratic search and incorrect reverse captures and
+backreferences. Port whole reverse concatenation, directional consumption,
+capture endpoints and greedy-loop retry algorithms from ridiculousfish/regress
+`src/ir.rs`, `src/cursor.rs`, `src/classicalbacktrack.rs` at
+`771e6c8fa1e472ef86c45b5206b37fa4e4494e25`. License verified as MIT OR
+Apache-2.0; this adaptation selects MIT (Copyright (c) 2020 ridiculous_fish).
+Amazing retains its own bounded instructions, UTF-16 cursor, states and
+capture/frame accounting. Nested lookahead resets to forward; nested
+lookbehind resets to backward. String sets reverse their candidate cursor and
+preserve longest-first ordering. Alternatives retain source order.
+
+Final Boat gate: 3,639 workspace nextest passed / 17 skipped, four doctests
+passed. Four nextest threads avoid contention in an unrelated compositor
+retained-frame timing check. Grouped reverse-capture/assertion tests passed;
+20,000-point prefix and 100,000-point greedy retry regression took 8ms.
+
+Complete `--only RegExp` selection at five seconds / eight workers:
+2,063 files, before 1,590 pass / 26 fail / 447 timeout (570.555s); after
+1,595 / 21 / 447 (571.512s). Five gained files: lookBehind alternations,
+back-references-to-captures, captures, mutual-recursive, and named-groups
+lookbehind. Zero lost passing files. All 1,595 main-baseline/before/new passes
+were rechecked at 60 seconds: 1,595 passing files, 3,188 passing variants,
+zero failures/timeouts (7.731s). Original pinned test/helper bytes preserved.
+
+Evidence: `js-date_jsd7_evidence.json`; reproducible full-deadline recheck:
+`python3 docs/lanes/js-date_jsd7_gate.py`. The 447 default construction
+iteration deadlines are not claimed solved by this matcher change. Runtime's
+independent general tail-delete optimization and VM loop-policy work are
+separate measured tickets.

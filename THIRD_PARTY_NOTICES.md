@@ -58,3 +58,4 @@ reproduced in the table row for that upstream.
 | boa-dev/boa @ 39cd11214ecb366200157dab96b3919e61e9a391 | MIT | Copyright (c) 2019 Jason Williams | Object-literal method definition name/HomeObject operations adapted from core/engine/src/bytecompiler/expression/object_literal.rs into crates/amazing-js/src/interp_object_methods.rs. |
 
 | boa-dev/boa @ 39cd11214ecb366200157dab96b3919e61e9a391 | MIT | Copyright (c) 2018 Boa Developers | crates/amazing-js/src/module_graph.rs (ordered module graph walks and ResolveExport) |
+| ridiculousfish/regress @ 771e6c8fa1e472ef86c45b5206b37fa4e4494e25 | MIT | Copyright (c) 2020 ridiculous_fish | `crates/amazing-regex/src/vm.rs` — reverse concatenation, directional capture/input/backreference matching and greedy-loop retry algorithms adapted from src/ir.rs, src/cursor.rs and src/classicalbacktrack.rs. |

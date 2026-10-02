@@ -735,3 +735,88 @@ fn many_ignorecase_classes_stay_well_under_the_compile_budget() {
 // `annex_b_quantified_assertions_preserve_zero_width_semantics`), which
 // cover the same escape/quantifier/class-range grammar; kept once, here, to
 // avoid doubling up near-duplicate coverage after merging dev into this lane.
+
+#[test]
+fn reverse_lookbehind_preserves_capture_order_and_assertion_direction() {
+    let matched = Regex::new(r"(?<=([ab]+)([bc]+))$", "")
+        .unwrap()
+        .exec("abc", 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(matched.captures[1], Some(0..1));
+    assert_eq!(matched.captures[2], Some(1..3));
+    let matched = Regex::new(r"(?<=([ab])+)$", "")
+        .unwrap()
+        .exec("ab", 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(matched.captures[1], Some(0..1));
+    let matched = Regex::new(r"(?<=\1(a+))b", "")
+        .unwrap()
+        .exec("aab", 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(matched.captures[1], Some(1..2));
+    let matched = Regex::new(r"(?<=(a+)\1)b", "")
+        .unwrap()
+        .exec("aab", 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(matched.captures[1], Some(0..2));
+    for pattern in [r"(?<=a(?=b))b", r"(?<=a(?<=a))b"] {
+        assert_eq!(
+            Regex::new(pattern, "")
+                .unwrap()
+                .exec("ab", 0)
+                .unwrap()
+                .unwrap()
+                .range,
+            1..2
+        );
+    }
+    for (pattern, input, expected) in [
+        (r"(?<=\babc\b )def", "abc def", 4..7),
+        (r"(?<=\Babc\B)def", "xabcdef", 4..7),
+    ] {
+        let found = Regex::new(pattern, "").unwrap().exec(input, 0).unwrap()
+            .unwrap_or_else(|| panic!("no match for {pattern:?} in {input:?}"));
+        assert_eq!(found.range, expected);
+    }
+    let matched = Regex::new(r"(?<!(a))b", "")
+        .unwrap()
+        .exec("cb", 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(matched.captures[1], None);
+    let matched = Regex::new(r"(?<=(😀+))b", "u")
+        .unwrap()
+        .exec("😀😀b", 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(matched.captures[1], Some(0..4));
+    let matched = Regex::new(r"(?<=([\q{ab|cde}]+))f", "v")
+        .unwrap()
+        .exec("abcdef", 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(matched.captures[1], Some(0..5));
+}
+
+#[test]
+fn reverse_lookbehind_search_is_linear_in_prefix_length() {
+    // Each failed assertion consumes one preceding point, rather than trying
+    // every candidate prefix start (which exhausted the work budget here).
+    let input = format!("{}za", "a".repeat(20_000));
+    let matched = Regex::new(r"(?<=z)a", "")
+        .unwrap()
+        .exec(&input, 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(matched.range, 20_001..20_002);
+    let regex = Regex::new(r"(?<=^a+ab)b", "y").unwrap();
+    let input = format!("{}abb", "a".repeat(100_000));
+    assert_eq!(
+        regex.exec(&input, 100_002).unwrap().unwrap().range,
+        100_002..100_003
+    );
+}
