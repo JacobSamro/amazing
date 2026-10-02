@@ -39,6 +39,10 @@ impl ModuleFailure {
             thrown: None,
         }
     }
+    fn syntax(phase: ModulePhase, message: impl Into<String>) -> Self {
+        let message = message.into();
+        Self { phase, thrown: Some(Throw::syntax_error(message.clone())), message }
+    }
     fn runtime(error: Throw) -> Self {
         Self {
             phase: ModulePhase::Runtime,
@@ -78,6 +82,7 @@ pub struct ModuleRecord {
 pub struct ModuleLinker<R: ModuleResolver> {
     resolver: R,
     records: HashMap<String, ModuleRecord>,
+    load_failures: HashMap<String, CachedLoadFailure>,
     /// Instances persist across `evaluate` calls (JS-19 item 1) so that a dynamic `import()`
     /// made through `Interpreter::binding_set_module_loader_hook` that reuses this same linker
     /// -- the normal case for an embedding with one linker per realm -- reaches an
@@ -89,11 +94,18 @@ pub struct ModuleLinker<R: ModuleResolver> {
     realm_global: Option<EnvHandle>,
 }
 
+#[derive(Clone)]
+struct CachedLoadFailure {
+    failure: ModuleFailure,
+    direct_parse: bool,
+}
+
 impl<R: ModuleResolver> ModuleLinker<R> {
     pub fn new(resolver: R) -> Self {
         Self {
             resolver,
             records: HashMap::new(),
+            load_failures: HashMap::new(),
             instances: HashMap::new(),
             realm_global: None,
         }
@@ -101,6 +113,20 @@ impl<R: ModuleResolver> ModuleLinker<R> {
 
     /// Parse the root and all transitive dependencies, then validate imports.
     pub fn link(&mut self, id: &str, source: &str) -> Result<(), ModuleFailure> {
+        let previous: HashSet<String> = self.records.keys().cloned().collect();
+        let result = self.link_inner(id, source);
+        if let Err(failure) = &result {
+            self.load_failures.entry(id.into()).or_insert_with(|| CachedLoadFailure {
+                failure: failure.clone(), direct_parse: false,
+            });
+            // No code has evaluated yet. Discard this failed link transaction's
+            // records so later successful graphs cannot see incomplete edges.
+            self.records.retain(|id, _| previous.contains(id));
+        }
+        result
+    }
+
+    fn link_inner(&mut self, id: &str, source: &str) -> Result<(), ModuleFailure> {
         self.load(id.to_owned(), source.to_owned(), true)?;
         let mut cache = HashMap::new();
         for record in self.records.values() {
@@ -115,7 +141,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                                 &mut cache,
                             )?
                         {
-                            return Err(ModuleFailure::new(
+                            return Err(ModuleFailure::syntax(
                                 ModulePhase::Resolution,
                                 format!("missing export {} from {}", binding.imported, import.from),
                             ));
@@ -135,7 +161,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                             &mut HashSet::new(),
                             &mut cache,
                         )? {
-                            return Err(ModuleFailure::new(
+                            return Err(ModuleFailure::syntax(
                                 ModulePhase::Resolution,
                                 format!("missing re-export {} from {from}", name.local),
                             ));
@@ -148,19 +174,40 @@ impl<R: ModuleResolver> ModuleLinker<R> {
     }
 
     fn load(&mut self, id: String, source: String, root: bool) -> Result<(), ModuleFailure> {
+        if let Some(cached) = self.load_failures.get(&id) {
+            let mut failure = cached.failure.clone();
+            if cached.direct_parse {
+                failure.phase = if root { ModulePhase::Parse } else { ModulePhase::Resolution };
+            }
+            return Err(failure);
+        }
+        let result = self.load_inner(id.clone(), source, root);
+        if let Err(failure) = &result {
+            self.load_failures.entry(id.clone()).or_insert_with(|| CachedLoadFailure {
+                failure: failure.clone(), direct_parse: false,
+            });
+            self.records.remove(&id);
+        }
+        result
+    }
+
+    fn load_inner(&mut self, id: String, source: String, root: bool) -> Result<(), ModuleFailure> {
         if self.records.contains_key(&id) {
             return Ok(());
         }
-        let module = crate::parse_module(&source).map_err(|error| {
-            ModuleFailure::new(
-                if root {
-                    ModulePhase::Parse
-                } else {
-                    ModulePhase::Resolution
-                },
-                error.to_string(),
-            )
-        })?;
+        let module = match crate::parse_module(&source) {
+            Ok(module) => module,
+            Err(error) => {
+                let failure = ModuleFailure::syntax(
+                    if root { ModulePhase::Parse } else { ModulePhase::Resolution },
+                    error.to_string(),
+                );
+                self.load_failures.insert(id.clone(), CachedLoadFailure {
+                    failure: failure.clone(), direct_parse: true,
+                });
+                return Err(failure);
+            }
+        };
         // Insert before recursing, so an import cycle terminates the load walk.
         self.records.insert(
             id.clone(),
@@ -446,7 +493,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                     } else {
                         self.export_cell(&dependency, &imported, &mut HashSet::new())?
                             .ok_or_else(|| {
-                                ModuleFailure::new(
+                                ModuleFailure::syntax(
                                     ModulePhase::Resolution,
                                     format!("missing export {imported}"),
                                 )
@@ -616,7 +663,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         let first = stars.first().cloned();
         if let Some(first) = &first {
             if stars.iter().skip(1).any(|cell| !cell.same_target(first)) {
-                return Err(ModuleFailure::new(
+                return Err(ModuleFailure::syntax(
                     ModulePhase::Resolution,
                     format!("ambiguous export {name}"),
                 ));
@@ -993,6 +1040,43 @@ mod tests {
         assert_eq!(result["set"], JsValue::Bool(false));
         assert_eq!(result["deleted"], JsValue::Bool(false));
         assert_eq!(result["unchanged"], JsValue::num(1.0));
+    }
+
+    #[test]
+    fn syntax_failures_keep_type_identity_and_phase_without_poisoning_later_graphs() {
+        let resolver = |specifier: &str, _: &str| match specifier {
+            "cycle" => Ok(("cycle".into(), "import 'bad-root';".into())),
+            "bad-root" => Ok(("bad-root".into(), "import 'cycle';import 'broken';".into())),
+            "broken" => Ok(("broken".into(), "export const =;".into())),
+            "good" => Ok(("good".into(), "export const value=42;".into())),
+            _ => Err("fetch failed".into()),
+        };
+        let mut linker = ModuleLinker::new(resolver);
+        let nested = linker.link("bad-root", "import 'cycle';import 'broken';").unwrap_err();
+        assert_eq!(nested.phase, ModulePhase::Resolution);
+        assert!(nested.thrown.as_ref().unwrap().describe().starts_with("SyntaxError"));
+        assert!(linker.records.is_empty());
+        let direct = linker.link("broken", "export const =;").unwrap_err();
+        assert_eq!(direct.phase, ModulePhase::Parse);
+        assert_eq!(nested.thrown.as_ref().unwrap().0, direct.thrown.as_ref().unwrap().0);
+        let repeated = linker.link("bad-root", "import 'cycle';import 'broken';").unwrap_err();
+        assert_eq!(nested.thrown.as_ref().unwrap().0, repeated.thrown.as_ref().unwrap().0);
+        linker.link("good-root", "import {value} from 'good';export {value};").unwrap();
+        assert_eq!(linker.evaluate("good-root", &mut Interpreter::new()).unwrap()["value"], JsValue::num(42.0));
+    }
+
+    #[test]
+    fn linking_syntax_errors_are_typed_but_host_fetch_failures_remain_host_owned() {
+        let mut missing = ModuleLinker::new(|_: &str, _: &str| Err("fetch failed".into()));
+        let fetched = missing.link("root", "import 'missing';").unwrap_err();
+        assert_eq!(fetched.phase, ModulePhase::Resolution);
+        assert!(fetched.thrown.is_none());
+        let mut missing_export = ModuleLinker::new(|_: &str, _: &str| Ok(("dep".into(), "export const present=1;".into())));
+        let failure = missing_export.link("root", "import {absent} from 'dep';").unwrap_err();
+        assert_eq!(failure.phase, ModulePhase::Resolution);
+        assert!(failure.thrown.as_ref().unwrap().describe().starts_with("SyntaxError"));
+        let repeated = missing_export.link("root", "import {absent} from 'dep';").unwrap_err();
+        assert_eq!(failure.thrown.unwrap().0, repeated.thrown.unwrap().0);
     }
 
     #[test]

@@ -43,6 +43,21 @@ singletons, and runtime evaluation failures cache their original thrown object.
 Use canonical identifiers for the root as well as dependencies so a self-import
 reaches the same record.
 
+Link failures expose parser and static import/export errors as
+`ModuleFailure.thrown = Some(Throw)` containing a SyntaxError object. Host
+resolver failures retain `thrown = None`, so the embedding can select its fetch
+error type. Always prefer an existing `thrown` over constructing a new object
+from `phase` or `message`; cloning it preserves identity. A dependency syntax
+failure has Resolution phase and the same cached object as a direct Parse-phase
+load of that canonical identifier. Registry identifiers are immutable module-map
+entries: changing source bytes under a failed identifier does not invalidate it.
+
+The linker caches failed loads and static link roots, and rolls back all newly
+inserted records when a link transaction fails. This prevents partially loaded
+cycles from poisoning a later graph or exposing missing dependency edges.
+Successful pre-existing records and their evaluated instances remain intact.
+These load/link caches complement the existing runtime evaluation error cache.
+
 Browser resolvers may override `ModuleResolver::source_url(id) -> Option<String>`
 to install `import.meta.url`. Its default is `None`, preserving hosts that do
 not expose URL metadata. This URL may differ from the unique registry identity
