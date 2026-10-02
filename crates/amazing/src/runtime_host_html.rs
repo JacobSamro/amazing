@@ -795,6 +795,7 @@ impl RuntimeBindings {
         let can_run_scripts = !(sandbox.sandboxed && !sandbox.allow_scripts);
         let import = amazing_dom::markup::IncrementalDocumentImport::new(document);
         let mut parser = amazing_html::ResumableParser::new(Dom::new());
+        if child_url == "about:srcdoc" { parser.set_srcdoc(); }
         parser.push_source(html);
         let parser = Rc::new(RefCell::new(parser));
         self.register_active_parser(document, parser.clone());

@@ -85,10 +85,16 @@ fn select_and_option_contexts_have_independent_tree_oracles() {
 }
 
 #[test]
-fn select_fragment_ignores_stray_context_end_and_disallowed_tags() {
+fn select_fragment_ignores_stray_context_end_and_allows_ordinary_tags() {
     assert_eq!(dump("select", "</select><option>a</option><div>b</div>&amp;\r\nc"),
-        "#document\n  <option>\n    \"a\"\n  \"b&\nc\"\n");
+        "#document\n  <option>\n    \"a\"\n  <div>\n    \"b\"\n  \"&\nc\"\n");
     assert_eq!(dump("option", "<option>x<option>y"),
+        "#document\n  <option>\n    \"x\"\n  <option>\n    \"y\"\n");
+}
+
+#[test]
+fn select_fragment_ignores_input_and_nested_select_start_tags() {
+    assert_eq!(dump("select", "<input><select><option>x</select><option>y"),
         "#document\n  <option>\n    \"x\"\n  <option>\n    \"y\"\n");
 }
 

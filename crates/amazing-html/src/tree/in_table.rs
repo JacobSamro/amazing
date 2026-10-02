@@ -95,7 +95,7 @@ impl TreeBuilder {
                     });
                 }
             },
-            "style" | "script" | "title" | "noframes" => {
+            "style" | "script" => {
                 self.start_generic_text_element(name, attrs);
             },
             "input" => {
@@ -181,7 +181,6 @@ impl TreeBuilder {
                 }
             },
             _ => {
-                self.foster = true;
                 self.in_table_start_tag(name, attrs);
             },
         }
@@ -197,12 +196,9 @@ impl TreeBuilder {
                 }
             },
             "td" | "th" | "tr" => {
-                // Stray cell/row end: imply a tbody, then handle the tag.
-                let _ = self.insert_element("tbody", Vec::new());
-                self.any_other_end_tag(name);
+                // These end tags are ignored in the table-body mode.
             },
             _ => {
-                self.foster = true;
                 self.in_table_end_tag(name);
             },
         }
@@ -226,7 +222,6 @@ impl TreeBuilder {
                         }
                     },
                     _ => {
-                        self.foster = true;
                         self.in_table_start_tag(&name, attrs);
                     },
                 }
@@ -249,7 +244,6 @@ impl TreeBuilder {
                     }
                 },
                 _ => {
-                    self.foster = true;
                     self.in_table_end_tag(&name);
                 },
             },
@@ -300,6 +294,17 @@ impl TreeBuilder {
 
     pub(super) fn in_caption(&mut self, tok: Token) {
         match tok {
+            Token::StartTag { ref name, .. }
+                if matches!(name.as_str(), "caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr") =>
+            {
+                if self.has_in_table_scope("caption") {
+                    self.generate_implied_end_tags(None);
+                    self.pop_until("caption");
+                    self.clear_fmt_to_marker();
+                    self.mode = Mode::InTable;
+                    self.in_table(tok);
+                }
+            },
             Token::EndTag { ref name } => match name.as_str() {
                 "caption" => {
                     if self.stack_has("caption") {

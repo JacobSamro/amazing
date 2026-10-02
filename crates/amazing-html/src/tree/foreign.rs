@@ -91,7 +91,7 @@ impl TreeBuilder {
     pub(super) fn in_foreign_content(&mut self, tok: Token) {
         match tok {
             Token::Characters(data) => {
-                if data.chars().any(|c| !is_ws_char(c)) {
+                if data.chars().any(|c| c != '\0' && !is_ws_char(c)) {
                     self.frameset_ok = false;
                 }
                 self.insert_text(&data.replace('\0', "\u{FFFD}"));
@@ -159,6 +159,17 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 for position in (0..self.open.len()).rev() {
                     let node = self.open[position];
+                    // Reaching an HTML ancestor reprocesses the token under
+                    // the HTML rules before attempting a local-name match.
+                    // Otherwise </div> could bypass an intervening special
+                    // foreign integration point and pop the whole subtree.
+                    if self.dom.namespace(node) == Some(Namespace::Html) {
+                        if matches!(name.as_str(), "p" | "br") {
+                            self.open.truncate(position + 1);
+                        }
+                        self.process_token_in_html(Token::EndTag { name });
+                        return;
+                    }
                     if self
                         .dom
                         .name(node)
@@ -188,17 +199,6 @@ impl TreeBuilder {
                             }
                         }
                         self.open.truncate(position);
-                        return;
-                    }
-                    if self.dom.namespace(node) == Some(Namespace::Html) {
-                        // The in-body rules synthesize an element for a stray
-                        // </p> or </br>. Those recovery elements belong after
-                        // the foreign subtree. Other unmatched end tags must
-                        // leave that subtree open.
-                        if matches!(name.as_str(), "p" | "br") {
-                            self.open.truncate(position + 1);
-                        }
-                        self.process_token_in_html(Token::EndTag { name });
                         return;
                     }
                 }
