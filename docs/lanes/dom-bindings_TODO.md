@@ -3131,3 +3131,26 @@ compatMode. No upstream algorithm copied.
 Reference: DOM [compatMode](https://dom.spec.whatwg.org/#dom-document-compatmode),
 consulted2026-10-03: document mode distinguishes no, limited, and full quirks;
 compatMode exposes BackCompat only for full quirks.
+
+### Pinned character-set normalization fixture protocol
+
+Parent grants narrow `dom/nodes/encoding.py` server support. The largest
+remaining dom/nodes cluster is654 nullish contentDocument assertions in the two
+characterSet normalization tests. The runner currently sends the Python source
+as application/octet-stream. The pinned Python endpoint actually takes the
+first label query parameter, isomorphically decodes its bytes, escapes it in a
+meta charset declaration, and returns a Unicode HTML body. WPT's default
+FunctionHandler response is200 with no Content-Type; missing required label is
+500/application-json. The new backend preserves this behavior (environment
+traceback text is omitted). Real HTML MIME detection and canonical charset
+names belong to HTML; document encoding is selected from actual response bytes,
+never injected from the expected WPT label. No fixture file or assertion is
+rewritten; no upstream algorithm is copied.
+
+Baseline fixed20a85c17:315+339fail/0pass. Complete314nodes12028pass951fail6errors.
+HTML46 adopted342a09d5. Final Boat native workspace3,531pass17skip and four
+doctests. Complete314nodes12,028→12,682passes (+654),951→298fails,6errors;
+zero lost passes by multiplicity. Both charset pages315/315+339/339;451 legacy
+encoding and14XHR assertions preserved. The TTL-interrupted attempt is excluded;
+full exact-source rerun completed. Durable evidence/charset-fixture records
+raw upstream protocol outputs, fixture/source hashes and compact whole-node gate.

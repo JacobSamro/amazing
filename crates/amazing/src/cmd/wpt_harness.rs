@@ -216,10 +216,19 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
     if let Some(path) = path.as_deref() {
         let path_only = path.split('#').next().unwrap_or(path);
         if let Some((route, query)) = path_only.split_once('?') {
+            if route == "/dom/nodes/encoding.py"
+                && source_bytes(root, &root.join("dom/nodes/encoding.py"), scaffold).is_ok() {
+                respond_encoding_py(&mut stream, query);
+                return;
+            }
             if route == "/cookies/resources/cookie.py" {
                 respond_cookie_py(&mut stream, query);
                 return;
             }
+        } else if path_only == "/dom/nodes/encoding.py"
+            && source_bytes(root, &root.join("dom/nodes/encoding.py"), scaffold).is_ok() {
+            respond_encoding_py(&mut stream, "");
+            return;
         } else if path_only == "/cookies/resources/cookie.py" {
             respond_cookie_py(&mut stream, "");
             return;
@@ -399,11 +408,53 @@ fn respond_cookie_py(stream: &mut TcpStream, query: &str) {
     let _ = stream.write_all(body);
 }
 
+// Pinned dom/nodes/encoding.py's request/response protocol. This is fixture
+// server support, not a replacement for decoding or document charset logic.
+// The upstream handler returns a Unicode HTML body without Content-Type, so
+// HTML navigation must detect its media type from the actual response bytes.
+fn encoding_fixture_body(query: &str) -> Option<Vec<u8>> {
+    let label = query.split('&').find_map(|pair| {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        (harness_percent_decode_bytes(key) == b"label")
+            .then(|| harness_percent_decode_bytes(value))
+    })?;
+    let mut escaped = String::new();
+    // WPT isomorphic decoding maps each byte to the same-valued code point.
+    for byte in label {
+        match byte {
+            b'&' => escaped.push_str("&amp;"),
+            b'<' => escaped.push_str("&lt;"),
+            b'>' => escaped.push_str("&gt;"),
+            b'"' => escaped.push_str("&quot;"),
+            b'\'' => escaped.push_str("&#x27;"),
+            _ => escaped.push(char::from(byte)),
+        }
+    }
+    Some(format!("<!doctype html><meta charset=\"{escaped}\">").into_bytes())
+}
+
+fn respond_encoding_py(stream: &mut TcpStream, query: &str) {
+    let (status, content_type, body) = match encoding_fixture_body(query) {
+        Some(body) => ("200 OK", "", body),
+        // A missing required GET argument raises an upstream handler error.
+        // Omit its environment-specific traceback from this fixture backend.
+        None => ("500 Internal Server Error", "Content-Type: application/json\r\n",
+            br#"{"error":{"code":500,"message":"missing label"}}"#.to_vec()),
+    };
+    let _ = write!(stream,
+        "HTTP/1.1 {status}\r\n{content_type}Content-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+    let _ = stream.write_all(&body);
+}
+
 /// `%XX`-escape decoder for `cookie.py`'s query string, mirroring
 /// `amazing_net::url`'s private decoder (not exported, and this is
 /// harness-only plumbing rather than a reason to widen that crate's public
 /// API). Invalid escapes pass through byte-for-byte.
 fn harness_percent_decode(s: &str) -> String {
+    String::from_utf8_lossy(&harness_percent_decode_bytes(s)).into_owned()
+}
+
+fn harness_percent_decode_bytes(s: &str) -> Vec<u8> {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -425,7 +476,7 @@ fn harness_percent_decode(s: &str) -> String {
             i += 1;
         }
     }
-    String::from_utf8_lossy(&out).into_owned()
+    out
 }
 
 /// Decodes one JSON string literal (the `cookie` may be a bare string or an
@@ -1064,11 +1115,7 @@ fn execute_page(
         scheduler.js.set_history_state(value);
     }
     let decoded = decode_document(&html);
-    let character_set = if decoded.encoding == amazing_html::encoding::Encoding::Utf8 {
-        "UTF-8"
-    } else {
-        decoded.encoding.name()
-    };
+    let character_set = amazing_html::encoding::canonical_name(decoded.encoding);
     scheduler.set_document_metadata(character_set, "text/html", "");
     let html = decoded.text;
     let refresh_images = |scheduler: &mut crate::js_scheduler::DriverScheduler| -> Result<(), String> {
@@ -1491,7 +1538,30 @@ pub fn run(args: &[String]) -> ExitCode {
 
 #[cfg(test)]
 mod any_window_tests {
-    use super::{any_window_wrapper, decode_document};
+    use super::{any_window_wrapper, decode_document, encoding_fixture_body, respond_encoding_py};
+
+    #[test]
+    fn encoding_fixture_uses_first_label_and_escapes_isomorphic_bytes() {
+        assert_eq!(encoding_fixture_body("label=%80%22%26%3C%3E%27+&label=utf-8").unwrap(),
+            "<!doctype html><meta charset=\"\u{80}&quot;&amp;&lt;&gt;&#x27; \">".as_bytes());
+        assert_eq!(encoding_fixture_body("other=utf-8"), None);
+        assert_eq!(encoding_fixture_body("label="), Some(b"<!doctype html><meta charset=\"\">".to_vec()));
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let worker = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            respond_encoding_py(&mut stream, "label=big5");
+        });
+        let mut stream = std::net::TcpStream::connect(address).unwrap();
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+        let mut response = String::new();
+        std::io::Read::read_to_string(&mut stream, &mut response).unwrap();
+        worker.join().unwrap();
+        let (headers, body) = response.split_once("\r\n\r\n").unwrap();
+        assert!(headers.starts_with("HTTP/1.1 200 OK\r\n"));
+        assert!(!headers.to_ascii_lowercase().contains("content-type:"));
+        assert_eq!(body, "<!doctype html><meta charset=\"big5\">");
+    }
 
     #[test]
     fn document_bytes_decode_declared_encoding_and_bom_before_default() {
