@@ -17,7 +17,9 @@ use std::fmt;
 use std::ops::Range;
 
 const MAX_PATTERN: usize = 16_384;
-const MAX_INPUT: usize = 1_048_576;
+// A complete Unicode code-point corpus is 2,162,688 UTF-16 units. Keep
+// enough bounded input space for it, including property complements.
+const MAX_INPUT: usize = 4_194_304;
 // Recursive-descent parser nesting depth (parser.rs's `atom`/`set_class`,
 // one increment per `(` or nested `[...]` class): a real, finite guard
 // against native stack overflow from a maliciously deep pattern, not a
@@ -32,21 +34,9 @@ const MAX_INPUT: usize = 1_048_576;
 const MAX_DEPTH: usize = 512;
 const MAX_CAPTURES: usize = 128;
 const MAX_CODE: usize = 32_768;
-const MAX_STEPS: usize = 1_000_000;
-// Tried raising this (and the slots cap it guards alongside) to let large
-// greedy matches over property-escapes classes (`/^\p{Alphabetic}+$/u`
-// against a harness string covering that property's ~130k+ code points)
-// clear the backtracking-storage limit instead of throwing RangeError.
-// Measured result: it doesn't help. Each loop iteration still clones a full
-// State (pos + captures + marks) onto the backtrack stack (Node::Repeat's
-// Split/Mark/body/Progress/Jump compilation in vm.rs), so raising the cap
-// just lets ~130k of those clones happen before the 30s test262 timeout
-// fires instead of a RangeError firing in milliseconds -- same pass/fail
-// outcome (still not passing) but far worse for shared-host CPU time.
-// Reverted (see .agents/js-date/log.md, JSD-5 cluster 3): the real fix is an
-// O(1)-per-iteration greedy-loop fast path for simple, capture-free atoms
-// (no per-iteration State clone), which is a VM change too large/risky for
-// this round -- deferred alongside the lookbehind capture-order gap.
+const MAX_STEPS: usize = 8_388_608;
+// Ambiguous repetitions still share bounded frame and slot storage.
+// Deterministic greedy atoms represent all retry endpoints in one frame.
 const MAX_STACK: usize = 8_192;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

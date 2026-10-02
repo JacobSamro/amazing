@@ -1,4 +1,29 @@
 use super::*;
+#[test]
+fn long_deterministic_repetition_uses_one_retry_frame() {
+    let full_unicode_size = "a".repeat(2_162_688);
+    assert_eq!(Regex::new(r"^\p{Alphabetic}+$", "u").unwrap()
+        .exec(&full_unicode_size, 0).unwrap().unwrap().range, 0..full_unicode_size.len());
+    let input = "a".repeat(150_000);
+    for pattern in [r"^a+$", r"^\p{Alphabetic}+$", r"^.+$", r"^a+a$", r"^a+(a+)$"] {
+        let result = Regex::new(pattern, "u").unwrap().exec(&input, 0).unwrap().unwrap();
+        assert_eq!(result.range, 0..input.len(), "{pattern}");
+    }
+    let input = "\u{10400}".repeat(20_000);
+    let result = Regex::new(r"^\p{Alphabetic}+(\p{Alphabetic})$", "u")
+        .unwrap().exec(&input, 0).unwrap().unwrap();
+    assert_eq!(result.captures[1], Some(39_998..40_000));
+}
+
+#[test]
+fn compressed_repeat_restores_capture_and_endpoint_state() {
+    assert_eq!(captures(r"^(a*)(a+)b$", "", "aaaab"),
+        vec![Some("aaaab".into()), Some("aaa".into()), Some("a".into())]);
+    assert_eq!(captures(r"^a{2,4}(a+)$", "", "aaaaaa")[1], Some("aa".into()));
+    assert_eq!(captures(r"^a*(?=ab)ab$", "", "aaaab")[0], Some("aaaab".into()));
+    assert_eq!(captures(r"^(?:a+b|a+c)$", "", "aaac")[0], Some("aaac".into()));
+    assert!(Regex::new(r"^a{3,4}$", "").unwrap().exec("aa", 0).unwrap().is_none());
+}
 fn captures(pattern: &str, flags: &str, input: &str) -> Vec<Option<String>> {
     let r = Regex::new(pattern, flags)
         .unwrap()

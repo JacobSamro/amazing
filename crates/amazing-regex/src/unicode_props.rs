@@ -16,7 +16,10 @@ type AliasMap = BTreeMap<&'static str, &'static str>;
 
 fn parse_range(text: &str) -> Option<(u32, u32)> {
     if let Some((a, b)) = text.split_once("..") {
-        Some((u32::from_str_radix(a, 16).ok()?, u32::from_str_radix(b, 16).ok()?))
+        Some((
+            u32::from_str_radix(a, 16).ok()?,
+            u32::from_str_radix(b, 16).ok()?,
+        ))
     } else {
         let v = u32::from_str_radix(text, 16).ok()?;
         Some((v, v))
@@ -92,8 +95,14 @@ fn general_category() -> &'static RangeMap {
         let mut map = RangeMap::new();
         // Split across two files (each under the project's 4000-line cap);
         // concatenation reproduces the single UCD source file exactly.
-        parse_ranges(include_str!("../data/DerivedGeneralCategory.1.txt"), &mut map);
-        parse_ranges(include_str!("../data/DerivedGeneralCategory.2.txt"), &mut map);
+        parse_ranges(
+            include_str!("../data/DerivedGeneralCategory.1.txt"),
+            &mut map,
+        );
+        parse_ranges(
+            include_str!("../data/DerivedGeneralCategory.2.txt"),
+            &mut map,
+        );
         for ranges in map.values_mut() {
             merge(ranges);
         }
@@ -161,7 +170,9 @@ fn script_extensions() -> &'static (RangeMap, Ranges) {
             let (Some(range), Some(codes)) = (fields.next(), fields.next()) else {
                 continue;
             };
-            let Some(span) = parse_range(range) else { continue };
+            let Some(span) = parse_range(range) else {
+                continue;
+            };
             overridden.push(span);
             for code in codes.split_whitespace() {
                 let long = sc_value_alias().get(code).copied().unwrap_or(code);
@@ -228,7 +239,9 @@ fn name_alias() -> &'static AliasMap {
         let mut map = AliasMap::new();
         for line in include_str!("../data/PropertyAliases.txt").lines() {
             let fields: Vec<&str> = line.split(';').collect();
-            let Some(&canonical) = fields.get(1) else { continue };
+            let Some(&canonical) = fields.get(1) else {
+                continue;
+            };
             for &alias in &fields {
                 map.insert(alias, canonical);
             }
@@ -251,7 +264,9 @@ fn gc_value_alias() -> &'static AliasMap {
             if fields.first() != Some(&"gc") {
                 continue;
             }
-            let Some(&short) = fields.get(1) else { continue };
+            let Some(&short) = fields.get(1) else {
+                continue;
+            };
             for &alias in &fields[1..] {
                 map.insert(alias, short);
             }
@@ -283,12 +298,17 @@ fn sc_value_alias() -> &'static AliasMap {
     })
 }
 
-enum Lookup {
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Lookup {
     Plain(&'static [(u32, u32)]),
-    ScriptExtensions(&'static str),
+    ScriptExtensions {
+        explicit: &'static [(u32, u32)],
+        overridden: &'static [(u32, u32)],
+        base: &'static [(u32, u32)],
+    },
 }
 
-fn lookup(expr: &str) -> Option<Lookup> {
+pub(crate) fn lookup(expr: &str) -> Option<Lookup> {
     if let Some((name, value)) = expr.split_once('=') {
         let canonical = name_alias().get(name).copied().unwrap_or(name);
         return match canonical {
@@ -308,7 +328,14 @@ fn lookup(expr: &str) -> Option<Lookup> {
                     .0
                     .get_key_value(long)
                     .or_else(|| scripts().get_key_value(long))
-                    .map(|(&key, _)| Lookup::ScriptExtensions(key))
+                    .map(|(&key, _)| {
+                        let (overrides, overridden) = script_extensions();
+                        Lookup::ScriptExtensions {
+                            explicit: overrides.get(key).map(Vec::as_slice).unwrap_or(&[]),
+                            overridden,
+                            base: scripts().get(key).map(Vec::as_slice).unwrap_or(&[]),
+                        }
+                    })
             }
             _ => None,
         };
@@ -333,18 +360,18 @@ pub(crate) fn supported(expr: &str) -> bool {
 }
 
 pub(crate) fn contains(expr: &str, cp: u32) -> bool {
-    match lookup(expr) {
-        Some(Lookup::Plain(ranges)) => in_ranges(ranges, cp),
-        Some(Lookup::ScriptExtensions(long)) => {
-            let (overrides, overridden) = script_extensions();
-            let explicit = overrides.get(long).map(Vec::as_slice).unwrap_or(&[]);
-            in_ranges(explicit, cp)
-                || (!in_ranges(overridden, cp)
-                    && in_ranges(
-                        scripts().get(long).map(Vec::as_slice).unwrap_or(&[]),
-                        cp,
-                    ))
+    lookup(expr).is_some_and(|property| property.contains(cp))
+}
+
+impl Lookup {
+    pub(crate) fn contains(self, cp: u32) -> bool {
+        match self {
+            Lookup::Plain(ranges) => in_ranges(ranges, cp),
+            Lookup::ScriptExtensions {
+                explicit,
+                overridden,
+                base,
+            } => in_ranges(explicit, cp) || (!in_ranges(overridden, cp) && in_ranges(base, cp)),
         }
-        None => false,
     }
 }

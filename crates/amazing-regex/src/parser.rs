@@ -55,7 +55,7 @@ pub(crate) enum SetExpr {
     Complement(Box<SetExpr>),
 }
 impl SetExpr {
-    fn has_strings(&self) -> bool {
+    pub(crate) fn has_strings(&self) -> bool {
         match self {
             Self::String(s) => s.len() != 1,
             Self::Property(name, _) => crate::unicode_sets::strings(name)
