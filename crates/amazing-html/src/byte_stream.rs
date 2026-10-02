@@ -39,6 +39,11 @@ impl IncrementalByteParser {
         }
     }
 
+    /// Sets scripting before feeding the first byte chunk.
+    pub fn set_scripting_mode(&mut self, mode: crate::ScriptingMode) {
+        self.parser.set_scripting_mode(mode);
+    }
+
     pub fn push_chunk(&mut self, mut chunk: &[u8]) {
         if self.encoding.is_none() {
             let take = chunk.len().min(SNIFF_LIMIT - self.prefix.len());

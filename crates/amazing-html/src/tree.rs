@@ -9,7 +9,7 @@
 //! (`<b>1<p>2</b>3</p>`, `<b>1<i>2</b>3</i>`) come out browser-shaped.
 //!
 //! Deviations from full spec (deliberate, mirroring lib.rs):
-//! - `noscript` content is parsed as raw text regardless of scripting flag.
+//! - Scripting is enabled by default; embeddings can explicitly disable it.
 //! - Foreign content implements namespace-aware SVG/MathML tree construction
 //!   and integration points, but not every foreign-attribute adjustment.
 //! - Doctype mode classification controls quirks-specific tree recovery.
@@ -24,6 +24,7 @@ use amazing_dom::shadow::{ShadowMode, ShadowOptions, SlotAssignment};
 use amazing_dom::events::CallbackId;
 
 use crate::tokenizer::{Token, Tokenizer};
+use crate::ScriptingMode;
 
 // Pure move, no behavior change (see each module's own doc comment and
 // `docs/lanes/html_TODO.md`): these hold insertion-mode groups that used to
@@ -33,6 +34,7 @@ use crate::tokenizer::{Token, Tokenizer};
 mod foreign;
 mod in_select;
 mod doctype;
+mod noscript;
 mod in_table;
 
 /// Elements whose start tags never take children (void + obsolete empties).
@@ -106,10 +108,10 @@ enum Mode {
     BeforeHtml,
     BeforeHead,
     InHead,
+    InHeadNoscript,
     InTemplate,
     AfterHead,
     InBody,
-    InSelect,
     Text,
     InTable,
     InTableText,
@@ -162,6 +164,7 @@ pub struct TreeBuilder {
     dom: Dom,
     custom_element_host: Option<Box<dyn ParserCustomElementHost>>,
     mode: Mode,
+    scripting_mode: ScriptingMode,
     /// Return mode for "text" (the "original insertion mode").
     orig_mode: Mode,
     /// Return mode and pending characters for the "in table text" rules.
@@ -323,6 +326,7 @@ impl TreeBuilder {
             dom: Dom::new(),
             custom_element_host: None,
             mode: Mode::Initial,
+            scripting_mode: ScriptingMode::Enabled,
             orig_mode: Mode::Initial,
             table_text_return_mode: Mode::Initial,
             pending_table_text: String::new(),
@@ -349,6 +353,10 @@ impl TreeBuilder {
     /// Srcdoc documents keep no-quirks mode regardless of their doctype.
     pub(crate) fn set_srcdoc(&mut self) {
         self.mode_locked = true;
+    }
+
+    pub(crate) fn set_scripting_mode(&mut self, mode: ScriptingMode) {
+        self.scripting_mode = mode;
     }
 
     /// Starts a document parse with a preconfigured DOM registry and host.
@@ -459,7 +467,7 @@ impl TreeBuilder {
             // §13.2.6: only the modes that actually redirect a `template`
             // tag to "in head" rules (directly, or by cascading through "in
             // table"/"in caption"/etc., which this shortcut short-circuits)
-            // belong here. `InSelect`, `InFrameset`, `AfterFrameset`,
+            // belong here. `InHeadNoscript`, `InFrameset`, `AfterFrameset`,
             // `AfterBody` and the `AfterAfter*` modes have no such rule --
             // per spec `template` there is just an ordinary, unhandled
             // token, ignored like any other. Reusing this shortcut for them
@@ -506,10 +514,10 @@ impl TreeBuilder {
             Mode::BeforeHtml => self.before_html(tok),
             Mode::BeforeHead => self.before_head(tok),
             Mode::InHead => self.in_head(tok),
+            Mode::InHeadNoscript => self.in_head_noscript(tok),
             Mode::InTemplate => self.in_template(tok),
             Mode::AfterHead => self.after_head(tok),
             Mode::InBody => self.in_body(tok),
-            Mode::InSelect => self.in_select(tok),
             Mode::Text => self.text_mode(tok),
             Mode::InTable => self.in_table(tok),
             Mode::InTableText => unreachable!("handled before token routing"),
@@ -1816,6 +1824,10 @@ impl TreeBuilder {
                     "base" | "basefont" | "bgsound" | "link" | "meta" => {
                         self.insert_void(name, attrs);
                     },
+                    "noscript" if self.scripting_mode == ScriptingMode::Disabled => {
+                        self.insert_and_push(name, attrs);
+                        self.mode = Mode::InHeadNoscript;
+                    },
                     "title" | "noframes" | "style" | "script" | "noscript" => {
                         self.start_generic_text_element(name, attrs);
                     },
@@ -2165,7 +2177,9 @@ impl TreeBuilder {
                 self.start_generic_text_element("iframe", attrs);
             },
             "noembed" => self.start_generic_text_element("noembed", attrs),
-            "noscript" => self.start_generic_text_element("noscript", attrs),
+            "noscript" if self.scripting_mode == ScriptingMode::Enabled => {
+                self.start_generic_text_element("noscript", attrs);
+            },
             "select" => {
                 if self.fragment && self.fragment_context.as_deref() == Some("select") {
                     return;
@@ -2368,6 +2382,7 @@ impl TreeBuilder {
                     // script elements that execute per spec; MathML does
                     // not).
                     if !self.fragment
+                        && self.scripting_mode == ScriptingMode::Enabled
                         && self.template_modes.is_empty()
                         && name == "script"
                         && matches!(self.dom.namespace(node), Some(Namespace::Html) | Some(Namespace::Svg))
@@ -2586,6 +2601,11 @@ impl IncrementalParser {
         }
     }
 
+    /// Sets the document's scripting mode before feeding the first chunk.
+    pub fn set_scripting_mode(&mut self, mode: ScriptingMode) {
+        self.builder.set_scripting_mode(mode);
+    }
+
     /// Starts a streamed document parse with a synchronous custom-element host.
     /// Fragment parsing remains inert and uses a separate entry point.
     pub fn with_custom_element_host(dom: Dom, host: Box<dyn ParserCustomElementHost>) -> Self {
@@ -2638,7 +2658,12 @@ impl IncrementalParser {
 
 /// Convenience: tokenize `src` and run tree construction to completion.
 pub fn build(src: &str) -> Dom {
+    build_with_scripting_mode(src, ScriptingMode::Enabled)
+}
+
+pub(crate) fn build_with_scripting_mode(src: &str, scripting_mode: ScriptingMode) -> Dom {
     let mut builder = TreeBuilder::new();
+    builder.set_scripting_mode(scripting_mode);
     let mut tokenizer = Tokenizer::new(src.chars().collect());
     loop {
         let tok = tokenizer.next_token();
@@ -2714,13 +2739,15 @@ fn fragment_insertion_mode(context: &str) -> Mode {
 /// element; that caller-side host-identity gap is intentionally left to the
 /// binding layer, which has an actual host `NodeIdx` available to attach to
 /// (see `parse_fragment_with_shadow_roots`'s doc comment in `lib.rs`).
-pub(crate) fn build_fragment(
+pub(crate) fn build_fragment_with_scripting_mode(
     src: &str,
     context: &str,
     namespace: Namespace,
     allow_declarative_shadow_roots: bool,
+    scripting_mode: ScriptingMode,
 ) -> Dom {
     let mut builder = TreeBuilder::new();
+    builder.set_scripting_mode(scripting_mode);
     builder.allow_declarative_shadow_roots = allow_declarative_shadow_roots;
     builder.fragment = true;
     builder.fragment_context = Some(context.to_owned());
@@ -2735,6 +2762,7 @@ pub(crate) fn build_fragment(
     // because its local name happens to collide with one of these.
     if namespace == Namespace::Html
         && matches!(context, "textarea" | "title" | "style" | "xmp" | "iframe" | "noembed" | "noframes" | "script" | "noscript" | "plaintext")
+        && (context != "noscript" || scripting_mode == ScriptingMode::Enabled)
     {
         tokenizer.enter_fragment_text_context(context);
     }
