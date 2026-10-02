@@ -41,6 +41,7 @@ mod document_bindings;
 mod legacy_document_bindings;
 mod parser_bindings;
 mod element_reflection;
+mod hyperlink_bindings;
 mod processing_instruction_bindings;
 mod image_bindings;
 pub use abort_bindings::fire_abort_timeout;

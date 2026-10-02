@@ -769,7 +769,7 @@ fn local_file(root: &Path, base: &Path, source: &str) -> Result<PathBuf, String>
     }
     Ok(file)
 }
-fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
+fn source_bytes(root: &Path, path: &Path, scaffold: bool) -> Result<Vec<u8>, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     // A marker-pinned (non-git, venus tarball) checkout already proved its
     // provenance once in `supervise`; there is no git object database to
@@ -796,7 +796,11 @@ fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
             ));
         }
     }
-    let mut text = String::from_utf8(bytes).map_err(|e| e.to_string())?;
+    Ok(bytes)
+}
+
+fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
+    let mut text = String::from_utf8(source_bytes(root, path, scaffold)?).map_err(|e| e.to_string())?;
     // NET-41: the top-level document's own `<script src>` tags are read
     // straight off disk here rather than through `serve_fixture`'s HTTP
     // path (only an iframe's/subresource's script tags go through real
@@ -815,6 +819,27 @@ fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
         apply_sub_substitution(&mut text);
     }
     Ok(text)
+}
+
+// Preserve the checked upstream bytes until the HTML encoding prescan. WPT
+// template substitution retains its existing UTF-8 template contract.
+fn document_source(root: &Path, path: &Path, scaffold: bool) -> Result<Vec<u8>, String> {
+    if !scaffold && path.file_name().is_some_and(|name| name.to_string_lossy().contains(".sub.")) {
+        source(root, path, scaffold).map(String::into_bytes)
+    } else {
+        source_bytes(root, path, scaffold)
+    }
+}
+
+fn decode_document(bytes: &[u8]) -> amazing_html::encoding::DecodedHtml {
+    let mut decoded = amazing_html::encoding::decode(bytes, None);
+    if decoded.source == amazing_html::encoding::Source::Default {
+        // The fixture embedding defaults to UTF-8, as it did before byte
+        // decoding was enabled; BOM and declared encodings take precedence.
+        decoded.encoding = amazing_html::encoding::Encoding::Utf8;
+        decoded.text = String::from_utf8_lossy(bytes).into_owned();
+    }
+    decoded
 }
 
 /// The `.sub.` placeholder table (WPT's `.sub.` template convention), shared
@@ -945,10 +970,10 @@ fn execute(options: &Options) -> Result<(), String> {
     let root = options.root.canonicalize().map_err(|e| e.to_string())?;
     let file = local_file(&root, &root, &options.test)?;
     let expected_html = match file.extension().and_then(|s| s.to_str()) {
-        Some("html" | "htm") => source(&root, &file, options.scaffold)?,
+        Some("html" | "htm") => document_source(&root, &file, options.scaffold)?,
         Some("js") if !options.scaffold && (options.test.ends_with(".any.js") || options.test.ends_with(".window.js")) => {
             let js = source(&root, &file, false)?;
-            any_window_wrapper(&js, &options.test)?
+            any_window_wrapper(&js, &options.test)?.into_bytes()
         }
         _ => return Err("unsupported: classic-script .html/.htm or window .any.js/.window.js tests only".into()),
     };
@@ -966,11 +991,11 @@ fn execute(options: &Options) -> Result<(), String> {
     } else {
         let generated =
             (options.test.ends_with(".any.js") || options.test.ends_with(".window.js"))
-                .then(|| (options.test.clone(), expected_html.as_bytes().to_vec()));
+                .then(|| (options.test.clone(), expected_html.clone()));
         let fixture = FixtureServer::start(root.clone(), generated, options.scaffold)?;
         let url = fixture.url(&options.test);
         let page = fetch_page(&mut navigator, &url, true, None)?;
-        if page.rendered != expected_html.as_bytes() {
+        if page.rendered != expected_html {
             return Err("fixture navigation differed from pinned page bytes".into());
         }
         (fixture, page.url, page.history_state)
@@ -1005,7 +1030,7 @@ fn execute_page(
     options: &Options,
     root: &Path,
     file: PathBuf,
-    html: String,
+    html: Vec<u8>,
     url: String,
     fixture: &FixtureServer,
     navigator: &mut crate::navigator::Navigator,
@@ -1038,8 +1063,14 @@ fn execute_page(
             .map_err(|e| e.describe())?;
         scheduler.js.set_history_state(value);
     }
-    // This runner reads a UTF-8 HTML source directly as its top-level page.
-    scheduler.set_document_metadata("UTF-8", "text/html", "");
+    let decoded = decode_document(&html);
+    let character_set = if decoded.encoding == amazing_html::encoding::Encoding::Utf8 {
+        "UTF-8"
+    } else {
+        decoded.encoding.name()
+    };
+    scheduler.set_document_metadata(character_set, "text/html", "");
+    let html = decoded.text;
     let refresh_images = |scheduler: &mut crate::js_scheduler::DriverScheduler| -> Result<(), String> {
         let page = host.borrow();
         let styles = amazing_css::compute(&page.dom, &[]);
@@ -1238,8 +1269,8 @@ fn execute_page(
                     .to_owned();
                 let page = fetch_page(navigator, &current, false, None)?;
                 let file = fixture_file(root, fixture, &page.url)?;
-                let html = source(root, &file, options.scaffold)?;
-                if page.rendered != html.as_bytes() {
+                let html = document_source(root, &file, options.scaffold)?;
+                if page.rendered != html {
                     return Err("fixture reload differed from pinned page bytes".into());
                 }
                 return execute_page(
@@ -1271,8 +1302,8 @@ fn execute_page(
                 } else {
                     let page = fetch_page(navigator, &target_url, false, Some(target))?;
                     let file = fixture_file(root, fixture, &page.url)?;
-                    let html = source(root, &file, options.scaffold)?;
-                    if page.rendered != html.as_bytes() {
+                    let html = document_source(root, &file, options.scaffold)?;
+                    if page.rendered != html {
                         return Err("fixture traversal differed from pinned page bytes".into());
                     }
                     return execute_page(
@@ -1293,8 +1324,8 @@ fn execute_page(
             let next = resolve_page_url(navigator.current_url().unwrap_or(&url), &next)?;
             let page = fetch_page(navigator, &next, true, None)?;
             let file = fixture_file(root, fixture, &page.url)?;
-            let html = source(root, &file, options.scaffold)?;
-            if page.rendered != html.as_bytes() {
+            let html = document_source(root, &file, options.scaffold)?;
+            if page.rendered != html {
                 return Err("fixture navigation differed from pinned page bytes".into());
             }
             return execute_page(
@@ -1460,7 +1491,20 @@ pub fn run(args: &[String]) -> ExitCode {
 
 #[cfg(test)]
 mod any_window_tests {
-    use super::any_window_wrapper;
+    use super::{any_window_wrapper, decode_document};
+
+    #[test]
+    fn document_bytes_decode_declared_encoding_and_bom_before_default() {
+        let legacy = decode_document(b"<meta charset=windows-1252><p>\x80");
+        assert_eq!(legacy.encoding, amazing_html::encoding::Encoding::Windows1252);
+        assert!(legacy.text.ends_with("<p>€"));
+        let bom = decode_document(b"\xef\xbb\xbf<meta charset=windows-1252><p>\xc3\xa9");
+        assert_eq!(bom.encoding, amazing_html::encoding::Encoding::Utf8);
+        assert!(bom.text.ends_with("<p>é"));
+        let fallback = decode_document("<p>é".as_bytes());
+        assert_eq!(fallback.encoding, amazing_html::encoding::Encoding::Utf8);
+        assert_eq!(fallback.text, "<p>é");
+    }
 
     #[test]
     fn any_window_wrapper_orders_upstream_metadata_before_source() {

@@ -338,6 +338,11 @@ pub enum Operation {
     RadioNodeListLength, RadioNodeListItem, RadioNodeListIndexedGetter,
     RadioNodeListSupportedIndexCount, RadioNodeListValue, RadioNodeListSetValue,
     ElementGetHTML, ElementHref, ElementSetHref, ElementTarget, ElementSetTarget,
+    HyperlinkOrigin, HyperlinkProtocol, HyperlinkSetProtocol,
+    HyperlinkUsername, HyperlinkSetUsername, HyperlinkPassword, HyperlinkSetPassword,
+    HyperlinkHost, HyperlinkSetHost, HyperlinkHostname, HyperlinkSetHostname,
+    HyperlinkPort, HyperlinkSetPort, HyperlinkPathname, HyperlinkSetPathname,
+    HyperlinkSearch, HyperlinkSetSearch, HyperlinkHash, HyperlinkSetHash,
     ElementRel, ElementSetRel, ElementRelList, ElementSetRelList,
     OutputHtmlFor, OutputSetHtmlFor, IFrameSandbox, IFrameSetSandbox,
     OutputValue, OutputSetValue, OutputDefaultValue, OutputSetDefaultValue,
@@ -918,6 +923,9 @@ pub trait DocumentHost: BindingHost {
 /// base URL without making bindings depend on the URL/network crate.
 pub trait UrlReflection: BindingHost {
     fn resolve_url(&mut self, input: &[u16]) -> Result<Vec<u16>, Self::Error>;
+    fn resolve_element_url(&mut self, _element: NodeIdx, input: &[u16]) -> Result<Vec<u16>, Self::Error> {
+        self.resolve_url(input)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

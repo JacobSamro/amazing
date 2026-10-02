@@ -19,7 +19,7 @@ fn spec(op: O) -> Option<Spec> {
             setter: matches!(op, O::LegacyReflectSet(..)) });
     }
     let (attribute, tags, kind): (&'static str, &'static [&'static str], Kind) = match op {
-        O::ElementHref | O::ElementSetHref => ("href", REL, K::Url),
+        O::ElementHref | O::ElementSetHref => ("href", REL, K::UsvUrl),
         O::ElementTarget | O::ElementSetTarget => ("target", HYPERLINK, K::String),
         O::ElementRel | O::ElementSetRel => ("rel", REL, K::String),
         O::ElementRelList | O::ElementSetRelList => ("rel", REL, K::TokenList),
@@ -173,7 +173,7 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
         Kind::Url | Kind::UsvUrl => {
             let Some(value) = value else { return host.string(&[]) };
             let value = if matches!(spec.kind, Kind::UsvUrl) { String::from_utf16_lossy(&value).encode_utf16().collect() } else { value };
-            let resolved = host.resolve_url(&value)?;
+            let resolved = host.resolve_element_url(node, &value)?;
             host.string(&resolved)
         }
         Kind::InputType => host.string(&input_type(value.as_deref().unwrap_or_default())),
