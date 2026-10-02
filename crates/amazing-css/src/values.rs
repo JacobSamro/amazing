@@ -797,6 +797,16 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         }
         _ => {}
     }
+    if (property.starts_with("border-inline-") || property.starts_with("border-block-"))
+        && (property.contains("-start-") || property.contains("-end-"))
+        && let Some(component) = property.rsplit('-').next()
+        && matches!(component, "width" | "style" | "color")
+    {
+        return parse(&format!("border-top-{component}"), css);
+    }
+    if let Some(valid) = crate::computed::logical_border::valid(property, css) {
+        return valid.then_some(V::Unparsed);
+    }
     let physical_property = match property {
         "inline-size" | "block-size" => "width",
         "min-inline-size" | "min-block-size" => "min-width",
