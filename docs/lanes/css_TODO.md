@@ -2524,3 +2524,30 @@ gained 5/lost 0: table-intrinsic-size001..004 and rules-groups. Remaining 23
 mismatches unchanged. Durable gate summaries and compact render classifications
 are under `crates/amazing-css/evidence/css31/`. No Windows gate required by the
 Linux-first override. No local build/test or direct Boat lifecycle commands.
+
+## CSS-32: background-image argument validation
+
+Fixed base `03e13e3f`. CSS Images 3 §3.2 and Images 4 §2.6 require
+nonnegative explicit radial-gradient radii, length-only circle radii, and
+one optional 0–100% percentage with one image/color per cross-fade item.
+Mathematical percentages are typechecked independently of lengths; circles
+reject percentage-valued math, and logical/container length units remain valid.
+Previously background-image had no validator, accepting every string.
+
+`image_values.rs` validates balanced image-list entries, handles light-dark
+image pairs and recursive cross-fade arguments, rejects invalid radial sizes
+before the position clause, and leaves negative color-stop positions valid.
+The math parser now exposes percentage-only type checking, so cross-fade
+rejects length or mixed length/percentage expressions. Balanced linear/conic
+gradients, image-set/image/element/paint and legacy image functions retain
+the existing downstream parser representation; their separate argument
+grammars remain future work. Both declaration-time and post-var-substitution
+gates use the new validator, with tests distinguishing invalid declarations
+from invalid winning substituted values. No port/dependency added.
+
+Boat/Linux final: 360/360 crate tests, 0 crate doctests; workspace 3519/3519,
+17 skipped, 4/4 doctests. Twelve parsing selections 3235/4506 ->3248/4506,
+gained 13 exact assertions/lost 0 (backgrounds +12, images +1; all other
+selections unchanged). Static rendering preserves all classifications:
+backgrounds 75/134, images 92/141, gained 0/lost 0 for each. Evidence and a
+bulk reproduction script: `crates/amazing-css/evidence/css32/`.

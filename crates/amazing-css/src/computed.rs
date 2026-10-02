@@ -3021,6 +3021,7 @@ fn computed_opacity(value: &str) -> Option<String> {
 
 fn valid_new_paint_property(property: &str, value: &str) -> bool {
     match property {
+        "background-image" => crate::image_values::valid_background_image(value),
         "background-clip" => valid_background_clip(value),
         "background-origin" => valid_background_origin(value),
         "background-attachment" => valid_background_attachment(value),
@@ -3351,7 +3352,7 @@ fn parse_var_call(tokens: &[Token], function_index: usize) -> Option<VarCall<'_>
     })
 }
 
-fn trim_tokens(mut tokens: &[Token]) -> &[Token] {
+pub(crate) fn trim_tokens(mut tokens: &[Token]) -> &[Token] {
     while matches!(tokens.first(), Some(Token::Whitespace)) {
         tokens = &tokens[1..];
     }
