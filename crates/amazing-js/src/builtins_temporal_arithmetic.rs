@@ -984,12 +984,12 @@ fn std_temporal_yearmonth_anchor(calendar: &str, iso: &[i64; 10]) -> Result<[i64
     Ok(result)
 }
 
-fn std_temporal_yearmonth_with_calendar(i: &mut Interpreter, data: StdTemporalData,
+fn std_temporal_merge_calendar_fields(i: &mut Interpreter, data: StdTemporalData,
     bag: JsValue, options: JsValue) -> Result<JsValue, Throw> {
-    let read = std_temporal_read_calendar_fields(i, StdTemporalKind::PlainYearMonth, &data.calendar, &bag)?;
+    let read = std_temporal_read_calendar_fields(i, data.kind, &data.calendar, &bag)?;
     if !read.any_present { return Err(Throw::type_error("no Temporal fields provided")); }
     let reject = std_temporal_overflow(i, options)?;
-    let (base_year, base_month, ..) = std_calendar_fields(&data.calendar,
+    let (base_year, base_month, base_day, ..) = std_calendar_fields(&data.calendar,
         data.fields[0], data.fields[1], data.fields[2]);
     let year = if read.era_text.is_some() || read.era_year.is_some() {
         std_temporal_resolve_era_year(&data.calendar, &read.era_text, read.era_year, read.year)?
@@ -998,14 +998,17 @@ fn std_temporal_yearmonth_with_calendar(i: &mut Interpreter, data: StdTemporalDa
     let month_code = if read.month.is_none() && read.month_code_text.is_none() {
         Some(std_calendar_month_code(&data.calendar, data.fields[0], data.fields[1], data.fields[2]))
     } else { read.month_code_text };
-    let mut fields = [0; 10];
+    let mut fields = data.fields;
     fields[0] = year;
     fields[1] = read.month.unwrap_or(base_month);
-    fields[2] = 1;
-    std_temporal_bag_resolve_calendar(StdTemporalKind::PlainYearMonth, &data.calendar,
+    fields[2] = if data.kind == StdTemporalKind::PlainYearMonth { 1 } else { read.day.unwrap_or(base_day) };
+    if data.kind == StdTemporalKind::PlainDateTime {
+        for k in 0..6 { if read.time_present[k] { fields[3 + k] = read.time[k]; } }
+    }
+    std_temporal_bag_resolve_calendar(data.kind, &data.calendar,
         &mut fields, read.month, month_code, reject)?;
-    std_temporal_regulate(StdTemporalKind::PlainYearMonth, &mut fields, reject);
-    std_temporal_make_cal(i, StdTemporalKind::PlainYearMonth, fields, data.calendar)
+    std_temporal_regulate(data.kind, &mut fields, reject);
+    std_temporal_make_cal(i, data.kind, fields, data.calendar)
 }
 
 // The field this loop is currently reading, resolved per Temporal kind below
@@ -1079,6 +1082,7 @@ struct StdCalendarRead {
     month_code_text: Option<String>,
     day: Option<i64>,
     time: [i64; 6],
+    time_present: [bool; 6],
     any_present: bool,
     era_text: Option<String>,
     era_year: Option<i64>,
@@ -1099,7 +1103,7 @@ fn std_temporal_validate_month_code_syntax(code: &str) -> Result<(), Throw> {
 }
 
 fn std_temporal_read_calendar_fields(i: &mut Interpreter, kind: StdTemporalKind, calendar: &str, value: &JsValue) -> Result<StdCalendarRead, Throw> {
-    let mut read = StdCalendarRead { year: None, month: None, month_code_text: None, day: None, time: [0; 6], any_present: false,
+    let mut read = StdCalendarRead { year: None, month: None, month_code_text: None, day: None, time: [0; 6], time_present: [false; 6], any_present: false,
         era_text: None, era_year: None };
     // CalendarFields (spec): "era"/"eraYear" only join the requested field
     // list for a calendar that actually uses eras -- for iso8601 (and
@@ -1158,12 +1162,12 @@ fn std_temporal_read_calendar_fields(i: &mut Interpreter, kind: StdTemporalKind,
                 if value < 1 { return Err(Throw::range_error("day must be a positive integer")); }
                 read.day = Some(value);
             }
-            StdWithField::Hour => read.time[0] = std_temporal_number(i, property, None)?,
-            StdWithField::Minute => read.time[1] = std_temporal_number(i, property, None)?,
-            StdWithField::Second => read.time[2] = std_temporal_number(i, property, None)?,
-            StdWithField::Millisecond => read.time[3] = std_temporal_number(i, property, None)?,
-            StdWithField::Microsecond => read.time[4] = std_temporal_number(i, property, None)?,
-            StdWithField::Nanosecond => read.time[5] = std_temporal_number(i, property, None)?,
+            StdWithField::Hour => { read.time[0] = std_temporal_number(i, property, None)?; read.time_present[0] = true; }
+            StdWithField::Minute => { read.time[1] = std_temporal_number(i, property, None)?; read.time_present[1] = true; }
+            StdWithField::Second => { read.time[2] = std_temporal_number(i, property, None)?; read.time_present[2] = true; }
+            StdWithField::Millisecond => { read.time[3] = std_temporal_number(i, property, None)?; read.time_present[3] = true; }
+            StdWithField::Microsecond => { read.time[4] = std_temporal_number(i, property, None)?; read.time_present[4] = true; }
+            StdWithField::Nanosecond => { read.time[5] = std_temporal_number(i, property, None)?; read.time_present[5] = true; }
             // `era`'s own validity (is this a real era name for the
             // calendar?) is calendar-dependent cross-field resolution,
             // deferred to the caller like monthCode's suitability check --
@@ -1239,8 +1243,9 @@ fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
             return Err(Throw::type_error("with() argument must not have a timeZone property"));
         }
     }
-    if data.kind == StdTemporalKind::PlainYearMonth && data.calendar != "iso8601" {
-        return std_temporal_yearmonth_with_calendar(i, data, bag, std_reflect_arg(&args, 1));
+    if matches!(data.kind, StdTemporalKind::PlainYearMonth | StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime)
+        && data.calendar != "iso8601" {
+        return std_temporal_merge_calendar_fields(i, data, bag, std_reflect_arg(&args, 1));
     }
     let fields: &[(&str, StdWithField)] = std_temporal_field_table(data.kind);
     let mut result = data.fields;

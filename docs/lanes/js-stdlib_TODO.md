@@ -1903,6 +1903,10 @@ confirmed, 1 passed each, matching prior runs).
   methods68/190→190/190; total intl402 Temporal1573→1699 (+126), built-ins4487
   unchanged, zero losses. Combined Boat workspace3515 passed/17 skipped and
   four doctests green, on fixed base2eb1229a.
-- Next native-calendar merge cluster: PlainDate.with49 failures and
-  PlainDateTime.with49 failures. Reuse the now-correct year-month merge helper,
-  preserving day/time fields and native monthCode across year changes.
+- PlainDate/PlainDateTime native-calendar field merging completed:
+  [decision and evidence](js-stdlib_plain_with_calendars.md). PlainDate.with
+ 22/71→70/71, PlainDateTime.with21/70→69/70, intl402 Temporal1699→1799 (+100),
+  zero lost files. Boat workspace3515/17 skipped and4 doctests green.
+- Next calendar gap: port lumen's MIT Umm al-Qura year-start/month-length
+  tables to replace the tabular-civil approximation. Three with-family files
+  remain blocked on the real data; getters/construction/arithmetic also use it.
