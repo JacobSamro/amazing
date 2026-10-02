@@ -62,10 +62,7 @@ pub(crate) fn canonical(name: &str, css: &str) -> Option<String> {
             [Token::Str(s)] => Some(format!("\"{}\"", s.replace('"', "\\\""))),
             _ => None,
         }),
-        "font-size-adjust" => keyword("none").or_else(|| match t.as_slice() {
-            [Token::Number(n)] if n.is_finite() && *n >= 0.0 => Some(n.to_string()),
-            _ => None,
-        }),
+        "font-size-adjust" => crate::font_size_adjust::FontSizeAdjust::parse(css).map(|value| value.to_css()),
         "font-palette" => keyword("normal light dark").or_else(|| match t.as_slice() {
             [Token::Ident(s)] if !s.starts_with("--") && !s.is_empty() => Some(s.clone()),
             [Token::Function(f), Token::OpenParen, ..]

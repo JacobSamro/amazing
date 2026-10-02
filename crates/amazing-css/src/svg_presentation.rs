@@ -2,7 +2,7 @@
 //! low-priority author hints after SVG's attribute-specific grammar is checked.
 use amazing_dom::{Dom, Namespace, NodeIdx};
 use crate::syntax::{Token, tokenize, serialize};
-use crate::values::{self, ComputedValue, Keyword, LengthPercentage, SvgPaint, SvgResource};
+use crate::values::{self, ComputedValue, LengthPercentage, SvgPaint, SvgResource};
 
 pub(crate) fn collect(dom: &Dom, el: NodeIdx) -> Vec<(String, String)> {
     if dom.namespace(el) != Some(Namespace::Svg) { return Vec::new(); }
@@ -127,8 +127,7 @@ pub(crate) fn parse_property(property: &str, value: &str) -> Option<ComputedValu
         }
         "clip-path" | "mask" if s == "none" => Some(V::SvgResource(SvgResource::None)),
         "clip-path" | "mask" => url(value).map(|url| V::SvgResource(SvgResource::Url(url))),
-        "font-size-adjust" if s == "none" => Some(V::Keyword(Keyword::None)),
-        "font-size-adjust" => value.parse::<f64>().ok().filter(|n| n.is_finite() && *n >= 0.0).map(V::Number),
+        "font-size-adjust" => crate::font_size_adjust::FontSizeAdjust::parse(value).map(V::FontSizeAdjust),
         _ => None,
     }
 }
