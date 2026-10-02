@@ -719,7 +719,7 @@ mod tests {
     #[test]
     fn dump_preserves_expanded_attributes_and_insertion_order() {
         let mut dom = Dom::new();
-        let svg = dom.create_element_ns(NodeIdx(0), "svg", Namespace::Svg);
+        let svg = dom.create_element_ns(NodeIdx(0), Some("http://www.w3.org/2000/svg"), "svg").unwrap();
         dom.set_attribute(svg, "id", "root");
         dom.set_attribute_expanded(svg, Some("http://www.w3.org/1999/xlink"),
             Some("xlink"), "href", "#target").unwrap();
