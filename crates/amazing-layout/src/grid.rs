@@ -1982,6 +1982,7 @@ pub(crate) fn intrinsic_lanes_width(box_: &LayoutBox, fonts: &FontSource, minimu
     let padding = values::resolve_padding(&box_.style, box_.font_size, 0.0);
     let border = values::resolve_borders(&box_.style, box_.font_size);
     let chrome = padding.left + padding.right + border.left + border.right;
+    if let Some(width) = crate::containment::intrinsic_width(box_) { return chrome + width; }
     let crate::Flow::Grid(items) = &box_.flow else { return chrome; };
     let spec = GridSpec::of(&box_.style, None, box_.font_size, 0.0, None);
     let measure = |item: &LayoutBox| {

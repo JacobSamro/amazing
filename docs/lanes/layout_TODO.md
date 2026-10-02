@@ -3297,3 +3297,11 @@ logical001/002 unresolved CSS longhands; 010/015/016/021/026 flex/grid adoption.
 CSS owner queued physical/logical containment property expansion/validation;
 layout-flexgrid adoption needs the shared intrinsic-size seam. General float
 insertion into partially occupied line boxes and inline fragmentation remain.
+
+### LAYOUT-38 — shared intrinsic size containment (2026-10-03)
+
+On fixed CSS-aware base `b038b9c6`, consume resolved physical containment longhands with independent `none`/length/auto-fallback axes, and share the same resolver through block, atomic inline, flex and grid intrinsic queries. Inline-size containment follows writing mode; eligible captions remain supported. Preserve surrogate dimensions during later text shaping. Fix positive surrogate-height collapse-through and contained inline-flex baseline measurement. Nine grouped geometry/resolver regressions cover the area; no copied upstream implementation.
+
+Boat native ext4 gate: **3532 workspace passed /17 skipped**, **4 doctests**, **7 harness tests**. Full six-directory pinned WPT **552 eligible**, **338→372 pass**, **214→180 mismatch**, **34 gained /0 lost**, no changed/new/removed or operational failures. Sizing **91→99/138** (+8), containment **108→134/229** (+26), tables **59/82**, floats **29/39**, normal-flow **24/29**, display **27/35** unchanged. CSS31/32/33 owner changes already belong to the baseline, so their +5 table/+1 logical sizing gains are excluded. Evidence and exact source/renderer hashes: `crates/amazing-layout/evidence/layout38/`.
+
+Remembered-size persistence and dynamic visibility remain unimplemented. Continue with remaining containment failure clusters, beginning layout containment establishing independent formatting contexts and auto sizing; replaced-node natural-size behavior needs its owning lane if no layout seam exists.

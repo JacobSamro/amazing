@@ -226,8 +226,11 @@ fn layout_block_in_context(
     // min-width/max-width, and float/atomic auto shrink-to-fit); the height
     // half is merged into `def_h` further down, which already outranks
     // content-based auto height.
-    let (contain_width_override, contain_height_override) = contain_size_override(b, font_px);
-    let shaped_intrinsic = if let (Flow::Inlines(items), Some(text)) = (&b.flow, text) {
+    let (contain_width_override, contain_height_override) = crate::containment::intrinsic_inner_sizes(&b.style, font_units, None);
+    let shaped_intrinsic = if let Some(width) = contain_width_override {
+        let outer = width + bl + pl + pr + br_;
+        Some((outer, outer))
+    } else if let (Flow::Inlines(items), Some(text)) = (&b.flow, text) {
         (has_ruby || floating || b.inline_atomic || vertical_text || width_keyword).then(|| {
             crate::inline::intrinsic_widths_shaped(items,
                 b.font_metric_style.as_ref().map(|style| style.direction).unwrap_or_default(), text)
@@ -242,7 +245,8 @@ fn layout_block_in_context(
         .or_else(|| keyword_shaped_intrinsic.map(|pair| if minimum {pair.0} else {pair.1}))
         .unwrap_or_else(|| if minimum { crate::flex::min_content_width(b, fonts) }
             else { crate::flex::max_content_width(b, fonts) });
-    let mut vertical_intrinsic = vertical_inline_measure(b, cbw, text);
+    let mut vertical_intrinsic = if contain_width_override.is_some() { None }
+        else { vertical_inline_measure(b, cbw, text) };
     // --- §10.3.3 horizontal constraint ---------------------------------
     let mut content_w;
     match values::resolve_extent_with_units(&b.style, "width", font_units, Some(cbw)) {
@@ -488,7 +492,7 @@ fn layout_block_in_context(
     // but their outer boxes take part in this box's line breaking.
     if matches!(b.flow, Flow::Inlines(_)) {
         layout_atomic_inlines(b, content_x, content_y, content_w, fonts, text);
-        if vertical_text && vertical_intrinsic.is_none() {
+        if vertical_text && vertical_intrinsic.is_none() && contain_width_override.is_none() {
             vertical_intrinsic = vertical_inline_measure(b, content_w, text);
             if let Some((cross, _)) = vertical_intrinsic {
                 if (floating || b.inline_atomic) && matches!(values::resolve_extent_with_units(&b.style, "width", font_units, Some(cbw)), MaybeLen::Auto) {
@@ -777,7 +781,7 @@ pub(crate) fn refresh_atomic_inline_metrics(parent: &mut LayoutBox) {
             } else if is_inline_block(&child.style) {
                 inline_block_baseline(child) - child.border_box.y + margin.top.unwrap_or(0.0)
             } else {
-                height
+                crate::flex::first_baseline(child) - child.border_box.y + margin.top.unwrap_or(0.0)
             };
         }
     }
@@ -841,42 +845,6 @@ fn pt(b: &LayoutBox) -> f32 {
 }
 fn pb(b: &LayoutBox) -> f32 {
     b.padding.bottom
-}
-
-/// CSS Sizing 4 `contain-intrinsic-size` (#intrinsic-size-override): under
-/// `contain: size` or `contain: strict`, a box's own intrinsic width/height
-/// contribution comes from this property instead of measuring its content.
-/// Returns `(width, height)` content-box overrides, in px; either is `None`
-/// when that axis has no override (`none`, unparseable, or containment not
-/// active on this box at all). Only handles the plain `<length>` form of
-/// each axis, not `auto <length>` (the "remembered size" fallback, which
-/// needs last-rendered-size tracking this codebase does not have); an
-/// `auto`-prefixed axis is treated as having no override rather than
-/// guessed at, since the `<length>` half of that form is a fallback for
-/// before the element has ever been sized, not the value to always use.
-/// `contain-intrinsic-size` is not registered in `amazing-css` as a
-/// shorthand, so its raw two-token source (or one token for both axes)
-/// survives on this single property name rather than being expanded into
-/// `contain-intrinsic-width`/`-height` longhands.
-fn contain_size_override(b: &LayoutBox, font_px: f32) -> (Option<f32>, Option<f32>) {
-    let contains_size = b.style.get("contain").is_some_and(|value| {
-        value.split_ascii_whitespace()
-            .any(|token| token.eq_ignore_ascii_case("size") || token.eq_ignore_ascii_case("strict"))
-    });
-    if !contains_size {
-        return (None, None);
-    }
-    let Some(source) = b.style.get("contain-intrinsic-size") else { return (None, None); };
-    let parse_one = |token: &str| -> Option<f32> {
-        if token.eq_ignore_ascii_case("none") || token.eq_ignore_ascii_case("auto") {
-            return None;
-        }
-        values::parse_length_percentage(token, font_px, font_px * 0.6)?.resolve(None)
-    };
-    let mut tokens = source.split_ascii_whitespace().map(parse_one);
-    let first = tokens.next().flatten();
-    let second = tokens.next().flatten().or(first);
-    (first, second)
 }
 
 /// Specified `height` in px, or None (auto). Percentages need the
@@ -1053,7 +1021,9 @@ fn can_collapse_through(block: &LayoutBox, containing_width: f32) -> bool {
         return false;
     }
     let min_height = size_constraint(block, "min-height", block.font_size).unwrap_or(0.0);
-    let height = specified_height(block, block.font_size);
+    let contained_height = crate::containment::intrinsic_inner_sizes(&block.style,
+        values::FontRelativeUnits::legacy(block.font_size, block.font_size * 0.6), None).1;
+    let height = specified_height(block, block.font_size).or(contained_height);
     min_height == 0.0 && height.is_none_or(|height| height == 0.0)
 }
 
@@ -1124,6 +1094,67 @@ mod tests {
         box_.containing_block_height = Some(100.0);
         assert_eq!(size_constraint(&box_, "max-height", 16.0), Some(75.0));
         assert_eq!(specified_height(&box_, 16.0), Some(45.0));
+    }
+
+    #[test]
+    fn contained_child_sizes_parent_intrinsics_without_measuring_content() {
+        for display in ["block", "inline-block", "inline-flex", "inline-grid"] {
+            let (dom, root) = layout(
+                "<body><div id=parent><div id=target>very long content that must not set intrinsic width</div></div></body>",
+                &format!("#parent{{width:max-content}}#target{{display:{display};contain:size;contain-intrinsic-size:55px 66px;padding:3px;border:2px solid}}"),
+            );
+            let parent = find_id(&root, &dom, "parent").unwrap();
+            assert!((parent.content_box.w - 65.0).abs() < 0.01, "{display}: parent width {}", parent.content_box.w);
+            let target = find_id(&root, &dom, "target")
+                .or_else(|| parent.positioned.iter().find(|box_| box_.inline_atomic)).unwrap();
+            close(target.content_box.w, 55.0);
+            close(target.content_box.h, 66.0);
+        }
+    }
+
+    #[test]
+    fn contained_none_axis_is_empty_instead_of_reusing_the_other_length() {
+        let (dom, root) = layout(
+            "<body><div id=target>some nonempty content</div></body>",
+            "#target{display:inline-block;contain:size;contain-intrinsic-size:55px none}",
+        );
+        let target = find_id(&root, &dom, "target").or_else(|| root.positioned.first()).unwrap();
+        close(target.content_box.w, 55.0);
+        close(target.content_box.h, 0.0);
+    }
+
+    #[test]
+    fn contained_flex_bases_distribute_free_space_from_inner_sizes() {
+        let (dom, root) = layout(
+            "<body><div id=flex><div id=one></div><div id=two></div><div id=three></div></div></body>",
+            "#flex{display:flex;width:500px;height:100px}#flex>div{border:1px solid;contain:size}#one{contain-intrinsic-size:55px 11px;flex-grow:3}#two{contain-intrinsic-size:66px 22px;flex-grow:2}#three{contain-intrinsic-size:77px 33px;flex-grow:1}",
+        );
+        for (id, width) in [("one", 203.0), ("two", 164.66667), ("three", 126.33333)] {
+            let target = find_id(&root, &dom, id).unwrap();
+            close(target.content_box.w, width);
+            close(target.border_box.h, 100.0);
+        }
+    }
+
+    #[test]
+    fn positive_contained_inner_height_prevents_empty_margin_collapse_through() {
+        let (dom, root) = layout(
+            "<body><div id=parent><div id=target></div></div></body>",
+            "#parent{width:max-content;border:1px solid}#target{contain:size;contain-intrinsic-size:111px 222px}",
+        );
+        close(find_id(&root, &dom, "parent").unwrap().content_box.h, 222.0);
+        close(find_id(&root, &dom, "parent").unwrap().content_box.w, 111.0);
+    }
+
+    #[test]
+    fn contained_inline_flex_uses_the_same_baseline_for_line_metrics_and_placement() {
+        let (dom, root) = layout(
+            "<body><div id=target>test</div></body>",
+            "#target{display:inline-flex;contain:size;contain-intrinsic-size:111px 222px;border:5px solid green}",
+        );
+        let target = find_id(&root, &dom, "target").or_else(|| root.positioned.first()).unwrap();
+        close(target.border_box.y, root.content_box.y);
+        close(target.border_box.h, 232.0);
     }
 
     fn layout(html: &str, css: &str) -> (Dom, LayoutBox) {

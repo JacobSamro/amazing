@@ -1435,8 +1435,9 @@ fn intrinsic_width_constraints(b: &LayoutBox, inner: f32, fonts: &FontSource) ->
 }
 
 pub(crate) fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
+    if let Some(width) = crate::containment::intrinsic_width(b) { return width; }
     match &b.flow {
-        Flow::Inlines(items) => inline_run_width(items, fonts),
+        Flow::Inlines(items) => inline_run_width(&contained_atomic_items(b, items, fonts, false), fonts),
         Flow::Flex(children) if matches!(
             ContainerSpec::of(&b.style, b.font_size, 0.0, None).direction,
             Direction::Row | Direction::RowReverse
@@ -1496,8 +1497,9 @@ pub(crate) fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 
 }
 
 pub(crate) fn min_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
+    if let Some(width) = crate::containment::intrinsic_width(b) { return width; }
     match &b.flow {
-        Flow::Inlines(items) => inline_min_content_width(items, fonts),
+        Flow::Inlines(items) => inline_min_content_width(&contained_atomic_items(b, items, fonts, true), fonts),
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children
             .iter()
             .map(|child| {
@@ -1509,6 +1511,29 @@ pub(crate) fn min_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 
             .fold(0.0f32, f32::max),
         Flow::Empty => 0.0,
     }
+}
+
+/// Atomic placeholders have not undergone layout during a parent's intrinsic
+/// query. Resolve contained children from the same inner-size model rather than
+/// allowing their initial zero-width placeholder to hide that contribution.
+fn contained_atomic_items<'a>(
+    parent: &LayoutBox, items: &'a [crate::InlineNode], fonts: &FontSource, minimum: bool,
+) -> std::borrow::Cow<'a, [crate::InlineNode]> {
+    if !parent.positioned.iter().any(|child| child.inline_atomic
+        && crate::containment::intrinsic_width(child).is_some()) {
+        return std::borrow::Cow::Borrowed(items);
+    }
+    let mut measured = items.to_vec();
+    for item in &mut measured {
+        if let crate::InlineNode::Atomic { node, size, .. } = item {
+            if let Some(child) = parent.positioned.iter().find(|child| child.node == Some(*node)
+                && child.inline_atomic && crate::containment::intrinsic_width(child).is_some()) {
+                size.width = if minimum { min_content_width(child, fonts) }
+                    else { max_content_width(child, fonts) };
+            }
+        }
+    }
+    std::borrow::Cow::Owned(measured)
 }
 
 fn inline_min_content_width(items: &[crate::InlineNode], fonts: &FontSource) -> f32 {

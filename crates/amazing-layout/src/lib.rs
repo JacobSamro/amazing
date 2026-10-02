@@ -69,6 +69,7 @@
 //! auto-fit, intrinsic-spanning, subgrid, and Grid-Lanes deviations.
 
 pub mod block;
+mod containment;
 pub mod box_tree;
 mod table_tree;
 mod table;
@@ -593,6 +594,9 @@ pub fn layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
 }
 
 fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
+    // Shaping changes descendants, not the containing box's surrogate size.
+    let contained_height = containment::intrinsic_inner_sizes(&layout.style,
+        values::FontRelativeUnits::legacy(layout.font_size, layout.font_size * 0.6), None).1.is_some();
     for child in layout.positioned.iter_mut().filter(|child| child.inline_atomic) {
         apply_shaped_text(child, text);
     }
@@ -670,7 +674,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 } else {
                     lines.iter().map(|line| line.height).sum::<f32>()
                 };
-                if layout
+                if !contained_height && layout
                     .style
                     .get("height")
                     .is_none_or(|value| value.eq_ignore_ascii_case("auto"))
@@ -704,6 +708,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 shift += child.border_box.h - old_height;
             }
             if shift != 0.0
+                && !contained_height
                 && layout
                     .style
                     .get("height")
