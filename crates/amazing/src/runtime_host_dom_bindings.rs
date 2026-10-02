@@ -18,8 +18,11 @@ impl RuntimeBindingHost<'_> {
     }
 
     pub(super) fn dom_document_default_view(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
-        // The current embedding associates its one WindowProxy with the active
-        // document. DOMImplementation, DOMParser and clones create inert docs.
+        // Nested browsing contexts keep their WindowProxy association separately
+        // from the root document. Inert documents have neither association.
+        if let Some(window) = self.iframe_document_window(document) {
+            return Ok(Some(window));
+        }
         Ok((document == self.current_document()).then(|| self.js.binding_global_object()))
     }
 
@@ -816,6 +819,27 @@ mod tests {
             true;
         "#).unwrap();
         assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn iframe_document_default_view_preserves_child_proxy_and_inert_nulls() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body><iframe srcdoc='child'></iframe></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        scheduler.run_script("void document.querySelector('iframe')").unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script(r#"
+            const frame = document.querySelector('iframe');
+            const child = frame.contentDocument;
+            child.defaultView === frame.contentWindow &&
+            child.defaultView.document === child &&
+            child.defaultView !== window &&
+            child.implementation.createHTMLDocument('').defaultView === null &&
+            child.cloneNode(false).defaultView === null;
+        "#).unwrap(), JsValue::Bool(true));
     }
 
     #[test]
