@@ -1,0 +1,112 @@
+{
+  "ticket": "JS-25",
+  "source_commit": "aefe33971385446ace4cfe481366c891ece76ef5",
+  "fixed_base": "f878c84cddf55661119e264005d6fb4dc3186445",
+  "before_source": "a44bf1714d205ac10f7564b5d5cad48c51919961",
+  "before_equivalence": "git diff --quiet a44bf171 f878c84c -- crates scripts Cargo.toml Cargo.lock succeeds; f878 only adds docs/evidence. Before snapshot is the previous exact after source with identical executable code.",
+  "platform": "Linux Boat; native source, target and nextest executable",
+  "changes": [
+    "Public parser::EvalContext and parse_eval preserving eval Script goal",
+    "Inherited strict/new.target/super property/super call/initializer arguments permissions and visible private names",
+    "Ordinary function/method lexical boundaries established before parameter initializers as well as bodies",
+    "Initializer arguments restriction covers shorthand property references"
+  ],
+  "owned": {
+    "passed": 529,
+    "skipped": 1,
+    "js_passed": 502,
+    "regex_passed": 27,
+    "doctests_passed": 1
+  },
+  "workspace": {
+    "passed": 3602,
+    "skipped": 17,
+    "doctests_passed": 4,
+    "nextest_seconds": 81.228
+  },
+  "before": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "host_sha256": "1b4dd895a337ead1aa014c3256d41a719319098d3bdfa083a55c5313951e49b9",
+    "classification_sha256": "9b5acc20248c490cf77357a0e376843b49b33fc0c8203e82391c2aa536d25704",
+    "elapsed_seconds": 54.967,
+    "timeout_seconds": 10.0,
+    "jobs": 8,
+    "filter": "language/",
+    "pyyaml": "6.0.3",
+    "capabilities": {
+      "protocol": 2,
+      "module": true,
+      "async": true,
+      "can_block": true,
+      "createRealm": true,
+      "detachArrayBuffer": true,
+      "gc": false,
+      "agent": false,
+      "IsHTMLDDA": false,
+      "AbstractModuleSource": false,
+      "evalScript": true,
+      "global": true,
+      "print": true,
+      "intl402": true
+    }
+  },
+  "after": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "host_sha256": "e254a714f95a4d2664839fdf4deab1959148fcd58d8e9aee2b032581f34cb5df",
+    "classification_sha256": "9b5acc20248c490cf77357a0e376843b49b33fc0c8203e82391c2aa536d25704",
+    "elapsed_seconds": 55.074,
+    "timeout_seconds": 10.0,
+    "jobs": 8,
+    "filter": "language/",
+    "pyyaml": "6.0.3",
+    "capabilities": {
+      "protocol": 2,
+      "module": true,
+      "async": true,
+      "can_block": true,
+      "createRealm": true,
+      "detachArrayBuffer": true,
+      "gc": false,
+      "agent": false,
+      "IsHTMLDDA": false,
+      "AbstractModuleSource": false,
+      "evalScript": true,
+      "global": true,
+      "print": true,
+      "intl402": true
+    }
+  },
+  "comparison": {
+    "before": {
+      "pass": 23438,
+      "fail": 1108,
+      "timeout": 0,
+      "unsupported": 26,
+      "skipped": 29300
+    },
+    "after": {
+      "pass": 23438,
+      "fail": 1108,
+      "timeout": 0,
+      "unsupported": 26,
+      "skipped": 29300
+    },
+    "before_passing_variants": 43617,
+    "after_passing_variants": 43617,
+    "gained_files": [],
+    "lost_files": [],
+    "gained_variants": [],
+    "lost_variants": [],
+    "loss_details": []
+  },
+  "incomplete_iteration": {
+    "owned_passed": 528,
+    "owned_failed": 1,
+    "reason": "Grouped new API regression caught object method inheriting enclosing initializer arguments restriction. Corrected params/body boundaries in bulk; successful529-owned/workspace/corpus source supersedes this iteration."
+  },
+  "consumer": "Runtime owns lexical caller context capture and native_eval integration after source locator34. API is parser-only; contextual eval failure cluster remains open until that consumer gate."
+}

@@ -24,6 +24,10 @@ change caller metadata, callee frames, environment schemas or eval execution.
 Three grouped parser regressions cover independent permissions, Script-goal
 restrictions, private scopes/shadowing/unknown names, arguments through arrow
 and shorthand forms, and ordinary parameter/body boundaries. Owned Boat bulk:
-529 passed / 1 skipped (JS502, regex27), 1 doctest. Full workspace/docs and matching
-whole-language zero-loss gate are running on the same frozen source; evidence
-will follow separately. Runtime integrates its consumer after source locator34.
+529 passed / 1 skipped (JS502, regex27), 1 doctest. Workspace3602 passed /17 skipped,
+4 doctests. Matching whole-language/ including AnnexB, 24572 selected files:
+23438 passing files and43617 passing variants unchanged, zero losses/timeouts.
+Exact before/after hashes and source equivalence are in
+[js-lang_JS25-evidence.json](js-lang_JS25-evidence.json). Runtime integrates its
+consumer after source locator34; the contextual eval cluster remains open until
+that consumer gate.

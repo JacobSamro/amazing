@@ -1712,3 +1712,11 @@ Runtime owns native-eval context capture/execution after source locator34;
 VM17 owns invocation identity and factory/caller metadata. No shared callee or
 environment edits in this parser series. Interface and grouped source tests:
 [js-lang_JS25-interface.md](js-lang_JS25-interface.md).
+
+Parser dependency source `aefe3397`, fixed base `f878c84c` (executable source
+identical to measured before `a44bf171`): owned**529/1skip +1doc**; workspace
+**3602/17skip +4docs**. Matching whole language/ including AnnexB24572 selected
+files,10s/8 workers: **23438 passing files /43617 passing variants unchanged**,
+**zero losses/timeouts**. [js-lang_JS25-evidence.json](js-lang_JS25-evidence.json)
+records exact hashes. API/grammar dependency is ready; runtime contextual eval
+consumer follows source locator34 and retains ownership of callee/env metadata.
