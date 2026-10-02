@@ -162,6 +162,15 @@ def request(source: str, variant: str, helpers: list[tuple[str, str]]) -> bytes:
     return framed([PROTOCOL, source] + [item for pair in helpers for item in pair])
 
 
+def script_request(source: str, variant: str, path: str, test_root: pathlib.Path,
+                   helpers: list[tuple[str, str]]) -> bytes:
+    """Opt-in classic source context; protocol-1 request bytes stay unchanged."""
+    if variant == "strict":
+        source = '\"use strict\";\n' + source
+    return framed(["AMAZING_TEST262_2_SCRIPT", source, path, str(test_root / "test")]
+                  + [item for pair in helpers for item in pair])
+
+
 def module_request(source: str, path: str, test_root: pathlib.Path,
                    helpers: list[tuple[str, str]]) -> bytes:
     """Module messages use a separate magic; classic bytes stay unchanged."""
@@ -270,6 +279,7 @@ def run_file(path: pathlib.Path, root: pathlib.Path, binary: pathlib.Path,
             verdict = result("unsupported", reason)
         else:
             payload = (module_request(source, name, root, helpers) if variant == "module"
+                       else script_request(source, variant, name, root, helpers) if caps.get("script_source_context")
                        else request(source, variant, helpers))
             response = execute(binary, payload, timeout, variant == "module")
             verdict = classify(meta, response["outcome"]) if "outcome" in response else response

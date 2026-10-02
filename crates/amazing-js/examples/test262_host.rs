@@ -200,9 +200,50 @@ fn emit_module(phase: &str, kind: &str, detail: &str, unsupported: Option<&str>)
     );
 }
 
-fn run_module_request() -> io::Result<()> {
+fn install_test262_module_loader(
+    i: &mut Interpreter, root: &str, path: &str,
+) -> io::Result<(Rc<RefCell<amazing_js::module::ModuleLinker>>, String)> {
     use amazing_js::module::{ModuleLinker, ModulePhase};
     use std::path::Path;
+    let root_path = Path::new(&root).canonicalize()?;
+    let root_id = root_path.join(&path).canonicalize()?.to_string_lossy().into_owned();
+    let root_path_for_resolver = root_path.clone();
+    let path_for_resolver = path.to_owned();
+    let resolve_specifier = move |specifier: &str, referrer: &str| -> Result<(String, String), String> {
+        let referrer = if referrer == path_for_resolver { root_path_for_resolver.join(&path_for_resolver) }
+            else { Path::new(referrer).to_path_buf() };
+        let candidate = referrer.parent().unwrap_or(&root_path_for_resolver).join(specifier);
+        let canonical = candidate.canonicalize().map_err(|error| error.to_string())?;
+        if !canonical.starts_with(&root_path_for_resolver) {
+            return Err(format!("module specifier escapes Test262 checkout: {specifier}"));
+        }
+        let source = std::fs::read_to_string(&canonical).map_err(|error| error.to_string())?;
+        Ok((canonical.to_string_lossy().into_owned(), source))
+    };
+    let linker = Rc::new(RefCell::new(ModuleLinker::new(resolve_specifier)));
+    let loader_linker = Rc::clone(&linker);
+    let loader_root = root_path.clone();
+    i.binding_set_typed_module_loader_hook(Rc::new(move |interpreter, specifier, referrer| {
+        let candidate = Path::new(referrer).parent().unwrap_or(&loader_root).join(specifier);
+        let canonical = candidate.canonicalize().map_err(|error| Throw::type_error(error.to_string()))?;
+        if !canonical.starts_with(&loader_root) {
+            return Err(Throw::type_error("module specifier escapes Test262 checkout"));
+        }
+        let id = canonical.to_string_lossy().into_owned();
+        let source = std::fs::read_to_string(canonical).map_err(|error| Throw::type_error(error.to_string()))?;
+        let convert_error = |failure: amazing_js::module::ModuleFailure| match failure.phase {
+            ModulePhase::Parse | ModulePhase::Resolution => Throw::syntax_error(failure.message),
+            _ => failure.thrown.unwrap_or_else(|| Throw::type_error(failure.message)),
+        };
+        loader_linker.borrow_mut().link(&id, &source).map_err(convert_error)?;
+        ModuleLinker::evaluate_shared(&loader_linker, &id, interpreter).map_err(convert_error)?;
+        Ok(loader_linker.borrow().namespace_object(&id).expect("evaluated module has a namespace"))
+    }));
+    Ok((linker, root_id))
+}
+
+fn run_module_request() -> io::Result<()> {
+    use amazing_js::module::{ModuleLinker, ModulePhase};
     let mut bytes = Vec::new();
     io::stdin().take(128 * 1024 * 1024).read_to_end(&mut bytes)?;
     let mut input = bytes.as_slice();
@@ -238,40 +279,7 @@ fn run_module_request() -> io::Result<()> {
             return Ok(());
         }
     }
-    let root_path = Path::new(&root).canonicalize()?;
-    let root_id = root_path.join(&path).canonicalize()?.to_string_lossy().into_owned();
-    let root_path_for_resolver = root_path.clone();
-    let path_for_resolver = path.clone();
-    let resolve_specifier = move |specifier: &str, referrer: &str| -> Result<(String, String), String> {
-        let referrer = if referrer == path_for_resolver { root_path_for_resolver.join(&path_for_resolver) }
-            else { Path::new(referrer).to_path_buf() };
-        let candidate = referrer.parent().unwrap_or(&root_path_for_resolver).join(specifier);
-        let canonical = candidate.canonicalize().map_err(|error| error.to_string())?;
-        if !canonical.starts_with(&root_path_for_resolver) {
-            return Err(format!("module specifier escapes Test262 checkout: {specifier}"));
-        }
-        let source = std::fs::read_to_string(&canonical).map_err(|error| error.to_string())?;
-        Ok((canonical.to_string_lossy().into_owned(), source))
-    };
-    let linker = Rc::new(RefCell::new(ModuleLinker::new(resolve_specifier)));
-    let loader_linker = Rc::clone(&linker);
-    let loader_root = root_path.clone();
-    i.binding_set_typed_module_loader_hook(Rc::new(move |interpreter, specifier, referrer| {
-        let candidate = Path::new(referrer).parent().unwrap_or(&loader_root).join(specifier);
-        let canonical = candidate.canonicalize().map_err(|error| Throw::type_error(error.to_string()))?;
-        if !canonical.starts_with(&loader_root) {
-            return Err(Throw::type_error("module specifier escapes Test262 checkout"));
-        }
-        let id = canonical.to_string_lossy().into_owned();
-        let source = std::fs::read_to_string(canonical).map_err(|error| Throw::type_error(error.to_string()))?;
-        let convert_error = |failure: amazing_js::module::ModuleFailure| match failure.phase {
-            ModulePhase::Parse | ModulePhase::Resolution => Throw::syntax_error(failure.message),
-            _ => failure.thrown.unwrap_or_else(|| Throw::type_error(failure.message)),
-        };
-        loader_linker.borrow_mut().link(&id, &source).map_err(convert_error)?;
-        ModuleLinker::evaluate_shared(&loader_linker, &id, interpreter).map_err(convert_error)?;
-        Ok(loader_linker.borrow().namespace_object(&id).expect("evaluated module has a namespace"))
-    }));
+    let (linker, root_id) = install_test262_module_loader(&mut i, &root, &path)?;
     let linked = linker.borrow_mut().link(&root_id, &source);
     let evaluation = linked.and_then(|_| ModuleLinker::evaluate_shared(&linker, &root_id, &mut i).map(|_| ()));
     if let Err(failure) = evaluation {
@@ -295,10 +303,16 @@ fn run() -> io::Result<()> {
         .take(128 * 1024 * 1024)
         .read_to_end(&mut bytes)?;
     let mut input = bytes.as_slice();
-    if field(&mut input)? != "AMAZING_TEST262_1" {
+    let protocol = field(&mut input)?;
+    if protocol != "AMAZING_TEST262_1" && protocol != "AMAZING_TEST262_2_SCRIPT" {
         return Err(io::Error::other("bad protocol"));
     }
     let source = field(&mut input)?;
+    let source_context = if protocol == "AMAZING_TEST262_2_SCRIPT" {
+        Some((field(&mut input)?, field(&mut input)?))
+    } else {
+        None
+    };
     let mut helpers = Vec::new();
     while !input.is_empty() {
         helpers.push((field(&mut input)?, field(&mut input)?));
@@ -335,7 +349,13 @@ fn run() -> io::Result<()> {
             return Ok(());
         }
     }
-    match i.run_program(&program) {
+    let execution = if let Some((path, root)) = source_context {
+        let (_, referrer) = install_test262_module_loader(&mut i, &root, &path)?;
+        i.run_script_with_source_context(&source, &referrer)
+    } else {
+        i.run_program(&program)
+    };
+    match execution {
         Ok(_) => {
             if async_test {
                 match ASYNC_DONE.with(|done| done.borrow().clone()) {
@@ -396,7 +416,7 @@ const CAPABILITIES: Capabilities = Capabilities {
 impl Capabilities {
     fn emit(&self, protocol: u8) {
         println!(
-            "{{\"protocol\":{protocol},\"module\":{},\"async\":{},\"can_block\":{},\"createRealm\":{},\"detachArrayBuffer\":{},\"gc\":{},\"agent\":{},\"IsHTMLDDA\":{},\"AbstractModuleSource\":{},\"evalScript\":{},\"global\":{},\"print\":{},\"intl402\":{}}}",
+            "{{\"protocol\":{protocol},\"script_source_context\":{context},\"module\":{},\"async\":{},\"can_block\":{},\"createRealm\":{},\"detachArrayBuffer\":{},\"gc\":{},\"agent\":{},\"IsHTMLDDA\":{},\"AbstractModuleSource\":{},\"evalScript\":{},\"global\":{},\"print\":{},\"intl402\":{}}}",
             self.module && protocol >= 2,
             self.asynchronous,
             self.can_block,
@@ -410,6 +430,7 @@ impl Capabilities {
             self.global,
             self.print,
             self.intl402,
+            context = protocol >= 2,
         );
     }
 }
