@@ -1050,6 +1050,54 @@ fn async_await_rejection_runs_catch_and_finally() {
 }
 
 #[test]
+fn jsvm15_object_spread_operands_suspend_without_losing_literal_state() {
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        let source = r#"
+            var calls=0, log='', symbol=Symbol();
+            var proto={set a(v){calls++}};
+            var source={get a(){log+='g';return 7},[symbol]:8};
+            Object.defineProperty(source,'__proto__',{value:42,enumerable:true});
+            function* g(){yield {__proto__:proto,...(yield source)}}
+            var it=g();
+            var first=it.next();
+            var o=it.next(first.value).value;
+            o.a===7 && o[symbol]===8 && o.__proto__===42 &&
+                Object.getPrototypeOf(o)===proto && calls===0 && log==='g';
+        "#;
+        assert_eq!(Interpreter::new().run_script_with_backend(source, backend).unwrap(), JsValue::Bool(true));
+        let source = r#"
+            function* g(){yield {...yield yield}}
+            var it=g();
+            it.next(); it.next({a:42});
+            it.next({a:42}).value.a;
+        "#;
+        assert_eq!(Interpreter::new().run_script_with_backend(source, backend).unwrap(), JsValue::num(42.0));
+        let source = r#"
+            var log='', result;
+            var source={get a(){log+='g';return 42}};
+            async function f(){return {before:(log+='b',1),...(await source),after:(log+='a',2)}}
+            f().then(function(o){result=[o.before,o.a,o.after,log].join(',')});
+        "#;
+        let mut interpreter = Interpreter::new();
+        interpreter.run_script_with_backend(source, backend).unwrap();
+        assert_eq!(interpreter.global_env.resolve("result"), Some(JsValue::str("1,42,2,bga")));
+        let source = r#"
+            var result;
+            async function* f(){yield {...(await null),...(await undefined),...(await 'xy')}}
+            f().next().then(function(r){result=Object.keys(r.value).join(',')+':'+r.value[0]+r.value[1]});
+        "#;
+        let mut interpreter = Interpreter::new();
+        interpreter.run_script_with_backend(source, backend).unwrap();
+        assert_eq!(interpreter.global_env.resolve("result"), Some(JsValue::str("0,1:xy")));
+    }
+    for source in ["function* g(){yield {...yield yield}}", "async function f(){return {...await 0}}"] {
+        let program = parse_script(source).unwrap();
+        let crate::ast::StmtKind::Function(function) = &program.body[0].kind else { unreachable!() };
+        assert!(compile_function_item(function, program.body[0].span, false).is_ok());
+    }
+}
+
+#[test]
 fn jsvm14_class_declarations_share_atomic_expression_lowering() {
     let sources = [
         r#"function* g(){class A {x=1; #p=2; get(){return this.x+this.#p} static n=4; static {this.n++}} yield [new A().get(),A.n,A.name].join(',')} g().next().value;"#,
