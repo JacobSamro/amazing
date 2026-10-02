@@ -10,7 +10,7 @@ mod patterns;
 #[cfg(test)]
 mod tests;
 
-use super::{adopt_promise_result, callable_function, for_iteration_env, native_promise_reject, native_promise_resolve, new_promise, promise_callback, reference_name, settle_promise, Interpreter, Reference};
+use super::{callable_function, for_iteration_env, new_promise, promise_resolving_functions, reference_name, settle_promise, Interpreter, Reference};
 use crate::ast::{BinOp, ForLeft, UnOp, VarKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::tokens::{Numeric, Span};
@@ -2010,87 +2010,29 @@ fn rejection(i: &Interpreter, error: JsValue) -> PromiseFate {
 
 pub(crate) fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValue {
     if matches!(&value, JsValue::Object(object) if matches!(object.borrow().exotic, Exotic::Promise(_))) {
-        // PromiseResolve(%Promise%, value): a native promise is reused only
-        // when its `constructor` is %Promise% (recognised here by its own
-        // `prototype` being %Promise.prototype%); reading it may throw.
+        // PromiseResolve(%Promise%, value) reuses only this realm's intrinsic
+        // constructor, regardless of a different constructor's prototype.
+        // The observable constructor read can itself reject the await.
         match i.get_prop(&value, "constructor") {
-            Ok(JsValue::Object(constructor))
-                if matches!(constructor.borrow().get_own("prototype"),
-                    Some(JsValue::Object(proto)) if Rc::ptr_eq(&proto.0, &i.promise_proto.0)) => return value,
+            Ok(constructor) if constructor == i.intrinsic_promise_constructor => return value,
             Ok(_) => {}
             Err(Throw(error)) => return new_promise(i, rejection(i, error)),
         }
     }
     let promise = new_promise(i, PromiseFate::Pending);
     let JsValue::Object(target) = &promise else { unreachable!() };
-    let then = if value.is_object() {
-        match i.get_prop(&value, "then") {
-            Ok(then) => then,
-            Err(Throw(error)) => {
-                let _ = settle_promise(target, rejection(i, error), i);
-                return promise;
-            }
-        }
-    } else {
-        JsValue::Undefined
-    };
-    if callable_function(&then).is_some() {
-        async_enqueue_thenable(i, target, value, then);
-    } else {
-        let _ = settle_promise(target, PromiseFate::Fulfilled(value), i);
+    if let Err(Throw(error)) = async_complete(i, target, value) {
+        let _ = settle_promise(target, rejection(i, error), i);
     }
     promise
 }
 
 pub(crate) fn async_complete(i: &mut Interpreter, target: &Obj, value: JsValue) -> Result<(), Throw> {
-    if matches!(&value, JsValue::Object(object) if matches!(object.borrow().exotic, Exotic::Promise(_))) {
-        if adopt_promise_result(target, &value, i)? {
-            return Ok(());
-        }
-    }
-    if value.is_object() {
-        let then = match i.get_prop(&value, "then") {
-            Ok(then) => then,
-            Err(Throw(error)) => return settle_promise(target, rejection(i, error), i),
-        };
-        if callable_function(&then).is_some() {
-            async_enqueue_thenable(i, target, value, then);
-            return Ok(());
-        }
-    }
-    settle_promise(target, PromiseFate::Fulfilled(value), i)
-}
-
-fn async_enqueue_thenable(i: &mut Interpreter, target: &Obj, value: JsValue, then: JsValue) {
-    let job = Interpreter::native("PromiseResolveThenableJob", async_thenable_job, &i.function_proto);
-    if let JsValue::Object(object) = &job {
-        let mut object = object.borrow_mut();
-        object.set_own("[[Then]]", then);
-        object.set_own("[[Thenable]]", value);
-        object.set_own("[[Target]]", JsValue::Object(target.clone()));
-    }
-    if let Err(Throw(error)) = i.queue_microtask(job) {
-        let _ = settle_promise(target, rejection(i, error), i);
-    }
-}
-
-fn async_thenable_job(i: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let native = i.native_stack.last().cloned().ok_or_else(|| Throw::type_error("missing thenable job"))?;
-    let (then, thenable, target) = {
-        let object = native.borrow();
-        let then = object.get_own("[[Then]]").ok_or_else(|| Throw::type_error("missing thenable method"))?;
-        let thenable = object.get_own("[[Thenable]]").ok_or_else(|| Throw::type_error("missing thenable receiver"))?;
-        let Some(JsValue::Object(target)) = object.get_own("[[Target]]") else {
-            return Err(Throw::type_error("missing thenable promise"));
-        };
-        (then, thenable, target)
-    };
-    let resolve = promise_callback(i, "resolve", &target, native_promise_resolve);
-    let reject = promise_callback(i, "reject", &target, native_promise_reject);
-    if let Err(Throw(error)) = i.call_value(&then, thenable, vec![resolve, reject]) {
-        settle_promise(&target, rejection(i, error), i)?;
-    }
-    Ok(JsValue::Undefined)
+    // Returning a Promise still performs Get(value, "then"). The shared
+    // resolving pair also keeps a pending adoption from being overwritten
+    // when a thenable resolves and subsequently rejects or throws.
+    let (resolve, _) = promise_resolving_functions(i, target);
+    i.call_value(&resolve, JsValue::Undefined, vec![value]).map(|_| ())
 }
 
 fn generator_result(i: &Interpreter, value: JsValue, done: bool) -> JsValue {
