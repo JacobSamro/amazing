@@ -169,7 +169,7 @@ impl Interpreter {
             let mut prototype = JsObject::ordinary();
             prototype.proto = Some(self.object_proto.clone());
             let prototype = Obj(Rc::new(RefCell::new(prototype)));
-            let constructor = Self::native(name, std_temporal_constructor(kind), &self.function_proto);
+            let constructor = Self::native_constructor(name, std_temporal_constructor(kind), &self.function_proto);
             if let JsValue::Object(function) = &constructor {
                 function.borrow_mut().define("name", symbol_data(JsValue::str(name), false, true)).unwrap();
                 function.borrow_mut().define("length", symbol_data(JsValue::num(std_temporal_length(kind) as f64), false, true)).unwrap();

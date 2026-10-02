@@ -20,34 +20,29 @@ impl Interpreter {
         });
         o.proto = Some(proto.clone());
         o.realm = proto.borrow().realm;
+        o.constructible = false;
         let handle = Obj(Rc::new(RefCell::new(o)));
         // JsObject::function seeds "name" then "length"; built-in functions
         // must expose "length" before "name" in property order.
         let _ = handle.borrow_mut().delete_own("name");
         let _ = handle.borrow_mut().delete_own("length");
-        let prototype = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
-        handle.borrow_mut().define("prototype", Property {
-            value: JsValue::Object(prototype), writable: true, enumerable: false,
-            configurable: true, getter: None, setter: None,
-        }).unwrap();
         let _ = handle.borrow_mut().define("length", Property { value: JsValue::num(arity as f64), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         let _ = handle.borrow_mut().define("name", Property { value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         JsValue::Object(handle)
     }
-    /// `Self::native` defaults every native function object to
-    /// `constructible: true` (JsObject's own default), which real
-    /// constructors (Promise, Error, Array, ...) rely on implicitly across
-    /// the whole builtins surface. Plain functions that are never valid
-    /// `new` targets per spec (global functions like `eval`, and -- more
-    /// broadly -- ordinary methods) need it cleared explicitly instead.
-    /// Auditing every native install site for this is a separate, larger
-    /// architectural ticket (filed in questions.md); this helper only
-    /// covers the specific global functions installed below that a
-    /// `IsConstructor` check must reject.
-    fn native_non_constructor(name: &str, f: crate::value::NativeFn, proto: &Obj) -> JsValue {
-        let value = Self::native(name, f, proto);
+    /// Only builtins with a spec [[Construct]] method opt in here.
+    fn native_constructor(name: &str, f: crate::value::NativeFn, proto: &Obj) -> JsValue {
+        Self::native_constructor_arity(name, f, proto, 0)
+    }
+    fn native_constructor_arity(name: &str, f: crate::value::NativeFn, proto: &Obj, arity: usize) -> JsValue {
+        let value = Self::native_arity(name, f, proto, arity);
         if let JsValue::Object(o) = &value {
-            o.borrow_mut().constructible = false;
+            o.borrow_mut().constructible = true;
+            let prototype = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
+            o.borrow_mut().define("prototype", Property {
+                value: JsValue::Object(prototype), writable: true, enumerable: false,
+                configurable: true, getter: None, setter: None,
+            }).unwrap();
         }
         value
     }
@@ -59,7 +54,7 @@ impl Interpreter {
         self.define_global("Infinity", JsValue::Num(f64::INFINITY));
         self.define_global(
             "eval",
-            Self::native_non_constructor("eval", native_eval, &self.function_proto),
+            Self::native("eval", native_eval, &self.function_proto),
         );
         self.define_global(
             "fetch",
@@ -101,9 +96,9 @@ impl Interpreter {
             "queueMicrotask",
             Self::native("queueMicrotask", native_queue_microtask, &self.function_proto),
         );
-        let error_constructor = Self::native("Error", native_error, &self.function_proto);
+        let error_constructor = Self::native_constructor("Error", native_error, &self.function_proto);
         // Reused as the stored %Error.prototype% (self.error_proto) rather than
-        // the fresh ordinary object `Self::native` allocates, so the `stack`
+        // the fresh ordinary object `Self::native_constructor` allocates, so the `stack`
         // setter's SameValue-with-home-object check has a stable identity to
         // compare against at call time.
         let error_prototype = self.error_proto.clone();
@@ -152,7 +147,7 @@ impl Interpreter {
             ("AggregateError", native_aggregate_error as crate::value::NativeFn),
             ("SuppressedError", native_suppressed_error as crate::value::NativeFn),
         ] {
-            let constructor = Self::native(name, native, &self.function_proto);
+            let constructor = Self::native_constructor(name, native, &self.function_proto);
             if let JsValue::Object(function) = &constructor {
                 if let JsValue::Object(error_function) = &error_constructor {
                     function.borrow_mut().proto = Some(error_function.clone());
@@ -167,7 +162,7 @@ impl Interpreter {
             }
             self.define_global(name, constructor);
         }
-        let function_ctor = Self::native(
+        let function_ctor = Self::native_constructor(
             "Function",
             native_function_constructor,
             &self.function_proto,
@@ -194,7 +189,7 @@ impl Interpreter {
         // constructor's own `[[Prototype]]` is %Function% (it "is a
         // subclass of Function"), and its `.prototype` link is
         // {writable:false, enumerable:false, configurable:false} --
-        // overwriting native_arity's ordinary-constructor default of
+        // overwriting native_constructor_arity's ordinary-constructor default of
         // {writable:true, configurable:true} -- matching
         // AsyncFunction-prototype.js. `constructor`/@@toStringTag on the
         // shared prototype are {writable:false, enumerable:false,
@@ -209,8 +204,8 @@ impl Interpreter {
                 ("GeneratorFunction", native_generator_function_constructor as crate::value::NativeFn, self.generator_function_proto.clone(), "GeneratorFunction", Some(self.generator_proto.clone())),
                 ("AsyncGeneratorFunction", native_async_generator_function_constructor as crate::value::NativeFn, self.async_generator_function_proto.clone(), "AsyncGeneratorFunction", Some(self.async_generator_proto.clone())),
             ] {
-                let ctor = Self::native_arity(name, native, &self.function_proto, 1);
-                let JsValue::Object(ctor_obj) = &ctor else { unreachable!("native_arity always returns an object") };
+                let ctor = Self::native_constructor_arity(name, native, &self.function_proto, 1);
+                let JsValue::Object(ctor_obj) = &ctor else { unreachable!("native_constructor_arity always returns an object") };
                 ctor_obj.borrow_mut().proto = Some(function_constructor.clone());
                 ctor_obj.borrow_mut().define("prototype", Property {
                     value: JsValue::Object(proto.clone()), writable: false, enumerable: false,
@@ -245,7 +240,7 @@ impl Interpreter {
             symbol_method_length(&method, length);
             self.object_proto.borrow_mut().define(name, symbol_data(method, true, true)).unwrap();
         }
-        let object_ctor = Self::native("Object", native_object, &self.function_proto);
+        let object_ctor = Self::native_constructor("Object", native_object, &self.function_proto);
         if let JsValue::Object(o) = &object_ctor {
             o.borrow_mut().set_own("prototype", JsValue::Object(self.object_proto.clone()));
             self.object_proto.borrow_mut().define("constructor", symbol_data(object_ctor.clone(), true, true)).unwrap();
@@ -331,7 +326,7 @@ impl Interpreter {
         self.install_proxy();
         self.define_global(
             "Array",
-            Self::native("Array", native_array, &self.function_proto),
+            Self::native_constructor("Array", native_array, &self.function_proto),
         );
         if let Some(array) = self.global_env.resolve("Array") {
             self.array_proto.borrow_mut().define("constructor", symbol_data(array.clone(), true, true)).unwrap();
@@ -357,7 +352,7 @@ impl Interpreter {
             );
         }
         self.install_symbols();
-        let date_ctor = Self::native("Date", native_date, &self.function_proto);
+        let date_ctor = Self::native_constructor("Date", native_date, &self.function_proto);
         if let JsValue::Object(object) = &date_ctor {
             object
                 .borrow_mut()
@@ -389,7 +384,7 @@ impl Interpreter {
             "isFinite",
             Self::native("isFinite", native_is_finite, &self.function_proto),
         );
-        let promise_ctor = Self::native("Promise", native_promise, &self.function_proto);
+        let promise_ctor = Self::native_constructor("Promise", native_promise, &self.function_proto);
         if let JsValue::Object(o) = &promise_ctor {
             let _ = self.set_prop(&promise_ctor, "prototype", JsValue::Object(self.promise_proto.clone()));
             self.promise_proto.borrow_mut().define("constructor", symbol_data(promise_ctor.clone(), true, true)).unwrap();
@@ -555,9 +550,9 @@ impl Interpreter {
         self.define_global("console", console);
         self.define_global(
             "Number",
-            Self::native("Number", native_number, &self.function_proto),
+            Self::native_constructor("Number", native_number, &self.function_proto),
         );
-        let string_ctor = Self::native("String", native_string, &self.function_proto);
+        let string_ctor = Self::native_constructor("String", native_string, &self.function_proto);
         if let JsValue::Object(object) = &string_ctor {
             let _ = object.borrow_mut().define("length", Property {
                 value: JsValue::num(1.0), writable: false, enumerable: false,
@@ -632,7 +627,7 @@ impl Interpreter {
             });
         }
         self.define_global("String", string_ctor);
-        let boolean_ctor = Self::native("Boolean", native_boolean, &self.function_proto);
+        let boolean_ctor = Self::native_constructor("Boolean", native_boolean, &self.function_proto);
 
         self.install_boolean_extra(&boolean_ctor);
         self.define_global("Boolean", boolean_ctor);

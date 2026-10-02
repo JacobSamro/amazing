@@ -56,7 +56,7 @@ fn intl_timezone(text: &str) -> Result<String, Throw> {
 
 impl Interpreter {
     fn install_intl_datetime(&mut self, namespace: &Obj) {
-        let constructor = Self::native("DateTimeFormat", intl_date_ctor, &self.function_proto);
+        let constructor = Self::native_constructor("DateTimeFormat", intl_date_ctor, &self.function_proto);
         let JsValue::Object(function) = &constructor else { unreachable!() };
         let JsValue::Object(prototype) = function.borrow().get_own("prototype").unwrap() else { unreachable!() };
         prototype.borrow_mut().proto = Some(self.object_proto.clone());

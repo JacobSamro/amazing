@@ -29,9 +29,8 @@ impl Interpreter {
             WellKnownSymbol::HasInstance.symbol(),
             symbol_data(has_instance, false, false),
         ).unwrap();
-        let constructor = Self::native("Symbol", native_symbol, &self.function_proto);
+        let constructor = Self::native_constructor("Symbol", native_symbol, &self.function_proto);
         if let JsValue::Object(object) = &constructor {
-            object.borrow_mut().constructible = false;
             object.borrow_mut().define("name", symbol_data(JsValue::str("Symbol"), false, true)).unwrap();
             object.borrow_mut().define("prototype", symbol_data(JsValue::Object(self.symbol_proto.clone()), false, false)).unwrap();
             object.borrow_mut().define("length", symbol_data(JsValue::num(0.0), false, true)).unwrap();
@@ -240,6 +239,9 @@ fn symbol_receiver(value: &JsValue) -> Result<JsSymbol, Throw> {
 }
 
 fn native_symbol(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if i.current_new_target().is_some() {
+        return Err(Throw::type_error("Symbol cannot be invoked with new"));
+    }
     let description = match args.first() {
         None | Some(JsValue::Undefined) => None,
         Some(value) => Some(i.to_js_string(value)?),

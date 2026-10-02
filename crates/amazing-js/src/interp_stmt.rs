@@ -2538,8 +2538,11 @@ impl Interpreter {
             .clone()
             .ok_or_else(|| Throw::type_error("not a constructor"))?;
         if matches!(&fun.body, FunctionBody::Native(native)
-            if std::ptr::fn_addr_eq(*native, bigint_constructor as crate::value::NativeFn)) {
-            return Err(Throw::type_error("BigInt is not a constructor"));
+            if std::ptr::fn_addr_eq(*native, bigint_constructor as crate::value::NativeFn)
+                || std::ptr::fn_addr_eq(*native, native_symbol as crate::value::NativeFn)) {
+            // Both have [[Construct]], but reject NewTarget before any
+            // prototype lookup or instance allocation.
+            return Err(Throw::type_error("BigInt and Symbol cannot be invoked with new"));
         }
         if fun.is_arrow {
             return Err(Throw::type_error("arrow is not a constructor"));

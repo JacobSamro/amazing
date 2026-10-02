@@ -8,7 +8,7 @@ struct IntlListState { locale: String, resolved: String, style: String, kind: St
 
 impl Interpreter {
     fn install_intl_relative_and_list(&mut self, namespace: &Obj) {
-        let relative = Self::native("RelativeTimeFormat", intl_relative_ctor, &self.function_proto);
+        let relative = Self::native_constructor("RelativeTimeFormat", intl_relative_ctor, &self.function_proto);
         let JsValue::Object(function) = &relative else { unreachable!() };
         let JsValue::Object(prototype) = function.borrow().get_own("prototype").unwrap() else { unreachable!() };
         prototype.borrow_mut().proto = Some(self.object_proto.clone());
@@ -23,7 +23,7 @@ impl Interpreter {
         intl_register_intrinsic(self, "RelativeTimeFormat", function, &prototype);
         let _ = namespace.borrow_mut().define("RelativeTimeFormat", binary_writable_property(relative));
 
-        let list = Self::native("ListFormat", intl_list_ctor, &self.function_proto);
+        let list = Self::native_constructor("ListFormat", intl_list_ctor, &self.function_proto);
         let JsValue::Object(function) = &list else { unreachable!() };
         let JsValue::Object(prototype) = function.borrow().get_own("prototype").unwrap() else { unreachable!() };
         prototype.borrow_mut().proto = Some(self.object_proto.clone());

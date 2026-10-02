@@ -980,3 +980,34 @@ internal proxy-trap-implementation reads are correct as-is;
 `named_visible`'s own chain walk was assessed lower-priority and left
 unfixed). Generators/async-generators remain blocked on js-vm (cross-lane
 request standing in `questions.md`).
+
+## JSRT-25 native constructibility (2026-10-03)
+
+At base `2eb1229a`, `native_arity` inherited `JsObject::ordinary`'s
+constructible flag and manufactured a prototype for every builtin callback.
+Native functions now have only [[Call]] by default; only the audited spec
+constructors opt into [[Construct]] with `native_constructor(_arity)`.
+The raw `JsObject::function` path also defaults `FunctionBody::Native` to
+nonconstructible, covering internal async callbacks. Host-native call policies
+are preserved. Ordinary native methods and global functions have no fabricated
+own prototype, and bound functions retain their target's constructibility.
+
+The constructor allowlist includes core constructors, Error subtypes, the
+three dynamic function kinds, binary constructors, collections, Iterator,
+DisposableStack/AsyncDisposableStack, Date/RegExp, Proxy, Intl and Temporal.
+Symbol and BigInt explicitly retain [[Construct]] for use as newTarget/extends,
+while their constructor bodies reject direct construction. The old survey
+incorrectly classified them as nonconstructors; the pinned BigInt
+`is-a-constructor.js` test exposed this distinction. No upstream code was copied.
+
+Linux Boat validation: workspace nextest **3516 passed, 17 skipped** (76.702s);
+workspace doctests **4 passed**. Crate iteration **470 passed, 1 skipped**,
+with **1 doctest passed**. Full pinned Test262: baseline **49,679** passing
+files to **49,695 confirmed passes**, **16 gained, zero lost**. The 10s/jobs4
+sweep reported 49,687 passes; all eight pass-to-timeout flips passed together
+at 60s/jobs4 on the same binary and sandbox. Evidence:
+`js-runtime_jsrt25_evidence.json`.
+
+Spec references: [builtin function objects](https://tc39.es/ecma262/multipage/ordinary-and-exotic-objects-behaviours.html#sec-built-in-function-objects),
+[Symbol](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-symbol-constructor),
+[BigInt](https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-bigint-constructor).

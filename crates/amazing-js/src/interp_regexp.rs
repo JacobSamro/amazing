@@ -70,7 +70,7 @@ impl Interpreter {
         Ok(JsValue::object(object))
     }
     fn install_regexp(&mut self) {
-        let constructor = Self::native("RegExp", native_regexp, &self.function_proto);
+        let constructor = Self::native_constructor("RegExp", native_regexp, &self.function_proto);
         if let JsValue::Object(object) = &constructor {
             // `RegExp.prototype` (§22.2.4): unlike an ordinary function's
             // own `prototype` (writable, non-configurable), this one is

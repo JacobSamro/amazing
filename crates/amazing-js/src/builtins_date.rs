@@ -1258,7 +1258,7 @@ fn date_static_utc(
 
 impl Interpreter {
     fn install_date(&mut self) {
-        let constructor = Self::native("Date", date_ctor, &self.function_proto);
+        let constructor = Self::native_constructor("Date", date_ctor, &self.function_proto);
         let JsValue::Object(function) = &constructor else {
             unreachable!("Date constructor is an object");
         };

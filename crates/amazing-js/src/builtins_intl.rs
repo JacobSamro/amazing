@@ -739,7 +739,7 @@ impl Interpreter {
         let JsValue::Object(namespace) = &intl else { unreachable!() };
         intl_method(self, namespace, "getCanonicalLocales", 1, intl_get_canonical_locales);
         intl_method(self, namespace, "supportedValuesOf", 1, intl_supported_values_of);
-        let locale = Self::native("Locale", intl_locale_ctor, &self.function_proto);
+        let locale = Self::native_constructor("Locale", intl_locale_ctor, &self.function_proto);
         if let JsValue::Object(ctor) = &locale {
             let JsValue::Object(proto) = ctor.borrow().get_own("prototype").unwrap() else { unreachable!() };
             proto.borrow_mut().proto = Some(self.object_proto.clone());

@@ -42,8 +42,8 @@ fn std_collection_set_new(i: &Interpreter) -> Obj {
 impl Interpreter {
     fn install_std_collections(&mut self) {
         self.install_std_collection_iterators();
-        let map = Self::native("Map", std_map_constructor, &self.function_proto);
-        let set = Self::native("Set", std_set_constructor, &self.function_proto);
+        let map = Self::native_constructor("Map", std_map_constructor, &self.function_proto);
+        let set = Self::native_constructor("Set", std_set_constructor, &self.function_proto);
         for (constructor, proto, name) in [
             (&map, &self.map_proto, "Map"), (&set, &self.set_proto, "Set"),
         ] {
@@ -459,7 +459,7 @@ impl Interpreter {
             let mut prototype = JsObject::ordinary();
             prototype.proto = Some(self.object_proto.clone());
             let prototype = Obj(Rc::new(RefCell::new(prototype)));
-            let constructor = Self::native(name, constructor, &self.function_proto);
+            let constructor = Self::native_constructor(name, constructor, &self.function_proto);
             if let JsValue::Object(object) = &constructor {
                 object.borrow_mut().define("name", symbol_data(JsValue::str(name), false, true)).unwrap();
                 object.borrow_mut().define("length", symbol_data(JsValue::num(if name == "FinalizationRegistry" { 1.0 } else { 0.0 }), false, true)).unwrap();

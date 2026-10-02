@@ -434,8 +434,8 @@ impl Interpreter {
     }
 
     fn install_binary_builtins(&mut self) {
-        let ab = Self::native("ArrayBuffer", binary_array_buffer_ctor, &self.function_proto);
-        let sab = Self::native("SharedArrayBuffer", binary_shared_buffer_ctor, &self.function_proto);
+        let ab = Self::native_constructor("ArrayBuffer", binary_array_buffer_ctor, &self.function_proto);
+        let sab = Self::native_constructor("SharedArrayBuffer", binary_shared_buffer_ctor, &self.function_proto);
         for (name, ctor, shared) in [("ArrayBuffer", &ab, false), ("SharedArrayBuffer", &sab, true)] {
             let JsValue::Object(function) = ctor else { unreachable!() };
             let JsValue::Object(proto) = function.borrow().get_own("prototype").unwrap() else { unreachable!() };
@@ -465,7 +465,7 @@ impl Interpreter {
             self.define_global(name, ctor.clone());
         }
 
-        let data = Self::native("DataView", binary_data_view_ctor, &self.function_proto);
+        let data = Self::native_constructor("DataView", binary_data_view_ctor, &self.function_proto);
         if let JsValue::Object(function) = &data {
             let JsValue::Object(proto) = function.borrow().get_own("prototype").unwrap() else { unreachable!() };
             proto.borrow_mut().proto = Some(self.object_proto.clone());
@@ -480,7 +480,7 @@ impl Interpreter {
         }
         self.define_global("DataView", data);
 
-        let intrinsic = Self::native("TypedArray", binary_typed_ctor, &self.function_proto);
+        let intrinsic = Self::native_constructor("TypedArray", binary_typed_ctor, &self.function_proto);
         let JsValue::Object(intrinsic_obj) = &intrinsic else { unreachable!() };
         let JsValue::Object(typed_proto) = intrinsic_obj.borrow().get_own("prototype").unwrap() else { unreachable!() };
         typed_proto.borrow_mut().proto = Some(self.object_proto.clone());
@@ -518,7 +518,7 @@ impl Interpreter {
             BinaryKind::Float32, BinaryKind::Float64,
         ] {
             let name = kind.name();
-            let ctor = Self::native(name, binary_typed_ctor, &self.function_proto);
+            let ctor = Self::native_constructor(name, binary_typed_ctor, &self.function_proto);
             let JsValue::Object(function) = &ctor else { unreachable!() };
             function.borrow_mut().proto = Some(intrinsic_obj.clone());
             let JsValue::Object(proto) = function.borrow().get_own("prototype").unwrap() else { unreachable!() };
