@@ -83,6 +83,9 @@ pub struct ModuleLinker<R: ModuleResolver> {
     resolver: R,
     records: HashMap<String, ModuleRecord>,
     load_failures: HashMap<String, CachedLoadFailure>,
+    root_failures: HashMap<String, ModuleFailure>,
+    requests: HashMap<String, Vec<String>>,
+    request_failures: HashMap<(String, String), ModuleFailure>,
     /// Instances persist across `evaluate` calls (JS-19 item 1) so that a dynamic `import()`
     /// made through `Interpreter::binding_set_module_loader_hook` that reuses this same linker
     /// -- the normal case for an embedding with one linker per realm -- reaches an
@@ -106,6 +109,9 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             resolver,
             records: HashMap::new(),
             load_failures: HashMap::new(),
+            root_failures: HashMap::new(),
+            requests: HashMap::new(),
+            request_failures: HashMap::new(),
             instances: HashMap::new(),
             realm_global: None,
         }
@@ -113,23 +119,19 @@ impl<R: ModuleResolver> ModuleLinker<R> {
 
     /// Parse the root and all transitive dependencies, then validate imports.
     pub fn link(&mut self, id: &str, source: &str) -> Result<(), ModuleFailure> {
-        let previous: HashSet<String> = self.records.keys().cloned().collect();
+        if let Some(failure) = self.root_failures.get(id) { return Err(failure.clone()); }
         let result = self.link_inner(id, source);
-        if let Err(failure) = &result {
-            self.load_failures.entry(id.into()).or_insert_with(|| CachedLoadFailure {
-                failure: failure.clone(), direct_parse: false,
-            });
-            // No code has evaluated yet. Discard this failed link transaction's
-            // records so later successful graphs cannot see incomplete edges.
-            self.records.retain(|id, _| previous.contains(id));
-        }
+        if let Err(failure) = &result { self.root_failures.insert(id.into(), failure.clone()); }
         result
     }
 
     fn link_inner(&mut self, id: &str, source: &str) -> Result<(), ModuleFailure> {
         self.load(id.to_owned(), source.to_owned(), true)?;
-        let mut cache = HashMap::new();
-        for record in self.records.values() {
+        self.first_graph_failure(id, true, &mut HashSet::new())?;
+        let mut order = Vec::new();
+        self.graph_order(id, &mut HashSet::new(), &mut order);
+        for record_id in order {
+            let record = &self.records[&record_id];
             for item in &record.module.items {
                 if let ModuleItem::Import(import) = item {
                     for binding in &import.bindings {
@@ -137,8 +139,6 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                             && !self.has_export(
                                 &record.dependencies[&import.from],
                                 &binding.imported,
-                                &mut HashSet::new(),
-                                &mut cache,
                             )?
                         {
                             return Err(ModuleFailure::syntax(
@@ -158,8 +158,6 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                         if !self.has_export(
                             &record.dependencies[from],
                             &name.local,
-                            &mut HashSet::new(),
-                            &mut cache,
                         )? {
                             return Err(ModuleFailure::syntax(
                                 ModulePhase::Resolution,
@@ -181,14 +179,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             }
             return Err(failure);
         }
-        let result = self.load_inner(id.clone(), source, root);
-        if let Err(failure) = &result {
-            self.load_failures.entry(id.clone()).or_insert_with(|| CachedLoadFailure {
-                failure: failure.clone(), direct_parse: false,
-            });
-            self.records.remove(&id);
-        }
-        result
+        self.load_inner(id, source, root)
     }
 
     fn load_inner(&mut self, id: String, source: String, root: bool) -> Result<(), ModuleFailure> {
@@ -230,77 +221,29 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                 _ => None,
             })
             .collect();
+        let mut seen = HashSet::new();
+        let requests: Vec<_> = requests.into_iter().filter(|request| seen.insert(request.clone())).collect();
+        self.requests.insert(id.clone(), requests.clone());
         for request in requests {
-            if self.records[&id].dependencies.contains_key(&request) {
-                continue;
+            match self.resolver.resolve(&request, &id) {
+                Ok((dep_id, dep_source)) => {
+                    self.records.get_mut(&id).unwrap().dependencies.insert(request, dep_id.clone());
+                    // Complete all parsed records, including siblings after a failed parse.
+                    // The root's ordered graph walk selects which cached intrinsic error to report.
+                    let _ = self.load(dep_id, dep_source, false);
+                }
+                Err(message) => {
+                    self.request_failures.insert((id.clone(), request), ModuleFailure::new(ModulePhase::Resolution, message));
+                }
             }
-            let (dep_id, dep_source) = self
-                .resolver
-                .resolve(&request, &id)
-                .map_err(|message| ModuleFailure::new(ModulePhase::Resolution, message))?;
-            self.records
-                .get_mut(&id)
-                .unwrap()
-                .dependencies
-                .insert(request, dep_id.clone());
-            self.load(dep_id, dep_source, false)?;
         }
         Ok(())
     }
 
     fn has_export(
-        &self,
-        id: &str,
-        name: &str,
-        visiting: &mut HashSet<String>,
-        cache: &mut HashMap<(String, String), bool>,
+        &self, id: &str, name: &str,
     ) -> Result<bool, ModuleFailure> {
-        let key = (id.to_owned(), name.to_owned());
-        if let Some(found) = cache.get(&key) {
-            return Ok(*found);
-        }
-        if !visiting.insert(id.to_owned()) {
-            return Ok(false);
-        }
-        let record = self
-            .records
-            .get(id)
-            .ok_or_else(|| ModuleFailure::new(ModulePhase::Resolution, "module record missing"))?;
-        let mut direct = false;
-        let mut star_count = 0;
-        for item in &record.module.items {
-            match item {
-                ModuleItem::ExportDefaultExpression(_)
-                | ModuleItem::ExportDefaultDeclaration(_)
-                    if name == "default" =>
-                {
-                    direct = true
-                }
-                ModuleItem::ExportNamed { names, .. }
-                    if names.iter().any(|entry| entry.exported == name) =>
-                {
-                    direct = true
-                }
-                ModuleItem::ExportAll {
-                    as_name: Some(alias),
-                    ..
-                } if alias == name => direct = true,
-                ModuleItem::ExportAll {
-                    as_name: None,
-                    from,
-                    ..
-                } if name != "default" => {
-                    if self.has_export(&record.dependencies[from], name, visiting, cache)? {
-                        star_count += 1;
-                    }
-                }
-                _ => {}
-            }
-        }
-        let found = direct || star_count == 1;
-        visiting.remove(id);
-        cache.insert(key, found);
-        Ok(found)
+        Ok(matches!(self.resolve_export(id, name, &mut HashSet::new()), ExportResolution::Binding(..) | ExportResolution::Namespace(..)))
     }
 
     pub fn evaluate(
@@ -308,7 +251,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         id: &str,
         root_interpreter: &mut Interpreter,
     ) -> Result<ModuleNamespace, ModuleFailure> {
-        self.instantiate_pending(root_interpreter)?;
+        self.instantiate_pending(id, root_interpreter)?;
         self.evaluate_instance(id, root_interpreter)?;
         let mut result = BTreeMap::new();
         for (name, cell) in &self.instances[id].exports {
@@ -323,7 +266,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
     pub fn evaluate_shared(
         linker: &Rc<RefCell<Self>>, id: &str, root: &mut Interpreter,
     ) -> Result<ModuleNamespace, ModuleFailure> {
-        linker.borrow_mut().instantiate_pending(root)?;
+        linker.borrow_mut().instantiate_pending(id, root)?;
         Self::evaluate_instance_shared(linker, id, root)?;
         let registry = linker.borrow();
         registry.instances[id].exports.iter().map(|(name, cell)| {
@@ -342,7 +285,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                 ModuleState::Linked => {}
             }
             registry.instances.get_mut(id).unwrap().state = ModuleState::Evaluating;
-            let dependencies: Vec<String> = registry.records[id].dependencies.values().cloned().collect();
+            let dependencies = registry.ordered_dependencies(id);
             (registry.instances[id].clone(), dependencies, registry.records[id].module.has_top_level_await)
         };
         let outcome = (|| {
@@ -368,23 +311,22 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         self.instances.get(id).map(|instance| instance.namespace.clone())
     }
 
-    /// Instantiate every record `link` has added since the last call (module environments,
-    /// hoisted bindings, import/re-export wiring, the namespace object), leaving any
+    /// Instantiate the root's reachable records (module environments, hoisted
+    /// bindings, import/re-export wiring, the namespace object), leaving any
     /// already-instantiated module completely untouched. Splitting this out of `evaluate` is
     /// what makes calling `evaluate` again after further `link`s -- the shape a dynamic
     /// `import()` loader hook needs -- safe: re-running the original single-shot version for
     /// every record on every call would re-execute already-evaluated top-level code and, for a
     /// widely shared or cyclic graph reached through repeated dynamic imports, never terminate.
-    fn instantiate_pending(&mut self, root_interpreter: &mut Interpreter) -> Result<(), ModuleFailure> {
+    fn instantiate_pending(&mut self, id: &str, root_interpreter: &mut Interpreter) -> Result<(), ModuleFailure> {
         // A dynamic import may run with its importer's module environment
         // installed, but new modules belong to the original realm global.
         let realm_global = self.realm_global.get_or_insert_with(|| root_interpreter.global_env.clone()).clone();
-        let new_ids: Vec<String> = self
-            .records
-            .keys()
-            .filter(|id| !self.instances.contains_key(id.as_str()))
-            .cloned()
-            .collect();
+        if let Some(failure) = self.root_failures.get(id) { return Err(failure.clone()); }
+        self.first_graph_failure(id, true, &mut HashSet::new())?;
+        let mut order = Vec::new();
+        self.graph_order(id, &mut HashSet::new(), &mut order);
+        let new_ids: Vec<String> = order.into_iter().filter(|id| !self.instances.contains_key(id)).collect();
         if new_ids.is_empty() {
             return Ok(());
         }
@@ -528,7 +470,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             ModuleState::Linked => {}
         }
         self.instances.get_mut(id).unwrap().state = ModuleState::Evaluating;
-        let dependencies: Vec<String> = self.records[id].dependencies.values().cloned().collect();
+        let dependencies = self.ordered_dependencies(id);
         let outcome = (|| {
             for dependency in dependencies { self.evaluate_instance(&dependency, root)?; }
             execute_module_body(root, &self.instances[id], self.records[id].module.has_top_level_await)
@@ -587,6 +529,9 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         name: &str,
         visiting: &mut HashSet<(String, String)>,
     ) -> Result<Option<BindingCell>, ModuleFailure> {
+        if matches!(self.resolve_export(id, name, &mut HashSet::new()), ExportResolution::Missing | ExportResolution::Ambiguous) {
+            return Ok(None);
+        }
         if !visiting.insert((id.to_owned(), name.to_owned())) {
             return Ok(None);
         }
@@ -660,18 +605,13 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         if direct.is_some() {
             return Ok(direct);
         }
-        let first = stars.first().cloned();
-        if let Some(first) = &first {
-            if stars.iter().skip(1).any(|cell| !cell.same_target(first)) {
-                return Err(ModuleFailure::syntax(
-                    ModulePhase::Resolution,
-                    format!("ambiguous export {name}"),
-                ));
-            }
-        }
-        Ok(first)
+        // ResolveExport already compared terminal bindings, including namespace
+        // aliases whose wrapper cells need not have identical allocations.
+        Ok(stars.first().cloned())
     }
 }
+
+include!("module_graph.rs");
 
 /// ExecuteAsyncModule (16.2.1.5.2), simplified for a host with no genuine
 /// cross-module concurrency: the module's top-level statements run on a
@@ -1055,7 +995,7 @@ mod tests {
         let nested = linker.link("bad-root", "import 'cycle';import 'broken';").unwrap_err();
         assert_eq!(nested.phase, ModulePhase::Resolution);
         assert!(nested.thrown.as_ref().unwrap().describe().starts_with("SyntaxError"));
-        assert!(linker.records.is_empty());
+        assert!(linker.instances.is_empty());
         let direct = linker.link("broken", "export const =;").unwrap_err();
         assert_eq!(direct.phase, ModulePhase::Parse);
         assert_eq!(nested.thrown.as_ref().unwrap().0, direct.thrown.as_ref().unwrap().0);

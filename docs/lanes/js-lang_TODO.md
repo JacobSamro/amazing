@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-23 — object method home objects and canonical module failures**.
+Frontier: **JS-24 — ordered module graphs and root-specific linking failures**.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
@@ -1671,3 +1671,20 @@ the root gates that separate minimal parser fix. The API's driver WPT follow-up
 exposed a nondeterministic root-link error choice, tracked as JS-24; its failure
 is preserved and the parent holds module-containing pushes until ordered graph
 linking restores stable passes.
+
+
+### JS-24 — ordered module graphs and root-specific linking failures
+
+Port the ordered requested-module walks and ResolveExport from MIT Boa
+`core/engine/src/module/source.rs` at `39cd11214ecb366200157dab96b3919e61e9a391`,
+adapted to canonical string IDs and std collections in `module_graph.rs`.
+Keep the public dependencies map as a lookup, with a private ordered request
+list. Retain complete parsed graph records even when another node fails parsing.
+Cache intrinsic parse errors by canonical node and linking errors by graph root;
+never propagate a root's linking error into a dependency's intrinsic cache.
+Validate and instantiate only reachable records, in ordered dependency postorder.
+Resolve star exports by terminal binding origin: equal origins are unambiguous,
+distinct origins are omitted from namespaces and rejected by named imports.
+The parent gates the installed browser driver's whole 111-page module corpus,
+including repeated cycle-root error choices; the lane gates whole language with
+a fixed before/after source pair and workspace plus doctests on Boat.
