@@ -71,6 +71,7 @@
 pub mod block;
 mod containment;
 pub mod box_tree;
+pub use box_tree::font_metric_text_style;
 mod table_tree;
 mod table;
 pub mod table_decoration;

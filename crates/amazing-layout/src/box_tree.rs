@@ -919,6 +919,19 @@ fn font_oblique_angle_degrees(value: &str) -> Option<f32> {
         .filter(|degrees| degrees.is_finite())
 }
 
+/// Font selection style shared by layout and computed-font metric callbacks.
+/// Supply the unadjusted computed CSS font size. The factory does not apply
+/// font-size-adjust or query a font; actual aspects are resolved by the caller.
+/// A pseudo-element style uses its originating element as `node`.
+pub fn font_metric_text_style(
+    dom: &Dom,
+    node: NodeIdx,
+    style: &ComputedStyle,
+    font_size: f32,
+) -> TextStyle {
+    text_style(dom, node, style, font_size, false)
+}
+
 fn text_style(
     dom: &Dom,
     owner: NodeIdx,
@@ -1817,6 +1830,39 @@ fn flatten_inline(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn public_font_metric_factory_matches_principal_and_generated_selection() {
+        for mode in ["horizontal-tb", "vertical-rl", "vertical-lr", "sideways-rl", "sideways-lr"] {
+            for slant in ["italic", "oblique 12.5deg"] {
+                let dom = amazing_html::parse("<body lang='tr'><p id='target'>A</p></body>");
+                let styled = amazing_css::compute(&dom, &[amazing_css::parse_stylesheet(&format!(
+                    "p{{font-family:'Metric, Family',serif;font-size:20px;font-weight:650;font-stretch:87.5%;font-style:{slant};writing-mode:{mode};direction:rtl;font-feature-settings:'liga' on;font-kerning:none;font-size-adjust:2;font-synthesis-style:oblique-only;font-synthesis-weight:none;font-synthesis-small-caps:none;font-synthesis-position:none}}p::before{{content:'B';position:absolute;font-size:10px}}p::after{{content:'C';position:fixed;font-size:30px}}"
+                ))]);
+                let tree = build_layout_tree(&dom, &styled, &FontSource::fallback());
+                let principal = display_box(&tree, &dom, "target").unwrap();
+                let node = principal.node.unwrap();
+                for (pseudo, size) in [(None,20.0),(Some(PseudoElement::Before),10.0),(Some(PseudoElement::After),30.0)] {
+                    let style = pseudo.map(|pseudo| styled.get_pseudo(node,pseudo).unwrap())
+                        .unwrap_or_else(|| styled.get(node).unwrap());
+                    let actual = crate::font_metric_text_style(&dom,node,style,size);
+                    let box_ = pseudo.map(|pseudo| principal.positioned.iter()
+                        .find(|box_| box_.generated_pseudo == Some(pseudo)).unwrap()).unwrap_or(principal);
+                    assert_eq!(box_.font_metric_style.as_ref(),Some(&actual),"{mode};{slant};{pseudo:?}");
+                    assert_eq!(actual.size,size);
+                    assert_eq!(actual.weight,650);
+                    assert_eq!(actual.stretch_percent,87.5);
+                    assert_eq!(actual.language.as_deref(),Some("tr"));
+                    assert_eq!(actual.families.len(),2);
+                    assert!(actual.families[0].contains("Metric, Family"));
+                    assert!(actual.features.iter().any(|feature| feature.tag == *b"liga" && feature.value == 1));
+                    assert_eq!(actual.synthesis.style,slant != "italic");
+                    assert!(!actual.synthesis.weight && !actual.synthesis.small_caps && !actual.synthesis.position);
+                    if slant.starts_with("oblique") { assert_eq!(actual.oblique_angle_degrees,Some(12.5)); }
+                }
+            }
+        }
+    }
 
     #[test]
     fn font_width_and_oblique_angle_keep_fractional_css_values() {

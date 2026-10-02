@@ -1,0 +1,37 @@
+{
+  "ticket": "LAYOUT-42A",
+  "fixed_base": "6da499f4d97589df36bd90b209e7c794ea1aaa61",
+  "workspace": {
+    "passed": 3582,
+    "skipped": 17,
+    "failed": 0
+  },
+  "doctests_passed": 4,
+  "harness_passed": 7,
+  "wpt": {
+    "subdir": "css/css-fonts",
+    "eligible": 32,
+    "before": {
+      "pass": 24,
+      "mismatch": 8,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after": {
+      "pass": 24,
+      "mismatch": 8,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "gained": 0,
+    "lost": 0,
+    "changed": 0,
+    "new": 0,
+    "removed": 0
+  },
+  "identical_renderer_sha256": "ab1d914e408f58850ed3aadd45a7117e49f201cc0fabce896f3c7fc2ce2c5bbe"
+}
