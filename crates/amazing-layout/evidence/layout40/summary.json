@@ -1,0 +1,198 @@
+{
+  "ticket": "LAYOUT-40",
+  "fixed_base": "12cf44b4bac76afd53a93a488c055e8e17e28127",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "workspace": {
+    "passed": 3539,
+    "skipped": 17,
+    "failed": 0
+  },
+  "doctests_passed": 4,
+  "harness_passed": 7,
+  "directories": [
+    {
+      "subdir": "css/CSS2/floats",
+      "before": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/CSS2/normal-flow",
+      "before": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-contain",
+      "before": {
+        "pass": 153,
+        "mismatch": 76,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 153,
+        "mismatch": 76,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-display",
+      "before": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-overflow",
+      "before": {
+        "pass": 81,
+        "mismatch": 262,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 81,
+        "mismatch": 262,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-sizing",
+      "before": {
+        "pass": 99,
+        "mismatch": 39,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 99,
+        "mismatch": 39,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-tables",
+      "before": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    }
+  ],
+  "interrupted_attempt": "Initial TTL expired during baseline css-overflow; incomplete logs archived separately, excluded from measurements. Entire fixed-source gate restarted on37.59.33.132:19038.",
+  "totals": {
+    "eligible": 895,
+    "before_pass": 472,
+    "after_pass": 472,
+    "before_mismatch": 423,
+    "after_mismatch": 423,
+    "gained": 0,
+    "lost": 0,
+    "changed": 0,
+    "new": 0,
+    "removed": 0
+  },
+  "candidate-source.sha256": "f3593188aeca3ec37350f50bf731572237d858686e4cb823459b5fed71675a08  crates/amazing-layout/src/lib.rs\nc3fdf44fa89a54b15de8f23b9278a33a8a3e87a049bd06b88d4fc387feff3e0f  crates/amazing-layout/src/position.rs",
+  "before-renderer.sha256": "408f54fdb0e17880e21a4afaee7a762b17970a51d37c096a23b435bee9864291  /tmp/amazing-layout36-target/release/amazing",
+  "after-renderer.sha256": "598e1afcab253d69ae5bd6698bb304be0ba1c0b578be5f8a4f4f4cb067c45c61  /tmp/amazing-layout36-target/release/amazing"
+}

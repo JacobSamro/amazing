@@ -1409,6 +1409,33 @@ mod tests {
     }
 
     #[test]
+    fn contained_ink_and_local_scroll_overflow_do_not_extend_document_bounds() {
+        for contain in ["layout", "paint", "content", "strict", "size layout"] {
+            for overflow in ["visible", "clip", "hidden", "auto", "scroll"] {
+                for position in ["static", "absolute", "fixed"] {
+                    let (dom, root) = layout(
+                        "<body><div id=container><div id=target></div></div></body>",
+                        &format!("body{{margin:0}}#container{{contain:{contain};width:50px;height:50px;margin:10px;overflow:{overflow}}}#target{{position:{position};width:20px;height:300px;top:20px}}"),800.0,100.0);
+                    let container = find_id(&root, &dom, "container").unwrap();
+                    close(crate::layout_overflow_bottom(container), container.border_box.y + container.border_box.h + 10.0);
+                    close(crate::layout_overflow_bottom(&root), 70.0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn size_and_style_containment_leave_visible_document_overflow_intact() {
+        for contain in ["none", "size", "inline-size", "style", "size style"] {
+            let (dom, root) = layout(
+                "<body><div id=container><div id=target></div></div></body>",
+                &format!("body{{margin:0}}#container{{contain:{contain};height:50px;margin-top:10px}}#target{{height:300px}}"),800.0,100.0);
+            let target = find_id(&root, &dom, "target").unwrap();
+            close(crate::layout_overflow_bottom(&root), target.border_box.y + 300.0);
+        }
+    }
+
+    #[test]
     fn scrollable_overflow_includes_absolute_but_excludes_fixed() {
         let (_dom, root) = layout(
             "<body><div id=absolute></div><div id=fixed></div></body>",
