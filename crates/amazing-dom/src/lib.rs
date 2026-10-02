@@ -537,12 +537,23 @@ impl Dom {
                     out.push(':');
                 }
                 out.push_str(name);
-                if let NodeKind::Element { attrs, .. } = &self.get(idx).kind {
-                    for (key, value) in attrs {
+                if let Some(attrs) = self.attributes_expanded(idx) {
+                    for attr in attrs {
                         out.push(' ');
-                        out.push_str(key);
+                        let namespace = match attr.namespace_uri {
+                            Some("http://www.w3.org/XML/1998/namespace") => Some("xml"),
+                            Some("http://www.w3.org/1999/xlink") => Some("xlink"),
+                            Some("http://www.w3.org/2000/xmlns/") => Some("xmlns"),
+                            Some(uri) => Some(uri),
+                            None => None,
+                        };
+                        if let Some(namespace) = namespace {
+                            out.push_str(namespace);
+                            out.push(' ');
+                        }
+                        out.push_str(attr.local_name);
                         out.push_str("=\"");
-                        out.push_str(value);
+                        out.push_str(attr.value);
                         out.push('"');
                     }
                 }
@@ -703,6 +714,23 @@ mod tests {
             dom.dump(NodeIdx(0)),
             "#document\n  <html>\n    <p>\n      \"hello\"\n"
         );
+    }
+
+    #[test]
+    fn dump_preserves_expanded_attributes_and_insertion_order() {
+        let mut dom = Dom::new();
+        let svg = dom.create_element_ns(NodeIdx(0), "svg", Namespace::Svg);
+        dom.set_attribute(svg, "id", "root");
+        dom.set_attribute_expanded(svg, Some("http://www.w3.org/1999/xlink"),
+            Some("xlink"), "href", "#target").unwrap();
+        dom.set_attribute(svg, "class", "icon");
+        dom.set_attribute_expanded(svg, Some("http://www.w3.org/XML/1998/namespace"),
+            Some("xml"), "lang", "en").unwrap();
+        dom.set_attribute_expanded(svg, Some("http://www.w3.org/2000/xmlns/"),
+            Some("xmlns"), "xlink", "http://www.w3.org/1999/xlink").unwrap();
+        assert_eq!(dom.dump(svg), concat!(
+            "<svg svg id=\"root\" xlink href=\"#target\" class=\"icon\" xml lang=\"en\" ",
+            "xmlns xlink=\"http://www.w3.org/1999/xlink\">\n"));
     }
 }
 
