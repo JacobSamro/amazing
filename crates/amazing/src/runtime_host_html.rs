@@ -1106,6 +1106,15 @@ impl RuntimeBindings {
 type IncrementalImportRef = Rc<RefCell<amazing_dom::markup::IncrementalDocumentImport>>;
 
 impl RuntimeBindingHost<'_> {
+    /// A navigated child document retains its associated WindowProxy even
+    /// when a parent-realm script reads the document's defaultView.
+    pub(super) fn iframe_document_window(&self, document: NodeIdx) -> Option<JsValue> {
+        let state = self.state.borrow();
+        let frame = state.frames.documents.iter()
+            .find_map(|(frame, entry)| (entry.document == Some(document)).then_some(frame))?;
+        state.frames.windows.get(frame).map(|(_, proxy)| proxy.clone())
+    }
+
     /// `[LegacyFactoryFunction=Option]` from the HTML standard: builds a
     /// detached `<option>` with text, value, default-selected and selectedness.
     pub(super) fn install_html_form_globals(&mut self) -> Result<(), Throw> {
@@ -1926,6 +1935,17 @@ mod tests {
             "var frame = document.querySelector('iframe'); \
              var el = frame.contentWindow.document.createElement('div'); \
              el.localName === 'div' && el instanceof frame.contentWindow.Element"
+        ).unwrap(), JsValue::Bool(true));
+        assert_eq!(scheduler.run_script(
+            "var child = frame.contentDocument; \
+             child.defaultView === frame.contentWindow && \
+             child.defaultView.document === child && \
+             child.defaultView.DOMException === frame.contentWindow.DOMException"
+        ).unwrap(), JsValue::Bool(true));
+        assert_eq!(scheduler.run_script(
+            "var caught; try { child.createElementNS('bad', 'xml:x'); } \
+             catch (e) { caught = e; } \
+             caught.constructor === child.defaultView.DOMException"
         ).unwrap(), JsValue::Bool(true));
         std::fs::remove_file(&path).unwrap();
     }

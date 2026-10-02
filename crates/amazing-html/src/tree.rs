@@ -3024,7 +3024,7 @@ mod tests {
         let dom = build("<svg viewbox='' preserveaspectratio=''><g xlink:href='x'></g></svg><math><mn definitionurl='u'>");
         let dump = dom.dump(NodeIdx(0));
         assert!(dump.contains("<svg svg viewBox=\"\" preserveAspectRatio=\"\">"));
-        assert!(dump.contains("<svg g>"));
+        assert!(dump.contains("<svg g xlink href=\"x\">"));
         assert!(dump.contains("<math mn definitionURL=\"u\">"));
         let svg = dom.children(NodeIdx(0)).flat_map(|n| dom.children(n))
             .flat_map(|n| dom.children(n)).find(|n| dom.name(*n) == Some("svg")).unwrap();
