@@ -150,9 +150,10 @@ if [ "$HOST" = boat ]; then
     # Drop the lease if we exit before the remote command's own trap takes
     # over (failed or interrupted sync); a stale lease keeps the sandbox billed.
     trap '$BSSH "$BOAT_HOST" "rm -f $LEASE" 2>/dev/null; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"' EXIT
-    $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE &&
-      { [ -e amazing/wt/$LANE/Cargo.toml ] || [ ! -e amazing/Cargo.toml ] ||
-        tar -C amazing -cf - --exclude=./target --exclude='./target-*' --exclude=./wt --exclude=./out --exclude=./corpora --exclude=./.git --exclude=./.agents . | tar -C amazing/wt/$LANE -xf -; }" &&
+    # Seed only from the canonical local source below. Snapshot-backed template
+    # directories can change metadata during tar reads and fail fresh shard
+    # setup; a partial template seed must never become build input.
+    $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE" &&
     rsync -rlpDz --checksum --delete --exclude .git --exclude /target --exclude '/target-*' --exclude /out --exclude /corpora \
       --exclude /.agents --exclude /.opencode --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/wt/$LANE/" &&
     { ok=1; break; }
