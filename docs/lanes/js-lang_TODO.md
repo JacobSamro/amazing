@@ -1688,3 +1688,14 @@ distinct origins are omitted from namespaces and rejected by named imports.
 The parent gates the installed browser driver's whole 111-page module corpus,
 including repeated cycle-root error choices; the lane gates whole language with
 a fixed before/after source pair and workspace plus doctests on Boat.
+
+JS24 source `a44bf171`, fixed before `df0cb8ed`, Linux Boat: owned
+**526 passed / 1 skipped** (JS499, regex27), **1 doctest**; workspace
+**3599 passed / 17 skipped**, **4 doctests**. Matching whole-language/
+including AnnexB (24572 selected files), 10s deadlines, 8 workers:
+**23428 → 23438 passing files**, **43607 → 43617 passing variants**,
+**+10 / +10**, **zero losses**, **zero timeouts**. The initial workspace
+controller SIGBUS after all test PASS lines is retained as incomplete; the
+unchanged source repeat with native nextest completed successfully. Exact
+hashes, selection and gains are in [js-lang_JS24-evidence.json](js-lang_JS24-evidence.json).
+The integrator independently gates the installed111-page module corpus.

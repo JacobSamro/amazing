@@ -1,0 +1,136 @@
+{
+  "ticket": "JS-24",
+  "source_commit": "a44bf1714d205ac10f7564b5d5cad48c51919961",
+  "before_commit": "df0cb8ed425cc0c1f234e1e2e08d81d3f0b74277",
+  "dependency_base": "7e3c07ba5639edb72af96b9f463ed61bde9fa54f",
+  "platform": "Linux Boat; native /tmp source, target and repeated nextest executable",
+  "upstream": {
+    "repo": "boa-dev/boa",
+    "path": "core/engine/src/module/source.rs",
+    "commit": "39cd11214ecb366200157dab96b3919e61e9a391",
+    "license": "MIT",
+    "adaptation": "Ordered requested-module graph walks and terminal-origin ResolveExport onto canonical string IDs and std collections"
+  },
+  "owned": {
+    "passed": 526,
+    "skipped": 1,
+    "js_passed": 499,
+    "regex_passed": 27,
+    "doctests_passed": 1
+  },
+  "workspace": {
+    "passed": 3599,
+    "skipped": 17,
+    "doctests_passed": 4,
+    "nextest_seconds": 85.785
+  },
+  "incomplete_runs": [
+    {
+      "run": "initial workspace after",
+      "reason": "All3599 tests printed PASS, then snapshot-backed cargo nextest terminated SIGBUS before summary. Repeated unchanged source with native copied nextest; successful repeat is gate evidence."
+    }
+  ],
+  "before": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "host_sha256": "0854d9a1af7a453fcb4904e5a4b68faeb790633a3e9e4f3bc9207021a58e8c78",
+    "classification_sha256": "16735d4342c423b8dc261d3a38bcbe5d61303a68a07f8a6949481710433cf58a",
+    "elapsed_seconds": 72.476,
+    "timeout_seconds": 10.0,
+    "jobs": 8,
+    "filter": "language/",
+    "pyyaml": "6.0.3",
+    "capabilities": {
+      "protocol": 2,
+      "module": true,
+      "async": true,
+      "can_block": true,
+      "createRealm": true,
+      "detachArrayBuffer": true,
+      "gc": false,
+      "agent": false,
+      "IsHTMLDDA": false,
+      "AbstractModuleSource": false,
+      "evalScript": true,
+      "global": true,
+      "print": true,
+      "intl402": true
+    }
+  },
+  "after": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "host_sha256": "1b4dd895a337ead1aa014c3256d41a719319098d3bdfa083a55c5313951e49b9",
+    "classification_sha256": "9b5acc20248c490cf77357a0e376843b49b33fc0c8203e82391c2aa536d25704",
+    "elapsed_seconds": 54.967,
+    "timeout_seconds": 10.0,
+    "jobs": 8,
+    "filter": "language/",
+    "pyyaml": "6.0.3",
+    "capabilities": {
+      "protocol": 2,
+      "module": true,
+      "async": true,
+      "can_block": true,
+      "createRealm": true,
+      "detachArrayBuffer": true,
+      "gc": false,
+      "agent": false,
+      "IsHTMLDDA": false,
+      "AbstractModuleSource": false,
+      "evalScript": true,
+      "global": true,
+      "print": true,
+      "intl402": true
+    }
+  },
+  "selection": "24572 files under language/ including AnnexB; exact slash filter excludes18 unrelated filename substring matches from earlier JS23 filter",
+  "comparison": {
+    "before": {
+      "pass": 23428,
+      "fail": 1118,
+      "timeout": 0,
+      "unsupported": 26,
+      "skipped": 29300
+    },
+    "after": {
+      "pass": 23438,
+      "fail": 1108,
+      "timeout": 0,
+      "unsupported": 26,
+      "skipped": 29300
+    },
+    "before_passing_variants": 43607,
+    "after_passing_variants": 43617,
+    "gained_files": [
+      "language/module-code/ambiguous-export-bindings/import-and-export-propagates-binding.js",
+      "language/module-code/ambiguous-export-bindings/namespace-unambiguous-if-export-star-as-from-and-import-star-as-and-export.js",
+      "language/module-code/ambiguous-export-bindings/namespace-unambiguous-if-export-star-as-from.js",
+      "language/module-code/ambiguous-export-bindings/namespace-unambiguous-if-import-star-as-and-export.js",
+      "language/module-code/ambiguous-export-bindings/omitted-from-namespace.js",
+      "language/module-code/instn-iee-err-circular-as.js",
+      "language/module-code/instn-iee-err-circular.js",
+      "language/module-code/instn-star-iee-multi-cycle-same-name.js",
+      "language/module-code/instn-star-iee-single-cycle-same-name.js",
+      "language/module-code/top-level-await/pending-async-dep-from-cycle.js"
+    ],
+    "lost_files": [],
+    "gained_variants": [
+      "language/module-code/ambiguous-export-bindings/import-and-export-propagates-binding.js#module",
+      "language/module-code/ambiguous-export-bindings/namespace-unambiguous-if-export-star-as-from-and-import-star-as-and-export.js#module",
+      "language/module-code/ambiguous-export-bindings/namespace-unambiguous-if-export-star-as-from.js#module",
+      "language/module-code/ambiguous-export-bindings/namespace-unambiguous-if-import-star-as-and-export.js#module",
+      "language/module-code/ambiguous-export-bindings/omitted-from-namespace.js#module",
+      "language/module-code/instn-iee-err-circular-as.js#module",
+      "language/module-code/instn-iee-err-circular.js#module",
+      "language/module-code/instn-star-iee-multi-cycle-same-name.js#module",
+      "language/module-code/instn-star-iee-single-cycle-same-name.js#module",
+      "language/module-code/top-level-await/pending-async-dep-from-cycle.js#module"
+    ],
+    "lost_variants": [],
+    "loss_details": []
+  },
+  "browser_module_gate": "Integrator owns installed111-page WPT stability repeat; no lane claim for that pending result."
+}
