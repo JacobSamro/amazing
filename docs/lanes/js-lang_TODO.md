@@ -1492,3 +1492,42 @@ the targeted RegExp grammar area. [Evidence](js-lang_JS15-evidence.json).
 
 Next: Unicode property escapes, exact aliases, categories/scripts/extensions,
 and Unicode mode complement/case-fold semantics.
+
+## JS-20 — immutable Object.prototype and legacy __proto__
+
+Fixed base `2eb1229a`. `default_set_prototype` now preserves every realm's
+immutable Object.prototype and the module namespace's fixed prototype. Its
+ordinary cycle check stops at nonordinary GetPrototypeOf methods without
+calling Proxy traps, as required by OrdinarySetPrototypeOf. Previously a
+self-returning trap could hang the walk; mutating Object.prototype underneath a
+Proxy could also make a handler inherit its own Proxy and recursively look up
+traps. Neither path is reached after the fix.
+
+Object.prototype.__proto__ is installed as a configurable, nonenumerable
+accessor, with call-only getter/setter functions and lengths 0/1. The getter
+boxes primitives then delegates GetPrototypeOf; the setter requires a coercible
+receiver, ignores invalid prototypes and primitive receivers, then delegates
+SetPrototypeOf and throws if it returns false. Both interpreter backends cover
+proxy boundaries, same-prototype nonextensible writes, primitive boxing, nullish
+receivers, trap refusal and descriptor metadata.
+
+Reference algorithms: [OrdinarySetPrototypeOf](https://tc39.es/ecma262/2024/multipage/ordinary-and-exotic-objects-behaviours.html#sec-ordinarysetprototypeof)
+and [Object.prototype.__proto__](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.prototype.__proto__). No upstream code ported.
+
+Next: dynamic-import host loading must release the ModuleLinker borrow before
+executing module code and draining jobs. Queuing the hook alone cannot solve
+reentrancy: ordinary run_program and top-level-await evaluation both drain the
+queue inside evaluate's borrow. A prepared-step evaluator is the likely seam.
+
+Linux Boat gates: **471 owned passed / 1 skipped**, **1 owned doctest**;
+**3517 workspace passed / 17 skipped**, **31 doctest suites / 4 passed**.
+Full pinned Test262: **49679 → 49727 passing files**, **95710 → 95801 passing
+variants**, **zero lost passing files or variants**. The full sweep used a
+10-second deadline; its six file / sixteen variant deadline flips all recovered
+in 60-second whole-directory decodeURI/decodeURIComponent/Date replays with
+unchanged input, runner and host hashes. Of the 48 file / 91 variant gains,
+**44 files / 87 variants** are feature gains and four Date files/variants are
+additional baseline deadline recoveries. All **15/15 __proto__** files pass;
+the accepted mutable-proto-special-form loss is recovered. Raw and combined
+classification hashes, exact provenance and gain lists are retained in
+[js-lang_JS20-evidence.json](js-lang_JS20-evidence.json).

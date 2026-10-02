@@ -235,6 +235,13 @@ impl Interpreter {
         let property_is_enumerable = symbol_method(self, "propertyIsEnumerable", native_property_is_enumerable);
         symbol_method_length(&property_is_enumerable, 1);
         self.object_proto.borrow_mut().define("propertyIsEnumerable", symbol_data(property_is_enumerable, true, true)).unwrap();
+        let proto_getter = symbol_method(self, "get __proto__", native_object_proto_getter);
+        let proto_setter = symbol_method(self, "set __proto__", native_object_proto_setter);
+        symbol_method_length(&proto_setter, 1);
+        self.object_proto.borrow_mut().define("__proto__", Property {
+            value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
+            getter: Some(proto_getter), setter: Some(proto_setter),
+        }).unwrap();
         for (name, length, native) in [
             ("__defineGetter__", 2, native_object_define_getter as crate::value::NativeFn),
             ("__defineSetter__", 2, native_object_define_setter as crate::value::NativeFn),

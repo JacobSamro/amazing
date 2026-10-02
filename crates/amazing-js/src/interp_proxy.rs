@@ -36,6 +36,64 @@ pub struct ProxyState {
     revoked: Cell<bool>,
 }
 
+#[cfg(test)]
+mod prototype_mutation_tests {
+    use super::*;
+
+    #[test]
+    fn immutable_root_and_proxy_boundary_do_not_run_traps() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script_with_backend(r#"
+                var calls = 0;
+                var proxy = new Proxy({}, { getPrototypeOf() { calls++; return proxy; } });
+                var o = {}, cycle = {};
+                Object.setPrototypeOf(o, proxy);
+                Object.setPrototypeOf(cycle, o);
+                var rejected = Reflect.setPrototypeOf(Object.prototype, proxy) === false;
+                var same = Reflect.setPrototypeOf(Object.prototype, null) === true;
+                var failed = false;
+                try { Object.setPrototypeOf(Object.prototype, proxy); }
+                catch (e) { failed = e instanceof TypeError; }
+                calls === 0 && rejected && same && failed &&
+                    Object.getPrototypeOf(o) === proxy &&
+                    Reflect.setPrototypeOf(o, cycle) === false;
+            "# , backend).unwrap(), JsValue::Bool(true), "{backend:?}");
+        }
+    }
+
+    #[test]
+    fn legacy_proto_accessor_observes_receiver_and_proxy_operations() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script_with_backend(r#"
+                var desc = Object.getOwnPropertyDescriptor(Object.prototype, '__proto__');
+                var o = {}, p = {}, changed = 0;
+                o.__proto__ = p;
+                var assigned = o.__proto__ === p;
+                desc.set.call(o, 17);
+                var ignored = Object.getPrototypeOf(o) === p;
+                var proxy = new Proxy({}, {
+                    getPrototypeOf() { return p; },
+                    setPrototypeOf(target, value) { changed++; return false; }
+                });
+                var failed = false, nullish = false, frozen = false;
+                try { desc.set.call(proxy, null); } catch (e) { failed = e instanceof TypeError; }
+                try { desc.set.call(null, 17); } catch (e) { nullish = e instanceof TypeError; }
+                Object.preventExtensions(o);
+                desc.set.call(o, p);
+                try { desc.set.call(o, null); } catch (e) { frozen = e instanceof TypeError; }
+                assigned && ignored && failed && nullish && frozen && changed === 1 &&
+                    desc.get.call(proxy) === p && desc.get.call(42) === Number.prototype &&
+                    desc.set.call(42, null) === undefined &&
+                    desc.get.name === 'get __proto__' && desc.get.length === 0 &&
+                    desc.set.name === 'set __proto__' && desc.set.length === 1 &&
+                    !desc.enumerable && desc.configurable;
+            "# , backend).unwrap(), JsValue::Bool(true), "{backend:?}");
+        }
+    }
+}
+
 fn property_key_to_value(key: &PropertyKey) -> JsValue {
     match key {
         PropertyKey::String(s) => JsValue::Str(s.clone()),
@@ -261,13 +319,24 @@ impl Interpreter {
         let current = target.borrow().proto.clone();
         if current.as_ref().zip(prototype.as_ref()).is_some_and(|(a, b)| Rc::ptr_eq(&a.0, &b.0))
             || (current.is_none() && prototype.is_none()) { return Ok(true); }
+        // Object.prototype is an immutable-prototype exotic object, in every
+        // realm. In particular, allowing a Proxy below it makes that Proxy's
+        // ordinary handler inherit the Proxy itself and recurse on trap lookup.
+        if Rc::ptr_eq(&target.0, &self.object_proto.0)
+            || self.realms.values().any(|realm| Rc::ptr_eq(&target.0, &realm.object_proto.0))
+            || matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
+            return Ok(false);
+        }
         if !target.borrow().extensible { return Ok(false); }
         let mut cursor = prototype.clone();
         while let Some(candidate) = cursor {
             if Rc::ptr_eq(&candidate.0, &target.0) { return Ok(false); }
-            cursor = if let Some(result) = self.proxy_get_prototype(&candidate) {
-                match result? { JsValue::Object(p) => Some(p), _ => None }
-            } else { candidate.borrow().proto.clone() };
+            // OrdinarySetPrototypeOf only follows ordinary [[GetPrototypeOf]]
+            // methods. It must neither invoke a Proxy trap nor chase its result:
+            // a trap can return itself forever, throw, or have observable effects.
+            if matches!(candidate.borrow().exotic, Exotic::Proxy(_) | Exotic::ModuleNamespace(_))
+                || self.is_window_proxy(&candidate) { break; }
+            cursor = candidate.borrow().proto.clone();
         }
         target.borrow_mut().proto = prototype.clone();
         Ok(true)

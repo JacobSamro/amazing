@@ -1,0 +1,213 @@
+{
+  "ticket": "JS-20",
+  "base_sha": "2eb1229a",
+  "platform": {
+    "os": "Linux",
+    "service": "Boat",
+    "sandbox": "bx_2n57r7zz",
+    "pool": "pool-js-b"
+  },
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "workspace": {
+    "passed": 3517,
+    "skipped": 17,
+    "failed": 0,
+    "doctest_suites": 31,
+    "doctests_passed": 4,
+    "doctests_failed": 0
+  },
+  "owned": {
+    "passed": 471,
+    "skipped": 1,
+    "failed": 0,
+    "doctests_passed": 1
+  },
+  "before": {
+    "files": {
+      "pass": 49679,
+      "fail": 3295,
+      "timeout": 434,
+      "unsupported": 170,
+      "skipped": 294
+    },
+    "variants": {
+      "pass": 95710,
+      "fail": 6004,
+      "timeout": 865,
+      "unsupported": 339,
+      "skipped": 0
+    },
+    "classification_sha256": "a7fecb5123c3dc54b4c2e14216788df3938909c54e40631415b0ac407818ad84",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "host_sha256": "77ca3903882a020bd30a03e462b479f3f7a179e0d2c26d2f213561e8d812ba9f",
+    "timeout_seconds": 60,
+    "jobs": 28
+  },
+  "raw_after": {
+    "files": {
+      "pass": 49717,
+      "fail": 3249,
+      "timeout": 443,
+      "unsupported": 169,
+      "skipped": 294
+    },
+    "variants": {
+      "pass": 95781,
+      "fail": 5913,
+      "timeout": 887,
+      "unsupported": 337,
+      "skipped": 0
+    },
+    "classification_sha256": "8663ecc69ff0ee9a872802b1d6f55ec830f91b3edec8ab52330fc3627ccb182a",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "host_sha256": "8b0441c601d98f97c3217aded341266c255ca42f334b97fd5afad1a9e5f0df5f",
+    "timeout_seconds": 10,
+    "jobs": 8
+  },
+  "verified_after": {
+    "files": {
+      "pass": 49727,
+      "fail": 3249,
+      "timeout": 433,
+      "unsupported": 169,
+      "skipped": 294
+    },
+    "variants": {
+      "pass": 95801,
+      "fail": 5913,
+      "timeout": 867,
+      "unsupported": 337,
+      "skipped": 0
+    },
+    "classification_sha256": "775360734cceabfc8bd0f39ebfe95782020f3df5bcdb1f00f6d07bbbf83c14da",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "host_sha256": "8b0441c601d98f97c3217aded341266c255ca42f334b97fd5afad1a9e5f0df5f",
+    "timeout_seconds": null,
+    "jobs": 8
+  },
+  "normalization": {
+    "raw_file": "js20-full-after.json",
+    "raw_timeout_seconds": 10,
+    "replays": [
+      {
+        "file": "js20-recheck-built-ins_decodeURI.json",
+        "filter": "built-ins/decodeURI",
+        "timeout_seconds": 60,
+        "classification_sha256": "01a6aebda062b05b17fce1bf4b24c105d54c933c5d7ddc1d3ad7f1f5493b9f11",
+        "host_sha256": "8b0441c601d98f97c3217aded341266c255ca42f334b97fd5afad1a9e5f0df5f",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717"
+      },
+      {
+        "file": "js20-recheck-built-ins_decodeURIComponent.json",
+        "filter": "built-ins/decodeURIComponent",
+        "timeout_seconds": 60,
+        "classification_sha256": "844825a608d99a2ae74874cc48a5e173c89d55e8b2f10c1cc236715eb795abf4",
+        "host_sha256": "8b0441c601d98f97c3217aded341266c255ca42f334b97fd5afad1a9e5f0df5f",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717"
+      },
+      {
+        "file": "js20-recheck-staging_sm_Date.json",
+        "filter": "staging/sm/Date",
+        "timeout_seconds": 60,
+        "classification_sha256": "560d91e5e488ad7adc3667352689f8610c0b87b782d109ac0816e2bc4c7dfe20",
+        "host_sha256": "8b0441c601d98f97c3217aded341266c255ca42f334b97fd5afad1a9e5f0df5f",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717"
+      }
+    ]
+  },
+  "comparison": {
+    "gained_files": 48,
+    "gained_variants": 91,
+    "lost_files": [],
+    "lost_variants": [],
+    "feature_file_gains": [
+      "built-ins/Array/prototype/indexOf/calls-only-has-on-prototype-after-length-zeroed.js",
+      "built-ins/Array/prototype/lastIndexOf/calls-only-has-on-prototype-after-length-zeroed.js",
+      "built-ins/Object/prototype/__proto__/get-abrupt.js",
+      "built-ins/Object/prototype/__proto__/get-fn-name.js",
+      "built-ins/Object/prototype/__proto__/get-ordinary-obj.js",
+      "built-ins/Object/prototype/__proto__/get-to-obj-abrupt.js",
+      "built-ins/Object/prototype/__proto__/prop-desc.js",
+      "built-ins/Object/prototype/__proto__/set-abrupt.js",
+      "built-ins/Object/prototype/__proto__/set-cycle-shadowed.js",
+      "built-ins/Object/prototype/__proto__/set-cycle.js",
+      "built-ins/Object/prototype/__proto__/set-fn-name.js",
+      "built-ins/Object/prototype/__proto__/set-immutable.js",
+      "built-ins/Object/prototype/__proto__/set-invalid-value.js",
+      "built-ins/Object/prototype/__proto__/set-non-extensible.js",
+      "built-ins/Object/prototype/__proto__/set-non-obj-coercible.js",
+      "built-ins/Object/prototype/__proto__/set-non-object.js",
+      "built-ins/Object/prototype/__proto__/set-ordinary-obj.js",
+      "built-ins/Object/prototype/setPrototypeOf-with-non-circular-values-__proto__.js",
+      "built-ins/Object/prototype/setPrototypeOf-with-non-circular-values.js",
+      "built-ins/Proxy/has/call-in-prototype-index.js",
+      "built-ins/TypedArrayConstructors/ctors/no-species.js",
+      "staging/sm/Array/indexOf-packed-array.js",
+      "staging/sm/Date/prototype-is-not-a-date.js",
+      "staging/sm/Function/function-name-property.js",
+      "staging/sm/Function/function-toString-builtin.js",
+      "staging/sm/Function/has-instance-jitted.js",
+      "staging/sm/Proxy/proxy-__proto__.js",
+      "staging/sm/Proxy/regress-bug950407.js",
+      "staging/sm/Reflect/setPrototypeOf.js",
+      "staging/sm/TypedArray/from_surfaces.js",
+      "staging/sm/TypedArray/has-property-op.js",
+      "staging/sm/TypedArray/of.js",
+      "staging/sm/class/methodsPrototype.js",
+      "staging/sm/expressions/destructuring-object-__proto__-1.js",
+      "staging/sm/expressions/destructuring-object-__proto__-2.js",
+      "staging/sm/extensions/__proto__.js",
+      "staging/sm/extensions/array-inherited-__proto__.js",
+      "staging/sm/extensions/destructuring-for-inof-__proto__.js",
+      "staging/sm/extensions/getOwnPropertyNames-__proto__.js",
+      "staging/sm/extensions/mutable-proto-special-form.js",
+      "staging/sm/extensions/regress-469625-01.js",
+      "staging/sm/object/getter-name.js",
+      "staging/sm/regress/regress-428366.js",
+      "staging/sm/regress/regress-665355.js"
+    ],
+    "deadline_recovery_file_gains": [
+      "staging/sm/Date/dst-offset-caching-1-of-8.js",
+      "staging/sm/Date/dst-offset-caching-6-of-8.js",
+      "staging/sm/Date/dst-offset-caching-7-of-8.js",
+      "staging/sm/Date/dst-offset-caching-8-of-8.js"
+    ],
+    "input_same": true,
+    "runner_same": true
+  },
+  "focused": {
+    "annexB": {
+      "before": 1019,
+      "after": 1019
+    },
+    "Proxy": {
+      "before": 274,
+      "after": 275
+    },
+    "Object_setPrototypeOf": {
+      "before": 12,
+      "after": 12
+    },
+    "Reflect_setPrototypeOf": {
+      "before": 14,
+      "after": 14
+    },
+    "staging_sm_extensions": {
+      "before": 42,
+      "after": 48
+    },
+    "Object_prototype___proto__": {
+      "before": 0,
+      "after": 15
+    },
+    "lost_files": 0,
+    "lost_variants": 0
+  },
+  "note": "Verified classification combines the full 10-second run with the unchanged-binary 60-second whole-directory decodeURI/decodeURIComponent/Date replays. 44 feature file gains plus four Date deadline recoveries; no engine claim is made for those four timing gains."
+}
