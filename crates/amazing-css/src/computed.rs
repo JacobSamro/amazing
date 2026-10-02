@@ -33,6 +33,8 @@ pub(crate) use grid_values::{
 };
 #[path = "shadow_values.rs"]
 mod shadow_values;
+#[path = "text_policy.rs"]
+mod text_policy;
 // CSS-29: `box-shadow`'s `<shadow>` list grammar moved out too, for the same
 // reason as `grid_values` above (kept this file under the 4,000-line policy
 // after the box-shadow-invalid.html fix). Only `valid_box_shadow` crosses
@@ -323,6 +325,12 @@ impl ComputedStyle {
             self.props.insert(longhand, expanded);
         }
         if property.starts_with("font-synthesis") { font_synthesis::serialize(&mut self.props); }
+        if crate::text_properties::supported(property) {
+            crate::text_properties::serialize(&mut self.props);
+            for shorthand in ["white-space", "text-wrap", "text-spacing"] {
+                if let Some(css) = self.props.get(shorthand) { self.typed.insert(shorthand.into(), values::parse(shorthand, css).unwrap_or(ComputedValue::Unparsed)); }
+            }
+        }
         let next_zoom = self.get("zoom").and_then(used_zoom_factor).unwrap_or(1.0);
         self.effective_zoom *= next_zoom / prior_zoom;
         self.resolve_typed_units();
@@ -365,6 +373,19 @@ struct PropertyMetadata {
 // or paint behavior. Keeping initial/inheritance metadata in one registry is
 // what makes CSS-wide keywords and `all` property-aware.
 const PROPERTIES: &[PropertyMetadata] = &[
+    PropertyMetadata { name: "text-group-align", initial: "none", inherited: false },
+    PropertyMetadata { name: "text-justify", initial: "auto", inherited: true },
+    PropertyMetadata { name: "word-space-transform", initial: "none", inherited: true },
+    PropertyMetadata { name: "wrap-inside", initial: "auto", inherited: false },
+    PropertyMetadata { name: "wrap-after", initial: "auto", inherited: false },
+    PropertyMetadata { name: "wrap-before", initial: "auto", inherited: false },
+    PropertyMetadata { name: "hanging-punctuation", initial: "none", inherited: true },
+    PropertyMetadata { name: "text-spacing-trim", initial: "normal", inherited: true },
+    PropertyMetadata { name: "text-autospace", initial: "normal", inherited: true },
+    PropertyMetadata { name: "text-wrap-style", initial: "auto", inherited: true },
+    PropertyMetadata { name: "text-wrap-mode", initial: "wrap", inherited: true },
+    PropertyMetadata { name: "white-space-trim", initial: "none", inherited: false },
+    PropertyMetadata { name: "white-space-collapse", initial: "collapse", inherited: true },
     PropertyMetadata { name: "contain-intrinsic-width", initial: "none", inherited: false },
     PropertyMetadata { name: "contain-intrinsic-height", initial: "none", inherited: false },
     PropertyMetadata { name: "contain-intrinsic-inline-size", initial: "none", inherited: false },
@@ -1090,7 +1111,7 @@ fn metadata(name: &str) -> Option<PropertyMetadata> {
 
 pub(crate) fn is_supported_property(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
-    metadata(&name).is_some() || logical_border::supported(&name) || name == "contain-intrinsic-size"
+    metadata(&name).is_some() || crate::text_properties::supported(&name) || logical_border::supported(&name) || name == "contain-intrinsic-size"
 }
 
 /// Expands shorthands before cascade ranking so each resulting longhand keeps
@@ -1104,6 +1125,10 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     } else {
         property.to_ascii_lowercase()
     };
+    if crate::text_properties::axes(&property).is_some() {
+        return text_policy::expand(&property, value).unwrap_or_default();
+    }
+    if property == "word-wrap" { return expand_declaration("overflow-wrap", value); }
     if property == "font-synthesis" {
         return font_synthesis::expand(value).unwrap_or_default();
     }
@@ -2723,6 +2748,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
     contain_intrinsic::resolve_lengths(&mut style.props, style.root_font_px);
     individual_transforms::resolve(&mut style.props, style.root_font_px);
     font_synthesis::serialize(&mut style.props);
+    crate::text_properties::serialize(&mut style.props);
     crate::font_size_adjust::resolve_css_math(&mut style.props, style.root_font_px);
     style.resolve_relative_colors();
     style.resolve_light_dark(environment);
@@ -2730,6 +2756,9 @@ pub(crate) fn resolve_with_root_attrs_environment(
     style.effective_zoom = parent.map_or(1.0, |parent| parent.effective_zoom) * local_zoom;
     style.rebuild_typed();
     style.typed.extend(inherited_typed);
+    if let Some(css) = style.get("white-space").map(str::to_owned) {
+        style.typed.insert("white-space".into(), values::parse("white-space", &css).unwrap_or(ComputedValue::Unparsed));
+    }
     // Axis coupling happens after inheritance and can change an inherited axis.
     for axis in ["overflow-x", "overflow-y"] {
         if let Some(value) = style.get(axis).and_then(|css| values::parse(axis, css)) {
@@ -2896,6 +2925,8 @@ fn compute_normal_value(
         crate::font_properties::canonical(property.name, &computed).unwrap_or(computed)
     } else if matches!(property.name, "font-feature-settings" | "font-variant-ligatures") {
         canonical_font_feature_value(property.name, &computed).unwrap_or(computed)
+    } else if crate::text_properties::supported(property.name) {
+        crate::text_properties::canonical(property.name, &computed).unwrap_or(computed)
     } else if property.name == "display" {
         values::display_canonical(&computed).unwrap_or(&computed).to_owned()
     } else if matches!(property.name, "ruby-align" | "ruby-position" | "ruby-overhang" | "ruby-merge") {
@@ -3090,6 +3121,7 @@ fn deferred_inner<'a>(value: &'a str, function: &str) -> Option<&'a str> {
 }
 
 fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()> {
+    if let Some(resolved) = text_policy::resolve_deferred(property, value) { return resolved; }
     if let Some(resolved) = font_synthesis::resolve_deferred(value) { return resolved; }
     if let Some(resolved) = contain_intrinsic::resolve_deferred(value) { return resolved; }
     if let Some(resolved) = logical_border::resolve_deferred(property, value) { return resolved; }
