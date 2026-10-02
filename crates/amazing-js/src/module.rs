@@ -1,6 +1,8 @@
 //! Synchronous source-text modules. Resolution and linking are separate from
 //! evaluation so a missing module/export is reported in the resolution phase.
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::ast::{
     Binding, Block, Declarator, Expr, ExprKind, Ident, Module, ModuleItem, Program, Stmt,
@@ -81,6 +83,7 @@ pub struct ModuleLinker<R: ModuleResolver> {
     /// shared or cyclic dynamic-import graph re-evaluates unboundedly
     /// (`module-graphs-does-not-hang.js`).
     instances: HashMap<String, ModuleInstance>,
+    realm_global: Option<EnvHandle>,
 }
 
 impl<R: ModuleResolver> ModuleLinker<R> {
@@ -89,6 +92,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             resolver,
             records: HashMap::new(),
             instances: HashMap::new(),
+            realm_global: None,
         }
     }
 
@@ -263,6 +267,46 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         Ok(result)
     }
 
+    /// Evaluate a host-owned shared registry without holding its RefCell borrow
+    /// while JavaScript runs. A module body (or a job it drains) may invoke the
+    /// same registry's dynamic-import loader recursively.
+    pub fn evaluate_shared(
+        linker: &Rc<RefCell<Self>>, id: &str, root: &mut Interpreter,
+    ) -> Result<ModuleNamespace, ModuleFailure> {
+        linker.borrow_mut().instantiate_pending(root)?;
+        Self::evaluate_instance_shared(linker, id, root)?;
+        let registry = linker.borrow();
+        registry.instances[id].exports.iter().map(|(name, cell)| {
+            Ok((name.clone(), cell.read().map_err(ModuleFailure::runtime)?))
+        }).collect()
+    }
+
+    fn evaluate_instance_shared(
+        linker: &Rc<RefCell<Self>>, id: &str, root: &mut Interpreter,
+    ) -> Result<(), ModuleFailure> {
+        let (instance, dependencies, has_await) = {
+            let mut registry = linker.borrow_mut();
+            if let Some(error) = &registry.instances[id].error { return Err(error.clone()); }
+            match registry.instances[id].state {
+                ModuleState::Evaluated | ModuleState::Evaluating => return Ok(()),
+                ModuleState::Linked => {}
+            }
+            registry.instances.get_mut(id).unwrap().state = ModuleState::Evaluating;
+            let dependencies: Vec<String> = registry.records[id].dependencies.values().cloned().collect();
+            (registry.instances[id].clone(), dependencies, registry.records[id].module.has_top_level_await)
+        };
+        let outcome = (|| {
+            for dependency in dependencies { Self::evaluate_instance_shared(linker, &dependency, root)?; }
+            execute_module_body(root, &instance, has_await)
+        })();
+        let mut registry = linker.borrow_mut();
+        match &outcome {
+            Ok(()) => registry.instances.get_mut(id).unwrap().state = ModuleState::Evaluated,
+            Err(error) => registry.instances.get_mut(id).unwrap().error = Some(error.clone()),
+        }
+        outcome
+    }
+
     /// The live namespace exotic object for an already-evaluated (or at least instantiated)
     /// module, keyed by the same id `link`/`evaluate` use. Unlike `evaluate`'s returned
     /// `ModuleNamespace` (a flattened, one-shot snapshot), this is the actual per-realm
@@ -282,7 +326,9 @@ impl<R: ModuleResolver> ModuleLinker<R> {
     /// every record on every call would re-execute already-evaluated top-level code and, for a
     /// widely shared or cyclic graph reached through repeated dynamic imports, never terminate.
     fn instantiate_pending(&mut self, root_interpreter: &mut Interpreter) -> Result<(), ModuleFailure> {
-        let realm_global = root_interpreter.global_env.clone();
+        // A dynamic import may run with its importer's module environment
+        // installed, but new modules belong to the original realm global.
+        let realm_global = self.realm_global.get_or_insert_with(|| root_interpreter.global_env.clone()).clone();
         let new_ids: Vec<String> = self
             .records
             .keys()
@@ -332,6 +378,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                     namespace: JsValue::object(object),
                     exports: BTreeMap::new(),
                     state: ModuleState::Linked,
+                    error: None,
                 },
             );
         }
@@ -422,27 +469,22 @@ impl<R: ModuleResolver> ModuleLinker<R> {
     }
 
     fn evaluate_instance(&mut self, id: &str, root: &mut Interpreter) -> Result<(), ModuleFailure> {
+        if let Some(error) = &self.instances[id].error { return Err(error.clone()); }
         match self.instances[id].state {
             ModuleState::Evaluated | ModuleState::Evaluating => return Ok(()),
             ModuleState::Linked => {}
         }
         self.instances.get_mut(id).unwrap().state = ModuleState::Evaluating;
         let dependencies: Vec<String> = self.records[id].dependencies.values().cloned().collect();
-        for dependency in dependencies {
-            self.evaluate_instance(&dependency, root)?;
+        let outcome = (|| {
+            for dependency in dependencies { self.evaluate_instance(&dependency, root)?; }
+            execute_module_body(root, &self.instances[id], self.records[id].module.has_top_level_await)
+        })();
+        match &outcome {
+            Ok(()) => self.instances.get_mut(id).unwrap().state = ModuleState::Evaluated,
+            Err(error) => self.instances.get_mut(id).unwrap().error = Some(error.clone()),
         }
-        let previous = std::mem::replace(&mut root.global_env, self.instances[id].env.clone());
-        let evaluated = if self.records[id].module.has_top_level_await {
-            evaluate_async_module_body(root, &self.instances[id])
-        } else {
-            root.run_program(&self.instances[id].program)
-                .map(|_| ())
-                .map_err(ModuleFailure::runtime)
-        };
-        root.global_env = previous;
-        evaluated?;
-        self.instances.get_mut(id).unwrap().state = ModuleState::Evaluated;
-        Ok(())
+        outcome
     }
 
     fn export_names(&self, id: &str, visiting: &mut HashSet<String>) -> HashSet<String> {
@@ -656,6 +698,7 @@ enum ModuleState {
     Evaluated,
 }
 
+#[derive(Clone)]
 struct ModuleInstance {
     env: EnvHandle,
     program: Program,
@@ -663,6 +706,18 @@ struct ModuleInstance {
     namespace: JsValue,
     exports: BTreeMap<String, BindingCell>,
     state: ModuleState,
+    error: Option<ModuleFailure>,
+}
+
+fn execute_module_body(root: &mut Interpreter, instance: &ModuleInstance, has_await: bool) -> Result<(), ModuleFailure> {
+    let previous = std::mem::replace(&mut root.global_env, instance.env.clone());
+    let outcome = if has_await {
+        evaluate_async_module_body(root, instance)
+    } else {
+        root.run_program(&instance.program).map(|_| ()).map_err(ModuleFailure::runtime)
+    };
+    root.global_env = previous;
+    outcome
 }
 
 fn namespace_binding(name: &str) -> String {
@@ -943,5 +998,47 @@ mod tests {
         let result = linker.evaluate("root", &mut Interpreter::new()).unwrap();
         assert_eq!(result["same"], JsValue::Bool(true));
         assert_eq!(result["distinct"], JsValue::Bool(true));
+    }
+
+    #[test]
+    fn shared_registry_allows_nested_imports_without_borrows_or_scope_leaks() {
+        let sources = Rc::new(HashMap::from([
+            ("dep", "const privateValue=99; globalThis.loads++; import('leaf').then(ns=>{globalThis.leaf=ns.value;globalThis.leaked=ns.leaked;}); export let value=1; export function bump(){value++;}"),
+            ("leaf", "export const value=41; export const leaked=typeof privateValue;"),
+        ]));
+        let resolver_sources = sources.clone();
+        let linker = Rc::new(RefCell::new(ModuleLinker::new(move |specifier: &str, _: &str| {
+            resolver_sources.get(specifier).map(|source| (specifier.to_owned(), (*source).to_owned()))
+                .ok_or_else(|| "missing module".to_owned())
+        })));
+        let mut root = Interpreter::new();
+        root.run_script("globalThis.loads=0;").unwrap();
+        let loader_linker = linker.clone();
+        root.binding_set_typed_module_loader_hook(Rc::new(move |i, specifier, _| {
+            let source = sources.get(specifier).ok_or_else(|| Throw::type_error("missing module"))?;
+            loader_linker.borrow_mut().link(specifier, source).map_err(|e| Throw::type_error(e.message))?;
+            ModuleLinker::evaluate_shared(&loader_linker, specifier, i)
+                .map_err(|e| e.thrown.unwrap_or_else(|| Throw::type_error(e.message)))?;
+            Ok(loader_linker.borrow().namespace_object(specifier).unwrap())
+        }));
+        linker.borrow_mut().link("root", "import * as stat from 'dep'; import('dep').then(ns=>{globalThis.same=ns===stat;ns.bump();globalThis.finalValue=stat.value;}); export const done=true;").unwrap();
+        assert_eq!(ModuleLinker::evaluate_shared(&linker, "root", &mut root).unwrap()["done"], JsValue::Bool(true));
+        assert_eq!(root.run_script("same && finalValue===2 && loads===1 && leaf===41 && leaked==='undefined'").unwrap(), JsValue::Bool(true));
+        ModuleLinker::evaluate_shared(&linker, "root", &mut root).unwrap();
+        assert_eq!(root.run_script("loads").unwrap(), JsValue::num(1.0));
+    }
+
+    #[test]
+    fn shared_registry_rethrows_cached_module_error_without_evaluating_again() {
+        let linker = Rc::new(RefCell::new(ModuleLinker::new(|_: &str, _: &str| Err("unresolved".into()))));
+        let mut root = Interpreter::new();
+        root.run_script("globalThis.count=0;globalThis.marker={};").unwrap();
+        linker.borrow_mut().link("bad", "globalThis.count++;throw globalThis.marker;").unwrap();
+        let first = ModuleLinker::evaluate_shared(&linker, "bad", &mut root).unwrap_err().thrown.unwrap();
+        let second = ModuleLinker::evaluate_shared(&linker, "bad", &mut root).unwrap_err().thrown.unwrap();
+        assert_eq!(first.0, second.0);
+        assert_eq!(root.run_script("count").unwrap(), JsValue::num(1.0));
+        assert!(linker.borrow_mut().evaluate("bad", &mut root).is_err());
+        assert_eq!(root.run_script("count").unwrap(), JsValue::num(1.0));
     }
 }

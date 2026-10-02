@@ -239,6 +239,7 @@ fn run_module_request() -> io::Result<()> {
         }
     }
     let root_path = Path::new(&root).canonicalize()?;
+    let root_id = root_path.join(&path).canonicalize()?.to_string_lossy().into_owned();
     let root_path_for_resolver = root_path.clone();
     let path_for_resolver = path.clone();
     let resolve_specifier = move |specifier: &str, referrer: &str| -> Result<(String, String), String> {
@@ -253,27 +254,26 @@ fn run_module_request() -> io::Result<()> {
         Ok((canonical.to_string_lossy().into_owned(), source))
     };
     let linker = Rc::new(RefCell::new(ModuleLinker::new(resolve_specifier)));
-    // JS-19 item 1 (2026-09-27): NOT installing a dynamic-import loader hook here yet, on
-    // purpose, after measuring it as a net regression. The natural implementation -- borrow
-    // `linker_for_hook` mutably, `link` + `evaluate` + `namespace_object`, matching the static
-    // graph below -- panics ("RefCell already borrowed") the moment ANY module's own top-level
-    // code calls `import()`, not just a deeply nested case: the static-graph evaluation a few
-    // lines below already holds `linker.borrow_mut()` for the ENTIRE synchronous duration of
-    // evaluating the root module's top-level statements (that's what a Rust method call does),
-    // so a same-realm `import()` reached from inside those statements always re-enters the same
-    // RefCell while that outer borrow is still alive. This is not a borrow-scoping mistake in
-    // the hook closure -- no amount of narrowing which lines hold the guard fixes a genuine
-    // reentrant call into a method that itself holds `&mut self` for its whole body. The actual
-    // fix is architectural: `import()` must defer its real work to a microtask/job queued after
-    // the current synchronous call stack unwinds (13.3.10.1's HostLoadImportedModule really is
-    // meant to run as a later job, never inline), not call straight into the loader hook the
-    // moment the expression evaluates. Filed to questions.md for a follow-up ticket; until then,
-    // `dynamic_import` in interp_module_host.rs falls back to its `None` case ("dynamic import
-    // is not supported by this host"), which is what the corpus's zero-loss baseline measured.
-    let evaluation = {
-        let mut linker = linker.borrow_mut();
-        linker.link(&path, &source).and_then(|_| linker.evaluate(&path, &mut i).map(|_| ()))
-    };
+    let loader_linker = Rc::clone(&linker);
+    let loader_root = root_path.clone();
+    i.binding_set_typed_module_loader_hook(Rc::new(move |interpreter, specifier, referrer| {
+        let candidate = Path::new(referrer).parent().unwrap_or(&loader_root).join(specifier);
+        let canonical = candidate.canonicalize().map_err(|error| Throw::type_error(error.to_string()))?;
+        if !canonical.starts_with(&loader_root) {
+            return Err(Throw::type_error("module specifier escapes Test262 checkout"));
+        }
+        let id = canonical.to_string_lossy().into_owned();
+        let source = std::fs::read_to_string(canonical).map_err(|error| Throw::type_error(error.to_string()))?;
+        let convert_error = |failure: amazing_js::module::ModuleFailure| match failure.phase {
+            ModulePhase::Parse | ModulePhase::Resolution => Throw::syntax_error(failure.message),
+            _ => failure.thrown.unwrap_or_else(|| Throw::type_error(failure.message)),
+        };
+        loader_linker.borrow_mut().link(&id, &source).map_err(convert_error)?;
+        ModuleLinker::evaluate_shared(&loader_linker, &id, interpreter).map_err(convert_error)?;
+        Ok(loader_linker.borrow().namespace_object(&id).expect("evaluated module has a namespace"))
+    }));
+    let linked = linker.borrow_mut().link(&root_id, &source);
+    let evaluation = linked.and_then(|_| ModuleLinker::evaluate_shared(&linker, &root_id, &mut i).map(|_| ()));
     if let Err(failure) = evaluation {
         match failure.phase {
             ModulePhase::Parse => emit_module("parse", "SyntaxError", &failure.message, None),

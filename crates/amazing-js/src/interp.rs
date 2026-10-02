@@ -88,6 +88,7 @@ struct PromiseJob {
 enum Job {
     Promise(PromiseJob),
     Microtask(JsValue),
+    ModuleImport(ModuleImportJob),
 }
 
 /// An interpreter-owned root for exactly one scheduled item. Tokens cannot be
@@ -287,7 +288,7 @@ pub struct Interpreter {
     /// The embedding's dynamic `import()` / `import.source()` loader hook (see
     /// `ModuleLoaderHook`'s own doc comment in `interp_module_host.rs`). `None`
     /// until a driver installs one, e.g. via HTML script execution.
-    module_loader: Option<Rc<ModuleLoaderHook>>,
+    module_loader: Option<Rc<TypedModuleLoaderHook>>,
     host_realm: u64,
     realm_origin: String,
     window_proxy: Option<Obj>,
