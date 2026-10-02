@@ -674,7 +674,7 @@ fn static_anchor(parent: &LayoutBox, positioned: &LayoutBox) -> StaticAnchor {
         return StaticAnchor {
             x: left + fraction * (right_edge - left),
             y,
-            right: false,
+            right: reversed,
         };
     }
     // Block flow currently exposes horizontal physical block origins. Vertical
@@ -1053,6 +1053,43 @@ mod tests {
             (actual - expected).abs() < 0.01,
             "got {actual}, want {expected}"
         );
+    }
+
+    #[test]
+    fn inline_static_slots_use_parent_direction_inside_float_bands() {
+        for direction in ["ltr", "rtl"] {
+            for (align, fraction) in [("left", 0.0), ("center", 0.5), ("right", 1.0)] {
+                for side in ["left", "right"] {
+                    for display in ["inline", "inline-table"] {
+                        for position in ["absolute", "fixed"] {
+                            let css = format!("body{{margin:0}}#parent{{position:relative;width:100px;direction:{direction};text-align:{align}}}#preceding{{height:50px}}#float{{float:{side};width:50px;height:50px}}#target{{position:{position};display:{display};width:50px;height:50px}}");
+                            let (dom, root) = layout("<body><div id=parent><div id=preceding></div><div id=float></div><span id=target></span></div></body>", &css, 200.0, 200.0);
+                            let target = find_id(&root, &dom, "target").unwrap();
+                            let expected = if side == "left" { 50.0 } else { 0.0 }
+                                + 50.0 * fraction - if direction == "rtl" { 50.0 } else { 0.0 };
+                            assert!((target.border_box.x - expected).abs() < 0.01,
+                                "{direction};{align};{side};{display};{position}: x={}, expected {expected}", target.border_box.x);
+                            close(target.border_box.y, 50.0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn blockified_inline_positioned_boxes_keep_centered_hypothetical_slots() {
+        for position in ["absolute", "fixed"] {
+            for display in ["inline", "inline-block", "inline-flex", "inline-grid", "inline-table", "ruby", "block"] {
+                let css = format!("body{{margin:0}}#parent{{position:relative;width:200px;text-align:center}}#preceding{{height:20px}}#target{{position:{position};display:{display};width:10px;height:10px}}");
+                let (dom, root) = layout("<body><div id=parent><div id=preceding></div><span id=target></span></div></body>", &css, 400.0, 300.0);
+                let target = find_id(&root, &dom, "target").unwrap();
+                let expected_x = if display == "block" { 0.0 } else { 100.0 };
+                assert!((target.border_box.x - expected_x).abs() < 0.01,
+                    "{display};{position}: x={}, expected {expected_x}", target.border_box.x);
+                close(target.border_box.y, 20.0);
+            }
+        }
     }
 
     #[test]

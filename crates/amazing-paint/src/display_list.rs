@@ -486,7 +486,15 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
         .filter(|value| value.is_finite())
         .unwrap_or(1.0)
         .clamp(0.0, 1.0);
-    let transform = box_.style.get("transform").and_then(parse_transform);
+    // CSS Transforms 1 §6: these boxes have associated CSS layout geometry.
+    // fill-box uses content-box; stroke-box and the default view-box use
+    // border-box. Internal SVG object/viewBox geometry is a separate path.
+    let reference = match box_.style.get("transform-box") {
+        Some("content-box" | "fill-box") => box_.content_box,
+        _ => box_.border_box,
+    };
+    let transform = box_.style.get("transform")
+        .and_then(|value| parse_transform(value, reference.w, reference.h));
     let blend = box_
         .style
         .get("mix-blend-mode")
@@ -570,7 +578,7 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
     })
 }
 
-fn parse_transform(value: &str) -> Option<Affine> {
+fn parse_transform(value: &str, reference_width: f32, reference_height: f32) -> Option<Affine> {
     if value.trim().eq_ignore_ascii_case("none") {
         return None;
     }
@@ -585,19 +593,19 @@ fn parse_transform(value: &str) -> Option<Affine> {
         let values = split_arguments(arguments)?;
         let next = match name.as_str() {
             "translate" if (1..=2).contains(&values.len()) => Affine {
-                e: parse_length(values.first()?)?,
-                f: values
-                    .get(1)
-                    .and_then(|value| parse_length(value))
-                    .unwrap_or(0.0),
+                e: parse_translation_length(values.first()?, reference_width)?,
+                f: match values.get(1) {
+                    Some(value) => parse_translation_length(value, reference_height)?,
+                    None => 0.0,
+                },
                 ..Affine::IDENTITY
             },
             "translatex" if values.len() == 1 => Affine {
-                e: parse_length(values.first()?)?,
+                e: parse_translation_length(values.first()?, reference_width)?,
                 ..Affine::IDENTITY
             },
             "translatey" if values.len() == 1 => Affine {
-                f: parse_length(values.first()?)?,
+                f: parse_translation_length(values.first()?, reference_height)?,
                 ..Affine::IDENTITY
             },
             "scale" if (1..=2).contains(&values.len()) => {
@@ -684,6 +692,19 @@ fn parse_number(value: &str) -> Option<f32> {
         .filter(|value| value.is_finite())
 }
 
+/// Only translations accept percentages: X is relative to reference width,
+/// Y to reference height. Scale/matrix coefficients and angles keep their
+/// independent number/angle grammars.
+fn parse_translation_length(value: &str, reference_extent: f32) -> Option<f32> {
+    let value = value.trim();
+    let used = if let Some(percent) = value.strip_suffix('%') {
+        parse_number(percent)? / 100.0 * reference_extent
+    } else {
+        parse_length(value)?
+    };
+    used.is_finite().then_some(used)
+}
+
 fn parse_length(value: &str) -> Option<f32> {
     let value = value.trim().to_ascii_lowercase();
     if let Some(px) = value.strip_suffix("px") {
@@ -757,4 +778,70 @@ fn control_commands(box_: &LayoutBox) -> Option<Vec<PaintCommand<'_>>> {
         }
     }
     Some(commands)
+}
+
+#[cfg(test)]
+mod transform_translation_tests {
+    use super::*;
+
+    fn close(actual: f32, expected: f32) {
+        assert!((actual - expected).abs() < 0.001, "{actual} != {expected}");
+    }
+
+    #[test]
+    fn translations_use_independent_reference_axes_and_keep_absolute_units() {
+        for (width, height) in [(200.0, 80.0), (0.0, 0.0), (75.0, 300.0)] {
+            for (css, x, y) in [
+                ("translate(50%, -25%)", width * 0.5, height * -0.25),
+                ("translate(50% -25%)", width * 0.5, height * -0.25),
+                ("translateX(-100%)", -width, 0.0),
+                ("translateY(150%)", 0.0, height * 1.5),
+                ("translate(12px, 50%)", 12.0, height * 0.5),
+                ("translate(-25%, -4px)", width * -0.25, -4.0),
+                ("translate(50%)", width * 0.5, 0.0),
+                ("translateX(0%)", 0.0, 0.0),
+                ("translate(0, 0)", 0.0, 0.0),
+                ("translateX(25%) translateY(-50%)", width * 0.25, height * -0.5),
+            ] {
+                let transform = parse_transform(css, width, height).unwrap();
+                let mapped = transform.map(3.0, 7.0);
+                close(mapped.0, 3.0 + x);
+                close(mapped.1, 7.0 + y);
+            }
+        }
+    }
+
+    #[test]
+    fn effect_translation_uses_own_border_dimensions() {
+        let mut style = amazing_css::ComputedStyle::default();
+        style.set("transform", "translate(50%, -25%)");
+        let mut box_ = LayoutBox::new(None, amazing_layout::Display::Block, style, 16.0, 20.0);
+        box_.border_box = Rect { x: 400.0, y: 500.0, w: 120.0, h: 80.0 };
+        box_.content_box = Rect { x: 410.0, y: 510.0, w: 100.0, h: 60.0 };
+        for (reference, x, y) in [("view-box", 60.0, -20.0), ("border-box", 60.0, -20.0),
+            ("stroke-box", 60.0, -20.0), ("content-box", 50.0, -15.0), ("fill-box", 50.0, -15.0)] {
+            box_.style.set("transform-box", reference);
+            let transform = effect_for(&box_).unwrap().transform;
+            close(transform.e, x);
+            close(transform.f, y);
+        }
+    }
+
+    #[test]
+    fn parser_keeps_other_operation_grammars_and_rejects_invalid_translations() {
+        assert_eq!(parse_transform("none", 100.0, 50.0), None);
+        let scale = parse_transform("scale(2, 3)", 100.0, 50.0).unwrap();
+        assert_eq!(scale.map(2.0, 4.0), (4.0, 12.0));
+        let matrix = parse_transform("matrix(1, 0, 0, 1, 5, 6)", 100.0, 50.0).unwrap();
+        assert_eq!(matrix.map(2.0, 4.0), (7.0, 10.0));
+        let rotate = parse_transform("rotate(90deg)", 100.0, 50.0).unwrap();
+        close(rotate.map(2.0, 4.0).0, -4.0);
+        close(rotate.map(2.0, 4.0).1, 2.0);
+        for css in ["translate(10px, nope)", "translateX(1)", "translateY(1deg)",
+            "translate(1%, 2%, 3%)", "translateX(NaN%)", "translateY(inf%)",
+            "scaleX(50%)", "rotate(50%)", "matrix(1,0,0,1,50%,0)", "translateX(10%) junk"] {
+            assert!(parse_transform(css, 100.0, 50.0).is_none(), "{css}");
+        }
+        assert!(parse_transform("translateX(100%)", f32::INFINITY, 50.0).is_none());
+    }
 }

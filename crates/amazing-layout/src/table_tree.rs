@@ -219,9 +219,13 @@ fn wrap_table(b: &mut LayoutBox) {
     let mut wrapper = anonymous(b, Role::Other, Vec::new());
     wrapper.table_wrapper = true;
     wrapper.inline_atomic = std::mem::take(&mut b.inline_atomic);
+    // The wrapper is the principal positioned box, so its hypothetical
+    // static slot uses the element's outer display before blockification.
+    wrapper.originally_inline_level = std::mem::take(&mut b.originally_inline_level);
     // The principal wrapper retains source identity for paint ordering; the
     // inner grid uses the same element identity for table style and hit data.
     wrapper.node = b.node;
+    wrapper.generated_pseudo = b.generated_pseudo;
     wrapper.style.set("display", "flow-root");
     for name in [
         "position",
@@ -236,12 +240,18 @@ fn wrap_table(b: &mut LayoutBox) {
         "bottom",
         "left",
         "z-index",
+        "transform",
+        "transform-box",
+        "transform-origin",
     ] {
         if let Some(v) = b.style.get(name) {
             wrapper.style.set(name, v);
         }
         let initial = match name {
             "position" => "static",
+            "transform" => "none",
+            "transform-box" => "view-box",
+            "transform-origin" => "50% 50%",
             "float" | "clear" => "none",
             "margin-top" | "margin-right" | "margin-bottom" | "margin-left" => "0",
             _ => "auto",

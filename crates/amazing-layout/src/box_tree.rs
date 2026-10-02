@@ -133,22 +133,7 @@ fn build_element(
     replaced: &dyn ReplacedElementProvider,
 ) -> LayoutBox {
     let mut style = styled.get(idx).cloned().unwrap_or_default();
-    let table_role = crate::table_tree::Role::of(&style);
-    let out_of_flow = !matches!(table_role, crate::table_tree::Role::Other | crate::table_tree::Role::Table)
-        && (crate::floats::side(&style).is_some() || is_out_of_flow(&style));
-    // CSS2 §10.3.7: an absolutely/fixed-positioned box's static position
-    // (when both inset properties on an axis are auto) is computed
-    // differently depending on whether the box is inline-level -- captured
-    // here from the SPECIFIED display, before §9.7's block-equivalent reset
-    // below overwrites it (floats already collapse to Display::Block inside
-    // `parse_display` regardless, so this only ever matters for the
-    // out-of-flow/positioned case).
-    let originally_inline_level = out_of_flow
-        && crate::floats::side(&style).is_none()
-        && matches!(parse_display(&style), Display::Inline);
-    if out_of_flow {
-        style.set("display", "block");
-    }
+    let originally_inline_level = prepare_box_style(&mut style);
     let font_size = values::resolve_used_font_size(&style, parent_font_px);
     let normal_lh = fonts.scaled_metrics(font_size).line_height;
     let line_height = values::resolve_used_line_height(&style, font_size, normal_lh);
@@ -173,7 +158,13 @@ fn build_element(
         box_.table_colspan = table_span(attribute(dom, idx, "span"), 1000, false);
     }
     let classified = classify_children(dom, styled, idx, font_size, fonts, replaced);
-    box_.flow = classified.flow;
+    box_.flow = if box_.style.get("display") == Some("block ruby") {
+        // CSS Display 3 §2.7 changes only ruby's outer display type. Its
+        // base/annotation pairing still belongs to a ruby formatting context.
+        Flow::Inlines(vec![ruby_inline(dom, styled, idx, parent_font_px)])
+    } else {
+        classified.flow
+    };
     box_.positioned = classified.positioned;
     if styled.pseudo_matched(idx, PseudoElement::FirstLetter)
         && let Some(first_letter) = styled.get_pseudo(idx, PseudoElement::FirstLetter) {
@@ -195,11 +186,16 @@ fn generated_box(
     fonts: &FontSource,
     replaced: &dyn ReplacedElementProvider,
 ) -> Option<LayoutBox> {
-    let style = styled.get_pseudo(origin, pseudo)?.clone();
+    let mut style = styled.get_pseudo(origin, pseudo)?.clone();
     let content = styled.generated_content(origin, pseudo)?;
     if content.runs.is_empty() || is_display_none(&style) {
         return None;
     }
+    let originally_inline_level = if pseudo == PseudoElement::Marker {
+        false
+    } else {
+        prepare_box_style(&mut style)
+    };
     let font_size = values::resolve_used_font_size(&style, parent_font);
     let normal_lh = fonts.scaled_metrics(font_size).line_height;
     let line_height = values::resolve_used_line_height(&style, font_size, normal_lh);
@@ -219,6 +215,7 @@ fn generated_box(
     );
     box_.font_metric_style = Some(text_style(dom, origin, &box_.style, font_size, false));
     box_.generated_pseudo = Some(pseudo);
+    box_.originally_inline_level = originally_inline_level;
     box_.outside_marker = pseudo == PseudoElement::Marker
         && styled
             .get(origin)
@@ -543,6 +540,37 @@ fn split_text_item(items: &mut Vec<InlineNode>, index: usize, at: usize) {
     items.insert(index + 1, right);
 }
 
+/// Preserve the hypothetical inline slot before contextual blockification.
+/// Synthetic styles use the same CSS helper as element/pseudo computation.
+fn prepare_box_style(style: &mut ComputedStyle) -> bool {
+    let original = style.display_before_blockification()
+        .or_else(|| style.get("display")).unwrap_or("inline");
+    let inline = matches!(original, "inline" | "inline-block" | "inline-flex"
+        | "inline-grid" | "inline-grid-lanes" | "inline-table" | "ruby");
+    let positioned = is_out_of_flow(style);
+    if positioned || crate::floats::side(style).is_some() {
+        let display = amazing_css::blockified_display(style.get("display").unwrap_or("inline"));
+        style.set("display", &display);
+    }
+    if positioned {
+        style.set("float", "none");
+    }
+    positioned && inline
+}
+
+/// Floats do not apply to flex/grid items (Flexbox §3, Grid §3). This is a
+/// used box style; the source ComputedStyle keeps its specified float value.
+fn formatting_item(mut item: LayoutBox) -> LayoutBox {
+    if item.generated_pseudo == Some(PseudoElement::Marker) {
+        return item;
+    }
+    let display = amazing_css::blockified_display(item.style.get("display").unwrap_or("inline"));
+    item.style.set("display", &display);
+    item.style.set("float", "none");
+    item.display = parse_display(&item.style);
+    item
+}
+
 /// `display` computed value → [`Display`]. Unknown values fall back to
 /// CSS's initial `inline`; `none` never reaches here (filtered upstream).
 fn parse_display(style: &ComputedStyle) -> Display {
@@ -551,6 +579,7 @@ fn parse_display(style: &ComputedStyle) -> Display {
             if v.eq_ignore_ascii_case("block")
             || v.eq_ignore_ascii_case("flow-root")
             || v.eq_ignore_ascii_case("list-item")
+            || v.eq_ignore_ascii_case("block ruby")
             || v.eq_ignore_ascii_case("table")
             || v.eq_ignore_ascii_case("inline-block")
             || v.eq_ignore_ascii_case("inline-table")
@@ -1227,7 +1256,7 @@ fn classify_children(
                 if generated.outside_marker || is_out_of_flow(&generated.style) {
                     positioned.push(generated);
                 } else {
-                    items.push(generated);
+                    items.push(formatting_item(generated));
                 }
             }
         }
@@ -1273,9 +1302,9 @@ fn classify_children(
                         continue;
                     }
                     flush_anonymous_into(&mut items, &mut run, &mut positioned, font_size, fonts, &mut Vec::new());
-                    items.push(build_element(
+                    items.push(formatting_item(build_element(
                         dom, styled, child, entry.parent_font, fonts, replaced,
-                    ));
+                    )));
                 }
             }
         }
@@ -1286,7 +1315,7 @@ fn classify_children(
             if is_out_of_flow(&generated.style) {
                 positioned.push(generated);
             } else {
-                items.push(generated);
+                items.push(formatting_item(generated));
             }
         }
         let flow = if own_display == Display::Grid {
@@ -1850,6 +1879,103 @@ mod tests {
         let styled = amazing_css::compute(&dom, &[amazing_css::parse_stylesheet(css)]);
         let tree = build_layout_tree(&dom, &styled, &FontSource::fallback());
         (dom, tree)
+    }
+
+    fn display_box<'a>(box_: &'a LayoutBox, dom: &Dom, id: &str) -> Option<&'a LayoutBox> {
+        if box_.node.is_some_and(|node| attribute(dom, node, "id") == Some(id)) {
+            return Some(box_);
+        }
+        let children = match &box_.flow {
+            Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children.as_slice(),
+            _ => &[],
+        };
+        children.iter().chain(&box_.positioned).find_map(|child| display_box(child, dom, id))
+    }
+
+    #[test]
+    fn contextual_blockification_preserves_inner_layout_and_inline_static_slots() {
+        for policy in ["float:left", "position:absolute", "position:fixed"] {
+            for (display, expected, inline) in [
+                ("inline", Display::Block, true), ("inline-block", Display::Block, true),
+                ("inline-flex", Display::Flex, true), ("inline-grid", Display::Grid, true),
+                ("inline-table", Display::Block, true), ("ruby", Display::Block, true),
+                ("table-cell", Display::Block, false), ("block", Display::Block, false),
+            ] {
+                let css = format!("#target{{display:{display};{policy};transform:translateX(50%);transform-box:content-box}}");
+                let (dom, root) = tree_css("<body><div id=target><span>A</span></div></body>", &css);
+                let target = display_box(&root, &dom, "target").unwrap();
+                assert_eq!(target.display, expected, "{display};{policy}");
+                if display == "inline-table" {
+                    assert_eq!(target.style.get("transform"), Some("translateX(50%)"));
+                    assert_eq!(target.style.get("transform-box"), Some("content-box"));
+                    let Flow::Blocks(children) = &target.flow else { panic!("grid") };
+                    assert_eq!(children[0].style.get("transform"), Some("none"));
+                }
+                assert_eq!(target.originally_inline_level, inline && policy.starts_with("position"),
+                    "{display};{policy}");
+                if policy.starts_with("position") {
+                    assert_eq!(target.style.get("float"), Some("none"));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn flex_and_grid_items_skip_contents_and_ignore_used_float() {
+        for parent in ["flex", "grid"] {
+            for display in ["inline", "inline-block", "inline-flex", "inline-grid", "inline-table", "ruby"] {
+                let dom = amazing_html::parse("<body><div id=parent><section><section><div id=target>A</div></section></section></div></body>");
+                let css = format!("#parent{{display:{parent}}}section{{display:contents}}#target{{display:{display};float:left}}");
+                let styled = amazing_css::compute(&dom, &[amazing_css::parse_stylesheet(&css)]);
+                let root = build_layout_tree(&dom, &styled, &FontSource::fallback());
+                let target = display_box(&root, &dom, "target").unwrap();
+                assert_eq!(target.style.get("float"), Some("none"), "{parent};{display}");
+                assert_eq!(styled.get(target.node.unwrap()).unwrap().get("float"), Some("left"));
+                if display == "inline-table" {
+                    assert!(target.table_wrapper);
+                    let Flow::Blocks(children) = &target.flow else { panic!("table grid") };
+                    assert_eq!(children[0].style.get("display"), Some("table"));
+                } else {
+                    assert_eq!(target.style.get("display"), Some(amazing_css::blockified_display(display).as_str()));
+                }
+                let parent_box = display_box(&root, &dom, "parent").unwrap();
+                let items = match &parent_box.flow { Flow::Flex(items) | Flow::Grid(items) => items, _ => panic!("items") };
+                assert_eq!(items.len(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn blockified_ruby_keeps_paired_base_and_annotation_groups() {
+        for policy in ["float:left", "position:absolute", "position:fixed", ""] {
+            for parent in ["block", "flex", "grid"] {
+                if parent == "block" && policy.is_empty() { continue; }
+                let css = format!("#parent{{display:{parent}}}#target{{{policy}}}");
+                let (dom, root) = tree_css("<body><div id=parent><ruby id=target><rb>A</rb><rb>B</rb><rtc>note</rtc></ruby></div></body>", &css);
+                let target = display_box(&root, &dom, "target").unwrap();
+                assert_eq!(target.style.get("display"), Some("block ruby"));
+                let Flow::Inlines(items) = &target.flow else { panic!("ruby flow {policy};{parent}") };
+                let [InlineNode::Ruby { columns, .. }] = items.as_slice() else { panic!("ruby group") };
+                assert_eq!(columns.len(), 2);
+                assert_eq!(columns[0].base.text, "A");
+                assert_eq!(columns[1].base.text, "B");
+                assert_eq!(columns[0].annotation_span, 2);
+                assert_eq!(columns[0].annotation.as_ref().unwrap().text, "note");
+            }
+        }
+    }
+
+    #[test]
+    fn positioned_generated_content_preserves_pre_blockification_display() {
+        for display in ["inline", "inline-block", "inline-flex", "inline-grid", "inline-table"] {
+            let css = format!("p::before{{content:'A';display:{display};position:absolute;float:left}}");
+            let (_, root) = tree_css("<body><p>B</p></body>", &css);
+            let Flow::Blocks(blocks) = &root.flow else { panic!("blocks") };
+            let generated = &blocks[0].positioned[0];
+            assert!(generated.originally_inline_level, "{display}");
+            assert_eq!(generated.generated_pseudo, Some(PseudoElement::Before));
+            assert_eq!(generated.style.get("float"), Some("none"));
+        }
     }
 
     #[test]
