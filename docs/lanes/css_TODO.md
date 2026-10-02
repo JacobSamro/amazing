@@ -2495,3 +2495,32 @@ from this ticket's list-grammar work. Also still open from CSS-25: `calc()`
 infinity/NaN, relative-color channel keywords inside nested
 `calc()`/`clamp()`, `container` shorthand serialization, `random-item()`,
 and `mediaqueries`' `matchMedia().media` canonical serialization.
+
+## CSS-31: logical border axis and edge shorthands
+
+Fixed base: `9d0b42d0`. CSS Logical Properties Level 1 §4.5 specifies
+`border-inline`/`border-block`, four edge shorthands, and the axis
+width/style/color one-or-two-value shorthands. Previously none expanded
+into the logical border longhands already mapped by cascade.rs; declarations
+remained inert diagnostic text. This blocked the routed table-intrinsic-size
+cluster despite correct layout intrinsic sizing.
+
+`logical_border.rs` uses the existing atomic side-border parser and existing
+writing-mode mapping. It handles omitted component resets, CSS-wide keywords,
+functional colors, paired values, variable substitution, and invalid-at-computed
+values. Invalid logical longhands are rejected before cascade ranking.
+Axis computed serialization is reconstructed from final longhand winners;
+logical longhands mirror their physical winners, including RTL/vertical modes.
+CSS.supports recognizes the complete family. No upstream code was ported.
+Moved computed.rs's existing tests into computed_tests.rs to keep every changed
+source below 4,000 lines.
+
+Linux gates on Boat pool-layout `bx_shgjh66q`, native `/tmp/amazing-target-css`:
+crate 358/358 (before 356), crate doctests 0; workspace 3517/3517, 17 skipped,
+workspace doctests 4/4. Eleven pinned WPT parsing selections 3076/4292 ->
+3132/4292, css-logical 300/469 -> 356/469; exact failure-key comparison gained 56,
+lost 0, all ten other selections unchanged. CSS tables render 54/82 -> 59/82,
+gained 5/lost 0: table-intrinsic-size001..004 and rules-groups. Remaining 23
+mismatches unchanged. Durable gate summaries and compact render classifications
+are under `crates/amazing-css/evidence/css31/`. No Windows gate required by the
+Linux-first override. No local build/test or direct Boat lifecycle commands.
