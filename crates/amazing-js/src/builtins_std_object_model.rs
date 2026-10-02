@@ -384,6 +384,34 @@ fn std_legacy_to_object(i: &mut Interpreter, this: JsValue) -> Result<JsValue, T
     native_object(i, JsValue::Undefined, vec![this])
 }
 
+// Annex B Object.prototype.__proto__: unlike Object.setPrototypeOf, an invalid
+// prototype argument is silently ignored, after RequireObjectCoercible(this).
+fn native_object_proto_getter(
+    i: &mut Interpreter, this: JsValue, _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = std_legacy_to_object(i, this)? else { unreachable!() };
+    i.default_get_prototype(&object)
+}
+
+fn native_object_proto_setter(
+    i: &mut Interpreter, this: JsValue, args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if this.is_null() || this.is_undefined() {
+        return Err(Throw::type_error("Object.prototype accessor called on null or undefined"));
+    }
+    let prototype = match args.first() {
+        Some(JsValue::Object(object)) => Some(object.clone()),
+        Some(JsValue::Null) => None,
+        _ => return Ok(JsValue::Undefined),
+    };
+    if let JsValue::Object(object) = this {
+        if !i.default_set_prototype(&object, &prototype)? {
+            return Err(Throw::type_error("cannot change object prototype"));
+        }
+    }
+    Ok(JsValue::Undefined)
+}
+
 fn std_object_define_accessor(
     i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, is_getter: bool,
 ) -> Result<JsValue, Throw> {
