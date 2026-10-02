@@ -69,6 +69,12 @@ impl ResumableParser {
         self.builder.set_srcdoc();
     }
 
+    /// Sets scripting before feeding source. Disabled mode never pauses for
+    /// scripts or queues deferred/async script execution events.
+    pub fn set_scripting_mode(&mut self, mode: crate::ScriptingMode) {
+        self.builder.set_scripting_mode(mode);
+    }
+
     /// Feeds the whole, already-decoded document source (newline-normalized
     /// exactly like `parse`). Call once, before the first `run`.
     pub fn push_source(&mut self, src: &str) {

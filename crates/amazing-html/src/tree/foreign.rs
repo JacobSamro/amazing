@@ -142,6 +142,7 @@ impl TreeBuilder {
                     // inside `<template>` content, SVG namespace only
                     // (MathML has no script element).
                     if !self.fragment
+                        && self.scripting_mode == ScriptingMode::Enabled
                         && self.template_modes.is_empty()
                         && name.eq_ignore_ascii_case("script")
                         && namespace == Namespace::Svg
@@ -187,6 +188,7 @@ impl TreeBuilder {
                         // (WPT's execution-timing/131.html: "scheduler:
                         // inline svg script").
                         if !self.fragment
+                            && self.scripting_mode == ScriptingMode::Enabled
                             && self.template_modes.is_empty()
                             && name.eq_ignore_ascii_case("script")
                             && self.dom.namespace(node) == Some(Namespace::Svg)

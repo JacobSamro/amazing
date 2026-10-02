@@ -46,6 +46,15 @@ pub use resumable::{ParseSignal, ResumableParser};
 pub use byte_stream::IncrementalByteParser;
 pub use xml::{parse_xml, XmlError, XmlErrorKind};
 
+/// Whether scripting affects HTML tree construction. Enabled parsing prepares
+/// script events; the embedding is responsible for actually executing them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ScriptingMode {
+    #[default]
+    Enabled,
+    Disabled,
+}
+
 use amazing_dom::{Dom, Namespace, NodeIdx};
 
 #[cfg(test)]
@@ -66,6 +75,8 @@ mod declarative_shadow_tests;
 mod frameset_tests;
 #[cfg(test)]
 mod tail_mode_tests;
+#[cfg(test)]
+mod scripting_tests;
 
 /// Decodes and parses a complete HTML byte stream. `transport_label` is the
 /// optional charset from out-of-band transport metadata.
@@ -73,11 +84,23 @@ pub fn parse_bytes(bytes: &[u8], transport_label: Option<&str>) -> Dom {
     parse(&encoding::decode(bytes, transport_label).text)
 }
 
+/// Decodes a complete byte stream and parses with its document scripting mode.
+pub fn parse_bytes_with_scripting_mode(
+    bytes: &[u8], transport_label: Option<&str>, scripting_mode: ScriptingMode,
+) -> Dom {
+    parse_with_scripting_mode(&encoding::decode(bytes, transport_label).text, scripting_mode)
+}
+
 /// Parses an HTML document into an arena-backed DOM.
 ///
 /// The returned `Dom` always has the document node at index 0 (`NodeIdx(0)`);
 /// use [`Dom::dump`] on it for the inspectable terminal view.
 pub fn parse(src: &str) -> Dom {
+    parse_with_scripting_mode(src, ScriptingMode::Enabled)
+}
+
+/// Parses decoded HTML with its document scripting mode.
+pub fn parse_with_scripting_mode(src: &str, scripting_mode: ScriptingMode) -> Dom {
     // Newline normalization (part of the spec's encoding step): CRLF and
     // lone CR become LF before tokenization, mirroring what browsers do
     // while decoding the byte stream.
@@ -88,7 +111,7 @@ pub fn parse(src: &str) -> Dom {
     } else {
         src
     };
-    tree::build(src)
+    tree::build_with_scripting_mode(src, scripting_mode)
 }
 
 /// Parses into a DOM with custom-element definitions installed before the
@@ -112,8 +135,8 @@ pub fn parse_with_custom_element_host(
 /// Parses an HTML fragment in any HTML element context and
 /// returns the fragment children under a standalone document node.
 ///
-/// `noscript` uses this parser's fixed scripting-enabled RAWTEXT behavior;
-/// there is no scripting-disabled fragment mode.
+/// Scripting is enabled by default. [`parse_fragment_with_scripting_mode`]
+/// accepts the context document's explicit scripting mode.
 pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
     parse_fragment_with_namespace(context, Namespace::Html, src)
 }
@@ -124,7 +147,14 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
 /// element's real namespace instead of always the HTML fragment root's
 /// (see `tree::build_fragment`'s own doc comment).
 pub fn parse_fragment_with_namespace(context: &str, namespace: Namespace, src: &str) -> Result<Dom, String> {
-    parse_fragment_inner(context, namespace, src, false)
+    parse_fragment_inner(context, namespace, src, false, ScriptingMode::Enabled)
+}
+
+/// Parses a fragment with its context namespace and document scripting mode.
+pub fn parse_fragment_with_scripting_mode(
+    context: &str, namespace: Namespace, src: &str, scripting_mode: ScriptingMode,
+) -> Result<Dom, String> {
+    parse_fragment_inner(context, namespace, src, false, scripting_mode)
 }
 
 /// `parse_fragment`, but with declarative shadow roots enabled (HTML
@@ -157,7 +187,7 @@ pub fn parse_fragment_with_namespace(context: &str, namespace: Namespace, src: &
 /// as the shadow root's children and dropping the template from the
 /// fragment before inserting the rest.
 pub fn parse_fragment_with_shadow_roots(context: &str, src: &str) -> Result<Dom, String> {
-    parse_fragment_inner(context, Namespace::Html, src, true)
+    parse_fragment_inner(context, Namespace::Html, src, true, ScriptingMode::Enabled)
 }
 
 fn parse_fragment_inner(
@@ -165,6 +195,7 @@ fn parse_fragment_inner(
     namespace: Namespace,
     src: &str,
     allow_declarative_shadow_roots: bool,
+    scripting_mode: ScriptingMode,
 ) -> Result<Dom, String> {
     let context = context.to_ascii_lowercase();
     if context.is_empty() || context.chars().any(|c| c.is_ascii_whitespace() || matches!(c, '<' | '>' | '\0')) {
@@ -177,7 +208,9 @@ fn parse_fragment_inner(
     } else {
         src
     };
-    let source = tree::build_fragment(src, &context, namespace, allow_declarative_shadow_roots);
+    let source = tree::build_fragment_with_scripting_mode(
+        src, &context, namespace, allow_declarative_shadow_roots, scripting_mode,
+    );
 
     fn clone_subtree(source: &Dom, source_node: NodeIdx, target: &mut Dom, parent: NodeIdx) {
         let created = target.append_child(parent, source.get(source_node).kind.clone());

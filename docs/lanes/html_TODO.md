@@ -3497,3 +3497,18 @@ decoded-input probe of all 1936 cases passes 1905; 25 failures are disabled
 noscript parsing and six require actual JavaScript execution. Those six
 execution cases remain explicitly unsupported by the parser-only probe.
 The previously measured 1894 cases all pass through the probe unchanged.
+
+HTML45 completed the whole scripting-disabled parser area: public mode
+configuration for decoded/byte documents and fragments, incremental text/byte
+parsers and resumable script preparation. Defaults stay enabled. Complete
+InHeadNoscript rules ported from MIT html5ever rules.rs at
+`6db7bbf1c4dfaecd28731950d427e40c8b911bef`; header and appended notice recorded.
+The whole1936 probe now has **1930 passes, zero failures, six unsupported
+execution cases**, up 25 parser passes with zero losses and identical corpus
+hashes/comparator. Original CLI coverage remains 1894/1894. Native Boat gate:
+189 owned passes, 3526 workspace passes (17 skipped), four doctests. Durable
+per-case before/after results and reproduction live under evidence/html45/.
+
+Next: canonical document encoding names and unknown-response HTML sniffing
+for DOM's faithful encoding.py iframe fixture, followed by persistent DOM
+quirks-mode integration when the owning DOM API is gated.
