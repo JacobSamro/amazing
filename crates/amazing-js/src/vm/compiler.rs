@@ -1047,8 +1047,9 @@ impl Compiler {
         self.enter(expression.span)?;
         // The VM has no optional chains: hand the whole chain, from its
         // outermost link, to the tree walker so short-circuiting covers
-        // every link (`o?.b[f()]` must not call `f`).
-        if in_optional_chain(expression) && !may_suspend(expression) {
+        // every link (`o?.b[f()]` must not call `f`). Super reference operations
+        // also need the home object's prototype and the actual this receiver.
+        if (in_optional_chain(expression) || super_reference_operation(expression)) && !may_suspend(expression) {
             let result = self.register(expression.span).map(|dst| {
                 self.emit(Instruction::TreeEval(dst, Rc::new(expression.clone())));
                 dst
@@ -1445,6 +1446,13 @@ impl Compiler {
                     self.program.references += 1;
                     self.emit(Instruction::ResolvePrivateWrite(slot, object, name.name.clone()));
                     slot
+                } else if let Some((obj, prop)) = public_member_target(target) {
+                    let object = self.expression(obj)?;
+                    let key = self.member_key(object, prop, true)?;
+                    let slot = self.program.references;
+                    self.program.references += 1;
+                    self.emit(Instruction::ResolveMemberWrite(slot, object, key));
+                    slot
                 } else { self.reference(target)?.0 };
                 let value = if let Some(name) = super::super::event_handler::identifier_name(target) {
                     self.named_class_expression(value, KeyOperand::Static(name.into()))?
@@ -1648,6 +1656,14 @@ fn unsupported_statement(kind: &StmtKind) -> &'static str {
     }
 }
 
+fn public_member_target(mut target: &Expr) -> Option<(&Expr, &ast::MemberProp)> {
+    while let ExprKind::Paren(inner) = &target.kind { target = inner; }
+    match &target.kind {
+        ExprKind::Member { obj, prop, optional: false } if !matches!(prop, ast::MemberProp::Private(_)) => Some((obj, prop)),
+        _ => None,
+    }
+}
+
 fn private_target(mut target: &Expr) -> Option<(&Expr, &ast::Ident)> {
     while let ExprKind::Paren(inner) = &target.kind {
         target = inner;
@@ -1660,6 +1676,16 @@ fn private_target(mut target: &Expr) -> Option<(&Expr, &ast::Ident)> {
 
 fn key_may_suspend(key: &ast::PropKey) -> bool {
     matches!(key, ast::PropKey::Computed(key) if may_suspend(key))
+}
+
+fn super_reference_operation(expression: &Expr) -> bool {
+    match &expression.kind {
+        ExprKind::Paren(inner) => super_reference_operation(inner),
+        ExprKind::Member { obj, .. } => matches!(obj.kind, ExprKind::Super),
+        ExprKind::Call { callee, .. } => super_reference_operation(callee),
+        ExprKind::Assign { target, .. } | ExprKind::Update { target, .. } => super_reference_operation(target),
+        _ => false,
+    }
 }
 
 fn in_optional_chain(expression: &Expr) -> bool {

@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-22 — optional-chain references and browser source metadata**.
+Frontier: **JS-23 — object method home objects and canonical module failures**.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
@@ -1614,3 +1614,60 @@ exact host/classification hashes and gain lists are in
 `f86b814d6f74e9ffc1eff29dece4d8f6456da539`. The integrator explicitly owns the
 combined full-tree Test262 gate; duplicate lane full sweeps were cancelled before
 completion. Source and target ran on native `/tmp` storage through the main wrapper.
+
+
+## JS-23 — object method home objects and canonical module failures
+
+Fixed dependency base `7e3c07ba` (JSVM-12 eager generator frames included).
+The initial `d20f78dd` base lacked eager generator initialization, so the parent
+authorized adopting the existing owner fix. A fresh bulk then showed that eager
+initialization alone did not retain the resumable call context: the VM owner
+granted a narrow captured CallFrame/strictness field and resume push/restore
+wrapper, with no FunctionCode.call or FDI edits. Object-literal ordinary,
+getter/setter, generator and async methods receive their object as HomeObject,
+exact UTF-16/symbol names, leading-required parameter length and standard
+name/length descriptors. Arrows retain lexical HomeObject. Super references
+carry both the home prototype and actual this receiver through property reads,
+calls, assignment and updates; plain assignment avoids reading its getter.
+Grouped references retain these semantics. Plain writes to ordinary, super and
+private members evaluate base/key without reading the property; compound/update
+references read explicitly. The VM owner granted one lexical home copy,
+non-suspending super-reference TreeEval dispatch, and plain public-member
+ResolveMemberWrite lowering. Suspended frames restore the original call context
+and strictness on every resume/result path. Post-yield arrows and post-await
+methods/new.target therefore keep their original context. Captured values use
+strong Rc ownership; no tracing collector hook exists in this tree. Suspending
+super property operations remain a separately coordinated VM follow-up.
+
+Method-definition metadata operations are adapted from MIT `boa-dev/boa`,
+`core/engine/src/bytecompiler/expression/object_literal.rs`, pinned commit
+`39cd11214ecb366200157dab96b3919e61e9a391`. Upstream property-key naming and
+SetHomeObject operations map onto Amazing's existing function factory and
+property gateways. License verified at this commit; the new helper's header and
+an appended third-party notice accompany the code.
+
+The separate browser module API follow-up preserves canonical SyntaxError
+object identity across direct and nested parse failures, distinguishes typed
+parser/static-link errors from host-owned resolver errors, and rolls back all
+records newly inserted by a failed link transaction. Completed earlier records
+remain intact. Two module and three both-backend method regressions cover these
+contracts. Embedding error conversion must prefer `failure.thrown`, as documented
+in [js-lang_JS21-interface.md](js-lang_JS21-interface.md); browser and Test262
+adapters remain owned by their respective integrators.
+
+The first 60-second baseline was interrupted by the sandbox's finite TTL and
+is incomplete evidence. Its replacement and the shared after gate use the same
+fixed base and native `/tmp` source/target on the renewed Boat sandbox.
+
+Final shared Linux Boat gate on fixed `7e3c07ba`: owned **489 → 494 passed /
+one skipped**, **one doctest**; workspace **3594 passed / 17 skipped**, **four
+doctests**. Whole language including Annex B (24590 selected files), matching
+10-second deadlines: **23363 → 23445 passing files**, **43481 → 43641 passing
+variants**, **82 file / 160 variant gains**, **zero losses**, **zero timeouts**.
+Host/input/runner/classification provenance and exact gain lists are in
+[js-lang_JS23-evidence.json](js-lang_JS23-evidence.json). The source-phase
+lookahead dependency `600ce2a6` was committed after this native snapshot froze;
+the root gates that separate minimal parser fix. The API's driver WPT follow-up
+exposed a nondeterministic root-link error choice, tracked as JS-24; its failure
+is preserved and the parent holds module-containing pushes until ordered graph
+linking restores stable passes.

@@ -344,6 +344,10 @@ pub struct Program {
 /// until exception handlers are compiled, but belongs to the frame so it can
 /// survive an instruction-boundary suspension with the other VM state.
 struct VmFrame {
+    // A resume can arrive through an unrelated next()/promise callback. Keep
+    // the original method/arrow call context, not the resumer's context.
+    call_context: Option<super::CallFrame>,
+    strict_context: bool,
     registers: Vec<JsValue>,
     caches: Vec<Option<fast_path::InlineCache>>,
     references: Vec<Option<Reference>>,
@@ -526,6 +530,8 @@ impl Program {
         fuel: usize,
     ) -> Result<Box<VmFrame>, Throw> {
         let mut frame = Box::new(VmFrame {
+            call_context: i.frames.last().cloned(),
+            strict_context: i.strict_eval_context,
             registers: take_registers(self.registers),
             caches: (0..self.code.len()).map(|_| None).collect(),
             references: (0..self.references).map(|_| None).collect(),
@@ -569,6 +575,24 @@ impl Program {
         frame: &mut Box<VmFrame>,
         quantum: usize,
     ) -> Result<FrameOutcome, Throw> {
+        let frame_depth = i.frames.len();
+        let previous_strict = i.strict_eval_context;
+        if let Some(context) = &frame.call_context {
+            i.frames.push(context.clone());
+        }
+        i.strict_eval_context = frame.strict_context;
+        let result = self.resume_frame_inner(i, frame, quantum);
+        i.frames.truncate(frame_depth);
+        i.strict_eval_context = previous_strict;
+        result
+    }
+
+    fn resume_frame_inner(
+        &self,
+        i: &mut Interpreter,
+        frame: &mut Box<VmFrame>,
+        quantum: usize,
+    ) -> Result<FrameOutcome, Throw> {
         if let Some(value) = &frame.completed {
             return Ok(FrameOutcome::Completed(value.clone()));
         }
@@ -582,6 +606,8 @@ impl Program {
             }
         }
         let VmFrame {
+            call_context: _,
+            strict_context: _,
             registers,
             caches,
             references,
@@ -844,8 +870,7 @@ impl Program {
                         let key = key.resolve(&registers)?;
                         let JsValue::Object(target) = &registers[*object] else { unreachable!() };
                         let method = code.instantiate(i, env);
-                        let JsValue::Object(callable) = &method else { unreachable!() };
-                        callable.borrow_mut().func.as_mut().unwrap().home = Some(target.clone());
+                        i.configure_object_method(&method, &registers[*object], &key, *kind, &code.0.params);
                         if matches!(kind, crate::ast::MethodKind::Get | crate::ast::MethodKind::Set) {
                             let mut property = target.borrow().own_prop(&key).cloned()
                                 .filter(|property| property.getter.is_some() || property.setter.is_some())
@@ -1655,6 +1680,7 @@ impl FunctionCode {
             // of the enclosing (derived) constructor's.
             if let Some(frame) = i.frames.last() {
                 let mut arrow = handle.borrow_mut();
+                arrow.func.as_mut().unwrap().home = frame.home.clone();
                 arrow.lexical_super_constructor = frame.super_constructor.clone();
                 arrow.lexical_new_target = frame.new_target.clone();
             }
