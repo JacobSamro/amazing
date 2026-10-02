@@ -654,6 +654,7 @@ impl Interpreter {
     fn run_job(&mut self, job: Job) -> Result<(), Throw> {
         match job {
             Job::Promise(job) => run_promise_reaction(job.reaction, job.fate, self),
+            Job::ModuleImport(job) => self.run_module_import_job(job),
             Job::Microtask(callback) => {
                 self.call_value(&callback, JsValue::Undefined, Vec::new())?;
                 Ok(())
@@ -949,8 +950,7 @@ impl Interpreter {
             ExprKind::This => env.resolve_this_checked(),
             ExprKind::NewTarget => Ok(self.current_new_target().unwrap_or(JsValue::Undefined)),
             ExprKind::DynamicImport(args) => {
-                let specifier = args.first().ok_or_else(|| Throw::type_error("import() requires a specifier"))?;
-                self.dynamic_import(specifier, env)
+                self.dynamic_import(args, env)
             }
             // import.source(...)/import.defer(...) (the source/deferred phase-imports proposal):
             // no host hook returns a Module Source object yet, so this always rejects rather than

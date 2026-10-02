@@ -1,0 +1,284 @@
+{
+  "ticket": "JS-21",
+  "base_sha": "6a81bf731eeb0620bd0972d19d0f73187b0b2a29",
+  "platform": {
+    "os": "Linux",
+    "service": "Boat",
+    "sandbox": "bx_2n57r7zz",
+    "pool": "pool-js-b"
+  },
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "workspace": {
+    "passed": 3522,
+    "skipped": 17,
+    "failed": 0,
+    "doctest_suites": 31,
+    "doctests_passed": 4,
+    "doctests_failed": 0
+  },
+  "owned": {
+    "passed": 476,
+    "skipped": 1,
+    "failed": 0,
+    "doctests_passed": 1
+  },
+  "before": {
+    "files": {
+      "pass": 49727,
+      "fail": 3249,
+      "timeout": 433,
+      "unsupported": 169,
+      "skipped": 294
+    },
+    "variants": {
+      "pass": 95801,
+      "fail": 5913,
+      "timeout": 867,
+      "unsupported": 337,
+      "skipped": 0
+    },
+    "classification_sha256": "775360734cceabfc8bd0f39ebfe95782020f3df5bcdb1f00f6d07bbbf83c14da",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "host_sha256": "8b0441c601d98f97c3217aded341266c255ca42f334b97fd5afad1a9e5f0df5f",
+    "timeout_seconds": null,
+    "jobs": 8
+  },
+  "raw_after": {
+    "files": {
+      "pass": 49747,
+      "fail": 3218,
+      "timeout": 444,
+      "unsupported": 169,
+      "skipped": 294
+    },
+    "variants": {
+      "pass": 95820,
+      "fail": 5873,
+      "timeout": 888,
+      "unsupported": 337,
+      "skipped": 0
+    },
+    "classification_sha256": "da07dcb1c3a32fa1f512ab08d1915fc66edab9f7a9d9863248aaf7b695f04954",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "host_sha256": "d3094b66e90658bcce4be1e5ecbec92906c84ac86521d9d931b6e68748bf7732",
+    "timeout_seconds": 10,
+    "jobs": 8
+  },
+  "verified_after": {
+    "files": {
+      "pass": 49758,
+      "fail": 3218,
+      "timeout": 433,
+      "unsupported": 169,
+      "skipped": 294
+    },
+    "variants": {
+      "pass": 95841,
+      "fail": 5873,
+      "timeout": 867,
+      "unsupported": 337,
+      "skipped": 0
+    },
+    "classification_sha256": "3444b3ddd4abda548323a1ce1246fd2c035f45bca5952b3966a95e81ed43b404",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "host_sha256": "d3094b66e90658bcce4be1e5ecbec92906c84ac86521d9d931b6e68748bf7732",
+    "timeout_seconds": null,
+    "jobs": 8
+  },
+  "gains": {
+    "files": 31,
+    "variants": 40,
+    "file_paths": [
+      "language/expressions/dynamic-import/import-attributes/2nd-param-evaluation-abrupt-return.js",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-evaluation-abrupt-throw.js",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-evaluation-sequence.js",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-get-with-error.js",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-non-object.js",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-with-enumeration-abrupt.js",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-with-non-object.js",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-with-value-abrupt.js",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-with-value-non-string.js",
+      "language/module-code/eval-self-once.js",
+      "language/module-code/instn-iee-bndng-cls.js",
+      "language/module-code/instn-iee-bndng-const.js",
+      "language/module-code/instn-iee-bndng-fun.js",
+      "language/module-code/instn-iee-bndng-gen.js",
+      "language/module-code/instn-iee-bndng-let.js",
+      "language/module-code/instn-iee-bndng-var.js",
+      "language/module-code/instn-named-bndng-cls.js",
+      "language/module-code/instn-named-bndng-const.js",
+      "language/module-code/instn-named-bndng-dflt-cls.js",
+      "language/module-code/instn-named-bndng-dflt-expr.js",
+      "language/module-code/instn-named-bndng-dflt-named.js",
+      "language/module-code/instn-named-bndng-dflt-star.js",
+      "language/module-code/instn-named-bndng-let.js",
+      "language/module-code/instn-named-bndng-trlng-comma.js",
+      "language/module-code/instn-named-bndng-var.js",
+      "language/module-code/namespace/internals/delete-exported-uninit.js",
+      "language/module-code/namespace/internals/get-str-found-uninit.js",
+      "language/module-code/top-level-await/await-dynamic-import-resolution.js",
+      "language/module-code/top-level-await/module-graphs-does-not-hang.js",
+      "language/module-code/top-level-await/module-self-import-async-resolution-ticks.js",
+      "staging/top-level-await/tla-hang-entry.js"
+    ],
+    "variant_keys": [
+      "language/expressions/dynamic-import/import-attributes/2nd-param-evaluation-abrupt-return.js#non-strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-evaluation-abrupt-return.js#strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-evaluation-abrupt-throw.js#non-strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-evaluation-abrupt-throw.js#strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-evaluation-sequence.js#non-strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-evaluation-sequence.js#strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-get-with-error.js#non-strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-get-with-error.js#strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-non-object.js#non-strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-non-object.js#strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-with-enumeration-abrupt.js#non-strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-with-enumeration-abrupt.js#strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-with-non-object.js#non-strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-with-non-object.js#strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-with-value-abrupt.js#non-strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-with-value-abrupt.js#strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-with-value-non-string.js#non-strict",
+      "language/expressions/dynamic-import/import-attributes/2nd-param-with-value-non-string.js#strict",
+      "language/module-code/eval-self-once.js#module",
+      "language/module-code/instn-iee-bndng-cls.js#module",
+      "language/module-code/instn-iee-bndng-const.js#module",
+      "language/module-code/instn-iee-bndng-fun.js#module",
+      "language/module-code/instn-iee-bndng-gen.js#module",
+      "language/module-code/instn-iee-bndng-let.js#module",
+      "language/module-code/instn-iee-bndng-var.js#module",
+      "language/module-code/instn-named-bndng-cls.js#module",
+      "language/module-code/instn-named-bndng-const.js#module",
+      "language/module-code/instn-named-bndng-dflt-cls.js#module",
+      "language/module-code/instn-named-bndng-dflt-expr.js#module",
+      "language/module-code/instn-named-bndng-dflt-named.js#module",
+      "language/module-code/instn-named-bndng-dflt-star.js#module",
+      "language/module-code/instn-named-bndng-let.js#module",
+      "language/module-code/instn-named-bndng-trlng-comma.js#module",
+      "language/module-code/instn-named-bndng-var.js#module",
+      "language/module-code/namespace/internals/delete-exported-uninit.js#module",
+      "language/module-code/namespace/internals/get-str-found-uninit.js#module",
+      "language/module-code/top-level-await/await-dynamic-import-resolution.js#module",
+      "language/module-code/top-level-await/module-graphs-does-not-hang.js#module",
+      "language/module-code/top-level-await/module-self-import-async-resolution-ticks.js#module",
+      "staging/top-level-await/tla-hang-entry.js#module"
+    ]
+  },
+  "losses": {
+    "files": 0,
+    "variants": 0
+  },
+  "focused": {
+    "language/expressions/dynamic-import": {
+      "before_files": 661,
+      "after_files": 670,
+      "before_passing_variants": 1231,
+      "after_passing_variants": 1249,
+      "lost_files": 0,
+      "lost_variants": 0
+    },
+    "language/module-code": {
+      "before_files": 543,
+      "after_files": 564,
+      "before_passing_variants": 545,
+      "after_passing_variants": 566,
+      "lost_files": 0,
+      "lost_variants": 0
+    }
+  },
+  "normalization": {
+    "raw_file": "js21-full-after.json",
+    "raw_timeout_seconds": 10,
+    "replays": [
+      {
+        "file": "js21-recheck-built-ins_decodeURI.json",
+        "filter": "built-ins/decodeURI",
+        "timeout_seconds": 60,
+        "classification_sha256": "01a6aebda062b05b17fce1bf4b24c105d54c933c5d7ddc1d3ad7f1f5493b9f11",
+        "host_sha256": "d3094b66e90658bcce4be1e5ecbec92906c84ac86521d9d931b6e68748bf7732",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717"
+      },
+      {
+        "file": "js21-recheck-built-ins_decodeURIComponent.json",
+        "filter": "built-ins/decodeURIComponent",
+        "timeout_seconds": 60,
+        "classification_sha256": "844825a608d99a2ae74874cc48a5e173c89d55e8b2f10c1cc236715eb795abf4",
+        "host_sha256": "d3094b66e90658bcce4be1e5ecbec92906c84ac86521d9d931b6e68748bf7732",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717"
+      },
+      {
+        "file": "js21-recheck-staging_sm_Date.json",
+        "filter": "staging/sm/Date",
+        "timeout_seconds": 60,
+        "classification_sha256": "560d91e5e488ad7adc3667352689f8610c0b87b782d109ac0816e2bc4c7dfe20",
+        "host_sha256": "d3094b66e90658bcce4be1e5ecbec92906c84ac86521d9d931b6e68748bf7732",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717"
+      },
+      {
+        "file": "js21-recheck-staging_sm_TypedArray.json",
+        "filter": "staging/sm/TypedArray",
+        "timeout_seconds": 60,
+        "classification_sha256": "5427a09e7d822a9126ce6b3c55107570a215047d8c4baf0b2011b3a3520cbdb2",
+        "host_sha256": "d3094b66e90658bcce4be1e5ecbec92906c84ac86521d9d931b6e68748bf7732",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717"
+      }
+    ],
+    "raw_lost_files": [
+      "built-ins/decodeURI/S15.1.3.1_A2.5_T1.js",
+      "built-ins/decodeURIComponent/S15.1.3.2_A2.5_T1.js",
+      "staging/sm/Date/dst-offset-caching-1-of-8.js",
+      "staging/sm/Date/dst-offset-caching-2-of-8.js",
+      "staging/sm/Date/dst-offset-caching-3-of-8.js",
+      "staging/sm/Date/dst-offset-caching-4-of-8.js",
+      "staging/sm/Date/dst-offset-caching-5-of-8.js",
+      "staging/sm/Date/dst-offset-caching-6-of-8.js",
+      "staging/sm/Date/dst-offset-caching-7-of-8.js",
+      "staging/sm/Date/dst-offset-caching-8-of-8.js",
+      "staging/sm/TypedArray/element-setting-converts-using-ToNumber.js"
+    ],
+    "raw_lost_variants": [
+      "built-ins/decodeURI/S15.1.3.1_A2.5_T1.js#non-strict",
+      "built-ins/decodeURI/S15.1.3.1_A2.5_T1.js#strict",
+      "built-ins/decodeURIComponent/S15.1.3.2_A2.5_T1.js#non-strict",
+      "built-ins/decodeURIComponent/S15.1.3.2_A2.5_T1.js#strict",
+      "staging/sm/Date/dst-offset-caching-1-of-8.js#non-strict",
+      "staging/sm/Date/dst-offset-caching-1-of-8.js#strict",
+      "staging/sm/Date/dst-offset-caching-2-of-8.js#non-strict",
+      "staging/sm/Date/dst-offset-caching-2-of-8.js#strict",
+      "staging/sm/Date/dst-offset-caching-3-of-8.js#non-strict",
+      "staging/sm/Date/dst-offset-caching-3-of-8.js#strict",
+      "staging/sm/Date/dst-offset-caching-4-of-8.js#non-strict",
+      "staging/sm/Date/dst-offset-caching-4-of-8.js#strict",
+      "staging/sm/Date/dst-offset-caching-5-of-8.js#non-strict",
+      "staging/sm/Date/dst-offset-caching-5-of-8.js#strict",
+      "staging/sm/Date/dst-offset-caching-6-of-8.js#non-strict",
+      "staging/sm/Date/dst-offset-caching-6-of-8.js#strict",
+      "staging/sm/Date/dst-offset-caching-7-of-8.js#non-strict",
+      "staging/sm/Date/dst-offset-caching-7-of-8.js#strict",
+      "staging/sm/Date/dst-offset-caching-8-of-8.js#non-strict",
+      "staging/sm/Date/dst-offset-caching-8-of-8.js#strict",
+      "staging/sm/TypedArray/element-setting-converts-using-ToNumber.js#non-strict"
+    ],
+    "all_losses_reason": "execution.deadline",
+    "recovered_all": true,
+    "source_and_target_native_storage": true,
+    "engine_edits_between_runs": false
+  },
+  "scratch": {
+    "before": "js21-full-before.json",
+    "raw_after": "js21-full-after.json",
+    "verified_after": "js21-verified-after.json",
+    "diff": "js21-verified-diff.json"
+  },
+  "limitations": [
+    "Classic wire format has no filename/root and is unchanged. An additive source-context extension is filed with the orchestrator.",
+    "General async-module sibling concurrency and waiting on already-evaluating async graphs need a resumable coordinator."
+  ]
+}

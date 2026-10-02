@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-17 — class named evaluation and for-await-of contexts**.
+Frontier: **JS-21 — queued module loading and a reentrant shared registry**.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
@@ -1531,3 +1531,40 @@ additional baseline deadline recoveries. All **15/15 __proto__** files pass;
 the accepted mutable-proto-special-form loss is recovered. Raw and combined
 classification hashes, exact provenance and gain lists are retained in
 [js-lang_JS20-evidence.json](js-lang_JS20-evidence.json).
+
+## JS-21 — queued module loading and a reentrant shared registry
+
+Fixed base `6a81bf73`. The host uses `ModuleLinker::evaluate_shared` to release
+all registry RefCell borrows before running JS or draining its jobs; queuing
+import alone would still reenter the earlier evaluator's live borrow. New module
+scopes retain the original realm global rather than inheriting the running
+importer's lexical bindings, and failed evaluations preserve their thrown
+object without running the body again. Canonical root identity unifies static,
+dynamic and self-import paths in the Test262 module host.
+
+A queued ModuleImport job captures the importing realm and typed loader, then
+resolves the namespace through the existing promise thenable machinery. The
+string-error loader API remains compatible; an additive typed hook preserves
+module syntax/resolution/runtime errors. Import arguments execute in order;
+ToString and attribute-validation failures reject the promise. Empty attributes
+work; nonempty attributes remain unsupported by this host. Five new regressions
+cover nested imports, namespace identity/live cells, scope isolation, cached
+errors, deferred order, namespace then exports and realm restoration.
+
+Initial Boat owned gate: **476 passed / 1 skipped**, **1 doctest**. Focused
+Test262 dynamic-import **661 → 670**, module-code **543 → 564**, zero lost
+passing files or variants. Final Boat workspace: **3522 passed / 17 skipped**,
+**31 doctest suites / 4 passed**. Full pinned Test262: **49727 → 49758 passing
+files**, **95801 → 95841 passing variants**, **31 file / 40 variant gains**,
+**zero lost passing files or variants**. The raw 10-second sweep's eleven file /
+twenty-one variant deadline flips recovered in whole-directory 60-second
+decodeURI, decodeURIComponent, Date and TypedArray replays with identical input,
+runner and host hashes. Source and target were copied to native `/tmp` storage
+for that replay; no engine edits occurred between runs. Exact classification
+hashes, gain paths and replay provenance are in
+[js-lang_JS21-evidence.json](js-lang_JS21-evidence.json).
+
+The classic-script wire protocol still has no filename/root. Its fixture
+resolution needs a separately approved additive source-context extension;
+legacy classic framing is unchanged. General async-module sibling concurrency
+and in-progress async import graphs remain beyond this synchronous evaluator.
