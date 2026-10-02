@@ -1049,6 +1049,56 @@ fn async_await_rejection_runs_catch_and_finally() {
 }
 
 #[test]
+fn jsvm13_async_resolution_observes_then_and_keeps_the_first_resolution() {
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        for body in [
+            "async function f(){return value} f().then(ok,bad);",
+            "async function f(){return await value} f().then(ok,bad);",
+            "async function* f(){yield value} f().next().then(function(r){ok(r.value)},bad);",
+            "async function* f(){return value} f().next().then(function(r){ok(r.value)},bad);",
+        ] {
+            let source = format!(r#"
+                var release, result='pending';
+                var pending=new Promise(function(resolve){{release=resolve}});
+                var value={{then:function(resolve,reject){{resolve(pending);reject(9);throw 10}}}};
+                function ok(v){{result='ok:'+v}}
+                function bad(v){{result='bad:'+v}}
+                {body}
+                release(7);
+            "#);
+            let mut interpreter = Interpreter::new();
+            interpreter.run_script_with_backend(&source, backend).unwrap();
+            assert_eq!(interpreter.global_env.resolve("result"), Some(JsValue::str("ok:7")), "{body}");
+        }
+        let source = r#"
+            var gets=0, result='pending';
+            var value=Promise.resolve(7);
+            Object.defineProperty(value,'then',{get:function(){gets++;throw 9}});
+            async function f(){return value}
+            f().then(function(){result='fulfilled'},function(e){result='error:'+e});
+        "#;
+        let mut interpreter = Interpreter::new();
+        interpreter.run_script_with_backend(source, backend).unwrap();
+        assert_eq!(interpreter.global_env.resolve("gets"), Some(JsValue::num(1.0)));
+        assert_eq!(interpreter.global_env.resolve("result"), Some(JsValue::str("error:9")));
+        let source = r#"
+            var gets=0, result='pending';
+            var value=Promise.resolve(7);
+            function Other(){}
+            Other.prototype=Promise.prototype;
+            value.constructor=Other;
+            Object.defineProperty(value,'then',{get:function(){gets++;return function(resolve){resolve(42)}}});
+            async function f(){return await value}
+            f().then(function(v){result=v});
+        "#;
+        let mut interpreter = Interpreter::new();
+        interpreter.run_script_with_backend(source, backend).unwrap();
+        assert_eq!(interpreter.global_env.resolve("gets"), Some(JsValue::num(1.0)));
+        assert_eq!(interpreter.global_env.resolve("result"), Some(JsValue::num(42.0)));
+    }
+}
+
+#[test]
 fn async_jobs_interleave_with_promise_reactions() {
     let mut interpreter = Interpreter::new();
     let source = "

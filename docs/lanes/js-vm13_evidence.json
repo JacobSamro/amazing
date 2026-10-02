@@ -1,0 +1,26 @@
+{
+  "ticket": "JSVM-13",
+  "base": "7e3c07ba5639edb72af96b9f463ed61bde9fa54f",
+  "platform": "Linux Boat; native /tmp source and target",
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "workspace": {"passed": 3590, "skipped": 17, "doctests_passed": 4},
+  "before_host_sha256": "0b92b4b29ef650f84cf60440eee0555748cbee5e46471deb537c7fbd40ffd9ac",
+  "after_host_sha256": "e06c3f24eab7afd045e6daeaecbb1002b6264ab40ea0a42f3ea1eb3fc0d320b9",
+  "timeout_seconds": 20,
+  "jobs": 8,
+  "affected": [
+    {"selection": "language/", "files": 24572, "before_passed": 23346, "after_passed": 23348, "before_classification_sha256": "1bce8880f36118efd12c80f287fe4265ea10dd0b243e94cd457a8c291c020cc3", "after_classification_sha256": "d789b4ea26f1dbf40d3e9f25d3445f4d63ee0f8f5a9fb729cd5ebaaae131b7a9"},
+    {"selection": "built-ins/Promise", "files": 732, "before_passed": 520, "after_passed": 520, "before_classification_sha256": "0b90405591abf27eba63802f0c021e49803a7284496a6b196222ffb796e4635c", "after_classification_sha256": "0b90405591abf27eba63802f0c021e49803a7284496a6b196222ffb796e4635c"},
+    {"selection": "built-ins/Generator", "files": 84, "before_passed": 84, "after_passed": 84, "before_classification_sha256": "a56b732d31df90e72640a23144c69ac9fdc037124be3aa07f6d6d8cbd3e898e3", "after_classification_sha256": "a56b732d31df90e72640a23144c69ac9fdc037124be3aa07f6d6d8cbd3e898e3"},
+    {"selection": "built-ins/AsyncGenerator", "files": 71, "before_passed": 71, "after_passed": 71, "before_classification_sha256": "260b08bf16f382b9c159641363d2c04159529ee9475f4dc0003441ea6ddf5e71", "after_classification_sha256": "260b08bf16f382b9c159641363d2c04159529ee9475f4dc0003441ea6ddf5e71"}
+  ],
+  "combined": {"selected_files": 25459, "before_passed": 24021, "after_passed": 24023, "gained": 2, "lost": 0},
+  "gained": [
+    "language/expressions/async-generator/yield-thenable-create-resolving-functions-reject.js",
+    "language/expressions/async-generator/yield-thenable-create-resolving-functions-resolve.js"
+  ],
+  "lost": [],
+  "coverage": "Ordinary runtime; no forced VM environment flag. Whole affected corpus before and after on exact fixed base.",
+  "porting": "Calls existing JSRT-28 resolving-pair helper; no new upstream code copied.",
+  "follow_up": "Runtime-owned internal PerformPromiseThen attachment helper, then owned VM await driver consumers."
+}

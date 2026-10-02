@@ -871,3 +871,39 @@ runtime follow-up coordinated with the shared regression expectations.
   correction, which does not change compiler acceptance.
 
 Compact durable evidence: [js-vm12_evidence.json](js-vm12_evidence.json).
+
+## JSVM-13: shared resolving pairs for VM async completion
+
+Fixed base `7e3c07ba`. VM async completion and await wrapping now invoke the
+runtime's JSRT-28 resolving pair. A returned native Promise still has its `then`
+property read; thenables resolving to a pending Promise keep their first
+resolution when they subsequently reject or throw. Duplicate VM thenable jobs
+and target-only callback gates are removed. Await's native Promise reuse checks
+the exact intrinsic constructor, rather than a different constructor's prototype.
+
+The shared helper is called directly; no upstream code is copied and no shared
+interpreter files are edited. Regressions exercise async return/await and async
+generator yield/return, throwing then accessors, and alternate constructors with
+the intrinsic Promise prototype.
+
+### Measured gate (Boat, fixed base `7e3c07ba`)
+
+- Final workspace nextest **3590/3590 passed**, 17 skipped; workspace doctests
+  **4 passed**. All source/target directories used native `/tmp` storage.
+- Before/after whole affected Test262 selections, 20s and eight jobs: language
+  **23346 to 23348 / 24572**, Promise **520/732** unchanged, Generator **84/84**
+  unchanged, AsyncGenerator **71/71** unchanged. **Two gained, zero lost** files:
+  async-generator `yield-thenable-create-resolving-functions-reject.js` and
+  `yield-thenable-create-resolving-functions-resolve.js`.
+- No full Unicode corpus rerun was needed for this shared resolver consumer;
+  the full affected language selection includes async functions, generators,
+  await, modules and disposal boundaries. Baseline runs used exact `--ref`.
+
+Compact durable evidence: [js-vm13_evidence.json](js-vm13_evidence.json).
+The next runtime-coordinated follow-up replaces observable native Promise `then`
+access in await drivers with internal PerformPromiseThen reaction attachment.
+This series preserves that existing driver boundary.
+
+Specification references: [CreateResolvingFunctions](https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-createresolvingfunctions),
+[NewPromiseResolveThenableJob](https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-newpromiseresolvethenablejob)
+and [PromiseResolve](https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-promise-resolve).
