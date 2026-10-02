@@ -173,10 +173,7 @@ struct Compiler {
     /// emission is statically balanced. A `break`/`continue` target records
     /// it so `ExitTo` can pop the scopes the jump leaves.
     scope_depth: usize,
-    /// Set on the probe that validates parameter initializers: those run in
-    /// the tree walker's parameter scope, where a direct eval's var and
-    /// `arguments` scoping must not be delegated piecemeal.
-    parameter_probe: bool,
+    /// The innermost disposal scope captures each using declaration.
     resource_stack: Vec<usize>,
 }
 
@@ -218,7 +215,6 @@ impl Compiler {
             loop_stack: Vec::new(),
             pending_labels: Vec::new(),
             scope_depth: 0,
-            parameter_probe: false,
             resource_stack: Vec::new(),
         }
     }
@@ -268,13 +264,11 @@ impl Compiler {
         }
     }
 
-    // Parameter initializers currently execute in the shared evaluator. Require
-    // the same supported expression subset so direct eval cannot silently use
-    // a different environment at the bytecode function boundary.
+    // Parameters execute in the shared evaluator, against the same call-time
+    // environment the VM prepares before creating a generator object.
     fn validate_parameters(&self, params: &[ast::Param]) -> Result<(), CompileError> {
         let mut probe = Self::new(true);
         probe.strict = self.strict;
-        probe.parameter_probe = true;
         for param in params {
             probe.validate_binding_expressions(&param.binding)?;
             if let Some(default) = &param.default { probe.expression(default)?; }
@@ -303,6 +297,17 @@ impl Compiler {
         Ok(())
     }
 
+    fn binding_has_parameter_expression(binding: &Binding) -> bool {
+        match binding {
+            Binding::Ident(_) => false,
+            Binding::Default(..) => true,
+            Binding::Rest(inner) => Self::binding_has_parameter_expression(inner),
+            Binding::Array(elements) => elements.iter().flatten().any(|inner| Self::binding_has_parameter_expression(inner)),
+            Binding::Object(properties) => properties.iter().any(|(key, inner)|
+                matches!(key, ast::BindingKey::Computed(_)) || Self::binding_has_parameter_expression(inner)),
+        }
+    }
+
     fn compile_function(
         &self,
         function: &ast::FunctionItem,
@@ -316,6 +321,11 @@ impl Compiler {
         child.is_async = function.is_async;
         child.hoist_functions(&function.body.body)?;
         child.statements(&function.body.body, function.body.span)?;
+        let body_lexical_names = super::super::block_lexical_names(&function.body.body);
+        let skip_generator_arguments = function.is_generator
+            && !params.iter().any(|p| p.default.is_some() || Self::binding_has_parameter_expression(&p.binding))
+            && (body_lexical_names.iter().any(|name| name == "arguments")
+                || child.program.functions.iter().any(|function| function.name == "arguments"));
         if child.program.code.len() > MAX_INSTRUCTIONS {
             return Err(self.error(span, "instruction limit"));
         }
@@ -326,6 +336,8 @@ impl Compiler {
                 .map(|n| n.name.clone())
                 .unwrap_or_default(),
             params,
+            body_lexical_names,
+            skip_generator_arguments,
             program: child.program,
             is_arrow: false,
             is_generator: function.is_generator,
@@ -361,6 +373,8 @@ impl Compiler {
         Ok(FunctionCode(Rc::new(CompiledFunction {
             name: String::new(),
             params,
+            body_lexical_names: Vec::new(),
+            skip_generator_arguments: false,
             program: child.program,
             is_arrow: true,
             is_generator: false,
@@ -1031,12 +1045,10 @@ impl Compiler {
         }
         let mark = (self.program.code.len(), self.scope_depth);
         let result = match self.expression_inner(expression) {
-            // Direct eval in a body runs against the frame's own env chain,
-            // so its `var`s land in the function scope as usual; in parameter
-            // defaults it stays excluded (see `parameter_probe`).
+            // Direct eval runs against the evaluator's current environment,
+            // including the shared parameter-binding environment.
             Err(error)
                 if !matches!(error.message, RESOURCE_LIMIT | "register limit")
-                    && !(self.parameter_probe && error.message == "direct eval")
                     && !context_dependent(expression)
                     && !may_suspend(expression) =>
             {

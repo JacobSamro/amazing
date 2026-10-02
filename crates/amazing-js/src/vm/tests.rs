@@ -514,6 +514,56 @@ fn jsvm11_async_disposal_parks_until_settlement_and_runs_remaining_resources() {
 }
 
 #[test]
+fn jsvm12_generator_fdi_is_eager_and_parameter_eval_compiles() {
+    let source = "function* g(){let arguments=42;yield arguments} g().next().value;";
+    assert_eq!(Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap(), JsValue::num(42.0));
+    for declaration in ["function* g", "async function* g"] {
+        for lexical in ["let x;", "const x=2;", "class x {}", "using x=null;"] {
+            let source = format!("{declaration}(a=eval('var a=1')){{{lexical} yield 1;}} var caught=false; try{{g()}}catch(e){{caught=e instanceof SyntaxError}} caught;");
+            let mut interpreter = Interpreter::new();
+            assert_eq!(interpreter.run_script_with_backend(&source, ExecutionBackend::Bytecode).unwrap(), JsValue::Bool(true), "{source}");
+            let program = parse_script(&source).unwrap();
+            let crate::ast::StmtKind::Function(function) = &program.body[0].kind else { unreachable!() };
+            assert!(compile_function_item(function, program.body[0].span, false).is_ok(), "{source}");
+        }
+    }
+    let source = r#"
+        var ran=0;
+        function* g(){
+            var x=41;
+            function f(){return 42}
+            ran++; yield x;
+        }
+        var it=g();
+    "#;
+    let mut interpreter = Interpreter::new();
+    interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    let state = generator_state(interpreter.global_env.resolve("it").unwrap()).unwrap();
+    let state = state.borrow();
+    assert!(!state.started);
+    assert!(state.frame.is_some());
+    assert_eq!(state.env.resolve("x"), Some(JsValue::Undefined));
+    assert!(matches!(state.env.resolve("f"), Some(JsValue::Object(_))));
+    assert_eq!(interpreter.global_env.resolve("ran"), Some(JsValue::num(0.0)));
+    drop(state);
+    assert_eq!(interpreter.run_script("it.next().value").unwrap(), JsValue::num(41.0));
+    for action in ["it.return(9)", "try {it.throw(9)} catch(e){}"] {
+        let source = format!("var ran=0; function* g(a=eval('var x=1')){{ran++;yield x}} var it=g(); {action}; it.next().done && ran===0;");
+        assert_eq!(Interpreter::new().run_script_with_backend(&source, ExecutionBackend::Bytecode).unwrap(), JsValue::Bool(true));
+    }
+    let source = r#"
+        var ran=0, done=false;
+        async function* g(a=eval('var x=1')){ran++;yield x}
+        var it=g();
+        it.return(9).then(function(){return it.next()}).then(function(r){done=r.done});
+    "#;
+    let mut interpreter = Interpreter::new();
+    interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(interpreter.global_env.resolve("ran"), Some(JsValue::num(0.0)));
+    assert_eq!(interpreter.global_env.resolve("done"), Some(JsValue::Bool(true)));
+}
+
+#[test]
 fn jsvm10_suspension_free_unsupported_expressions_run_through_the_tree_walker() {
     for source in [
         "var o = {a: 1}; delete o.a; 'a' in o;",
