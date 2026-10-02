@@ -22,6 +22,7 @@ pub mod abort;
 pub mod animation;
 pub mod observable;
 pub mod document_surface;
+pub use document_surface::QuirksMode;
 pub mod legacy_document;
 pub mod render_mutation;
 pub mod markup;
@@ -154,6 +155,7 @@ pub struct Dom {
     collections: Vec<collection::LiveCollection>,
     abort_signals: abort::AbortSignals,
     document_states: Vec<(NodeIdx, document_surface::ReadyState)>,
+    document_modes: Vec<(NodeIdx, u64, QuirksMode)>,
     document_metadata: Vec<(NodeIdx, document_surface::DocumentMetadata)>,
     token_lists: Vec<(NodeIdx, String)>,
     mutation_generation: u64,
@@ -240,6 +242,7 @@ impl Dom {
             collections: Vec::new(),
             abort_signals: abort::AbortSignals::default(),
             document_states: Vec::new(),
+            document_modes: Vec::new(),
             document_metadata: Vec::new(),
             token_lists: Vec::new(),
             mutation_generation: 0,
