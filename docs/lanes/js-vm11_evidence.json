@@ -1,0 +1,176 @@
+{
+  "ticket": "JSVM-11",
+  "base": "2eb1229a",
+  "platform": "Linux Boat bx_e32kqbvv, pool-js-vm",
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "base_classification_sha256": "a7fecb5123c3dc54b4c2e14216788df3938909c54e40631415b0ac407818ad84",
+  "base_passes": 49679,
+  "workspace": {
+    "passed": 3518,
+    "skipped": 17,
+    "seconds": 70.938,
+    "doctests_passed": 4
+  },
+  "full_corpus_before_last_delta": {
+    "files": {
+      "pass": 49701,
+      "fail": 3265,
+      "timeout": 443,
+      "unsupported": 169,
+      "skipped": 294
+    },
+    "timeout_seconds": 10,
+    "elapsed_seconds": 1263.865,
+    "host_sha256": "766f8afe5999948253e3d185e6c1fe9c14adb8e40d43a8097d22ba6a98332487",
+    "classification_sha256": "a989ff802cc5e6a618b10f8afed2c820327c95530b1d8a9d4a3a12448bd6239e",
+    "gained": 28,
+    "deadline_losses_rechecked": 6
+  },
+  "final_delta": "Await using with throwing synchronous disposal fallback now awaits rejection before older resources; whole language and ERM classifications unchanged from full corpus.",
+  "final_delta_and_timeout_rechecks": [
+    {
+      "run": "language-final",
+      "timeout_seconds": 20.0,
+      "host_sha256": "6b7373207622c8572029b416f543b13d35b815747f1b89a07be3c8eee1f37185",
+      "classification_sha256": "8bfb82d98427509acb06c983868f7137395d0145a2240a8f873ec8696185debc",
+      "files": {
+        "pass": 23304,
+        "fail": 1242,
+        "unsupported": 26
+      },
+      "elapsed_seconds": 37.311
+    },
+    {
+      "run": "erm-final",
+      "timeout_seconds": 20.0,
+      "host_sha256": "6b7373207622c8572029b416f543b13d35b815747f1b89a07be3c8eee1f37185",
+      "classification_sha256": "2a28f70922d0a6261d16124eda75adfb434b41a3432e442550d671a6ba2ceb29",
+      "files": {
+        "pass": 51,
+        "fail": 2
+      },
+      "elapsed_seconds": 2.517
+    },
+    {
+      "run": "timeout-uri",
+      "timeout_seconds": 60.0,
+      "host_sha256": "6b7373207622c8572029b416f543b13d35b815747f1b89a07be3c8eee1f37185",
+      "classification_sha256": "01a6aebda062b05b17fce1bf4b24c105d54c933c5d7ddc1d3ad7f1f5493b9f11",
+      "files": {
+        "pass": 109,
+        "fail": 2
+      },
+      "elapsed_seconds": 34.65
+    },
+    {
+      "run": "timeout-date",
+      "timeout_seconds": 60.0,
+      "host_sha256": "6b7373207622c8572029b416f543b13d35b815747f1b89a07be3c8eee1f37185",
+      "classification_sha256": "e86c5261bed5088c6691fab69d322549961579fa968353ebadfdb5b739e45ceb",
+      "files": {
+        "pass": 8
+      },
+      "elapsed_seconds": 132.494
+    },
+    {
+      "run": "timeout-regress",
+      "timeout_seconds": 60.0,
+      "host_sha256": "6b7373207622c8572029b416f543b13d35b815747f1b89a07be3c8eee1f37185",
+      "classification_sha256": "1a72140851bc4ad73fcf0c677e2745eb02dd8ca86c666437620cacb4db25307a",
+      "files": {
+        "pass": 1
+      },
+      "elapsed_seconds": 12.784
+    }
+  ],
+  "combined_files": {
+    "unsupported": 169,
+    "pass": 49711,
+    "fail": 3265,
+    "timeout": 433,
+    "skipped": 294
+  },
+  "combined_gained": 32,
+  "combined_lost": 0,
+  "semantic_gained": [
+    "language/expressions/assignment/dstr/array-elem-iter-rtrn-close-null.js",
+    "language/expressions/assignment/dstr/array-elem-trlg-iter-list-rtrn-close-err.js",
+    "language/expressions/assignment/dstr/array-elem-trlg-iter-list-rtrn-close-null.js",
+    "language/expressions/assignment/dstr/array-elem-trlg-iter-rest-rtrn-close-err.js",
+    "language/expressions/assignment/dstr/array-elem-trlg-iter-rest-rtrn-close-null.js",
+    "language/expressions/assignment/dstr/array-elem-trlg-iter-rest-rtrn-close.js",
+    "language/expressions/assignment/dstr/array-rest-iter-rtrn-close.js",
+    "language/statements/await-using/await-using-implies-await-if-evaluated.js",
+    "language/statements/await-using/initializer-Symbol.asyncDispose-called-at-end-of-asyncgeneratorbody.js",
+    "language/statements/await-using/initializer-Symbol.dispose-called-at-end-of-asyncgeneratorbody.js",
+    "language/statements/await-using/throws-suppressederror-if-multiple-errors-during-disposal.js",
+    "language/statements/for-await-of/async-func-decl-dstr-array-elem-put-prop-ref-no-get.js",
+    "language/statements/for-await-of/async-func-decl-dstr-array-rest-put-prop-ref-no-get.js",
+    "language/statements/for-await-of/async-func-decl-dstr-obj-prop-put-prop-ref-no-get.js",
+    "language/statements/for-await-of/async-gen-decl-dstr-array-elem-iter-rtrn-close-null.js",
+    "language/statements/for-await-of/async-gen-decl-dstr-array-elem-put-prop-ref-no-get.js",
+    "language/statements/for-await-of/async-gen-decl-dstr-array-rest-put-prop-ref-no-get.js",
+    "language/statements/for-await-of/async-gen-decl-dstr-obj-prop-put-prop-ref-no-get.js",
+    "language/statements/for-of/dstr/array-elem-iter-rtrn-close-null.js",
+    "language/statements/for-of/dstr/array-elem-trlg-iter-list-rtrn-close-err.js",
+    "language/statements/for-of/dstr/array-elem-trlg-iter-list-rtrn-close-null.js",
+    "language/statements/for-of/dstr/array-elem-trlg-iter-rest-rtrn-close-err.js",
+    "language/statements/for-of/dstr/array-elem-trlg-iter-rest-rtrn-close-null.js",
+    "language/statements/for-of/dstr/array-elem-trlg-iter-rest-rtrn-close.js",
+    "language/statements/for-of/dstr/array-rest-iter-rtrn-close.js",
+    "language/statements/using/initializer-disposed-at-end-of-asyncgeneratorbody.js",
+    "staging/explicit-resource-management/await-using-dispose-method-throws-after-await.js",
+    "staging/explicit-resource-management/await-using-in-async-function-call-without-await.js"
+  ],
+  "deadline_gained": [
+    "staging/sm/Date/dst-offset-caching-1-of-8.js",
+    "staging/sm/Date/dst-offset-caching-6-of-8.js",
+    "staging/sm/Date/dst-offset-caching-7-of-8.js",
+    "staging/sm/Date/dst-offset-caching-8-of-8.js"
+  ],
+  "compile_attempts": 28067,
+  "compiled": 27838,
+  "fallbacks": 229,
+  "fallback_reasons": {
+    "direct eval": 128,
+    "statement kind": 10,
+    "yield": 11,
+    "spread": 56,
+    "class field or static block": 8,
+    "expression kind": 14,
+    "member access": 2
+  },
+  "historical_jsvm10_fallbacks": 525,
+  "probes": [
+    {
+      "name": "5000-using-async-bodies",
+      "vm": false,
+      "seconds": 0.101,
+      "timeout": false,
+      "exit_code": 0,
+      "threads": 1,
+      "rss_kb": 73592,
+      "result": "completed 5000"
+    },
+    {
+      "name": "unicode-buildString",
+      "vm": false,
+      "seconds": 88.538,
+      "timeout": false,
+      "exit_code": 0,
+      "threads": 1,
+      "rss_kb": 25032,
+      "result": "UTF-16 length2162688"
+    },
+    {
+      "name": "unicode-buildString",
+      "vm": true,
+      "seconds": 30.886,
+      "timeout": false,
+      "exit_code": 0,
+      "threads": 1,
+      "rss_kb": 19536,
+      "result": "instruction-limit RangeError"
+    }
+  ]
+}
