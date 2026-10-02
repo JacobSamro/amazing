@@ -21,7 +21,7 @@ use crate::value::{JsValue, Obj, PrivateName, Property, Throw};
 /// Shared handle to one environment frame. The only way code outside this
 /// module touches an environment.
 #[derive(Clone)]
-pub struct EnvHandle(pub Rc<RefCell<Env>>);
+pub struct EnvHandle(pub Rc<RefCell<Env>>, Option<Rc<str>>);
 
 impl std::fmt::Debug for EnvHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -280,6 +280,7 @@ impl Env {
 impl EnvHandle {
     pub fn new(kind: EnvKind, parent: Option<EnvHandle>) -> EnvHandle {
         let realm = parent.as_ref().and_then(EnvHandle::realm);
+        let source_context = parent.as_ref().and_then(|parent| parent.1.clone());
         EnvHandle(Rc::new(RefCell::new(Env {
             realm,
             global_object: None,
@@ -290,8 +291,16 @@ impl EnvHandle {
             this_binding: None,
             this_uninitialized: false,
             class_private: None,
-        })))
+        })), source_context)
     }
+
+    /// Shares live bindings while attaching an immutable originating-script locator.
+    /// Captured handles retain this locator when another script uses the same globals.
+    pub(crate) fn with_source_context(&self, referrer: &str) -> Self {
+        Self(self.0.clone(), Some(Rc::from(referrer)))
+    }
+
+    pub(crate) fn source_context(&self) -> Option<&str> { self.1.as_deref() }
 
     pub(crate) fn new_object(object: Obj, parent: EnvHandle) -> EnvHandle {
         let frame = Self::new(EnvKind::Block, Some(parent));
