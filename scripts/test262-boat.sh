@@ -5,7 +5,7 @@
 # ~3.5. Each shard is its own lane (t262-shard-K) so the runs never share a
 # tree; each shard stops its sandbox as soon as its result is copied back.
 #
-# Usage: scripts/test262-boat.sh <ref> <tag> [--shards N] [--baseline BASE.json]
+# Usage: scripts/test262-boat.sh <ref> <tag> [--shards N] [--baseline BASE.json] [--resume]
 #   Writes .agents/test262/t262-<shortsha>-<tag>.json (merged) and prints lost/gained
 #   against the baseline. Exit 1 when a baseline pass was lost.
 
@@ -13,11 +13,12 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")"
 REF="${1:?usage: test262-boat.sh <ref> <tag> [--shards N] [--baseline BASE.json]}"; TAG="${2:?tag}"; shift 2
-N=4 BASE=""
+N=4 BASE="" RESUME=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --shards) N="$2"; shift 2 ;;
     --baseline) BASE="$2"; shift 2 ;;
+    --resume) RESUME=1; shift ;;
     *) echo "test262-boat: unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -31,6 +32,10 @@ RUNNER_B64="$(base64 < "$REPO/scripts/test262.py" | tr -d '\n')"
 
 pids=()
 for K in $(seq 0 $((N - 1))); do
+  if [ "$RESUME" = 1 ] && [ -s "$OUTDIR/.shard-$SHA-$TAG-$K.json" ]; then
+    echo "test262-boat: retaining completed shard $K"
+    continue
+  fi
   (
     "$REPO/scripts/linux-run.sh" "t262-shard-$K" --ref "$SHA" -- "
       set -euo pipefail
@@ -45,10 +50,15 @@ for K in $(seq 0 $((N - 1))); do
       echo $RUNNER_B64 | base64 -d > /tmp/t262runner.py
       set +e
       python3 /tmp/t262runner.py \"\$TEST262_ROOT\" --binary \"\$CARGO_TARGET_DIR/release/examples/test262_host\" \
-        --jobs \$JOBS --timeout 60 --shard $K/$N --output \$OUT/shard-$SHA-$TAG.json >/dev/null 2>&1
+        --jobs \$JOBS --timeout 60 --shard $K/$N --output /tmp/shard-$SHA-$TAG-$K.json >/tmp/shard-$SHA-$TAG-$K-runner.log 2>&1
       result=\$?
       set -e
       echo shard-$K-exit=\$result
+      if ! test -s /tmp/shard-$SHA-$TAG-$K.json; then
+        tail -60 /tmp/shard-$SHA-$TAG-$K-runner.log
+        exit 1
+      fi
+      cp /tmp/shard-$SHA-$TAG-$K.json \"\$OUT/shard-$SHA-$TAG.json\"
       test -s \"\$OUT/shard-$SHA-$TAG.json\"" > "$OUTDIR/.shard-$SHA-$TAG-$K.log" 2>&1
     D="$(mktemp -d)"
     "$MAIN/scripts/lane-fetch.sh" "t262-shard-$K" "$D" "amazing/out/t262-shard-$K/shard-$SHA-$TAG.json" &&

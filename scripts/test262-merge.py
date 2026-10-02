@@ -25,9 +25,29 @@ def main() -> int:
         baseline = args[i + 1]
         del args[i : i + 2]
     out, shards = args[0], args[1:]
+    reports = [json.load(open(path)) for path in shards]
+    provenance = ("test262_revision", "input_sha256", "host_sha256", "runner_sha256", "timeout_seconds")
+    identities = set()
+    expected_paths = {r["path"] for r in reports[0]["records"]}
+    for report in reports:
+        for field in provenance:
+            if not report.get(field) or report[field] != reports[0].get(field):
+                print(f"invalid shard provenance: {field}", file=sys.stderr)
+                return 2
+        identity = report.get("shard", "")
+        try:
+            index, total = map(int, identity.split("/"))
+        except (ValueError, AttributeError):
+            print("invalid shard identity", file=sys.stderr)
+            return 2
+        paths = [r["path"] for r in report["records"]]
+        if total != len(reports) or not 0 <= index < total or index in identities or set(paths) != expected_paths or len(paths) != len(expected_paths):
+            print("incomplete or duplicate shard coverage", file=sys.stderr)
+            return 2
+        identities.add(index)
     merged: dict[str, dict] = {}
-    for path in shards:
-        for rec in json.load(open(path))["records"]:
+    for report in reports:
+        for rec in report["records"]:
             ran = not (rec.get("status") == "skipped" and "selection.excluded" in json.dumps(rec))
             if ran or rec["path"] not in merged:
                 merged[rec["path"]] = rec
