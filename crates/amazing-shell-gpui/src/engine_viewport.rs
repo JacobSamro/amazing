@@ -1962,6 +1962,7 @@ fn load_page_text(css: &str, page: &str, sheets: &[(String, String)]) -> TextPro
     for warning in warnings {
         eprintln!("amazing shell: {warning}");
     }
+    let mut font_fetch_cache = std::collections::HashMap::new();
     for (source, stylesheet_url) in &expanded {
       for face in amazing_css::parse_font_faces(source) {
         let family = face.family.clone();
@@ -1976,6 +1977,7 @@ fn load_page_text(css: &str, page: &str, sheets: &[(String, String)]) -> TextPro
             stylesheet_url,
             document_url: page,
             warnings: Vec::new(),
+            cache: &mut font_fetch_cache,
         };
         if let Err(error) = provider.begin_font_load(descriptor.display) {
             eprintln!("amazing shell: font-face {family:?}: {error:?}");
