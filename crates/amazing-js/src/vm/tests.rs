@@ -1265,7 +1265,9 @@ fn compiled_method_and_generator_boundaries_preserve_eval_strictness_and_names()
     for source in [
         "function* g() {} var d=Object.getOwnPropertyDescriptor(g,'name'); d.value==='g' && !d.writable && !d.enumerable && d.configurable",
         "var o={m(){ let x; eval('var x'); }}; try { o.m(); false; } catch(e) { e instanceof SyntaxError; }",
-        "var o={*m(p=eval('var arguments')){let arguments;}}; try { o.m(); false; } catch(e) { e instanceof SyntaxError; }",
+        // Parameter eval declarations and body lexical declarations are in
+        // separate environments when the parameter list contains expressions.
+        "var o={*m(p=eval('var arguments')){let arguments;yield arguments;}}; var g=o.m(); g.next().value===undefined && g.next().done",
         "'use strict'; var o={m(){return function(){return typeof this;};}}; o.m().call('x')==='string'",
     ] {
         let mut interpreter=Interpreter::new();
@@ -1337,6 +1339,5 @@ fn class_static_methods_and_accessors_install_on_the_constructor() {
     let result = Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
     assert_eq!(result, JsValue::str("undefined:function:2:3:42:7:base"));
 }
-
 
 

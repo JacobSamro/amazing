@@ -109,6 +109,9 @@ pub enum EnvKind {
     Function,
     /// Arrow body environment: owns locals but inherits the outer `this`.
     Arrow,
+    /// Body variable environment below a parameter-expression environment.
+    /// Owns var/eval declarations and inherits this/super from the call frame.
+    Var,
     /// Block / loop-body / catch environment.
     Block,
     /// The global environment: lookups missing here become ReferenceErrors.
@@ -578,7 +581,7 @@ impl EnvHandle {
                 let env = current.0.borrow();
                 (env.kind, env.parent.clone())
             };
-            if matches!(kind, EnvKind::Global | EnvKind::Module | EnvKind::Function | EnvKind::Arrow) {
+            if matches!(kind, EnvKind::Global | EnvKind::Module | EnvKind::Function | EnvKind::Arrow | EnvKind::Var) {
                 return current;
             }
             current = parent.expect("block environment has a parent");

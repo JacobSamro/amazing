@@ -79,6 +79,9 @@ fn collect_eval_declarations(body: &[ast::Stmt], functions: &mut Vec<String>, va
                 if let Some(catch) = &statement.catch { collect_eval_declarations(&catch.body.body, functions, variables); }
                 if let Some(finally) = &statement.finally { collect_eval_declarations(&finally.body, functions, variables); }
             }
+            StmtKind::Switch { cases, .. } => {
+                for case in cases { collect_eval_declarations(&case.body, functions, variables); }
+            }
             _ => {}
         }
     }
