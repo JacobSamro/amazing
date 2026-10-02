@@ -1160,6 +1160,13 @@ impl Compiler {
                 for element in elements {
                     let ast::ObjElem::Prop(property) = element else {
                         let ast::ObjElem::Spread(source) = element else { unreachable!() };
+                        // Object elements retain the parser's generic spread
+                        // expression wrapper. It has no standalone value;
+                        // evaluate its operand before copying properties.
+                        let source = match &source.kind {
+                            ExprKind::Spread(inner) => inner.as_ref(),
+                            _ => source.as_ref(),
+                        };
                         let source = self.expression(source)?;
                         self.emit(Instruction::SpreadObject(dst, source));
                         continue;

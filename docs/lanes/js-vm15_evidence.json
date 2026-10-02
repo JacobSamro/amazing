@@ -1,0 +1,26 @@
+{
+  "ticket": "JSVM-15",
+  "base": "bc9e83889a46392e1001352023eb997efc9ab0c8",
+  "platform": "Linux Boat; native /tmp source and target",
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "workspace": {"passed": 3638, "skipped": 17, "doctests_passed": 4},
+  "before_host_sha256": "ee1c17ea12c382d5f3ac3a1db54a3a838c26ae08c9c3086d2d0c4ee51f715647",
+  "after_host_sha256": "a6a5800d6954ff73dda30b37831d4fd015bdce649b8a303ea4f5d1f6009f20c7",
+  "timeout_seconds": 20,
+  "jobs": 8,
+  "affected": [
+    {"selection": "language/", "files": 24572, "before_passed": 23574, "after_passed": 23574, "classification_sha256": "ba24557a1f6c4e1e43c8735af03587ddd18d782d57df80e71e6938dcd881a01c"},
+    {"selection": "built-ins/Function", "files": 515, "before_passed": 501, "after_passed": 501, "classification_sha256": "e7c59576c88c79f3fd22f045610cc287034c1c685addc6dea10f0a027891e5ed"},
+    {"selection": "built-ins/AsyncFunction", "files": 18, "before_passed": 18, "after_passed": 18, "classification_sha256": "169dfba5de940eb8aa2e0f17270fc618992bf5bf1bced2a1c363ccac9f2117db"},
+    {"selection": "built-ins/GeneratorFunction", "files": 23, "before_passed": 23, "after_passed": 23, "classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f"},
+    {"selection": "built-ins/AsyncGeneratorFunction", "files": 23, "before_passed": 23, "after_passed": 23, "classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a"}
+  ],
+  "combined": {"selected_files": 25151, "before_passed": 24139, "after_passed": 24139, "gained": 0, "lost": 0},
+  "compile_attempts_before": {"total": 22506, "compiled": 22406, "fallback": 100},
+  "compile_attempts_after": {"total": 22506, "compiled": 22462, "fallback": 44},
+  "removed_reasons": {"spread": 56},
+  "remaining_reasons": {"expression kind": 14, "statement kind": 10, "yield": 10, "class field or static block": 8, "member access": 2},
+  "rejection_contexts": 44,
+  "scope": "Parser spread-wrapper normalization reuses existing native SpreadObject; no shared interpreter edits or upstream code copied.",
+  "limitation": "Fixed combined base has a separately runtime-owned direct-eval arguments regression; zero-loss counts measure this series against that base."
+}

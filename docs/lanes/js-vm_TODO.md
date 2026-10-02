@@ -940,3 +940,29 @@ Diagnostics are disabled by default.
   Normalize the wrapper before lowering in the next owned compiler series.
 
 Compact durable evidence: [js-vm14_evidence.json](js-vm14_evidence.json).
+
+## JSVM-15: native suspending object spread operands
+
+Fixed combined base `bc9e8388`. The compiler unwraps the parser's nested
+`ExprKind::Spread` inside an `ObjElem::Spread` before evaluating its operand.
+The existing native `SpreadObject` instruction can then copy an object whose
+operand yielded or awaited, preserving the partially built literal and property
+evaluation order in the VM frame. No new opcode or shared interpreter edit.
+
+Regressions cover nested yields, awaited source getters and surrounding property
+order, symbols, data `__proto__` keys with a literal prototype, bypassing inherited
+setters, and null/undefined/string sources.
+
+Measured native Boat gate on fixed combined `bc9e8388`: workspace **3638 passed**,
+17 skipped; doctests **4 passed**. Whole language and Function/AsyncFunction/
+GeneratorFunction/AsyncGeneratorFunction selections **24139/25151 passed** before
+and after, every classification unchanged, **zero gained or lost**. Compile
+attempts **22506**, accepted **22406 -> 22462**; fallbacks **100 -> 44**, removing
+all **56 spread** rejections. Remaining guarded shapes: suspending dynamic import
+14, with statements 10, invalid/delegating yield 10, suspending class fields 8,
+optional suspending member access 2.
+
+These are deltas against the frozen combined base, which has a separately
+runtime-owned direct-eval arguments regression under repair; this series does
+not claim recovery of those earlier combined-head passes. Compact durable
+evidence: [js-vm15_evidence.json](js-vm15_evidence.json).
