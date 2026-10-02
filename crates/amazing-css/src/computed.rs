@@ -350,6 +350,10 @@ struct PropertyMetadata {
 // or paint behavior. Keeping initial/inheritance metadata in one registry is
 // what makes CSS-wide keywords and `all` property-aware.
 const PROPERTIES: &[PropertyMetadata] = &[
+    PropertyMetadata { name: "contain-intrinsic-width", initial: "none", inherited: false },
+    PropertyMetadata { name: "contain-intrinsic-height", initial: "none", inherited: false },
+    PropertyMetadata { name: "contain-intrinsic-inline-size", initial: "none", inherited: false },
+    PropertyMetadata { name: "contain-intrinsic-block-size", initial: "none", inherited: false },
     PropertyMetadata { name: "animation-name", initial: "none", inherited: false },
     PropertyMetadata { name: "animation-duration", initial: "0s", inherited: false },
     PropertyMetadata { name: "animation-timing-function", initial: "ease", inherited: false },
@@ -1068,13 +1072,14 @@ fn metadata(name: &str) -> Option<PropertyMetadata> {
 
 pub(crate) fn is_supported_property(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
-    metadata(&name).is_some() || logical_border::supported(&name)
+    metadata(&name).is_some() || logical_border::supported(&name) || name == "contain-intrinsic-size"
 }
 
 /// Expands shorthands before cascade ranking so each resulting longhand keeps
 /// the source declaration's origin, importance, specificity, and order.
 pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, String)> {
     const SIDES: [&str; 4] = ["top", "right", "bottom", "left"];
+    if property.eq_ignore_ascii_case("contain-intrinsic-size") { return contain_intrinsic::expand(value).unwrap_or_default(); }
     if let Some(expanded) = logical_border::expand(property, value) { return expanded; }
     let property = if property.starts_with("--") {
         property.to_owned()
@@ -2695,6 +2700,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
         author_specified: BTreeSet::new(),
         url_bases: parent.map(|parent| parent.url_bases.clone()).unwrap_or_default(),
     };
+    contain_intrinsic::resolve_lengths(&mut style.props, style.root_font_px);
     style.resolve_relative_colors();
     style.resolve_light_dark(environment);
     let local_zoom = style.props.get("zoom").and_then(|value| used_zoom_factor(value)).unwrap_or(1.0);
@@ -3021,6 +3027,7 @@ fn computed_opacity(value: &str) -> Option<String> {
 
 fn valid_new_paint_property(property: &str, value: &str) -> bool {
     match property {
+        property if contain_intrinsic::is_longhand(property) => contain_intrinsic::valid(property, value),
         "background-image" => crate::image_values::valid_background_image(value),
         "background-clip" => valid_background_clip(value),
         "background-origin" => valid_background_origin(value),
@@ -3060,6 +3067,7 @@ fn deferred_inner<'a>(value: &'a str, function: &str) -> Option<&'a str> {
 }
 
 fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()> {
+    if let Some(resolved) = contain_intrinsic::resolve_deferred(value) { return resolved; }
     if let Some(resolved) = logical_border::resolve_deferred(property, value) { return resolved; }
     if let Some(inner) = deferred_inner(value, DEFERRED_LIST_STYLE) {
         return expand_list_style(inner).ok_or(())?.into_iter()
@@ -3534,3 +3542,6 @@ mod tests;
 
 #[path = "logical_border.rs"]
 pub(crate) mod logical_border;
+
+#[path = "contain_intrinsic.rs"]
+pub(crate) mod contain_intrinsic;
