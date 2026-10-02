@@ -200,15 +200,9 @@
 //!   under whatever the *last top-level script* set, not their own real
 //!   identity — an honest simplification, not real Chrome's per-execution-
 //!   context script attribution.
-//! * **Module scripts are collected, not executed** — this engine does not
-//!   support ES modules yet (`cmd::js::is_classic_javascript_type`'s own doc
-//!   comment). [`collect_module_scripts`] walks the DOM for
-//!   `<script type="module">` the same way `cmd::js::collect_script_text`
-//!   does for classic scripts, fetching a `src` module exactly like a
-//!   classic `<script src>` (a real `Network.*` triple), so `scriptParsed`
-//!   and `getScriptSource` see real source text for a module a DevTools
-//!   frontend could not otherwise learn exists — but its top-level code
-//!   never runs, and it never gets its own JS module namespace/bindings.
+//! * **Module dependency instrumentation is incomplete.** Root module scripts
+//!   execute and report their source; dependency fetches use the browser module
+//!   transport without recording the PageOwner's Network/Debugger events.
 //! * **Script line/column extents are relative to the script's own text**,
 //!   not to its position in the containing HTML document — this driver has
 //!   no HTML-node source-position tracking to add that offset, so
@@ -1154,38 +1148,6 @@ fn script_extent(source: &str) -> (u32, u32) {
     (end_line, end_column)
 }
 
-/// Walks the DOM collecting `<script type="module">` elements' url/inline
-/// source *without* executing them — this engine does not support ES
-/// modules yet (`cmd::js::is_classic_javascript_type`'s own doc comment on
-/// why `collect_script_text` skips them). CDP-20 still reports a
-/// `Debugger.scriptParsed` for each one collected here so a DevTools
-/// frontend can see modules exist and read their source via
-/// `getScriptSource`, rather than silently losing them the way plain script
-/// execution already did before this ticket.
-fn collect_module_scripts(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &mut Vec<crate::cmd::js::PageScript>) {
-    if dom.name(node) == Some("script") {
-        let attrs = dom.attrs_of(node).unwrap_or(&[]);
-        let is_module = attrs
-            .iter()
-            .any(|(name, value)| name.eq_ignore_ascii_case("type") && value.eq_ignore_ascii_case("module"));
-        if is_module {
-            let mut source = String::new();
-            for child in dom.children(node) {
-                if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
-                    source.push_str(data);
-                }
-            }
-            let src = attrs.iter().find(|(name, _)| name == "src").map(|(_, value)| value.clone());
-            if src.is_some() || !source.trim().is_empty() {
-                out.push(crate::cmd::js::PageScript { node, src, body: source });
-            }
-        }
-    }
-    for child in dom.children(node) {
-        collect_module_scripts(dom, child, out);
-    }
-}
-
 impl PageOwner {
     /// Builds a page owner around `dom` with a fresh, empty JS realm and no
     /// accumulated events — the common tail of [`Self::from_parsed`] and
@@ -1371,23 +1333,22 @@ impl PageOwner {
     /// own persistent `scheduler` rather than building (and dropping) its
     /// own, since CDP needs the realm to survive past page load.
     fn load_scripts_leniently(&mut self) {
-        let (scripts, modules, handlers) = {
+        let (mut scripts, handlers) = {
             let host = self.dom_host.borrow();
             let mut scripts = Vec::new();
             crate::cmd::js::collect_script_text(&host.dom, amazing_dom::NodeIdx(0), &mut scripts);
-            let mut modules = Vec::new();
-            collect_module_scripts(&host.dom, amazing_dom::NodeIdx(0), &mut modules);
             let mut handlers = Vec::new();
             crate::cmd::js::collect_inline_handlers(&host.dom, amazing_dom::NodeIdx(0), &mut handlers);
-            (scripts, modules, handlers)
+            (scripts, handlers)
         };
         for (node, event, body) in handlers {
             if let Err(thrown) = self.scheduler.install_inline_handler(node, &event, &body) {
                 self.record_load_error(format!("inline {event} handler on node {node}: {}", thrown.describe()));
             }
         }
+        scripts.sort_by_key(|script| script.kind == crate::cmd::js::ScriptKind::Module);
         for script in scripts {
-            let (source, url) = match script.src {
+            let (source, url) = match &script.src {
                 Some(src) => {
                     let script_url = crate::cmd::js::resolve_script_url(&self.url, &src);
                     match self.fetch_and_record(&script_url, "Script") {
@@ -1395,32 +1356,13 @@ impl PageOwner {
                         Err(()) => continue, // already recorded as a network failure
                     }
                 }
-                None => (script.body, self.url.clone()),
+                None => (script.body.clone(), self.url.clone()),
             };
             let script_id = self.register_script(&url, &source);
-            self.scheduler.js.set_current_script(script_id, url);
-            if let Err(thrown) = self.scheduler.run_script(&source) {
+            self.scheduler.js.set_current_script(script_id, url.clone());
+            if let Err(thrown) = self.scheduler.run_page_script(&script, &source, &url) {
                 self.record_load_error(format!("page script: {}", thrown.describe()));
             }
-        }
-        // Module scripts are collected and reported as `Debugger.scriptParsed`
-        // (real source, real url) but never executed — this engine does not
-        // support ES modules yet (`cmd::js::is_classic_javascript_type`'s own
-        // doc comment). Reporting them honestly, rather than silently
-        // dropping them as `collect_script_text` does, is CDP-20's own delta
-        // here; see the module's "Known limitations".
-        for module in modules {
-            let (source, url) = match module.src {
-                Some(src) => {
-                    let script_url = crate::cmd::js::resolve_script_url(&self.url, &src);
-                    match self.fetch_and_record(&script_url, "Script") {
-                        Ok(text) => (text, script_url),
-                        Err(()) => continue,
-                    }
-                }
-                None => (module.body, self.url.clone()),
-            };
-            self.register_script(&url, &source);
         }
         if let Err(thrown) = self.scheduler.dispatch_dom_event(0, "DOMContentLoaded") {
             self.record_load_error(format!("DOMContentLoaded listener: {}", thrown.describe()));

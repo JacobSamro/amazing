@@ -61,6 +61,26 @@ impl DriverScheduler {
     pub(crate) fn run_script(&mut self, source: &str) -> Result<JsValue, Throw> {
         self.enter(|js| js.run_script(source))
     }
+    pub(crate) fn run_page_script(&mut self, script: &crate::cmd::js::PageScript,
+        source: &str, url: &str) -> Result<JsValue, Throw> {
+        let bindings = self.bindings.clone();
+        self.enter(|js| bindings.execute_page_script(js, script, source, url))
+    }
+    pub(crate) fn set_module_source_loader(&mut self,
+        loader: Rc<crate::runtime_binding_host::modules::ModuleSourceLoader>) {
+        self.bindings.set_module_source_loader(loader);
+    }
+    pub(crate) fn load_module_source(&self, url: &str) -> Result<String, String> {
+        self.bindings.load_module_source(&self.js, url)
+    }
+    pub(crate) fn page_script_url(&self, page: &str, script: &crate::cmd::js::PageScript) -> String {
+        self.bindings.page_script_url(&self.js, script, page)
+    }
+    pub(crate) fn finish_module_script(&mut self, script: &crate::cmd::js::PageScript,
+        error: Option<&Throw>, url: &str, fetched: bool) -> Result<(), Throw> {
+        let bindings = self.bindings.clone();
+        self.enter(|js| bindings.finish_module_script(js, script, error, url, fetched))
+    }
     pub(crate) fn set_location_url(&mut self, url: impl Into<String>) {
         let url = url.into();
         self.js.set_location_url(&url);

@@ -4,6 +4,7 @@ use amazing_js::DomHost;
 use crate::dom_host::BrowserDomHost;
 use super::parse::read_source;
 pub(crate) struct PageScript {
+    pub(crate) kind: ScriptKind,
     /// HTML-29: the script element's own tree position, so a top-level
     /// script's `document.write` call can be narrowed to the parser's
     /// insertion point right after it (`DriverScheduler::
@@ -13,13 +14,13 @@ pub(crate) struct PageScript {
     pub(crate) src: Option<String>,
     pub(crate) body: String,
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ScriptKind { Classic, Module }
 
 /// A `<script>` is classic JavaScript only when its `type` is absent, empty, or
 /// a JavaScript MIME type. Data blocks (`application/ld+json`, `text/template`,
-/// `importmap`, ...) must never execute, and modules are not supported here, so
-/// both are skipped instead of being parsed as classic scripts. Executing a
-/// data block or a module as classic JS produced spurious parse errors on real
-/// pages.
+/// `importmap`, ...) must never execute. Modules use their own registry rather
+/// than the shared classic script environment.
 pub(crate) fn is_classic_javascript_type(raw: Option<&str>) -> bool {
     let Some(raw) = raw else { return true };
     // Matches `amazing_html::tree`'s own `classic_or_module_script_type`
@@ -36,11 +37,8 @@ pub(crate) fn is_classic_javascript_type(raw: Option<&str>) -> bool {
     value.is_empty() || amazing_html::is_javascript_mime_type(&value)
 }
 
-/// Builds a `PageScript` for one already-known `<script>` node (classic type
-/// only -- data blocks like `application/ld+json` and modules are excluded
-/// here; a module script is handled through its own `ScriptMode::Deferred`
-/// path instead, see `run_interleaved_parse`), or `None` if it is not a
-/// classic script or has neither a `src` nor non-whitespace inline text.
+/// Builds a classic or module `PageScript` for an already-known node, excluding
+/// data blocks and classic `nomodule` fallbacks.
 /// Shared by `collect_script_text`'s full-tree walk (non-interleaved callers:
 /// iframes, and any full-DOM fallback) and HTML-31's interleaved drivers,
 /// which already know each script's `NodeIdx` from `ResumableParser`'s own
@@ -54,9 +52,13 @@ pub(crate) fn script_source_from_node(
         .iter()
         .find(|(name, _)| name.eq_ignore_ascii_case("type"))
         .map(|(_, value)| value.as_str());
-    if !is_classic_javascript_type(script_type) {
-        return None;
-    }
+    let kind = if script_type.is_some_and(|value|
+        amazing_html::strip_ascii_whitespace(value).eq_ignore_ascii_case("module")) {
+        ScriptKind::Module
+    } else if is_classic_javascript_type(script_type) {
+        if attrs.iter().any(|(name, _)| name.eq_ignore_ascii_case("nomodule")) { return None; }
+        ScriptKind::Classic
+    } else { return None; };
     let mut source = String::new();
     for child in dom.children(node) {
         if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
@@ -87,7 +89,7 @@ pub(crate) fn script_source_from_node(
                 .map(|(_, value)| value.clone())
         });
     if src.is_some() || !source.trim().is_empty() {
-        Some(PageScript { node, src, body: source })
+        Some(PageScript { node, src, body: source, kind })
     } else {
         None
     }
@@ -288,8 +290,12 @@ pub(crate) fn execute_page_scripts_lenient(
             return Ok(());
         }
         let source = match &script.src {
+            Some(src) if script.kind == ScriptKind::Module => match scheduler.load_module_source(&scheduler.page_script_url(page, script)) {
+                Ok(source) => source,
+                Err(error) => { errors.push(format!("external module {src}: {error}")); return Ok(()); }
+            },
             Some(src) => {
-                let script_url = resolve_script_url(page, src);
+                let script_url = scheduler.page_script_url(page, script);
                 let fetched = amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
                     .map_err(|error| format!("{error}"))
                     .and_then(|response| response.text()
@@ -301,7 +307,8 @@ pub(crate) fn execute_page_scripts_lenient(
             }
             None => script.body.clone(),
         };
-        if let Err(error) = scheduler.run_script(&source) {
+        let script_url = scheduler.page_script_url(page, script);
+        if let Err(error) = scheduler.run_page_script(&script, &source, &script_url) {
             errors.push(format!("page script: {}", error.describe()));
         }
         Ok(())
@@ -311,11 +318,36 @@ pub(crate) fn execute_page_scripts_lenient(
     // same as "no deferred/async scripts" rather than unwrapping, since this
     // whole function's contract is to never panic on a real page.
     let deferred = script_result.unwrap_or_default();
+    let handlers = {
+        let host_ref = host.borrow();
+        let mut handlers = Vec::new();
+        collect_inline_handlers(&host_ref.dom, amazing_dom::NodeIdx(0), &mut handlers);
+        handlers
+    };
+    for (node, event, body) in handlers {
+        if !budget_exceeded && Instant::now() >= deadline {
+            budget_exceeded = true;
+            errors.push(format!("script phase exceeded its {budget}s budget; remaining inline handlers skipped"));
+        }
+        if budget_exceeded { continue; }
+        if let Err(error) = scheduler.install_inline_handler(node, &event, &body) {
+            errors.push(format!("inline {event} handler on node {node}: {}", error.describe()));
+        }
+    }
     if !budget_exceeded {
         for script in &deferred {
             let source = match &script.src {
+                Some(src) if script.kind == ScriptKind::Module => match scheduler.load_module_source(&scheduler.page_script_url(page, script)) {
+                    Ok(source) => source,
+                    Err(error) => {
+                        errors.push(format!("external module {src}: {error}"));
+                        let script_url = scheduler.page_script_url(page, script);
+                        if let Err(error) = scheduler.finish_module_script(script, None, &script_url, false) { errors.push(error.describe()); }
+                        continue;
+                    }
+                },
                 Some(src) => {
-                    let script_url = resolve_script_url(page, src);
+                    let script_url = scheduler.page_script_url(page, script);
                     let fetched = amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
                         .map_err(|error| format!("{error}"))
                         .and_then(|response| response.text()
@@ -327,33 +359,13 @@ pub(crate) fn execute_page_scripts_lenient(
                 }
                 None => script.body.clone(),
             };
-            if let Err(error) = scheduler.run_script(&source) {
+            let script_url = scheduler.page_script_url(page, script);
+            let result = scheduler.run_page_script(script, &source, &script_url);
+            if let Err(error) = &result {
                 errors.push(format!("page script: {}", error.describe()));
             }
-        }
-    }
-    // HTML-31/32: inline `on*` handlers only exist once their element has
-    // been parsed; collected after the interleaved parse reaches `Eof`
-    // (matching `wpt_harness.rs::execute_page`/`prepare_page_scripts`),
-    // unlike before HTML-32, when the whole DOM already existed upfront.
-    let handlers = {
-        let host_ref = host.borrow();
-        let mut handlers = Vec::new();
-        collect_inline_handlers(&host_ref.dom, amazing_dom::NodeIdx(0), &mut handlers);
-        handlers
-    };
-    for (node, event, body) in handlers {
-        if !budget_exceeded && Instant::now() >= deadline {
-            budget_exceeded = true;
-            errors.push(format!(
-                "script phase exceeded its {budget}s budget; remaining inline handlers skipped"
-            ));
-        }
-        if budget_exceeded {
-            continue;
-        }
-        if let Err(error) = scheduler.install_inline_handler(node, &event, &body) {
-            errors.push(format!("inline {event} handler on node {node}: {}", error.describe()));
+            if script.kind == ScriptKind::Module
+                && let Err(error) = scheduler.finish_module_script(script, result.as_ref().err(), &script_url, true) { errors.push(error.describe()); }
         }
     }
     if budget_exceeded {
@@ -416,8 +428,9 @@ pub(crate) fn prepare_page_scripts(
     scheduler.set_location_url(page);
     let deferred = run_interleaved_parse(host, &mut scheduler, html, |scheduler, script| {
         let source = match &script.src {
+            Some(_) if script.kind == ScriptKind::Module => scheduler.load_module_source(&scheduler.page_script_url(page, script))?,
             Some(src) => {
-                let script_url = resolve_script_url(page, src);
+                let script_url = scheduler.page_script_url(page, script);
                 let response =
                     amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
                         .map_err(|error| format!("external script {src}: {error}"))?;
@@ -427,31 +440,11 @@ pub(crate) fn prepare_page_scripts(
             }
             None => script.body.clone(),
         };
-        scheduler.run_script(&source)
+        let script_url = scheduler.page_script_url(page, script);
+        scheduler.run_page_script(&script, &source, &script_url)
             .map(|_| ())
             .map_err(|error| format!("page script failed: {}", error.describe()))
     })?;
-    for script in &deferred {
-        let source = match &script.src {
-            Some(src) => {
-                let script_url = resolve_script_url(page, src);
-                let response =
-                    amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
-                        .map_err(|error| format!("external script {src}: {error}"))?;
-                response
-                    .text()
-                    .ok_or_else(|| format!("external script {src} was not text"))?
-            }
-            None => script.body.clone(),
-        };
-        scheduler.run_script(&source)
-            .map_err(|error| format!("page script failed: {}", error.describe()))?;
-    }
-    // HTML-31/32: inline `on*` handler attributes only exist once their
-    // element has been parsed, so collecting them waits until the
-    // interleaved parse above reaches `Eof` (matching `wpt_harness.rs::
-    // execute_page`; unlike before HTML-32, when the whole DOM already
-    // existed prior to running any script at all).
     let handlers = {
         let host_ref = host.borrow();
         let mut handlers = Vec::new();
@@ -460,7 +453,29 @@ pub(crate) fn prepare_page_scripts(
     };
     for (node, event, body) in handlers {
         scheduler.install_inline_handler(node, &event, &body)
-            .map_err(|error| format!("inline onclick failed: {}", error.describe()))?;
+            .map_err(|error| format!("inline handler failed: {}", error.describe()))?;
+    }
+    for script in &deferred {
+        let source = match &script.src {
+            Some(_) if script.kind == ScriptKind::Module => scheduler.load_module_source(&scheduler.page_script_url(page, script))?,
+            Some(src) => {
+                let script_url = scheduler.page_script_url(page, script);
+                let response =
+                    amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
+                        .map_err(|error| format!("external script {src}: {error}"))?;
+                response
+                    .text()
+                    .ok_or_else(|| format!("external script {src} was not text"))?
+            }
+            None => script.body.clone(),
+        };
+        let script_url = scheduler.page_script_url(page, script);
+        scheduler.run_page_script(script, &source, &script_url)
+            .map_err(|error| format!("page script failed: {}", error.describe()))?;
+        if script.kind == ScriptKind::Module {
+            scheduler.finish_module_script(script, None, &script_url, true)
+                .map_err(|error| format!("module load handler failed: {}", error.describe()))?;
+        }
     }
     scheduler.dispatch_dom_event(0, "DOMContentLoaded")
         .map_err(|error| format!("DOMContentLoaded listener failed: {}", error.describe()))?;
@@ -513,7 +528,12 @@ pub(crate) fn cmd_run(path: Option<&str>) -> ExitCode {
         Ok(scheduler) => scheduler,
         Err(error) => { eprintln!("amazing run: {}", error.describe()); return ExitCode::FAILURE; }
     };
-    let entry = scheduler.run_script(&source);
+    let entry = if let Some(path) = path {
+        let url = crate::runtime_binding_host::modules::source_url(path);
+        scheduler.set_location_url(&url);
+        let script = PageScript { kind: ScriptKind::Classic, node: amazing_dom::NodeIdx(0), src: Some(url.clone()), body: String::new() };
+        scheduler.run_page_script(&script, &source, &url)
+    } else { scheduler.run_script(&source) };
     let checkpoint = scheduler.pump_at(std::time::Duration::from_millis(16), true);
     let result = entry.and_then(|value| checkpoint.map(|_| value));
     match result {
