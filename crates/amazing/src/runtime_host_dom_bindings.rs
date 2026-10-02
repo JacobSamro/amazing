@@ -9,12 +9,42 @@ impl RuntimeBindingHost<'_> {
         let scalar = String::from_utf16_lossy(input);
         let base = self.state.borrow().document_url.as_deref()
             .and_then(|base| amazing_net::url::ParsedUrl::parse(base).ok());
+        let charset = self.state.borrow().document_character_set.clone().unwrap_or_else(|| "UTF-8".into());
+        let encoder = |query: &str| super::runtime_host_net::encode_document_query(query, &charset);
         let resolved = match base {
-            Some(base) => base.resolve(&scalar),
-            None => amazing_net::url::ParsedUrl::parse(&scalar),
+            Some(base) => base.resolve_with_query_encoder(&scalar, &encoder),
+            None => amazing_net::url::ParsedUrl::parse_with_query_encoder(&scalar, None, &encoder),
         };
         resolved.map(|url| url.serialize().encode_utf16().collect())
             .unwrap_or_else(|_| input.to_vec())
+    }
+
+    pub(super) fn dom_resolve_element_url(&mut self, element: NodeIdx, input: &[u16]) -> Result<Vec<u16>, Throw> {
+        let (document_url, charset, base_href) = {
+            let state = self.state.borrow();
+            let host = state.host.borrow();
+            let document = host.dom.owner_document(element).unwrap_or(NodeIdx(0));
+            let metadata = host.dom.document_metadata(document).ok().flatten();
+            let (url, charset) = if document == NodeIdx(0) {
+                (state.document_url.clone().unwrap_or_else(|| "about:blank".into()),
+                    state.document_character_set.clone().unwrap_or_else(|| "UTF-8".into()))
+            } else {
+                (metadata.map(|data| data.url.clone()).unwrap_or_else(|| "about:blank".into()),
+                    metadata.map(|data| data.character_set.clone()).unwrap_or_else(|| "UTF-8".into()))
+            };
+            (url, charset, host.dom.document_base_href(document).ok().flatten())
+        };
+        let encoder = |query: &str| super::runtime_host_net::encode_document_query(query, &charset);
+        let mut base = amazing_net::ParsedUrl::parse(&document_url).ok();
+        if let (Some(url), Some(href)) = (&base, base_href) {
+            if let Ok(resolved) = url.resolve_with_query_encoder(&String::from_utf16_lossy(&href), &encoder) {
+                base = Some(resolved);
+            }
+        }
+        let scalar = String::from_utf16_lossy(input);
+        let resolved = amazing_net::ParsedUrl::parse_with_query_encoder(&scalar, base.as_ref(), &encoder);
+        Ok(resolved.map(|url| url.serialize().encode_utf16().collect())
+            .unwrap_or_else(|_| scalar.encode_utf16().collect()))
     }
 
     pub(super) fn dom_document_default_view(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
@@ -819,6 +849,57 @@ mod tests {
             true;
         "#).unwrap();
         assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn hyperlink_query_encoding_uses_owner_document_and_live_base() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<head><base href='https://cdn.test/dir/'></head><body></body>"),
+            native_forwarded: false,
+        }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = super::super::install(&mut js, host.clone()).unwrap();
+        bindings.set_document_url(&mut js, "https://example.test/page");
+        bindings.set_document_metadata("windows-1252", "text/html", "");
+        assert_eq!(js.run_script(r#"
+            function check(value) { if (!value) throw new Error('hyperlink encoding'); }
+            for (const tag of ['a', 'area']) {
+                const a = document.createElement(tag);
+                a.href = '€/next?€#€';
+                check(a.href === 'https://cdn.test/dir/%E2%82%AC/next?%80#%E2%82%AC');
+                check(a.search === '?%80' && a.pathname === '/dir/%E2%82%AC/next');
+                check(a.hash === '#%E2%82%AC' && a.origin === 'https://cdn.test');
+                a.search = '?€'; // Component setters use the URL parser's UTF-8 default.
+                check(a.search === '?%E2%82%AC');
+                a.href = {toString() {
+                    document.querySelector('base').setAttribute('href', 'https://changed.test/');
+                    return 'next?€';
+                }};
+                check(a.href === 'https://changed.test/next?%80');
+                document.querySelector('base').setAttribute('href', 'https://cdn.test/dir/');
+            }
+            const child = document.implementation.createHTMLDocument('');
+            const childLink = child.createElement('a');
+            childLink.href = 'https://child.test/?あ';
+            check(childLink.search === '?%E3%81%82');
+            const opaque = document.createElement('a');
+            opaque.href = 'MAILTO:user@example.test';
+            opaque.hostname = 'ignored.test';
+            opaque.username = 'ignored';
+            opaque.pathname = 'ignored';
+            check(opaque.getAttribute('href') === 'MAILTO:user@example.test');
+            true;
+        "#).unwrap(), JsValue::Bool(true));
+        let document = host.borrow_mut().dom.create_document();
+        host.borrow_mut().dom.set_document_metadata(document, amazing_dom::document_surface::DocumentMetadata {
+            url: "https://child.test/base/".into(), content_type: "text/html".into(),
+            character_set: "Shift_JIS".into(),
+        }).unwrap();
+        let link = host.borrow_mut().dom.create_element(document, "a");
+        let resolved = RuntimeBindingHost { js: &mut js, state: bindings.state.clone() }
+            .dom_resolve_element_url(link, &"next?あ".encode_utf16().collect::<Vec<_>>()).unwrap();
+        assert_eq!(String::from_utf16(&resolved).unwrap(), "https://child.test/base/next?%82%A0");
     }
 
     #[test]
