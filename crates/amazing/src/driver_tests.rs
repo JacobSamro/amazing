@@ -26,7 +26,7 @@ fn focus_updates_active_element_and_dispatches_ordered_focus_events() {
 #[test]
 fn detached_created_element_has_live_style() {
     let host = Rc::new(RefCell::new(BrowserDomHost {
-        dom: amazing_html::parse("<body><div id='content'></div></body>"),
+        dom: amazing_html::parse("<!doctype html><body><div id='content'></div></body>"),
         native_forwarded: false,
     }));
     let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
