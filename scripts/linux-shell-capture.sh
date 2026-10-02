@@ -210,8 +210,9 @@ if [ -n \"\$WID\" ] && [ -n '$ACTIONS' ]; then
 fi
 if [ -z '$ACTIONS' ]; then
   if [ -n \"\$WID\" ]; then DISPLAY=\$DISP import -window \$WID \$OUT/captures/$NAME.png; else
-    echo 'linux-shell-capture: no shell window; capturing the whole display' >&2
-    DISPLAY=\$DISP import -window root \$OUT/captures/$NAME.png; fi
+    echo 'linux-shell-capture: no Amazing window; capture rejected' >&2
+    tail -20 \$OUT/captures/$NAME.log >&2
+    exit 5; fi
 fi
 kill -0 \$APID 2>/dev/null || { echo 'linux-shell-capture: shell exited early; log:' >&2; tail -20 \$OUT/captures/$NAME.log >&2; }
 printf '{\"exe\":\"%s\",\"sha256\":\"%s\",\"commit_tree\":\"%s\",\"args\":\"%s\",\"display\":\"$SIZE\",\"window\":\"%s\",\"captured\":\"%s\"}\n' \
