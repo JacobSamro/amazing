@@ -49,7 +49,7 @@ const VOID_ELEMENTS: &[&str] = &[
 
 /// Default-scope terminator element names (§13.2.4.3).
 const SCOPE_TERMINATORS: &[&str] =
-    &["applet", "caption", "html", "table", "td", "th", "marquee", "object", "template"];
+    &["applet", "caption", "html", "table", "td", "th", "marquee", "object", "select", "template"];
 
 /// Extra terminators for "in button scope".
 const BUTTON_SCOPE_EXTRA: &[&str] = &["button"];
@@ -1144,7 +1144,6 @@ impl TreeBuilder {
         for &node in self.open.iter().rev() {
             let n = self.dom.name(node).unwrap_or("");
             let next = match n {
-                "select" => Some(Mode::InBody), // current spec: in-body recovery
                 "td" | "th" => Some(Mode::InCell),
                 "tr" => Some(Mode::InRow),
                 "tbody" | "tfoot" | "thead" => Some(Mode::InTableBody),
@@ -2114,6 +2113,9 @@ impl TreeBuilder {
                 self.frameset_ok = false;
             },
             "input" => {
+                if self.fragment && self.fragment_context.as_deref() == Some("select") {
+                    return;
+                }
                 if self.has_in_scope("select") {
                     self.pop_until("select");
                     self.reset_insertion_mode();
@@ -2165,6 +2167,9 @@ impl TreeBuilder {
             "noembed" => self.start_generic_text_element("noembed", attrs),
             "noscript" => self.start_generic_text_element("noscript", attrs),
             "select" => {
+                if self.fragment && self.fragment_context.as_deref() == Some("select") {
+                    return;
+                }
                 if self.has_in_scope("select") {
                     self.pop_until("select");
                     self.reset_insertion_mode();
@@ -2988,6 +2993,18 @@ mod tests {
             build_shape("<select><option>x<input>y"),
             "(doc html[head[]body[select[option[\"x\"]]input[]\"y\"]])"
         );
+    }
+
+    #[test]
+    fn select_blocks_adoption_agency_scope() {
+        assert_eq!(build_shape("<font><select><option>a</option></font></select>"),
+            "(doc html[head[]body[font[select[option[\"a\"]]]]])");
+    }
+
+    #[test]
+    fn template_close_resets_past_select_to_enclosing_table_cell() {
+        assert_eq!(build_shape("<body><table><tr><td><select><template>Foo</template><caption>A</table>"),
+            "(doc html[head[]body[table[tbody[tr[td[select[template[]]]]]caption[\"A\"]]]])");
     }
 
     #[test]

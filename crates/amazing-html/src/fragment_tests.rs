@@ -93,6 +93,12 @@ fn select_fragment_ignores_stray_context_end_and_allows_ordinary_tags() {
 }
 
 #[test]
+fn select_fragment_ignores_input_and_nested_select_start_tags() {
+    assert_eq!(dump("select", "<input><select><option>x</select><option>y"),
+        "#document\n  <option>\n    \"x\"\n  <option>\n    \"y\"\n");
+}
+
+#[test]
 fn contexts_without_required_rules_remain_explicitly_unsupported() {
     assert_eq!(dump("template", "x"), "#document\n  \"x\"\n");
 }
