@@ -1892,3 +1892,17 @@ Workspace gate: `cargo nextest run --workspace --locked --no-fail-fast`
 3,399/3,399 pass (3 slow, 17 skipped, 0 failed); `cargo test --workspace
 --locked --doc` all green (`amazing_js`/`amazing_html` doctests individually
 confirmed, 1 passed each, matching prior runs).
+
+## 2026-10-03 resumed calendar work
+
+- ZonedDateTime.with era/monthCode merging and ethioaa year consistency:
+  [decision and evidence](js-stdlib_zoned-with.md). Temporal+55 passing files,
+  zero losses; one Umm al-Qura with failure still needs real calendar data.
+- PlainYearMonth native-calendar arithmetic, with, since/until and parsing:
+  [decision and evidence](js-stdlib_yearmonth_calendars.md). Assigned intl402
+  methods68/190→190/190; total intl402 Temporal1573→1699 (+126), built-ins4487
+  unchanged, zero losses. Combined Boat workspace3515 passed/17 skipped and
+  four doctests green, on fixed base2eb1229a.
+- Next native-calendar merge cluster: PlainDate.with49 failures and
+  PlainDateTime.with49 failures. Reuse the now-correct year-month merge helper,
+  preserving day/time fields and native monthCode across year changes.

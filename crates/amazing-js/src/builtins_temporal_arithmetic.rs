@@ -345,12 +345,11 @@ fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
             // blank duration, purely from materializing -271821-04-01) and
             // options-read-before-algorithmic-validation.js (the overflow
             // option is still read first).
-            let mut anchor = result;
-            anchor[2] = 1;
+            let anchor = std_temporal_yearmonth_anchor(&data.calendar, &result)?;
             std_temporal_validate(StdTemporalKind::PlainDate, &anchor)?;
             let mut added = std_temporal_add_calendar_cal(&data.calendar, &anchor, &duration, factor, reject)?;
             std_temporal_validate(StdTemporalKind::PlainDate, &added)?;
-            added[2] = data.fields[2];
+            added = std_temporal_yearmonth_anchor(&data.calendar, &added)?;
             result = added;
         }
         StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime => {
@@ -695,6 +694,38 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
             return Err(Throw::range_error("invalid PlainYearMonth difference units"));
         }
         std_temporal_validate_rounding_increment(&smallest, increment)?;
+        if data.calendar != "iso8601" {
+            if data.fields[..3] == other[..3] {
+                return std_temporal_make(i, StdTemporalKind::Duration, [0; 10]);
+            }
+            let first = std_temporal_yearmonth_anchor(&data.calendar, &data.fields)?;
+            let second = std_temporal_yearmonth_anchor(&data.calendar, &other)?;
+            std_temporal_validate(StdTemporalKind::PlainDate, &first)?;
+            std_temporal_validate(StdTemporalKind::PlainDate, &second)?;
+            let mut duration = std_temporal_calendar_difference_cal(&data.calendar, &first, &second, &largest)?;
+            duration[2..10].fill(0);
+            if smallest != "month" || increment != 1 {
+                let target_ns = std_temporal_epoch_ns(&second);
+                if smallest == largest {
+                    let count = std_temporal_round_calendar_unit_cal(&data.calendar, &first,
+                        target_ns - std_temporal_epoch_ns(&first), &smallest, increment, &mode)?;
+                    duration = [0; 10];
+                    duration[if smallest == "year" { 0 } else { 1 }] = count;
+                } else {
+                    let mut years = [0; 10];
+                    years[0] = duration[0];
+                    let cursor = std_temporal_add_calendar_cal(&data.calendar, &first, &years, 1, false)?;
+                    let months = std_temporal_round_calendar_unit_cal(&data.calendar, &cursor,
+                        target_ns - std_temporal_epoch_ns(&cursor), "month", increment, &mode)?;
+                    years[1] = months;
+                    let rounded = std_temporal_add_calendar_cal(&data.calendar, &first, &years, 1, false)?;
+                    duration = std_temporal_calendar_difference_cal(&data.calendar, &first, &rounded, &largest)?;
+                    duration[2..10].fill(0);
+                }
+            }
+            if since { for field in &mut duration { *field = -*field; } }
+            return std_temporal_make(i, StdTemporalKind::Duration, duration);
+        }
         // DifferenceTemporalPlainYearMonth (spec): equal year-months return
         // a zero Duration immediately, BEFORE either side is ever
         // materialized as a full calendar date -- confirmed by
@@ -941,6 +972,42 @@ fn std_temporal_since(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
     std_temporal_difference(i, this, args, true)
 }
 
+// CalendarYearMonthFromFields materializes the first day of the calendar's
+// month. Its ISO day usually differs from 1 for non-ISO month structures.
+fn std_temporal_yearmonth_anchor(calendar: &str, iso: &[i64; 10]) -> Result<[i64; 10], Throw> {
+    let mut result = *iso;
+    if std_calendar_is_month_structure(calendar) {
+        let (year, month, ..) = std_calendar_fields(calendar, iso[0], iso[1], iso[2]);
+        (result[0], result[1], result[2]) = std_calendar_to_iso(calendar, year, month, 1);
+    } else { result[2] = 1; }
+    result[3..10].fill(0);
+    Ok(result)
+}
+
+fn std_temporal_yearmonth_with_calendar(i: &mut Interpreter, data: StdTemporalData,
+    bag: JsValue, options: JsValue) -> Result<JsValue, Throw> {
+    let read = std_temporal_read_calendar_fields(i, StdTemporalKind::PlainYearMonth, &data.calendar, &bag)?;
+    if !read.any_present { return Err(Throw::type_error("no Temporal fields provided")); }
+    let reject = std_temporal_overflow(i, options)?;
+    let (base_year, base_month, ..) = std_calendar_fields(&data.calendar,
+        data.fields[0], data.fields[1], data.fields[2]);
+    let year = if read.era_text.is_some() || read.era_year.is_some() {
+        std_temporal_resolve_era_year(&data.calendar, &read.era_text, read.era_year, read.year)?
+            .ok_or_else(|| Throw::type_error("year is required"))?
+    } else { read.year.unwrap_or(base_year) };
+    let month_code = if read.month.is_none() && read.month_code_text.is_none() {
+        Some(std_calendar_month_code(&data.calendar, data.fields[0], data.fields[1], data.fields[2]))
+    } else { read.month_code_text };
+    let mut fields = [0; 10];
+    fields[0] = year;
+    fields[1] = read.month.unwrap_or(base_month);
+    fields[2] = 1;
+    std_temporal_bag_resolve_calendar(StdTemporalKind::PlainYearMonth, &data.calendar,
+        &mut fields, read.month, month_code, reject)?;
+    std_temporal_regulate(StdTemporalKind::PlainYearMonth, &mut fields, reject);
+    std_temporal_make_cal(i, StdTemporalKind::PlainYearMonth, fields, data.calendar)
+}
+
 // The field this loop is currently reading, resolved per Temporal kind below
 // in the exact alphabetical order PrepareTemporalFields/PrepareCalendarFields
 // specifies (and that with()'s many order-of-operations.js tests observe via
@@ -1171,6 +1238,9 @@ fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
         if !time_zone.is_undefined() {
             return Err(Throw::type_error("with() argument must not have a timeZone property"));
         }
+    }
+    if data.kind == StdTemporalKind::PlainYearMonth && data.calendar != "iso8601" {
+        return std_temporal_yearmonth_with_calendar(i, data, bag, std_reflect_arg(&args, 1));
     }
     let fields: &[(&str, StdWithField)] = std_temporal_field_table(data.kind);
     let mut result = data.fields;
@@ -1540,9 +1610,12 @@ fn std_temporal_epoch_breakdown_cal(cal: &str, base: &[i64; 10], target_epoch_ns
 // Epoch-nanosecond offset of `base` plus exactly `k` of a calendar unit
 // (year/month/week, by Duration field index `unit_index`).
 fn std_temporal_calendar_step_ns(base: &[i64; 10], unit_index: usize, k: i64) -> Result<i128, Throw> {
+    std_temporal_calendar_step_ns_cal("iso8601", base, unit_index, k)
+}
+fn std_temporal_calendar_step_ns_cal(calendar: &str, base: &[i64; 10], unit_index: usize, k: i64) -> Result<i128, Throw> {
     let mut single = [0i64; 10];
     single[unit_index] = k;
-    let target = std_temporal_add_calendar(base, &single, 1, false)?;
+    let target = std_temporal_add_calendar_cal(calendar, base, &single, 1, false)?;
     // `std_temporal_add_calendar` itself only rejects an i64 day-count
     // overflow, not the narrower ISO date range Temporal actually supports --
     // an enormous candidate count (e.g. rounding Number.MIN_SAFE_INTEGER
@@ -1560,16 +1633,19 @@ fn std_temporal_calendar_step_ns(base: &[i64; 10], unit_index: usize, k: i64) ->
 // two adjacent candidate unit-counts (computed via actual calendar
 // arithmetic from `base`) and rounds within that bracket.
 fn std_temporal_round_calendar_unit(base: &[i64; 10], total_ns: i128, unit: &str, increment: i64, mode: &str) -> Result<i64, Throw> {
+    std_temporal_round_calendar_unit_cal("iso8601", base, total_ns, unit, increment, mode)
+}
+fn std_temporal_round_calendar_unit_cal(calendar: &str, base: &[i64; 10], total_ns: i128, unit: &str, increment: i64, mode: &str) -> Result<i64, Throw> {
     let unit_index = std_temporal_unit_rank(unit).filter(|r| *r <= 2)
         .ok_or_else(|| Throw::range_error("invalid unit for calendar rounding"))?;
     if total_ns == 0 { return Ok(0); }
-    let single = std_temporal_calendar_step_ns(base, unit_index, 1)?.max(1);
+    let single = std_temporal_calendar_step_ns_cal(calendar, base, unit_index, 1)?.max(1);
     let mut lo = ((total_ns as f64 / single as f64) / increment as f64).floor() as i64 * increment;
     let neg = total_ns < 0;
     for _ in 0..1_000_000 {
-        let lo_ns = std_temporal_calendar_step_ns(base, unit_index, lo)?;
+        let lo_ns = std_temporal_calendar_step_ns_cal(calendar, base, unit_index, lo)?;
         if lo_ns > total_ns { lo -= increment; continue; }
-        let hi_ns = std_temporal_calendar_step_ns(base, unit_index, lo + increment)?;
+        let hi_ns = std_temporal_calendar_step_ns_cal(calendar, base, unit_index, lo + increment)?;
         if hi_ns <= total_ns { lo += increment; continue; }
         let numerator = total_ns - lo_ns;
         let denom = hi_ns - lo_ns;
