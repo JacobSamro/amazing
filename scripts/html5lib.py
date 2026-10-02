@@ -15,8 +15,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-_ATTR_RE = re.compile(r' ((?:(?:xml|xlink|xmlns) )?[^\s="]+)="((?:[^"])*)"')
-_ATTRIBUTE_LINE_RE = re.compile(r'(?:(?:xml|xlink|xmlns) )?[^\s="]+=".*"')
+_ATTR_RE = re.compile(r' ((?:(?:xml|xlink|xmlns) )?[^\s="][^\s=]*)="((?:[^"])*)"')
+_ATTRIBUTE_LINE_RE = re.compile(r'(?:(?:xml|xlink|xmlns) )?[^\s="][^\s=]*=".*"')
 
 
 def _normalize_tag_attrs(content: str) -> str:
