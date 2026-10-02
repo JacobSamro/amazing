@@ -847,6 +847,8 @@ fn resolve_candidate_pool<'a>(
     // Both candidates keep their original specificity, layer, and source order.
     let vertical = !writing_mode.eq_ignore_ascii_case("horizontal-tb");
     for (logical, horizontal, vertical_name) in [
+        ("contain-intrinsic-inline-size", "contain-intrinsic-width", "contain-intrinsic-height"),
+        ("contain-intrinsic-block-size", "contain-intrinsic-height", "contain-intrinsic-width"),
         ("inline-size", "width", "height"),
         ("block-size", "height", "width"),
         ("min-inline-size", "min-width", "min-height"),
@@ -1065,6 +1067,8 @@ fn resolve_candidate_pool<'a>(
         style.mark_author_specified(property);
     }
     for (logical, horizontal, vertical_name) in [
+        ("contain-intrinsic-inline-size", "contain-intrinsic-width", "contain-intrinsic-height"),
+        ("contain-intrinsic-block-size", "contain-intrinsic-height", "contain-intrinsic-width"),
         ("inline-size", "width", "height"),
         ("block-size", "height", "width"),
         ("min-inline-size", "min-width", "min-height"),
@@ -1118,8 +1122,11 @@ fn resolve_candidate_pool<'a>(
         }
     }
     computed::logical_border::serialize_shorthands(&mut style);
+    computed::contain_intrinsic::serialize_shorthand(&mut style);
     let mut sources = sources;
     for (logical, horizontal, vertical_name) in [
+        ("contain-intrinsic-inline-size", "contain-intrinsic-width", "contain-intrinsic-height"),
+        ("contain-intrinsic-block-size", "contain-intrinsic-height", "contain-intrinsic-width"),
         ("inline-size", "width", "height"),
         ("block-size", "height", "width"),
         ("min-inline-size", "min-width", "min-height"),

@@ -2551,3 +2551,27 @@ gained 13 exact assertions/lost 0 (backgrounds +12, images +1; all other
 selections unchanged). Static rendering preserves all classifications:
 backgrounds 75/134, images 92/141, gained 0/lost 0 for each. Evidence and a
 bulk reproduction script: `crates/amazing-css/evidence/css32/`.
+
+## CSS-33: contain-intrinsic-size family
+
+Fixed base `7c9e3652`. Routed by LAYOUT-38: raw contain-intrinsic-size
+and unmapped logical longhands lost declaration order. Implemented CSS
+Sizing 4 §5.2 grouped `[auto? [none | nonnegative length]]{1,2}`, atomic
+expansion into physical width/height, CSS-wide values, deferred variables,
+four registered physical/logical longhands, Layout invalidation classification,
+and logical mapping before ranking with provenance and computed mirroring.
+Font/absolute lengths compute to px; CSS owns values, while layout owns remembered
+sizes and the effect of size containment. The compatibility shorthand getter
+is reconstructed from final physical winners.
+
+Found and fixed a measurement bug in wpt_conformance.rs: an explicitly present
+non-literal expected argument (such as length_ref("2vw")) was replaced with the
+specified string, manufacturing false passes for unresolved viewport lengths.
+Unsupported dynamic expected values now count as skipped, consistent with the
+runner's documented static extraction boundary. Both before/after parsing
+measurements use the same corrected harness; the base engine remains 7c9e3652.
+Full workspace 3521/3521, 17 skipped; doctests 4/4. Crate 362/362, docs 0.
+Full static sizing sweep 90/138 ->91/138, gained 1/lost 0: logical-001 now passes.
+Corrected-harness parsing 3440/4805 ->3482/4805, gained 42/lost 0 by exact
+assertion identity, 169 nonliteral cases skipped. Evidence: css33/gate.json
+and before/after compact classifications under amazing-css/evidence.
