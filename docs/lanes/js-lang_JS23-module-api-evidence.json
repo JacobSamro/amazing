@@ -1,0 +1,43 @@
+{
+  "ticket": "JS-23 module API",
+  "api_commit": "ae89a0af52620a8e9d93796dc30475c283b717a0",
+  "api_base_sha": "d20f78dd3fbbaed160c3670fa1123518583bb026",
+  "changes": [
+    "Typed SyntaxError objects for module parser/import/export failures; host resolver errors remain untyped",
+    "Canonical load-failure error identity and root/dependency Parse/Resolution phase preservation",
+    "Rollback new records after a failed link graph to avoid incomplete-cycle crashes"
+  ],
+  "owned_module_tests": {
+    "passed": 12,
+    "failed": 0,
+    "new_regressions": 2,
+    "shared_owned_batch": {
+      "passed": 491,
+      "failed": 1,
+      "skipped": 1,
+      "failure": "New independent generator-super method regression needed already merged JSVM12 eager frames; not a module regression"
+    }
+  },
+  "independent_driver_gate": {
+    "reported_by": "integrator-assist js_date agent",
+    "driver_commit": "432ba911",
+    "workspace_passed": 3564,
+    "workspace_skipped": 17,
+    "doctests_passed": 4,
+    "wpt_module_pages_selected": 111,
+    "passing_pages": 35,
+    "passing_subtests": 110,
+    "gained_pages": 35,
+    "gained_subtests": 108,
+    "lost_pages": 0,
+    "lost_subtests": 0,
+    "evidence": ".agents/integrator-assist/evidence/final/results.json"
+  },
+  "remaining_module_clusters": [
+    "Root-dependent parse/instantiation error choice and fresh instantiation errors across different roots",
+    "Requested-module evaluation order for duplicated imports",
+    "Ambiguous star exports must be omitted from namespaces",
+    "Dynamic Function/eval source locator propagation"
+  ],
+  "language_gate": "Fresh whole-language before/after underway on fixed7e3 dependency; no final language zero-loss claim in this checkpoint"
+}
