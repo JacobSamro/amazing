@@ -312,29 +312,61 @@ fn split_and_unquote(args: &str) -> Vec<Option<String>> {
     parts
 }
 
+/// Evaluate only quoted literal chains, never arbitrary JavaScript expressions.
 fn unquote(text: &str) -> Option<String> {
-    let bytes = text.as_bytes();
-    if bytes.len() < 2 {
-        return None;
-    }
-    let quote = bytes[0];
-    if (quote != b'\'' && quote != b'"') || bytes[bytes.len() - 1] != quote {
-        return None;
-    }
-    let inner = &text[1..text.len() - 1];
-    let mut out = String::with_capacity(inner.len());
-    let mut chars = inner.chars();
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            match chars.next() {
-                Some('n') => out.push('\n'),
-                Some('t') => out.push('\t'),
-                Some(escaped) => out.push(escaped),
-                None => {}
+    let mut rest = text.trim();
+    let mut out = String::new();
+    loop {
+        let quote = rest.chars().next()?;
+        if !matches!(quote, '\'' | '"') {
+            return None;
+        }
+        let mut chars = rest.char_indices().skip(1);
+        let end = loop {
+            let (index, ch) = chars.next()?;
+            if ch == quote {
+                break index + ch.len_utf8();
             }
-        } else {
-            out.push(ch);
+            if ch == '\\' {
+                let (_, escaped) = chars.next()?;
+                match escaped {
+                    'n' => out.push('\n'),
+                    't' => out.push('\t'),
+                    'r' => out.push('\r'),
+                    '\n' => {}
+                    '\r' => {}
+                    _ => out.push(escaped),
+                }
+            } else {
+                out.push(ch);
+            }
+        };
+        rest = rest[end..].trim();
+        if rest.is_empty() {
+            return Some(out);
+        }
+        rest = rest.strip_prefix('+')?.trim_start();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn literal_chains_preserve_quotes_and_skip_dynamic_expressions() {
+        assert_eq!(
+            unquote("'small-caps ' +\n \"stylistic(Foo)\" + ' ruby'"),
+            Some("small-caps stylistic(Foo) ruby".into())
+        );
+        assert_eq!(unquote("'a\\\"b'"), Some("a\"b".into()));
+        for expression in [
+            "'a' + variable",
+            "'a' trailing'",
+            "'a' +",
+            "['a']",
+            "'unterminated",
+        ] {
+            assert_eq!(unquote(expression), None, "{expression}");
         }
     }
-    Some(out)
 }

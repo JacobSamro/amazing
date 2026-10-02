@@ -103,7 +103,7 @@ pub(crate) fn canonical(name: &str, css: &str) -> Option<String> {
             )
         }),
         "font-variant-alternates" => {
-            keyword("normal").or_else(|| valid_alternates(&t).then(|| serialize(&tokens)))
+            keyword("normal").or_else(|| canonical_alternates(&t))
         }
         "font-variation-settings" => {
             keyword("normal").or_else(|| valid_variation(&t).then(|| serialize(&tokens)))
@@ -124,7 +124,7 @@ fn grouped_keywords(words: Vec<String>, groups: &[&[&str]]) -> Option<String> {
         }
         seen |= 1 << group;
     }
-    Some(words.join(" "))
+    Some(groups.iter().filter_map(|group| words.iter().find(|word| group.contains(&word.as_str()))).cloned().collect::<Vec<_>>().join(" "))
 }
 
 fn valid_variation(t: &[&Token]) -> bool {
@@ -189,7 +189,7 @@ fn valid_alternates(t: &[&Token]) -> bool {
             pos += 1;
             let mut count = 0;
             loop {
-                if !matches!(t.get(pos), Some(Token::Ident(_))) {
+                if !matches!(t.get(pos), Some(Token::Ident(name)) if !matches!(name.to_ascii_lowercase().as_str(), "initial" | "inherit" | "unset" | "revert" | "revert-layer" | "default")) {
                     return false;
                 }
                 count += 1;
@@ -209,6 +209,35 @@ fn valid_alternates(t: &[&Token]) -> bool {
         }
     }
     true
+}
+
+fn canonical_alternates(t: &[&Token]) -> Option<String> {
+    if !valid_alternates(t) { return None; }
+    let mut parts: [Option<String>; 7] = std::array::from_fn(|_| None);
+    let mut position = 0;
+    while position < t.len() {
+        let start = position;
+        let (index, function) = match t[position] {
+            Token::Ident(_) => (1, false),
+            Token::Function(name) => (match name.to_ascii_lowercase().as_str() {
+                "stylistic" => 0, "styleset" => 2, "character-variant" => 3,
+                "swash" => 4, "ornaments" => 5, "annotation" => 6, _ => return None,
+            }, true),
+            _ => return None,
+        };
+        position += 1;
+        if function {
+            while !matches!(t[position], Token::CloseParen) { position += 1; }
+            position += 1;
+        }
+        let mut tokens: Vec<Token> = t[start..position].iter().map(|token| (*token).clone()).collect();
+        match &mut tokens[0] {
+            Token::Ident(name) | Token::Function(name) => *name = name.to_ascii_lowercase(),
+            _ => {},
+        }
+        parts[index] = Some(serialize(&tokens));
+    }
+    Some(parts.into_iter().flatten().collect::<Vec<_>>().join(" "))
 }
 
 pub(crate) fn expand_synthesis(value: &str) -> Option<Vec<(String, String)>> {

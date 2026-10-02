@@ -1,0 +1,50 @@
+{
+  "ticket": "CSS-40",
+  "base": "209bcc867a3fca80d5333e765371277305f2fa86",
+  "platform": "Boat Linux native /tmp source+target",
+  "renderer_sha256": "b0b5a218de8d81d423dac523cdee56f5c5a5d9410c194404e25671201e2888be",
+  "crate": 385,
+  "example_tests": 1,
+  "workspace": 3544,
+  "workspace_skipped": 17,
+  "doctests": 4,
+  "parsing": {
+    "before": 4105,
+    "after": 4126,
+    "total": 5126,
+    "non_literal_skipped": 169,
+    "gained": [
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"common-ligatures no-common-ligatures\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"contextual no-contextual\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"diagonal-fractions stacked-fractions\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"discretionary-ligatures no-discretionary-ligatures\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"full-width proportional-width\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"historical-ligatures no-historical-ligatures\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"jis78 jis83\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"lining-nums oldstyle-nums\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"none normal\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"none small-caps\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"normal none\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"normal small-caps\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"ordinal slashed-zero ordinal\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"proportional-nums tabular-nums\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"ruby sub ruby\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"slashed-zero jis78 slashed-zero\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"small-caps all-small-caps\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"small-caps none\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"small-caps normal\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"stylistic(flowing) stylistic(flowing)\" unexpectedly parsed",
+      "FAIL /home/user/corpora/wpt/css/css-fonts/parsing/font-variant-invalid.html: invalid font-variant: \"sub super\" unexpectedly parsed"
+    ],
+    "lost": [],
+    "identical_runner": true
+  },
+  "render": {
+    "before_pass": 24,
+    "after_pass": 24,
+    "total": 32,
+    "gained": [],
+    "lost": [],
+    "unchanged": 32
+  }
+}

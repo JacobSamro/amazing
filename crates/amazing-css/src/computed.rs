@@ -35,6 +35,8 @@ pub(crate) use grid_values::{
 mod shadow_values;
 #[path = "text_policy.rs"]
 mod text_policy;
+#[path = "font_variant_policy.rs"]
+mod font_variant_policy;
 // CSS-29: `box-shadow`'s `<shadow>` list grammar moved out too, for the same
 // reason as `grid_values` above (kept this file under the 4,000-line policy
 // after the box-shadow-invalid.html fix). Only `valid_box_shadow` crosses
@@ -324,6 +326,7 @@ impl ComputedStyle {
             self.url_bases.remove(&longhand);
             self.props.insert(longhand, expanded);
         }
+        if property.starts_with("font-variant") || property == "font" { crate::font_variant::serialize(&mut self.props); }
         if property.starts_with("font-synthesis") { font_synthesis::serialize(&mut self.props); }
         if crate::text_properties::supported(property) {
             crate::text_properties::serialize(&mut self.props);
@@ -1129,6 +1132,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         return text_policy::expand(&property, value).unwrap_or_default();
     }
     if property == "word-wrap" { return expand_declaration("overflow-wrap", value); }
+    if property == "font-variant" { return font_variant_policy::expand(value).unwrap_or_default(); }
     if property == "font-synthesis" {
         return font_synthesis::expand(value).unwrap_or_default();
     }
@@ -2458,7 +2462,7 @@ pub(crate) fn canonical_font_feature_value(property: &str, value: &str) -> Optio
     }
     if property == "font-variant-ligatures" {
         let mut seen = [false; 4];
-        let mut result = Vec::new();
+        let mut result: [Option<String>; 4] = std::array::from_fn(|_| None);
         for token in significant {
             let Token::Ident(name) = token else { return None };
             let name = name.to_ascii_lowercase();
@@ -2471,9 +2475,9 @@ pub(crate) fn canonical_font_feature_value(property: &str, value: &str) -> Optio
             };
             if seen[category] { return None; }
             seen[category] = true;
-            result.push(name);
+            result[category] = Some(name);
         }
-        return (!result.is_empty()).then(|| result.join(" "));
+        return seen.iter().any(|value| *value).then(|| result.into_iter().flatten().collect::<Vec<_>>().join(" "));
     }
     if property != "font-feature-settings" { return None; }
     let mut result = Vec::new();
@@ -2748,6 +2752,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
     contain_intrinsic::resolve_lengths(&mut style.props, style.root_font_px);
     individual_transforms::resolve(&mut style.props, style.root_font_px);
     font_synthesis::serialize(&mut style.props);
+    crate::font_variant::serialize(&mut style.props);
     crate::text_properties::serialize(&mut style.props);
     crate::font_size_adjust::resolve_css_math(&mut style.props, style.root_font_px);
     style.resolve_relative_colors();
@@ -3121,6 +3126,7 @@ fn deferred_inner<'a>(value: &'a str, function: &str) -> Option<&'a str> {
 }
 
 fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()> {
+    if let Some(resolved) = font_variant_policy::resolve_deferred(property, value) { return resolved; }
     if let Some(resolved) = text_policy::resolve_deferred(property, value) { return resolved; }
     if let Some(resolved) = font_synthesis::resolve_deferred(value) { return resolved; }
     if let Some(resolved) = contain_intrinsic::resolve_deferred(value) { return resolved; }

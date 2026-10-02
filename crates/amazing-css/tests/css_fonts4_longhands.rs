@@ -18,7 +18,7 @@ fn fonts4_longhands_accept_and_inherit() {
             "oldstyle-nums tabular-nums slashed-zero",
         ),
         ("font-variant-east-asian", "jis04 full-width ruby"),
-        ("font-variant-alternates", "historical-forms stylistic(alt)"),
+        ("font-variant-alternates", "stylistic(alt) historical-forms"),
         ("font-variant-position", "super"),
         ("font-variant-emoji", "text"),
         ("font-synthesis-weight", "none"),
