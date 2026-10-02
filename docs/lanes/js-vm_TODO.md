@@ -750,3 +750,79 @@ Overall, from the first comparable measurement (`59b19e9d`): **2729 → 525** fa
 - Workspace nextest 3493/3493 (17 skipped); workspace doctests 4 passed, 0 failed (31 crates).
 - The measurement hook is removed (`135efe46`); `interp_async.rs` and `interp_coroutine.rs` are
   byte-identical to their JSVM-9 versions.
+
+## JSVM-11: resumable destructuring and explicit resource management
+
+Fixed base: `2eb1229a`. No shared interpreter files or dependency changes; the
+implementation adapts the VM's own instructions and reuses its existing
+interpreter value/property/iterator helpers. No upstream code was copied.
+
+- Declaration and assignment patterns lower recursively into instructions.
+  Pattern iterators live in the heap frame; default expressions, computed keys
+  and assignment targets can suspend without an OS-thread coroutine. Protected
+  finally regions close partially consumed iterators on return/throw and preserve
+  an original throw over an IteratorClose error. Rest consumes remaining values;
+  object rest records converted excluded keys, including symbols.
+  Assignment references resolve before the iterator/property read; ordinary
+  assignment's legacy function-name inference is excluded from pattern stores.
+  Elisions step without observing the result's value getter.
+- Suspending loop heads bind in fresh lexical scopes. Lexical right-hand sides
+  use temporary TDZ environments, and native patterns reserve all their bound
+  names before initialization. Catch patterns use the same native binder.
+- Using declarations capture the method at declaration time into frame-owned
+  resource slots. Scope exit, break, continue, return and throw route through the
+  existing VM finally machinery and dispose in reverse declaration order. Loop
+  resource heads dispose per iteration; C-style for-head resources dispose when
+  the loop exits; switch cases share a resource scope.
+- Async disposal awaits on the VM frame and records rejection before proceeding
+  to older resources. Multiple errors form SuppressedError chains in disposal
+  order. The async hint is kept independently of the resolved method: synchronous
+  fallbacks ignore their result, nullish async resources coalesce the required
+  await, and noncallable disposal methods reject at capture time. A synchronous
+  fallback that throws produces an awaited rejection before older resources run.
+- `AMAZING_JS_VM_COMPILE_LOG=<path>` optionally records actual runtime async and
+  generator compilation attempts, one append-only line (`ok` or rejection
+  reason) per attempt. It is disabled by default; Test262 subprocesses can share
+  one log to rank the remaining coroutine fallback clusters.
+
+### Measured gate (Boat, fixed base `2eb1229a`)
+
+- Workspace nextest **3518/3518 passed**, 17 skipped; workspace doctests **4 passed**.
+- Full pinned Test262, 53872 files, at 10 seconds: **49701 passed** versus base
+  49679, 28 gained and six deadline-only losses. Rechecking the whole URI and
+  DST clusters at 60 seconds recovered all six and four additional deadline
+  passes. Combined classifications: **49711 passed, 32 gained, zero lost**;
+  28 gains are native semantics and four are deadline recovery.
+- The last correction translates a throwing synchronous disposal fallback into
+  an awaited rejection. After it, workspace/doctests and the whole `language/`
+  selection (24572 nonfixture files, 23304 passed) plus explicit-resource-management
+  staging (53 files, 51 passed) passed their zero-loss comparisons. Every affected
+  classification matched the full run taken before that correction.
+- Runtime generator/async compile attempts: **27838 compiled / 28067 attempts**;
+  **229 fallbacks** (historical JSVM-10: 525). Remaining reasons: parameter direct
+  eval 128, spread 56, expression kind 14, yield 11, statement kind 10, class
+  field/static block 8, member access 2. Using, suspending loop binding,
+  assignment-target and binding-pattern rejection categories are gone.
+- 5000 suspended async bodies with `using` completed in **0.101 seconds**, peak
+  **one thread**, 73592 KiB RSS. JSVM-10's same using-body shape retained 5002
+  threads. This probe uses the ordinary runtime backend, with no forced VM flag.
+- Full Unicode `regExpUtils.js` buildString: tree walker completes in **88.538s**;
+  forced VM compilation reaches its instruction limit in **30.886s**. Ordinary
+  VM adoption needs a fuel/performance follow-up before claiming Unicode gains.
+
+Compact durable evidence: [js-vm11_evidence.json](js-vm11_evidence.json). Parameter
+initialization remains on the tree walker; direct eval inside parameter
+initializers remains a deliberate compiler fallback. Plain identifier loop heads
+retain the existing single-step binder; all declaration and assignment patterns
+use the native lowering.
+
+Next parameter-eval follow-up: preserve call-time generator
+FunctionDeclarationInstantiation before removing the parameter probe's direct
+eval guard. The tree-walker path eagerly hoists and checks body lexical names
+against bindings introduced by parameter eval. The VM currently prepares its
+frame at the first resume, so merely accepting those defaults would postpone a
+required redeclaration SyntaxError until `.next()`. Carry the lexical-name check
+and eager environment preparation in compiled-function metadata first.
+
+Specification references: [destructuring assignment](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-destructuring-assignment)
+and [DisposeResources](https://tc39.es/ecma262/multipage/abstract-operations.html#sec-disposeresources).

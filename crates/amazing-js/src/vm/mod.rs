@@ -5,6 +5,8 @@
 mod async_delegate;
 mod compiler;
 mod fast_path;
+mod resources;
+mod patterns;
 #[cfg(test)]
 mod tests;
 
@@ -65,6 +67,7 @@ enum Condition {
     Truthy,
     Falsy,
     Nullish,
+    Undefined,
 }
 
 #[derive(Debug, Clone)]
@@ -153,6 +156,8 @@ enum Instruction {
     GetMember(Register, Register, KeyOperand),
     ResolveMember(usize, Register, Register, KeyOperand),
     StoreReference(usize, Register),
+    StorePatternReference(usize, Register),
+    ResolveMemberWrite(usize, Register, KeyOperand),
     NewObject(Register),
     SetObjectProperty(Register, KeyOperand, Register),
     /// A non-computed literal `__proto__: value` property definition sets
@@ -180,6 +185,8 @@ enum Instruction {
     CaptureSpread(usize, Register),
     TemplateAppend(Register, Vec<u16>, Option<Register>),
     Declare(String, Register, VarKind),
+    ReserveBinding(String, bool),
+    NamedEvaluation(Register, Rc<crate::ast::Expr>, String),
     Unary(Register, UnOp, Register),
     Binary(Register, BinOp, Register, Register),
     Move(Register, Register),
@@ -240,6 +247,19 @@ enum Instruction {
     /// string), `done` set once the key chain is exhausted.
     ForInNext(Register, Register, usize),
     BindFor(ForLeft, Register),
+    PatternStart(usize, Register),
+    PatternStep(Register, usize),
+    PatternSkip(usize),
+    PatternRest(Register, usize),
+    PatternClose(usize),
+    ObjectRest(Register, Register, Vec<KeyOperand>),
+    ResourceStart(usize),
+    ResourceCapture(usize, Register, bool),
+    ResourceBeginDispose(usize),
+    ResourceNext(Register, Register, Register, usize),
+    ResourceError(usize, Register),
+    ResourceFinish(usize),
+    EnterCatchValue(Register),
     /// Private field read (JSVM-10): `#x` resolves lexically through the
     /// active PrivateEnvironment chain at *runtime* (`env.resolve_private`),
     /// not at compile time -- a private name closes over whichever class
@@ -265,6 +285,7 @@ enum Instruction {
     /// never needs to suspend; the enclosing body stays on the VM instead of
     /// falling back to a coroutine thread.
     TreeEval(Register, Rc<crate::ast::Expr>),
+    TreeEvalNamedClass(Register, Rc<crate::ast::Expr>, KeyOperand),
     /// Replace the innermost block scope with a fresh one holding copies of
     /// the named `let` bindings (a `for (let ...;;)` iteration boundary).
     CopyScope(Vec<String>),
@@ -313,6 +334,7 @@ pub struct Program {
     functions: Vec<HoistedFunction>,
     is_function: bool,
     async_iterator_slots: usize,
+    resource_slots: usize,
     for_in_slots: usize,
 }
 
@@ -340,6 +362,11 @@ struct VmFrame {
     /// (AsyncGeneratorUnwrapYieldResumption) before it is delivered.
     await_return: bool,
     async_iterators: Vec<Option<AsyncIteratorState>>,
+    pattern_iterators: Vec<Option<super::PatternIter>>,
+    resources: Vec<Vec<resources::Resource>>,
+    resource_errors: Vec<Option<Throw>>,
+    resource_needs_await: Vec<bool>,
+    resource_has_awaited: Vec<bool>,
     /// `for-in`'s enumeration state (JSVM-10): one slot per syntactic `for-in`
     /// in the compiled body, mirroring `async_iterators`'s per-slot shape.
     /// Reuses the tree walker's own `ForInState`/`next_for_in_key` (private
@@ -515,6 +542,11 @@ impl Program {
             await_dst: None,
             await_return: false,
             async_iterators: (0..self.async_iterator_slots).map(|_| None).collect(),
+            pattern_iterators: (0..self.async_iterator_slots).map(|_| None).collect(),
+            resources: (0..self.resource_slots).map(|_| Vec::new()).collect(),
+            resource_errors: (0..self.resource_slots).map(|_| None).collect(),
+            resource_needs_await: vec![false; self.resource_slots],
+            resource_has_awaited: vec![false; self.resource_slots],
             for_in_states: (0..self.for_in_slots).map(|_| None).collect(),
         });
         for name in &self.hoisted {
@@ -566,6 +598,11 @@ impl Program {
             await_dst,
             await_return: _,
             async_iterators,
+            pattern_iterators,
+            resources,
+            resource_errors,
+            resource_needs_await,
+            resource_has_awaited,
             for_in_states,
         } = frame.as_mut();
         let mut steps = 0;
@@ -744,19 +781,23 @@ impl Program {
                     Instruction::TreeEval(dst, expression) => {
                         registers[*dst] = i.eval_expr(expression, env)?;
                     }
+                    Instruction::TreeEvalNamedClass(dst, expression, key) => {
+                        let name = Interpreter::property_function_name(&key.resolve(&registers)?);
+                        registers[*dst] = i.eval_named_class_expr(expression, env, &name)?;
+                    }
                     Instruction::HasPrivateField(dst, base, name) => {
                         let private = env.resolve_private(name).ok_or_else(|| {
                             Throw::syntax_error(format!("private name #{name} is not defined"))
                         })?;
                         registers[*dst] = JsValue::Bool(super::private_field_has(&registers[*base], &private)?);
                     }
-                    Instruction::StoreReference(slot, src) => {
+                    Instruction::StoreReference(slot, src) | Instruction::StorePatternReference(slot, src) => {
                         let reference = references[*slot]
                             .take()
                             .ok_or_else(|| Throw::type_error("invalid VM reference lifetime"))?;
                         let mut value = registers[*src].clone();
-                        if let Some(name) = reference_name(&reference) {
-                            i.infer_function_name(&mut value, &name);
+                        if matches!(op, Instruction::StoreReference(..)) {
+                            if let Some(name) = reference_name(&reference) { i.infer_function_name(&mut value, &name); }
                         }
                         match reference {
                             Reference::Property(receiver, key) => {
@@ -764,6 +805,9 @@ impl Program {
                             }
                             other => i.put_reference(other, value, &env)?,
                         }
+                    }
+                    Instruction::ResolveMemberWrite(slot, base, key) => {
+                        references[*slot] = Some(Reference::Property(registers[*base].clone(), key.resolve(registers)?));
                     }
                     Instruction::Update(dst, slot, old, op, prefix) => {
                         let reference = references[*slot]
@@ -889,6 +933,8 @@ impl Program {
                             )?;
                         }
                     },
+                    Instruction::ReserveBinding(name, mutable) => { env.declare_uninitialized(name, *mutable)?; }
+                    Instruction::NamedEvaluation(dst, expression, name) => { i.named_evaluation(expression, &mut registers[*dst], name); }
                     Instruction::Unary(dst, op, src) => {
                         registers[*dst] = i.unary_value(*op, registers[*src].clone())?;
                     }
@@ -906,6 +952,7 @@ impl Program {
                             Condition::Truthy => value.to_boolean(),
                             Condition::Falsy => !value.to_boolean(),
                             Condition::Nullish => value.is_null() || value.is_undefined(),
+                            Condition::Undefined => value.is_undefined(),
                         } {
                             *pc = *target;
                         }
@@ -1355,6 +1402,96 @@ impl Program {
                         scopes.push(previous);
                         *env = iteration;
                     }
+                    Instruction::PatternStart(slot, source) => {
+                        pattern_iterators[*slot] = Some(super::PatternIter::new(i, &registers[*source])?);
+                    }
+                    Instruction::PatternStep(dst, slot) => {
+                        registers[*dst] = pattern_iterators[*slot].as_mut().expect("pattern started")
+                            .step(i)?.unwrap_or(JsValue::Undefined);
+                    }
+                    Instruction::PatternSkip(slot) => {
+                        patterns::skip(i, pattern_iterators[*slot].as_mut().expect("pattern started"))?;
+                    }
+                    Instruction::PatternRest(dst, slot) => {
+                        let values = pattern_iterators[*slot].as_mut().expect("pattern started").collect_rest(i)?;
+                        registers[*dst] = super::array_values(i, values)?;
+                    }
+                    Instruction::PatternClose(slot) => {
+                        let closed = pattern_iterators[*slot].take().expect("pattern started").close(i);
+                        if !try_stack.last().is_some_and(|h| matches!(h.pending, Some(Abrupt::Throw(_)))) {
+                            closed?;
+                        }
+                    }
+                    Instruction::ObjectRest(dst, source, keys) => {
+                        let keys = keys.iter().map(|key| key.resolve(registers)).collect::<Result<Vec<_>, _>>()?;
+                        registers[*dst] = i.object_rest(&registers[*source], &keys)?;
+                    }
+                    Instruction::ResourceStart(slot) => {
+                        resources[*slot].clear();
+                        resource_errors[*slot] = None;
+                        resource_needs_await[*slot] = false;
+                        resource_has_awaited[*slot] = false;
+                    }
+                    Instruction::ResourceCapture(slot, source, is_async) => {
+                        let value = &registers[*source];
+                        if let Some(resource) = resources::capture(i, value.clone(), *is_async)? { resources[*slot].push(resource); }
+                    }
+                    Instruction::ResourceBeginDispose(slot) => {
+                        resource_errors[*slot] = try_stack.last().and_then(|handler| match &handler.pending {
+                            Some(Abrupt::Throw(error)) => Some(i.normalize_throw(error.clone())),
+                            _ => None,
+                        });
+                    }
+                    Instruction::ResourceNext(dst, awaited, done, slot) => {
+                        registers[*done] = JsValue::Bool(resources[*slot].is_empty());
+                        registers[*awaited] = JsValue::Bool(false);
+                        registers[*dst] = JsValue::Undefined;
+                        if let Some(resource) = resources[*slot].pop() {
+                            if resource.method.is_undefined() {
+                                resource_needs_await[*slot] = true;
+                            } else if !resource.await_result && resource_needs_await[*slot] && !resource_has_awaited[*slot] {
+                                // Null async resources coalesce into one await before
+                                // the next synchronous disposer, or at scope end.
+                                resources[*slot].push(resource);
+                                resource_needs_await[*slot] = false;
+                                registers[*awaited] = JsValue::Bool(true);
+                            } else {
+                                match i.call_value(&resource.method, resource.value, Vec::new()) {
+                                    Ok(value) => {
+                                        registers[*dst] = if resource.use_result { value } else { JsValue::Undefined };
+                                        registers[*awaited] = JsValue::Bool(resource.await_result);
+                                        resource_has_awaited[*slot] |= resource.await_result;
+                                    }
+                                    Err(error) if resource.await_result && !resource.use_result => {
+                                        // GetDisposeMethod's async wrapper translates a
+                                        // synchronous disposer throw into a rejected
+                                        // promise, so older resources wait for it too.
+                                        let fate = rejection(i, error.0);
+                                        registers[*dst] = new_promise(i, fate);
+                                        registers[*awaited] = JsValue::Bool(true);
+                                        resource_has_awaited[*slot] = true;
+                                    }
+                                    Err(error) => resource_error(i, &mut resource_errors[*slot], error),
+                                }
+                            }
+                        } else if resource_needs_await[*slot] && !resource_has_awaited[*slot] {
+                            resource_has_awaited[*slot] = true;
+                            registers[*done] = JsValue::Bool(false);
+                            registers[*awaited] = JsValue::Bool(true);
+                        }
+                    }
+                    Instruction::ResourceError(slot, source) => {
+                        resource_error(i, &mut resource_errors[*slot], Throw(registers[*source].clone()));
+                    }
+                    Instruction::ResourceFinish(slot) => {
+                        if let Some(error) = resource_errors[*slot].take() { return Err(error); }
+                    }
+                    Instruction::EnterCatchValue(dst) => {
+                        let handler = try_stack.last_mut().ok_or_else(|| Throw::type_error("invalid resource catch"))?;
+                        registers[*dst] = handler.caught.take().ok_or_else(|| Throw::type_error("missing disposal error"))?;
+                        scopes.push(env.clone());
+                        *env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+                    }
                 }
                 Ok(None)
             })();
@@ -1405,6 +1542,14 @@ fn leave_scopes_to(scopes: &mut Vec<EnvHandle>, env: &mut EnvHandle, depth: usiz
         *env = scopes[depth].clone();
         scopes.truncate(depth);
     }
+}
+
+fn resource_error(i: &mut Interpreter, pending: &mut Option<Throw>, error: Throw) {
+    let error = i.normalize_throw(error);
+    *pending = Some(match pending.take() {
+        Some(previous) => Throw(i.make_suppressed_error(error.0, previous.0)),
+        None => error,
+    });
 }
 
 /// Continue a return or throw through active handlers. An instruction fuel

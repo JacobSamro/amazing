@@ -378,7 +378,7 @@ fn jsvm10_private_fields_and_methods_in_generator_and_async_bodies_match() {
 }
 
 #[test]
-fn jsvm10_suspending_for_heads_and_using_declarations_stay_off_the_vm() {
+fn jsvm11_suspending_for_heads_and_using_declarations_compile() {
     for source in [
         "function* g() { var x; for ([x = yield] of [[]]) {} }",
         "function* g() { var x; for ({a: x = yield} of [{}]) {} }",
@@ -395,7 +395,7 @@ fn jsvm10_suspending_for_heads_and_using_declarations_stay_off_the_vm() {
             crate::ast::StmtKind::Function(function) => function,
             other => panic!("expected function: {other:?}"),
         };
-        assert!(compile_function_item(function, program.body[0].span, false).is_err(), "{source}");
+        assert!(compile_function_item(function, program.body[0].span, false).is_ok(), "{source}");
     }
     // Plain destructuring heads without a suspension point still compile.
     for source in [
@@ -411,6 +411,106 @@ fn jsvm10_suspending_for_heads_and_using_declarations_stay_off_the_vm() {
         };
         assert!(compile_function_item(function, program.body[0].span, false).is_ok(), "{source}");
     }
+}
+
+#[test]
+fn jsvm11_destructuring_preserves_iterator_across_yield_and_return() {
+    let source = r#"
+        var log = '', x;
+        var values = {[Symbol.iterator]() { return {
+            next() { log += 'n'; return {done:false, value:undefined}; },
+            return() { log += 'c'; return {}; }
+        }; }};
+        function* g() { for ([x = yield 'default'] of [values]) { log += x; } }
+        var it = g(); var first = it.next().value;
+        var before = log; it.return(9); var after = log;
+        first + ':' + before + ':' + after;
+    "#;
+    let result = Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(result, JsValue::str("default:n:nc"));
+    let source = "function* g(){ let [x = yield 1, ...rest] = [undefined, 3, 4]; yield x + rest[1]; } var it=g(); it.next(); it.next(38).value;";
+    assert_eq!(Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap(), JsValue::num(42.0));
+    let source = r#"
+        var log='', o={};
+        var iterable={[Symbol.iterator](){return {
+            next(){log+='next;'; return {done:false,value:9}},
+            return(){log+='close;';return {}}
+        }}};
+        function* g(){[o[yield 'key']] = iterable;}
+        var it=g(); it.next(); var before=log; it.next('x');
+        before+':'+log+':'+o.x;
+    "#;
+    assert_eq!(Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap(), JsValue::str(":next;close;:9"));
+    let source = r#"
+        var touched=0;
+        var iterable={[Symbol.iterator](){return {
+            next(){return {done:false,get value(){touched++;throw 1}}},
+            return(){return {}}
+        }}};
+        let [,]=iterable;
+        var f; [f]=[function(){}];
+        touched+':'+f.name;
+    "#;
+    assert_eq!(Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap(), JsValue::str("0:"));
+}
+
+#[test]
+fn jsvm11_resource_disposal_unwinds_and_suppresses_errors() {
+    for source in [
+        "var out=''; function f(){ using a = {[Symbol.dispose](){out+='a'}}; using b = {[Symbol.dispose](){out+='b'}}; return 1; } f(); out;",
+        "var out=''; for(using x of [{[Symbol.dispose](){out+='a'}}, {[Symbol.dispose](){out+='b'}}]) {out+='x'; continue;} out;",
+        "var out=''; function* g(){using x={[Symbol.dispose](){out+='d'}}; yield 1;} var it=g(); it.next(); it.return(); out;",
+    ] { differential(source, &["out"]); }
+    let source = "var out=''; try {using x={[Symbol.dispose](){throw 'dispose'}}; throw 'body';} catch(e){out=e.error+':'+e.suppressed;} out;";
+    assert_eq!(Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap(), JsValue::str("dispose:body"));
+}
+
+#[test]
+fn jsvm11_async_disposal_parks_until_settlement_and_runs_remaining_resources() {
+    let source = r#"
+        var log='', resolve;
+        var pending=new Promise(function(r){resolve=r});
+        async function work(){
+            using a={[Symbol.dispose](){log+='a'}};
+            await using b={[Symbol.asyncDispose](){log+='b'; return pending;}};
+            return 42;
+        }
+        var result=0;
+        work().then(function(v){result=v});
+        var before=log;
+        resolve();
+        before+':'+log+':'+result;
+    "#;
+    let mut interpreter = Interpreter::new();
+    interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(interpreter.global_env.resolve("before"), Some(JsValue::str("b")));
+    assert_eq!(interpreter.global_env.resolve("log"), Some(JsValue::str("ba")));
+    assert_eq!(interpreter.global_env.resolve("result"), Some(JsValue::num(42.0)));
+    let source = r#"
+        var errors='';
+        async function f(){
+            using a={[Symbol.dispose](){throw 'a'}};
+            await using b={[Symbol.asyncDispose](){return Promise.reject('b')}};
+            throw 'body';
+        }
+        f().catch(function(e){errors=e.error+':'+e.suppressed.error+':'+e.suppressed.suppressed});
+    "#;
+    let mut interpreter = Interpreter::new();
+    interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(interpreter.global_env.resolve("errors"), Some(JsValue::str("a:b:body")));
+    let source = r#"
+        var log='';
+        async function f(){
+            using a={[Symbol.dispose](){log+='a'}};
+            await using b={[Symbol.dispose](){log+='b';throw 'error'}};
+        }
+        f().catch(function(e){log+=e});
+        var before=log;
+    "#;
+    let mut interpreter = Interpreter::new();
+    interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(interpreter.global_env.resolve("before"), Some(JsValue::str("b")));
+    assert_eq!(interpreter.global_env.resolve("log"), Some(JsValue::str("baerror")));
 }
 
 #[test]
@@ -439,14 +539,13 @@ fn jsvm10_suspension_free_unsupported_expressions_run_through_the_tree_walker() 
     ] {
         differential(source, &["out", "a"]);
     }
-    // A yield inside an otherwise-unsupported expression still cannot be
-    // delegated: the tree walker has no way to suspend there.
+    // Assignment patterns containing yield now compile to resumable instructions.
     let program = parse_script("function* g() { var a; [a] = [yield 1]; }").unwrap();
     let function = match &program.body[0].kind {
         crate::ast::StmtKind::Function(function) => function,
         other => panic!("expected function: {other:?}"),
     };
-    assert!(compile_function_item(function, program.body[0].span, false).is_err());
+    assert!(compile_function_item(function, program.body[0].span, false).is_ok());
 }
 
 #[test]
@@ -476,10 +575,6 @@ fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
         // compiler still declines, keeping this test's actual point (atomic
         // whole-program rejection before hoisting or side effects) real.
         "changed = 1; with ({}) { 1; }",
-        "changed = 1; try { throw [1]; } catch ([a]) { a; }",
-        "changed = 1; let [...a] = [1];",
-        "changed = 1; let [a] = [2];",
-        "changed = 1; var [b] = [2];",
     ] {
         let mut interpreter = Interpreter::new();
         let result = interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode);
@@ -1337,6 +1432,3 @@ fn class_static_methods_and_accessors_install_on_the_constructor() {
     let result = Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
     assert_eq!(result, JsValue::str("undefined:function:2:3:42:7:base"));
 }
-
-
-

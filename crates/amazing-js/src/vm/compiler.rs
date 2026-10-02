@@ -9,11 +9,31 @@ use crate::tokens::Span;
 use crate::value::{JsString, JsValue};
 use std::rc::Rc;
 
+#[path = "compiler_patterns.rs"]
+mod patterns;
+use patterns::pattern_target;
+#[path = "compiler_resources.rs"]
+mod resources;
+
 const MAX_REGISTERS: usize = 65_536;
 const MAX_INSTRUCTIONS: usize = 262_144;
 // Keep recursive compilation below the Windows test host's main-thread stack.
 // Deeper valid syntax falls back atomically before instruction execution.
 const MAX_DEPTH: usize = 64;
+
+/// Opt-in measurement of actual runtime generator/async compilation attempts.
+/// Append-only output lets Test262 host subprocesses share a single log.
+fn record_compile_attempt(result: &Result<FunctionCode, CompileError>) {
+    if let Some(path) = std::env::var_os("AMAZING_JS_VM_COMPILE_LOG") {
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let reason = match result { Ok(_) => "ok", Err(error) => error.message };
+            // Format before appending so subprocesses cannot interleave the
+            // reason and newline as separate writes.
+            let _ = file.write_all(format!("{reason}\n").as_bytes());
+        }
+    }
+}
 
 fn has_use_strict_directive(statements: &[Stmt]) -> bool {
     statements.iter()
@@ -30,9 +50,7 @@ pub fn compile(ast: &ast::Program, is_module: bool) -> Result<Program, CompileEr
     let mut c = Compiler::new(false);
     c.strict = is_module || has_use_strict_directive(&ast.body);
     c.hoist_functions(&ast.body)?;
-    for statement in &ast.body {
-        c.statement(statement)?;
-    }
+    c.statements(&ast.body, ast.span)?;
     if c.program.code.len() > MAX_INSTRUCTIONS {
         return Err(c.error(ast.span, "instruction limit"));
     }
@@ -51,13 +69,15 @@ pub fn compile(ast: &ast::Program, is_module: bool) -> Result<Program, CompileEr
 pub(crate) fn compile_class_method(method: &ast::ClassMethod, strict: bool) -> Result<FunctionCode, CompileError> {
     let mut compiler = Compiler::new(false);
     compiler.strict = strict;
-    let mut code = compiler.compile_function(&ast::FunctionItem {
+    let result = compiler.compile_function(&ast::FunctionItem {
         name: None,
         params: method.params.clone(),
         body: method.body.clone(),
         is_async: method.is_async,
         is_generator: method.is_generator,
-    }, method.span)?;
+    }, method.span);
+    if method.is_async || method.is_generator { record_compile_attempt(&result); }
+    let mut code = result?;
     Rc::get_mut(&mut code.0).expect("new method code").is_method = true;
     Ok(code)
 }
@@ -67,7 +87,9 @@ pub(crate) fn compile_function_item(function: &ast::FunctionItem, span: Span, st
 {
     let mut compiler = Compiler::new(false);
     compiler.strict = strict;
-    compiler.compile_function(function, span)
+    let result = compiler.compile_function(function, span);
+    if function.is_async || function.is_generator { record_compile_attempt(&result); }
+    result
 }
 
 /// Compile an async AST body whose parameters have already been bound by the
@@ -79,13 +101,15 @@ pub(crate) fn compile_function_item(function: &ast::FunctionItem, span: Span, st
 pub(crate) fn compile_async_body(body: &ast::Block, strict: bool) -> Result<FunctionCode, CompileError> {
     let mut compiler = Compiler::new(false);
     compiler.strict = strict;
-    compiler.compile_function(&ast::FunctionItem {
+    let result = compiler.compile_function(&ast::FunctionItem {
         name: None,
         params: vec![],
         body: body.clone(),
         is_async: true,
         is_generator: false,
-    }, body.span)
+    }, body.span);
+    record_compile_attempt(&result);
+    result
 }
 
 /// Compile a generator AST body whose parameters have already been bound by
@@ -153,6 +177,7 @@ struct Compiler {
     /// the tree walker's parameter scope, where a direct eval's var and
     /// `arguments` scoping must not be delegated piecemeal.
     parameter_probe: bool,
+    resource_stack: Vec<usize>,
 }
 
 /// One entry per enclosing loop, `switch`, or plain labeled statement a
@@ -183,6 +208,7 @@ impl Compiler {
                 functions: vec![],
                 is_function,
                 async_iterator_slots: 0,
+                resource_slots: 0,
                 for_in_slots: 0,
             },
             depth: 0,
@@ -193,6 +219,7 @@ impl Compiler {
             pending_labels: Vec::new(),
             scope_depth: 0,
             parameter_probe: false,
+            resource_stack: Vec::new(),
         }
     }
 
@@ -288,9 +315,7 @@ impl Compiler {
         child.is_generator = function.is_generator;
         child.is_async = function.is_async;
         child.hoist_functions(&function.body.body)?;
-        for statement in &function.body.body {
-            child.statement(statement)?;
-        }
+        child.statements(&function.body.body, function.body.span)?;
         if child.program.code.len() > MAX_INSTRUCTIONS {
             return Err(self.error(span, "instruction limit"));
         }
@@ -330,9 +355,7 @@ impl Compiler {
             }
             ast::ArrowBody::Block(block) => {
                 child.hoist_functions(&block.body)?;
-                for statement in &block.body {
-                    child.statement(statement)?;
-                }
+                child.statements(&block.body, block.span)?;
             }
         }
         Ok(FunctionCode(Rc::new(CompiledFunction {
@@ -507,7 +530,7 @@ impl Compiler {
     fn emit(&mut self, op: Instruction) -> usize {
         let index = self.program.code.len();
         match &op {
-            Instruction::EnterScope | Instruction::EnterCatch(_) | Instruction::BindFor(..) => self.scope_depth += 1,
+            Instruction::EnterScope | Instruction::EnterCatch(_) | Instruction::EnterCatchValue(_) | Instruction::BindFor(..) => self.scope_depth += 1,
             Instruction::LeaveScope => self.scope_depth -= 1,
             _ => {}
         }
@@ -532,7 +555,13 @@ impl Compiler {
 
     fn statement(&mut self, statement: &Stmt) -> Result<(), CompileError> {
         self.enter(statement.span)?;
+        let resources = matches!(&statement.kind, StmtKind::For { init: Some(ast::ForInit::Decl(d)), .. } if d.resource_kind.is_some())
+            .then(|| self.begin_resources());
         let result = self.statement_inner(statement);
+        let result = result.and_then(|()| match resources {
+            Some((slot, handler)) => self.end_resources(slot, handler, statement.span),
+            None => Ok(()),
+        });
         self.depth -= 1;
         result
     }
@@ -545,19 +574,12 @@ impl Compiler {
                 self.emit(Instruction::Complete(value));
             }
             StmtKind::Var(declaration) => {
-                if declaration.resource_kind.is_some() {
-                    // The VM has no disposal; the tree walker disposes.
-                    return Err(self.error(statement.span, "using declaration"));
-                }
                 for binding in &declaration.decls {
                     if self.program.code.len() >= MAX_INSTRUCTIONS {
                         return Err(self.error(binding.span, "instruction limit"));
                     }
-                    let Binding::Ident(name) = &binding.binding else {
-                        return Err(self.error(binding.span, "binding pattern"));
-                    };
                     if declaration.kind == VarKind::Var {
-                        self.program.hoisted.push(name.name.clone());
+                        self.hoist_pattern(&binding.binding);
                         if binding.init.is_none() {
                             continue;
                         }
@@ -565,15 +587,24 @@ impl Compiler {
                     if declaration.kind == VarKind::Const && binding.init.is_none() {
                         return Err(self.error(binding.span, "const requires an initializer"));
                     }
+                    if declaration.kind != VarKind::Var && (declaration.resource_kind.is_some() || !matches!(binding.binding, Binding::Ident(_))) {
+                        self.reserve_pattern(&binding.binding, declaration.kind == VarKind::Let);
+                    }
                     let value = match &binding.init {
-                        Some(expression) => self.named_class_expression(expression, KeyOperand::Static(super::Interpreter::class_binding_name(&name.name)))?,
+                        Some(expression) => match &binding.binding {
+                            Binding::Ident(name) => self.named_class_expression(expression, KeyOperand::Static(super::Interpreter::class_binding_name(&name.name)))?,
+                            _ => self.expression(expression)?,
+                        },
                         None => 0, // Register zero is immutable undefined.
                     };
-                    self.emit(Instruction::Declare(
-                        name.name.clone(),
-                        value,
-                        declaration.kind,
-                    ));
+                    if let (Binding::Ident(name), Some(init)) = (&binding.binding, &binding.init) {
+                        self.emit(Instruction::NamedEvaluation(value, Rc::new(init.clone()), name.name.clone()));
+                    }
+                    if let Some(resource_kind) = declaration.resource_kind {
+                        let slot = *self.resource_stack.last().ok_or_else(|| self.error(binding.span, "unscoped using declaration"))?;
+                        self.emit(Instruction::ResourceCapture(slot, value, resource_kind == ast::ResourceKind::AwaitUsing));
+                    }
+                    self.binding_pattern(&binding.binding, value, declaration.kind, binding.span)?;
                 }
             }
             StmtKind::Class(class) => {
@@ -586,9 +617,7 @@ impl Compiler {
             StmtKind::Block(block) => {
                 self.emit(Instruction::Complete(0));
                 self.emit(Instruction::EnterScope);
-                for child in &block.body {
-                    self.statement(child)?;
-                }
+                self.statements(&block.body, block.span)?;
                 self.emit(Instruction::LeaveScope);
             }
             StmtKind::If { cond, then, els } => {
@@ -641,9 +670,6 @@ impl Compiler {
                 // scope; the break target is the closing `LeaveScope`.
                 let lexical = match init {
                     Some(ast::ForInit::Decl(declaration)) if declaration.kind != VarKind::Var => {
-                        if declaration.resource_kind.is_some() {
-                            return Err(self.error(statement.span, "lexical for binding"));
-                        }
                         Some(declaration)
                     }
                     _ => None,
@@ -709,7 +735,7 @@ impl Compiler {
                 let labels = std::mem::take(&mut self.pending_labels);
                 self.push_loop(labels, true);
                 self.emit(Instruction::Complete(0));
-                let iterable = self.expression(right)?;
+                let iterable = self.for_head_right(left, right)?;
                 let slot = self.program.async_iterator_slots;
                 self.program.async_iterator_slots += 1;
                 self.emit(Instruction::IteratorStart(slot, iterable));
@@ -722,10 +748,7 @@ impl Compiler {
                 let done_branch = self.emit(Instruction::Branch(done, Condition::Truthy, 0));
                 let value = self.register(statement.span)?;
                 self.emit(Instruction::AsyncIteratorValue(value, next));
-                self.check_for_left(left, statement.span)?;
-                self.emit(Instruction::BindFor(left.clone(), value));
-                self.statement(body)?;
-                self.emit(Instruction::LeaveScope);
+                self.for_iteration(left, value, body, statement.span)?;
                 self.emit(Instruction::Jump(start));
                 self.patch(done_branch);
                 self.emit(Instruction::TryNormal);
@@ -750,7 +773,7 @@ impl Compiler {
                 let labels = std::mem::take(&mut self.pending_labels);
                 self.push_loop(labels, true);
                 self.emit(Instruction::Complete(0));
-                let source = self.expression(right)?;
+                let source = self.for_head_right(left, right)?;
                 let slot = self.program.for_in_slots;
                 self.program.for_in_slots += 1;
                 self.emit(Instruction::ForInStart(slot, source));
@@ -759,10 +782,7 @@ impl Compiler {
                 let done = self.register(statement.span)?;
                 self.emit(Instruction::ForInNext(value, done, slot));
                 let end = self.emit(Instruction::Branch(done, Condition::Truthy, 0));
-                self.check_for_left(left, statement.span)?;
-                self.emit(Instruction::BindFor(left.clone(), value));
-                self.statement(body)?;
-                self.emit(Instruction::LeaveScope);
+                self.for_iteration(left, value, body, statement.span)?;
                 self.emit(Instruction::Jump(start));
                 self.patch(end);
                 let break_target = self.program.code.len();
@@ -772,7 +792,7 @@ impl Compiler {
                 let labels = std::mem::take(&mut self.pending_labels);
                 self.push_loop(labels, true);
                 self.emit(Instruction::Complete(0));
-                let iterable = self.expression(right)?;
+                let iterable = self.for_head_right(left, right)?;
                 let slot = self.program.async_iterator_slots;
                 self.program.async_iterator_slots += 1;
                 self.emit(Instruction::AsyncIteratorStart(slot, iterable));
@@ -789,10 +809,7 @@ impl Compiler {
                 self.emit(Instruction::AsyncIteratorValue(value, result));
                 let awaited = self.register(statement.span)?;
                 self.emit(Instruction::AsyncIteratorAwaitValue(awaited, slot, value));
-                self.check_for_left(left, statement.span)?;
-                self.emit(Instruction::BindFor(left.clone(), awaited));
-                self.statement(body)?;
-                self.emit(Instruction::LeaveScope);
+                self.for_iteration(left, awaited, body, statement.span)?;
                 self.emit(Instruction::Jump(start));
                 self.patch(done_branch);
                 self.emit(Instruction::TryNormal);
@@ -815,6 +832,9 @@ impl Compiler {
                 let labels = std::mem::take(&mut self.pending_labels);
                 self.push_loop(labels, false);
                 self.emit(Instruction::EnterScope);
+                let resources = cases.iter().flat_map(|case| &case.body)
+                    .any(|s| matches!(&s.kind, StmtKind::Var(d) if d.resource_kind.is_some()))
+                    .then(|| self.begin_resources());
                 // Test each `case` in source order (Falsy => fall through to
                 // the next test), first match wins; `default` (if any) has no
                 // test of its own and is handled as a final unconditional
@@ -864,10 +884,12 @@ impl Compiler {
                     self.patch_to(default_jump, body_starts[default_index]);
                 }
                 let _ = bodies_start;
+                let normal_exit = self.program.code.len();
+                if let Some((slot, handler)) = resources { self.end_resources(slot, handler, statement.span)?; }
                 self.emit(Instruction::LeaveScope);
                 let end = self.program.code.len();
                 if let Some(no_match_exit) = no_match_exit {
-                    self.patch_to(no_match_exit, end);
+                    self.patch_to(no_match_exit, normal_exit);
                 }
                 self.pop_loop(end, None);
             }
@@ -903,10 +925,6 @@ impl Compiler {
                 self.emit(Instruction::Throw(value));
             }
             StmtKind::Try(statement) => {
-                if statement.catch.as_ref().is_some_and(|catch|
-                    catch.binding.as_ref().is_some_and(|binding| !matches!(binding, Binding::Ident(_)))) {
-                    return Err(self.error(statement.block.span, "catch binding pattern"));
-                }
                 self.emit(Instruction::Complete(0));
                 let handler = self.emit(Instruction::PushTry {
                     catch: None,
@@ -914,20 +932,19 @@ impl Compiler {
                     end: 0,
                 });
                 self.emit(Instruction::EnterScope);
-                for child in &statement.block.body {
-                    self.statement(child)?;
-                }
+                self.statements(&statement.block.body, statement.block.span)?;
                 self.emit(Instruction::LeaveScope);
                 self.emit(Instruction::TryNormal);
 
                 let catch = if let Some(catch) = &statement.catch {
                     let start = self.program.code.len();
-                    self.emit(Instruction::EnterCatch(
-                        catch.param.as_ref().map(|param| param.name.clone()),
-                    ));
-                    for child in &catch.body.body {
-                        self.statement(child)?;
-                    }
+                    if let Some(binding) = &catch.binding {
+                        let value = self.register(catch.body.span)?;
+                        self.emit(Instruction::EnterCatchValue(value));
+                        self.reserve_pattern(binding, true);
+                        self.binding_pattern(binding, value, VarKind::Let, catch.body.span)?;
+                    } else { self.emit(Instruction::EnterCatch(None)); }
+                    self.statements(&catch.body.body, catch.body.span)?;
                     self.emit(Instruction::LeaveScope);
                     self.emit(Instruction::TryNormal);
                     Some(start)
@@ -938,9 +955,7 @@ impl Compiler {
                 let finally = if let Some(finally) = &statement.finally {
                     let start = self.program.code.len();
                     self.emit(Instruction::EnterScope);
-                    for child in &finally.body {
-                        self.statement(child)?;
-                    }
+                    self.statements(&finally.body, finally.span)?;
                     self.emit(Instruction::LeaveScope);
                     self.emit(Instruction::EndFinally);
                     Some(start)
@@ -986,6 +1001,11 @@ impl Compiler {
         match &expression.kind {
             ExprKind::Paren(inner) => self.named_class_expression(inner, name),
             ExprKind::Class(class) if class.name.is_none() => {
+                if class.members.iter().any(|member| matches!(member, ast::ClassMember::Field(_) | ast::ClassMember::StaticBlock(_))) && !may_suspend(expression) {
+                    let dst = self.register(expression.span)?;
+                    self.emit(Instruction::TreeEvalNamedClass(dst, Rc::new(expression.clone()), name));
+                    return Ok(dst);
+                }
                 let mut code = self.compile_class(class, expression.span)?;
                 code.inferred_name = Some(name);
                 let dst = self.register(expression.span)?;
@@ -1375,6 +1395,11 @@ impl Compiler {
                 target,
                 value,
             } => {
+                if pattern_target(target) {
+                    let value = self.expression(value)?;
+                    self.assignment_pattern(target, value)?;
+                    return Ok(value);
+                }
                 let slot = if let Some(name) = super::super::event_handler::identifier_name(target) {
                     let slot = self.program.references;
                     self.program.references += 1;
@@ -1508,28 +1533,6 @@ impl Compiler {
     /// value is converted with `ToPropertyKey` (which can itself run user
     /// code via `toString`/`valueOf`) -- the part the VM previously got
     /// backwards for compound assignment.
-    /// `BindFor` binds the head through the tree walker, which cannot
-    /// suspend: a `yield`/`await` inside the head pattern (a default, a
-    /// computed key, a target expression) must keep the whole body on the
-    /// coroutine. `using` heads need disposal the VM does not implement.
-    fn check_for_left(&self, left: &ast::ForLeft, span: Span) -> Result<(), CompileError> {
-        let suspending = self.is_generator || self.is_async;
-        match left {
-            ast::ForLeft::Decl(declaration) if declaration.resource_kind.is_some() => {
-                Err(self.error(span, "using declaration"))
-            }
-            ast::ForLeft::Decl(declaration)
-                if suspending && declaration.decls.iter().any(|d| binding_may_suspend(&d.binding)) =>
-            {
-                Err(self.error(span, "suspending for binding"))
-            }
-            ast::ForLeft::Target(target) if suspending && may_suspend(target) => {
-                Err(self.error(span, "suspending for binding"))
-            }
-            _ => Ok(()),
-        }
-    }
-
     fn member_key(
         &mut self,
         object: Register,
@@ -1625,18 +1628,6 @@ fn private_target(mut target: &Expr) -> Option<(&Expr, &ast::Ident)> {
 
 fn key_may_suspend(key: &ast::PropKey) -> bool {
     matches!(key, ast::PropKey::Computed(key) if may_suspend(key))
-}
-
-fn binding_may_suspend(binding: &Binding) -> bool {
-    match binding {
-        Binding::Ident(_) => false,
-        Binding::Array(items) => items.iter().flatten().any(|item| binding_may_suspend(item)),
-        Binding::Object(props) => props.iter().any(|(key, value)| {
-            matches!(key, ast::BindingKey::Computed(key) if may_suspend(key)) || binding_may_suspend(value)
-        }),
-        Binding::Rest(inner) => binding_may_suspend(inner),
-        Binding::Default(inner, value) => binding_may_suspend(inner) || may_suspend(value),
-    }
 }
 
 fn in_optional_chain(expression: &Expr) -> bool {
