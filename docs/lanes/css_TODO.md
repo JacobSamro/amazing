@@ -2575,3 +2575,36 @@ Full static sizing sweep 90/138 ->91/138, gained 1/lost 0: logical-001 now passe
 Corrected-harness parsing 3440/4805 ->3482/4805, gained 42/lost 0 by exact
 assertion identity, 169 nonliteral cases skipped. Evidence: css33/gate.json
 and before/after compact classifications under amazing-css/evidence.
+
+## CSS-34: individual transform properties
+
+Implemented CSS Transforms 2 §5 as one CSS-owned area: registered inherited-false
+`translate`, `rotate`, and `scale` longhands with `none` initial values; dimensional
+grammar checks before cascade ranking and after variable substitution; computed
+axis/angle/percentage/length serialization; distinct `none` versus identity values.
+Scale percentages become numbers without opacity clamping, redundant Y/Z defaults
+are omitted, reverse axis rotations negate the angle, and general/zero vectors
+retain their axis. Translation retains percentages and mixed linear calc values
+until box geometry is available, while resolving absolute/font/viewport lengths.
+Number/percentage/angle math uses the existing typed math parser; font-dependent
+scale `sign()` expressions resolve only when their metric is available. EOF
+function closure follows CSS Syntax recovery. Relative font metrics not provided
+by the CSS environment and piecewise percentage math remain symbolic.
+
+The fixed base is `a717bb9749a867628f92811b45abb435efde7769`. The corrected
+CSS-33 parsing runner is identical before and after. The full 14-selection parsing
+corpus gains 83 assertions with zero losses: 3482 → 3565 / 4805, across 498 files
+(169 nonliteral assertions excluded equally). Linux workspace: 3524 passes,
+17 skips, plus four doctests. Full css-transforms static reftests: 145 / 348
+before and after; all 348 classifications unchanged, zero losses. See
+`crates/amazing-css/evidence/css34/` for compact before/after render maps and exact
+gained assertions. Builds and tests use native `/tmp/amazing-source-css` and
+`/tmp/amazing-target-css` on Boat; retained source and outputs remain under HOME.
+
+Consumer boundary: layout/paint/compositor do not yet compose these individual
+properties into the rendered transformation matrix. Their owners must compose
+translate → rotate → scale before the existing transform list, and preserve the
+stacking/containing-block distinction between `none` and identity. Changes are
+conservatively classified Rebuild until that consumer path is adopted. Rendering
+parity here is a zero-loss gate, not a claim of newly rendered transforms.
+Spec: https://drafts.csswg.org/css-transforms-2/#individual-transforms.
