@@ -123,7 +123,7 @@ STOPPED = {"archived", "stopped"}
 # Only sandboxes named "amazing*" (the template's own name) belong to this fleet.
 # Everything else on the account is the user's and is never stopped, resized or
 # deleted from here (2026-09-26).
-MUTATING = {"stop", "resume", "delete", "exec"}
+MUTATING = {"stop", "resume", "delete", "exec", "extend"}
 
 
 def boat(*args: str, timeout: int = 180) -> dict:
@@ -296,6 +296,10 @@ def _ensure_locked(lane: str, size: str) -> str:
         boat("resume", sid, "--ttl", RUN_TTL_SECONDS, *extra, timeout=300)
         print(f"boat-lane: resumed {sid} for {lane}"
               + (f" as {size} (was {d.get('type')})" if extra else ""), file=sys.stderr)
+    elif d is not None and d.get("state") in ("provisioned", "cloning", "ready", "idle", "running"):
+        # A finite TTL counts from creation/resume, not from the last run.
+        # Renew at the start of work instead of letting a later gate expire.
+        boat("extend", sid, "--ttl", RUN_TTL_SECONDS)
     return sid
 
 

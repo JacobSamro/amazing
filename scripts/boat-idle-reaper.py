@@ -32,6 +32,8 @@ BOAT = os.path.expanduser("~/.ascii/bin/boat")
 KEEP = {"bx_rg6jga8q", "bx_p3hj37uf", "bx_9czp5hbk"}
 LIVE_STATES = {"provisioned", "cloning", "ready", "idle", "running"}
 LOAD_BUSY = 0.3
+BUSY_TTL_SECONDS = 7200
+RENEW_BEFORE_SECONDS = 600
 PROBE = (
     "cut -d' ' -f1 /proc/loadavg; "
     "pgrep -xc 'cargo|rustc|cargo-nextest|test262_host|amazing|amazing-shell|wpt_render_compare|cc|c\\+\\+|ld|ld.lld|clang|gcc' || true; "
@@ -53,7 +55,7 @@ def boat(*args: str, timeout: int = 60) -> dict | None:
             # --json goes right after the subcommand: after `exec <id> <cmd>`
             # it would be passed to the remote command, the probe would fail,
             # and every sandbox would count as busy (never stopped, 2026-09-26).
-            [BOAT, args[0], "--json", *args[1:]], capture_output=True, text=True, timeout=timeout
+            [BOAT, "--no-update", args[0], "--json", *args[1:]], capture_output=True, text=True, timeout=timeout
         ).stdout
     except subprocess.TimeoutExpired:
         return None
@@ -87,6 +89,15 @@ def managed_ids() -> set[str]:
 def running_sandboxes() -> list[dict]:
     listing = boat("list") or {}
     return [s for s in listing.get("sandboxes", []) if s.get("state") in LIVE_STATES]
+
+
+def expires_soon(sandbox: dict, now: float) -> bool:
+    value = sandbox.get("archiveAfter")
+    try:
+        expiry = datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except (AttributeError, TypeError, ValueError):
+        return False
+    return expiry - now <= RENEW_BEFORE_SECONDS
 
 
 def is_busy(sandbox_id: str) -> bool | None:
@@ -151,6 +162,12 @@ def main() -> int:
             busy = is_busy(sid)
             if busy is not False:
                 idle_since.pop(sid, None)
+                if busy is True and expires_soon(sb, now):
+                    log(f"EXTEND {sid}: active work, finite TTL {BUSY_TTL_SECONDS}s")
+                    if not args.dry_run:
+                        result = boat("extend", sid, "--ttl", str(BUSY_TTL_SECONDS))
+                        if not result or result.get("event") == "error":
+                            log(f"EXTEND failed {sid}; active run may expire")
                 continue
             # A busy pool never idles long enough to pick up a new size, so a
             # size change is applied in the first gap between runs: stop it now
