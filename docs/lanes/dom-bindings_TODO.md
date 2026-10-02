@@ -3169,3 +3169,18 @@ Caption cross-realm wrapper identity remains an externalJS gap. 65,534-row
 span-limits geometry fixture baseline timeout→candidate/recheckSIGKILL with
 no prior passing assertions; preserved honestly in evidence.
 Next: granted HTML serialization audit and whole HTMLBaseElement reflection.
+
+### HTML serialization and document context
+
+Fixed combinedbc9e8388; complete serialization8 baseline352pass23fail and314nodes
+12686pass293fail6err. Parent granted HTML algorithm audit plus explicit
+scripting-context DOM API and FragmentParser bool seam. Defaults no-context
+false, active root explicitlytrue, Document clonefalse, generation-safe reuse.
+Normal/shadow fragment parsing captures actual owner document bool; HTMLDOMParser
+parses Disabled. HTML owner initializes configured parser/iframe context.
+Attribute escaping, namespace names, UTF16raw data, CDATA/Text and PI ?> written
+in bulk. Meaningful native tests cover context and serialization semantics.
+Template contents appropriate inert owner-document model and full XML serializer
+are separate gaps; no guessed template bool or relaxed XML validity. Final Linux3641pass17skip/docs4; serialization352/23→372/3 (+20), nodes12686/293→12692/288 (+6), zero loss after whole322 unchanged-source recheck restored known XHR deadline assertion. Evidence: amazing-bindings/evidence/html-serialization.
+Queued parent-granted follow-ups: whole HTMLBaseElement reflection/fallback URL;
+then faithful pinned single-byte-raw.py fixture protocol (actual body/header).

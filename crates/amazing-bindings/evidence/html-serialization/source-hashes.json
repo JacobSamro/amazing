@@ -1,0 +1,12 @@
+{
+  "crates/amazing-bindings/src/host.rs": "f6cc3756a3352414b0ad7d41ee4ccaecc3b77c8d191781ce6f4f31557b657d8c",
+  "crates/amazing-bindings/src/markup_bindings.rs": "716824c0cda4b31b1cfb420c9670131ef21764a30fc44d9267223317fa47125b",
+  "crates/amazing-dom/src/attr.rs": "3a0a7a4b0c69ba885192e5b73de26dd060916285a00df3d41276407bea6d6f80",
+  "crates/amazing-dom/src/markup.rs": "2084d96b1167fdf23225fc83e5c3b27964efb68b0e9ce066f86765cc54a633db",
+  "crates/amazing/src/runtime_binding_host.rs": "cb4d888df468e30f8748666d95adc2677b80c4034077513eed021bf1911fb6b8",
+  "crates/amazing/src/runtime_host_dom_bindings.rs": "556ed60b230650a3b5bd742a1dd43629ebafca0c354e323cf858b1a2eabaccaf",
+  "docs/lanes/dom-bindings_TODO.md": "a114924452424800b8387235522ccf12f175d32610e29d30538dc16724d4ca3c",
+  "crates/amazing-dom/src/lib.rs": "40dc0ae56e1a380a4466c91561987c79a029cd98e78430098f737c3fc6ce381c",
+  "crates/amazing-dom/src/document_surface.rs": "b2d6fd9d47ab72368f30234bb4b35142ea0c7e94716919d10740dd85b715e9ec",
+  "crates/amazing-html/src/lib.rs": "7a71ff9fee0f5836d785b40730f83a881892d2a91d9c7a173456b225aca00a3a"
+}

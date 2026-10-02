@@ -47,8 +47,8 @@ fn escape(out: &mut Vec<u16>, value: &[u16], attribute: bool, raw: bool) {
             0x26 => Some("&amp;"),
             0xA0 => Some("&nbsp;"),
             0x22 if attribute => Some("&quot;"),
-            0x3C if !attribute => Some("&lt;"),
-            0x3E if !attribute => Some("&gt;"),
+            0x3C => Some("&lt;"),
+            0x3E => Some("&gt;"),
             _ => None,
         };
         if let Some(replacement) = replacement { append(out, replacement); } else { out.push(*unit); }
@@ -145,11 +145,24 @@ impl Dom {
         serializable_shadow_roots: bool, shadow_roots: &[NodeIdx]) {
         match &self.get(node).kind {
             NodeKind::Element { .. } => {
-                let name = self.qualified_name(node).expect("element name");
+                let name = if matches!(self.namespace(node), Some(crate::Namespace::Html | crate::Namespace::Svg | crate::Namespace::MathMl)) {
+                    self.local_name(node).expect("element name").to_owned()
+                } else { self.qualified_name(node).expect("element name") };
                 append(out, "<"); append(out, &name);
                 for attr in self.attributes_expanded(node).expect("element attributes") {
-                    append(out, " "); append(out, &attr.qualified_name()); append(out, "=\"");
-                    escape(out, &attr.value.encode_utf16().collect::<Vec<_>>(), true, false);
+                    let name = match attr.namespace_uri {
+                        None => attr.local_name.to_owned(),
+                        Some("http://www.w3.org/XML/1998/namespace") => format!("xml:{}", attr.local_name),
+                        Some("http://www.w3.org/2000/xmlns/") if attr.local_name == "xmlns" => "xmlns".into(),
+                        Some("http://www.w3.org/2000/xmlns/") => format!("xmlns:{}", attr.local_name),
+                        Some("http://www.w3.org/1999/xlink") => format!("xlink:{}", attr.local_name),
+                        _ => attr.qualified_name(),
+                    };
+                    let value = self.attached_attr_slot(node, attr.namespace_uri, attr.local_name)
+                        .and_then(|attr| self.attr_snapshot(attr).ok()).map(|attr| attr.value)
+                        .unwrap_or_else(|| attr.value.encode_utf16().collect());
+                    append(out, " "); append(out, &name); append(out, "=\"");
+                    escape(out, &value, true, false);
                     append(out, "\"");
                 }
                 append(out, ">");
@@ -162,20 +175,17 @@ impl Dom {
                 }
                 append(out, "</"); append(out, &name); append(out, ">");
             }
-            NodeKind::Text { .. } => {
+            NodeKind::Text { .. } | NodeKind::CDATASection { .. } => {
                 let raw = self.get(node).parent.is_some_and(|parent|
                     self.namespace_uri(parent) == Some("http://www.w3.org/1999/xhtml")
-                        && self.local_name(parent).is_some_and(raw_text_parent));
+                        && (self.local_name(parent).is_some_and(raw_text_parent)
+                            || self.local_name(parent) == Some("noscript") && self.owner_document(node)
+                                .is_some_and(|document| self.document_scripting_enabled(document).unwrap_or(false))));
                 escape(out, &self.character_data_utf16(node).unwrap_or_default(), false, raw);
             }
-            NodeKind::CDATASection { .. } => {
-                append(out, "<![CDATA[");
-                out.extend(self.character_data_utf16(node).unwrap_or_default());
-                append(out, "]]>");
-            }
-            NodeKind::Comment { data } => { append(out, "<!--"); append(out, data); append(out, "-->"); }
-            NodeKind::ProcessingInstruction { target, data } => {
-                append(out, "<?"); append(out, target); append(out, " "); append(out, data); append(out, ">");
+            NodeKind::Comment { .. } => { append(out, "<!--"); out.extend(self.character_data_utf16(node).unwrap_or_default()); append(out, "-->"); }
+            NodeKind::ProcessingInstruction { target, .. } => {
+                append(out, "<?"); append(out, target); append(out, " "); out.extend(self.character_data_utf16(node).unwrap_or_default()); append(out, "?>");
             }
             NodeKind::DocumentType { name, .. } => { append(out, "<!DOCTYPE "); append(out, name); append(out, ">"); }
             NodeKind::Document | NodeKind::DocumentFragment => {
@@ -778,5 +788,41 @@ impl IncrementalDocumentImport {
         source.attach_before(source_parent, None, created);
         self.record(created, node);
         Ok(Some(created))
+    }
+}
+
+#[cfg(test)]
+mod serialization_tests {
+    use super::*;
+    #[test]
+    fn html_serialization_normalizes_namespace_names_and_attribute_escaping() {
+        let mut dom = Dom::new(); let document = NodeIdx(0);
+        let svg = dom.create_element_ns_in(document,Some("http://www.w3.org/2000/svg"),"odd:svg").unwrap();
+        dom.set_attribute_expanded(svg,Some("http://www.w3.org/XML/1998/namespace"),Some("other"),"lang","<&>\"\u{a0}").unwrap();
+        dom.set_attribute_expanded(svg,Some("http://www.w3.org/1999/xlink"),Some("other"),"href","next").unwrap();
+        dom.set_attribute_ns(svg,Some("http://www.w3.org/2000/xmlns/"),"xmlns","http://www.w3.org/2000/svg").unwrap();
+        let child = dom.create_element_ns_in(document,Some("urn:other"),"p:item").unwrap();dom.pre_insert(child,svg,None).unwrap();
+        assert_eq!(String::from_utf16(&dom.serialize_node(svg).unwrap()).unwrap(),
+            "<svg xml:lang=\"&lt;&amp;&gt;&quot;&nbsp;\" xlink:href=\"next\" xmlns=\"http://www.w3.org/2000/svg\"><p:item></p:item></svg>");
+    }
+    #[test]
+    fn serialization_preserves_utf16_data_and_uses_actual_document_scripting() {
+        let mut dom = Dom::new();let doc = NodeIdx(0);let div = dom.create_element(doc,"div");
+        dom.set_attribute(div,"value","").unwrap();let attr = dom.get_attribute_node(div,None,"value").unwrap();
+        dom.set_attr_value(attr,vec![0xD800,60,62]).unwrap();
+        let comment = dom.create_node_in(doc,NodeKind::Comment{data:String::new()}).unwrap();dom.pre_insert(comment,div,None).unwrap();
+        dom.replace_character_data(comment,0,0,&[0xD800]).unwrap();
+        let pi = dom.create_node_in(doc,NodeKind::ProcessingInstruction{target:"target".into(),data:String::new()}).unwrap();dom.pre_insert(pi,div,None).unwrap();
+        dom.replace_character_data(pi,0,0,&[0xDC00]).unwrap();
+        let mut expected = "<div value=\"".encode_utf16().collect::<Vec<_>>();expected.push(0xD800);
+        expected.extend("&lt;&gt;\"><!--".encode_utf16());expected.push(0xD800);
+        expected.extend("--><?target ".encode_utf16());expected.push(0xDC00);expected.extend("?></div>".encode_utf16());
+        assert_eq!(dom.serialize_node(div).unwrap(),expected);
+        let noscript = dom.create_element(doc,"noscript");dom.append_child(noscript,NodeKind::Text{data:"<&>".into()});
+        assert_eq!(dom.serialize_children(noscript).unwrap(),"&lt;&amp;&gt;".encode_utf16().collect::<Vec<_>>());
+        dom.set_document_scripting_enabled(doc,true).unwrap();
+        assert_eq!(dom.serialize_children(noscript).unwrap(),"<&>".encode_utf16().collect::<Vec<_>>());
+        let cdata = dom.create_node_in(doc,NodeKind::CDATASection{data:"<img>".into()}).unwrap();
+        assert_eq!(dom.serialize_node(cdata).unwrap(),"&lt;img&gt;".encode_utf16().collect::<Vec<_>>());
     }
 }

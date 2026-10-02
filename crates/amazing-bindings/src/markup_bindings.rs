@@ -210,10 +210,14 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
                 };
                 let context_node = if insertion_parent == node { node } else { insertion_parent };
                 let context_node = dom.shadow_data(context_node).map_or(context_node, |data| data.host);
+                let context_document = if matches!(dom.get(context_node).kind, NodeKind::Document) {
+                    context_node
+                } else { dom.owner_document(context_node).ok_or(DomError::InvalidNode)? };
+                let scripting_enabled = dom.document_scripting_enabled(context_document)?;
                 let context = if matches!(dom.get(context_node).kind, NodeKind::Document) {
-                    FragmentContext { local_name: "body".into(), namespace_uri: Some("http://www.w3.org/1999/xhtml".into()) }
+                    FragmentContext { scripting_enabled, local_name: "body".into(), namespace_uri: Some("http://www.w3.org/1999/xhtml".into()) }
                 } else {
-                    FragmentContext { local_name: dom.local_name(context_node).ok_or(DomError::TypeError)?.into(),
+                    FragmentContext { scripting_enabled, local_name: dom.local_name(context_node).ok_or(DomError::TypeError)?.into(),
                         namespace_uri: dom.namespace_uri(context_node).map(str::to_owned) }
                 };
                 Ok((insertion_parent, reference, context, context_node))
