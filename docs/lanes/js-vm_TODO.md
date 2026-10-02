@@ -907,3 +907,36 @@ This series preserves that existing driver boundary.
 Specification references: [CreateResolvingFunctions](https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-createresolvingfunctions),
 [NewPromiseResolveThenableJob](https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-newpromiseresolvethenablejob)
 and [PromiseResolve](https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-promise-resolve).
+
+## JSVM-14: atomic class declaration lowering and rejection context
+
+Fixed base JSVM-13 `9785e236`. A class declaration now lowers its value through
+the same expression path as a named class expression before initializing its
+outer lexical binding. Fields, static blocks and private elements can delegate
+atomically when heritage/computed keys do not suspend; suspended class evaluation
+continues to fall back as a whole coroutine. No new interpreter implementation
+or copied upstream code is introduced.
+
+`AMAZING_JS_VM_REJECT_CONTEXT=<path>` optionally appends rejected parameter/body
+AST context independently of the existing compact compile-acceptance log.
+Diagnostics are disabled by default.
+
+### Measured gate (Boat, fixed base `9785e236`)
+
+- Workspace nextest **3591/3591 passed**, 17 skipped; workspace doctests **4 passed**.
+- Before/after 25151 whole affected Test262 files, 20s/eight jobs: language
+  **23348/24572**, Function **501/515**, AsyncFunction **18/18**, GeneratorFunction
+  **23/23**, AsyncGeneratorFunction **23/23**; **zero gained, zero lost**, every
+  classification unchanged. New explicit-bytecode regressions verify declaration
+  coverage independently of existing coroutine fallback passes.
+- Compile attempts **22382/22482 accepted**, **100 fallbacks**, unchanged. The
+  eight class-field/static-block rejections all include suspending computed keys;
+  those deliberately retain whole-coroutine fallback. This series does not claim
+  a measured rejection reduction.
+- The 100 rejection contexts identify the largest remaining shape: object spread
+  carries `ObjElem::Spread(ExprKind::Spread(inner))`; native object-spread lowering
+  mistakenly passes the wrapper to `expression()`. Suspending inner expressions
+  then prevent whole-object delegation, accounting for 56 spread rejections.
+  Normalize the wrapper before lowering in the next owned compiler series.
+
+Compact durable evidence: [js-vm14_evidence.json](js-vm14_evidence.json).
