@@ -91,7 +91,7 @@ impl TreeBuilder {
     pub(super) fn in_foreign_content(&mut self, tok: Token) {
         match tok {
             Token::Characters(data) => {
-                if data.chars().any(|c| !is_ws_char(c)) {
+                if data.chars().any(|c| c != '\0' && !is_ws_char(c)) {
                     self.frameset_ok = false;
                 }
                 self.insert_text(&data.replace('\0', "\u{FFFD}"));

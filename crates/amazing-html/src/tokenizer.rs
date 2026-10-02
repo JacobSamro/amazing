@@ -802,10 +802,9 @@ impl Tokenizer {
                         self.emit_tag(true);
                     },
                     Some(_) => {
-                        let c = self.bump().unwrap();
-                        self.finish_attr();
-                        self.pending.push_name(c.to_ascii_lowercase());
-                        self.state = State::AttrName;
+                        // Unexpected solidus: reconsume in before attribute
+                        // name, where another slash remains a delimiter.
+                        self.state = State::BeforeAttrName;
                     },
                 },
 
@@ -876,7 +875,7 @@ impl Tokenizer {
                 },
 
                 State::CommentEnd => match self.peek() {
-                    None => {}, // finish_eof re-adds "--"
+                    None => {}, // EOF emits the existing comment token.
                     Some('>') => {
                         self.pos += 1;
                         let data = std::mem::take(&mut self.comment_buf);
@@ -900,7 +899,7 @@ impl Tokenizer {
                 },
 
                 State::CommentEndBang => match self.peek() {
-                    None => {}, // finish_eof re-adds "--!"
+                    None => {}, // EOF emits the existing comment token.
                     Some('-') => {
                         self.pos += 1;
                         self.state = State::CommentEndDash;
@@ -1717,19 +1716,11 @@ impl Tokenizer {
                 let data = std::mem::take(&mut self.comment_buf);
                 self.emit(Token::Comment(data));
             },
-            State::CommentEndDash => {
-                let mut data = std::mem::take(&mut self.comment_buf);
-                data.push('-');
-                self.emit(Token::Comment(data));
-            },
-            State::CommentEnd => {
-                let mut data = std::mem::take(&mut self.comment_buf);
-                data.push_str("--");
-                self.emit(Token::Comment(data));
-            },
-            State::CommentEndBang => {
-                let mut data = std::mem::take(&mut self.comment_buf);
-                data.push_str("--!");
+            State::CommentEndDash | State::CommentEnd | State::CommentEndBang => {
+                // Pending delimiter characters are appended only when a
+                // later input character takes the "anything else" arm.
+                // EOF emits the comment without those delimiters.
+                let data = std::mem::take(&mut self.comment_buf);
                 self.emit(Token::Comment(data));
             },
             State::CommentStart | State::Comment | State::BogusComment => {

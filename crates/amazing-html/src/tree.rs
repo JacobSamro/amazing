@@ -60,7 +60,7 @@ const LIST_ITEM_SCOPE_EXTRA: &[&str] = &["ol", "ul"];
 /// Names popped by "generate implied end tags" (§13.2.6.3). `td`/`th` are
 /// included per the project plan so cell-closing paths converge.
 const IMPLIED_END_TAGS: &[&str] = &[
-    "dd", "dt", "li", "optgroup", "option", "p", "rb", "rp", "rt", "td", "th",
+    "dd", "dt", "li", "optgroup", "option", "p", "rb", "rp", "rt", "rtc", "td", "th",
 ];
 
 /// Active formatting elements (§13.2.4.3).
@@ -924,6 +924,8 @@ impl TreeBuilder {
                 }
             }
         }
+        let target = self.shadow_templates.iter().find(|(template, _)| *template == target)
+            .map(|(_, root)| *root).or_else(|| self.dom.template_contents(target)).unwrap_or(target);
         (target, None)
     }
 
@@ -1221,7 +1223,7 @@ impl TreeBuilder {
                 {
                     dups.push(i);
                 },
-                _ => break,
+                _ => {},
             }
         }
         if dups.len() >= 3 {
@@ -1989,7 +1991,7 @@ impl TreeBuilder {
             "address" | "article" | "aside" | "blockquote" | "center"
             | "details" | "dialog" | "dir" | "div" | "dl" | "fieldset"
             | "figcaption" | "figure" | "footer" | "header" | "hgroup"
-            | "main" | "menu" | "nav" | "ol" | "p" | "section" | "summary"
+            | "main" | "menu" | "nav" | "ol" | "p" | "search" | "section" | "summary"
             | "ul" => {
                 self.close_p_element();
                 self.insert_and_push(name, attrs);
@@ -2370,8 +2372,9 @@ impl TreeBuilder {
 
     fn in_frameset(&mut self, tok: Token) {
         match tok {
-            Token::Characters(data) if data.chars().all(is_ws_char) => {
-                self.insert_text(&data)
+            Token::Characters(data) => {
+                let whitespace: String = data.chars().filter(|&c| is_ws_char(c)).collect();
+                self.insert_text(&whitespace)
             },
             Token::Comment(data) => self.insert_comment_here(&data),
             Token::Doctype { .. } => {},
@@ -2413,8 +2416,9 @@ impl TreeBuilder {
 
     fn after_frameset(&mut self, tok: Token) {
         match tok {
-            Token::Characters(data) if data.chars().all(is_ws_char) => {
-                self.insert_text(&data)
+            Token::Characters(data) => {
+                let whitespace: String = data.chars().filter(|&c| is_ws_char(c)).collect();
+                self.insert_text(&whitespace)
             },
             Token::Comment(data) => self.insert_comment_here(&data),
             Token::Doctype { .. } => {},
