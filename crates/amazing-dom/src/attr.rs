@@ -57,7 +57,7 @@ impl Dom {
         *value = units;
         Ok(())
     }
-    fn attached_attr_slot(&self, element: NodeIdx, uri: Option<&str>, local: &str) -> Option<NodeIdx> {
+    pub(crate) fn attached_attr_slot(&self, element: NodeIdx, uri: Option<&str>, local: &str) -> Option<NodeIdx> {
         self.nodes.iter().enumerate().find_map(|(index, node)| match &node.kind {
             NodeKind::Attr { local_name, namespace_uri, owner_element: Some(owner), .. }
                 if *owner == element && namespace_uri.as_deref() == uri && local_name == local => Some(NodeIdx(index as u32)),

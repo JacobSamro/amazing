@@ -858,6 +858,8 @@ pub enum Operation {
 /// has ended. Parser results live in a separate arena and are imported by DOM.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FragmentContext {
+    /// Exact owner document scripting state, captured before parsing.
+    pub scripting_enabled: bool,
     pub local_name: String,
     pub namespace_uri: Option<String>,
 }

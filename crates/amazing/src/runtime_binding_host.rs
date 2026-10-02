@@ -742,6 +742,7 @@ pub(crate) fn install(
     let arena = Rc::as_ptr(&host) as u64;
     let window_event_target_slot = {
         let mut host = host.borrow_mut();
+        host.dom.set_document_scripting_enabled(NodeIdx(0), true).expect("active root document");
         let slot = host.dom.create_event_target();
         host.dom.set_window_event_target(slot).expect("new Window event target slot");
         slot
@@ -876,7 +877,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
         let mime = content_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
         let (parsed, detected_encoding) = if mime == "text/html" {
             let decoded = amazing_html::encoding::decode(bytes, charset);
-            (amazing_html::parse_bytes(bytes, charset), decoded.encoding)
+            (amazing_html::parse_bytes_with_scripting_mode(bytes, charset, amazing_html::ScriptingMode::Disabled), decoded.encoding)
         } else if matches!(mime.as_str(), "text/xml" | "application/xml" | "application/xhtml+xml" | "image/svg+xml")
             || mime.ends_with("+xml") {
             let (source, encoding) = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
@@ -1920,7 +1921,9 @@ impl FragmentParser for RuntimeBindingHost<'_> {
         } else {
             &context.local_name
         };
-        amazing_html::parse_fragment_with_namespace(parser_context, namespace, &markup)
+        let scripting_mode = if context.scripting_enabled { amazing_html::ScriptingMode::Enabled }
+            else { amazing_html::ScriptingMode::Disabled };
+        amazing_html::parse_fragment_with_scripting_mode(parser_context, namespace, &markup, scripting_mode)
             .map_err(|_| DomError::NotSupportedError)
     }
 
@@ -1938,7 +1941,9 @@ impl FragmentParser for RuntimeBindingHost<'_> {
         }
         let markup = String::from_utf16(markup).map_err(|_| DomError::TypeError)?;
         let parser_context = if context.local_name == "p" { "div" } else { &context.local_name };
-        amazing_html::parse_fragment_with_shadow_roots(parser_context, &markup)
+        let scripting_mode = if context.scripting_enabled { amazing_html::ScriptingMode::Enabled }
+            else { amazing_html::ScriptingMode::Disabled };
+        amazing_html::parse_fragment_with_shadow_roots_and_scripting_mode(parser_context, &markup, scripting_mode)
             .map_err(|_| DomError::NotSupportedError)
     }
 }

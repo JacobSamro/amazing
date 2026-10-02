@@ -1,0 +1,40 @@
+{
+  "serialization": {
+    "before": {
+      "pass": 352,
+      "fail": 23,
+      "error": 0
+    },
+    "after": {
+      "pass": 372,
+      "fail": 3,
+      "error": 0
+    },
+    "gained": 20,
+    "lost": 0
+  },
+  "nodes": {
+    "before": {
+      "pass": 12686,
+      "fail": 293,
+      "error": 6
+    },
+    "after": {
+      "pass": 12692,
+      "fail": 288,
+      "error": 6
+    },
+    "gained": 6,
+    "lost": 0
+  },
+  "base": "bc9e83889a46392e1001352023eb997efc9ab0c8",
+  "dependency": "a09c324b",
+  "candidate_binary": "37529409321e0801d6491669bd5d20105b391266e7ab1c080a28392c63479adc",
+  "baseline_binary": "62e0cc85846a094b90d1f0bd9701d790b5254207dc8fece9ee77ab64f4677f5d",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "nextest_pass": 3641,
+  "nextest_skipped": 17,
+  "doctests_pass": 4,
+  "corpus_files": 322,
+  "recheck": "Whole322 unchanged-source recheck restored known XHR deadline assertion; first final report had no XHR assertions."
+}

@@ -48,6 +48,24 @@ impl Dom {
         } else { self.document_modes.push((document, generation, mode)); }
         Ok(())
     }
+    /// Scripting is disabled without a browsing context. Embeddings explicitly
+    /// enable active documents unless their context settings disable scripting.
+    /// Fresh and cloned Documents stay disabled; cloning an element retains
+    /// its document and therefore its context's existing scripting state.
+    pub fn document_scripting_enabled(&self, document: NodeIdx) -> Result<bool, DomError> {
+        self.document_checked(document)?;
+        let generation = self.node_generations[document.0 as usize];
+        Ok(self.document_scripting.iter().find(|(node, version, _)|
+            *node == document && *version == generation).is_some_and(|(_, _, enabled)| *enabled))
+    }
+    pub fn set_document_scripting_enabled(&mut self, document: NodeIdx, enabled: bool) -> Result<(), DomError> {
+        self.document_checked(document)?;
+        let generation = self.node_generations[document.0 as usize];
+        if let Some(entry) = self.document_scripting.iter_mut().find(|(node, _, _)| *node == document) {
+            *entry = (document, generation, enabled);
+        } else { self.document_scripting.push((document, generation, enabled)); }
+        Ok(())
+    }
     pub fn document_metadata(&self, document: NodeIdx) -> Result<Option<&DocumentMetadata>, DomError> {
         self.document_checked(document)?;
         Ok(self.document_metadata.iter().find(|(node, _)| *node == document).map(|(_, data)| data))
@@ -234,5 +252,25 @@ mod tests {
         let child = dom.create_element_ns(fragment, Some("http://www.w3.org/1999/xhtml"), "span").unwrap();
         dom.set_attribute(child, "id", "needle").unwrap();
         assert_eq!(dom.get_element_by_id(fragment, &"needle".encode_utf16().collect::<Vec<_>>()), Ok(Some(child)));
+    }
+}
+
+#[cfg(test)]
+mod scripting_tests {
+    use super::*;
+    #[test]
+    fn scripting_tracks_context_and_does_not_clone_or_recycle_active_context() {
+        let mut dom = Dom::new(); let doc = NodeIdx(0);
+        assert!(!dom.document_scripting_enabled(doc).unwrap());
+        dom.set_document_scripting_enabled(doc,true).unwrap();
+        let cloned = dom.clone_node(doc,false).unwrap();
+        assert!(!dom.document_scripting_enabled(cloned).unwrap());
+        dom.set_document_scripting_enabled(cloned,true).unwrap();
+        dom.retire_unreachable_node(cloned).unwrap();
+        let replacement = dom.create_document(); assert_eq!(replacement,cloned);
+        assert!(!dom.document_scripting_enabled(replacement).unwrap());
+        let node = dom.create_element(doc,"div");
+        assert_eq!(dom.set_document_scripting_enabled(node,true),Err(DomError::TypeError));
+        assert!(dom.document_scripting_enabled(doc).unwrap());
     }
 }

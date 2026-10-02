@@ -1322,4 +1322,30 @@ mod tests {
         assert!(matches!(result, JsValue::Bool(true)));
     }
 
+    #[test]
+    fn serialization_context_distinguishes_active_and_inert_document_parsing() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = super::super::install(&mut js, host).unwrap();
+        bindings.set_document_url(&mut js, "https://example.test/serialization");
+        let result = js.run_script(r#"
+            let step=0; function check(v){step++;if(!v)throw 'serialization context '+step;} try {
+            const active=document.createElement('div'); active.innerHTML='<noscript><&></noscript>';
+            check(active.innerHTML === '<noscript><&></noscript>');
+            const inert=document.implementation.createHTMLDocument('');
+            inert.body.innerHTML='<noscript>&lt;&amp;&gt;</noscript>';
+            check(inert.body.firstChild.textContent === '<&>');
+            check(inert.body.innerHTML === '<noscript>&lt;&amp;&gt;</noscript>');
+            const parsed=new DOMParser().parseFromString('<body><noscript>&lt;&amp;&gt;</noscript></body>','text/html');
+            check(parsed.body.firstChild.textContent === '<&>');
+            check(parsed.body.innerHTML === '<noscript>&lt;&amp;&gt;</noscript>');
+            const clone=document.cloneNode(false), div=clone.createElement('div');
+            div.innerHTML='<noscript>&lt;&amp;&gt;</noscript>';
+            check(div.firstChild.textContent === '<&>');
+            true; } catch(e) { String(e)+" step="+step; }
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)), "{result:?}");
+    }
+
 }
