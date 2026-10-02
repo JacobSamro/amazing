@@ -3064,3 +3064,15 @@ Measurements pending: fixed-base full dom/nodes corpus plus owned tests/docs,
 then candidate workspace nextest/doctests + full same corpus with zero-loss
 comparison. All runs use Boat after user steering; the preliminary k-test build
 was cancelled before tests and is not evidence.
+
+### HTML-requested namespace attribute dump fidelity
+
+The HTML lane measured ten foreign-content mismatches whose expanded attributes
+were stored correctly but omitted by `Dom::dump`. The dump previously read only
+`NodeKind::Element.attrs`, so namespaced attributes were invisible. It now reads
+`attributes_expanded`, preserving cross-namespace insertion order, and prints
+canonical `xml`, `xlink`, and `xmlns` namespace labels before local names. A native
+regression mixes null, XLink, XML and XMLNS attributes. This is a diagnostic
+fidelity correction; any html5lib measurement gain must be distinguished from
+parser behavior changes. HTML's corpus measures it; the current DOM workspace
+and node gate includes its native test.
