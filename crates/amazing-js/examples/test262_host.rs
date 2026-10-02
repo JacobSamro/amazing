@@ -236,7 +236,7 @@ fn install_test262_module_loader(
                 return thrown;
             }
             match failure.phase {
-                ModulePhase::Parse | ModulePhase::Resolution => Throw::syntax_error(failure.message),
+                ModulePhase::Parse => Throw::syntax_error(failure.message),
                 _ => Throw::type_error(failure.message),
             }
         };
