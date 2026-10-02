@@ -1,0 +1,36 @@
+{
+  "id": "css__CSS2__floats__float-nowrap-4.html",
+  "classification": "pass",
+  "relation": "match",
+  "reference_href": "float-nowrap-4-ref.html",
+  "differing_pixels": 0,
+  "max_difference": 0,
+  "reference_sha256": "b65702503c55578f4b9dd3120a112d7de15f825d45150afa06a345f699e5e78a",
+  "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+  "detail": "maxDifference=0/0; totalPixels=0/0",
+  "allowed_max_difference": 0,
+  "allowed_differing_pixels": 0,
+  "actual_sha256": "b65702503c55578f4b9dd3120a112d7de15f825d45150afa06a345f699e5e78a",
+  "references": [
+    {
+      "relation": "match",
+      "reference_href": "float-nowrap-4-ref.html",
+      "satisfied": true,
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "reference_sha256": "b65702503c55578f4b9dd3120a112d7de15f825d45150afa06a345f699e5e78a",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "relation": "match",
+      "reference_href": "float-nowrap-4-ref2.html",
+      "satisfied": true,
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "reference_sha256": "b65702503c55578f4b9dd3120a112d7de15f825d45150afa06a345f699e5e78a",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    }
+  ]
+}

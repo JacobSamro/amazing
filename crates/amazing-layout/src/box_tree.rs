@@ -1468,6 +1468,7 @@ fn classify_children(
                             child_style,
                             entry.parent_font,
                             edge,
+                            no_wrap_here(&own_style) && has_renderable_inline_content(&inlines),
                             &mut inlines,
                             &mut blocks,
                             &mut positioned,
@@ -1600,6 +1601,7 @@ fn flatten_inline(
     style: ComputedStyle,
     parent_font_px: f32,
     edge_boundary: ShapingBoundary,
+    ancestor_nowrap_content: bool,
     inlines: &mut Vec<InlineNode>,
     blocks_out: &mut Vec<LayoutBox>,
     positioned_out: &mut Vec<LayoutBox>,
@@ -1609,7 +1611,8 @@ fn flatten_inline(
 ) {
     let font_size = values::resolve_used_font_size(&style, parent_font_px);
     let bidi_style = text_style(dom, idx, &style, font_size, true);
-    let inline_start = inlines.len();
+    let mut inline_start = inlines.len();
+    let mut nowrap_prefix = no_wrap_here(&style) && ancestor_nowrap_content;
 
     for pseudo in [PseudoElement::Marker, PseudoElement::Before] {
         append_generated(
@@ -1705,37 +1708,17 @@ fn flatten_inline(
                             replaced, inlines, positioned_out);
                     }
                     _ if crate::floats::side(&cs).is_some() && no_wrap_here(&style) => {
-                        // CSS2 #float-position (float-nowrap-*): see
-                        // classify_children's matching branch for the full
-                        // rationale, the "only defer once something has
-                        // already flowed" fix, and why this checks
-                        // renderable content rather than a bare `is_empty`.
-                        // `style` here is this scope's own (e.g. the
-                        // `white-space:nowrap` span's) computed style, not
-                        // the float's.
-                        //
-                        // "Since" is scoped to `inline_start` (this
-                        // flatten_inline call's own entry point), not index
-                        // 0 of the whole shared `inlines` -- this element
-                        // (e.g. the nowrap span) may be nested inside an
-                        // OUTER scope that is NOT itself nowrap and already
-                        // flowed unrelated content into the same vector
-                        // before recursing here (float-nowrap-4.html: the
-                        // outer div's own leading "Some " text must not
-                        // count as "something flowed" for a float that is
-                        // the nowrap span's own first child -- that float
-                        // hoists in place, right after "Some ", per
-                        // float-nowrap-4-ref.html, not deferred past the
-                        // nowrap span's own trailing text). Does not
-                        // generalize to a float nested two-or-more inline
-                        // levels below where the CURRENT nowrap run
-                        // actually began if an intervening sibling already
-                        // flowed content earlier in that same run -- no
-                        // fixture in this family exercises that deeper
-                        // case.
-                        if !has_renderable_inline_content(&inlines[inline_start.min(inlines.len())..])
+                        // A float cannot split an uninterrupted nowrap run, including
+                        // content in enclosing inline scopes. But outer normal-flow
+                        // text is not part of a newly entered nowrap run: flush that
+                        // prefix before placing a first-child float (CSS2 9.5.1,
+                        // float-nowrap-4). Collapsible indentation alone is no prefix.
+                        if !nowrap_prefix
+                            && !has_renderable_inline_content(&inlines[inline_start.min(inlines.len())..])
                             && deferred_floats.is_empty()
                         {
+                            flush_anonymous_into(blocks_out, inlines, positioned_out, parent_font_px, fonts, deferred_floats);
+                            inline_start = 0;
                             blocks_out.push(build_element(
                                 dom,
                                 styled,
@@ -1762,6 +1745,8 @@ fn flatten_inline(
                     {
                         // Hoist: end the current inline run here.
                         flush_anonymous_into(blocks_out, inlines, positioned_out, parent_font_px, fonts, deferred_floats);
+                        inline_start = 0;
+                        nowrap_prefix = false;
                         blocks_out.push(build_element(
                             dom,
                             styled,
@@ -1775,6 +1760,7 @@ fn flatten_inline(
                         let child_font_size = values::resolve_used_font_size(&cs, entry.parent_font);
                         let edge =
                             boundary_between(dom, child, &text_parent, entry.parent_font, &cs, child_font_size);
+                        let block_start = blocks_out.len();
                         flatten_inline(
                             dom,
                             styled,
@@ -1782,13 +1768,19 @@ fn flatten_inline(
                             cs,
                             entry.parent_font,
                             edge,
+                            no_wrap_here(&style) && (nowrap_prefix
+                                || has_renderable_inline_content(&inlines[inline_start.min(inlines.len())..])),
                             inlines,
                             blocks_out,
                             positioned_out,
                             fonts,
                             replaced,
                             deferred_floats,
-                        )
+                        );
+                        if blocks_out.len() != block_start {
+                            inline_start = 0;
+                            nowrap_prefix = false;
+                        }
                 }
                 }
             }
@@ -1911,33 +1903,67 @@ mod tests {
     }
 
     #[test]
-    fn float_first_in_a_nested_nowrap_span_hoists_before_the_outer_text_that_preceded_it() {
-        // CSS2 #float-position (WPT float-nowrap-4.html / float-nowrap-4-
-        // ref.html): the float is the very first child of a NESTED
-        // `white-space:nowrap` span, but that span itself is nested inside
-        // an outer, non-nowrap div whose own leading text ("Some ") already
-        // flowed into the same shared `inlines` buffer before flatten_inline
-        // ever recurses into the span. That outer, unrelated text must not
-        // count as "something flowed" for the nowrap span's OWN scope --
-        // the float still hoists in place (right after "Some ", landing
-        // BEFORE the nowrap span's own text), matching float-nowrap-4-ref's
-        // `Some <float> <nowrap>text...</nowrap>` arrangement. Regression:
-        // checking `inlines` from index 0 (rather than from this
-        // flatten_inline call's own `inline_start`) saw the outer "Some "
-        // and deferred the float past the nowrap span's own trailing text
-        // instead.
+    fn nested_nowrap_first_float_preserves_normal_prefix_order() {
+        for prefix in ["Some ", "<em>Some </em>"] {
+            for leading in ["", " \n", "<i></i>"] {
+                for nested in [false, true] {
+                    let content = format!("{leading}<span class=f></span>text that overflows my parent.");
+                    let content = if nested { format!("<i>{content}</i>") } else { content };
+                    let (_, root) = tree_css(
+                        &format!("<body><div id=d>{prefix}<span class=nw>{content}</span></div></body>"),
+                        "#d{width:10ch}.nw{white-space:nowrap}.f{float:right;width:5ch;height:5ch}",
+                    );
+                    let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+                    let Flow::Blocks(parts) = &body[0].flow else { panic!("div blocks") };
+                    assert_eq!(parts.len(), 3, "expected [outer text, float, nowrap text], got {parts:?}");
+                    assert_eq!(inline_part_text(&parts[0]).trim(), "Some");
+                    assert_eq!(parts[1].style.get("float"), Some("right"));
+                    assert_eq!(inline_part_text(&parts[2]).trim(), "text that overflows my parent.");
+                    assert!(parts[0].source_order < parts[1].source_order);
+                    assert!(parts[1].source_order < parts[2].source_end_order);
+                }
+            }
+        }
+    }
+
+    fn inline_part_text(part: &LayoutBox) -> String {
+        let Flow::Inlines(items) = &part.flow else { panic!("inline run") };
+        items.iter().filter_map(|item| match item {
+            InlineNode::Text { text, .. } => Some(text.as_str()),
+            _ => None,
+        }).collect()
+    }
+
+    #[test]
+    fn deeper_float_preserves_ancestor_nowrap_content() {
+        // Descendant wrappers do not restart an inherited nowrap run.
+        for scope in ["#d", ".nw"] {
+            for nested in ["<i><span class=f></span>after</i>", "<i><b><span class=f></span>after</b></i>"] {
+                let (_, root) = tree_css(
+                    &format!("<body><div id=d><span class=nw>before{nested}</span>end</div></body>"),
+                    &format!("{scope}{{white-space:nowrap}}.f{{float:left;width:5ch;height:5ch}}"),
+                );
+                let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+                let Flow::Blocks(parts) = &body[0].flow else { panic!("div blocks") };
+                assert_eq!(parts.len(), 2, "expected [continuous text, float], got {parts:?}");
+                assert_eq!(inline_part_text(&parts[0]), "beforeafterend");
+                assert_eq!(parts[1].style.get("float"), Some("left"));
+            }
+        }
+    }
+
+    #[test]
+    fn block_descendant_ends_the_ancestor_nowrap_prefix() {
         let (_, root) = tree_css(
-            "<body><div id=d>Some <span class=nw><span class=f></span>text that overflows my parent.</span></div></body>",
-            "#d{width:10ch}.nw{white-space:nowrap}.f{float:right;width:5ch;height:5ch}",
+            "<body><div id=d>before<span><span class=block>block</span><i><span class=f></span>after</i></span></div></body>",
+            "#d{white-space:nowrap}.block{display:block}.f{float:right;width:5ch;height:5ch}",
         );
         let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
         let Flow::Blocks(parts) = &body[0].flow else { panic!("div blocks") };
-        assert_eq!(parts.len(), 2, "expected [float, unified text], got {parts:?}");
-        assert_eq!(parts[0].style.get("float"), Some("right"), "float must come first");
-        assert!(
-            matches!(&parts[1].flow, Flow::Inlines(_)),
-            "second part should be the unified inline run"
-        );
+        assert_eq!(parts.len(), 4);
+        assert_eq!(inline_part_text(&parts[0]), "before");
+        assert_eq!(parts[2].style.get("float"), Some("right"));
+        assert_eq!(inline_part_text(&parts[3]), "after");
     }
 
     #[test]

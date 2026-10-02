@@ -3261,3 +3261,39 @@ runs, then measure the full float and layout regression corpora again.
 Durable evidence: [summary](../../crates/amazing-layout/evidence/layout36/summary.json),
 ten before/after compact classification maps in the same directory, and
 [both reference comparisons](../../crates/amazing-layout/evidence/layout36/float-nowrap-4.json).
+
+### LAYOUT-37 — nested-nowrap float source order (2026-10-03)
+
+On fixed base `e23ad240`, first-child floats inside a newly entered nowrap
+scope now follow already buffered outer normal-flow text. Enclosing nowrap
+content is carried through recursive inline scopes so deeper wrappers preserve
+one uninterrupted run. Genuine block interruptions reset both the inherited
+prefix and the inline range. The LAYOUT-35 incorrect `[float, unified text]`
+regression is replaced by twelve `[outer text, float, nowrap text]` variants;
+four deeper ancestor-run variants and a block-interruption regression cover
+the related scope behavior.
+
+Boat `bx_shgjh66q`, eight vCPUs, native ext4 source and target:
+**3517 workspace nextest passed / 17 skipped**, **four doctests passed**,
+**seven harness checks passed**, zero failures. Full pinned WPT five-directory
+before/after: **323 eligible**, **223→224 pass**, **100→99 mismatch**, one
+gain and zero lost/changed/new/removed. Floats **28→29/39**; normal-flow
+**24/29**, tables **54/82**, sizing **90/138**, display **27/35** unchanged.
+Both valid `float-nowrap-4.html` references now match with **zero differing
+pixels**; actual/reference PPM hash
+`b65702503c55578f4b9dd3120a112d7de15f825d45150afa06a345f699e5e78a`.
+This corrects the actual defect; no reference or baseline expectation changed.
+
+Candidate renderer SHA256
+`8882f2d3379e5c1efc9d4315d2874e4e0febe1c92e173a7204c9eaf7f6d590bd`.
+Baseline renderer reproduces LAYOUT-36's exact SHA256. Durable measurements
+and compact before/after maps: `crates/amazing-layout/evidence/layout37/`.
+First native source-copy attempt accidentally excluded `target.rs` with a
+`target*` pattern; corrected to directories `target*/` before any test/corpus
+measurement. No local builds/tests or Windows runs. No CSS or flex/grid edits.
+
+Next containment cluster is scoped: 002/007/008 intrinsic query propagation;
+logical001/002 unresolved CSS longhands; 010/015/016/021/026 flex/grid adoption.
+CSS owner queued physical/logical containment property expansion/validation;
+layout-flexgrid adoption needs the shared intrinsic-size seam. General float
+insertion into partially occupied line boxes and inline fragmentation remain.
