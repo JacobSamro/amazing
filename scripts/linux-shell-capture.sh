@@ -95,8 +95,8 @@ if [ "$REAL_PAGES" = 1 ]; then
 set -u
 ROOT=\"\$PWD\"
 cd crates/amazing-shell-gpui || exit 3
-export CARGO_TARGET_DIR=\$HOME/amazing/target-shell-$LANE
-cargo build --locked $BUILD_FLAG --bin amazing-shell 2>&1 | grep -E '^(error|warning: unused)' -A6 | head -40
+export CARGO_TARGET_DIR=/tmp/amazing-shell-target-$LANE CARGO_INCREMENTAL=0
+cargo build --locked $BUILD_FLAG --bin amazing-shell || exit 4
 EXE=\$CARGO_TARGET_DIR/$PROFILE/amazing-shell
 [ -x \"\$EXE\" ] || { echo 'linux-shell-capture: build failed' >&2; exit 4; }
 cd \"\$ROOT\"
@@ -166,8 +166,8 @@ fi
 set -u
 ROOT=\"\$PWD\"
 cd crates/amazing-shell-gpui || exit 3
-export CARGO_TARGET_DIR=\$HOME/amazing/target-shell-$LANE
-cargo build --locked $BUILD_FLAG --bin amazing-shell 2>&1 | grep -E '^(error|warning: unused)' -A6 | head -40
+export CARGO_TARGET_DIR=/tmp/amazing-shell-target-$LANE CARGO_INCREMENTAL=0
+cargo build --locked $BUILD_FLAG --bin amazing-shell || exit 4
 EXE=\$CARGO_TARGET_DIR/$PROFILE/amazing-shell
 [ -x \"\$EXE\" ] || { echo 'linux-shell-capture: build failed' >&2; exit 4; }
 cd \"\$ROOT\"
