@@ -189,7 +189,15 @@ pub fn parse_fragment_with_scripting_mode(
 /// as the shadow root's children and dropping the template from the
 /// fragment before inserting the rest.
 pub fn parse_fragment_with_shadow_roots(context: &str, src: &str) -> Result<Dom, String> {
-    parse_fragment_inner(context, Namespace::Html, src, true, ScriptingMode::Enabled)
+    parse_fragment_with_shadow_roots_and_scripting_mode(context, src, ScriptingMode::Enabled)
+}
+
+/// Parses an HTML fragment allowing declarative shadow roots, using the
+/// context document's explicit scripting mode.
+pub fn parse_fragment_with_shadow_roots_and_scripting_mode(
+    context: &str, src: &str, scripting_mode: ScriptingMode,
+) -> Result<Dom, String> {
+    parse_fragment_inner(context, Namespace::Html, src, true, scripting_mode)
 }
 
 fn parse_fragment_inner(
