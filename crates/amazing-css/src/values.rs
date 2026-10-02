@@ -477,6 +477,7 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         return crate::svg_presentation::parse_property(property, css);
     }
     match property {
+        "font-synthesis" => return crate::font_properties::expand_synthesis(css).map(|_| V::Unparsed),
         p if crate::font_properties::is_audited_longhand(p) => {
             return crate::font_properties::canonical(p, css).map(|_| V::Unparsed);
         }

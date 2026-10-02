@@ -49,8 +49,8 @@ pub(crate) fn canonical(name: &str, css: &str) -> Option<String> {
     match name {
         "font-kerning" => keyword("auto normal none"),
         "font-optical-sizing" => keyword("auto none"),
+        "font-synthesis-style" => keyword("auto none oblique-only"),
         "font-synthesis-weight"
-        | "font-synthesis-style"
         | "font-synthesis-small-caps"
         | "font-synthesis-position" => keyword("auto none"),
         "font-variant-caps" => keyword(
@@ -241,6 +241,7 @@ pub(crate) fn expand_synthesis(value: &str) -> Option<Vec<(String, String)>> {
         );
     }
     let mut seen = 0u8;
+    let mut oblique_only = false;
     if t.is_empty() {
         return None;
     }
@@ -254,7 +255,10 @@ pub(crate) fn expand_synthesis(value: &str) -> Option<Vec<(String, String)>> {
     }
     for token in t {
         let Token::Ident(s) = token else { return None };
-        let index = names.iter().position(|name| s.eq_ignore_ascii_case(name))?;
+        let index = if s.eq_ignore_ascii_case("oblique-only") {
+            oblique_only = true;
+            1
+        } else { names.iter().position(|name| s.eq_ignore_ascii_case(name))? };
         if seen & (1 << index) != 0 {
             return None;
         }
@@ -267,7 +271,8 @@ pub(crate) fn expand_synthesis(value: &str) -> Option<Vec<(String, String)>> {
             .map(|(i, name)| {
                 (
                     format!("font-synthesis-{name}"),
-                    if seen & (1 << i) != 0 { "auto" } else { "none" }.into(),
+                    if i == 1 && oblique_only { "oblique-only" }
+                    else if seen & (1 << i) != 0 { "auto" } else { "none" }.into(),
                 )
             })
             .collect(),

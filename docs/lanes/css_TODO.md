@@ -2608,3 +2608,29 @@ stacking/containing-block distinction between `none` and identity. Changes are
 conservatively classified Rebuild until that consumer path is adopted. Rendering
 parity here is a zero-loss gate, not a claim of newly rendered transforms.
 Spec: https://drafts.csswg.org/css-transforms-2/#individual-transforms.
+
+## CSS-35: font-synthesis family
+
+Completed the CSS-owned synthetic-face controls as one area: four inherited
+longhands plus shorthand grammar, deferred `var()` expansion, invalid-at-computed
+unset behavior, CSS-wide inheritance, and canonical shorthand reconstruction
+from the winning axes. `oblique-only` is accepted on the style longhand and as
+the style alternative in the pinned WPT shorthand grammar; it conflicts with
+`style`, including after variable substitution. Unspecified shorthand axes reset
+to none. The independent `font` shorthand does not reset synthesis controls.
+Layout-time CSS style mutation also rebuilds the derived shorthand summary.
+
+Base `0e59c664cdbbd9cdccf064ba66c557a23c79cace`; same CSS-33 corrected runner
+and full 14-selection parsing corpus: 3565 → 3599 / 4805, +34 exact assertions,
+zero losses. Linux workspace 3527 passes, 17 skips, four doctests; CSS crate 368
+passes. Full css-fonts static render selection remains 24 / 32, all 32
+classifications unchanged, zero losses. Native Boat source/target; durable
+before/after classifications and gained assertion identities in
+`crates/amazing-css/evidence/css35/`.
+
+Consumer follow-up routed to layout: `box_tree::font_synthesis` currently treats
+all non-none policies as enabled. For oblique-only, the style synthesis bit must
+be disabled when the requested font-style is italic; oblique requests retain
+synthesis permission. CSS supplies the distinct canonical policy string.
+References: CSS Fonts 4 §2.8 and pinned WPT
+`css/css-fonts/parsing/font-synthesis-{valid,invalid,computed}.html`.
