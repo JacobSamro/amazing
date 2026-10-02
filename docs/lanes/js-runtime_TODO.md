@@ -1242,3 +1242,34 @@ Evidence: `js-runtime_jsrt31_evidence.json`.
 The first final gate was green; the native-name correction warranted one
 unchanged-base gate repeat. Runtime next: whole allKeyed/allSettledKeyed area,
 the largest remaining unimplemented Promise cluster (87 pinned cases).
+
+## JSRT-33 Constant-time tail property deletion (2026-10-03)
+
+Frozen base `7785c295`. Generic `JsObject::delete_own` now pops the final
+property and removes its hash index entry when no remaining slot moves.
+Interior deletion keeps its previous shift/rebuild behavior. Both successful
+paths preserve configurable checks, insertion order and shape-version bumps,
+so VM cached slots still invalidate. Descending dense-array truncation and
+generic object tail deletion avoid rebuilding every surviving index entry.
+No dense array representation, VM default policy or harness recognition was
+introduced. A grouped regression covers tail/interior deletion, lookup,
+reinsertion order, empty objects and cached-slot invalidation.
+
+Final Boat workspace **3639 passed/17 skipped, 69.741 seconds**, **4 doctests**.
+Array selection **3226/3332**, Object **3338/3414**, deletion **414/452**,
+fromCodePoint **12/12**, apply **48/48**, all unchanged with zero lost passes.
+Full RegExp at the same **5-second timeout/8 jobs**: **1590 → 1694/2063**,
+**104 gained, zero lost**; timeouts **447 → 343**, failures unchanged at 26.
+Unique union **9305 cases**, **8614 → 8718**, **104 gained, zero lost**.
+
+The unchanged pinned regExpUtils helper builds the full 1,114,112-code-point
+range in **90,590 → 4,255 ms** (about **21.3×** faster), producing the same
+2,162,688 UTF-16 units; Any/nonASCII scans remain 19/17 ms. The smaller 65,536
+range improves **5,014 → 247 ms**. Independent reference diagnostics also show
+three 10,000-element truncations **2286 → 93 ms** and generic 10,000-key tail
+deletion **751 → 33 ms**; these use the VM lane's different fixed reference
+base and are diagnostics, while the full helper comparison uses this ticket's
+same frozen base. Remaining 343 deadline cases need further general work.
+Evidence: `js-runtime_jsrt33_evidence.json`; runnable diagnostic:
+`js-runtime_array_profile.py`. Next priority: dynamic Function and indirect
+eval active source-location capture. Keyed Promise WIP remains preserved.
