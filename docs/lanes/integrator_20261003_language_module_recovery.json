@@ -1,0 +1,39 @@
+{
+  "source_commit": "7ddb3f8e36f9252976d54564107ddf6cb7d07fe4",
+  "validated_at": "2026-10-02T23:40:51.901660+00:00",
+  "platform": "Boat Linux",
+  "workspace": {
+    "passed": 3672,
+    "skipped": 17,
+    "doctests_passed": 4
+  },
+  "language": {
+    "before_passed": 23346,
+    "after_passed": 23803,
+    "gained_files": 457,
+    "lost_files": 0,
+    "gained_variants": 787,
+    "lost_variants": 0,
+    "before_sha256": "af7a8254bb7d489f3db4c12873b18d8d3eb82be8ff9ce1675dc8f3961bc2bbca",
+    "after_sha256": "3b9c1c5f6a861228b343ed2c3d0e8660eae98a314a744619d97d01170c7b94c2",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+    "timeout_seconds": 60
+  },
+  "module_wpt": {
+    "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "selection_sha256": "b14ef1bbafb77fca6aa21b6d03bdb16e45a1e56d63ece1ef73cfa3976c74da63",
+    "binary_sha256": "0c4f86c813fb9c07dfa1d448d103f6d20df8fe05eb0773bc51f7da6f3fc308f2",
+    "selected": 111,
+    "passed_files": 43,
+    "passed_subtests": 118,
+    "delta": {
+      "gained_files": 8,
+      "lost_files": 0,
+      "gained_subtests": 8,
+      "lost_subtests": 0
+    },
+    "result_sha256": "fb64b4f269c9845d6aeee4f2fccacfe9f0199bdd2ad565c2709e358c2c28fcaa"
+  },
+  "recovered_regressions": "All 30 direct-eval arguments parameter-environment files and the contextual import source lookahead file retained; ordered module graph instantiation-error-4 restored."
+}
