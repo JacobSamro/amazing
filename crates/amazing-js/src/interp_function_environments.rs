@@ -19,6 +19,15 @@ fn binding_has_expression(binding: &Binding) -> bool {
 }
 
 impl Interpreter {
+    fn prepare_function_parameter_environment(
+        &self, callee: &EnvHandle, params: &[ast::Param], strict: bool,
+    ) -> EnvHandle {
+        // FDI step 20: eval-created vars live outside the parameter bindings.
+        if !strict && parameters_have_expressions(params) {
+            EnvHandle::new(EnvKind::Parameter, Some(callee.clone()))
+        } else { callee.clone() }
+    }
+
     fn prepare_function_body_environment(
         &self,
         parameters: &EnvHandle,
@@ -56,6 +65,29 @@ impl Interpreter {
 #[cfg(test)]
 mod function_environment_tests {
     use super::*;
+
+    #[test]
+    fn parameter_eval_declarations_cannot_cross_parameter_bindings() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            for source in [
+                "function f(p=eval('var arguments')){let arguments;} try{f();false}catch(e){e instanceof SyntaxError}",
+                "function f(p=eval('var arguments=7')){return arguments} try{f();false}catch(e){e instanceof SyntaxError}",
+                "function* f(p=eval('var arguments')){let arguments;} try{f();false}catch(e){e instanceof SyntaxError}",
+                "async function* f(p=eval('var arguments')){let arguments;} try{f();false}catch(e){e instanceof SyntaxError}",
+                "var o={m(p=eval('var arguments')){let arguments;}};try{o.m();false}catch(e){e instanceof SyntaxError}",
+                "var o={*m(p=eval('var arguments')){let arguments;}};try{o.m();false}catch(e){e instanceof SyntaxError}",
+                "function f(p=eval('var p')){} try{f();false}catch(e){e instanceof SyntaxError}",
+                "var f=(p=eval('var p'))=>p;try{f();false}catch(e){e instanceof SyntaxError}",
+            ] {
+                let mut i = Interpreter::new();
+                assert_eq!(i.run_script_with_backend(source, backend).unwrap(), JsValue::Bool(true), "{backend:?}: {source}");
+            }
+            let mut i = Interpreter::new();
+            i.run_script_with_backend("var rejected=false;async function f(p=eval('var arguments')){let arguments;} f().then(()=>{},e=>rejected=e instanceof SyntaxError);", backend).unwrap();
+            i.drain_microtasks().unwrap();
+            assert_eq!(i.run_script("rejected").unwrap(), JsValue::Bool(true));
+        }
+    }
 
     #[test]
     fn parameter_default_closures_keep_the_parameter_environment() {
