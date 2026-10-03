@@ -1,0 +1,17 @@
+{
+  "before": "376dada37ad07042e7f97c5f6208b4cfcf347ee9",
+  "source": "592e94cc51a4867d646eb90d9e4ce2f41e182a1c",
+  "owned_passed": 638,
+  "workspace_passed": 3887,
+  "workspace_skips": 17,
+  "doctests_passed": 4,
+  "html5lib": 1894,
+  "expanded": 1930,
+  "expanded_unsupported": 6,
+  "gained": 0,
+  "lost": 0,
+  "cssom_pages": 192,
+  "cssom_passing_assertions": 1769,
+  "module_pages": 111,
+  "module_passing_assertions": 132
+}
