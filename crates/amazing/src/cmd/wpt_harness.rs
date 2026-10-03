@@ -1196,7 +1196,7 @@ fn execute_page(
     };
     refresh_images(&mut scheduler)?;
     // The engine's browser-global identity also supplies the standard self alias.
-    let global = JsValue::Object(scheduler.js.global_obj.clone());
+    let global = scheduler.js.binding_global_this();
     scheduler
         .js
         .global_obj

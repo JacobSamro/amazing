@@ -7,7 +7,7 @@
 use super::*;
 use crate::dom_host::BrowserDomHost;
 use amazing_dom::document_surface::ReadyState;
-use amazing_net::url::{ParsedUrl, UrlOrigin};
+use amazing_net::url::ParsedUrl;
 use amazing_fetch::{HttpUrl, HeaderList, check_frame_embedding,
     api::{ApiRequest, NavigableContext},
     service::{NetworkService, ServiceEvent}};
@@ -257,14 +257,6 @@ fn fetch_child_script(src: &str, base: &str,
         }).ok().filter(|response| response.is_success())?.body
     };
     Some(amazing_html::encoding::decode(&bytes, None).text)
-}
-
-fn same_origin(parent: &str, child: &str) -> bool {
-    let (Ok(parent), Ok(child)) = (ParsedUrl::parse(parent), ParsedUrl::parse(child)) else {
-        return false;
-    };
-    matches!((parent.origin(), child.origin()),
-        (UrlOrigin::Tuple(a), UrlOrigin::Tuple(b)) if a == b)
 }
 
 fn content_type(response: &amazing_net::Response, logical_url: &str,
