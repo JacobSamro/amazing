@@ -736,7 +736,7 @@ mod tests {
         let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
         scheduler.set_location_url("https://example.test/page.html");
         scheduler.run_script("var target=document.getElementById('root'),seen=[],bubbled=0; for(var type of ['load','error']) { target.addEventListener(type,function(e){seen.push(e);}); document.addEventListener(type,function(){bubbled++;}); }").unwrap();
-        let module = script(ScriptKind::Module, node, true);
+        let module = script(&scheduler, ScriptKind::Module, node.0, true);
         scheduler.finish_module_script(&module, None, "https://example.test/root.js", true).unwrap();
         scheduler.finish_module_script(&module, None, "https://example.test/root.js", false).unwrap();
         assert!(matches!(scheduler.run_script("seen.length===2 && seen[0].type==='load' && seen[1].type==='error' && bubbled===0 && seen.every(e=>e instanceof Event && e.isTrusted && e.target===target && e.currentTarget===null && !e.bubbles && !e.cancelable && !e.composed)").unwrap(), JsValue::Bool(true)));
