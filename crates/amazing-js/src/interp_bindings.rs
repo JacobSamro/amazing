@@ -233,6 +233,16 @@ impl Interpreter {
         Ok(())
     }
 
+    /// Define a user-visible own property through the receiver's internal
+    /// operation, including Proxy traps and WindowProxy origin checks.
+    /// A false result denotes rejection without an abrupt completion.
+    pub fn binding_define_own_property(
+        &mut self, object: &JsValue, name: &str, descriptor: &JsValue,
+    ) -> Result<bool, Throw> {
+        let owner = Self::binding_owner(object)?;
+        self.define_own_property(&owner, &PropertyKey::from(name), descriptor)
+    }
+
     pub fn binding_define_data_property(
         &mut self,
         owner: &JsValue,
