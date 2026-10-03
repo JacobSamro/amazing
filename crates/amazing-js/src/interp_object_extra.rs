@@ -35,6 +35,70 @@ mod object_semantic_tests {
     }
 
     #[test]
+    fn number_exponentiation_matrix_agrees_across_math_operator_and_assignment() {
+        check(r#"
+            var valid=true,cases=[
+             [NaN,0,1],[NaN,-0,1],[NaN,1,NaN],[NaN,Infinity,NaN],
+             [1,NaN,NaN],[-1,NaN,NaN],[0,NaN,NaN],[-0,NaN,NaN],[Infinity,NaN,NaN],
+             [1,Infinity,NaN],[1,-Infinity,NaN],[-1,Infinity,NaN],[-1,-Infinity,NaN],
+             [0,0,1],[-0,0,1],[0,3,0],[-0,3,-0],[-0,2,0],[-0,0.5,0],
+             [0,-3,Infinity],[-0,-3,-Infinity],[-0,-2,Infinity],[-0,-0.5,Infinity],
+             [0,Infinity,0],[-0,Infinity,0],[0,-Infinity,Infinity],[-0,-Infinity,Infinity],
+             [Infinity,0,1],[-Infinity,0,1],[Infinity,3,Infinity],[-Infinity,3,-Infinity],
+             [-Infinity,2,Infinity],[-Infinity,0.5,Infinity],[Infinity,-3,0],[-Infinity,-3,-0],[-Infinity,-2,0],
+             [Infinity,Infinity,Infinity],[-Infinity,Infinity,Infinity],[Infinity,-Infinity,0],[-Infinity,-Infinity,0],
+             [2,3,8],[-2,3,-8],[-2,2,4],[2,-3,0.125],[-2,-3,-0.125],[-2,0.5,NaN],
+             [2,Infinity,Infinity],[2,-Infinity,0],[-2,Infinity,Infinity],[-2,-Infinity,0],
+             [-1,9007199254740991,-1],[-1,9007199254740992,1],[-0,9007199254740991,-0],
+             [0.5,Infinity,0],[0.5,-Infinity,Infinity],[-0.5,Infinity,0],[-0.5,-Infinity,Infinity]
+            ];
+            for(var c of cases){var base=c[0],exponent=c[1],expected=c[2];
+             valid=valid && Object.is(Math.pow(base,exponent),expected) && Object.is(base**exponent,expected);
+             var value=base;value**=exponent;valid=valid && Object.is(value,expected);
+            }
+            valid;
+        "#);
+    }
+
+    #[test]
+    fn number_exponentiation_coercion_order_defaults_and_abrupt_identity_are_preserved() {
+        check(r#"
+            var valid=true, log=[], sentinel={}, left={valueOf(){log.push('left');return 1}},
+                right={valueOf(){log.push('right');return NaN}};
+            for(var operation of [Math.pow,function(a,b){return a**b},function(a,b){a**=b;return a}]) {
+                log=[];valid=valid && Number.isNaN(operation(left,right)) && log.join(',')==='left,right';
+                var bad={valueOf(){log.push('throw');throw sentinel}};
+                log=[];try{operation(bad,right);valid=false;}catch(e){valid=valid && e===sentinel && log.join(',')==='throw';}
+                log=[];try{operation(left,bad);valid=false;}catch(e){valid=valid && e===sentinel && log.join(',')==='left,throw';}
+                log=[];var a={valueOf(){log.push('value');return{}},toString(){log.push('string');return'2'}};
+                valid=valid && operation(a,3)===8 && log.join(',')==='value,string';
+            }
+            valid=valid && Number.isNaN(Math.pow()) && Number.isNaN(Math.pow(1)) && Math.pow(undefined,0)===1 &&
+                Math.pow(null,2)===0 && Math.pow.call(null,'2','3')===8 && Number.isNaN(Math.pow(1,undefined));
+            valid;
+        "#);
+    }
+
+    #[test]
+    fn number_exponentiation_keeps_bigint_and_mixed_numeric_boundaries() {
+        check(r#"
+            var valid=true;
+            for(var operation of [function(a,b){return a**b},function(a,b){a**=b;return a}]) {
+                valid=valid && operation(2n,3n)===8n && operation(-2n,3n)===-8n && operation(0n,0n)===1n;
+                valid=valid && operation(Object(2n),3n)===8n;
+                try{operation(2n,-1n);valid=false;}catch(e){valid=valid && e instanceof RangeError;}
+                for(var args of [[2n,3],[2,3n],[new Number(2),3n]]) {
+                    try{operation(...args);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+                }
+            }
+            for(var args of [[2n,3n],[Object(2n),3],[Symbol(),2]]) {
+                try{Math.pow(...args);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+            }
+            valid;
+        "#);
+    }
+
+    #[test]
     fn all_installed_math_methods_constants_and_intrinsic_metadata_follow_descriptors() {
         check(r#"
             var valid=true;

@@ -2629,7 +2629,7 @@ fn native_math_sqrt(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Resu
 fn native_math_pow(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let base = i.to_number(args.first().unwrap_or(&JsValue::Undefined))?;
     let exponent = i.to_number(args.get(1).unwrap_or(&JsValue::Undefined))?;
-    Ok(JsValue::num(base.powf(exponent)))
+    Ok(JsValue::num(crate::value::number_exponentiate(base, exponent)))
 }
 fn native_math_trunc(
     i: &mut Interpreter,

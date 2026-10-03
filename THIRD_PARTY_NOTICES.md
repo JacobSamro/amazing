@@ -95,3 +95,5 @@ reproduced in the table row for that upstream.
 - **boa-dev/boa** — MIT, Copyright (c) 2019 Jason Williams; `core/engine/src/builtins/math/mod.rs` @ `39cd11214ecb366200157dab96b3919e61e9a391`; Math intrinsic method metadata adapted in `crates/amazing-js/src/interp_install.rs`.
 
 - **boa-dev/boa** — MIT, Copyright (c) 2019 Jason Williams; `core/engine/src/builtins/promise/mod.rs` @ `39cd11214ecb366200157dab96b3919e61e9a391`; Promise.try/withResolvers and Promise prototype tag installation adapted in `crates/amazing-js/src/interp_promise_static.rs` and `crates/amazing-js/src/interp_install.rs`.
+
+- **boa-dev/boa** — MIT, Copyright (c) 2019 Jason Williams; `core/engine/src/builtins/math/mod.rs` @ `39cd11214ecb366200157dab96b3919e61e9a391`; Number::exponentiate guards adapted in `crates/amazing-js/src/value.rs`, reused by Math.pow, AST Pow and the VM numeric Pow consumer.

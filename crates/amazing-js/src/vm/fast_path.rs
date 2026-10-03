@@ -85,7 +85,7 @@ pub(super) fn binary(op: BinOp, left: &JsValue, right: &JsValue) -> Option<JsVal
         Mul => JsValue::num(a * b),
         Div => JsValue::num(a / b),
         Rem => JsValue::num(a % b),
-        Pow => JsValue::num(a.powf(*b)),
+        Pow => JsValue::num(crate::value::number_exponentiate(*a, *b)),
         Lt => JsValue::Bool(a < b),
         Gt => JsValue::Bool(a > b),
         Le => JsValue::Bool(a <= b),

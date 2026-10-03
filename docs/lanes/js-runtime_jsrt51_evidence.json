@@ -1,0 +1,267 @@
+{
+  "ticket": "JSRT-51",
+  "base_sha": "1d5253829385896416f8de2d7f42bf5f0673f66f",
+  "workspace": {
+    "passed": 3979,
+    "skipped": 17,
+    "elapsed_seconds": 75.627
+  },
+  "doctests": 4,
+  "selections": {
+    "built-ins-Math": {
+      "selected": 327,
+      "before": {
+        "pass": 321,
+        "fail": 6,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53545
+      },
+      "after": {
+        "pass": 324,
+        "fail": 3,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53545
+      },
+      "gained": [
+        "built-ins/Math/pow/applying-the-exp-operator_A1.js",
+        "built-ins/Math/pow/applying-the-exp-operator_A7.js",
+        "built-ins/Math/pow/applying-the-exp-operator_A8.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.356,
+      "elapsed_after": 3.44,
+      "before_host_sha256": "bbfbe0c588b3c033a8425d303e0fb13c5d6496f900fa85929cea940e3ee95b14",
+      "after_host_sha256": "a6f36f53be5fe15b0670089d85a96c3b163b43c0979ec65c47a3d51c631598e2",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Number": {
+      "selected": 340,
+      "before": {
+        "pass": 330,
+        "fail": 10,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53532
+      },
+      "after": {
+        "pass": 330,
+        "fail": 10,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53532
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.656,
+      "elapsed_after": 3.397,
+      "before_host_sha256": "bbfbe0c588b3c033a8425d303e0fb13c5d6496f900fa85929cea940e3ee95b14",
+      "after_host_sha256": "a6f36f53be5fe15b0670089d85a96c3b163b43c0979ec65c47a3d51c631598e2",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-BigInt": {
+      "selected": 77,
+      "before": {
+        "pass": 77,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53795
+      },
+      "after": {
+        "pass": 77,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53795
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.762,
+      "elapsed_after": 2.415,
+      "before_host_sha256": "bbfbe0c588b3c033a8425d303e0fb13c5d6496f900fa85929cea940e3ee95b14",
+      "after_host_sha256": "a6f36f53be5fe15b0670089d85a96c3b163b43c0979ec65c47a3d51c631598e2",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "language": {
+      "selected": 24590,
+      "before": {
+        "pass": 24393,
+        "fail": 171,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "after": {
+        "pass": 24395,
+        "fail": 169,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "gained": [
+        "language/expressions/exponentiation/applying-the-exp-operator_A7.js",
+        "language/expressions/exponentiation/applying-the-exp-operator_A8.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 54.409,
+      "elapsed_after": 54.599,
+      "before_host_sha256": "bbfbe0c588b3c033a8425d303e0fb13c5d6496f900fa85929cea940e3ee95b14",
+      "after_host_sha256": "a6f36f53be5fe15b0670089d85a96c3b163b43c0979ec65c47a3d51c631598e2",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Function": {
+      "selected": 515,
+      "before": {
+        "pass": 506,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "after": {
+        "pass": 506,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 4.48,
+      "elapsed_after": 4.345,
+      "before_host_sha256": "bbfbe0c588b3c033a8425d303e0fb13c5d6496f900fa85929cea940e3ee95b14",
+      "after_host_sha256": "a6f36f53be5fe15b0670089d85a96c3b163b43c0979ec65c47a3d51c631598e2",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before": {
+        "pass": 3411,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "after": {
+        "pass": 3411,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 10.113,
+      "elapsed_after": 10.49,
+      "before_host_sha256": "bbfbe0c588b3c033a8425d303e0fb13c5d6496f900fa85929cea940e3ee95b14",
+      "after_host_sha256": "a6f36f53be5fe15b0670089d85a96c3b163b43c0979ec65c47a3d51c631598e2",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    }
+  },
+  "unique": {
+    "selected": 29263,
+    "before_pass": 29038,
+    "after_pass": 29043,
+    "gained_files": [
+      "built-ins/Math/pow/applying-the-exp-operator_A1.js",
+      "built-ins/Math/pow/applying-the-exp-operator_A7.js",
+      "built-ins/Math/pow/applying-the-exp-operator_A8.js",
+      "language/expressions/exponentiation/applying-the-exp-operator_A7.js",
+      "language/expressions/exponentiation/applying-the-exp-operator_A8.js"
+    ],
+    "lost_files": [
+
+    ],
+    "gained_variants": [
+      [
+        "built-ins/Math/pow/applying-the-exp-operator_A1.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/pow/applying-the-exp-operator_A1.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/pow/applying-the-exp-operator_A7.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/pow/applying-the-exp-operator_A7.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/pow/applying-the-exp-operator_A8.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/pow/applying-the-exp-operator_A8.js",
+        "strict"
+      ],
+      [
+        "language/expressions/exponentiation/applying-the-exp-operator_A7.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/exponentiation/applying-the-exp-operator_A7.js",
+        "strict"
+      ],
+      [
+        "language/expressions/exponentiation/applying-the-exp-operator_A8.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/exponentiation/applying-the-exp-operator_A8.js",
+        "strict"
+      ]
+    ],
+    "lost_variants": [
+
+    ]
+  }
+}

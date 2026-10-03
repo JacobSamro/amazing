@@ -1437,7 +1437,7 @@ impl Interpreter {
                     Mul => self.to_number(&x)? * self.to_number(&y)?,
                     Div => self.to_number(&x)? / self.to_number(&y)?,
                     Rem => self.to_number(&x)? % self.to_number(&y)?,
-                    Pow => self.to_number(&x)?.powf(self.to_number(&y)?),
+                    Pow => crate::value::number_exponentiate(self.to_number(&x)?, self.to_number(&y)?),
                     Shl | Shr | UShr => {
                         let left = self.to_int32(&x)?;
                         let shift = self.to_uint32(&y)? & 31;

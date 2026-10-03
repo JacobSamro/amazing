@@ -1,4 +1,5 @@
-// Portions ported from boa-dev/boa (core/engine/src/property/mod.rs)
+// Portions ported from boa-dev/boa (core/engine/src/property/mod.rs,
+// core/engine/src/builtins/math/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // Completed descriptor kind adapted to a scalar tag without changing value roots.
 //! The ECMAScript value model: language values, objects, and the abstract
@@ -559,6 +560,17 @@ pub fn number_to_string(n: f64) -> String {
             if point - 1 >= 0 { "+" } else { "-" },
             (point - 1).abs()
         )
+    }
+}
+
+/// Number::exponentiate (ECMA-262 §6.1.6.1.3). Rust's powf differs from the
+/// language operation for NaN exponents and infinite powers of ±1.
+#[inline]
+pub fn number_exponentiate(base: f64, exponent: f64) -> f64 {
+    if exponent.is_nan() || (base.abs() == 1.0 && exponent.is_infinite()) {
+        f64::NAN
+    } else {
+        base.powf(exponent)
     }
 }
 
