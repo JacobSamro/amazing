@@ -68,7 +68,7 @@ mod animation_bindings;
 mod clipboard_bindings;
 pub mod canvas_interfaces;
 pub use mutation_bindings::deliver_mutation_checkpoint;
-pub use event_bindings::dispatch_user_agent_event;
+pub use event_bindings::{dispatch_user_agent_event, dispatch_user_agent_event_with_payload};
 pub use amazing_dom::{Dom, DomError, NodeIdx};
 pub use amazing_fetch::api::{Blob, BlobPart, File, FormData};
 pub use interfaces::{html_element_interface, install, unscopable_members, InstallReport, OptionalCapability, INTERFACES};

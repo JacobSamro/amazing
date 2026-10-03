@@ -2702,3 +2702,43 @@ mod tests_dom_b_reflect;
 mod tests_observable;
 #[path = "tests_set_html_unsafe.rs"]
 mod tests_set_html_unsafe;
+
+#[test]
+fn native_ua_payload_cancellation_and_activation_share_one_dispatch() {
+    use amazing_dom::events::{Event, EventClass, EventExtra, EventInit, EventTarget};
+    use std::time::Duration;
+    let mut host=Host::default();
+    let input=host.dom.create_element_ns(NodeIdx(0),Some("http://www.w3.org/1999/xhtml"),"input").unwrap();
+    host.dom.set_attribute(input,"type","checkbox").unwrap();
+    host.dom.set_input_indeterminate(input,true).unwrap();
+    let listener=host.script(move |host,receiver,args| {
+        assert_eq!(receiver,&V::Node(input));
+        assert_eq!(call(host,O::EventIsTrusted,args[0].clone(),&[]),V::Bool(true));
+        assert_eq!(call(host,O::EventExtra("clientX"),args[0].clone(),&[]),V::Number(31.5));
+        assert_eq!(call(host,O::EventExtra("shiftKey"),args[0].clone(),&[]),V::Bool(true));
+        assert!(host.dom.input_checked(input).unwrap());
+        assert!(!host.dom.input_indeterminate(input).unwrap());
+        Ok(V::Undefined)
+    });
+    call(&mut host,O::AddEventListener,V::Node(input),&[str_value("click"),listener]);
+    for (kind,id) in [("input",41),("change",42)] {
+        call(&mut host,O::AddEventListener,V::Node(input),&[str_value(kind),V::Callable(id)]);
+    }
+    let click=|| {
+        let mut event=Event::new("click",EventInit {bubbles:true,cancelable:true,composed:true},Duration::from_millis(12));
+        event.set_class(EventClass::Mouse);
+        event.set_extra("clientX",EventExtra::Number(31.5));
+        event.set_extra("shiftKey",EventExtra::Boolean(true));
+        event
+    };
+    host.cancel_events=true;
+    assert!(!dispatch_user_agent_event_with_payload(&mut host,EventTarget::Node(input),click()).unwrap());
+    assert!(!host.dom.input_checked(input).unwrap());
+    assert!(host.dom.input_indeterminate(input).unwrap());
+    assert!(host.calls.is_empty());
+    host.cancel_events=false;
+    assert!(dispatch_user_agent_event_with_payload(&mut host,EventTarget::Node(input),click()).unwrap());
+    assert!(host.dom.input_checked(input).unwrap());
+    assert!(!host.dom.input_indeterminate(input).unwrap());
+    assert_eq!(host.calls,vec![41,42]);
+}

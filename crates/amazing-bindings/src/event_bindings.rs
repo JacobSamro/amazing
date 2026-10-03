@@ -98,6 +98,14 @@ pub fn dispatch_user_agent_event<H: BindingHost>(host: &mut H, target: EventTarg
     kind: &str, init: EventInit) -> Result<(), H::Error> {
     dispatch_native_event(host, target, kind, init)
 }
+/// Dispatch a fully populated browser event through native listeners and activation.
+/// Returns false exactly when cancellation prevents the default action.
+/// The caller supplies the native event's type, flags, timestamp and typed payload.
+pub fn dispatch_user_agent_event_with_payload<H: BindingHost>(host: &mut H,
+    target: EventTarget, event: Event) -> Result<bool, H::Error> {
+    let event = host.with_dom(|dom| Ok(dom.events_mut().create_event(event)))?;
+    dispatch_created_event(host, target, event)
+}
 fn dispatch_native_event_result<H: BindingHost>(host: &mut H, target: EventTarget, kind: &str, init: EventInit) -> Result<bool, H::Error> {
     let event = host.with_dom(|dom| Ok(dom.events_mut().create_event(
         Event::new(kind, init, Duration::ZERO))))?;
