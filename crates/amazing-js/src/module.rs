@@ -273,7 +273,9 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         linker: &Rc<RefCell<Self>>, id: &str, root: &mut Interpreter,
     ) -> Result<ModuleNamespace, ModuleFailure> where R: 'static {
         let promise = Self::evaluate_async_shared(linker,id,root)?;
-        root.drain_microtasks().map_err(ModuleFailure::runtime)?;
+        if promise_fate(&promise).is_none() {
+            root.drain_microtasks().map_err(ModuleFailure::runtime)?;
+        }
         match promise_fate(&promise) {
             Some(PromiseFate::Rejected(value)) => return Err(ModuleFailure::runtime(Throw(value))),
             Some(PromiseFate::Fulfilled(_)) => {},

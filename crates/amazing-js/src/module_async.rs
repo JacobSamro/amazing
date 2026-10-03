@@ -898,3 +898,30 @@ mod cycle_root_completion_tests {
         assert_eq!(again, a);
     }
 }
+
+#[cfg(test)]
+mod external_scheduler_compatibility_tests {
+    use super::*;
+    #[test]
+    fn settled_shared_evaluation_never_pumps_external_scheduler_jobs() {
+        let linker = Rc::new(RefCell::new(ModuleLinker::new(
+            |_: &str, _: &str| Err("missing".into()),
+        )));
+        let mut i = Interpreter::new_with_external_scheduler(64).unwrap();
+        i.run_script("var order=[];var marker={};queueMicrotask(()=>order.push('job'));").unwrap();
+        linker.borrow_mut().link("ok", "order.push('module');export const value=7;").unwrap();
+        linker.borrow_mut().link("bad", "throw marker;").unwrap();
+        let values = ModuleLinker::evaluate_shared(&linker, "ok", &mut i).unwrap();
+        assert_eq!(values["value"], JsValue::num(7.0));
+        for _ in 0..2 {
+            let error = ModuleLinker::evaluate_shared(&linker, "bad", &mut i).unwrap_err();
+            assert_eq!(error.thrown.unwrap().0, i.global_env.resolve("marker").unwrap());
+        }
+        assert_eq!(i.run_script("order.join(',')").unwrap(), JsValue::str("module"));
+        for request in i.take_scheduling_requests() {
+            let crate::interp::SchedulingRequest::Microtask {job_token} = request else {panic!("unexpected timer")};
+            i.invoke_one_job(job_token).unwrap();
+        }
+        assert_eq!(i.run_script("order.join(',')").unwrap(), JsValue::str("module,job"));
+    }
+}
