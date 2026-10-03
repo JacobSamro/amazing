@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import hashlib
+import html
 import json
 import os
 import re
@@ -89,10 +90,7 @@ FLAGS_META_RE = re.compile(r"<" + NS_PREFIX + r"meta\b[^>]*\bname\s*=\s*[\"']fla
 EMBEDDED_RESOURCE_RE = re.compile(r"<" + NS_PREFIX + r"(?:img|object|iframe|video|audio|canvas|image)\b", re.I | re.S)
 CSS_RESOURCE_RE = re.compile(r"url\s*\(|@font-face|@import\b", re.I | re.S)
 STYLESHEET_LINK_RE = re.compile(r"<" + NS_PREFIX + r"link\b[^>]*\brel\s*=\s*[\"']stylesheet[\"']", re.I | re.S)
-FUZZY_META_RE = re.compile(r"<" + NS_PREFIX + r"meta\b[^>]*\bname\s*=\s*[\"']fuzzy[\"'][^>]*>", re.I | re.S)
-FUZZY_CONTENT_RE = re.compile(r"\bcontent\s*=\s*[\"']([^\"']+)[\"']", re.I | re.S)
-FUZZY_MAX_RE = re.compile(r"maxDifference\s*=\s*\d+-(\d+)")
-FUZZY_PIXELS_RE = re.compile(r"totalPixels\s*=\s*\d+-(\d+)")
+FUZZY_META_RE = re.compile(r"<" + NS_PREFIX + r"meta\b[^>]*>", re.I | re.S)
 REMOTE_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
 
 
@@ -274,22 +272,65 @@ def write_ppm(path: Path, width: int, height: int, pixels: bytes) -> None:
     path.write_bytes(header + pixels)
 
 
-def fuzzy_limits(test_source: str):
-    tag_match = FUZZY_META_RE.search(test_source)
-    if not tag_match:
-        return 0, 0
-    content_match = FUZZY_CONTENT_RE.search(tag_match.group(0))
-    if not content_match:
-        return 0, 0
-    content = content_match.group(1)
-    max_match = FUZZY_MAX_RE.search(content)
-    pixel_match = FUZZY_PIXELS_RE.search(content)
-    max_difference = int(max_match.group(1)) if max_match else 0
-    total_pixels = int(pixel_match.group(1)) if pixel_match else 0
-    return max_difference, total_pixels
+def fuzzy_metadata(test_source: str, test_url: str, reference_urls: set[str]):
+    """Read WPT's named/positional integer ranges per reference.
+
+    Implemented from https://web-platform-tests.org/writing-tests/reftests.html
+    rather than treating a missing regex match as a zero tolerance.
+    """
+    metadata = {}
+    names = ("maxDifference", "totalPixels")
+    for match in FUZZY_META_RE.finditer(test_source):
+        tag = match.group(0)
+        if html_attribute(tag, "name") != "fuzzy":
+            continue
+        content = html_attribute(tag, "content")
+        if content is None:
+            raise ValueError("fuzzy metadata has no content")
+        content = html.unescape(content).strip()
+        prefix, separator, values = content.rpartition(":")
+        key = urllib.parse.urljoin(test_url, prefix) if separator else None
+        if key is not None and key not in reference_urls:
+            raise ValueError(f"fuzzy metadata selects an unknown reference: {prefix}")
+        if key in metadata:
+            raise ValueError("duplicate fuzzy metadata for a reference")
+        fields = (values if separator else content).split(";")
+        if len(fields) != 2:
+            raise ValueError("fuzzy metadata requires two parameters")
+        named, positional = {}, []
+        for field in fields:
+            name, equal, value = field.partition("=")
+            if equal:
+                name = name.strip()
+                if name not in names or name in named:
+                    raise ValueError("invalid or duplicate fuzzy parameter")
+            else:
+                value = field
+            integers = value.strip().split("-")
+            if len(integers) not in (1, 2) or any(not re.fullmatch(r"\s*[0-9]+\s*", n) for n in integers):
+                raise ValueError("fuzzy bounds must be nonnegative integer ranges")
+            bounds = (int(integers[0]), int(integers[-1]))
+            if bounds[0] > bounds[1]:
+                raise ValueError("fuzzy range is reversed")
+            if equal:
+                named[name] = bounds
+            else:
+                positional.append(bounds)
+        result = []
+        for name in names:
+            if name in named:
+                result.append(named[name])
+            elif positional:
+                result.append(positional.pop(0))
+            else:
+                raise ValueError("missing fuzzy parameter")
+        if positional:
+            raise ValueError("unused fuzzy parameter")
+        metadata[key] = tuple(result)
+    return metadata
 
 
-def compare_ppm(actual_path: Path, reference_path: Path, diff_path: Path, allowed_difference: int, allowed_pixels: int):
+def compare_ppm(actual_path: Path, reference_path: Path, diff_path: Path, allowed_difference: tuple[int, int], allowed_pixels: tuple[int, int]):
     actual_w, actual_h, actual_pixels = read_ppm(actual_path)
     reference_w, reference_h, reference_pixels = read_ppm(reference_path)
     if (actual_w, actual_h) != (reference_w, reference_h):
@@ -316,7 +357,9 @@ def compare_ppm(actual_path: Path, reference_path: Path, diff_path: Path, allowe
         else:
             diff[offset], diff[offset + 1], diff[offset + 2] = 255, 255, 255
     write_ppm(diff_path, actual_w, actual_h, bytes(diff))
-    matched = max_difference <= allowed_difference and differing <= allowed_pixels
+    exact_allowed = (differing == 0 and allowed_pixels[0] == 0) or (max_difference == 0 and allowed_difference[0] == 0)
+    matched = exact_allowed or (allowed_difference[0] <= max_difference <= allowed_difference[1]
+                               and allowed_pixels[0] <= differing <= allowed_pixels[1])
     return {
         "matched": matched,
         "differing_pixels": differing,
@@ -387,9 +430,17 @@ def run_one_test(candidate, exe: Path, wpt_root: Path, run_directory: Path, widt
             "detail": actual_run["detail"],
         }
     test_source = test_path.read_text(errors="replace")
-    max_difference, total_pixels = fuzzy_limits(test_source)
+    test_url = test_path.as_uri()
+    try:
+        metadata = fuzzy_metadata(test_source, test_url, {
+            urllib.parse.urljoin(test_url, link["href"]) for link in candidate["links"]
+        })
+    except ValueError as error:
+        return {"id": test_id, "classification": "error", "detail": str(error)}
     evaluations = []
     for index, link in enumerate(candidate["links"]):
+        reference_url = urllib.parse.urljoin(test_url, link["href"])
+        max_difference, total_pixels = metadata.get(reference_url, metadata.get(None, ((0, 0), (0, 0))))
         suffix = "" if index == 0 else f"_{index}"
         reference_output = test_directory / f"reference{suffix}.ppm"
         diff_output = test_directory / f"diff{suffix}.ppm"
@@ -398,7 +449,11 @@ def run_one_test(candidate, exe: Path, wpt_root: Path, run_directory: Path, widt
             test_directory / f"reference{suffix}",
         )
         evaluation = {"relation": link["relation"], "reference_href": link["href"],
-                      "satisfied": False}
+                      "satisfied": False,
+                      "allowed_max_difference": max_difference[1],
+                      "allowed_differing_pixels": total_pixels[1],
+                      "allowed_difference_range": max_difference,
+                      "allowed_pixel_range": total_pixels}
         if reference_run["classification"] != "rendered":
             evaluation.update(render_failed=reference_run["classification"],
                               detail=f"reference: {reference_run['detail']}")
@@ -446,8 +501,6 @@ def run_one_test(candidate, exe: Path, wpt_root: Path, run_directory: Path, widt
         "id": test_id,
         "classification": classification,
         **{key: value for key, value in primary.items() if key != "satisfied"},
-        "allowed_max_difference": max_difference,
-        "allowed_differing_pixels": total_pixels,
         "actual_sha256": sha256_file(actual_path),
         "references": evaluations,
     }
