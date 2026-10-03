@@ -1,0 +1,17 @@
+{
+  "base": "8f2bbaa05b2c8ceced0c915dab8eff4cb4197c21",
+  "before": "f1a5b3cf109ab7e8f0fc69e0b78bfc1625460ada",
+  "source": "376dada37ad07042e7f97c5f6208b4cfcf347ee9",
+  "owned": 636,
+  "workspace": 3885,
+  "workspace_skips": 17,
+  "doctests": 4,
+  "html5lib": 1894,
+  "expanded": 1930,
+  "expanded_unsupported": 6,
+  "parser_gains": 7,
+  "lost": 0,
+  "module_passes": 132,
+  "module_gains": 0,
+  "module_lost": 0
+}
