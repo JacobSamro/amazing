@@ -785,7 +785,7 @@ fn heap_frame_suspends_and_resumes_at_instruction_boundaries() {
                 assert_eq!(value, JsValue::num(3.0));
                 break;
             }
-            FrameOutcome::Yielded(_) => panic!("ordinary frame yielded"),
+            FrameOutcome::Yielded(_) | FrameOutcome::YieldedIteratorResult(_) => panic!("ordinary frame yielded"),
             FrameOutcome::Awaited(_) => panic!("ordinary frame awaited"),
         }
     }
@@ -849,7 +849,7 @@ fn heap_frame_resumes_through_catch_and_finally() {
                 assert_eq!(value, JsValue::num(9.0));
                 break;
             }
-            FrameOutcome::Yielded(_) => panic!("ordinary frame yielded"),
+            FrameOutcome::Yielded(_) | FrameOutcome::YieldedIteratorResult(_) => panic!("ordinary frame yielded"),
             FrameOutcome::Awaited(_) => panic!("ordinary frame awaited"),
         }
     }
