@@ -46,7 +46,9 @@ impl RuntimeBindings {
                 .flatten().and_then(amazing_encoding::encoding_for_label);
             let encoding = script_encoding.or_else(|| label.and_then(amazing_encoding::encoding_for_label))
                 .unwrap_or(amazing_encoding::Encoding::Utf8);
-            let (mode, credentials, referrer_policy) = classic_options(&host.dom, script);
+            let default = state.frames.document_referrer_policy(&host.dom, document)
+                .unwrap_or(amazing_fetch::ReferrerPolicy::StrictOriginWhenCrossOrigin);
+            let (mode, credentials, referrer_policy) = classic_options(&host.dom, script, default);
             (loader, context, encoding, mode, credentials, referrer_policy)
         };
         let Some(loader) = snapshot.0 else {
@@ -70,7 +72,7 @@ impl RuntimeBindings {
     }
 }
 
-fn classic_options(dom: &Dom, script: NodeIdx) ->
+fn classic_options(dom: &Dom, script: NodeIdx, default: amazing_fetch::ReferrerPolicy) ->
     (amazing_fetch::RequestMode, amazing_fetch::CredentialsMode, amazing_fetch::ReferrerPolicy) {
     use amazing_fetch::{CredentialsMode, ReferrerPolicy, RequestMode};
     let (mode, credentials) = match dom.get_attribute_ns(script, None, "crossorigin") {
@@ -80,16 +82,81 @@ fn classic_options(dom: &Dom, script: NodeIdx) ->
     };
     // Enumerated content attributes are ASCII case-insensitive; invalid and
     // empty states use the engine's document default policy.
-    let policy = dom.get_attribute_ns(script, None, "referrerpolicy")
-        .and_then(|value| {
-            let value = value.to_ascii_lowercase();
-            if !matches!(value.as_str(), "no-referrer" | "no-referrer-when-downgrade" | "same-origin"
-                | "origin" | "strict-origin" | "origin-when-cross-origin"
-                | "strict-origin-when-cross-origin" | "unsafe-url") { return None; }
-            ReferrerPolicy::parse_header(&value)
-        })
-        .unwrap_or(ReferrerPolicy::StrictOriginWhenCrossOrigin);
+    let policy = attribute_referrer_policy(dom.get_attribute_ns(script, None, "referrerpolicy"))
+        .unwrap_or(default);
     (mode, credentials, policy)
+}
+
+pub(super) fn attribute_referrer_policy(value: Option<&str>) -> Option<amazing_fetch::ReferrerPolicy> {
+    let value = value?.to_ascii_lowercase();
+    if !matches!(value.as_str(), "no-referrer" | "no-referrer-when-downgrade" | "same-origin"
+        | "origin" | "strict-origin" | "origin-when-cross-origin"
+        | "strict-origin-when-cross-origin" | "unsafe-url") { return None; }
+    amazing_fetch::ReferrerPolicy::parse_header(&value)
+}
+
+pub(super) fn response_referrer_policy(headers: &amazing_net::Headers) -> amazing_fetch::ReferrerPolicy {
+    headers.get_all("referrer-policy").into_iter()
+        .filter_map(amazing_fetch::ReferrerPolicy::parse_header).last()
+        .unwrap_or(amazing_fetch::ReferrerPolicy::StrictOriginWhenCrossOrigin)
+}
+
+pub(super) fn referrer_policy_name(policy: amazing_fetch::ReferrerPolicy) -> &'static str {
+    use amazing_fetch::ReferrerPolicy::*;
+    match policy {
+        NoReferrer => "no-referrer", NoReferrerWhenDowngrade => "no-referrer-when-downgrade",
+        SameOrigin => "same-origin", Origin => "origin", StrictOrigin => "strict-origin",
+        OriginWhenCrossOrigin => "origin-when-cross-origin",
+        StrictOriginWhenCrossOrigin => "strict-origin-when-cross-origin", UnsafeUrl => "unsafe-url",
+    }
+}
+
+impl FrameRuntime {
+    pub(super) fn document_referrer_policy(&self, dom: &Dom, document: NodeIdx)
+        -> Option<amazing_fetch::ReferrerPolicy> {
+        if !matches!(dom.kind(document), Some(NodeKind::Document)) { return None; }
+        let generation = dom.node_generation(document)?;
+        Some(self.document_referrer_policies.get(&document).filter(|(saved, _)| *saved == generation)
+            .map(|(_, policy)| *policy).unwrap_or(amazing_fetch::ReferrerPolicy::StrictOriginWhenCrossOrigin))
+    }
+}
+
+impl RuntimeBindingHost<'_> {
+    pub(super) fn html_document_referrer_policy(&self, document: NodeIdx)
+        -> Option<amazing_fetch::ReferrerPolicy> {
+        let state = self.state.borrow(); let host = state.host.borrow();
+        state.frames.document_referrer_policy(&host.dom, document)
+    }
+    pub(super) fn html_set_document_referrer_policy(&self, document: NodeIdx,
+        policy: amazing_fetch::ReferrerPolicy) -> Result<(), amazing_dom::DomError> {
+        let generation = {
+            let state = self.state.borrow(); let host = state.host.borrow();
+            if !matches!(host.dom.kind(document), Some(NodeKind::Document)) {
+                return Err(amazing_dom::DomError::InvalidStateError);
+            }
+            host.dom.node_generation(document).ok_or(amazing_dom::DomError::InvalidStateError)?
+        };
+        self.state.borrow_mut().frames.document_referrer_policies.insert(document, (generation, policy));
+        Ok(())
+    }
+}
+
+impl RuntimeBindings {
+    pub(crate) fn set_document_response_referrer_policy(&self, document: NodeIdx,
+        headers: &amazing_net::Headers) -> Result<(), amazing_dom::DomError> {
+        let policy = headers.get_all("referrer-policy").into_iter()
+            .filter_map(amazing_fetch::ReferrerPolicy::parse_header).last();
+        let Some(policy) = policy else { return Ok(()); };
+        let generation = {
+            let state = self.state.borrow(); let host = state.host.borrow();
+            if !matches!(host.dom.kind(document), Some(NodeKind::Document)) {
+                return Err(amazing_dom::DomError::InvalidStateError);
+            }
+            host.dom.node_generation(document).ok_or(amazing_dom::DomError::InvalidStateError)?
+        };
+        self.state.borrow_mut().frames.document_referrer_policies.insert(document, (generation, policy));
+        Ok(())
+    }
 }
 
 /// HTML fetch-a-classic-script plus Encoding decode. No HTML meta prescan:
@@ -174,9 +241,33 @@ mod tests {
                 let dom = amazing_html::parse(&format!("<script {attribute} referrerpolicy='{value}'></script>"));
                 let script = dom.tree_order(NodeIdx(0)).into_iter()
                     .find(|node| dom.local_name(*node) == Some("script")).unwrap();
-                assert_eq!(classic_options(&dom, script), (mode, credentials, expected));
+                assert_eq!(classic_options(&dom, script, ReferrerPolicy::StrictOriginWhenCrossOrigin), (mode, credentials, expected));
             }
         }
+    }
+
+    #[test]
+    fn referrer_policy_headers_attributes_and_generation_keep_actual_document_state() {
+        use amazing_fetch::ReferrerPolicy::*;
+        let mut headers = amazing_net::Headers::new();
+        headers.append("Referrer-Policy", "origin, invalid").unwrap();
+        headers.append("Referrer-Policy", "no-referrer, same-origin").unwrap();
+        headers.append("Referrer-Policy", "INVALID").unwrap();
+        assert_eq!(response_referrer_policy(&headers), SameOrigin);
+        for value in ["", " origin ", "origin,no-referrer", "bogus"] {
+            assert_eq!(attribute_referrer_policy(Some(value)), None);
+        }
+        assert_eq!(attribute_referrer_policy(Some("NO-REFERRER")), Some(NoReferrer));
+        let dom = amazing_html::parse("<script referrerpolicy='bogus'></script>");
+        let script = dom.tree_order(NodeIdx(0)).into_iter().find(|node| dom.local_name(*node)==Some("script")).unwrap();
+        assert_eq!(classic_options(&dom, script, NoReferrer).2, NoReferrer);
+        let mut frames = FrameRuntime::default();
+        let generation = dom.node_generation(NodeIdx(0)).unwrap();
+        frames.document_referrer_policies.insert(NodeIdx(0), (generation, Origin));
+        assert_eq!(frames.document_referrer_policy(&dom, NodeIdx(0)), Some(Origin));
+        frames.document_referrer_policies.insert(NodeIdx(0), (generation+1, NoReferrer));
+        assert_eq!(frames.document_referrer_policy(&dom, NodeIdx(0)), Some(StrictOriginWhenCrossOrigin));
+        assert_eq!(frames.document_referrer_policy(&dom, script), None);
     }
 
     #[test]
@@ -264,12 +355,15 @@ mod tests {
         creator.csp = amazing_fetch::CspPolicyList::from_headers(&headers).unwrap();
         RuntimeBindingHost { js: &mut js, state: bindings.state.clone() }
             .set_document_network_policy(NodeIdx(0), creator.clone()).unwrap();
+        RuntimeBindingHost { js: &mut js, state: bindings.state.clone() }
+            .html_set_document_referrer_policy(NodeIdx(0), amazing_fetch::ReferrerPolicy::NoReferrer).unwrap();
         let seen = Rc::new(RefCell::new(Vec::new()));
         let observed = seen.clone();
         bindings.set_frame_resource_loader(Rc::new(move |request| {
             observed.borrow_mut().push(request.clone());
             let mut response = response(&request.requested_url, Some("text/html"), b"<!doctype html><body>".to_vec());
             response.headers.append("Content-Security-Policy", "connect-src 'none'").unwrap();
+            response.headers.append("Referrer-Policy", "origin, same-origin").unwrap();
             Ok(response)
         }));
         let frames = {
@@ -288,22 +382,27 @@ mod tests {
         for document in documents[..2].iter().copied() {
             let generation = host.borrow().dom.node_generation(document).unwrap();
             assert_eq!(adapter.document_network_policy(document, generation).unwrap().csp, creator.csp);
+            assert_eq!(adapter.html_document_referrer_policy(document), Some(amazing_fetch::ReferrerPolicy::NoReferrer));
         }
         let remote_generation = host.borrow().dom.node_generation(documents[2]).unwrap();
         let remote = adapter.document_network_policy(documents[2], remote_generation).unwrap();
         assert_ne!(remote.csp, creator.csp);
+        assert_eq!(adapter.html_document_referrer_policy(documents[2]), Some(amazing_fetch::ReferrerPolicy::SameOrigin));
+        assert_eq!(seen.borrow()[0].referrer_policy, amazing_fetch::ReferrerPolicy::NoReferrer);
         assert_eq!(seen.borrow()[0].client_context.as_ref().unwrap().csp, creator.csp);
         // Replacing the creator's policy cannot change inherited snapshots.
         adapter.set_document_network_policy(NodeIdx(0), amazing_fetch::service::ClientContext::default()).unwrap();
         for document in documents[..2].iter().copied() {
             let generation = host.borrow().dom.node_generation(document).unwrap();
             assert_eq!(adapter.document_network_policy(document, generation).unwrap().csp, creator.csp);
+            assert_eq!(adapter.html_document_referrer_policy(document), Some(amazing_fetch::ReferrerPolicy::NoReferrer));
         }
         drop(adapter);
         let script = host.borrow_mut().dom.create_element(documents[2], "script");
         bindings.fetch_document_classic_script(&mut js, documents[2], script, "/script.js",
             "https://example.test/remote", None).unwrap();
         assert_eq!(seen.borrow().last().unwrap().client_context.as_ref().unwrap().csp, remote.csp);
+        assert_eq!(seen.borrow().last().unwrap().referrer_policy, amazing_fetch::ReferrerPolicy::SameOrigin);
         assert!(host.try_borrow_mut().is_ok());
     }
 

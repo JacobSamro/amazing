@@ -63,6 +63,7 @@ struct NavigationSource {
     /// Policy at initiation, retained even when the source Document retires.
     policy: HtmlDocumentContext,
     client_context: Option<amazing_fetch::service::ClientContext>,
+    referrer_policy: amazing_fetch::ReferrerPolicy,
 }
 
 #[derive(Clone)]
@@ -135,6 +136,7 @@ pub(super) struct FrameRuntime {
     pending_loads: VecDeque<(NodeIdx, Option<NodeIdx>, bool)>,
     resolver: Option<FrameResourceResolver>,
     resource_loader: Option<HtmlFrameResourceLoader>,
+    document_referrer_policies: HashMap<NodeIdx, (u64, amazing_fetch::ReferrerPolicy)>,
     navigation_hook: Option<ChildNavigationHook>,
     form_navigation_hook: Option<FormNavigationHook>,
     /// The stable WindowProxy (and its current target realm) for each
@@ -865,9 +867,10 @@ impl RuntimeBindings {
                 let Some(policy) = policy else { continue; };
                 let origin = context_origin(adapter.js, &owner_context, owner_realm).unwrap_or_else(|_| "null".into());
                 let client_context = adapter.document_network_policy(owner, generation);
+                let referrer_policy = adapter.html_document_referrer_policy(owner).unwrap_or(amazing_fetch::ReferrerPolicy::StrictOriginWhenCrossOrigin);
                 NavigationSource { document: owner, generation, base_url,
                     document_url: owner_context.document_url.clone(), origin,
-                    fetch_origin: owner_context.fetch_origin.clone(), policy, client_context }
+                    fetch_origin: owner_context.fetch_origin.clone(), policy, client_context, referrer_policy }
             };
             let mut ancestor_origins = Vec::new();
             let mut ancestor = Some(owner_context.clone());
@@ -882,12 +885,18 @@ impl RuntimeBindings {
             }
             ancestor_origins.reverse();
             let Some(top_level_origin) = ancestor_origins.first().cloned() else { continue; };
+            let request_referrer_policy = {
+                let host = host.borrow();
+                resource_response::attribute_referrer_policy(host.dom.get_attribute_ns(node, None, "referrerpolicy"))
+                    .unwrap_or(source.referrer_policy)
+            };
             let navigation_context = NavigableContext { top_level_origin,
                 parent_origin: owner_context.fetch_origin.clone(), ancestor_origins,
                 sandbox_flags: sandbox.to_bits(), frame_csp: Default::default(),
-                referrer: source.document_url.clone(), referrer_policy: "strict-origin-when-cross-origin".into(),
+                referrer: source.document_url.clone(), referrer_policy: resource_response::referrer_policy_name(request_referrer_policy).into(),
                 now_unix: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64 };
             let mut response_policy = None;
+            let mut response_referrer_policy = None;
             let loaded = (|| -> Result<LoadedChildDocument, String> {
                 // `srcdoc` takes priority over `src` per spec: its content is
                 // used verbatim and the navigable's URL becomes "about:srcdoc"
@@ -936,6 +945,7 @@ impl RuntimeBindings {
                 let mut policy = amazing_fetch::service::ClientContext::default();
                 policy.csp = amazing_fetch::CspPolicyList::from_headers(&response.headers)
                     .map_err(|error| format!("iframe response policy: {error:?}"))?;
+                response_referrer_policy = Some(resource_response::response_referrer_policy(&response.headers));
                 response_policy = Some(policy);
                 let document_url = if canonical || resolver.is_none() { response.url.clone() } else { logical_url.clone() };
                 // HTML-34: only the HTML case defers to a script-interleaved
@@ -1015,6 +1025,11 @@ impl RuntimeBindings {
                     let adapter = RuntimeBindingHost { js, state: self.state.clone() };
                     if adapter.set_document_network_policy(document, policy).is_err() { continue; }
                 }
+            }
+            if let Some(document) = document {
+                let policy = response_referrer_policy.unwrap_or(source.referrer_policy);
+                let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
+                if adapter.html_set_document_referrer_policy(document, policy).is_err() { continue; }
             }
             let mut state = self.state.borrow_mut();
             let navigation = ChildNavigation { frame: node, requested_src: src.clone(),
@@ -1591,10 +1606,12 @@ impl RuntimeBindingHost<'_> {
             state.frames.document_context(&host.dom, source_context.document)
         }.ok_or_else(|| Throw::type_error("Stale navigation source context"))?;
         let client_context = self.document_network_policy(source_context.document, source_generation);
+        let referrer_policy = self.html_document_referrer_policy(source_context.document)
+            .unwrap_or(amazing_fetch::ReferrerPolicy::StrictOriginWhenCrossOrigin);
         Ok(HtmlNavigation { document: target_context.document, generation: target_generation,
             url: url.into(), replace, reload: false, source: NavigationSource { document: source_context.document,
                 generation: source_generation, base_url, document_url: source_context.document_url,
-                origin, fetch_origin: source_context.fetch_origin, policy, client_context } })
+                origin, fetch_origin: source_context.fetch_origin, policy, client_context, referrer_policy } })
     }
 
     pub(super) fn html_location_navigate(&mut self, url: &str, replace: bool) -> Result<(), Throw> {
