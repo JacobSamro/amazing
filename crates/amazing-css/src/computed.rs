@@ -111,7 +111,7 @@ impl Default for ComputedStyle {
 }
 
 impl ComputedStyle {
-    pub(crate) fn root_font_size_px(&self) -> f32 { self.root_font_px as f32 }
+    pub fn root_font_size_px(&self) -> f32 { self.root_font_px as f32 }
 
     /// Copy the parent's actual used-unit context into an anonymous box style.
     /// This copies only accumulated zoom and the document root font size;
