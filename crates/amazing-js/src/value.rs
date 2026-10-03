@@ -1149,6 +1149,9 @@ impl JsObject {
     /// throws rather than overwriting if the brand is already present (the
     /// double-`super()`-with-private-fields case).
     pub fn private_add(&mut self, name: PrivateName, kind: PrivateElementKind) -> Result<(), Throw> {
+        if matches!(self.exotic, Exotic::ModuleNamespace(_) | Exotic::DeferredModuleNamespace(_)) {
+            return Err(Throw::type_error("cannot add private members to a module namespace"));
+        }
         if self.private_has(&name) {
             return Err(Throw::type_error(format!(
                 "cannot add private member {} twice on the same object",

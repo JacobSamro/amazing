@@ -1121,3 +1121,7 @@ mod tests {
         assert_eq!(root.run_script("count").unwrap(), JsValue::num(1.0));
     }
 }
+
+#[cfg(test)]
+#[path = "module_namespace_tests.rs"]
+mod namespace_operation_tests;

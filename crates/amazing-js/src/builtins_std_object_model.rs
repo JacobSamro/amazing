@@ -241,7 +241,11 @@ impl Interpreter {
         let existing = match self.window_proxy_own_property(&receiver_object, key) {
             Some(result) => result?,
             None => match self.proxy_get_own_property(&receiver_object, key) {
-                Some(result) => result?, None => receiver_object.borrow().own_prop(key).cloned(),
+                Some(result) => result?,
+                None => match self.namespace_own_property(&receiver_object, key) {
+                    Some(result) => result?,
+                    None => receiver_object.borrow().own_prop(key).cloned(),
+                },
             },
         };
         if let Some(property) = &existing {
@@ -258,6 +262,10 @@ impl Interpreter {
         {
             self.set_prop(&JsValue::Object(receiver_object), key, value)?;
             return Ok(true);
+        }
+        if is_module_namespace(&receiver_object) {
+            return namespace_define_fields(self, &receiver_object, key,
+                &StdDescriptorFields { value: Some(value), ..Default::default() });
         }
         self.ordinary_set_data_property(&receiver_object, key, value, existing)
     }

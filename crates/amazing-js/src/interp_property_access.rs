@@ -246,6 +246,17 @@ impl Interpreter {
                 }
                 return Ok(keys);
             }
+            if is_module_namespace(object) {
+                let mut keys = Vec::new();
+                for key in self.own_property_keys(v)? {
+                    if let PropertyKey::String(name) = &key {
+                        if self.namespace_own_property(object, &key).unwrap()?.is_some_and(|p| p.enumerable) {
+                            keys.push(name.clone());
+                        }
+                    }
+                }
+                return Ok(keys);
+            }
         }
         match v {
             JsValue::Object(o) if binary_own_keys(o).is_some() => Ok(binary_own_keys(o).unwrap().into_iter().filter_map(|key| match key {
@@ -271,6 +282,7 @@ impl Interpreter {
                 if state.visited_keys.contains(&key) { continue; }
                 let property = if let Some(result) = self.window_proxy_own_property(&object, &PropertyKey::String(key.clone())) { result? }
                     else if let Some(result) = self.proxy_get_own_property(&object, &PropertyKey::String(key.clone())) { result? }
+                    else if let Some(result) = self.namespace_own_property(&object, &PropertyKey::String(key.clone())) { result? }
                     else { match binary_index_descriptor(&object, &PropertyKey::String(key.clone())) {
                     Some(descriptor) => descriptor,
                     None => self.legacy_own_property(&object, key.clone(), false)?,
