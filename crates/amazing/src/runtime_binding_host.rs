@@ -663,6 +663,10 @@ impl RuntimeBindingHost<'_> {
 }
 
 #[cfg(test)]
+#[path = "runtime_window_property_tests.rs"]
+mod window_property_tests;
+
+#[cfg(test)]
 mod image_loader_tests {
     use super::*;
 
@@ -862,6 +866,10 @@ pub(crate) fn install(
     adapter.js.global_env = fresh;
     adapter.install_net()?;
     adapter.install_module_loader()?;
+    // Installed Window uses genuine realm and event-target identity. The
+    // legacy DOM-node marker intercepts ordinary body/documentElement names.
+    let global = adapter.js.binding_global_object();
+    adapter.js.binding_delete_property(&global, "[[DomNode]]")?;
     adapter
         .js
         .global_obj
