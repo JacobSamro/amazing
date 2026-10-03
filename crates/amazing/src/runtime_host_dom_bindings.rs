@@ -69,7 +69,7 @@ impl RuntimeBindingHost<'_> {
     }
 
     pub(super) fn dom_parser_document(&self, parser: &JsValue) -> Result<NodeIdx, Throw> {
-        let slot = self.web_key(parser, InterfaceBrand::DOM_PARSER)?;
+        let slot = self.web_slot(parser, InterfaceBrand::DOM_PARSER)?;
         let state = self.state.borrow();
         let WebObject::DomParser { document: (document, generation), .. } = &state.web_objects[slot] else {
             return Err(Throw::type_error("Expected a DOMParser"));
@@ -85,7 +85,7 @@ impl RuntimeBindingHost<'_> {
     pub(super) fn dom_parse_for_parser(&mut self, parser: &JsValue, bytes: &[u8], content_type: &str,
         url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
         self.dom_parser_document(parser).map_err(|_| DomError::TypeError)?;
-        let slot = self.web_key(parser, InterfaceBrand::DOM_PARSER).map_err(|_| DomError::TypeError)?;
+        let slot = self.web_slot(parser, InterfaceBrand::DOM_PARSER).map_err(|_| DomError::TypeError)?;
         let (realm, origin) = {
             let state = self.state.borrow();
             let WebObject::DomParser { realm, origin, .. } = &state.web_objects[slot] else {
