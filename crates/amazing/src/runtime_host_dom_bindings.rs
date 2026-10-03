@@ -2012,7 +2012,7 @@ mod tests {
         let realm=js.binding_current_realm();let actual=bindings.state.borrow_mut().realm_documents.remove(&realm).unwrap();
         let count=host.borrow().dom.node_count();
         let result=js.run_script("(function(){let n=0;for(const make of [()=>new Text('x'),()=>new Comment('x'),()=>new DocumentFragment(),()=>new Document(),()=>new DOMParser(),()=>new Option('x'),()=>new ProcessingInstruction('t','d')]){try{make()}catch(e){if(e instanceof TypeError)n++;}}return n;})()").unwrap();
-        assert_eq!(result,JsValue::Number(7.0));assert_eq!(host.borrow().dom.node_count(),count);
+        assert_eq!(result,JsValue::Num(7.0));assert_eq!(host.borrow().dom.node_count(),count);
         bindings.state.borrow_mut().realm_documents.insert(realm,(actual.0,actual.1+1));
         assert_eq!(js.run_script("(function(){try{document.createElement('div')}catch(e){return e instanceof TypeError;}return false;})()").unwrap(),JsValue::Bool(true));
         assert_eq!(host.borrow().dom.node_count(),count);bindings.state.borrow_mut().realm_documents.insert(realm,actual);
