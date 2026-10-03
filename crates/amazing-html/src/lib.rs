@@ -34,6 +34,7 @@
 //! ```
 
 pub mod encoding;
+mod encoding_prescan;
 mod byte_stream;
 pub mod entities;
 pub mod resumable;

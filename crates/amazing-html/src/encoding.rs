@@ -49,6 +49,7 @@ pub enum Source {
     Transport,
     Meta,
     Utf16XmlPreamble,
+    XmlDeclaration,
     Default,
 }
 
@@ -88,8 +89,8 @@ fn sniff_with_fallback(bytes: &[u8], transport_label: Option<&str>, fallback: En
         (encoding, Source::Transport, 0)
     } else if let Some(encoding) = xml_utf16_preamble(bytes) {
         (encoding, Source::Utf16XmlPreamble, 0)
-    } else if let Some(encoding) = prescan_meta(bytes) {
-        (encoding, Source::Meta, 0)
+    } else if let Some((encoding, source)) = crate::encoding_prescan::prescan(bytes) {
+        (encoding, source, 0)
     } else {
         (fallback, Source::Default, 0)
     };
@@ -110,114 +111,7 @@ fn xml_utf16_preamble(bytes: &[u8]) -> Option<Encoding> {
     }
 }
 
-fn prescan_meta(bytes: &[u8]) -> Option<Encoding> {
-    let bytes = &bytes[..bytes.len().min(1024)];
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i..].starts_with(b"<!--") {
-            if let Some(end) = bytes[i + 4..].windows(3).position(|s| s == b"-->") {
-                i += 4 + end + 3;
-                continue;
-            }
-            break;
-        }
-        if bytes[i] != b'<' {
-            i += 1;
-            continue;
-        }
-        if bytes
-            .get(i + 1..i + 5)
-            .is_some_and(|s| s.eq_ignore_ascii_case(b"meta"))
-            && bytes
-                .get(i + 5)
-                .is_some_and(|b| ascii_space(*b) || *b == b'/')
-        {
-            i += 5;
-            let mut charset = None;
-            let mut content = None;
-            let mut pragma = false;
-            while i < bytes.len() && bytes[i] != b'>' {
-                while i < bytes.len() && (ascii_space(bytes[i]) || bytes[i] == b'/') {
-                    i += 1;
-                }
-                if i >= bytes.len() || bytes[i] == b'>' {
-                    break;
-                }
-                let start = i;
-                while i < bytes.len()
-                    && !ascii_space(bytes[i])
-                    && !matches!(bytes[i], b'=' | b'>' | b'/')
-                {
-                    i += 1;
-                }
-                if i == start {
-                    i += 1;
-                    continue;
-                }
-                let name = &bytes[start..i];
-                while i < bytes.len() && ascii_space(bytes[i]) {
-                    i += 1;
-                }
-                let mut value = &b""[..];
-                if i < bytes.len() && bytes[i] == b'=' {
-                    i += 1;
-                    while i < bytes.len() && ascii_space(bytes[i]) {
-                        i += 1;
-                    }
-                    if i < bytes.len() && matches!(bytes[i], b'\'' | b'"') {
-                        let quote = bytes[i];
-                        i += 1;
-                        let start = i;
-                        while i < bytes.len() && bytes[i] != quote {
-                            i += 1;
-                        }
-                        value = &bytes[start..i];
-                        if i < bytes.len() {
-                            i += 1;
-                        }
-                    } else {
-                        let start = i;
-                        while i < bytes.len() && !ascii_space(bytes[i]) && bytes[i] != b'>' {
-                            i += 1;
-                        }
-                        value = &bytes[start..i];
-                    }
-                }
-                if name.eq_ignore_ascii_case(b"charset") && charset.is_none() {
-                    charset = Some(value);
-                } else if name.eq_ignore_ascii_case(b"content") && content.is_none() {
-                    content = Some(value);
-                } else if name.eq_ignore_ascii_case(b"http-equiv")
-                    && value.eq_ignore_ascii_case(b"content-type")
-                {
-                    pragma = true;
-                }
-            }
-            let declared = charset.or_else(|| {
-                if pragma {
-                    content.and_then(extract_content_charset)
-                } else {
-                    None
-                }
-            });
-            if let Some(encoding) = declared
-                .and_then(|value| std::str::from_utf8(value).ok())
-                .and_then(label)
-            {
-                return Some(match encoding {
-                    Encoding::Utf16Le | Encoding::Utf16Be => Encoding::Utf8,
-                    Encoding::XUserDefined => Encoding::Windows1252,
-                    other => other,
-                });
-            }
-        } else {
-            i += 1;
-        }
-    }
-    None
-}
-
-fn extract_content_charset(value: &[u8]) -> Option<&[u8]> {
+pub(super) fn extract_content_charset(value: &[u8]) -> Option<&[u8]> {
     if value.len() < 7 {
         return None;
     }

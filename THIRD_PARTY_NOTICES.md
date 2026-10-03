@@ -126,3 +126,5 @@ reproduced in the table row for that upstream.
 
 - boa-dev/boa — MIT, Copyright (c) 2019 Jason Williams and contributors; core/engine/src/builtins/error/{mod,aggregate,type}.rs @ 39cd11214ecb366200157dab96b3919e61e9a391: whole Error-family allocation, metadata, message/cause and strict iterable algorithms adapted in crates/amazing-js/src/interp_errors.rs, interp_install.rs, interp_builtins.rs and the owned constructor dispatch in interp_stmt.rs; shared allocation adapted to current normative SuppressedError sequence.
 - tafia/quick-xml @ 2eaa844b4b40117fb7ed4d1f512ede918125aeab — MIT, Copyright (c) 2016 Johann Tuffe. Complete supported XML byte-detection area from src/encoding.rs adapted in crates/amazing-html/src/xml_encoding.rs; full license adjacent.
+
+- html5lib/html5lib-python @ fd4f032bc090d44fb11a84b352dad7cbee0a4745 — MIT; Copyright (c) 2006-2013 James Graham and other contributors. Complete EncodingParser.getAttribute adapted into crates/amazing-html/src/encoding_prescan.rs; full license encoding_prescan.LICENSE-MIT.

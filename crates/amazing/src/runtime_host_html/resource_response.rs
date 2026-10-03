@@ -846,4 +846,19 @@ mod tests {
         }
     }
 
+    #[test]
+    fn html_response_prescan_uses_real_tag_boundaries_and_compatible_xml_encoding() {
+        for (source, expected, text) in [
+            ("<div title='<meta charset=utf-8>'></div><p>", "windows-1252", "¢"),
+            ("<meta http-equiv=refresh http-equiv=content-type content='charset=utf-8'><p>", "windows-1252", "¢"),
+            ("<?xml encoding='windows-1251'?><p>", "windows-1251", "ў"),
+        ] {
+            let mut bytes = source.as_bytes().to_vec(); bytes.push(0xa2);
+            let (dom, encoding) = parse_response(&bytes, "text/html", None).unwrap();
+            assert_eq!(encoding, expected);
+            assert!(dom.tree_order(NodeIdx(0)).into_iter().any(|node|
+                matches!(&dom.get(node).kind, NodeKind::Text { data } if data.as_str() == text)));
+        }
+    }
+
 }
