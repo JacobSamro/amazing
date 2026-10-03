@@ -1,3 +1,7 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/{map,set}/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// Strong collection algorithms use existing actor-owned live iterator cursors;
+// current ECMA-262 refreshes intersection size after every Has callback.
 // Keyed collections and the ES2025 Set operations.
 
 fn std_collection_method(i: &Interpreter, name: &str, length: u32, native: crate::value::NativeFn) -> JsValue {
@@ -7,6 +11,7 @@ fn std_collection_method(i: &Interpreter, name: &str, length: u32, native: crate
 }
 
 fn std_collection_key(value: &JsValue) -> MapKey {
+    if let JsValue::Num(number) = value { if *number == 0.0 { return MapKey::Num(0.0); } }
     map_key(value)
 }
 
@@ -55,8 +60,15 @@ impl Interpreter {
             proto.borrow_mut().define("constructor", symbol_data(constructor.clone(), true, true)).unwrap();
             proto.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(), symbol_data(JsValue::str(name), false, true)).unwrap();
         }
-        for proto in [&self.map_proto, &self.set_proto] {
-            let getter = std_collection_method(self, "get size", 0, std_collection_size);
+        for (constructor, proto, native) in [(&map, &self.map_proto, std_map_size as crate::value::NativeFn), (&set, &self.set_proto, std_set_size as crate::value::NativeFn)] {
+            let getter = std_collection_method(self, "get size", 0, native);
+            let species = std_collection_method(self, "get [Symbol.species]", 0, std_collection_species);
+            if let JsValue::Object(constructor) = constructor {
+                constructor.borrow_mut().define(WellKnownSymbol::Species.symbol(), Property {
+                    accessor: true, value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
+                    getter: Some(species), setter: None,
+                }).unwrap();
+            }
             proto.borrow_mut().define("size", Property {
                 accessor: true,
                 value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
@@ -69,6 +81,8 @@ impl Interpreter {
         self.global_obj.borrow_mut().define("Set", symbol_data(set.clone(), true, true)).unwrap();
         for (name, length, function) in [
             ("get", 1, std_map_get as crate::value::NativeFn),
+            ("getOrInsert", 2, std_map_get_or_insert as crate::value::NativeFn),
+            ("getOrInsertComputed", 2, std_map_get_or_insert_computed as crate::value::NativeFn),
             ("set", 2, std_map_set as crate::value::NativeFn),
             ("has", 1, std_map_has as crate::value::NativeFn),
             ("delete", 1, std_map_delete as crate::value::NativeFn),
@@ -111,48 +125,95 @@ impl Interpreter {
     }
 }
 
-fn std_collection_size(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    match &this {
-        JsValue::Object(object) => match &object.borrow().exotic {
-            Exotic::Map(state) => Ok(JsValue::num(state.entries.len() as f64)),
-            Exotic::Set(state) => Ok(JsValue::num(state.entries.len() as f64)),
-            _ => Err(Throw::type_error("incompatible collection receiver")),
-        },
-        _ => Err(Throw::type_error("incompatible collection receiver")),
-    }
+fn std_collection_species(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> { Ok(this) }
+fn std_map_size(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let map = std_collection_map(&this)?;
+    Ok(JsValue::num(if let Exotic::Map(state) = &map.borrow().exotic { state.entries.len() as f64 } else { unreachable!() }))
+}
+fn std_set_size(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let set = std_collection_set(&this)?;
+    Ok(JsValue::num(if let Exotic::Set(state) = &set.borrow().exotic { state.entries.len() as f64 } else { unreachable!() }))
 }
 
-fn std_map_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    if !this.is_object() { return Err(Throw::type_error("Map requires new")); }
-    let map = std_collection_map_new(i);
-    if let Some(source) = args.first() {
-        if !source.is_null() && !source.is_undefined() {
-            let adder = i.get_prop(&JsValue::Object(map.clone()), "set")?;
-            if !std_callable(&adder) { return Err(Throw::type_error("Map set is not callable")); }
-            for entry in i.iterate(source)? {
-                if !entry.is_object() { return Err(Throw::type_error("Map iterator value is not an object")); }
-                let key = i.get_prop(&entry, "0")?;
-                let value = i.get_prop(&entry, "1")?;
-                i.call_value(&adder, JsValue::Object(map.clone()), vec![key, value])?;
-            }
+fn std_collection_constructor_prototype(i: &mut Interpreter) -> Result<Obj, Throw> {
+    let target = i.current_new_target().ok_or_else(|| Throw::type_error("collection constructor requires new"))?;
+    match i.get_prop(&target, "prototype")? {
+        JsValue::Object(prototype) => Ok(prototype),
+        _ => {
+            let constructor = JsValue::Object(i.native_stack.last().cloned()
+                .ok_or_else(|| Throw::type_error("missing collection constructor context"))?);
+            i.constructor_fallback_prototype(&constructor, &target)
         }
+    }
+}
+fn std_collection_sync_iterator(i: &mut Interpreter, source: JsValue) -> Result<StdIteratorRecord, Throw> {
+    let method = i.get_prop(&source, WellKnownSymbol::Iterator.symbol())?;
+    if !std_callable(&method) { return Err(Throw::type_error("collection input is not iterable")); }
+    let iterator = i.call_value(&method, source, Vec::new())?;
+    if !iterator.is_object() { return Err(Throw::type_error("iterator is not an object")); }
+    let next = i.get_prop(&iterator, "next")?;
+    Ok(StdIteratorRecord { iterator, next })
+}
+fn std_map_constructor(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let prototype = std_collection_constructor_prototype(i)?;
+    let map = std_collection_map_new(i);
+    map.borrow_mut().proto = Some(prototype);
+    let source = std_reflect_arg(&args, 0);
+    if source.is_null() || source.is_undefined() { return Ok(JsValue::Object(map)); }
+    let adder = i.get_prop(&JsValue::Object(map.clone()), "set")?;
+    if !std_callable(&adder) { return Err(Throw::type_error("Map set is not callable")); }
+    let record = std_collection_sync_iterator(i, source)?;
+    while let Some(entry) = std_iterator_step(i, &record)? {
+        let result = (|| {
+            if !entry.is_object() { return Err(Throw::type_error("Map iterator value is not an object")); }
+            let key = i.get_prop(&entry, "0")?;
+            let value = i.get_prop(&entry, "1")?;
+            i.call_value(&adder, JsValue::Object(map.clone()), vec![key, value])
+        })();
+        if let Err(error) = result { return Err(std_iterator_abrupt_close(i, &record, error)); }
     }
     Ok(JsValue::Object(map))
 }
-
-fn std_set_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    if !this.is_object() { return Err(Throw::type_error("Set requires new")); }
+fn std_set_constructor(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let prototype = std_collection_constructor_prototype(i)?;
     let set = std_collection_set_new(i);
-    if let Some(source) = args.first() {
-        if !source.is_null() && !source.is_undefined() {
-            let adder = i.get_prop(&JsValue::Object(set.clone()), "add")?;
-            if !std_callable(&adder) { return Err(Throw::type_error("Set add is not callable")); }
-            for value in i.iterate(source)? {
-                i.call_value(&adder, JsValue::Object(set.clone()), vec![value])?;
-            }
+    set.borrow_mut().proto = Some(prototype);
+    let source = std_reflect_arg(&args, 0);
+    if source.is_null() || source.is_undefined() { return Ok(JsValue::Object(set)); }
+    let adder = i.get_prop(&JsValue::Object(set.clone()), "add")?;
+    if !std_callable(&adder) { return Err(Throw::type_error("Set add is not callable")); }
+    let record = std_collection_sync_iterator(i, source)?;
+    while let Some(value) = std_iterator_step(i, &record)? {
+        if let Err(error) = i.call_value(&adder, JsValue::Object(set.clone()), vec![value]) {
+            return Err(std_iterator_abrupt_close(i, &record, error));
         }
     }
     Ok(JsValue::Object(set))
+}
+fn std_collection_map_lookup(map: &Obj, key: &JsValue) -> Option<JsValue> {
+    let key = std_collection_key(key);
+    if let Exotic::Map(state) = &map.borrow().exotic {
+        state.entries.iter().find(|(candidate, _)| candidate.same(&key)).map(|(_, value)| value.clone())
+    } else { unreachable!() }
+}
+fn std_map_get_or_insert(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let map = std_collection_map(&this)?;
+    let key = key_value(&std_collection_key(&std_reflect_arg(&args, 0)));
+    if let Some(value) = std_collection_map_lookup(&map, &key) { return Ok(value); }
+    let value = std_reflect_arg(&args, 1);
+    std_collection_map_put(&map, key, value.clone());
+    Ok(value)
+}
+fn std_map_get_or_insert_computed(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let map = std_collection_map(&this)?;
+    let callback = std_reflect_arg(&args, 1);
+    if !std_callable(&callback) { return Err(Throw::type_error("Map upsert callback is not callable")); }
+    let key = key_value(&std_collection_key(&std_reflect_arg(&args, 0)));
+    if let Some(value) = std_collection_map_lookup(&map, &key) { return Ok(value); }
+    let value = i.call_value(&callback, JsValue::Undefined, vec![key.clone()])?;
+    // Re-lookup after callback mutation, retaining an existing entry's order.
+    std_collection_map_put(&map, key, value.clone());
+    Ok(value)
 }
 
 fn std_map_get(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -205,31 +266,42 @@ fn std_map_entries(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Resul
     Ok(i.std_collection_iterator(map, StdCollectionIterKind::MapEntries))
 }
 fn std_map_for_each(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let map = std_collection_map(&this)?;
+    let target = std_collection_map(&this)?;
     let callback = std_reflect_arg(&args, 0);
     if !std_callable(&callback) { return Err(Throw::type_error("callback is not callable")); }
     let this_arg = std_reflect_arg(&args, 1);
-    let mut index = 0;
-    loop {
-        let next = if let Exotic::Map(state) = &map.borrow().exotic { state.entries.get(index).map(|(key, value)| (key_value(key), value.clone())) } else { None };
-        let Some((key, value)) = next else { break };
-        i.call_value(&callback, this_arg.clone(), vec![value, key, this.clone()])?;
-        index += 1;
-    }
-    Ok(JsValue::Undefined)
+    let cursor = i.std_collection_iterator(target, StdCollectionIterKind::MapEntries);
+    let result = (|| {
+        while let Some((key, value)) = std_collection_cursor_entry(i, &cursor)? {
+            i.call_value(&callback, this_arg.clone(), vec![value, key, this.clone()])?;
+        }
+        Ok(JsValue::Undefined)
+    })();
+    std_collection_cursor_release(i, &cursor);
+    result
 }
 fn std_map_group_by(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let source = std_reflect_arg(&args, 0);
+    if source.is_null() || source.is_undefined() { return Err(Throw::type_error("groupBy input is null or undefined")); }
     let callback = std_reflect_arg(&args, 1);
     if !std_callable(&callback) { return Err(Throw::type_error("callback is not callable")); }
+    let record = std_collection_sync_iterator(i, source)?;
     let map = std_collection_map_new(i);
-    for (index, value) in i.iterate(&source)?.into_iter().enumerate() {
-        let key = i.call_value(&callback, JsValue::Undefined, vec![value.clone(), JsValue::num(index as f64)])?;
-        let old = std_map_get(i, JsValue::Object(map.clone()), vec![key.clone()])?;
-        let group = if old.is_undefined() { array_values(i, Vec::new())? } else { old };
+    let mut index = 0u64;
+    loop {
+        if index >= (1u64 << 53) - 1 {
+            return Err(std_iterator_abrupt_close(i, &record, Throw::type_error("groupBy maximum index exceeded")));
+        }
+        let Some(value) = std_iterator_step(i, &record)? else { break };
+        let key = match i.call_value(&callback, JsValue::Undefined, vec![value.clone(), JsValue::num(index as f64)]) {
+            Ok(key) => key,
+            Err(error) => return Err(std_iterator_abrupt_close(i, &record, error)),
+        };
+        let group = match std_collection_map_lookup(&map, &key) { Some(group) => group, None => array_values(i, Vec::new())? };
         let length = i.array_length(&group);
-        i.set_prop(&group, length.to_string(), value)?;
+        array_create_data_property(i, &group, length, value)?;
         std_collection_map_put(&map, key, group);
+        index += 1;
     }
     Ok(JsValue::Object(map))
 }
@@ -270,152 +342,158 @@ fn std_set_entries(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Resul
     Ok(i.std_collection_iterator(set, StdCollectionIterKind::SetEntries))
 }
 fn std_set_for_each(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let set = std_collection_set(&this)?;
+    let target = std_collection_set(&this)?;
     let callback = std_reflect_arg(&args, 0);
     if !std_callable(&callback) { return Err(Throw::type_error("callback is not callable")); }
     let this_arg = std_reflect_arg(&args, 1);
-    let mut index = 0;
-    loop {
-        let next = if let Exotic::Set(state) = &set.borrow().exotic { state.entries.get(index).map(key_value) } else { None };
-        let Some(value) = next else { break };
-        i.call_value(&callback, this_arg.clone(), vec![value.clone(), value, this.clone()])?;
-        index += 1;
-    }
-    Ok(JsValue::Undefined)
+    let cursor = i.std_collection_iterator(target, StdCollectionIterKind::SetValues);
+    let result = (|| {
+        while let Some((key, value)) = std_collection_cursor_entry(i, &cursor)? {
+            i.call_value(&callback, this_arg.clone(), vec![value, key, this.clone()])?;
+        }
+        Ok(JsValue::Undefined)
+    })();
+    std_collection_cursor_release(i, &cursor);
+    result
 }
-
 struct StdSetRecord { object: JsValue, size: f64, has: JsValue, keys: JsValue }
 
 fn std_set_record(i: &mut Interpreter, value: JsValue) -> Result<StdSetRecord, Throw> {
     if !value.is_object() { return Err(Throw::type_error("set-like argument must be an object")); }
-    let size_value = i.get_prop(&value, "size")?;
-    let size = i.to_number(&size_value)?;
-    if size.is_nan() { return Err(Throw::type_error("set-like size is NaN")); }
+    let raw_size = i.get_prop(&value, "size")?;
+    let number_size = i.to_number(&raw_size)?;
+    if number_size.is_nan() { return Err(Throw::type_error("set-like size is NaN")); }
+    let size = number_size.trunc();
     if size < 0.0 { return Err(Throw::range_error("set-like size is negative")); }
     let has = i.get_prop(&value, "has")?;
+    if !std_callable(&has) { return Err(Throw::type_error("set-like has is not callable")); }
     let keys = i.get_prop(&value, "keys")?;
-    if !std_callable(&has) || !std_callable(&keys) { return Err(Throw::type_error("set-like methods must be callable")); }
-    Ok(StdSetRecord { object: value, size: size.trunc(), has, keys })
+    if !std_callable(&keys) { return Err(Throw::type_error("set-like keys is not callable")); }
+    Ok(StdSetRecord { object: value, size, has, keys })
 }
-
 fn std_set_record_has(i: &mut Interpreter, record: &StdSetRecord, value: JsValue) -> Result<bool, Throw> {
     Ok(i.call_value(&record.has, record.object.clone(), vec![value])?.to_boolean())
 }
-
-fn std_set_record_values(i: &mut Interpreter, record: &StdSetRecord) -> Result<Vec<JsValue>, Throw> {
+fn std_set_record_iterator(i: &mut Interpreter, record: &StdSetRecord) -> Result<StdIteratorRecord, Throw> {
     let iterator = i.call_value(&record.keys, record.object.clone(), Vec::new())?;
-    let iterator = i.std_iterator_direct(iterator)?;
-    let mut values = Vec::new();
-    while let Some(value) = std_iterator_step(i, &iterator)? { values.push(value); }
-    Ok(values)
+    i.std_iterator_direct(iterator)
 }
-
 fn std_set_snapshot(set: &Obj) -> Vec<JsValue> {
-    if let Exotic::Set(state) = &set.borrow().exotic { state.entries.iter().map(key_value).collect() } else { Vec::new() }
+    if let Exotic::Set(state) = &set.borrow().exotic { state.entries.iter().map(key_value).collect() } else { unreachable!() }
 }
-
+fn std_set_size_value(set: &Obj) -> usize {
+    if let Exotic::Set(state) = &set.borrow().exotic { state.entries.len() } else { unreachable!() }
+}
+fn std_set_contains(set: &Obj, value: &JsValue) -> bool {
+    let key = std_collection_key(value);
+    matches!(&set.borrow().exotic, Exotic::Set(state) if state.entries.iter().any(|candidate| candidate.same(&key)))
+}
+fn std_set_remove_result(set: &Obj, value: &JsValue) {
+    let key = std_collection_key(value);
+    if let Exotic::Set(state) = &mut set.borrow_mut().exotic { state.entries.retain(|candidate| !candidate.same(&key)); }
+}
 fn std_set_new_from(i: &Interpreter, values: impl IntoIterator<Item = JsValue>) -> Obj {
     let set = std_collection_set_new(i);
     for value in values { std_collection_set_add(&set, value); }
     set
 }
-
+// Cursor notifications preserve append/delete/clear semantics across arbitrary
+// reentrant Has callbacks. No callback is run while registry/storage is borrowed.
+fn std_set_live_visit(
+    i: &mut Interpreter, set: Obj,
+    mut visit: impl FnMut(&mut Interpreter, JsValue) -> Result<bool, Throw>,
+) -> Result<bool, Throw> {
+    let cursor = i.std_collection_iterator(set, StdCollectionIterKind::SetValues);
+    let result = (|| {
+        while let Some((value, _)) = std_collection_cursor_entry(i, &cursor)? {
+            if !visit(i, value)? { return Ok(false); }
+        }
+        Ok(true)
+    })();
+    std_collection_cursor_release(i, &cursor);
+    result
+}
 fn std_set_union(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let set = std_collection_set(&this)?;
     let record = std_set_record(i, std_reflect_arg(&args, 0))?;
+    // GetIteratorFromMethod can mutate the receiver before its data is copied.
+    let iterator = std_set_record_iterator(i, &record)?;
     let result = std_set_new_from(i, std_set_snapshot(&set));
-    for value in std_set_record_values(i, &record)? { std_collection_set_add(&result, value); }
+    while let Some(value) = std_iterator_step(i, &iterator)? { std_collection_set_add(&result, value); }
     Ok(JsValue::Object(result))
 }
-
 fn std_set_intersection(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let set = std_collection_set(&this)?;
     let record = std_set_record(i, std_reflect_arg(&args, 0))?;
-    let values = std_set_snapshot(&set);
     let result = std_collection_set_new(i);
-    if values.len() as f64 <= record.size {
-        for value in values { if std_set_record_has(i, &record, value.clone())? { std_collection_set_add(&result, value); } }
+    if std_set_size_value(&set) as f64 <= record.size {
+        std_set_live_visit(i, set, |i, value| {
+            if std_set_record_has(i, &record, value.clone())? { std_collection_set_add(&result, value); }
+            Ok(true)
+        })?;
     } else {
-        for value in std_set_record_values(i, &record)? {
-            let key = std_collection_key(&value);
-            if matches!(&set.borrow().exotic, Exotic::Set(state) if state.entries.iter().any(|candidate| candidate.same(&key))) {
-                std_collection_set_add(&result, value);
-            }
+        let iterator = std_set_record_iterator(i, &record)?;
+        while let Some(value) = std_iterator_step(i, &iterator)? {
+            if std_set_contains(&set, &value) { std_collection_set_add(&result, value); }
         }
     }
     Ok(JsValue::Object(result))
 }
-
 fn std_set_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let set = std_collection_set(&this)?;
     let record = std_set_record(i, std_reflect_arg(&args, 0))?;
+    // Unlike intersection, difference walks the original fixed copied data.
     let values = std_set_snapshot(&set);
     let result = std_set_new_from(i, values.clone());
     if values.len() as f64 <= record.size {
-        for value in values { if std_set_record_has(i, &record, value.clone())? {
-            let key = std_collection_key(&value);
-            if let Exotic::Set(state) = &mut result.borrow_mut().exotic { state.entries.retain(|candidate| !candidate.same(&key)); }
-        } }
-    } else {
-        for value in std_set_record_values(i, &record)? {
-            let key = std_collection_key(&value);
-            if let Exotic::Set(state) = &mut result.borrow_mut().exotic { state.entries.retain(|candidate| !candidate.same(&key)); }
+        for value in values {
+            if std_set_record_has(i, &record, value.clone())? { std_set_remove_result(&result, &value); }
         }
+    } else {
+        let iterator = std_set_record_iterator(i, &record)?;
+        while let Some(value) = std_iterator_step(i, &iterator)? { std_set_remove_result(&result, &value); }
     }
     Ok(JsValue::Object(result))
 }
-
 fn std_set_symmetric_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let set = std_collection_set(&this)?;
     let record = std_set_record(i, std_reflect_arg(&args, 0))?;
+    let iterator = std_set_record_iterator(i, &record)?;
     let result = std_set_new_from(i, std_set_snapshot(&set));
-    for value in std_set_record_values(i, &record)? {
-        let key = std_collection_key(&value);
-        let originally_present = matches!(&set.borrow().exotic, Exotic::Set(state) if state.entries.iter().any(|candidate| candidate.same(&key)));
-        if originally_present {
-            if let Exotic::Set(state) = &mut result.borrow_mut().exotic { state.entries.retain(|candidate| !candidate.same(&key)); }
-        } else { std_collection_set_add(&result, value); }
+    while let Some(value) = std_iterator_step(i, &iterator)? {
+        if std_set_contains(&set, &value) { std_set_remove_result(&result, &value); }
+        else { std_collection_set_add(&result, value); }
     }
     Ok(JsValue::Object(result))
 }
-
 fn std_set_is_subset_of(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let set = std_collection_set(&this)?;
     let record = std_set_record(i, std_reflect_arg(&args, 0))?;
-    let values = std_set_snapshot(&set);
-    if values.len() as f64 > record.size { return Ok(JsValue::Bool(false)); }
-    for value in values { if !std_set_record_has(i, &record, value)? { return Ok(JsValue::Bool(false)); } }
-    Ok(JsValue::Bool(true))
+    if std_set_size_value(&set) as f64 > record.size { return Ok(JsValue::Bool(false)); }
+    Ok(JsValue::Bool(std_set_live_visit(i, set, |i, value| std_set_record_has(i, &record, value))?))
 }
-
 fn std_set_is_superset_of(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let set = std_collection_set(&this)?;
     let record = std_set_record(i, std_reflect_arg(&args, 0))?;
-    if (std_set_snapshot(&set).len() as f64) < record.size { return Ok(JsValue::Bool(false)); }
-    for value in std_set_record_values(i, &record)? {
-        let key = std_collection_key(&value);
-        if !matches!(&set.borrow().exotic, Exotic::Set(state) if state.entries.iter().any(|candidate| candidate.same(&key))) {
-            return Ok(JsValue::Bool(false));
-        }
+    if (std_set_size_value(&set) as f64) < record.size { return Ok(JsValue::Bool(false)); }
+    let iterator = std_set_record_iterator(i, &record)?;
+    while let Some(value) = std_iterator_step(i, &iterator)? {
+        if !std_set_contains(&set, &value) { std_iterator_close(i, &iterator)?; return Ok(JsValue::Bool(false)); }
     }
     Ok(JsValue::Bool(true))
 }
-
 fn std_set_is_disjoint_from(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let set = std_collection_set(&this)?;
     let record = std_set_record(i, std_reflect_arg(&args, 0))?;
-    let values = std_set_snapshot(&set);
-    if values.len() as f64 <= record.size {
-        for value in values { if std_set_record_has(i, &record, value)? { return Ok(JsValue::Bool(false)); } }
+    if std_set_size_value(&set) as f64 <= record.size {
+        Ok(JsValue::Bool(std_set_live_visit(i, set, |i, value| Ok(!std_set_record_has(i, &record, value)?))?))
     } else {
-        for value in std_set_record_values(i, &record)? {
-            let key = std_collection_key(&value);
-            if matches!(&set.borrow().exotic, Exotic::Set(state) if state.entries.iter().any(|candidate| candidate.same(&key))) {
-                return Ok(JsValue::Bool(false));
-            }
+        let iterator = std_set_record_iterator(i, &record)?;
+        while let Some(value) = std_iterator_step(i, &iterator)? {
+            if std_set_contains(&set, &value) { std_iterator_close(i, &iterator)?; return Ok(JsValue::Bool(false)); }
         }
+        Ok(JsValue::Bool(true))
     }
-    Ok(JsValue::Bool(true))
 }
 
 type StdWeakObject = Weak<RefCell<JsObject>>;
@@ -651,4 +729,210 @@ fn std_finalization_unregister(_: &mut Interpreter, this: JsValue, args: Vec<JsV
         data.registrations.len() != old
     });
     Ok(JsValue::Bool(removed))
+}
+
+#[cfg(test)]
+mod strong_collection_protocol_tests {
+    use super::*;
+    fn check(source: &str) {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script_with_backend(source, backend).unwrap_or_else(|e|panic!("{backend:?}: {}\n{source}",e.describe())),JsValue::Bool(true),"{backend:?}");
+        }
+    }
+    #[test]
+    fn installed_species_size_brands_and_upsert_metadata_are_genuine() {
+        check(r#"
+          var valid=true,m=new Map,s=new Set;
+          for(var C of [Map,Set]){
+            var d=Object.getOwnPropertyDescriptor(C,Symbol.species),g=d.get;
+            valid=valid && d.enumerable===false && d.configurable===true && d.set===undefined && g.length===0 && g.name==='get [Symbol.species]' && C[Symbol.species]===C && g.call(7)===7;
+            try{new g;valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+          }
+          var mg=Object.getOwnPropertyDescriptor(Map.prototype,'size').get,sg=Object.getOwnPropertyDescriptor(Set.prototype,'size').get;
+          valid=valid && mg.call(m)===0 && sg.call(s)===0;
+          for(var entry of [[mg,s],[sg,m],[mg,new Proxy(m,{})],[sg,{}],[mg,Map.prototype],[sg,Set.prototype]]){
+            try{entry[0].call(entry[1]);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+          }
+          for(var name of ['getOrInsert','getOrInsertComputed']){
+            var d=Object.getOwnPropertyDescriptor(Map.prototype,name),f=d.value;
+            valid=valid && f.length===2 && f.name===name && d.writable && !d.enumerable && d.configurable && !Object.hasOwn(f,'prototype');
+            try{new f;valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+          }valid;
+        "#);
+    }
+    #[test]
+    fn upsert_canonicalizes_keys_validates_before_lookup_and_rechecks_mutation() {
+        check(r#"
+          var valid=true,m=new Map,object={},symbol=Symbol(),calls=0;
+          for(var key of [undefined,null,true,false,1,NaN,2n,'x',object,symbol]){
+            var value={};valid=valid && m.getOrInsert(key,value)===value && m.getOrInsert(key,7)===value;
+            valid=valid && m.getOrInsertComputed(key,function(){calls++;throw 'unused';})===value;
+          }
+          valid=valid && calls===0;
+          try{m.getOrInsertComputed(object,3);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+          var a=new Map,cb=function(k){'use strict';valid=valid && this===undefined && arguments.length===1 && Object.is(k,0);a.set('first',1);a.set(-0,'callback');return'final';};
+          valid=valid && a.getOrInsertComputed(-0,cb)==='final' && a.get(0)==='final' && Array.from(a.keys()).join(',')==='first,0';
+          var error={};try{a.getOrInsertComputed('bad',function(){throw error;});valid=false;}catch(e){valid=valid && e===error && !a.has('bad');}
+          a.set('gone',1);a.getOrInsertComputed('new',function(k){a.clear();a.set(k,2);a.set('after',3);return 4;});
+          valid=valid && Array.from(a.keys()).join(',')==='new,after' && a.get('new')===4;
+          var b=new Map;b.getOrInsert(-0,1);valid=valid && Object.is(b.keys().next().value,0);valid;
+        "#);
+    }
+    #[test]
+    fn constructors_allocate_once_then_stream_cached_next_and_adder() {
+        check(r#"
+          var valid=true;
+          for(var C of [Map,Set]){
+            var map=C===Map,log=[],count=0,n=0,adder=map?'set':'add',proto={};
+            Object.defineProperty(proto,adder,{get(){log.push('adder');return function(k,v){log.push('add:'+k);valid=valid && Object.getPrototypeOf(this)===proto;};}});
+            var nt=new Proxy(function(){},{get(t,k,r){if(k==='prototype'){count++;log.push('proto');return proto;}return Reflect.get(t,k,r);}});
+            var input={get [Symbol.iterator](){log.push('iterator');return function(){log.push('call');return{get next(){log.push('next');return function(){var index=n++;log.push('step:'+index);return index===2?{done:true}:{value:map?[index,index+1]:index};};}};};}};
+            var result=Reflect.construct(C,[input],nt);
+            valid=valid && count===1 && Object.getPrototypeOf(result)===proto && log.join(',')==='proto,adder,iterator,call,next,step:0,add:0,step:1,add:1,step:2';
+            var bound=C.bind(null),proxy=new Proxy(C,{});valid=valid && new bound instanceof C && new proxy instanceof C;
+            class Sub extends C{};var sub=new Sub(map?[[1,2]]:[1]);valid=valid && sub instanceof Sub && sub instanceof C && sub.size===1;
+            var bare={};try{C.call(bare);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+            var gets=0,emptyProto=new Proxy({}, {get(){gets++;throw 'unused adder';}}),emptyNT=new Proxy(function(){},{get(t,k,r){return k==='prototype'?emptyProto:Reflect.get(t,k,r);}});
+            valid=valid && Object.getPrototypeOf(Reflect.construct(C,[null],emptyNT))===emptyProto && gets===0;
+          }valid;
+        "#);
+    }
+    #[test]
+    fn constructor_close_preserves_entry_or_adder_errors_and_step_failures_do_not_close() {
+        check(r#"
+          var valid=true;
+          for(var mode of [0,1,2,3,4,5,6]){
+            var log=[],error={},entry={get 0(){if(mode===1)throw error;return 1;},get 1(){if(mode===2)throw error;return 2;}},proto={set(){log.push('add');if(mode===3)throw error;}};
+            var nt=new Proxy(function(){},{get(t,k,r){return k==='prototype'?proto:Reflect.get(t,k,r);}});
+            var input={[Symbol.iterator](){return{next(){log.push('next');if(mode===4)throw error;return{get done(){if(mode===5)throw error;return false;},get value(){if(mode===6)throw error;return mode===0?1:entry;}};},return(){log.push('close');throw'ignored';}};}};
+            try{Reflect.construct(Map,[input],nt);valid=false;}catch(e){valid=valid && (mode===0?e instanceof TypeError:e===error);}
+            valid=valid && log.join(',')===(mode===3?'next,add,close':mode<=2?'next,close':'next');
+          }
+          var error={},closed=0,proto={add(){throw error;}},nt=new Proxy(function(){},{get(t,k,r){return k==='prototype'?proto:Reflect.get(t,k,r);}}),input={[Symbol.iterator](){return{next(){return{value:1};},return(){closed++;return 1;}};}};
+          try{Reflect.construct(Set,[input],nt);valid=false;}catch(e){valid=valid && e===error && closed===1;}
+          for(var C of [Map,Set]){
+            var log=[],proto={};Object.defineProperty(proto,C===Map?'set':'add',{get(){log.push('adder');return 0;}});
+            var nt=new Proxy(function(){},{get(t,k,r){return k==='prototype'?proto:Reflect.get(t,k,r);}}),input={get [Symbol.iterator](){log.push('iterator');throw'unused';}};
+            try{Reflect.construct(C,[input],nt);valid=false;}catch(e){valid=valid && e instanceof TypeError && log.join(',')==='adder';}
+          }valid;
+        "#);
+    }
+    #[test]
+    fn foreach_live_walks_reinsertion_clear_updates_and_reentrant_iterations() {
+        check(r#"
+          var valid=true;
+          for(var C of [Map,Set]){
+            var map=C===Map,target=new C(map?[[1,10],[2,20],[3,30]]:[1,2,3]),seen=[],changed=false,receiver={};
+            target.forEach(function(v,k,t){'use strict';valid=valid && this===receiver && t===target && arguments.length===3;seen.push(k);
+              if(k===1 && !changed){changed=true;target.delete(1);target.delete(2);if(map){target.set(1,11);target.set(4,40);}else{target.add(1);target.add(4);}}
+            },receiver);valid=valid && seen.join(',')==='1,3,1,4';
+            var target=new C(map?[[1,10],[2,20]]:[1,2]),seen=[],changed=false;
+            target.forEach(function(v,k){seen.push(k);if(!changed){changed=true;target.clear();if(map)target.set(9,90);else target.add(9);}});
+            valid=valid && seen.join(',')==='1,9';
+            var error={},before=0;try{target.forEach(function(){before++;throw error;});valid=false;}catch(e){valid=valid && e===error && before===1;}
+            var outer=0,inner=0;target.forEach(function(){outer++;target.forEach(function(){inner++;});});valid=valid && outer===1 && inner===1;
+          }
+          var m=new Map([[1,10],[2,20]]),seen=[];m.forEach(function(v,k){seen.push(v);if(k===1)m.set(2,21);});valid=valid && seen.join(',')==='10,21';valid;
+        "#);
+    }
+    #[test]
+    fn set_records_have_exact_conversion_get_order_and_streaming_early_close() {
+        check(r#"
+          var valid=true,methods=['union','intersection','difference','symmetricDifference','isSubsetOf','isSupersetOf','isDisjointFrom'];
+          for(var method of methods){
+            var log=[],other={get size(){log.push('size');return{valueOf(){log.push('number');return-0.5;}};},get has(){log.push('has');return function(){return false;};},get keys(){log.push('keys');return function(){log.push('call');return{next(){return{done:true};}};};}};
+            new Set()[method](other);valid=valid && log.slice(0,4).join(',')==='size,number,has,keys';
+            var reads=0,bad={size:0,has:3,get keys(){reads++;throw'unused';}};try{new Set()[method](bad);valid=false;}catch(e){valid=valid && e instanceof TypeError && reads===0;}
+          }
+          for(var method of ['isSupersetOf','isDisjointFrom'])for(var mode of [0,1,2]){
+            var log=[],error={},other={size:0,has(){throw'unused';},keys(){log.push('keys');return{next(){log.push('next');return{value:method==='isSupersetOf'?9:1};},return(){log.push('close');if(mode===1)throw error;return mode===2?1:{};}};}};
+            try{var result=new Set([1,2])[method](other);valid=valid && mode===0 && result===false;}catch(e){valid=valid && (mode===1?e===error:mode===2&&e instanceof TypeError);}
+            valid=valid && log.join(',')==='keys,next,close';
+          }valid;
+        "#);
+    }
+    #[test]
+    fn set_operations_preserve_live_membership_fixed_copy_and_keys_acquisition_order() {
+        check(r#"
+          var valid=true;
+          for(var method of ['intersection','isSubsetOf','isDisjointFrom']){
+            var set=new Set([1,2]),seen=[],changed=false,other={size:100,has(k){seen.push(k);if(!changed){changed=true;set.delete(1);set.delete(2);set.add(3);set.add(1);}return method==='isDisjointFrom'?false:true;},keys(){throw'unused';}};
+            var result=set[method](other);valid=valid && seen.join(',')==='1,3,1' && (method==='intersection'?Array.from(result).join(',')==='1,3':result===true);
+          }
+          var set=new Set([1,2]),seen=[],other={size:100,has(k){seen.push(k);set.clear();set.add(9);return k===1;},keys(){throw'unused';}};
+          valid=valid && Array.from(set.difference(other)).join(',')==='2' && seen.join(',')==='1,2';
+          for(var method of ['union','symmetricDifference','difference']){
+            var set=new Set([1]),other={size:0,has(){throw'unused';},keys(){set.add(2);return{next(){return{done:true};}};}};
+            valid=valid && Array.from(set[method](other)).join(',')===(method==='difference'?'1':'1,2');
+          }
+          for(var method of ['union','intersection','symmetricDifference']){
+            var n=0,other={size:0,has(){return false;},keys(){return{next(){return n++<2?{value:-0}:{done:true};}};}};
+            var result=new Set([0,1])[method](other);valid=valid && Array.from(result).every(function(k){return !Object.is(k,-0);});
+          }valid;
+        "#);
+    }
+    #[test]
+    fn grouping_streams_callbacks_cached_next_and_own_data_arrays() {
+        check(r#"
+          var valid=true,log=[],n=0,gets=0,source={[Symbol.iterator](){return{get next(){gets++;return function(){log.push('step:'+n);return n<3?{value:n++}:{done:true};};},return(){log.push('close');throw'ignored';}};}};
+          var result=Map.groupBy(source,function(v,k){'use strict';valid=valid && this===undefined && arguments.length===2 && v===k;log.push('group:'+k);return v%2;});
+          valid=valid && gets===1 && log.join(',')==='step:0,group:0,step:1,group:1,step:2,group:2,step:3' && result.get(0).join(',')==='0,2' && result.get(1)[0]===1;
+          var error={},closed=0,source={[Symbol.iterator](){return{next(){return{value:1};},return(){closed++;throw'ignored';}};}};
+          try{Map.groupBy(source,function(){throw error;});valid=false;}catch(e){valid=valid && e===error && closed===1;}
+          var input=[1,2,3],desc=Object.getOwnPropertyDescriptor(Array.prototype,'0'),writes=0;
+          Object.defineProperty(Array.prototype,'0',{set(){writes++;throw'inherited';},configurable:true});
+          try{var grouped=Map.groupBy(input,function(){return 0;});}finally{if(desc)Object.defineProperty(Array.prototype,'0',desc);else delete Array.prototype[0];}
+          valid=valid && writes===0 && grouped.get(0).join(',')==='1,2,3';valid;
+        "#);
+    }
+    #[test]
+    fn collection_iterators_distinguish_brands_live_mutation_and_data_entry_creation() {
+        check(r#"
+          var valid=true,m=new Map([[1,10],[2,20]]),s=new Set([1,2]),mi=m.entries(),si=s.entries(),mn=mi.next,sn=si.next;
+          for(var entry of [[mn,si],[sn,mi],[mn,new Proxy(mi,{})],[sn,{}]]){try{entry[0].call(entry[1]);valid=false;}catch(e){valid=valid && e instanceof TypeError;}}
+          valid=valid && Object.getPrototypeOf(Object.getPrototypeOf(mi))===Iterator.prototype && !Object.hasOwn(Object.getPrototypeOf(mi),Symbol.iterator);
+          var first=mi.next().value;m.delete(1);m.set(3,30);valid=valid && first.join(',')==='1,10' && mi.next().value[0]===2 && mi.next().value[0]===3 && mi.next().done;
+          m.set(4,40);valid=valid && mi.next().done;
+          var desc=Object.getOwnPropertyDescriptor(Array.prototype,'0'),writes=0;
+          Object.defineProperty(Array.prototype,'0',{set(){writes++;throw'inherited';},configurable:true});
+          try{var me=m.entries().next().value,se=s.entries().next().value;}finally{if(desc)Object.defineProperty(Array.prototype,'0',desc);else delete Array.prototype[0];}
+          valid=valid && writes===0 && Object.hasOwn(me,'0') && Object.hasOwn(se,'0') && me.length===2 && se.length===2;valid;
+        "#);
+    }
+    #[test]
+    fn foreign_constructor_fallback_errors_and_iterator_resume_realms_are_independent() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();
+            let object=i.binding_create_object(None).unwrap();let realm=i.binding_create_realm(object).unwrap();
+            let values=i.binding_eval_in_realm(realm,"[Map,Set,Map.prototype.entries,Set.prototype.values,Map.prototype.entries.call(new Map).next,Set.prototype.values.call(new Set).next,Object.prototype,Array.prototype,TypeError.prototype,(function(){var f=function(){};f.prototype=null;return f;})()]" ).unwrap();
+            for (index,name) in ["ForeignMap","ForeignSet","foreignEntries","foreignValues","foreignMapNext","foreignSetNext","foreignObject","foreignArray","foreignType","ForeignNT"].into_iter().enumerate(){
+                let value=i.get_prop(&values,index.to_string()).unwrap();i.global_env.declare_var(name,value).unwrap();
+            }
+            let source=r#"
+              var valid=true;
+              for(var C of [Map,Set]){
+                var result=Reflect.construct(C,[],ForeignNT);valid=valid && Object.getPrototypeOf(result)===(C===Map?ForeignMap.prototype:ForeignSet.prototype);
+                var bound=ForeignNT.bind(null),proxy=new Proxy(ForeignNT,{});bound.prototype=null;var r=Reflect.construct(C,[],bound);valid=valid && Object.getPrototypeOf(r)===(C===Map?ForeignMap.prototype:ForeignSet.prototype);
+                var r=Reflect.construct(C,[],proxy);valid=valid && Object.getPrototypeOf(r)===(C===Map?ForeignMap.prototype:ForeignSet.prototype);
+              }
+              for(var tuple of [[new Map([[1,2]]),foreignEntries,foreignMapNext],[new Set([1]),foreignValues,foreignSetNext]]){
+                var target=tuple[0],factory=tuple[1],next=tuple[2],localIter=target[Symbol.iterator](),localNext=localIter.next;
+                var r=next.call(localIter);valid=valid && Object.getPrototypeOf(r)===Object.prototype;
+                if(target instanceof Map)valid=valid && Object.getPrototypeOf(r.value)===Array.prototype;
+                r=next.call(localIter);valid=valid && r.done && Object.getPrototypeOf(r)===Object.prototype;
+                r=next.call(localIter);valid=valid && r.done && Object.getPrototypeOf(r)===foreignObject;
+                var foreignIter=factory.call(target);r=localNext.call(foreignIter);valid=valid && Object.getPrototypeOf(r)===foreignObject;
+                if(target instanceof Map)valid=valid && Object.getPrototypeOf(r.value)===foreignArray;
+                r=localNext.call(foreignIter);valid=valid && r.done && Object.getPrototypeOf(r)===foreignObject;
+                r=localNext.call(foreignIter);valid=valid && r.done && Object.getPrototypeOf(r)===Object.prototype;
+                try{next.call({});valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===foreignType;}
+              }
+              for(var C of [ForeignMap,ForeignSet]){try{C();valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===foreignType;}}
+              var revoked=Proxy.revocable(ForeignNT,{});revoked.revoke();try{Reflect.construct(Map,[],revoked.proxy);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+              var error={},nt=new Proxy(function(){},{get(t,k,r){if(k==='prototype')throw error;return Reflect.get(t,k,r);}});try{Reflect.construct(Set,[],nt);valid=false;}catch(e){valid=valid && e===error;}valid;
+            "#;
+            assert_eq!(i.run_script_with_backend(source,backend).unwrap_or_else(|e|panic!("{backend:?}: {}",e.describe())),JsValue::Bool(true),"{backend:?}");
+        }
+    }
 }

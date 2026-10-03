@@ -2440,6 +2440,12 @@ impl Interpreter {
             if std::ptr::fn_addr_eq(*native, native_promise as crate::value::NativeFn)) {
             return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
         }
+        // Map and Set own prototype allocation before their cached adder Get.
+        if matches!(&fun.body, FunctionBody::Native(native)
+            if std::ptr::fn_addr_eq(*native, std_map_constructor as crate::value::NativeFn)
+                || std::ptr::fn_addr_eq(*native, std_set_constructor as crate::value::NativeFn)) {
+            return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
+        }
         if matches!(fun.body, FunctionBody::HostNative(_, HostCallPolicy::ConstructOnlyAllocates, _)) {
             let result = self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target))?;
             return if result.is_object() { Ok(result) }

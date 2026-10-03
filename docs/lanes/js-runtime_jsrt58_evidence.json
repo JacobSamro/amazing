@@ -1,0 +1,787 @@
+{
+  "ticket": "JSRT-58",
+  "base_sha": "8e1a8e590ae9f5c3e52cbbc2944ef5690e6d8ebd",
+  "workspace": {
+    "passed": 4029,
+    "skipped": 17,
+    "elapsed_seconds": 77.945
+  },
+  "doctests": 4,
+  "selections": {
+    "built-ins-Iterator": {
+      "selected": 654,
+      "before": {
+        "pass": 654,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53218
+      },
+      "after": {
+        "pass": 654,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53218
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 6.063,
+      "elapsed_after": 6.622,
+      "before_host_sha256": "56ff96164e67fd8edd63cfab90463750cc9c9a6f4f227a3b2d0f14b886b42c49",
+      "after_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Array": {
+      "selected": 3332,
+      "before": {
+        "pass": 3288,
+        "fail": 43,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50540
+      },
+      "after": {
+        "pass": 3288,
+        "fail": 43,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50540
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 15.575,
+      "elapsed_after": 16.293,
+      "before_host_sha256": "56ff96164e67fd8edd63cfab90463750cc9c9a6f4f227a3b2d0f14b886b42c49",
+      "after_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Map": {
+      "selected": 215,
+      "before": {
+        "pass": 179,
+        "fail": 36,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53657
+      },
+      "after": {
+        "pass": 215,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53657
+      },
+      "gained": [
+        "built-ins/Map/Symbol.species/length.js",
+        "built-ins/Map/Symbol.species/return-value.js",
+        "built-ins/Map/Symbol.species/symbol-species-name.js",
+        "built-ins/Map/Symbol.species/symbol-species.js",
+        "built-ins/Map/iterator-close-after-set-failure.js",
+        "built-ins/Map/iterator-close-failure-after-set-failure.js",
+        "built-ins/Map/iterator-item-first-entry-returns-abrupt.js",
+        "built-ins/Map/iterator-item-second-entry-returns-abrupt.js",
+        "built-ins/Map/iterator-items-are-not-object-close-iterator.js",
+        "built-ins/Map/prototype/forEach/iterates-values-deleted-then-readded.js",
+        "built-ins/Map/prototype/getOrInsert/append-new-values-normalizes-zero-key.js",
+        "built-ins/Map/prototype/getOrInsert/append-new-values.js",
+        "built-ins/Map/prototype/getOrInsert/append-value-if-key-is-not-present-different-key-types.js",
+        "built-ins/Map/prototype/getOrInsert/getOrInsert.js",
+        "built-ins/Map/prototype/getOrInsert/length.js",
+        "built-ins/Map/prototype/getOrInsert/name.js",
+        "built-ins/Map/prototype/getOrInsert/not-a-constructor.js",
+        "built-ins/Map/prototype/getOrInsert/returns-value-if-key-is-not-present-different-key-types.js",
+        "built-ins/Map/prototype/getOrInsert/returns-value-if-key-is-present-different-key-types.js",
+        "built-ins/Map/prototype/getOrInsert/returns-value-normalized-zero-key.js",
+        "built-ins/Map/prototype/getOrInsertComputed/append-new-values-normalizes-zero-key.js",
+        "built-ins/Map/prototype/getOrInsertComputed/append-new-values.js",
+        "built-ins/Map/prototype/getOrInsertComputed/append-value-if-key-is-not-present-different-key-types.js",
+        "built-ins/Map/prototype/getOrInsertComputed/callbackfn-throws.js",
+        "built-ins/Map/prototype/getOrInsertComputed/canonical-key-passed-to-callback.js",
+        "built-ins/Map/prototype/getOrInsertComputed/check-callback-fn-args.js",
+        "built-ins/Map/prototype/getOrInsertComputed/check-state-after-callback-fn-throws.js",
+        "built-ins/Map/prototype/getOrInsertComputed/different-types-function-callbackfn-does-not-throw.js",
+        "built-ins/Map/prototype/getOrInsertComputed/does-not-evaluate-callbackfn-if-key-present.js",
+        "built-ins/Map/prototype/getOrInsertComputed/getOrInsertComputed.js",
+        "built-ins/Map/prototype/getOrInsertComputed/not-a-constructor.js",
+        "built-ins/Map/prototype/getOrInsertComputed/overwrites-mutation-from-callbackfn.js",
+        "built-ins/Map/prototype/getOrInsertComputed/returns-value-if-key-is-not-present-different-key-types.js",
+        "built-ins/Map/prototype/getOrInsertComputed/returns-value-if-key-is-present-different-key-types.js",
+        "built-ins/Map/prototype/getOrInsertComputed/returns-value-normalized-zero-key.js",
+        "built-ins/Map/prototype/size/does-not-have-mapdata-internal-slot-set.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 4.272,
+      "elapsed_after": 4.163,
+      "before_host_sha256": "56ff96164e67fd8edd63cfab90463750cc9c9a6f4f227a3b2d0f14b886b42c49",
+      "after_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Set": {
+      "selected": 394,
+      "before": {
+        "pass": 379,
+        "fail": 15,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53478
+      },
+      "after": {
+        "pass": 394,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53478
+      },
+      "gained": [
+        "built-ins/Set/Symbol.species/length.js",
+        "built-ins/Set/Symbol.species/return-value.js",
+        "built-ins/Set/Symbol.species/symbol-species-name.js",
+        "built-ins/Set/Symbol.species/symbol-species.js",
+        "built-ins/Set/prototype/forEach/iterates-values-revisits-after-delete-re-add.js",
+        "built-ins/Set/prototype/intersection/converts-negative-zero.js",
+        "built-ins/Set/prototype/isDisjointFrom/set-like-class-mutation.js",
+        "built-ins/Set/prototype/isDisjointFrom/set-like-class-order.js",
+        "built-ins/Set/prototype/isDisjointFrom/set-like-iter-return.js",
+        "built-ins/Set/prototype/isSubsetOf/set-like-class-mutation.js",
+        "built-ins/Set/prototype/isSupersetOf/set-like-class-order.js",
+        "built-ins/Set/prototype/isSupersetOf/set-like-iter-return.js",
+        "built-ins/Set/prototype/symmetricDifference/converts-negative-zero.js",
+        "built-ins/Set/prototype/union/converts-negative-zero.js",
+        "built-ins/Set/set-iterator-close-after-add-failure.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.606,
+      "elapsed_after": 4.776,
+      "before_host_sha256": "56ff96164e67fd8edd63cfab90463750cc9c9a6f4f227a3b2d0f14b886b42c49",
+      "after_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before": {
+        "pass": 3411,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "after": {
+        "pass": 3411,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 12.334,
+      "elapsed_after": 12.089,
+      "before_host_sha256": "56ff96164e67fd8edd63cfab90463750cc9c9a6f4f227a3b2d0f14b886b42c49",
+      "after_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Reflect": {
+      "selected": 154,
+      "before": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "after": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.885,
+      "elapsed_after": 3.717,
+      "before_host_sha256": "56ff96164e67fd8edd63cfab90463750cc9c9a6f4f227a3b2d0f14b886b42c49",
+      "after_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Function": {
+      "selected": 515,
+      "before": {
+        "pass": 507,
+        "fail": 8,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "after": {
+        "pass": 507,
+        "fail": 8,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 5.058,
+      "elapsed_after": 4.791,
+      "before_host_sha256": "56ff96164e67fd8edd63cfab90463750cc9c9a6f4f227a3b2d0f14b886b42c49",
+      "after_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "language": {
+      "selected": 24590,
+      "before": {
+        "pass": 24395,
+        "fail": 169,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "after": {
+        "pass": 24395,
+        "fail": 169,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 59.379,
+      "elapsed_after": 63.808,
+      "before_host_sha256": "56ff96164e67fd8edd63cfab90463750cc9c9a6f4f227a3b2d0f14b886b42c49",
+      "after_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    }
+  },
+  "unique": {
+    "selected": 33268,
+    "before_pass": 32966,
+    "after_pass": 33017,
+    "gained_files": [
+      "built-ins/Map/Symbol.species/length.js",
+      "built-ins/Map/Symbol.species/return-value.js",
+      "built-ins/Map/Symbol.species/symbol-species-name.js",
+      "built-ins/Map/Symbol.species/symbol-species.js",
+      "built-ins/Map/iterator-close-after-set-failure.js",
+      "built-ins/Map/iterator-close-failure-after-set-failure.js",
+      "built-ins/Map/iterator-item-first-entry-returns-abrupt.js",
+      "built-ins/Map/iterator-item-second-entry-returns-abrupt.js",
+      "built-ins/Map/iterator-items-are-not-object-close-iterator.js",
+      "built-ins/Map/prototype/forEach/iterates-values-deleted-then-readded.js",
+      "built-ins/Map/prototype/getOrInsert/append-new-values-normalizes-zero-key.js",
+      "built-ins/Map/prototype/getOrInsert/append-new-values.js",
+      "built-ins/Map/prototype/getOrInsert/append-value-if-key-is-not-present-different-key-types.js",
+      "built-ins/Map/prototype/getOrInsert/getOrInsert.js",
+      "built-ins/Map/prototype/getOrInsert/length.js",
+      "built-ins/Map/prototype/getOrInsert/name.js",
+      "built-ins/Map/prototype/getOrInsert/not-a-constructor.js",
+      "built-ins/Map/prototype/getOrInsert/returns-value-if-key-is-not-present-different-key-types.js",
+      "built-ins/Map/prototype/getOrInsert/returns-value-if-key-is-present-different-key-types.js",
+      "built-ins/Map/prototype/getOrInsert/returns-value-normalized-zero-key.js",
+      "built-ins/Map/prototype/getOrInsertComputed/append-new-values-normalizes-zero-key.js",
+      "built-ins/Map/prototype/getOrInsertComputed/append-new-values.js",
+      "built-ins/Map/prototype/getOrInsertComputed/append-value-if-key-is-not-present-different-key-types.js",
+      "built-ins/Map/prototype/getOrInsertComputed/callbackfn-throws.js",
+      "built-ins/Map/prototype/getOrInsertComputed/canonical-key-passed-to-callback.js",
+      "built-ins/Map/prototype/getOrInsertComputed/check-callback-fn-args.js",
+      "built-ins/Map/prototype/getOrInsertComputed/check-state-after-callback-fn-throws.js",
+      "built-ins/Map/prototype/getOrInsertComputed/different-types-function-callbackfn-does-not-throw.js",
+      "built-ins/Map/prototype/getOrInsertComputed/does-not-evaluate-callbackfn-if-key-present.js",
+      "built-ins/Map/prototype/getOrInsertComputed/getOrInsertComputed.js",
+      "built-ins/Map/prototype/getOrInsertComputed/not-a-constructor.js",
+      "built-ins/Map/prototype/getOrInsertComputed/overwrites-mutation-from-callbackfn.js",
+      "built-ins/Map/prototype/getOrInsertComputed/returns-value-if-key-is-not-present-different-key-types.js",
+      "built-ins/Map/prototype/getOrInsertComputed/returns-value-if-key-is-present-different-key-types.js",
+      "built-ins/Map/prototype/getOrInsertComputed/returns-value-normalized-zero-key.js",
+      "built-ins/Map/prototype/size/does-not-have-mapdata-internal-slot-set.js",
+      "built-ins/Set/Symbol.species/length.js",
+      "built-ins/Set/Symbol.species/return-value.js",
+      "built-ins/Set/Symbol.species/symbol-species-name.js",
+      "built-ins/Set/Symbol.species/symbol-species.js",
+      "built-ins/Set/prototype/forEach/iterates-values-revisits-after-delete-re-add.js",
+      "built-ins/Set/prototype/intersection/converts-negative-zero.js",
+      "built-ins/Set/prototype/isDisjointFrom/set-like-class-mutation.js",
+      "built-ins/Set/prototype/isDisjointFrom/set-like-class-order.js",
+      "built-ins/Set/prototype/isDisjointFrom/set-like-iter-return.js",
+      "built-ins/Set/prototype/isSubsetOf/set-like-class-mutation.js",
+      "built-ins/Set/prototype/isSupersetOf/set-like-class-order.js",
+      "built-ins/Set/prototype/isSupersetOf/set-like-iter-return.js",
+      "built-ins/Set/prototype/symmetricDifference/converts-negative-zero.js",
+      "built-ins/Set/prototype/union/converts-negative-zero.js",
+      "built-ins/Set/set-iterator-close-after-add-failure.js"
+    ],
+    "lost_files": [
+
+    ],
+    "gained_variants": [
+      [
+        "built-ins/Map/Symbol.species/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/Symbol.species/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/Symbol.species/return-value.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/Symbol.species/return-value.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/Symbol.species/symbol-species-name.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/Symbol.species/symbol-species-name.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/Symbol.species/symbol-species.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/Symbol.species/symbol-species.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/iterator-close-after-set-failure.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/iterator-close-after-set-failure.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/iterator-close-failure-after-set-failure.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/iterator-close-failure-after-set-failure.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/iterator-item-first-entry-returns-abrupt.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/iterator-item-first-entry-returns-abrupt.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/iterator-item-second-entry-returns-abrupt.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/iterator-item-second-entry-returns-abrupt.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/iterator-items-are-not-object-close-iterator.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/iterator-items-are-not-object-close-iterator.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/forEach/iterates-values-deleted-then-readded.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/forEach/iterates-values-deleted-then-readded.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/append-new-values-normalizes-zero-key.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/append-new-values-normalizes-zero-key.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/append-new-values.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/append-new-values.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/append-value-if-key-is-not-present-different-key-types.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/append-value-if-key-is-not-present-different-key-types.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/getOrInsert.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/getOrInsert.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/name.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/name.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/not-a-constructor.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/not-a-constructor.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/returns-value-if-key-is-not-present-different-key-types.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/returns-value-if-key-is-not-present-different-key-types.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/returns-value-if-key-is-present-different-key-types.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/returns-value-if-key-is-present-different-key-types.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/returns-value-normalized-zero-key.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsert/returns-value-normalized-zero-key.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/append-new-values-normalizes-zero-key.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/append-new-values-normalizes-zero-key.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/append-new-values.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/append-new-values.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/append-value-if-key-is-not-present-different-key-types.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/append-value-if-key-is-not-present-different-key-types.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/callbackfn-throws.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/callbackfn-throws.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/canonical-key-passed-to-callback.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/canonical-key-passed-to-callback.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/check-callback-fn-args.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/check-state-after-callback-fn-throws.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/check-state-after-callback-fn-throws.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/different-types-function-callbackfn-does-not-throw.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/different-types-function-callbackfn-does-not-throw.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/does-not-evaluate-callbackfn-if-key-present.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/does-not-evaluate-callbackfn-if-key-present.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/getOrInsertComputed.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/getOrInsertComputed.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/not-a-constructor.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/not-a-constructor.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/overwrites-mutation-from-callbackfn.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/overwrites-mutation-from-callbackfn.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/returns-value-if-key-is-not-present-different-key-types.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/returns-value-if-key-is-not-present-different-key-types.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/returns-value-if-key-is-present-different-key-types.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/returns-value-if-key-is-present-different-key-types.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/returns-value-normalized-zero-key.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/getOrInsertComputed/returns-value-normalized-zero-key.js",
+        "strict"
+      ],
+      [
+        "built-ins/Map/prototype/size/does-not-have-mapdata-internal-slot-set.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Map/prototype/size/does-not-have-mapdata-internal-slot-set.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/Symbol.species/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/Symbol.species/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/Symbol.species/return-value.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/Symbol.species/return-value.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/Symbol.species/symbol-species-name.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/Symbol.species/symbol-species-name.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/Symbol.species/symbol-species.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/Symbol.species/symbol-species.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/prototype/forEach/iterates-values-revisits-after-delete-re-add.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/prototype/forEach/iterates-values-revisits-after-delete-re-add.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/prototype/intersection/converts-negative-zero.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/prototype/intersection/converts-negative-zero.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/prototype/isDisjointFrom/set-like-class-mutation.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/prototype/isDisjointFrom/set-like-class-mutation.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/prototype/isDisjointFrom/set-like-class-order.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/prototype/isDisjointFrom/set-like-class-order.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/prototype/isDisjointFrom/set-like-iter-return.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/prototype/isDisjointFrom/set-like-iter-return.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/prototype/isSubsetOf/set-like-class-mutation.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/prototype/isSubsetOf/set-like-class-mutation.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/prototype/isSupersetOf/set-like-class-order.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/prototype/isSupersetOf/set-like-class-order.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/prototype/isSupersetOf/set-like-iter-return.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/prototype/isSupersetOf/set-like-iter-return.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/prototype/symmetricDifference/converts-negative-zero.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/prototype/symmetricDifference/converts-negative-zero.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/prototype/union/converts-negative-zero.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/prototype/union/converts-negative-zero.js",
+        "strict"
+      ],
+      [
+        "built-ins/Set/set-iterator-close-after-add-failure.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Set/set-iterator-close-after-add-failure.js",
+        "strict"
+      ]
+    ],
+    "lost_variants": [
+
+    ]
+  }
+}
