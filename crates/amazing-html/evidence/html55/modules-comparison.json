@@ -1,0 +1,22 @@
+{
+  "selected": 111,
+  "before": {
+    "pass": 132,
+    "fail": 110,
+    "timeout": 1,
+    "notrun": 4,
+    "error": 0
+  },
+  "after": {
+    "pass": 132,
+    "fail": 110,
+    "timeout": 1,
+    "notrun": 4,
+    "error": 0
+  },
+  "gained": 0,
+  "lost": 0,
+  "selection_sha256": "b14ef1bbafb77fca6aa21b6d03bdb16e45a1e56d63ece1ef73cfa3976c74da63",
+  "before_binary_sha256": "bfb7041fb023e1d818bf801bd294b9f16c2aaddfe507c5f65502725e6973658c",
+  "after_binary_sha256": "8938bffe3d3136f89818707c7aeb40947ec96f281e77536aca46ebb036a08adf"
+}
