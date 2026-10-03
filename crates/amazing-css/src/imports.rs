@@ -205,6 +205,12 @@ pub(crate) fn parse_import(tokens: &[Token], rule_index: usize) -> Option<Import
     if rest.iter().any(|token| matches!(token,Token::Function(name) if name.eq_ignore_ascii_case("layer") || name.eq_ignore_ascii_case("supports"))) { return None; }
     Some(ImportRule { url, rule_index, layer, supports, media: MediaQueryList::parse(&serialize(rest)) })
 }
+pub(crate) fn namespace_prelude_valid(tokens: &[Token]) -> bool {
+    let mut tokens = trim(tokens);
+    if matches!(tokens.first(), Some(Token::Ident(_))) { tokens = trim(&tokens[1..]); }
+    parse_import(tokens, 0).is_some_and(|rule|
+        rule.layer.is_none() && rule.supports.is_none() && rule.media.css_text().is_empty())
+}
 impl Stylesheet {
     pub fn imports(&self) -> &[ImportRule] { &self.imports }
     /// Parsed conditional fonts; use the actual owning stylesheet base URL.

@@ -64,8 +64,8 @@ pub(super) fn parse(
                     "layer" => layer_names(prelude).is_some_and(|paths| paths.len() <= 1),
                     _ => false,
                 };
-                let valid_namespace = !block && name == "namespace" && matches!(trim_ws(prelude),
-                    [Token::Str(_) | Token::Url { .. }] | [Token::Ident(_), Token::Whitespace, Token::Str(_) | Token::Url { .. }]);
+                let valid_namespace = !block && name == "namespace"
+                    && crate::imports::namespace_prelude_valid(prelude);
                 if valid_block || valid_namespace { import_prefix = false; }
                 match name.as_str() {
                     "import" if import_prefix && !block => {

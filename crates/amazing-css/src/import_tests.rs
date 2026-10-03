@@ -33,7 +33,9 @@ fn import_prefix_ignores_statements_and_invalid_rules_but_not_empty_blocks() {
     for css in ["p{} @import 'late';","p{color:red} @import 'late';","@layer empty{} @import 'late';",
         "@media print{} @import 'late';","@supports (display:bad){} @import 'late';",
         "@scope (.x){} @import 'late';","@font-face{} @import 'late';",
-        "@media all{@import 'nested';}","@layer x{@import 'nested';}"] {
+        "@media all{@import 'nested';}","@layer x{@import 'nested';}",
+        "@namespace url('urn:test'); @import 'late';", "@namespace svg url(urn:test); @import 'late';",
+        "@namespace svg/**/url('urn:test'); @import 'late';"] {
         assert!(parse_stylesheet(css).imports().is_empty(),"{css}");
     }
     for css in ["@layer x,y; @import 'ok';","@unknown whatever{} @import 'ok';",
