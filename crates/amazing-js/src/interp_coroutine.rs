@@ -171,6 +171,16 @@ fn park_segment(i: &mut Interpreter, msg: Suspend) -> Resume {
 /// `None` when the `await` does not belong to such a body (the caller then keeps the
 /// pre-existing synchronous `await_value` behaviour).
 pub(crate) fn coroutine_await(i: &mut Interpreter, value: JsValue) -> Option<Result<JsValue, Throw>> {
+    coroutine_await_mode(i, value, false)
+}
+
+/// A synchronous iterator's value is first normalized by its Promise wrapper,
+/// which rejects instead of propagating a constructor-get abrupt completion.
+pub(crate) fn coroutine_await_sync(i: &mut Interpreter, value: JsValue) -> Option<Result<JsValue, Throw>> {
+    coroutine_await_mode(i, value, true)
+}
+
+fn coroutine_await_mode(i: &mut Interpreter, value: JsValue, sync_wrapper: bool) -> Option<Result<JsValue, Throw>> {
     if !in_coroutine() {
         return None;
     }
@@ -180,7 +190,15 @@ pub(crate) fn coroutine_await(i: &mut Interpreter, value: JsValue) -> Option<Res
     if !owned {
         return None;
     }
-    Some(match park_segment(i, Suspend::Await(value)) {
+    let promise = if sync_wrapper {
+        vm::async_resolve_value(i, value)
+    } else {
+        match vm::async_resolve_value_checked(i, value) {
+            Ok(promise) => promise,
+            Err(error) => return Some(Err(error)),
+        }
+    };
+    Some(match park_segment(i, Suspend::Await(promise)) {
         Resume::Next(value) => Ok(value),
         Resume::Throw(error) => Err(Throw(error)),
         Resume::Return(_) => Err(Throw::type_error("an async function cannot be returned from")),
@@ -855,10 +873,9 @@ fn thread_async_function_step(
     }
     match suspend {
         Suspend::Await(value) => {
-            let awaited = vm::async_resolve_value(i, value);
             let fulfilled = thread_async_callback(i, state.clone(), false);
             let rejected = thread_async_callback(i, state, true);
-            let promise = promise_object(&awaited)?;
+            let promise = promise_object(&value)?;
             perform_promise_then(i, &promise, Some(fulfilled), Some(rejected), None)?;
             Ok(())
         }

@@ -42,6 +42,13 @@ impl Interpreter {
         Err(Throw::range_error("async iterator promise resolution exceeded the limit"))
     }
 
+    fn await_sync_iteration_value(&mut self, value: JsValue) -> Result<JsValue, Throw> {
+        if let Some(result) = coroutine_await_sync(self, value.clone()) {
+            return result;
+        }
+        self.await_iteration_value(value)
+    }
+
     fn close_async_iterator(&mut self, iterator: &JsValue) -> Result<(), Throw> {
         let method = self.get_prop(iterator, "return")?;
         if method.is_undefined() || method.is_null() { return Ok(()); }
@@ -76,7 +83,7 @@ impl Interpreter {
         let Some(iterator) = iterator else {
             // Arrays and strings use the built-in sync iterator path.
             for value in self.iterate(iterable)? {
-                let value = self.await_iteration_value(value)?;
+                let value = self.await_sync_iteration_value(value)?;
                 let iteration_env = for_iteration_env(left, env);
                 self.bind_for(left, value, &iteration_env)?;
                 match self.exec_stmt(body, &iteration_env)? {
@@ -103,7 +110,7 @@ impl Interpreter {
             let value = self.get_prop(&result, "value")?;
             // Only a sync iterator's value is awaited (CreateAsyncFromSyncIterator); an async
             // iterator's result value is used as is.
-            let value = if async_iterator { value } else { self.await_iteration_value(value)? };
+            let value = if async_iterator { value } else { self.await_sync_iteration_value(value)? };
             let iteration_env = for_iteration_env(left, env);
             if let Err(error) = self.bind_for(left, value, &iteration_env) {
                 let _ = self.close_async_iterator(&iterator);

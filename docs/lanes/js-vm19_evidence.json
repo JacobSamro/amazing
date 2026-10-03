@@ -1,0 +1,28 @@
+{
+  "ticket": "JSVM-19",
+  "base": "f4941ad9bc2cbdf2527088de30a22df8bd21e23c",
+  "base_source_equals": "d6af8bbe",
+  "platform": "Linux Boat native /tmp source and target",
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "before_host_sha256": "5a66a0f186c389edebe39fd98d3581f27b88f3337d87085171bd62ccb82daa3c",
+  "after_host_sha256": "fe274d03f54d1790ab2819dcbceb8fa7e8129707bd9be2be5cc15364dad75535",
+  "workspace": {"passed":3793,"skipped":17,"doctests_passed":4},
+  "corpus": {
+    "selection": ["language", "built-ins/Promise", "built-ins/Async"],
+    "unique_selected_files":25566,
+    "before_passed_files":24954,"after_passed_files":24954,
+    "before_passed_variants":46433,"after_passed_variants":46433,
+    "gained_files":0,"lost_files":0,"gained_variants":0,"lost_variants":0,
+    "failed_files_unchanged":586,"unsupported_files_unchanged":26,
+    "classification_changes":0,"timeout_seconds":20,"jobs":8,
+    "language_passed_files":24095,"language_passed_variants":44721,
+    "promise_passed_files":627,"promise_passed_variants":1248,
+    "async_builtins_passed_files":232,"async_builtins_passed_variants":464,
+    "additional_six_cluster_union": {"selected_files":2462,"passed_files_unchanged":2340,"passed_variants_unchanged":4611,"lost_files":0,"lost_variants":0}
+  },
+  "regressions": ["Direct Await constructor-get abrupt completion reaches catch before caller continuation", "Constructor getter runs once under the original callable context", "VM ordinary async and async-generator consumers plus forced AST coroutine", "Post-catch await resumes normally", "Sync iterator wrapper rejection remains asynchronous", "Async-generator return rejection at suspendedStart, suspendedYield and completed queues"],
+  "boundaries": ["Checked normalization before VM/AST direct Await suspension", "Prepared Promise suspension payload prevents repeated constructor lookup", "Genuine async yield-star result/return/close checked normalization", "AsyncFromSync and async-generator Return retain rejection-producing normalization", "No compiler eligibility, factory, FDI, module observer or public Promise changes"],
+  "known_followup": "Existing VM sync ForAwait awaits raw iterator result before done/value reads. This is a preexisting spec defect, explicitly outside the checked-normalization fix; approved JSVM-20 ports the whole wrapper/reaction/close continuation.",
+  "artifacts": ["jsvm19-workspace-v2.log", "jsvm19-doctests-v2.log", "jsvm19-before-language.json", "jsvm19-after-language.json", "jsvm19-before-built-ins-Promise.json", "jsvm19-after-built-ins-Promise.json", "jsvm19-before-built-ins-Async.json", "jsvm19-after-built-ins-Async.json"]
+}

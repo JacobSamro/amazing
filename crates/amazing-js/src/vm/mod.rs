@@ -672,6 +672,10 @@ impl Program {
                 }
             }
             *pc += 1;
+            // PromiseResolve runs before leaving the suspended function's
+            // context. The outcome carries that prepared Promise, not the
+            // operand, so drivers never repeat its observable constructor read.
+            let mut awaited_promise = None;
             let step = (|| -> Result<Option<Abrupt>, Throw> {
                 match op {
                     Instruction::NoOp => {}
@@ -1277,7 +1281,16 @@ impl Program {
                                 *pc -= 1;
                             }
                             Ok(async_delegate::AsyncDelegateStep::Await(value)) => {
-                                registers[*dst] = value;
+                                let promise = if matches!(async_delegate.as_ref().unwrap().phase,
+                                    async_delegate::AsyncDelegatePhase::AwaitingSyncValue { .. }) {
+                                    async_resolve_value(i, value)
+                                } else {
+                                    match async_resolve_value_checked(i, value) {
+                                        Ok(promise) => promise,
+                                        Err(error) => { *async_delegate = None; return Err(error); }
+                                    }
+                                };
+                                awaited_promise = Some(promise);
                                 *await_dst = Some(*dst);
                                 *pc -= 1;
                             }
@@ -1295,7 +1308,8 @@ impl Program {
                             }
                         }
                     }
-                    Instruction::Await(dst, _) => {
+                    Instruction::Await(dst, src) => {
+                        awaited_promise = Some(async_resolve_value_checked(i, registers[*src].clone())?);
                         *await_dst = Some(*dst);
                         return Ok(None);
                     }
@@ -1360,6 +1374,9 @@ impl Program {
                         if is_async {
                             registers[*dst] = registers[*source].clone();
                         } else {
+                            // AsyncFromSyncIteratorContinuation converts an
+                            // abrupt PromiseResolve into a rejected wrapper.
+                            awaited_promise = Some(async_resolve_value(i, registers[*source].clone()));
                             *await_dst = Some(*dst);
                             return Ok(None);
                         }
@@ -1555,12 +1572,7 @@ impl Program {
                 return Ok(FrameOutcome::Yielded(value));
             }
             if await_dst.is_some() {
-                let value = match op {
-                    Instruction::Await(_, src) | Instruction::AsyncIteratorAwaitValue(_, _, src) => registers[*src].clone(),
-                    Instruction::YieldDelegateAsync(dst, _) => registers[*dst].clone(),
-                    _ => unreachable!(),
-                };
-                return Ok(FrameOutcome::Awaited(value));
+                return Ok(FrameOutcome::Awaited(awaited_promise.expect("await prepared its Promise")));
             }
         }
         let value = if self.is_function {
@@ -2055,10 +2067,9 @@ fn async_continue(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>, kind:
     }
     match outcome {
         Ok(FrameOutcome::Awaited(value)) => {
-            let awaited = async_resolve_value(i, value);
             let fulfilled = async_handler(i, state.clone(), false);
             let rejected = async_handler(i, state, true);
-            async_attach_reactions(i, awaited, fulfilled, rejected)?;
+            async_attach_reactions(i, value, fulfilled, rejected)?;
         }
         Ok(FrameOutcome::Completed(value)) => {
             async_complete(i, &target, value)?;
@@ -2077,14 +2088,22 @@ fn rejection(i: &Interpreter, error: JsValue) -> PromiseFate {
 }
 
 pub(crate) fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValue {
+    match async_resolve_value_checked(i, value) {
+        Ok(promise) => promise,
+        Err(Throw(error)) => new_promise(i, rejection(i, error)),
+    }
+}
+
+/// PromiseResolve(%Promise%, value), with abrupt constructor reads preserved.
+/// Direct Await propagates that completion before suspension; protocol wrappers
+/// and async-generator Return convert it into their own rejected Promise.
+pub(crate) fn async_resolve_value_checked(i: &mut Interpreter, value: JsValue) -> Result<JsValue, Throw> {
     if matches!(&value, JsValue::Object(object) if matches!(object.borrow().exotic, Exotic::Promise(_))) {
         // PromiseResolve(%Promise%, value) reuses only this realm's intrinsic
         // constructor, regardless of a different constructor's prototype.
         // The observable constructor read can itself reject the await.
-        match i.get_prop(&value, "constructor") {
-            Ok(constructor) if constructor == i.intrinsic_promise_constructor => return value,
-            Ok(_) => {}
-            Err(Throw(error)) => return new_promise(i, rejection(i, error)),
+        if i.get_prop(&value, "constructor")? == i.intrinsic_promise_constructor {
+            return Ok(value);
         }
     }
     let promise = new_promise(i, PromiseFate::Pending);
@@ -2092,7 +2111,7 @@ pub(crate) fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValu
     if let Err(Throw(error)) = async_complete(i, target, value) {
         let _ = settle_promise(target, rejection(i, error), i);
     }
-    promise
+    Ok(promise)
 }
 
 /// Await attaches reactions internally to its intrinsic Promise. It creates
@@ -2450,10 +2469,9 @@ fn async_generator_run(
             async_generator_drain(i, state)
         }
         Ok(FrameOutcome::Awaited(value)) => {
-            let awaited = async_resolve_value(i, value);
             let fulfilled = async_generator_step_handler(i, state.clone(), target.clone(), false);
             let rejected = async_generator_step_handler(i, state, target, true);
-            async_attach_reactions(i, awaited, fulfilled, rejected)?;
+            async_attach_reactions(i, value, fulfilled, rejected)?;
             Ok(())
         }
         Ok(FrameOutcome::Suspended) => unreachable!("unbounded async generator slice suspended"),

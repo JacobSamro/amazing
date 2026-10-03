@@ -1081,7 +1081,35 @@ One timeout remains, unchanged. Full callable **2439486 accepted /2439656 attemp
 **170 fallback** (129statement/18expression/11yield/8class/4member), with zero scoped
 declaration rejection. Compact evidence: [js-vm18_evidence.json](js-vm18_evidence.json).
 
-Next approved JSVM-19: whole checked Await normalization and abrupt constructor
-getter timing, preserving AsyncFromSync wrapper rejection timing and async
-generator Return behavior. Coordinate exact AST coroutine and module observer
-consumers after coherent Runtime35 adoption; no blanket Promise consumer rewrite.
+## JSVM-19: checked Await normalization (complete)
+
+Coherent d6af8bbe adopted by source-identical dependency merge f4941ad9. Direct
+VM Await and AST coroutine Await normalize the operand while their original call
+context is active, before suspension. A Promise constructor getter throwing now
+routes into the function's protected completion immediately. The suspension
+payload is the prepared intrinsic Promise; drivers attach internal reactions
+without repeating the observable constructor lookup. Async yield-star's genuine
+async result/return/close awaits use the same checked boundary. AsyncFromSync
+and async-generator Return retain rejection-producing normalization. The two AST
+synchronous ForAwait value sites have their own coroutine wrapper mode.
+Grouped tests cover immediate catch ordering, once-only constructor lookup,
+active caller context, resumed execution, sync-wrapper rejection and generator
+Return queues on both backends, including a forced AST coroutine.
+Final native Boat workspace **3793 passed**,17 skipped; doctests **four passed**.
+Whole language, Promise and Async built-ins cover **25566 unique files**:
+**24954 passing files and46433 passing variants unchanged**, zero lost files
+or variants, no classification changes. Six narrower whole selections also
+retain all2340 file/4611 variant passes. Compact durable evidence:
+[js-vm19_evidence.json](js-vm19_evidence.json).
+
+The correct spec order reads a synchronous iterator result's done/value before
+suspension. Existing VM ForAwait instead awaits the raw result first; that is a
+preexisting spec defect, not an invalid test expectation. JSVM-19's wrapper test
+isolates rejection catch timing and does not claim to fix that larger ordering.
+
+Next approved JSVM-20 ports the whole verified MIT Lumen AsyncFromSync wrapper
+and synchronous async yield-star continuation: observable done/value reads before
+suspension, successful internal wrapper reaction plus outer Await, abrupt
+normalization, iterator close and original-error precedence. Exact shared AST
+exec_for_await_of sync adapter/close helper is granted; genuine async paths and
+factory/FDI/reference behavior remain outside that ticket.

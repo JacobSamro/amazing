@@ -1253,6 +1253,81 @@ fn jsvm17_saved_context_distinguishes_recursive_and_borrowed_resumptions() {
 }
 
 #[test]
+fn jsvm19_await_constructor_abrupt_completion_stays_in_the_active_context() {
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        for force_thread in [false, true] {
+            if force_thread && backend == ExecutionBackend::Bytecode { continue; }
+            let blocker = if force_thread { "with({}){}" } else { "" };
+            for generator in [false, true] {
+                if generator && force_thread { continue; }
+                let star = if generator { "*" } else { "" };
+                let invoke = if generator { "f().next()" } else { "f()" };
+                let source = format!(r#"
+                    var log=[],gets=0,callerCorrect=false,error={{}},observed;
+                    var p=Promise.resolve(7);
+                    function getter() {{gets++;callerCorrect=getter.caller===f;log.push('get');throw error}}
+                    Object.defineProperty(p,'constructor',{{get:getter}});
+                    async function{star} f() {{ {blocker}
+                        try {{await p;log.push('wrong')}}
+                        catch(e) {{observed=e;log.push('catch')}}
+                        await 0;log.push('resumed');
+                    }}
+                    var output={invoke};log.push('after');
+                "#);
+                let mut i = Interpreter::new();
+                i.run_script_with_backend(&source, backend).unwrap_or_else(|e|
+                    panic!("{backend:?} thread={force_thread} generator={generator}: {e:?}"));
+                assert_eq!(i.run_script("log.join(',')==='get,catch,after,resumed' && gets===1 && observed===error && callerCorrect").unwrap(),
+                    JsValue::Bool(true), "{backend:?} thread={force_thread} generator={generator}");
+            }
+        }
+    }
+}
+
+#[test]
+fn jsvm19_sync_iterator_and_generator_return_keep_rejected_wrapper_timing() {
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        for force_thread in [false, true] {
+            if force_thread && backend == ExecutionBackend::Bytecode { continue; }
+            let blocker = if force_thread { "with({}){}" } else { "" };
+            for iterable in ["[p]", "({[Symbol.iterator](){return {next(){return {value:p,done:false}}}}})"] {
+                let source = format!(r#"
+                    var log=[],gets=0,error={{}},observed;
+                    var p=Promise.resolve(7);
+                    Object.defineProperty(p,'constructor',{{get:function(){{gets++;log.push('get');throw error}}}});
+                    async function f() {{{blocker}
+                        try {{for await (const value of {iterable}) {{log.push('wrong');break}}}}
+                        catch(e) {{observed=e;log.push('catch')}}
+                    }}
+                    f();log.push('after');
+                "#);
+                let mut i = Interpreter::new();
+                i.run_script_with_backend(&source, backend).unwrap_or_else(|e|
+                    panic!("{backend:?} thread={force_thread} {iterable}: {e:?}"));
+                assert_eq!(i.run_script("log.indexOf('after')<log.indexOf('catch') && log.indexOf('wrong')===-1 && gets===1 && observed===error").unwrap(),
+                    JsValue::Bool(true), "{backend:?} thread={force_thread} {iterable}: {:?}",
+                    i.run_script("log.join(',')").unwrap());
+            }
+        }
+        for setup in ["var it=f();", "var it=f();it.next();", "var it=f();it.next();it.next();"] {
+            let source = format!(r#"
+                var log=[],gets=0,error={{}},observed;
+                var p=Promise.resolve(7);
+                Object.defineProperty(p,'constructor',{{get:function(){{gets++;log.push('get');throw error}}}});
+                async function* f() {{yield 1;}}
+                {setup}
+                it.return(p).then(function(){{log.push('wrong')}},function(e){{observed=e;log.push('reject')}});
+                log.push('after');
+            "#);
+            let mut i=Interpreter::new();
+            i.run_script_with_backend(&source,backend).unwrap();
+            assert_eq!(i.run_script("gets===1 && observed===error && log.indexOf('after')<log.indexOf('reject')").unwrap(),
+                JsValue::Bool(true),"{backend:?}: {setup}");
+        }
+    }
+}
+
+#[test]
 fn jsvm16_await_uses_internal_reactions_across_all_driver_boundaries() {
     let forms = [
         ("async function f(){try{return await p}catch(e){return 'error:'+e}} var output=f();", false, true, false),
