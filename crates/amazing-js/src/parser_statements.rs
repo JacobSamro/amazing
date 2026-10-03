@@ -354,7 +354,7 @@ impl Parser {
                         // (radix prefixes, exponents and BigInt all need NumericValue).
                         // Retain the constant literal through the existing key path;
                         // no user code runs when converting its primitive value.
-                        let literal = self.parse_primary_expr()?;
+                        let literal = self.parse_primary()?;
                         (BindingKey::Computed(Box::new(literal)), None)
                     } else {
                         let identifier = self.prop_name()?;
