@@ -885,7 +885,7 @@ impl RuntimeBindings {
             }
             ancestor_origins.reverse();
             let Some(top_level_origin) = ancestor_origins.first().cloned() else { continue; };
-            let request_referrer_policy = {
+            let request_referrer_policy = if pending.is_some() { source.referrer_policy } else {
                 let host = host.borrow();
                 resource_response::attribute_referrer_policy(host.dom.get_attribute_ns(node, None, "referrerpolicy"))
                     .unwrap_or(source.referrer_policy)
