@@ -135,6 +135,12 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
         external_subset: false,
         standalone: false,
     };
+    // This parser arena is XML even before a response/DOMParser caller installs
+    // its actual MIME, URL and selected byte encoding. Template owners inherit
+    // the XML document type while retaining their independent creation defaults.
+    p.dom_result(dom.set_document_metadata(NodeIdx(0), amazing_dom::document_surface::DocumentMetadata {
+        url: "about:blank".into(), content_type: "application/xml".into(), character_set: "UTF-8".into(),
+    }))?;
     if let Some((offset, _)) = normalized.char_indices().find(|(_, c)| !xml_char(*c)) {
         p.pos = offset;
         return Err(p.error("forbidden XML character"));
@@ -185,7 +191,7 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
     let mut doctype_seen = false;
     while !p.rest().is_empty() {
         let mut parent = stack.last().map_or(NodeIdx(0), |f| f.node);
-        if fragment && dom.namespace_uri(parent) == Some(HTML_NAMESPACE) && dom.local_name(parent) == Some("template") {
+        if dom.namespace_uri(parent) == Some(HTML_NAMESPACE) && dom.local_name(parent) == Some("template") {
             parent = p.dom_result(dom.ensure_template_contents(parent))?;
         }
         if p.take("<!--") {
@@ -193,7 +199,7 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
             if data.contains("--") || data.ends_with('-') {
                 return Err(p.error("invalid comment"));
             }
-            dom.append_child(parent, NodeKind::Comment { data: data.into() });
+            p.append_node(&mut dom, parent, NodeKind::Comment { data: data.into() })?;
         } else if p.take("<?") {
             let target = p.name()?;
             if target.eq_ignore_ascii_case("xml") || target.contains(':') {
@@ -205,13 +211,13 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
                 p.require_space()?;
                 p.until("?>")?
             };
-            dom.append_child(
-                parent,
+            p.append_node(
+                &mut dom, parent,
                 NodeKind::ProcessingInstruction {
                     target,
                     data: data.into(),
                 },
-            );
+            )?;
         } else if p.take("<!DOCTYPE") {
             if fragment { return Err(p.error("doctype in XML fragment")); }
             if root_seen || doctype_seen {
@@ -247,20 +253,20 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
             }
             p.expect(">")?;
             dom.doctype = Some(name.clone());
-            dom.append_child(
-                NodeIdx(0),
+            p.append_node(
+                &mut dom, NodeIdx(0),
                 NodeKind::DocumentType {
                     name,
                     public_id,
                     system_id,
                 },
-            );
+            )?;
         } else if p.take("<![CDATA[") {
             if !fragment && stack.is_empty() { return Err(p.error("CDATA outside root")); }
             let data = p.until("]]>")?;
             // Preserve lexical section boundaries in both document and fragment DOMs.
             // CDATA is literal CharacterData, not a mergeable ordinary Text token.
-            dom.append_child(parent, NodeKind::CDATASection { data: data.into() });
+            p.append_node(&mut dom, parent, NodeKind::CDATASection { data: data.into() })?;
         } else if p.take("</") {
             let name = p.qname()?;
             p.space();
@@ -361,6 +367,9 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
                 p.dom_result(dom.create_element_expanded(parent, name.namespace_uri.as_deref(),
                     split_name(&name.qualified).0, &name.local))?
             };
+            if name.namespace_uri.as_deref() == Some(HTML_NAMESPACE) && name.local == "template" {
+                p.dom_result(dom.ensure_template_contents(node))?;
+            }
             for attr in resolved {
                 p.dom_result(dom.set_attribute_expanded(
                     node,
@@ -393,7 +402,7 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
                     return Err(p.error("]]> in character data"));
                 }
                 let data = p.references(raw, false)?;
-                dom.create_text(parent, &data);
+                p.append_node(&mut dom, parent, NodeKind::Text { data: data.into() })?;
             }
         }
     }
@@ -407,6 +416,13 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
 }
 
 impl<'a> Parser<'a> {
+    fn append_node(&self, dom: &mut Dom, parent: NodeIdx, kind: NodeKind) -> ResultXml<NodeIdx> {
+        let document = dom.owner_document(parent).unwrap_or(parent);
+        let node = self.dom_result(dom.create_node_in(document, kind))?;
+        dom.attach_last(parent, node);
+        Ok(node)
+    }
+
     fn rest(&self) -> &'a str {
         &self.src[self.pos..]
     }

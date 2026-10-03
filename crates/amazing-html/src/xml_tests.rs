@@ -511,3 +511,64 @@ fn xml_cdata_preserves_each_lexical_section_and_ordinary_text_boundaries() {
     for source in ["<![CDATA[x]]><r/>", "<r/><![CDATA[x]]>", "<r><![CDATA[x</r>",
         "<r><![cdata[x]]></r>", "<r><![CDATA[x]]>]]></r>", "<r><![CDATA[\0]]></r>"] { malformed(source); }
 }
+
+
+fn assert_xml_node_documents(dom: &Dom, node: NodeIdx, document: NodeIdx) {
+    assert_eq!(dom.owner_document(node), Some(document), "{:?}", dom.get(node).kind);
+    for child in dom.children(node) { assert_xml_node_documents(dom, child, document); }
+    if let Some(contents) = dom.template_contents(node) {
+        assert_eq!(dom.children(node).count(), 0);
+        let inert = dom.owner_document(contents).unwrap();
+        assert_ne!(inert, NodeIdx(0));
+        assert_eq!(dom.document_metadata(inert).unwrap().unwrap().content_type, "application/xml");
+        assert!(!dom.document_scripting_enabled(inert).unwrap());
+        assert_xml_node_documents(dom, contents, inert);
+    }
+}
+
+#[test]
+fn xml_document_templates_use_actual_inert_contents_and_node_documents() {
+    let source = "<?before data?><r xmlns:h='http://www.w3.org/1999/xhtml'><h:template id='t'>text<![CDATA[<&literal;]]><!--comment--><?inside data?><x a='v'/><h:template id='nested'>inner</h:template><h:template id='empty'/></h:template><h:TEMPLATE>ordinary</h:TEMPLATE><template xmlns='urn:foreign'><x/></template></r>";
+    let dom = parse_xml(source).unwrap();
+    assert_eq!(dom.document_metadata(NodeIdx(0)).unwrap().unwrap().content_type, "application/xml");
+    for child in dom.children(NodeIdx(0)) { assert_xml_node_documents(&dom, child, NodeIdx(0)); }
+    let template = elements(&dom).into_iter().find(|node| dom.get_attribute(*node, "id") == Some("t")).unwrap();
+    let contents = dom.template_contents(template).unwrap();
+    let children: Vec<_> = dom.children(contents).collect();
+    assert_eq!(children.len(), 7);
+    assert!(matches!(&dom.get(children[0]).kind, NodeKind::Text { data } if data.as_str() == "text"));
+    assert!(matches!(&dom.get(children[1]).kind, NodeKind::CDATASection { data } if data.as_str() == "<&literal;"));
+    assert!(matches!(&dom.get(children[2]).kind, NodeKind::Comment { data } if data.as_str() == "comment"));
+    assert!(matches!(&dom.get(children[3]).kind, NodeKind::ProcessingInstruction { target, data }
+        if target == "inside" && data.as_str() == "data"));
+    let document = dom.owner_document(contents).unwrap();
+    for node in [children[5],children[6]] {
+        assert_eq!(dom.owner_document(dom.template_contents(node).unwrap()), Some(document));
+    }
+    assert_eq!(dom.children(dom.template_contents(children[6]).unwrap()).count(), 0);
+    for node in elements(&dom).into_iter().filter(|node| dom.local_name(*node) == Some("TEMPLATE")
+        || dom.namespace_uri(*node) == Some("urn:foreign")) {
+        assert_eq!(dom.template_contents(node), None);
+        assert_eq!(dom.owner_document(node), Some(NodeIdx(0)));
+    }
+    for source in ["<template xmlns='http://www.w3.org/1999/xhtml'/>",
+        "<h:template xmlns:h='http://www.w3.org/1999/xhtml'></h:template>"] {
+        let dom = parse_xml(source).unwrap();
+        let root = dom.children(NodeIdx(0)).next().unwrap();
+        let contents = dom.template_contents(root).unwrap();
+        assert_eq!(dom.children(contents).count(), 0);
+        assert_xml_node_documents(&dom, root, NodeIdx(0));
+    }
+}
+
+#[test]
+fn xml_fragment_character_data_in_nested_templates_inherits_actual_insertion_document() {
+    let context = XmlFragmentContext { namespace_uri: Some(HTML_NAMESPACE.into()), prefix: None,
+        namespaces: vec![(None, HTML_NAMESPACE.into())] };
+    let dom = parse_xml_fragment(&context, "before<template><!--x--><?p y?><![CDATA[z]]><template>inner</template><span a='v'/></template>after").unwrap();
+    for child in dom.children(NodeIdx(0)) { assert_xml_node_documents(&dom, child, NodeIdx(0)); }
+    let top: Vec<_> = dom.children(NodeIdx(0)).collect();
+    assert_eq!(top.len(), 3);
+    let contents = dom.template_contents(top[1]).unwrap();
+    assert_eq!(dom.children(contents).count(), 5);
+}

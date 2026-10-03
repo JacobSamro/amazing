@@ -861,4 +861,25 @@ mod tests {
         }
     }
 
+    #[test]
+    fn xml_response_templates_and_all_character_data_keep_actual_owner_documents() {
+        for mime in ["text/xml", "application/xml", "application/xhtml+xml", "image/svg+xml"] {
+            let source = "<r xmlns:h='http://www.w3.org/1999/xhtml'><h:template>text<![CDATA[c]]><!--x--><?p y?><h:template/><x/></h:template></r>";
+            let (dom, encoding) = parse_response(source.as_bytes(), mime, None).unwrap();
+            assert_eq!(encoding, "UTF-8");
+            let root = dom.children(NodeIdx(0)).next().unwrap();
+            let template = dom.children(root).next().unwrap();
+            assert_eq!(dom.children(template).count(), 0);
+            let contents = dom.template_contents(template).unwrap();
+            let document = dom.owner_document(contents).unwrap();
+            assert_ne!(document, NodeIdx(0));
+            assert_eq!(dom.document_metadata(document).unwrap().unwrap().content_type, "application/xml");
+            let children: Vec<_> = dom.children(contents).collect();
+            assert_eq!(children.len(), 6);
+            for child in &children { assert_eq!(dom.owner_document(*child), Some(document)); }
+            assert_eq!(dom.owner_document(dom.template_contents(children[4]).unwrap()), Some(document));
+            assert!(!dom.document_scripting_enabled(document).unwrap());
+        }
+    }
+
 }
