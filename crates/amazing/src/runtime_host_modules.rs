@@ -268,6 +268,7 @@ impl RuntimeBindings {
     fn module_script_options(&self, script: &crate::cmd::js::PageScript) -> ModuleFetchOptions {
         let state = self.state.borrow();
         let host = state.host.borrow();
+        if (script.node.0 as usize) >= host.dom.node_count() { return ModuleFetchOptions::default(); }
         let attrs = host.dom.attrs_of(script.node).unwrap_or(&[]);
         let attr = |name: &str| attrs.iter().find(|(key, _)| key.eq_ignore_ascii_case(name))
             .map(|(_, value)| value.clone()).unwrap_or_default();
@@ -497,7 +498,7 @@ mod tests {
         assert_eq!(requests.len(), 2);
         assert_eq!(requests[0].referrer, "https://example.test/page.html");
         assert_eq!(requests[0].initiator.document_url, "https://example.test/page.html");
-        assert_eq!(requests[0].initiator.origin, amazing_fetch::HttpUrl::parse("https://example.test/").unwrap().origin());
+        assert_eq!(requests[0].initiator.origin, amazing_fetch::HttpUrl::parse("https://example.test/").unwrap().origin().clone());
         assert_eq!(requests[0].options.credentials, amazing_fetch::CredentialsMode::Include);
         assert_eq!(requests[0].options.referrer_policy, "origin");
         assert_eq!(requests[0].options.nonce, "abc");
@@ -505,6 +506,48 @@ mod tests {
         assert_eq!(requests[1].referrer, "https://example.test/redirect/root.js");
         assert_eq!(requests[1].options.referrer_policy, "no-referrer");
         assert_eq!(requests[1].options.credentials, amazing_fetch::CredentialsMode::Include);
+    }
+    #[test]
+    fn module_resource_transport_uses_inherited_and_opaque_child_principals() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<iframe srcdoc=\"<script type='module'>import './dep.js';</script>\"></iframe><iframe sandbox='allow-scripts' srcdoc=\"<script type='module'>import './dep.js';</script>\"></iframe>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/page.html");
+        let requests = Rc::new(RefCell::new(Vec::new()));
+        let recorded = requests.clone();
+        scheduler.set_module_resource_loader(Rc::new(move |request| {
+            assert_eq!(request.requested_url, "https://example.test/dep.js");
+            recorded.borrow_mut().push(request.clone());
+            let mut headers = amazing_net::Headers::new();
+            headers.append("content-type", "text/javascript".into()).unwrap();
+            Ok(amazing_net::Response { url: request.requested_url, status: 200, reason: "OK".into(), headers, body: b"export const value=1;".to_vec() })
+        }));
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        let requests = requests.borrow();
+        assert_eq!(requests.len(), 2);
+        let root = amazing_fetch::HttpUrl::parse("https://example.test/").unwrap().origin().clone();
+        assert_eq!(requests.iter().filter(|request| request.initiator.origin == root).count(), 1);
+        assert_eq!(requests.iter().filter(|request| request.initiator.origin != root).count(), 1);
+        for request in requests.iter() {
+            assert_eq!(request.initiator.document_url, "about:srcdoc");
+            assert_eq!(request.initiator.top_level_origin, root);
+            assert_eq!(request.initiator.ancestor_origins, vec![root.clone()]);
+        }
+    }
+    #[test]
+    fn module_response_transport_rejects_status_and_non_javascript_mime() {
+        for (status, mime) in [(404, "text/javascript"), (200, "application/json"), (200, "")] {
+            let mut scheduler = scheduler();
+            scheduler.set_module_resource_loader(Rc::new(move |request| {
+                let mut headers = amazing_net::Headers::new();
+                if !mime.is_empty() { headers.append("content-type", mime.into()).unwrap(); }
+                Ok(amazing_net::Response { url: request.requested_url, status, reason: String::new(), headers, body: b"window.executed=true;".to_vec() })
+            }));
+            assert!(scheduler.load_module_source("https://example.test/reject.js").is_err());
+            assert!(matches!(scheduler.run_script("typeof executed==='undefined'").unwrap(), JsValue::Bool(true)));
+        }
     }
     #[test]
     fn static_and_delayed_imports_share_live_namespace_and_fetch_once() {
