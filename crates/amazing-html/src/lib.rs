@@ -40,6 +40,7 @@ pub mod resumable;
 pub mod tokenizer;
 pub mod tree;
 pub mod xml;
+pub mod xml_encoding;
 pub use tree::IncrementalParser;
 pub use tree::{is_javascript_mime_type, strip_ascii_whitespace, ParserConstruction, ParserCustomElementHost, ScriptMode};
 pub use resumable::{ParseSignal, ResumableParser};

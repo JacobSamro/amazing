@@ -497,7 +497,8 @@ fn parse_response(body: &[u8], mime: &str, charset: Option<&str>) -> Result<(Dom
     }
     if matches!(mime, "text/xml" | "application/xml" | "application/xhtml+xml")
         || mime.ends_with("+xml") {
-        let decoded = amazing_html::encoding::decode(body, charset);
+        let decoded = amazing_html::xml_encoding::decode(body, charset)
+            .map_err(|error| format!("XML decode failed: {error}"))?;
         let parsed = amazing_html::parse_xml(&decoded.text)
             .map_err(|error| format!("XML parse failed: {error:?}"))?;
         return Ok((parsed, amazing_html::encoding::canonical_name(decoded.encoding)));

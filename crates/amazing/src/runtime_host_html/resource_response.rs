@@ -720,4 +720,22 @@ mod tests {
             assert_eq!(scheduler.run_script("document.querySelector('iframe').contentDocument").unwrap(), JsValue::Null);
         }
     }
+    #[test]
+    fn xml_response_bytes_use_xml_authorities_and_fatal_errors() {
+        let (dom, label) = parse_response("<r>é</r>".as_bytes(), "application/xml", None).unwrap();
+        assert_eq!(label, "UTF-8");
+        assert!(dom.dump(NodeIdx(0)).contains("é"));
+        let declared = b"<?xml version='1.0' encoding='windows-1253'?><r>\xa2</r>";
+        let (dom, label) = parse_response(declared, "application/xhtml+xml", None).unwrap();
+        assert_eq!(label, "windows-1253");
+        assert!(dom.dump(NodeIdx(0)).contains('\u{0386}'));
+        assert!(parse_response(declared, "text/xml", Some("UTF-8")).is_err());
+        assert!(parse_response(b"<r><meta charset='windows-1252'/>\xe9</r>", "image/svg+xml", None).is_err());
+        assert!(parse_response(b"<r>\xe9</r>", "application/xml", None).is_err());
+        let bytes = [b"\xef\xbb\xbf".as_slice(), "<r>é</r>".as_bytes()].concat();
+        assert_eq!(parse_response(&bytes, "text/xml", Some("windows-1252")).unwrap().1, "UTF-8");
+        assert_eq!(parse_response(b"<r>\xe9</r>", "application/xml", Some("windows-1252")).unwrap().1, "windows-1252");
+        assert!(parse_response(b"<r/>", "application/xml", Some("unknown")).is_err());
+    }
+
 }

@@ -104,6 +104,13 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
     parse_inner(src, None)
 }
 
+/// Reuses the document declaration grammar during byte encoding selection.
+pub(super) fn encoding_declaration(src: &str) -> Result<Option<String>, XmlError> {
+    if !src.starts_with("<?xml") || !src[5..].starts_with(xml_space) { return Ok(None); }
+    let mut parser = Parser { src, pos: 0, external_subset: false, standalone: false };
+    parser.declaration().map(|declaration| declaration.encoding)
+}
+
 fn parse_inner(src: &str, context: Option<&XmlFragmentContext>) -> ResultXml<(Dom, Option<XmlDeclaration>)> {
     let fragment = context.is_some();
     let mut dom = Dom::new();
