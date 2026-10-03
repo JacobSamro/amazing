@@ -1,0 +1,102 @@
+{
+  "ticket": "JSVM25R",
+  "before": "175107c08d43a9fe746a4ee87fe9dd21aa5b72a0",
+  "source_sha": "7b17e4d4e397fe5f89e3295219b87de9b02ac0c2",
+  "workspace": {
+    "before_passed": 4064,
+    "after_passed": 4077,
+    "skipped": 17,
+    "before_doctests": 4,
+    "after_doctests": 4
+  },
+  "selectors": [
+    "language",
+    "built-ins/Promise",
+    "built-ins/Iterator/",
+    "built-ins/Function/",
+    "built-ins/AsyncFunction/",
+    "built-ins/GeneratorFunction/",
+    "built-ins/AsyncGeneratorFunction/"
+  ],
+  "jobs": 8,
+  "timeout_seconds": 60,
+  "modes": {
+    "default": {
+      "selected_files": 26555,
+      "before_passed_files": 26413,
+      "after_passed_files": 26413,
+      "gained_files": [],
+      "lost_files": [],
+      "before_passed_variants": 49018,
+      "after_passed_variants": 49018,
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_host_sha256": "dd2becaf3d5a4808994976be2849a1b2d36c7d4bc2ad730d26436b4f8f936ff9",
+      "after_host_sha256": "f3d4202b7e03babc43f6bd810b7693c077ac0d14626ed2543472ebf4be1b2994",
+      "selected_variants": 49229
+    },
+    "vm": {
+      "selected_files": 26555,
+      "before_passed_files": 26413,
+      "after_passed_files": 26413,
+      "gained_files": [],
+      "lost_files": [],
+      "before_passed_variants": 49018,
+      "after_passed_variants": 49018,
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_host_sha256": "dd2becaf3d5a4808994976be2849a1b2d36c7d4bc2ad730d26436b4f8f936ff9",
+      "after_host_sha256": "f3d4202b7e03babc43f6bd810b7693c077ac0d14626ed2543472ebf4be1b2994",
+      "selected_variants": 49229
+    }
+  },
+  "compile_trace": {
+    "default": {
+      "before": {
+        "attempts": 899654,
+        "accepted": 899642,
+        "fallbacks": 12,
+        "reasons": {
+          "class field or static block": 8,
+          "member access": 4
+        }
+      },
+      "after": {
+        "attempts": 899654,
+        "accepted": 899642,
+        "fallbacks": 12,
+        "reasons": {
+          "class field or static block": 8,
+          "member access": 4
+        }
+      }
+    },
+    "vm": {
+      "before": {
+        "attempts": 487953,
+        "accepted": 487941,
+        "fallbacks": 12,
+        "reasons": {
+          "class field or static block": 8,
+          "member access": 4
+        }
+      },
+      "after": {
+        "attempts": 487953,
+        "accepted": 487941,
+        "fallbacks": 12,
+        "reasons": {
+          "class field or static block": 8,
+          "member access": 4
+        }
+      }
+    }
+  },
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "realm_reference": "js-vm25r_realm_reference.json",
+  "limitations": [
+    "Only native async-generator Return context/checked normalization is changed; the language owner separately gates coroutine Return continuation and legacy Yield Await gaps.",
+    "Class initialization and suspended optional-member fallbacks remain atomic."
+  ]
+}

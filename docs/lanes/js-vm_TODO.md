@@ -1339,7 +1339,7 @@ explicit-return Await regression. This series does not claim or implement
 parity across the unresolved AST ReturnStatement boundary; the parent routes
 the complete return/driver area to the language owner.
 
-## JSVM25R — checked injected async-generator Return (in progress)
+## JSVM25R — checked injected async-generator Return
 
 Fixed common dependency `175107c0` is coherent `88f64b9f` plus ready JSVM25.
 The native companion captures the body realm independently of its VM frame,
@@ -1357,3 +1357,16 @@ result. This holds for operand/bare yield, post-Await yield, finalizer yield
 and queued requests. No original-resumer realm is captured or substituted.
 See [js-vm25r_realm_reference.json](js-vm25r_realm_reference.json). The AST
 continuation counterpart remains the language owner's separately gated area.
+
+Final Linux source `7b17e4d4`: **4077 workspace tests passed**, 17 skipped,
+and **four doctests passed**, versus 4064 workspace tests on the common fixed
+before source. All thirteen native groups pass, covering original catch/finally,
+disposal, request ordering, constructor-get timing, saved invocation/strictness,
+initial/completed Return and borrowed/queued realm distinctions.
+Seven whole selections in both modes retain **26413 passing files** and
+**49018 passing variants** among **26555 selected files**, with **zero file
+and variant losses**. Compile attempts/accepted remain **899654/899642** in
+default mode and **487953/487941** in opt-in VM program mode; both retain
+12 fallbacks (class initialization8, member4). This is a correctness change,
+with unchanged Test262 pass counts and callable eligibility.
+Evidence: [js-vm25r_evidence.json](js-vm25r_evidence.json).
