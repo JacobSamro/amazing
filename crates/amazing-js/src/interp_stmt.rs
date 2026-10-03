@@ -2105,7 +2105,7 @@ impl Interpreter {
                     }
                     let constructing = new_target.is_some();
                     if (constructing && policy == HostCallPolicy::CallOnly)
-                        || (!constructing && policy == HostCallPolicy::ConstructOnly)
+                        || (!constructing && matches!(policy, HostCallPolicy::ConstructOnly | HostCallPolicy::ConstructOnlyAllocates))
                     {
                         return Err(Throw::type_error(if constructing {
                             "host function is not a constructor"
@@ -2364,6 +2364,11 @@ impl Interpreter {
             };
         }
         if !new_target.is_object() { return Err(Throw::type_error("newTarget is not an object")); }
+        if matches!(fun.body, FunctionBody::HostNative(_, HostCallPolicy::ConstructOnlyAllocates, _)) {
+            let result = self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target))?;
+            return if result.is_object() { Ok(result) }
+                else { Err(Throw::type_error("allocating host constructor returned a non-object")) };
+        }
         let proto = match self.get_prop(&new_target, "prototype")? {
             JsValue::Object(p) => p,
             _ => self.constructor_fallback_prototype(f, &new_target)?,

@@ -642,6 +642,38 @@ mod tests {
     }
 
     #[test]
+    fn allocating_host_constructor_owns_prototype_lookup_and_requires_object() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let host = i.binding_create_native_function(HostFunctionId(44), "AllocatingHost", 0, HostCallPolicy::ConstructOnlyAllocates);
+            i.binding_define_data_property(&i.binding_global_object(), "AllocatingHost", host, BindingPropertyFlags::METHOD).unwrap();
+            i.set_host_native_dispatcher(Rc::new(|i, _, this, args, new_target| {
+                assert!(this.is_undefined());
+                if args.first() == Some(&JsValue::Bool(false)) { return Ok(JsValue::Undefined); }
+                let prototype = i.binding_get_property(&new_target.unwrap(), "prototype")?;
+                let prototype = if prototype.is_object() { prototype }
+                    else { i.run_script("fallbackPrototype")? };
+                i.binding_create_object(Some(&prototype))
+            }));
+            let result = i.run_script_with_backend(r#"
+                var fallbackPrototype={}, chosen={}, gets=0, valid=true;
+                function Target(){}
+                var target=new Proxy(Target,{get(t,k,r){if(k==='prototype'){gets++;return chosen;}return Reflect.get(t,k,r);}});
+                var value=Reflect.construct(AllocatingHost,[],target);
+                valid=valid && gets===1 && Object.getPrototypeOf(value)===chosen;
+                chosen=null;gets=0;value=Reflect.construct(AllocatingHost,[],target);
+                valid=valid && gets===1 && Object.getPrototypeOf(value)===fallbackPrototype;
+                try{AllocatingHost();valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+                gets=0;try{Reflect.construct(AllocatingHost,[false],target);valid=false;}catch(e){valid=valid && e instanceof TypeError && gets===0;}
+                var sentinel={};target=new Proxy(Target,{get(t,k,r){if(k==='prototype')throw sentinel;return Reflect.get(t,k,r);}});
+                try{Reflect.construct(AllocatingHost,[],target);valid=false;}catch(e){valid=valid && e===sentinel;}
+                valid;
+            "#, backend).unwrap();
+            assert_eq!(result, JsValue::Bool(true), "{backend:?}");
+        }
+    }
+
+    #[test]
     fn global_object_inherits_host_event_target_methods() {
         let mut interpreter = Interpreter::new();
         let old_prototype = interpreter.binding_object_prototype();

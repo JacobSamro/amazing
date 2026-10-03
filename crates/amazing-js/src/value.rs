@@ -757,6 +757,8 @@ pub struct HostFunctionId(pub u64);
 pub enum HostCallPolicy {
     CallOnly,
     ConstructOnly,
+    /// The host owns allocation and GetPrototypeFromConstructor completely.
+    ConstructOnlyAllocates,
     CallAndConstruct,
 }
 

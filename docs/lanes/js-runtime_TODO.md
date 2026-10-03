@@ -1726,3 +1726,7 @@ Function **504/515**, language **24048/24590**, JSON **165/165** unchanged.
 Unique union **32481 cases**, **31790 → 31803 passing** (+13),
 **26 gained variants**, zero lost files or variants and zero timeouts.
 Evidence: `js-runtime_jsrt44_evidence.json`.
+
+## JSRT-46 — host-owned constructor allocation
+
+Base `777325cf45d54640753f2192b54dfce1d8930b3c`. Added opt-in `HostCallPolicy::ConstructOnlyAllocates`: the dispatcher receives undefined this and explicit newTarget, owns allocation/prototype lookup, and must return an object. Bare calls reject. Existing policies are unchanged. Boat whole amazing-js nextest: 575 passed, 1 skipped; 1 doctest passed. Both-backend regression covers one prototype get, host-selected fallback, no generic overwrite, abrupt identity, bare-call rejection and primitive-return rejection. No ported source.
