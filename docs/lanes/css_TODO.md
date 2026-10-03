@@ -2985,3 +2985,23 @@ CSS53 final corrected58f: workspace3946/17skip+4docs, all prior3939 native named
   all17 literal parsing selections4312/5126 across514files (failure multiplicities unchanged). Whole
   colors226/images92/fonts24/transforms141/backgrounds77 =560/891; all891 classifications retained,
   zero losses. Fixed baseline267aac24, exact candidate8709f429. Durable proof amazing-css/evidence/css54.
+
+### CSS-55 — owner media and opaque transport provenance
+
+- Add `project_imports_with_media(root, environment, &[String])`; the original projection delegates
+  an empty owner condition list. Actual link/style media applies to root segments, imported layer
+  markers, keyframes and fonts without wrapping source CSS or changing top-level @import grammar.
+  False/invalid owner media yields no active projected occurrences; media changes reproject the
+  same actual loaded graph, preserving source order, anonymous identities and explicit graph bounds.
+- Add inert `Stylesheet.resource_context: Option<u64>`, `ProjectedFontFace.resource_context` and
+  `ComputedStyle::url_context(property)`. Actual source occurrence tags travel with their own final
+  stylesheet URL; winning var() use-site, shorthand, rollback, explicit inheritance, pseudo and
+  shadow provenance follow the existing URL-base rules. CSS never interprets tags or guesses URLs.
+- Defaults remain None. Derived stylesheet/style state includes the metadata; source-only changes
+  invalidate retained style even when serialized URI text matches. Explicit facade fingerprints
+  must include the tag; the driver owns immutable tag records and transport/referrer policy.
+- Three new grouped tests plus expanded original URL-provenance groups cover owner-media reproject,
+  root/import fonts/layers/keyframes, repeated same-URL occurrence identity, principal/pseudo/shadow
+  winners, inheritance/reset/clone/mutation and source-only retained invalidation.
+- Gate pending on closed ready CSS54; whole native/imports/cascade, all17 parsing selections and
+  exact same relevant render selections. Actual fetched/decoded driver pipeline is separately gated.
