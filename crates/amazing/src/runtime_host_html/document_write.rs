@@ -7,6 +7,7 @@ pub(super) struct DocumentWriteSession {
     generation: u64,
     script_depth: usize,
     close_pending: bool,
+    trailing_cr: bool,
 }
 
 impl RuntimeBindingHost<'_> {
@@ -76,6 +77,17 @@ impl RuntimeBindingHost<'_> {
         }
         let parser = self.state.borrow().active_parsers.get(&document).cloned()
             .ok_or_else(|| Throw::type_error("Missing Document parser"))?;
+        // Input preprocessing spans author write calls, including a CR/LF
+        // pair split across two strings. Empty writes preserve the boundary.
+        if !text.is_empty() {
+            let mut state = self.state.borrow_mut();
+            if let Some(session) = state.frames.document_write_sessions.get_mut(&document) {
+                let starts_lf = text.starts_with('\n');
+                let trailing_cr = text.ends_with('\r');
+                if session.trailing_cr && starts_lf { text.remove(0); }
+                session.trailing_cr = trailing_cr;
+            }
+        }
         self.write_into_active_parser(document, &parser, &text)?;
         let finish = self.state.borrow().frames.document_write_sessions.get(&document)
             .is_some_and(|session| session.close_pending && session.script_depth == 0);
@@ -324,10 +336,12 @@ mod tests {
             if(document.documentElement!==null || document.readyState!=='loading') throw new Error('not empty');
             document.write('<!doc'); document.write('type html><html><head><title>A&am');
             document.write('p;B</title></head><body><!--com'); document.write('ment--><p id="wri');
-            document.write('tten">a&amp;'); document.writeln('b</p>'); document.close();
+            document.write('tten">a&amp;'); document.writeln('b</p>');
+            document.write('<pre id=lines>x\r');document.write('');document.write('\ny</pre>'); document.close();
             [document===original,document.doctype.name,document.compatMode,document.title,
-             document.getElementById('written').textContent,document.readyState,document.body.firstChild.data].join('|')
-        "#).unwrap(), JsValue::str("true|html|CSS1Compat|A&B|a&b|complete|comment"));
+             document.getElementById('written').textContent,document.readyState,document.body.firstChild.data,
+             document.getElementById('lines').textContent].join('|')
+        "#).unwrap(), JsValue::str("true|html|CSS1Compat|A&B|a&b|complete|comment|x\ny"));
     }
 
     #[test]
