@@ -1,0 +1,74 @@
+{
+  "before": {
+    "pass": 56963,
+    "fail": 2348,
+    "error": 6
+  },
+  "after": {
+    "pass": 57007,
+    "fail": 2305,
+    "error": 6
+  },
+  "pages_before": 579,
+  "pages_after": 579,
+  "lost_assertions": 0,
+  "lost_files": 0,
+  "lost": {},
+  "gained": {
+    "dom/nodes/Document-contentType/contentType/xhr_responseType_document.html": {
+      "XHR - retrieve HTML document: document.contentType === 'application/xml'": 1
+    },
+    "domparsing/createContextualFragment.html": {
+      "Must not throw INVALID_STATE_ERR for a detached node.": 1,
+      "Simple test with paragraphs": 1,
+      "Don't auto-create <body> when applied to <html>": 1,
+      "<script>s should be run when appended to the document (but not before)": 1,
+      "createContextualFragment should work even when the context is <area>": 1,
+      "createContextualFragment should work even when the context is <base>": 1,
+      "createContextualFragment should work even when the context is <basefont>": 1,
+      "createContextualFragment should work even when the context is <bgsound>": 1,
+      "createContextualFragment should work even when the context is <br>": 1,
+      "createContextualFragment should work even when the context is <col>": 1,
+      "createContextualFragment should work even when the context is <embed>": 1,
+      "createContextualFragment should work even when the context is <frame>": 1,
+      "createContextualFragment should work even when the context is <hr>": 1,
+      "createContextualFragment should work even when the context is <img>": 1,
+      "createContextualFragment should work even when the context is <input>": 1,
+      "createContextualFragment should work even when the context is <keygen>": 1,
+      "createContextualFragment should work even when the context is <link>": 1,
+      "createContextualFragment should work even when the context is <meta>": 1,
+      "createContextualFragment should work even when the context is <param>": 1,
+      "createContextualFragment should work even when the context is <source>": 1,
+      "createContextualFragment should work even when the context is <track>": 1,
+      "createContextualFragment should work even when the context is <wbr>": 1,
+      "createContextualFragment should work even when the context is <menuitem>": 1,
+      "createContextualFragment should work even when the context is <image>": 1,
+      "<html> and <body> must work the same, 1": 1,
+      "<html> and <body> must work the same, 2": 1,
+      "Implicit <body> creation": 1,
+      "Namespace generally shouldn't matter": 1,
+      "<html> in a different namespace shouldn't be special": 1,
+      "SVG namespace shouldn't be special": 1,
+      "null should be stringified": 1,
+      "undefined should be stringified": 1,
+      "Text nodes shouldn't be special": 1,
+      "Non-Element parent should not be special": 1
+    },
+    "html/semantics/scripting-1/the-template-element/template-for/template-for-html-setters.html": {
+      "Setter createContextualFragment should not patch existing target in head": 1,
+      "Setter createContextualFragment should not patch existing target in body": 1
+    },
+    "html/semantics/scripting-1/the-template-element/template-for/template-for-multiple-cases.html": {
+      "Empty marker name with <?start> and <?end> - contextualFragment ": 1,
+      "Empty marker name with <?start> and <?end> - contextualFragment with 2 chunks": 1,
+      "Empty marker name with <?start> and <?end> - contextualFragment with 4 chunks": 1,
+      "Empty marker name with <?marker> - contextualFragment ": 1,
+      "Empty marker name with <?marker> - contextualFragment with 2 chunks": 1,
+      "Empty marker name with <?marker> - contextualFragment with 4 chunks": 1
+    },
+    "html/syntax/serializing-html-fragments/escaping.html": {
+      "document.implementation.createHTMLDocument and createContextualFragment": 1
+    }
+  },
+  "removed_files": []
+}

@@ -1,0 +1,57 @@
+{
+  "before": {
+    "source": "bb5a752e56350d79a9cf1570e9ff3f53f3615e6b",
+    "binary_sha256": "cf36d171ef9d4969f3b047b22a194aa2070940ea957ded2812791802cd21b92e",
+    "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "directories": [
+      "dom/nodes",
+      "dom/ranges",
+      "domparsing",
+      "html/syntax/serializing-html-fragments",
+      "html/syntax/parsing",
+      "html/semantics/scripting-1/the-template-element"
+    ]
+  },
+  "after": {
+    "source": "58358536b4a15c5759e8331c6bf2e71553f5348d",
+    "binary_sha256": "4d7077af61a41da3327e6122472dbeb58fa7c79439f7538b5c53f78f22cbc6b2",
+    "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "directories": [
+      "dom/nodes",
+      "dom/ranges",
+      "domparsing",
+      "html/syntax/serializing-html-fragments",
+      "html/syntax/parsing",
+      "html/semantics/scripting-1/the-template-element"
+    ]
+  },
+  "common_base": "df7a8558494e4cdb30e2b9578f6546e46770cfdd",
+  "identical_dependencies": [
+    "e9e36c7f062f3a68712e128b93f022f5358cda57",
+    "12e307b7fd8b12a43a7a6171705ff5cb83a4e100 runner helper mirrored identically"
+  ],
+  "native_before": {
+    "pass": 3918,
+    "skip": 17,
+    "doc": 4
+  },
+  "native_after": {
+    "pass": 3923,
+    "skip": 17,
+    "doc": 4
+  },
+  "platform": "Linux Boat; native /tmp source and target",
+  "ordinary_timeout_ms": 25000,
+  "range_repeated_timeout_ms": 120000,
+  "repeat_policy": "Replace all66 dom/ranges rows on BOTH sides from unchanged SHA-verified frozen binaries. Initial579 reports retained in orchestration scratch. No fixture or expected-result edits.",
+  "syntax_guard": {
+    "pages": 72,
+    "pass": 2702,
+    "fail": 6,
+    "raw_sha256": "aa986533ee7600afa72a1aa7d3f41969cab2a3ad9734a1a3c80535ca73399c07"
+  },
+  "passing_identity": "SHA256 of exact UTF16LE subtest names with surrogatepass; Counter multiplicity retained",
+  "credited_gains": 43,
+  "uncredited_gains": 1,
+  "uncredited_reason": "XHR responseType=document deadline completion; no API change credited"
+}

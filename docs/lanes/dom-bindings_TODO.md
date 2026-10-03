@@ -3283,7 +3283,7 @@ identical rawhash. Four pinned remaining failures recorded against current
 namespace algorithm in evidence/xml-serializer/audit.md; no fixture rewrites.
 Fresh-box helper omissions fixed identically with pinned html/dom and
 trusted-types/support resource directories; incomplete reports excluded.
-### Range contextual fragment context and parsing (gate in progress)
+### Range contextual fragment context and parsing (ready)
 
 Fixed dependency df7a8558494e4cdb30e2b9578f6546e46770cfdd includes ready
 HTML54 direct HTML/XML fragment APIs. Lower Range operation captures live start
@@ -3297,5 +3297,9 @@ template owner metadata, quirks table behavior, XML direct fragment grammar and
 fatal errors, and imported XML script inertness through template/HTML adoption.
 HTML54 owner supplies XML-only imported-script marking395ef1c3; HTML Range script
 append behavior remains enabled. Top-level XHTML WPT remains unsupported by the
-current harness, and is reported honestly. No ready or gain claim until matched
-whole nodes/ranges/domparsing/serializer/parser/template plus native/docs complete.
+current harness, and is reported honestly. Fixed Boat workspace3918→3923/17skip,
+four docs both. Whole579 pages56963→57007 pass,2348→2305 fail,6errors,
+zero lost exact passing names/multiplicities/files. Credited43 gains:34 contextual
+fragment,8 template,1 serialization;1 XHR completion uncredited. Whole66 Range
+rows rerun BOTH unchanged frozen binaries at120s:40317/198 identical. Syntax72
+2702/6 byte-identical. Evidence: amazing-bindings/evidence/range-contextual-fragment.

@@ -1,0 +1,9 @@
+# Range contextual fragments
+
+Fixed matched Boat gate proves the complete `Range.createContextualFragment` operation and actual HTML/XML context snapshots. Receiver validation and DOMString conversion precede capturing the live Range. Namespace, local-name case, attributes, form ancestry, scripting and quirks state come from the actual context document. XML uses selected exact UTF16 namespace declarations and the ready direct XML parser; imported XML scripts remain already-started, including template contents. HTML fragment scripts execute when appended.
+
+Workspace:3918→3923 passed,17 skipped;4 doctests both. Full579 pages:56963→57007 passing assertions,2348→2305 failures,6 errors; zero lost exact passing names, multiplicities or files. Attributable gains:34 contextual-fragment assertions (35/35 final),8 template positional operations using Range,1 serialization assertion. One XHR completion is uncredited. Unsupported top-level XHTML stays unsupported; grouped native coverage exercises actual XML callbacks and errors.
+
+The initial25s whole gate truncated one combinatorial mutation page at slightly different places. Both unchanged frozen binaries were rerun over all66 Range pages at120s:40317 passing assertions and198 failures on each side, identical passing counters. Both full selections replace every Range row with that matched whole-directory run; no one-test retry or result union is used. The72-page syntax guard is byte-identical2702/6.
+
+`before.jsonl` and `after.jsonl` retain per-page classifications, counts and hashes of every exact passing name with multiplicity. `comparison.json` records actual names for gains and any losses. `provenance.json` records fixed dependencies, source and binary hashes, deadlines and guard. No corpus rewrites or expected-result injection.
