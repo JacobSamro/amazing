@@ -29,7 +29,7 @@ impl ColorValue {
         });
         Some(Self{space:space.into(),channels,alpha:if one.alpha.is_none()&&two.alpha.is_none(){None}else{Some(alpha*total.min(1.0))},legacy:false})
     }
-    fn convert_components(&self,target:&str)->Option<([f64;3],[bool;3])> {
+    pub(super) fn convert_components(&self,target:&str)->Option<([f64;3],[bool;3])> {
         let source=self.channels.map(|n|n.unwrap_or(0.0));
         let channels=advanced::coordinates::convert(&self.space,target,source)?;
         let category=|space:&str|match space {

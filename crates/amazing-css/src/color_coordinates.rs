@@ -27,7 +27,9 @@ fn rectangular(v:[f64;3])->[f64;3] {[v[0],v[1]*v[2].to_radians().cos(),v[1]*v[2]
 fn rgb_hsl(rgb:[f64;3])->[f64;3] {
     let [r,g,b]=rgb;let max=r.max(g).max(b);let min=r.min(g).min(b);let delta=max-min;let d=if delta.abs()<1e-12{0.0}else{delta};let l=(max+min)/2.0;
     let h=if d==0.0 {0.0}else if max==r {((g-b)/d).rem_euclid(6.0)*60.0}else if max==g {((b-r)/d+2.0)*60.0}else{((r-g)/d+4.0)*60.0};
-    [h,if d==0.0{0.0}else{d/(1.0-(2.0*l-1.0).abs())*100.0},l*100.0]
+    let s=if d==0.0 || l==0.0 || l==1.0 {0.0}else{d/(1.0-(2.0*l-1.0).abs())*100.0};
+    // Color4 out-of-gamut conversion keeps saturation positive by reversing hue.
+    [if s<0.0 {(h+180.0).rem_euclid(360.0)}else{h},s.abs(),l*100.0]
 }
 fn to_xyz(space:&str,v:[f64;3])->Option<[f64;3]> {Some(match space {
     "srgb"=>linear_xyz(v.map(srgb_decode)),"srgb-linear"=>linear_xyz(v),

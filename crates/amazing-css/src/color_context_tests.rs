@@ -29,6 +29,13 @@ fn relative_coordinates_and_alpha_keep_actual_source_precision() {
         assert_eq!(ColorValue::resolve(&css,Some(&source),false).unwrap().alpha,source.alpha);
     }
     assert!(ColorValue::resolve("rgb(from currentcolor r g b)",None,false).is_none());
+    let missing=ColorValue::resolve("rgb(from rgb(none 20 30 / none) r g b / alpha)",None,false).unwrap();
+    assert_eq!(missing.channels[0],None);assert_eq!(missing.alpha,None);
+    let outside=ColorValue::resolve("hsl(from color(srgb 2 3 4 / 1e-15) h s l / alpha)",None,false).unwrap();
+    assert!(outside.channels[1].unwrap()>=0.0);assert_eq!(outside.alpha,Some(1e-15));
+    let coords=advanced::coordinates::convert(&outside.space,"srgb",outside.channels.map(|n|n.unwrap())).unwrap();
+    for (actual,expected) in coords.into_iter().zip([2.0,3.0,4.0]) {assert!((actual-expected).abs()<1e-10,"{coords:?}");}
+
 }
 #[test]
 fn winning_variables_inheritance_currentcolor_and_scheme_are_precise() {

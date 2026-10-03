@@ -28,7 +28,7 @@ impl ColorValue {
             "color"=> {if parts.len()!=4 {return None;} let profile=parts.remove(0);if profile=="xyz" {"xyz-d65"}else{profile}},
             "alpha"=>source.space.as_str(),_=>return None,
         };
-        let base=advanced::coordinates::convert(&source.space,target,source.channels.map(|n|n.unwrap_or(0.0)))?;
+        let (base,missing)=source.convert_components(target)?;
         let names=match target {
             "hsl"=>["h","s","l"],"hwb"=>["h","w","b"],"lab"|"oklab"=>["l","a","b"],
             "lch"|"oklch"=>["l","c","h"],"xyz-d50"|"xyz-d65"=>["x","y","z"],_=>["r","g","b"],
@@ -38,6 +38,7 @@ impl ColorValue {
         let alpha=match alpha {
             None=>source.alpha,
             Some(text) if text.eq_ignore_ascii_case("none")=>None,
+            Some(text) if text.eq_ignore_ascii_case("alpha")=>source.alpha,
             Some(text)=>Some(advanced::number_channel(text,&keywords,1.0,1.0)?.clamp(0.0,1.0)),
         };
         let channels=if function=="alpha" {if !parts.is_empty() || alpha.is_none() && !rest.contains('/') {return None;}source.channels}
@@ -45,7 +46,7 @@ impl ColorValue {
             if parts.len()!=3 {return None;}
             let mut channels=[None;3];
             for i in 0..3 {
-                channels[i]=if parts[i].eq_ignore_ascii_case("none") {None} else {
+                channels[i]=if parts[i].eq_ignore_ascii_case("none") || (parts[i]==names[i] && missing[i]) {None} else {
                     let value=if function=="color" {advanced::number_channel(parts[i],&keywords,1.0,1.0)?}
                         else {advanced::channel_value(function,i,parts[i],&keywords)?};
                     if !value.is_finite(){return None;}
