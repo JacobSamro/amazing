@@ -898,3 +898,55 @@ mod tests {
         assert!(!interpreter.binding_same_value(&array, &other));
     }
 }
+
+#[cfg(test)]
+mod host_native_creation_realm_tests {
+    use super::*;
+    #[test]
+    fn borrowed_host_native_calls_enter_creation_realm_and_restore_the_caller() {
+        for backend in [ExecutionBackend::TreeWalk,ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();let parent=i.binding_current_realm();let child=i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
+            let calls=Rc::new(RefCell::new(Vec::new()));let observed=calls.clone();
+            let dispatch: Rc<HostNativeDispatch> = Rc::new(move |runtime,id,this,args,new_target| {
+                observed.borrow_mut().push((id.0,runtime.binding_current_realm(),runtime.binding_incumbent_realm(),this.clone(),new_target.clone()));
+                assert_eq!(runtime.binding_current_realm(),child);
+                assert_eq!(runtime.current_new_target(),new_target);
+                if id.0==202 { return Err(Throw::type_error("foreign native failure")); }
+                if id.0==203 { return Ok(this); }
+                Ok(args.first().cloned().unwrap_or(JsValue::Undefined))
+            });
+            i.set_host_native_dispatcher(dispatch.clone());
+            i.binding_with_realm(child,|runtime| { runtime.set_host_native_dispatcher(dispatch); Ok(()) }).unwrap();
+            for(name,id,policy) in [("foreignNative",201,HostCallPolicy::CallOnly),("foreignThrow",202,HostCallPolicy::CallOnly),("ForeignHost",203,HostCallPolicy::ConstructOnly)] {
+                let value=i.binding_with_realm(child,|runtime| Ok(runtime.binding_create_native_function(HostFunctionId(id),name,1,policy))).unwrap();
+                assert_eq!(i.binding_function_realm(&value).unwrap(),child);
+                i.global_env.declare_var(name,value).unwrap();
+            }
+            let value=i.binding_eval_in_realm(child,"TypeError.prototype").unwrap();i.global_env.declare_var("foreignType",value).unwrap();
+            let source=r#"
+              var valid=true,receiver={},proxy=new Proxy(foreignNative,{}),bound=foreignNative.bind(receiver);
+              valid=valid && foreignNative(0)===0;
+              valid=valid && foreignNative.call(receiver,1)===1 && foreignNative.apply(receiver,[2])===2 && Reflect.apply(foreignNative,receiver,[3])===3 && bound(4)===4 && proxy.call(receiver,5)===5;
+              for(var fn of [foreignThrow,foreignThrow.bind(receiver),new Proxy(foreignThrow,{})]){
+                try{fn.call(receiver);valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===foreignType;}
+              }
+              var target=function Target(){};target.prototype={};
+              valid=valid && Object.getPrototypeOf(Reflect.construct(ForeignHost,[],target))===target.prototype;
+              try{ForeignHost();valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===foreignType;}
+              valid;
+            "#;
+            assert_eq!(i.run_script_with_backend(source,backend).unwrap_or_else(|e|panic!("{backend:?}: {}",e.describe())),JsValue::Bool(true),"{backend:?}");
+            assert_eq!(i.binding_current_realm(),parent);
+            let records=calls.borrow();assert_eq!(records.len(),10);
+            for(record,incumbent) in records.iter().zip([parent,child,child,parent,parent,child,child,child,child,parent]) {
+                assert_eq!(record.1,child);assert_eq!(record.2,incumbent);
+            }
+            assert!(records[..9].iter().all(|r|r.4.is_none()));assert!(records[9].4.is_some());
+            assert!(records[0].3.is_undefined());
+            let receiver=i.global_env.resolve("receiver").unwrap();for record in &records[1..9]{assert_eq!(record.3,receiver);}
+            for src in ["foreignNative.bind(null)","new Proxy(foreignNative,{})","new Proxy(foreignNative.bind(null),{}).bind(null)"] {
+                let value=i.run_script_with_backend(src,backend).unwrap();assert_eq!(i.binding_function_realm(&value).unwrap(),child);
+            }
+        }
+    }
+}
