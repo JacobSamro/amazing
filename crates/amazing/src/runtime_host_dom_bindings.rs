@@ -201,12 +201,9 @@ impl RuntimeBindingHost<'_> {
     }
 
     pub(super) fn dom_document_default_view(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
-        // Nested browsing contexts keep their WindowProxy association separately
-        // from the root document. Inert documents have neither association.
-        if let Some(window) = self.iframe_document_window(document) {
-            return Ok(Some(window));
-        }
-        Ok((document == self.current_document()).then(|| self.js.binding_global_this()))
+        // Only an actual live browsing-context association supplies defaultView.
+        // A retained creation realm permits allocation without creating a Window.
+        Ok(self.iframe_document_window(document))
     }
 
     pub(super) fn dom_uses_inherited_accessors(brand: InterfaceBrand) -> bool {
@@ -1989,8 +1986,13 @@ mod tests {
         };
         let result=scheduler.run_script(r#"(function(){let step=0;try{
             function check(v){step++;if(!v)throw 'parser '+step;}
+            check(document.defaultView===window);
             const inner=frame.contentWindow;const parser=new inner.DOMParser();
+            const retainedDocument=inner.document;
+            check(retainedDocument.defaultView===inner);
             let converted=0;const source={toString(){converted++;frame.remove();
+                check(retainedDocument.defaultView===null);
+                check(inner.Function('return document.defaultView')()===null);
                 const text=inner.Function('return new Text("retained")')();
                 check(text.ownerDocument===inner.document && Object.getPrototypeOf(text)===inner.Text.prototype);
                 return '<r><child/></r>';}};
