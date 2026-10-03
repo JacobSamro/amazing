@@ -65,6 +65,14 @@ impl Interpreter {
         JsValue::Object(self.global_obj.clone())
     }
 
+    /// Add private host lexical bindings while retaining this realm's global
+    /// object record for subsequent script var/function declarations.
+    pub fn binding_create_global_environment_overlay(&self) -> EnvHandle {
+        let environment = EnvHandle::new(EnvKind::Global, Some(self.global_env.clone()));
+        environment.set_global_object(self.global_obj.clone());
+        environment
+    }
+
     /// Make Window inherit binding-installed EventTarget methods without
     /// exposing the runtime's global object representation to the host.
     pub fn binding_set_global_prototype(&mut self, prototype: &JsValue) -> Result<(), Throw> {

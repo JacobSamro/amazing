@@ -435,6 +435,16 @@ mod tests {
         assert!(matches!(driver.run_script("evaluated.value===9 && evaluated!==lazy && deferredRuns===1").unwrap(), JsValue::Bool(true)));
     }
     #[test]
+    fn host_lexical_overlays_keep_script_globals_connected_to_window() {
+        let mut driver = scheduler();
+        driver.run_script("var marker={};function fn(){return marker;}let privateMarker=3;").unwrap();
+        assert!(matches!(driver.run_script("window.marker===marker && window.fn===fn && window.fn()===marker && !Object.prototype.hasOwnProperty.call(window,'privateMarker')").unwrap(), JsValue::Bool(true)));
+        driver.run_script("window.marker=17;").unwrap();
+        assert!(matches!(driver.run_script("marker===17 && fn()===17 && privateMarker===3").unwrap(), JsValue::Bool(true)));
+        driver.run_script("marker=19;").unwrap();
+        assert!(matches!(driver.run_script("window.marker===19").unwrap(), JsValue::Bool(true)));
+    }
+    #[test]
     fn pending_page_modules_resume_without_blocking_load_and_share_import_namespace() {
         let mut driver = scheduler();
         driver.run_script("window.order=[];").unwrap();

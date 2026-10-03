@@ -704,7 +704,7 @@ impl RuntimeBindings {
             // identical cached wrapper, so the two stay `===` no matter
             // which is read first.
             let wrapped = adapter.wrap_node(document)?;
-            let fresh = EnvHandle::new(EnvKind::Global, Some(adapter.js.global_env.clone()));
+            let fresh = adapter.js.binding_create_global_environment_overlay();
             fresh.declare_lexical("document", wrapped.clone(), false)?;
             // HTML-34: same stable-identity shadowing as `document` above,
             // now that this realm's own `document_url` scoping (set around

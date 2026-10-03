@@ -835,7 +835,7 @@ pub(crate) fn install(
     // set_dom_host installs an immutable lexical legacy document. Shadow it in
     // a new global environment so every new page script sees the canonical
     // private wrapper while older browser globals remain available upstream.
-    let fresh = EnvHandle::new(EnvKind::Global, Some(adapter.js.global_env.clone()));
+    let fresh = adapter.js.binding_create_global_environment_overlay();
     fresh.declare_lexical("document", document.clone(), false)?;
     let (local_storage,session_storage)=adapter.storage_lexical_areas()?;
     fresh.declare_lexical("localStorage",local_storage,false)?;

@@ -172,7 +172,7 @@ impl RuntimeBindingHost<'_> {
     pub(super) fn install_net(&mut self) -> Result<(), Throw> {
         amazing_bindings::fetch_interfaces::install(self)?;
         let fetch = self.js.binding_get_property(&self.js.binding_global_object(), "fetch")?;
-        let env = EnvHandle::new(EnvKind::Global, Some(self.js.global_env.clone()));
+        let env = self.js.binding_create_global_environment_overlay();
         env.declare_lexical("fetch", fetch, false)?;
         self.js.global_env = env;
         self.install_websocket()?;
