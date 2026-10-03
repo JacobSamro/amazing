@@ -1,0 +1,37 @@
+{
+  "added_files": [],
+  "after": "/Users/jMac/Projects/OpenSource/amazing/.agents/dom-bindings/selection-standard-before-clock/results.json",
+  "after_files": 720,
+  "artifacts": {
+    "results.json": "b011202fba4e54b92373bd7597efc28728dca132920660cf4fbe729d428536b8",
+    "selection-standard-before-clock-doc.log": "8c23614ffac576aedf802544fa6e9aa23eda895338e3e7e22cb98caafff99c29",
+    "selection-standard-before-clock-syntax.jsonl": "0569986d9a8f62880c7cc4be274af583606b0acd7aa54beedcf801061eb8a5bb",
+    "selection-standard-before-clock-workspace.log": "bdff0fab4fb192ed732e42cce380c55c599f9bdb9c53fcbe63d7ce79298cc032"
+  },
+  "before": "/Users/jMac/Projects/OpenSource/amazing/.agents/dom-bindings/selection-standard-before/results.json",
+  "before_files": 720,
+  "doctests_passed": 4,
+  "gained_passing_assertions": 0,
+  "initial_source": "e1037e5db3187b0521b1cffe2742c828e35c9424",
+  "lost_passing_assertions": 0,
+  "lost_passing_files": [],
+  "missing_files": [],
+  "native_passed": 4030,
+  "native_skipped": 17,
+  "prerequisites": {
+    "core_hostnative_ready_evidence": "f0990d80828b3abb24ee4b69e819874f41229b33",
+    "generic_image_borrow_fix": "edac20516cf8f8946ca81afe051a357c2f62e84a",
+    "html_helper_ready_evidence": "3647b52b",
+    "pending_io_clock": [
+      "539a3d41f0526c53ac0811b64108fa19c476985a",
+      "592e94cc51a4867d646eb90d9e4ce2f41e182a1c"
+    ]
+  },
+  "restored_xhr_is_not_selection_gain": true,
+  "source": "851c0b4a512fa250813f9731436b5995f9740f16",
+  "subtests": {
+    "error": 7,
+    "fail": 19569,
+    "pass": 75734
+  }
+}
