@@ -2,6 +2,11 @@
 // @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Module evaluation capabilities use internal reactions, never observable then/species.
 impl Interpreter {
+    /// The legacy synchronous entry point owns a checkpoint only in standalone mode.
+    pub(crate) fn module_legacy_checkpoint(&mut self) -> Result<(), Throw> {
+        if self.external_scheduling.is_none() { self.drain_microtasks() } else { Ok(()) }
+    }
+
     /// Read an evaluation capability without any observable property access.
     pub fn binding_module_evaluation_state(&self, promise: &JsValue) -> Result<PromiseFate, Throw> {
         let object = promise_object(promise)?;
