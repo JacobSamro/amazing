@@ -131,7 +131,7 @@ impl RuntimeBindingHost<'_> {
         policy: amazing_fetch::ReferrerPolicy) -> Result<(), amazing_dom::DomError> {
         let generation = {
             let state = self.state.borrow(); let host = state.host.borrow();
-            if !matches!(host.dom.node_generation(document).map(|_| &dom.get(document).kind), Some(NodeKind::Document)) {
+            if !matches!(host.dom.node_generation(document).map(|_| &host.dom.get(document).kind), Some(NodeKind::Document)) {
                 return Err(amazing_dom::DomError::InvalidStateError);
             }
             host.dom.node_generation(document).ok_or(amazing_dom::DomError::InvalidStateError)?
@@ -155,7 +155,7 @@ impl RuntimeBindings {
         let Some(policy) = policy else { return Ok(()); };
         let generation = {
             let state = self.state.borrow(); let host = state.host.borrow();
-            if !matches!(host.dom.node_generation(document).map(|_| &dom.get(document).kind), Some(NodeKind::Document)) {
+            if !matches!(host.dom.node_generation(document).map(|_| &host.dom.get(document).kind), Some(NodeKind::Document)) {
                 return Err(amazing_dom::DomError::InvalidStateError);
             }
             host.dom.node_generation(document).ok_or(amazing_dom::DomError::InvalidStateError)?
