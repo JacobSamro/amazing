@@ -3296,6 +3296,28 @@ mod tests {
     }
 
     #[test]
+    fn parser_context_refresh_preserves_author_vars_and_mutation_observer_targets() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        crate::cmd::js::run_interleaved_parse(&host, &mut scheduler,
+            r#"<!doctype html><body><p id=n10>abc</p><div id=n00></div><script>
+                var n10=document.getElementById('n10').firstChild;
+                var n00=document.getElementById('n00');
+                var observer=new MutationObserver(function(){});
+                observer.observe(n10,{characterData:true});
+                observer.observe(n00,{attributes:true});
+                n10.appendData('d');n10.insertData(0,'x');n10.deleteData(0,1);n10.replaceData(0,1,'A');
+                n00.id='foo';
+                var records=observer.takeRecords();
+                if(n10.data!=='Abcd' || n00.id!=='foo' || records.length!==5) throw new Error('author vars or mutation targets replaced');
+                if(records[0].target!==n10 || records[4].target!==n00) throw new Error('mutation target identity');
+            </script>"#,
+            |scheduler, script| scheduler.run_script(&script.body).map(|_| ()).map_err(|error| error.describe()),
+        ).unwrap();
+    }
+
+    #[test]
     fn nested_srcdoc_parser_allocates_its_frames_before_child_scripts() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();

@@ -170,7 +170,12 @@ impl DriverScheduler {
     /// their queued load events. The caller has exposed the actual parsed DOM.
     pub(crate) fn refresh_parser_browsing_contexts(&mut self) -> Result<(), Throw> {
         let bindings = self.bindings.clone();
-        self.enter(|js| { bindings.navigate_iframes(js); Ok(()) })
+        // Context setup is not an author-script/reaction checkpoint. In particular,
+        // do not materialize named globals from a partially parsed document.
+        self.drain_outbox()?;
+        bindings.navigate_iframes(&mut self.js);
+        self.collect_native_mutations()?;
+        self.drain_outbox()
     }
     pub(crate) fn set_document_metadata(&mut self, character_set: &str, content_type: &str, referrer: &str) {
         self.bindings.set_document_metadata(character_set, content_type, referrer);
