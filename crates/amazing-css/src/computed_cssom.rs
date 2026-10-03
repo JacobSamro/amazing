@@ -218,6 +218,9 @@ impl ComputedStyle {
                 .find_map(|(key, value)| (key == name).then_some(value));
         }
         let name = name.to_ascii_lowercase();
+        if name == "font" {
+            return crate::font_shorthand::computed(self);
+        }
         if name == "word-wrap" {
             return self.get("overflow-wrap").map(str::to_owned);
         }
@@ -362,16 +365,14 @@ mod tests {
         assert_eq!(s.cssom_property_value("padding"), Some("5px".into()));
         assert_eq!(s.cssom_property_value("overflow"), Some("hidden".into()));
         assert_eq!(s.cssom_property_value("border"), None);
-        assert!(
-            s.cssom_property_value("border-top")
-                .unwrap()
-                .contains("solid")
-        );
-        assert!(
-            s.cssom_property_value("border-image")
-                .unwrap()
-                .contains("12")
-        );
+        assert!(s
+            .cssom_property_value("border-top")
+            .unwrap()
+            .contains("solid"));
+        assert!(s
+            .cssom_property_value("border-image")
+            .unwrap()
+            .contains("12"));
         let s = style("border:1px solid red");
         assert!(s.cssom_property_value("border").unwrap().contains("solid"));
         assert_eq!(s.cssom_property_value("not-a-property"), None);
@@ -420,18 +421,14 @@ mod tests {
         }
         assert!(idl.windows(2).all(|w| w[0] < w[1]));
         assert!(!idl.iter().any(|name| name.starts_with("--")));
-        assert!(
-            cssom_shorthand_longhands("font")
-                .unwrap()
-                .iter()
-                .any(|name| name == "font-family")
-        );
-        assert!(
-            cssom_shorthand_longhands("background")
-                .unwrap()
-                .iter()
-                .any(|name| name == "background-image")
-        );
-        assert_eq!(s.cssom_property_value("font"), None); // unsupported composite serializer, never join every reset axis
+        assert!(cssom_shorthand_longhands("font")
+            .unwrap()
+            .iter()
+            .any(|name| name == "font-family"));
+        assert!(cssom_shorthand_longhands("background")
+            .unwrap()
+            .iter()
+            .any(|name| name == "background-image"));
+        assert_eq!(s.cssom_property_value("font"), None); // noninitial reset-only numeric axis
     }
 }

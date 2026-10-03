@@ -1,0 +1,51 @@
+{
+  "ticket": "CSS-46",
+  "base": "d9dbf6b9ad3eb5e38eea2be546f36e455508d2c9",
+  "platform": "Boat Linux native /tmp source+target",
+  "renderer_sha256": "9353f73d5723d0609532e188c7eff5c2350b62e259607680772ac308585a2439",
+  "workspace": 3567,
+  "workspace_skipped": 17,
+  "doctests": 4,
+  "css_tests": 406,
+  "new_grouped_regressions": 3,
+  "parsing": {
+    "before": 4215,
+    "after": 4231,
+    "total": 5126,
+    "non_literal_skipped": 169,
+    "gained": [
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"100% larger / 2 fantasy\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"bold bolder xx-large/1.2 cursive\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"common-ligatures medium serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"italic oblique xx-small serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"italic small-caps lighter condensed normal smaller monospace\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"italic small-caps lighter condensed smaller\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"italic titling-caps medium serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"menu icon\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"normal 100 semi-condensed oblique small-caps 10px/normal Menu\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"normal 100 semi-condensed oblique small-caps Menu\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"normal full-width medium serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"normal normal normal normal normal 20%/1.2 \\\"FB Armada\\\"\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"oldstyle-nums medium serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"petite-caps medium serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"small-caps small-caps medium/normal sans-serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-invalid.html: invalid font: \"ultra-condensed extra-condensed larger/calc(120% + 1.2em) fantasy\" unexpectedly parsed"
+    ],
+    "lost": []
+  },
+  "render": {
+    "fonts": {
+      "before_pass": 24,
+      "after_pass": 24,
+      "total": 32,
+      "unchanged": 32,
+      "gained": [],
+      "lost": []
+    }
+  },
+  "driver_owner": "js_date CSSOM bridge",
+  "limitations": [
+    "System fonts use UA default fallback; no OS preference query",
+    "Unresolved relative weights do not produce a CSSOM font shorthand"
+  ]
+}

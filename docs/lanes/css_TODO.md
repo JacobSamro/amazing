@@ -2866,3 +2866,21 @@ Existing grouped regression expanded for names/order/projection/boundaries.
 Frozen final workspace/docs + identical15parsing + wholeimages/transforms gate.
 
 CSS45 final: workspace3564/17skip+4docs; parsing4215/5126 unchanged/lost0; wholeimages92/141 andtransforms145/348 all489classifications unchanged/lost0. Renderer0db48706510d198e73d827b94e128d6b482e7af522b149653f3e706474b245c4. Installed CSSOM proof remains driver-owned.
+
+### CSS46 — whole font shorthand grammar and computed serialization
+
+Fixed CSS45 d9dbf6b9. CSS Fonts4 https://drafts.csswg.org/css-fonts-4/#font-prop.
+Single lower parser validates/expands font optional unordered categories, adjacent
+oblique angles, decimal weights, legacy keyword widths, complete math size/height
+components, and quoted/identifier comma-separated families. Invalid declarations
+are rejected atomically rather than retained as raw shorthand; substitutions still
+resolve after cascade and invalid winning substitutions default all reset axes.
+System keywords use permitted UA default fallback; no OS preference query exists.
+CSSOM serializes actual component axes only with representable reset-only state,
+converts representable width percentages to legacy keywords, refuses unknown widths
+and unresolved relative weights. Font synthesis/palette remain independent.
+Three grouped regressions; old invalid-raw compatibility expectations corrected.
+IterationCSS406 green;4231/5126 (+16/lost0), wholefonts24/32 unchanged.
+Frozen full workspace/docs + identical15directory + wholefonts final gate.
+
+CSS46 final: CSS406/workspace3567/17skip+4docs;4215→4231/5126 (+16/lost0);wholefonts24/32 unchanged/all32stable/lost0. Renderer9353f73d5723d0609532e188c7eff5c2350b62e259607680772ac308585a2439. Next coherent selection-value normalization (weight/style/width/family), preserving unavailable metric/context values.

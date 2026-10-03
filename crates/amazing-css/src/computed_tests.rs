@@ -443,19 +443,7 @@ fn font_shorthand_expands_size_line_height_family_and_resets_optionals() {
     );
     assert_eq!(values.get("font-weight").map(String::as_str), Some("700"));
 
-    assert_eq!(
-        expand_declaration("font", "italic oblique 16px serif"),
-        vec![("font".into(), "italic oblique 16px serif".into())]
-    );
-    assert_eq!(
-        expand_declaration("font", "16px \"Quoted\" adjacent"),
-        vec![("font".into(), "16px \"Quoted\" adjacent".into())]
-    );
-    assert_eq!(
-        expand_declaration("font", "normal normal normal normal italic 16px serif"),
-        vec![(
-            "font".into(),
-            "normal normal normal normal italic 16px serif".into()
-        )]
-    );
+    for invalid in ["italic oblique 16px serif", "16px \"Quoted\" adjacent", "normal normal normal normal italic 16px serif"] {
+        assert!(expand_declaration("font", invalid).is_empty());
+    }
 }

@@ -1477,12 +1477,12 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         | "border-top-right-radius"
         | "border-bottom-right-radius"
         | "border-bottom-left-radius" => Vec::new(),
-        "font" if contains_var_function(value) => FONT_LONGHANDS
+        "font" if contains_var_function(value) => crate::font_shorthand::LONGHANDS
             .iter()
             .map(|name| ((*name).to_owned(), deferred(DEFERRED_FONT, value)))
             .collect(),
         "font" => {
-            expand_font_shorthand(value).unwrap_or_else(|| vec![(property, value.to_owned())])
+            crate::font_shorthand::expand(value).unwrap_or_default()
         }
         "grid-column-gap" if css_wide_keyword(value).is_some() || valid_gap_value(value) => {
             vec![("column-gap".to_owned(), value.to_owned())]
@@ -2340,140 +2340,6 @@ fn expand_flex_shorthand(parts: &[&str]) -> Option<(String, String, String)> {
     Some((grow, shrink, basis))
 }
 
-const FONT_LONGHANDS: &[&str] = &[
-    "font-family", "font-feature-settings", "font-size", "font-size-adjust", "font-stretch",
-    "font-style", "font-variant", "font-variant-ligatures", "font-weight", "font-kerning",
-    "font-language-override", "font-optical-sizing", "font-variant-alternates", "font-variant-caps",
-    "font-variant-east-asian", "font-variant-emoji", "font-variant-numeric",
-    "font-variant-position", "font-variation-settings",
-    "line-height",
-];
-
-fn expand_font_shorthand(value: &str) -> Option<Vec<(String, String)>> {
-    if css_wide_keyword(value).is_some() {
-        return Some(
-            FONT_LONGHANDS.iter().copied()
-            .map(|property| (property.to_owned(), value.to_owned()))
-            .collect(),
-        );
-    }
-    let tokens = tokenize(value);
-    let mut position = 0usize;
-    let mut style = "normal".to_owned();
-    let mut variant = "normal".to_owned();
-    let mut weight = "normal".to_owned();
-    let mut stretch = "normal".to_owned();
-    let mut style_seen = false;
-    let mut variant_seen = false;
-    let mut weight_seen = false;
-    let mut stretch_seen = false;
-    let mut optional_count = 0usize;
-    let size = loop {
-        skip_css_whitespace(&tokens, &mut position);
-        let token = tokens.get(position)?;
-        if is_font_size_token(token) {
-            let size = serialize(std::slice::from_ref(token));
-            position += 1;
-            break size;
-        }
-        optional_count += 1;
-        if optional_count > 4 {
-            return None;
-        }
-        match token {
-            Token::Ident(value) if value.eq_ignore_ascii_case("normal") => {}
-            Token::Ident(value)
-                if value.eq_ignore_ascii_case("italic")
-                    || value.eq_ignore_ascii_case("oblique") =>
-            {
-                if style_seen {
-                    return None;
-                }
-                style_seen = true;
-                style = value.clone();
-            }
-            Token::Ident(value) if value.eq_ignore_ascii_case("small-caps") => {
-                if variant_seen {
-                    return None;
-                }
-                variant_seen = true;
-                variant = value.clone();
-            }
-            Token::Ident(value)
-                if matches!(
-                    value.to_ascii_lowercase().as_str(),
-                    "bold" | "bolder" | "lighter"
-                ) =>
-            {
-                if weight_seen {
-                    return None;
-                }
-                weight_seen = true;
-                weight = value.clone();
-            }
-            Token::Number(value) if (1.0..=1000.0).contains(value) && value.fract() == 0.0 => {
-                if weight_seen {
-                    return None;
-                }
-                weight_seen = true;
-                weight = serialize(std::slice::from_ref(token));
-            }
-            Token::Ident(value)
-                if value.to_ascii_lowercase().ends_with("condensed")
-                    || value.to_ascii_lowercase().ends_with("expanded") =>
-            {
-                if stretch_seen {
-                    return None;
-                }
-                stretch_seen = true;
-                stretch = value.clone();
-            }
-            _ => return None,
-        }
-        position += 1;
-    };
-    skip_css_whitespace(&tokens, &mut position);
-    let line_height = if tokens.get(position) == Some(&Token::Delim('/')) {
-        position += 1;
-        skip_css_whitespace(&tokens, &mut position);
-        let token = tokens.get(position)?;
-        if !is_line_height_token(token) {
-            return None;
-        }
-        position += 1;
-        serialize(std::slice::from_ref(token))
-    } else {
-        "normal".to_owned()
-    };
-    skip_css_whitespace(&tokens, &mut position);
-    let family_tokens = tokens.get(position..)?;
-    if !valid_font_family_tokens(family_tokens) {
-        return None;
-    }
-    let family = serialize(family_tokens);
-    Some(vec![
-        ("font-style".into(), style),
-        ("font-variant".into(), variant),
-        ("font-variant-caps".into(), if variant_seen { "small-caps" } else { "normal" }.into()),
-        ("font-variant-alternates".into(), "normal".into()),
-        ("font-variant-east-asian".into(), "normal".into()),
-        ("font-variant-emoji".into(), "normal".into()),
-        ("font-variant-numeric".into(), "normal".into()),
-        ("font-variant-position".into(), "normal".into()),
-        ("font-variant-ligatures".into(), "normal".into()),
-        ("font-feature-settings".into(), "normal".into()),
-        ("font-kerning".into(), "auto".into()),
-        ("font-language-override".into(), "normal".into()),
-        ("font-optical-sizing".into(), "auto".into()),
-        ("font-variation-settings".into(), "normal".into()),
-        ("font-weight".into(), weight),
-        ("font-stretch".into(), stretch),
-        ("font-size-adjust".into(), "none".into()),
-        ("font-size".into(), size),
-        ("line-height".into(), line_height),
-        ("font-family".into(), family),
-    ])
-}
 
 /// Validate the two Fonts 4 feature grammars before a declaration enters the
 /// cascade, and serialize their computed values for public style consumers.
@@ -2539,46 +2405,9 @@ pub(crate) fn canonical_font_feature_value(property: &str, value: &str) -> Optio
     (!result.is_empty()).then(|| result.join(", "))
 }
 
+
 fn skip_css_whitespace(tokens: &[Token], position: &mut usize) {
-    while matches!(tokens.get(*position), Some(Token::Whitespace)) {
-        *position += 1;
-    }
-}
-
-fn is_font_size_token(token: &Token) -> bool {
-    matches!(token, Token::Dimension(value, _) | Token::Percentage(value) if *value >= 0.0)
-        || matches!(token, Token::Number(value) if *value == 0.0)
-        || matches!(token, Token::Ident(value) if matches!(
-            value.to_ascii_lowercase().as_str(),
-            "xx-small" | "x-small" | "small" | "medium" | "large" | "x-large" | "xx-large" | "xxx-large" | "smaller" | "larger"
-        ))
-}
-
-fn is_line_height_token(token: &Token) -> bool {
-    matches!(token, Token::Dimension(value, _) | Token::Percentage(value) | Token::Number(value) if *value >= 0.0)
-        || matches!(token, Token::Ident(value) if value.eq_ignore_ascii_case("normal"))
-}
-
-fn valid_font_family_tokens(tokens: &[Token]) -> bool {
-    #[derive(Clone, Copy)]
-    enum FamilyKind {
-        None,
-        String,
-        Ident,
-    }
-    let mut kind = FamilyKind::None;
-    for token in tokens {
-        match token {
-            Token::Whitespace => {}
-            Token::Comma if !matches!(kind, FamilyKind::None) => {
-                kind = FamilyKind::None;
-            }
-            Token::Ident(_) if !matches!(kind, FamilyKind::String) => kind = FamilyKind::Ident,
-            Token::Str(_) if matches!(kind, FamilyKind::None) => kind = FamilyKind::String,
-            _ => return false,
-        }
-    }
-    !matches!(kind, FamilyKind::None)
+    while matches!(tokens.get(*position), Some(Token::Whitespace)) { *position += 1; }
 }
 
 fn replicate_index(count: usize, side: usize) -> usize {
@@ -3188,7 +3017,7 @@ fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()>
         }
     }
     if let Some(inner) = deferred_inner(value, DEFERRED_FONT) {
-        return expand_font_shorthand(inner).ok_or(())?.into_iter()
+        return crate::font_shorthand::expand(inner).ok_or(())?.into_iter()
             .find_map(|(name, value)| (name == property).then_some(value)).ok_or(());
     }
     if let Some(inner) = deferred_inner(value, DEFERRED_BACKGROUND) {
