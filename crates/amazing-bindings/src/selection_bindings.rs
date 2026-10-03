@@ -71,12 +71,12 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         return Err(host.type_error("Invalid Selection"));
     }
     let id = SelectionId::from_slot(handle.slot as usize);
-    let previous_range = host.with_dom(|dom| dom.selection(id).map(|state| state.range))?;
+    let previous_range = host.with_dom(|dom| dom.selection_state(id).map(|state| state.range))?;
     match op {
         O::SelectionAddRange | O::SelectionRemoveRange => {
             let range = range_from_value(host, args.first())?;
             host.with_dom(|dom| if op == O::SelectionAddRange { dom.selection_add(id, range) } else { dom.selection_remove(id, range) })?;
-            if op == O::SelectionAddRange && host.with_dom(|dom| dom.selection(id).map(|state| state.range))? == Some(range) {
+            if op == O::SelectionAddRange && host.with_dom(|dom| dom.selection_state(id).map(|state| state.range))? == Some(range) {
                 host.selection_set_range_value(id, range, args.first().unwrap())?;
             }
         }
@@ -125,7 +125,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
                 if args.is_empty() { return Err(host.type_error("Not enough arguments")); }
                 let index = unsigned_long(host, args.first())?;
                 // Conversion can reenter and change the actual retained Selection.
-                let (state, points) = host.with_dom(|dom| Ok((dom.selection(id)?, dom.selection_visible_points(id)?)))?;
+                let (state, points) = host.with_dom(|dom| Ok((dom.selection_state(id)?, dom.selection_visible_points(id)?)))?;
                 if index != 0 || points.is_none() { return host.with_dom::<H::Value>(|_| Err(DomError::IndexSizeError)); }
                 let range = state.range.unwrap();
                 if let Some(value) = host.selection_range_value(id, range)? { return Ok(value); }
@@ -133,7 +133,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
                 host.selection_set_range_value(id, range, &value)?;
                 return Ok(value);
             }
-            let state = host.with_dom(|dom| dom.selection(id))?;
+            let state = host.with_dom(|dom| dom.selection_state(id))?;
             if op == O::SelectionDirection {
                 let direction = if state.range.is_none() { "none" } else { match state.direction {
                     SelectionDirection::Forwards => "forward", SelectionDirection::Backwards => "backward", SelectionDirection::Directionless => "none" } };
@@ -159,7 +159,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
             };
         }
     }
-    let current_range = host.with_dom(|dom| dom.selection(id).map(|state| state.range))?;
+    let current_range = host.with_dom(|dom| dom.selection_state(id).map(|state| state.range))?;
     if current_range != previous_range {
         // addRange accepts an existing platform object; every other association creates a fresh Range.
         if !matches!(op, O::SelectionAddRange | O::SelectionRemoveRange | O::SelectionRemoveAllRanges) {

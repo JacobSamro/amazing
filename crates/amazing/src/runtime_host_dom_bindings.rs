@@ -2246,7 +2246,7 @@ impl RuntimeBindingHost<'_> {
             return Err(Throw::type_error("Invalid Selection wrapper"));
         }
         let selection = amazing_dom::selection::SelectionId::from_slot(key.slot as usize);
-        state.host.borrow().dom.selection(selection)
+        state.host.borrow().dom.selection_state(selection)
             .map_err(|_| Throw::type_error("Stale Selection document"))?;
         Ok(selection)
     }
@@ -2312,7 +2312,7 @@ impl RuntimeBindingHost<'_> {
     fn dom_selection_range_value(&mut self, selection: amazing_dom::selection::SelectionId,
         range: amazing_dom::range::Range) -> Result<Option<JsValue>, Throw> {
         let state = self.state.borrow();
-        let selected = state.host.borrow().dom.selection(selection)
+        let selected = state.host.borrow().dom.selection_state(selection)
             .map_err(|_| Throw::type_error("Invalid Selection"))?;
         if selected.range != Some(range) || !state.range_creation_realms.contains_key(&range) {
             return Err(Throw::type_error("Range is not the registered Selection association"));

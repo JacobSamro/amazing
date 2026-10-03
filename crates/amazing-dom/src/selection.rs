@@ -52,12 +52,12 @@ impl Dom {
             range: None, direction: SelectionDirection::Directionless, observed: None });
         Ok(id)
     }
-    pub fn selection(&self, id: SelectionId) -> Result<SelectionState, DomError> {
+    pub fn selection_state(&self, id: SelectionId) -> Result<SelectionState, DomError> {
         let state = self.selections.entries.get(id.0).copied().ok_or(DomError::InvalidStateError)?;
         if self.selection_document_generation(state.document)? != state.document_generation { return Err(DomError::InvalidStateError); }
         Ok(state)
     }
-    pub fn selection_document(&self, id: SelectionId) -> Result<NodeIdx, DomError> { Ok(self.selection(id)?.document) }
+    pub fn selection_document(&self, id: SelectionId) -> Result<NodeIdx, DomError> { Ok(self.selection_state(id)?.document) }
     pub fn selection_range(&self, document: NodeIdx) -> Result<Option<Range>, DomError> {
         let generation = self.selection_document_generation(document)?;
         Ok(self.selections.entries.iter().find(|s| s.document == document && s.document_generation == generation).and_then(|s| s.range))
@@ -93,7 +93,7 @@ impl Dom {
         for (document, generation) in changed { self.schedule_selection_change(document, generation); }
     }
     fn associate_selection_range(&mut self, id: SelectionId, range: Option<Range>, direction: SelectionDirection) -> Result<(), DomError> {
-        let old = self.selection(id)?;
+        let old = self.selection_state(id)?;
         let observed = range.map(|range| self.range(range)).transpose()?;
         let state = &mut self.selections.entries[id.0];
         state.range = range; state.direction = direction; state.observed = observed;
@@ -101,7 +101,7 @@ impl Dom {
         Ok(())
     }
     pub fn selection_points(&self, id: SelectionId) -> Result<Option<(BoundaryPoint, BoundaryPoint)>, DomError> {
-        let state = self.selection(id)?;
+        let state = self.selection_state(id)?;
         let Some(range) = state.range else { return Ok(None); };
         let range = self.range(range)?;
         Ok(Some(if state.direction == SelectionDirection::Forwards { (range.start, range.end) } else { (range.end, range.start) }))
@@ -122,7 +122,7 @@ impl Dom {
         self.associate_selection_range(id, None, SelectionDirection::Directionless)
     }
     pub fn selection_remove(&mut self, id: SelectionId, range: Range) -> Result<(), DomError> {
-        if self.selection(id)?.range != Some(range) { return Err(DomError::NotFoundError); }
+        if self.selection_state(id)?.range != Some(range) { return Err(DomError::NotFoundError); }
         self.selection_clear(id)
     }
     fn selection_check_point(&self, point: BoundaryPoint) -> Result<(), DomError> {
@@ -140,7 +140,7 @@ impl Dom {
         self.associate_selection_range(id, Some(range), SelectionDirection::Directionless)
     }
     pub fn selection_collapse_to(&mut self, id: SelectionId, start: bool) -> Result<(), DomError> {
-        let old = self.selection(id)?.range.ok_or(DomError::InvalidStateError)?;
+        let old = self.selection_state(id)?.range.ok_or(DomError::InvalidStateError)?;
         let old = self.range(old)?;
         let point = if start { old.start } else { old.end };
         let range = self.register_range(AbstractRange { start: point, end: point });
@@ -187,13 +187,13 @@ impl Dom {
     }
     pub fn selection_delete_from_document(&mut self, id: SelectionId) -> Result<(), DomError> {
         if self.selection_visible_points(id)?.is_some() {
-            let range = self.selection(id)?.range.unwrap();
+            let range = self.selection_state(id)?.range.unwrap();
             self.range_delete_contents(range)?;
         }
         Ok(())
     }
     pub fn selection_composed_ranges(&mut self, id: SelectionId, shadow_roots: &[NodeIdx]) -> Result<Vec<StaticRangeId>, DomError> {
-        let Some(range) = self.selection(id)?.range else { return Ok(Vec::new()); };
+        let Some(range) = self.selection_state(id)?.range else { return Ok(Vec::new()); };
         for &root in shadow_roots { self.check_node(root)?; if self.shadow_data(root).is_none() { return Err(DomError::TypeError); } }
         let mut range = self.range(range)?;
         for (point, end) in [(&mut range.start, false), (&mut range.end, true)] {
