@@ -1,0 +1,758 @@
+{
+  "ticket": "JSRT-52",
+  "base_sha": "c0f49f4d30b79dd3cbb2d74f9eb452241b37a7ef",
+  "workspace": {
+    "passed": 3985,
+    "skipped": 17,
+    "elapsed_seconds": 75.123
+  },
+  "doctests": 4,
+  "selections": {
+    "built-ins-Promise": {
+      "selected": 732,
+      "before": {
+        "pass": 677,
+        "fail": 55,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53140
+      },
+      "after": {
+        "pass": 731,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53140
+      },
+      "gained": [
+        "built-ins/Promise/all/call-resolve-element-after-return.js",
+        "built-ins/Promise/all/call-resolve-element-items.js",
+        "built-ins/Promise/all/call-resolve-element.js",
+        "built-ins/Promise/all/invoke-then.js",
+        "built-ins/Promise/all/iter-next-val-err-no-close.js",
+        "built-ins/Promise/all/iter-returns-string-reject.js",
+        "built-ins/Promise/all/iter-step-err-no-close.js",
+        "built-ins/Promise/all/resolve-before-loop-exit-from-same.js",
+        "built-ins/Promise/all/resolve-element-function-length.js",
+        "built-ins/Promise/all/resolve-element-function-name.js",
+        "built-ins/Promise/all/resolve-from-same-thenable.js",
+        "built-ins/Promise/all/resolve-throws-iterator-return-is-not-callable.js",
+        "built-ins/Promise/all/resolve-throws-iterator-return-null-or-undefined.js",
+        "built-ins/Promise/all/same-reject-function.js",
+        "built-ins/Promise/allSettled/call-resolve-element-after-return.js",
+        "built-ins/Promise/allSettled/call-resolve-element-items.js",
+        "built-ins/Promise/allSettled/call-resolve-element.js",
+        "built-ins/Promise/allSettled/invoke-then.js",
+        "built-ins/Promise/allSettled/iter-next-val-err-no-close.js",
+        "built-ins/Promise/allSettled/iter-returns-string-reject.js",
+        "built-ins/Promise/allSettled/iter-step-err-no-close.js",
+        "built-ins/Promise/allSettled/reject-element-function-length.js",
+        "built-ins/Promise/allSettled/reject-element-function-multiple-calls.js",
+        "built-ins/Promise/allSettled/reject-element-function-name.js",
+        "built-ins/Promise/allSettled/resolve-before-loop-exit-from-same.js",
+        "built-ins/Promise/allSettled/resolve-element-function-length.js",
+        "built-ins/Promise/allSettled/resolve-element-function-name.js",
+        "built-ins/Promise/allSettled/resolve-from-same-thenable.js",
+        "built-ins/Promise/allSettled/resolve-throws-iterator-return-is-not-callable.js",
+        "built-ins/Promise/allSettled/resolve-throws-iterator-return-null-or-undefined.js",
+        "built-ins/Promise/any/call-reject-element-after-return.js",
+        "built-ins/Promise/any/call-reject-element-items.js",
+        "built-ins/Promise/any/invoke-resolve-error-close.js",
+        "built-ins/Promise/any/invoke-then-error-close.js",
+        "built-ins/Promise/any/invoke-then-get-error-close.js",
+        "built-ins/Promise/any/invoke-then.js",
+        "built-ins/Promise/any/iter-next-val-err-no-close.js",
+        "built-ins/Promise/any/iter-returns-string-reject.js",
+        "built-ins/Promise/any/iter-step-err-no-close.js",
+        "built-ins/Promise/any/reject-element-function-length.js",
+        "built-ins/Promise/any/reject-element-function-name.js",
+        "built-ins/Promise/any/reject-from-same-thenable.js",
+        "built-ins/Promise/any/resolve-before-loop-exit-from-same.js",
+        "built-ins/Promise/any/resolve-before-loop-exit.js",
+        "built-ins/Promise/any/resolve-throws-iterator-return-is-not-callable.js",
+        "built-ins/Promise/any/resolve-throws-iterator-return-null-or-undefined.js",
+        "built-ins/Promise/race/invoke-then.js",
+        "built-ins/Promise/race/iter-next-val-err-no-close.js",
+        "built-ins/Promise/race/iter-returns-string-reject.js",
+        "built-ins/Promise/race/iter-step-err-no-close.js",
+        "built-ins/Promise/race/resolve-throws-iterator-return-is-not-callable.js",
+        "built-ins/Promise/race/resolve-throws-iterator-return-null-or-undefined.js",
+        "built-ins/Promise/race/same-reject-function.js",
+        "built-ins/Promise/race/same-resolve-function.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 5.908,
+      "elapsed_after": 4.329,
+      "before_host_sha256": "a6f36f53be5fe15b0670089d85a96c3b163b43c0979ec65c47a3d51c631598e2",
+      "after_host_sha256": "46c1dc85a250858aa934547013d54dff1fe35890a5bd39788931ae04cd9aa952",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Iterator": {
+      "selected": 654,
+      "before": {
+        "pass": 643,
+        "fail": 11,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53218
+      },
+      "after": {
+        "pass": 643,
+        "fail": 11,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53218
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 5.807,
+      "elapsed_after": 5.857,
+      "before_host_sha256": "a6f36f53be5fe15b0670089d85a96c3b163b43c0979ec65c47a3d51c631598e2",
+      "after_host_sha256": "46c1dc85a250858aa934547013d54dff1fe35890a5bd39788931ae04cd9aa952",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before": {
+        "pass": 3411,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "after": {
+        "pass": 3411,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 10.723,
+      "elapsed_after": 10.4,
+      "before_host_sha256": "a6f36f53be5fe15b0670089d85a96c3b163b43c0979ec65c47a3d51c631598e2",
+      "after_host_sha256": "46c1dc85a250858aa934547013d54dff1fe35890a5bd39788931ae04cd9aa952",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Function": {
+      "selected": 515,
+      "before": {
+        "pass": 506,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "after": {
+        "pass": 506,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 4.367,
+      "elapsed_after": 4.369,
+      "before_host_sha256": "a6f36f53be5fe15b0670089d85a96c3b163b43c0979ec65c47a3d51c631598e2",
+      "after_host_sha256": "46c1dc85a250858aa934547013d54dff1fe35890a5bd39788931ae04cd9aa952",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Reflect": {
+      "selected": 154,
+      "before": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "after": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.72,
+      "elapsed_after": 2.944,
+      "before_host_sha256": "a6f36f53be5fe15b0670089d85a96c3b163b43c0979ec65c47a3d51c631598e2",
+      "after_host_sha256": "46c1dc85a250858aa934547013d54dff1fe35890a5bd39788931ae04cd9aa952",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "language": {
+      "selected": 24590,
+      "before": {
+        "pass": 24395,
+        "fail": 169,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "after": {
+        "pass": 24395,
+        "fail": 169,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 54.239,
+      "elapsed_after": 54.096,
+      "before_host_sha256": "a6f36f53be5fe15b0670089d85a96c3b163b43c0979ec65c47a3d51c631598e2",
+      "after_host_sha256": "46c1dc85a250858aa934547013d54dff1fe35890a5bd39788931ae04cd9aa952",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    }
+  },
+  "unique": {
+    "selected": 30059,
+    "before_pass": 29785,
+    "after_pass": 29839,
+    "gained_files": [
+      "built-ins/Promise/all/call-resolve-element-after-return.js",
+      "built-ins/Promise/all/call-resolve-element-items.js",
+      "built-ins/Promise/all/call-resolve-element.js",
+      "built-ins/Promise/all/invoke-then.js",
+      "built-ins/Promise/all/iter-next-val-err-no-close.js",
+      "built-ins/Promise/all/iter-returns-string-reject.js",
+      "built-ins/Promise/all/iter-step-err-no-close.js",
+      "built-ins/Promise/all/resolve-before-loop-exit-from-same.js",
+      "built-ins/Promise/all/resolve-element-function-length.js",
+      "built-ins/Promise/all/resolve-element-function-name.js",
+      "built-ins/Promise/all/resolve-from-same-thenable.js",
+      "built-ins/Promise/all/resolve-throws-iterator-return-is-not-callable.js",
+      "built-ins/Promise/all/resolve-throws-iterator-return-null-or-undefined.js",
+      "built-ins/Promise/all/same-reject-function.js",
+      "built-ins/Promise/allSettled/call-resolve-element-after-return.js",
+      "built-ins/Promise/allSettled/call-resolve-element-items.js",
+      "built-ins/Promise/allSettled/call-resolve-element.js",
+      "built-ins/Promise/allSettled/invoke-then.js",
+      "built-ins/Promise/allSettled/iter-next-val-err-no-close.js",
+      "built-ins/Promise/allSettled/iter-returns-string-reject.js",
+      "built-ins/Promise/allSettled/iter-step-err-no-close.js",
+      "built-ins/Promise/allSettled/reject-element-function-length.js",
+      "built-ins/Promise/allSettled/reject-element-function-multiple-calls.js",
+      "built-ins/Promise/allSettled/reject-element-function-name.js",
+      "built-ins/Promise/allSettled/resolve-before-loop-exit-from-same.js",
+      "built-ins/Promise/allSettled/resolve-element-function-length.js",
+      "built-ins/Promise/allSettled/resolve-element-function-name.js",
+      "built-ins/Promise/allSettled/resolve-from-same-thenable.js",
+      "built-ins/Promise/allSettled/resolve-throws-iterator-return-is-not-callable.js",
+      "built-ins/Promise/allSettled/resolve-throws-iterator-return-null-or-undefined.js",
+      "built-ins/Promise/any/call-reject-element-after-return.js",
+      "built-ins/Promise/any/call-reject-element-items.js",
+      "built-ins/Promise/any/invoke-resolve-error-close.js",
+      "built-ins/Promise/any/invoke-then-error-close.js",
+      "built-ins/Promise/any/invoke-then-get-error-close.js",
+      "built-ins/Promise/any/invoke-then.js",
+      "built-ins/Promise/any/iter-next-val-err-no-close.js",
+      "built-ins/Promise/any/iter-returns-string-reject.js",
+      "built-ins/Promise/any/iter-step-err-no-close.js",
+      "built-ins/Promise/any/reject-element-function-length.js",
+      "built-ins/Promise/any/reject-element-function-name.js",
+      "built-ins/Promise/any/reject-from-same-thenable.js",
+      "built-ins/Promise/any/resolve-before-loop-exit-from-same.js",
+      "built-ins/Promise/any/resolve-before-loop-exit.js",
+      "built-ins/Promise/any/resolve-throws-iterator-return-is-not-callable.js",
+      "built-ins/Promise/any/resolve-throws-iterator-return-null-or-undefined.js",
+      "built-ins/Promise/race/invoke-then.js",
+      "built-ins/Promise/race/iter-next-val-err-no-close.js",
+      "built-ins/Promise/race/iter-returns-string-reject.js",
+      "built-ins/Promise/race/iter-step-err-no-close.js",
+      "built-ins/Promise/race/resolve-throws-iterator-return-is-not-callable.js",
+      "built-ins/Promise/race/resolve-throws-iterator-return-null-or-undefined.js",
+      "built-ins/Promise/race/same-reject-function.js",
+      "built-ins/Promise/race/same-resolve-function.js"
+    ],
+    "lost_files": [
+
+    ],
+    "gained_variants": [
+      [
+        "built-ins/Promise/all/call-resolve-element-after-return.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/call-resolve-element-after-return.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/all/call-resolve-element-items.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/call-resolve-element-items.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/all/call-resolve-element.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/call-resolve-element.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/all/invoke-then.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/invoke-then.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/all/iter-next-val-err-no-close.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/iter-next-val-err-no-close.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/all/iter-returns-string-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/iter-returns-string-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/all/iter-step-err-no-close.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/iter-step-err-no-close.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/all/resolve-before-loop-exit-from-same.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/resolve-before-loop-exit-from-same.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/all/resolve-element-function-length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/resolve-element-function-length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/all/resolve-element-function-name.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/resolve-element-function-name.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/all/resolve-from-same-thenable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/resolve-from-same-thenable.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/all/resolve-throws-iterator-return-is-not-callable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/resolve-throws-iterator-return-is-not-callable.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/all/resolve-throws-iterator-return-null-or-undefined.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/resolve-throws-iterator-return-null-or-undefined.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/all/same-reject-function.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/all/same-reject-function.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/call-resolve-element-after-return.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/call-resolve-element-after-return.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/call-resolve-element-items.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/call-resolve-element-items.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/call-resolve-element.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/call-resolve-element.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/invoke-then.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/invoke-then.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-next-val-err-no-close.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-next-val-err-no-close.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-string-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-string-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-step-err-no-close.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-step-err-no-close.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/reject-element-function-length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/reject-element-function-length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/reject-element-function-multiple-calls.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/reject-element-function-multiple-calls.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/reject-element-function-name.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/reject-element-function-name.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/resolve-before-loop-exit-from-same.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/resolve-before-loop-exit-from-same.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/resolve-element-function-length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/resolve-element-function-length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/resolve-element-function-name.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/resolve-element-function-name.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/resolve-from-same-thenable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/resolve-from-same-thenable.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/resolve-throws-iterator-return-is-not-callable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/resolve-throws-iterator-return-is-not-callable.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/resolve-throws-iterator-return-null-or-undefined.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/resolve-throws-iterator-return-null-or-undefined.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/call-reject-element-after-return.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/call-reject-element-after-return.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/call-reject-element-items.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/call-reject-element-items.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/invoke-resolve-error-close.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/invoke-resolve-error-close.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/invoke-then-error-close.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/invoke-then-error-close.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/invoke-then-get-error-close.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/invoke-then-get-error-close.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/invoke-then.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/invoke-then.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-next-val-err-no-close.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-next-val-err-no-close.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-returns-string-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-returns-string-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-step-err-no-close.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-step-err-no-close.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/reject-element-function-length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/reject-element-function-length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/reject-element-function-name.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/reject-element-function-name.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/reject-from-same-thenable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/reject-from-same-thenable.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/resolve-before-loop-exit-from-same.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/resolve-before-loop-exit-from-same.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/resolve-before-loop-exit.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/resolve-before-loop-exit.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/resolve-throws-iterator-return-is-not-callable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/resolve-throws-iterator-return-is-not-callable.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/resolve-throws-iterator-return-null-or-undefined.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/resolve-throws-iterator-return-null-or-undefined.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/race/invoke-then.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/race/invoke-then.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/race/iter-next-val-err-no-close.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/race/iter-next-val-err-no-close.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/race/iter-returns-string-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/race/iter-returns-string-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/race/iter-step-err-no-close.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/race/iter-step-err-no-close.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/race/resolve-throws-iterator-return-is-not-callable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/race/resolve-throws-iterator-return-is-not-callable.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/race/resolve-throws-iterator-return-null-or-undefined.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/race/resolve-throws-iterator-return-null-or-undefined.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/race/same-reject-function.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/race/same-reject-function.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/race/same-resolve-function.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/race/same-resolve-function.js",
+        "strict"
+      ]
+    ],
+    "lost_variants": [
+
+    ]
+  }
+}
