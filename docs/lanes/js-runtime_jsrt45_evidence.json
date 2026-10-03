@@ -1,0 +1,860 @@
+{
+  "ticket": "JSRT-45",
+  "base_sha": "777325cf45d54640753f2192b54dfce1d8930b3c",
+  "workspace": {
+    "passed": 3792,
+    "skipped": 17,
+    "elapsed_seconds": 74.77
+  },
+  "doctests": 4,
+  "selections": {
+    "built-ins-Array": {
+      "selected": 3332,
+      "before": {
+        "pass": 3242,
+        "fail": 89,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50540
+      },
+      "after": {
+        "pass": 3283,
+        "fail": 48,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50540
+      },
+      "gained": [
+        "built-ins/Array/fromAsync/async-iterable-async-mapped-awaits-once.js",
+        "built-ins/Array/fromAsync/async-iterable-input-does-not-await-input.js",
+        "built-ins/Array/fromAsync/async-iterable-input-iteration-err.js",
+        "built-ins/Array/fromAsync/async-iterable-input.js",
+        "built-ins/Array/fromAsync/asyncitems-array-add-to-singleton.js",
+        "built-ins/Array/fromAsync/asyncitems-array-add.js",
+        "built-ins/Array/fromAsync/asyncitems-array-mutate.js",
+        "built-ins/Array/fromAsync/asyncitems-array-remove.js",
+        "built-ins/Array/fromAsync/asyncitems-asynciterator-exists.js",
+        "built-ins/Array/fromAsync/asyncitems-asynciterator-sync.js",
+        "built-ins/Array/fromAsync/asyncitems-iterator-exists.js",
+        "built-ins/Array/fromAsync/asyncitems-iterator-promise.js",
+        "built-ins/Array/fromAsync/mapfn-async-arraylike.js",
+        "built-ins/Array/fromAsync/mapfn-async-iterable-async.js",
+        "built-ins/Array/fromAsync/mapfn-async-iterable-sync.js",
+        "built-ins/Array/fromAsync/mapfn-async-throws-close-async-iterator.js",
+        "built-ins/Array/fromAsync/mapfn-async-throws-close-sync-iterator.js",
+        "built-ins/Array/fromAsync/mapfn-result-awaited-once-per-iteration.js",
+        "built-ins/Array/fromAsync/mapfn-sync-iterable-async.js",
+        "built-ins/Array/fromAsync/mapfn-sync-throws-close-async-iterator.js",
+        "built-ins/Array/fromAsync/mapfn-sync-throws-close-sync-iterator.js",
+        "built-ins/Array/fromAsync/non-iterable-input-with-thenable-async-mapped-awaits-callback-result-once.js",
+        "built-ins/Array/fromAsync/non-iterable-input-with-thenable-element-rejects.js",
+        "built-ins/Array/fromAsync/non-iterable-with-non-promise-thenable.js",
+        "built-ins/Array/fromAsync/non-iterable-with-thenable-async-mapped-awaits-once.js",
+        "built-ins/Array/fromAsync/non-iterable-with-thenable-awaits-once.js",
+        "built-ins/Array/fromAsync/non-iterable-with-thenable-sync-mapped-awaits-once.js",
+        "built-ins/Array/fromAsync/sync-iterable-input-with-non-promise-thenable.js",
+        "built-ins/Array/fromAsync/sync-iterable-with-rejecting-thenable-rejects.js",
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-async-mapped-awaits-once.js",
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-awaits-once.js",
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-sync-mapped-awaits-once.js",
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-then-method-err.js",
+        "built-ins/Array/fromAsync/this-constructor-operations.js",
+        "built-ins/Array/fromAsync/this-constructor-with-bad-length-setter.js",
+        "built-ins/Array/fromAsync/this-constructor-with-readonly-elements.js",
+        "built-ins/Array/fromAsync/this-constructor-with-readonly-length.js",
+        "built-ins/Array/fromAsync/this-constructor-with-unsettable-element-closes-async-iterator.js",
+        "built-ins/Array/fromAsync/this-constructor-with-unsettable-element-closes-sync-iterator.js",
+        "built-ins/Array/fromAsync/this-constructor-with-unsettable-element.js",
+        "built-ins/Array/fromAsync/this-constructor.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 14.833,
+      "elapsed_after": 14.613,
+      "before_host_sha256": "07e942feea598101516d4b071e10f7b8ec16aea8433b474f97e6fadace5455f7",
+      "after_host_sha256": "e411c7042578fee647f66d6e953d396760094ebc1e879483179d133f8567064c",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before": {
+        "pass": 3381,
+        "fail": 32,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "after": {
+        "pass": 3381,
+        "fail": 32,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 10.199,
+      "elapsed_after": 11.457,
+      "before_host_sha256": "07e942feea598101516d4b071e10f7b8ec16aea8433b474f97e6fadace5455f7",
+      "after_host_sha256": "e411c7042578fee647f66d6e953d396760094ebc1e879483179d133f8567064c",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Reflect": {
+      "selected": 154,
+      "before": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "after": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.877,
+      "elapsed_after": 3.152,
+      "before_host_sha256": "07e942feea598101516d4b071e10f7b8ec16aea8433b474f97e6fadace5455f7",
+      "after_host_sha256": "e411c7042578fee647f66d6e953d396760094ebc1e879483179d133f8567064c",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Proxy": {
+      "selected": 311,
+      "before": {
+        "pass": 310,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "after": {
+        "pass": 310,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.243,
+      "elapsed_after": 3.944,
+      "before_host_sha256": "07e942feea598101516d4b071e10f7b8ec16aea8433b474f97e6fadace5455f7",
+      "after_host_sha256": "e411c7042578fee647f66d6e953d396760094ebc1e879483179d133f8567064c",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Function": {
+      "selected": 515,
+      "before": {
+        "pass": 504,
+        "fail": 11,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "after": {
+        "pass": 504,
+        "fail": 11,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 4.361,
+      "elapsed_after": 4.818,
+      "before_host_sha256": "07e942feea598101516d4b071e10f7b8ec16aea8433b474f97e6fadace5455f7",
+      "after_host_sha256": "e411c7042578fee647f66d6e953d396760094ebc1e879483179d133f8567064c",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "language": {
+      "selected": 24590,
+      "before": {
+        "pass": 24048,
+        "fail": 516,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "after": {
+        "pass": 24048,
+        "fail": 516,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 59.052,
+      "elapsed_after": 54.23,
+      "before_host_sha256": "07e942feea598101516d4b071e10f7b8ec16aea8433b474f97e6fadace5455f7",
+      "after_host_sha256": "e411c7042578fee647f66d6e953d396760094ebc1e879483179d133f8567064c",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-JSON": {
+      "selected": 165,
+      "before": {
+        "pass": 165,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53707
+      },
+      "after": {
+        "pass": 165,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53707
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.994,
+      "elapsed_after": 3.08,
+      "before_host_sha256": "07e942feea598101516d4b071e10f7b8ec16aea8433b474f97e6fadace5455f7",
+      "after_host_sha256": "e411c7042578fee647f66d6e953d396760094ebc1e879483179d133f8567064c",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Promise": {
+      "selected": 732,
+      "before": {
+        "pass": 659,
+        "fail": 73,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53140
+      },
+      "after": {
+        "pass": 659,
+        "fail": 73,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53140
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 5.992,
+      "elapsed_after": 5.925,
+      "before_host_sha256": "07e942feea598101516d4b071e10f7b8ec16aea8433b474f97e6fadace5455f7",
+      "after_host_sha256": "e411c7042578fee647f66d6e953d396760094ebc1e879483179d133f8567064c",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Array-fromAsync": {
+      "selected": 95,
+      "before": {
+        "pass": 54,
+        "fail": 41,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53777
+      },
+      "after": {
+        "pass": 95,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53777
+      },
+      "gained": [
+        "built-ins/Array/fromAsync/async-iterable-async-mapped-awaits-once.js",
+        "built-ins/Array/fromAsync/async-iterable-input-does-not-await-input.js",
+        "built-ins/Array/fromAsync/async-iterable-input-iteration-err.js",
+        "built-ins/Array/fromAsync/async-iterable-input.js",
+        "built-ins/Array/fromAsync/asyncitems-array-add-to-singleton.js",
+        "built-ins/Array/fromAsync/asyncitems-array-add.js",
+        "built-ins/Array/fromAsync/asyncitems-array-mutate.js",
+        "built-ins/Array/fromAsync/asyncitems-array-remove.js",
+        "built-ins/Array/fromAsync/asyncitems-asynciterator-exists.js",
+        "built-ins/Array/fromAsync/asyncitems-asynciterator-sync.js",
+        "built-ins/Array/fromAsync/asyncitems-iterator-exists.js",
+        "built-ins/Array/fromAsync/asyncitems-iterator-promise.js",
+        "built-ins/Array/fromAsync/mapfn-async-arraylike.js",
+        "built-ins/Array/fromAsync/mapfn-async-iterable-async.js",
+        "built-ins/Array/fromAsync/mapfn-async-iterable-sync.js",
+        "built-ins/Array/fromAsync/mapfn-async-throws-close-async-iterator.js",
+        "built-ins/Array/fromAsync/mapfn-async-throws-close-sync-iterator.js",
+        "built-ins/Array/fromAsync/mapfn-result-awaited-once-per-iteration.js",
+        "built-ins/Array/fromAsync/mapfn-sync-iterable-async.js",
+        "built-ins/Array/fromAsync/mapfn-sync-throws-close-async-iterator.js",
+        "built-ins/Array/fromAsync/mapfn-sync-throws-close-sync-iterator.js",
+        "built-ins/Array/fromAsync/non-iterable-input-with-thenable-async-mapped-awaits-callback-result-once.js",
+        "built-ins/Array/fromAsync/non-iterable-input-with-thenable-element-rejects.js",
+        "built-ins/Array/fromAsync/non-iterable-with-non-promise-thenable.js",
+        "built-ins/Array/fromAsync/non-iterable-with-thenable-async-mapped-awaits-once.js",
+        "built-ins/Array/fromAsync/non-iterable-with-thenable-awaits-once.js",
+        "built-ins/Array/fromAsync/non-iterable-with-thenable-sync-mapped-awaits-once.js",
+        "built-ins/Array/fromAsync/sync-iterable-input-with-non-promise-thenable.js",
+        "built-ins/Array/fromAsync/sync-iterable-with-rejecting-thenable-rejects.js",
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-async-mapped-awaits-once.js",
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-awaits-once.js",
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-sync-mapped-awaits-once.js",
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-then-method-err.js",
+        "built-ins/Array/fromAsync/this-constructor-operations.js",
+        "built-ins/Array/fromAsync/this-constructor-with-bad-length-setter.js",
+        "built-ins/Array/fromAsync/this-constructor-with-readonly-elements.js",
+        "built-ins/Array/fromAsync/this-constructor-with-readonly-length.js",
+        "built-ins/Array/fromAsync/this-constructor-with-unsettable-element-closes-async-iterator.js",
+        "built-ins/Array/fromAsync/this-constructor-with-unsettable-element-closes-sync-iterator.js",
+        "built-ins/Array/fromAsync/this-constructor-with-unsettable-element.js",
+        "built-ins/Array/fromAsync/this-constructor.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.001,
+      "elapsed_after": 2.926,
+      "before_host_sha256": "07e942feea598101516d4b071e10f7b8ec16aea8433b474f97e6fadace5455f7",
+      "after_host_sha256": "e411c7042578fee647f66d6e953d396760094ebc1e879483179d133f8567064c",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-AsyncIteratorPrototype": {
+      "selected": 13,
+      "before": {
+        "pass": 4,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53859
+      },
+      "after": {
+        "pass": 4,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53859
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.107,
+      "elapsed_after": 2.686,
+      "before_host_sha256": "07e942feea598101516d4b071e10f7b8ec16aea8433b474f97e6fadace5455f7",
+      "after_host_sha256": "e411c7042578fee647f66d6e953d396760094ebc1e879483179d133f8567064c",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-AsyncFromSyncIteratorPrototype": {
+      "selected": 38,
+      "before": {
+        "pass": 37,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53834
+      },
+      "after": {
+        "pass": 37,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53834
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.381,
+      "elapsed_after": 2.704,
+      "before_host_sha256": "07e942feea598101516d4b071e10f7b8ec16aea8433b474f97e6fadace5455f7",
+      "after_host_sha256": "e411c7042578fee647f66d6e953d396760094ebc1e879483179d133f8567064c",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-AsyncGeneratorPrototype": {
+      "selected": 48,
+      "before": {
+        "pass": 48,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53824
+      },
+      "after": {
+        "pass": 48,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53824
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.287,
+      "elapsed_after": 2.883,
+      "before_host_sha256": "07e942feea598101516d4b071e10f7b8ec16aea8433b474f97e6fadace5455f7",
+      "after_host_sha256": "e411c7042578fee647f66d6e953d396760094ebc1e879483179d133f8567064c",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    }
+  },
+  "unique": {
+    "selected": 33312,
+    "before_pass": 32551,
+    "after_pass": 32592,
+    "gained_files": [
+      "built-ins/Array/fromAsync/async-iterable-async-mapped-awaits-once.js",
+      "built-ins/Array/fromAsync/async-iterable-input-does-not-await-input.js",
+      "built-ins/Array/fromAsync/async-iterable-input-iteration-err.js",
+      "built-ins/Array/fromAsync/async-iterable-input.js",
+      "built-ins/Array/fromAsync/asyncitems-array-add-to-singleton.js",
+      "built-ins/Array/fromAsync/asyncitems-array-add.js",
+      "built-ins/Array/fromAsync/asyncitems-array-mutate.js",
+      "built-ins/Array/fromAsync/asyncitems-array-remove.js",
+      "built-ins/Array/fromAsync/asyncitems-asynciterator-exists.js",
+      "built-ins/Array/fromAsync/asyncitems-asynciterator-sync.js",
+      "built-ins/Array/fromAsync/asyncitems-iterator-exists.js",
+      "built-ins/Array/fromAsync/asyncitems-iterator-promise.js",
+      "built-ins/Array/fromAsync/mapfn-async-arraylike.js",
+      "built-ins/Array/fromAsync/mapfn-async-iterable-async.js",
+      "built-ins/Array/fromAsync/mapfn-async-iterable-sync.js",
+      "built-ins/Array/fromAsync/mapfn-async-throws-close-async-iterator.js",
+      "built-ins/Array/fromAsync/mapfn-async-throws-close-sync-iterator.js",
+      "built-ins/Array/fromAsync/mapfn-result-awaited-once-per-iteration.js",
+      "built-ins/Array/fromAsync/mapfn-sync-iterable-async.js",
+      "built-ins/Array/fromAsync/mapfn-sync-throws-close-async-iterator.js",
+      "built-ins/Array/fromAsync/mapfn-sync-throws-close-sync-iterator.js",
+      "built-ins/Array/fromAsync/non-iterable-input-with-thenable-async-mapped-awaits-callback-result-once.js",
+      "built-ins/Array/fromAsync/non-iterable-input-with-thenable-element-rejects.js",
+      "built-ins/Array/fromAsync/non-iterable-with-non-promise-thenable.js",
+      "built-ins/Array/fromAsync/non-iterable-with-thenable-async-mapped-awaits-once.js",
+      "built-ins/Array/fromAsync/non-iterable-with-thenable-awaits-once.js",
+      "built-ins/Array/fromAsync/non-iterable-with-thenable-sync-mapped-awaits-once.js",
+      "built-ins/Array/fromAsync/sync-iterable-input-with-non-promise-thenable.js",
+      "built-ins/Array/fromAsync/sync-iterable-with-rejecting-thenable-rejects.js",
+      "built-ins/Array/fromAsync/sync-iterable-with-thenable-async-mapped-awaits-once.js",
+      "built-ins/Array/fromAsync/sync-iterable-with-thenable-awaits-once.js",
+      "built-ins/Array/fromAsync/sync-iterable-with-thenable-sync-mapped-awaits-once.js",
+      "built-ins/Array/fromAsync/sync-iterable-with-thenable-then-method-err.js",
+      "built-ins/Array/fromAsync/this-constructor-operations.js",
+      "built-ins/Array/fromAsync/this-constructor-with-bad-length-setter.js",
+      "built-ins/Array/fromAsync/this-constructor-with-readonly-elements.js",
+      "built-ins/Array/fromAsync/this-constructor-with-readonly-length.js",
+      "built-ins/Array/fromAsync/this-constructor-with-unsettable-element-closes-async-iterator.js",
+      "built-ins/Array/fromAsync/this-constructor-with-unsettable-element-closes-sync-iterator.js",
+      "built-ins/Array/fromAsync/this-constructor-with-unsettable-element.js",
+      "built-ins/Array/fromAsync/this-constructor.js"
+    ],
+    "lost_files": [
+
+    ],
+    "gained_variants": [
+      [
+        "built-ins/Array/fromAsync/async-iterable-async-mapped-awaits-once.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/async-iterable-async-mapped-awaits-once.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/async-iterable-input-does-not-await-input.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/async-iterable-input-does-not-await-input.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/async-iterable-input-iteration-err.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/async-iterable-input-iteration-err.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/async-iterable-input.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/async-iterable-input.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-array-add-to-singleton.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-array-add-to-singleton.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-array-add.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-array-add.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-array-mutate.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-array-mutate.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-array-remove.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-array-remove.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-asynciterator-exists.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-asynciterator-exists.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-asynciterator-sync.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-asynciterator-sync.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-iterator-exists.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-iterator-exists.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-iterator-promise.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/asyncitems-iterator-promise.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-async-arraylike.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-async-arraylike.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-async-iterable-async.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-async-iterable-async.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-async-iterable-sync.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-async-iterable-sync.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-async-throws-close-async-iterator.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-async-throws-close-async-iterator.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-async-throws-close-sync-iterator.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-async-throws-close-sync-iterator.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-result-awaited-once-per-iteration.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-result-awaited-once-per-iteration.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-sync-iterable-async.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-sync-iterable-async.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-sync-throws-close-async-iterator.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-sync-throws-close-async-iterator.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-sync-throws-close-sync-iterator.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/mapfn-sync-throws-close-sync-iterator.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/non-iterable-input-with-thenable-async-mapped-awaits-callback-result-once.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/non-iterable-input-with-thenable-async-mapped-awaits-callback-result-once.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/non-iterable-input-with-thenable-element-rejects.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/non-iterable-input-with-thenable-element-rejects.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/non-iterable-with-non-promise-thenable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/non-iterable-with-non-promise-thenable.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/non-iterable-with-thenable-async-mapped-awaits-once.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/non-iterable-with-thenable-async-mapped-awaits-once.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/non-iterable-with-thenable-awaits-once.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/non-iterable-with-thenable-awaits-once.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/non-iterable-with-thenable-sync-mapped-awaits-once.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/non-iterable-with-thenable-sync-mapped-awaits-once.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/sync-iterable-input-with-non-promise-thenable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/sync-iterable-input-with-non-promise-thenable.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/sync-iterable-with-rejecting-thenable-rejects.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/sync-iterable-with-rejecting-thenable-rejects.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-async-mapped-awaits-once.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-async-mapped-awaits-once.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-awaits-once.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-awaits-once.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-sync-mapped-awaits-once.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-sync-mapped-awaits-once.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-then-method-err.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/sync-iterable-with-thenable-then-method-err.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-operations.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-operations.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-with-bad-length-setter.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-with-bad-length-setter.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-with-readonly-elements.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-with-readonly-elements.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-with-readonly-length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-with-readonly-length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-with-unsettable-element-closes-async-iterator.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-with-unsettable-element-closes-async-iterator.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-with-unsettable-element-closes-sync-iterator.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-with-unsettable-element-closes-sync-iterator.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-with-unsettable-element.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor-with-unsettable-element.js",
+        "strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Array/fromAsync/this-constructor.js",
+        "strict"
+      ]
+    ],
+    "lost_variants": [
+
+    ]
+  }
+}

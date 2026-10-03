@@ -286,3 +286,89 @@ fn native_from_async_sync_return(i: &mut Interpreter, _: JsValue, args: Vec<JsVa
     let record = native_data(i)?;
     from_async_sync_call(i, &record, args, true)
 }
+
+#[cfg(test)]
+mod array_from_async_tests {
+    use super::*;
+
+    fn check(source: &str) {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            i.run_script_with_backend(source, backend).unwrap_or_else(|error| panic!("{backend:?}: {}", error.describe()));
+            i.drain_microtasks().unwrap();
+            assert_eq!(i.run_script("result").unwrap(), JsValue::Bool(true), "{backend:?}");
+        }
+    }
+
+    #[test]
+    fn from_async_sequential_arraylike_and_sync_values_await_mapping() {
+        check(r#"
+            var result=false, events=[], receiver={};
+            var source={length:2,get 0(){events.push('get0');return {then(r){events.push('value0');r(3);}};},
+                get 1(){events.push('get1');return Promise.resolve(4);}};
+            Array.fromAsync(source,function(v,k){events.push('map'+k);if(this!==receiver)throw 1;
+                return {then(r){events.push('mapped'+k);r(v+k);}};},receiver).then(a=>{
+                result=a.join(',')==='3,5' && events.join(',')==='get0,value0,map0,mapped0,get1,map1,mapped1';
+                return Array.fromAsync([Promise.resolve(6),{then(r){r(7);}}]);
+            }).then(a=>{result=result && a.join(',')==='6,7';});
+        "#);
+    }
+
+    #[test]
+    fn from_async_async_iterator_keeps_values_and_awaits_mapped_values() {
+        check(r#"
+            var result=false, gets=0, calls=0, payload=Promise.resolve(8);
+            var source={[Symbol.asyncIterator](){return {get next(){gets++;return function(){calls++;return Promise.resolve(
+                calls===1 ? {value:payload,done:false} : {get value(){throw 99;},done:true});};}};},
+                [Symbol.iterator](){throw 98;}};
+            Array.fromAsync(source).then(a=>{result=gets===1 && calls===2 && a.length===1 && a[0]===payload;
+                calls=0;return Array.fromAsync(source,(v,k)=>v);}).then(a=>{
+                    result=result && gets===2 && calls===2 && a[0]===8;});
+        "#);
+    }
+
+    #[test]
+    fn from_async_close_preserves_original_throw_and_awaits_return() {
+        check(r#"
+            var result=false, original={}, other={}, close=0, events=[];
+            var source={[Symbol.asyncIterator](){return {next(){return {value:1,done:false};},return(){close++;
+                return {then(r,j){events.push('close');j(other);}};}};}};
+            Array.fromAsync(source,()=>{throw original;}).then(()=>{result=false;},e=>{
+                result=e===original && close===1 && events.join(',')==='close';
+                return Array.fromAsync({[Symbol.iterator](){return {next(){return {value:Promise.reject(original),done:false};},
+                    return(){close++;throw other;}};}}).then(()=>{result=false;},e=>{result=result && e===original && close===2;});
+            });
+        "#);
+    }
+
+    #[test]
+    fn from_async_next_failures_do_not_close_and_initial_errors_reject() {
+        check(r#"
+            var result=false, original={}, closes=0, calls=0;
+            var source={[Symbol.asyncIterator](){return {next(){throw original;},return(){closes++;return {};}};}};
+            var p=Array.fromAsync(source);result=p instanceof Promise;
+            p.then(()=>{result=false;},e=>{result=result && e===original && closes===0;
+                return Array.fromAsync({get [Symbol.asyncIterator](){calls++;throw original;}},42)
+                    .then(()=>{result=false;},e=>{result=result && e instanceof TypeError && calls===0;});
+            }).then(()=>Array.fromAsync(null).then(()=>{result=false;},e=>{result=result && e instanceof TypeError;}));
+        "#);
+    }
+
+    #[test]
+    fn from_async_constructor_arguments_semantic_properties_and_internal_await() {
+        check(r#"
+            var result=false, sizes=[], defines=[], completed=0;
+            function C(n){sizes.push(arguments.length+':'+n);return new Proxy({},{defineProperty(t,k,d){defines.push(k);
+                return Reflect.defineProperty(t,k,d);}});}
+            var value=Promise.resolve(9);Object.defineProperty(value,'then',{get(){throw 98;}});
+            Array.fromAsync.call(C,{0:value,length:1}).then(a=>{
+                result=a[0]===9 && a.length===1 && sizes.join(',')==='1:1' && defines.join(',')==='0,length';
+                return Array.fromAsync.call(C,[2]);
+            }).then(a=>{result=result && a[0]===2 && sizes[1]==='0:undefined';
+                var closed=0;function Frozen(){return Object.preventExtensions({});}
+                return Array.fromAsync.call(Frozen,{[Symbol.asyncIterator](){return {next(){return {value:1,done:false};},
+                    return(){closed++;return {done:true};}};}}).then(()=>{result=false;},e=>{result=result && e instanceof TypeError && closed===1;});
+            });
+        "#);
+    }
+}
