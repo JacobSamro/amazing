@@ -124,7 +124,7 @@ fn delegation_prefers_async_method_and_caches_next() {
             "var it=g();it.next().then(a=>it.next().then(b=>ok=a.value===7&&!a.done&&b.value===9&&b.done&&log.join(',')==='async,next,next'))",
         ),
         (
-            "var ok=false,reads=0,n=0,inner={get next(){reads++;return function(){if(n++===0){Object.defineProperty(inner,'next',{value(){throw 1}});return {done:false,value:7}}return {done:true,value:8}}},iterable={[Symbol.asyncIterator](){return inner}};",
+            "var ok=false,reads=0,n=0,inner={get next(){reads++;return function(){if(n++===0){Object.defineProperty(inner,'next',{value(){throw 1}});return {done:false,value:7}}return {done:true,value:8}}}},iterable={[Symbol.asyncIterator](){return inner}};",
             "(async function*(){var value=yield* iterable;return value})",
             "var it=g();it.next().then(a=>it.next().then(b=>ok=a.value===7&&!a.done&&b.value===8&&b.done&&reads===1))",
         ),
