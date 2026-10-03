@@ -113,7 +113,7 @@ fn composed_ranges_rescope_nested_closed_roots_only_when_not_explicitly_allowed(
     let nested_host = dom.create_element(root, "div"); let nested = dom.attach_shadow(nested_host, options).unwrap();
     let text = dom.create_text(nested, "abc"); let id = dom.document_selection(document).unwrap();
     dom.selection_set_base_and_extent(id, BoundaryPoint::new(text, 0), BoundaryPoint::new(text, 3)).unwrap();
-    assert_eq!(dom.selection_visible_points(id).unwrap(), None);
+    assert_eq!(dom.selection_visible_points(id).unwrap(), Some((BoundaryPoint::new(text, 0), BoundaryPoint::new(text, 3))));
     let external = dom.selection_composed_ranges(id, &[]).unwrap()[0];
     assert_eq!(dom.static_range(external).unwrap().boundaries(), AbstractRange { start: BoundaryPoint::new(parent, 0), end: BoundaryPoint::new(parent, 1) });
     let exposed = dom.selection_composed_ranges(id, &[nested]).unwrap()[0];
@@ -128,7 +128,7 @@ fn composed_ranges_rescope_nested_closed_roots_only_when_not_explicitly_allowed(
 }
 
 #[test]
-fn selected_deletion_keeps_range_identity_and_shadow_deletion_is_a_noop() {
+fn selected_deletion_keeps_range_identity_in_document_and_connected_shadow() {
     let mut dom = Dom::new(); let parent = dom.create_element(NodeIdx(0), "p"); let text = dom.create_text(parent, "abcdef");
     let id = dom.document_selection(NodeIdx(0)).unwrap();
     dom.selection_set_base_and_extent(id, BoundaryPoint::new(text, 1), BoundaryPoint::new(text, 4)).unwrap();
@@ -145,6 +145,36 @@ fn selected_deletion_keeps_range_identity_and_shadow_deletion_is_a_noop() {
     dom.selection_set_base_and_extent(id, BoundaryPoint::new(shadow_text, 0), BoundaryPoint::new(shadow_text, 6)).unwrap();
     let shadow_range = dom.selection_state(id).unwrap().range;
     dom.selection_delete_from_document(id).unwrap();
-    assert_eq!(dom.character_data_utf16(shadow_text).unwrap(), "inside".encode_utf16().collect::<Vec<_>>());
+    assert_eq!(dom.character_data_utf16(shadow_text).unwrap(), Vec::<u16>::new());
     assert_eq!(dom.selection_state(id).unwrap().range, shadow_range);
+}
+
+
+#[test]
+fn connected_shadow_membership_is_actual_and_detached_owner_document_does_not_suffice() {
+    use crate::shadow::{ShadowMode, ShadowOptions, SlotAssignment};
+    for mode in [ShadowMode::Open, ShadowMode::Closed] {
+        let mut dom = Dom::new(); let document = NodeIdx(0);
+        let body = dom.create_element(document, "body"); let host = dom.create_element(body, "div");
+        let root = dom.attach_shadow(host, ShadowOptions { mode, delegates_focus: false,
+            slot_assignment: SlotAssignment::Named, clonable: false, serializable: false }).unwrap();
+        let text = dom.create_text(root, "abc"); let id = dom.document_selection(document).unwrap();
+        dom.selection_select_children(id, text).unwrap();
+        let selected = dom.selection_state(id).unwrap().range.unwrap();
+        assert_eq!(dom.range(selected).unwrap(), AbstractRange {
+            start: BoundaryPoint::new(text, 0), end: BoundaryPoint::new(text, 3) });
+        assert!(dom.selection_visible_points(id).unwrap().is_some());
+        dom.selection_clear(id).unwrap(); dom.selection_add(id, selected).unwrap();
+        assert_eq!(dom.selection_state(id).unwrap().range, Some(selected));
+        dom.remove(host).unwrap();
+        assert_eq!(dom.owner_document(text), Some(document));
+        assert_eq!(dom.selection_visible_points(id).unwrap(), None);
+        dom.selection_clear(id).unwrap(); dom.selection_add(id, selected).unwrap();
+        assert_eq!(dom.selection_state(id).unwrap().range, None);
+        dom.selection_select_children(id, text).unwrap();
+        assert_eq!(dom.selection_state(id).unwrap().range, None);
+        let detached = dom.create_node_in(document, NodeKind::Text { data: "detached".into() }).unwrap();
+        dom.selection_collapse_at(id, Some(BoundaryPoint::new(detached, 0))).unwrap();
+        assert_eq!(dom.selection_state(id).unwrap().range, None);
+    }
 }

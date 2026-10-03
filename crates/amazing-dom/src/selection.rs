@@ -106,15 +106,16 @@ impl Dom {
         let range = self.range(range)?;
         Ok(Some(if state.direction == SelectionDirection::Forwards { (range.start, range.end) } else { (range.end, range.start) }))
     }
-    /// Public Selection boundary visibility follows the document tree, not mutable ownerDocument.
+    /// Preserve actual connected shadow selections while the draft's document-tree masking
+    /// contradiction remains open (w3c/selection-api#361). Never infer membership from ownerDocument.
     pub fn selection_visible_points(&self, id: SelectionId) -> Result<Option<(BoundaryPoint, BoundaryPoint)>, DomError> {
         let document = self.selection_document(id)?;
-        Ok(self.selection_points(id)?.filter(|(anchor, focus)| self.root(anchor.node) == document && self.root(focus.node) == document))
+        Ok(self.selection_points(id)?.filter(|(anchor, focus)| self.shadow_including_root(anchor.node) == document && self.shadow_including_root(focus.node) == document))
     }
     pub fn selection_add(&mut self, id: SelectionId, range: Range) -> Result<(), DomError> {
         let document = self.selection_document(id)?;
         let boundaries = self.range(range)?;
-        if self.root(boundaries.start.node) != document || self.root(boundaries.end.node) != document { return Ok(()); }
+        if self.shadow_including_root(boundaries.start.node) != document || self.shadow_including_root(boundaries.end.node) != document { return Ok(()); }
         if self.selection_visible_points(id)?.is_some() { return Ok(()); }
         self.associate_selection_range(id, Some(range), SelectionDirection::Forwards)
     }
@@ -181,7 +182,7 @@ impl Dom {
         let document = self.selection_document(id)?;
         self.check_node(node)?;
         if matches!(self.get(node).kind, NodeKind::DocumentType { .. }) { return Err(DomError::InvalidNodeTypeError); }
-        if self.root(node) != document { return Ok(()); }
+        if self.shadow_including_root(node) != document { return Ok(()); }
         let range = self.register_range(AbstractRange { start: BoundaryPoint::new(node, 0), end: BoundaryPoint::new(node, self.children(node).count()) });
         self.associate_selection_range(id, Some(range), SelectionDirection::Forwards)
     }
