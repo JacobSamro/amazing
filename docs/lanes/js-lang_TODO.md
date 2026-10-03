@@ -1748,3 +1748,19 @@ Next cluster analysis: strict unresolvable PutValue, reference capture before
 assignment defaults/conversions, and destructuring target ordering. Native eval
 context remains Runtime35; invocation/factory metadata remains VM17. No shared
 execution hunks are changed before an explicit owner grant.
+
+### JS-27 — reference capture, assignment and destructuring
+
+Completed `ecfe581d` on coherent VM17 base `0d5963fe`. Captured declarative
+frames/object records/unresolvable realm globals, deferred computed write-key
+conversion, prepared destructuring targets before Get/default/iterator operations,
+primitive receiver setters, numeric conversion ordering and postfix numeric values.
+Linux workspace **3759/17 skipped +4 docs**; owned **575 passed**, eight grouped
+regressions. Whole language/ **23865→23982 files (+117)** and **44351→44516
+variants (+165)**, **zero losses/timeouts**.
+[js-lang_JS27-interface.md](js-lang_JS27-interface.md).
+
+Next JS28 audit: whole module import phases and typed attributes, faithful deferred
+namespace triggers and graph evaluation. Source/defer argument effects currently
+short-circuit; static phase/attributes currently ignored. Exact shared property/value
+hooks and host adoption need parent/owner grants; Runtime35 retains contextual eval.

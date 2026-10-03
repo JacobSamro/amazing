@@ -42,6 +42,19 @@ pattern targets, and Update's ToNumeric helper. Runtime35 eval contexts and priv
 metadata, Runtime36 WindowProxy hooks, VM invocation/factory/FDI fields and
 statement scope/hoist work remain separately owned.
 
-Gate evidence is pending. The baseline's initial corpus invocation rejected an
+Source `ecfe581ddd4883fcbbd4d221f20241facb6464a1` passed Linux workspace
+**3759 tests /17 skipped**, **four doctests**, and **575 owned crate tests**.
+Eight new grouped tests cover both backends, including a bytecode callable
+capturing an interpreted With environment and RHS eval creating a shadow binding.
+Whole language/ including Annex B: **24572 selected files**, **23865 →23982
+passing files (+117)**, **44351 →44516 variants (+165)**, **zero lost files or
+variants**, **zero timeouts**. Input, runner and variant inventories are identical.
+The baseline's initial corpus invocation rejected an
 unsupported CLI flag; its preserved log is incomplete corpus evidence. The fixed
 runner invocation uses `--only language/`, including Annex B language directories.
+
+Raw incomplete runs remain in the main lane scratch. The first workspace gate
+reported one new fixture failure because forced Bytecode rejects With statements;
+the corrected immutable source creates the scope in TreeWalk mode, then executes
+the captured ordinary assignment callable under each backend. Detailed proof:
+[js-lang_JS27-evidence.json](js-lang_JS27-evidence.json).
