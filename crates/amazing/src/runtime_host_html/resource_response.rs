@@ -212,7 +212,7 @@ pub(super) fn response_mime_type(response: &amazing_net::Response) -> Option<ama
 }
 
 pub(super) fn response_nosniff(response: &amazing_net::Response) -> bool {
-    amazing_fetch::security::determine_nosniff(&response_header_list(response))
+    amazing_fetch::determine_nosniff(&response_header_list(response))
 }
 
 /// HTML fetch-a-classic-script plus Encoding decode. No HTML meta prescan:
