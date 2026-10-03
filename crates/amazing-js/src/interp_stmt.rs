@@ -539,6 +539,10 @@ impl Interpreter {
         self.completion = None;
         for statement in body {
             let result = self.exec_stmt(statement, env);
+            let result = match result {
+                Err(_) if has_pending_return() => Ok(Flow::Return(take_pending_return().unwrap())),
+                other => other,
+            };
             if self.completion.is_none() { self.completion = value.clone(); }
             value = self.completion.clone();
             match result? {
@@ -612,7 +616,13 @@ impl Interpreter {
     /// Ported from lucid-softworks/lumen (crates/lumen/src/eval.rs) @ f6c9860d, MIT.
     fn dispose_frame(&mut self, frame: Vec<Disposable>, result: Result<Flow, Throw>) -> Result<Flow, Throw> {
         let protected = self.completion.clone();
-        let mut completion = result;
+        // The expression-unwind marker has reached a statement boundary.
+        // Clear it before calling disposers, whose throws must replace Return
+        // rather than be suppressed with the sentinel or mistaken for Return.
+        let mut completion = match result {
+            Err(_) if has_pending_return() => Ok(Flow::Return(take_pending_return().unwrap())),
+            other => other,
+        };
         for d in frame.into_iter().rev() {
             let disposed = self
                 .call_value(&d.method, d.value.clone(), Vec::new())

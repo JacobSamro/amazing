@@ -159,3 +159,33 @@ fn async_finally_and_disposal_preserve_pending_return_and_throw_identity() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+#[test]
+fn injected_generator_returns_cannot_mask_finalizer_or_disposer_throws() {
+    let bodies = [
+        "try{yield 1}finally{throw marker}",
+        "using x={[Symbol.dispose](){throw marker}};yield 1",
+        "try{yield 1}finally{yield 2;throw marker}",
+    ];
+    let mut cases = Vec::new();
+    // An unsupported With in the callable forces the existing AST coroutine
+    // adapter on this fixed base. Without it the ordinary factory uses VM.
+    for actor_prefix in ["", "with({}){};"] {
+        for body in bodies {
+            let drive = if body.contains("yield 2") {
+                "it.return(original);it.next()"
+            } else {
+                "it.return(original)"
+            };
+            cases.push(format!("var original={{}},marker={{}},same=false;var g=eval('(function*(){{{actor_prefix}{body}}})');var it=g();it.next();try{{{drive}}}catch(e){{same=e===marker}}same"));
+        }
+        cases.push(format!("var original={{}},marker={{}},caught=false;var g=eval('(function*(){{{actor_prefix}try{{yield 1}}finally{{try{{throw marker}}catch(e){{caught=e===marker}}}}}})');var it=g();it.next();var r=it.return(original);r.done&&r.value===original&&caught"));
+        cases.push(format!("var original={{}},same=false;var g=eval('(function*(){{{actor_prefix}try{{yield 1}}finally{{throw undefined}}}})');var it=g();it.next();try{{it.return(original)}}catch(e){{same=e===undefined}}same"));
+        cases.push(format!("var original={{}};var g=eval('(function*(){{{actor_prefix}try{{yield 1}}finally{{9}}}})');var it=g();it.next();var r=it.return(original);r.done&&r.value===original"));
+    }
+    let borrowed: Vec<_> = cases
+        .iter()
+        .map(|source| (source.as_str(), JsValue::Bool(true)))
+        .collect();
+    matrix(&borrowed);
+}
