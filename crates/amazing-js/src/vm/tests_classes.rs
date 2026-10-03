@@ -106,7 +106,8 @@ fn suspended_class_strictness_and_heritage_errors_keep_original_throw() {
             }
             class Base{};f().then(v=>done=v);
         "#).unwrap();compiled(&i,"f",!ast);i.drain_microtasks().unwrap();
-        assert_eq!(i.run_script("done&&afterClass===3&&typeof notDeclared==='undefined'&&log.join(',')==='tdz,strict,constructor,prototype'").unwrap(),JsValue::Bool(true));
+        assert_eq!(i.run_script("done&&afterClass===3&&typeof notDeclared==='undefined'&&log.join(',')==='tdz,strict,constructor,prototype'").unwrap(),JsValue::Bool(true),
+            "AST={ast}: {:?}", i.run_script("JSON.stringify([done,typeof afterClass,typeof notDeclared,log])").unwrap());
         assert!(!i.strict_eval_context);
     }
 }

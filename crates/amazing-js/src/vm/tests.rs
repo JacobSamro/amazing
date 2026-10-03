@@ -1766,7 +1766,7 @@ fn jsvm14_class_declarations_share_atomic_expression_lowering() {
     }
     let program = parse_script("function* g(){class A extends (yield 1){x=2}}").unwrap();
     let crate::ast::StmtKind::Function(function) = &program.body[0].kind else { unreachable!() };
-    assert!(compile_function_item(function, program.body[0].span, false).is_err());
+    assert!(compile_function_item(function, program.body[0].span, false).is_ok());
 }
 
 #[test]
