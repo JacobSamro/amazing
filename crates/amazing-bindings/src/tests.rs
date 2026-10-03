@@ -1564,6 +1564,7 @@ fn compare_document_position_exposes_dom_tree_order() {
 fn selection_uses_the_same_live_range_after_text_mutation() {
     let mut h = Host::default();
     let root = element(&mut h);
+    h.dom.pre_insert(root, NodeIdx(0), None).unwrap();
     let text = h.dom.create_text(root, "abc");
     let range = call(&mut h, O::CreateRange, V::Node(NodeIdx(0)), &[]);
     call(&mut h, O::RangeSetStart, range.clone(), &[V::Node(text), V::Number(1.)]);
@@ -2750,7 +2751,9 @@ fn native_ua_payload_cancellation_and_activation_share_one_dispatch() {
 
 #[test]
 fn selection_programmatic_aliases_directions_and_index_uint32() {
-    let mut h = Host::default(); let parent = element(&mut h); let text = h.dom.create_text(parent, "abcdef");
+    let mut h = Host::default(); let parent = element(&mut h);
+    h.dom.pre_insert(parent, NodeIdx(0), None).unwrap();
+    let text = h.dom.create_text(parent, "abcdef");
     let s = call(&mut h, O::GetSelection, V::Node(NodeIdx(0)), &[]);
     call(&mut h, O::SelectionSetBaseAndExtent, s.clone(), &[V::Node(text),V::Number(5.),V::Node(text),V::Number(1.)]);
     assert_eq!(call(&mut h,O::SelectionDirection,s.clone(),&[]),str_value("backward"));
