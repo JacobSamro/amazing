@@ -283,6 +283,12 @@ pub struct Interpreter {
     /// silently kept reading array elements by index instead of actually calling the override.
     original_array_iterator: JsValue,
     intrinsic_arguments_thrower: JsValue,
+    std_iterator_prototypes: Option<Rc<StdIteratorPrototypes>>,
+    std_collection_iterator_prototypes: Option<Rc<StdCollectionIterPrototypes>>,
+    // Instance state spans this actor's realms and serialized coroutine workers.
+    // Weak owners validate pointer reuse; borrows never cross a JS callback.
+    std_iterator_states: RefCell<HashMap<usize, StdIteratorState>>,
+    std_collection_iterator_states: RefCell<HashMap<usize, StdCollectionIterData>>,
     pub string_proto: Obj,
     pub number_proto: Obj,
     pub boolean_proto: Obj,
@@ -509,6 +515,10 @@ impl Interpreter {
             array_proto,
             original_array_iterator: JsValue::Undefined,
             intrinsic_arguments_thrower: JsValue::Undefined,
+            std_iterator_prototypes: None,
+            std_collection_iterator_prototypes: None,
+            std_iterator_states: RefCell::new(HashMap::new()),
+            std_collection_iterator_states: RefCell::new(HashMap::new()),
             string_proto,
             number_proto,
             boolean_proto,

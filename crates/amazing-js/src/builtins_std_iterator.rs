@@ -27,17 +27,11 @@ struct StdIteratorState {
 }
 
 struct StdIteratorPrototypes {
-    owner: Weak<RefCell<JsObject>>,
     base: Obj,
     helper: Obj,
     wrap: Obj,
     array: Obj,
     string: Obj,
-}
-
-thread_local! {
-    static STD_ITERATOR_STATES: RefCell<HashMap<usize, StdIteratorState>> = RefCell::new(HashMap::new());
-    static STD_ITERATOR_PROTOS: RefCell<HashMap<usize, StdIteratorPrototypes>> = RefCell::new(HashMap::new());
 }
 
 impl Interpreter {
@@ -120,8 +114,8 @@ impl Interpreter {
             prototype.borrow_mut().define("next", symbol_data(std_collection_method(self, "next", 0, native_sequence_iterator_next), true, true)).unwrap();
             prototype.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(), symbol_data(JsValue::str(tag), false, true)).unwrap();
         }
-        STD_ITERATOR_PROTOS.with(|registry| registry.borrow_mut().insert(std_weak_id(&self.global_obj),
-            StdIteratorPrototypes { owner: Rc::downgrade(&self.global_obj.0), base, helper, wrap, array, string }));
+        self.std_iterator_prototypes = Some(Rc::new(
+            StdIteratorPrototypes { base, helper, wrap, array, string }));
         self.define_global("Iterator", constructor);
         if let Some(value) = self.global_env.resolve("Iterator") {
             self.global_obj.borrow_mut().define("Iterator", symbol_data(value, true, true)).unwrap();
@@ -129,15 +123,13 @@ impl Interpreter {
     }
 
     fn std_iterator_prototypes(&self) -> Option<(Obj, Obj, Obj)> {
-        STD_ITERATOR_PROTOS.with(|registry| registry.borrow().get(&std_weak_id(&self.global_obj))
-            .filter(|data| std_weak_same(&data.owner, &self.global_obj))
-            .map(|data| (data.base.clone(), data.helper.clone(), data.wrap.clone())))
+        self.std_iterator_prototypes.as_ref()
+            .map(|data| (data.base.clone(), data.helper.clone(), data.wrap.clone()))
     }
 
     fn std_sequence_iterator_proto(&self, kind: SequenceIteratorKind) -> Option<Obj> {
-        STD_ITERATOR_PROTOS.with(|registry| registry.borrow().get(&std_weak_id(&self.global_obj))
-            .filter(|data| std_weak_same(&data.owner, &self.global_obj))
-            .map(|data| if kind == SequenceIteratorKind::String { data.string.clone() } else { data.array.clone() }))
+        self.std_iterator_prototypes.as_ref()
+            .map(|data| if kind == SequenceIteratorKind::String { data.string.clone() } else { data.array.clone() })
     }
 
     fn std_iterator_object(&self, source: Option<StdIteratorRecord>, operation: StdIteratorOperation, wrapped: bool) -> JsValue {
@@ -145,9 +137,9 @@ impl Interpreter {
         let mut object = JsObject::ordinary();
         object.proto = prototype;
         let object = Obj(Rc::new(RefCell::new(object)));
-        STD_ITERATOR_STATES.with(|registry| registry.borrow_mut().insert(std_weak_id(&object),
+        self.std_iterator_states.borrow_mut().insert(std_weak_id(&object),
             StdIteratorState { owner: Rc::downgrade(&object.0), source, operation, index: 0,
-                inner: None, done: false, started: false, executing: false }));
+                inner: None, done: false, started: false, executing: false });
         JsValue::Object(object)
     }
 
@@ -291,25 +283,25 @@ fn std_iterator_callback(i: &mut Interpreter, callback: &JsValue, value: JsValue
 
 fn std_iterator_next(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let JsValue::Object(owner) = &this else { return Err(Throw::type_error("incompatible Iterator helper receiver")); };
-    if STD_ITERATOR_STATES.with(|registry| registry.borrow().get(&std_weak_id(owner)).is_some_and(|state| state.executing)) {
+    if i.std_iterator_states.borrow().get(&std_weak_id(owner)).is_some_and(|state| state.executing) {
         return Err(Throw::type_error("Iterator helper is executing"));
     }
-    let mut state = STD_ITERATOR_STATES.with(|registry| registry.borrow_mut().remove(&std_weak_id(owner)))
+    let mut state = i.std_iterator_states.borrow_mut().remove(&std_weak_id(owner))
         .filter(|state| std_weak_same(&state.owner, owner))
         .ok_or_else(|| Throw::type_error("incompatible Iterator helper receiver"))?;
     state.started = true;
     let result = if state.done { Ok(None) } else { std_iterator_state_step(i, &mut state) };
     if result.as_ref().is_err() { state.done = true; }
-    STD_ITERATOR_STATES.with(|registry| registry.borrow_mut().insert(std_weak_id(owner), state));
+    i.std_iterator_states.borrow_mut().insert(std_weak_id(owner), state);
     result.map(|value| sequence_result(i, value.clone().unwrap_or(JsValue::Undefined), value.is_none()))
 }
 
 fn std_iterator_return(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let JsValue::Object(owner) = &this else { return Err(Throw::type_error("incompatible Iterator helper receiver")); };
-    if STD_ITERATOR_STATES.with(|registry| registry.borrow().get(&std_weak_id(owner)).is_some_and(|state| state.executing)) {
+    if i.std_iterator_states.borrow().get(&std_weak_id(owner)).is_some_and(|state| state.executing) {
         return Err(Throw::type_error("Iterator helper is executing"));
     }
-    let mut state = STD_ITERATOR_STATES.with(|registry| registry.borrow_mut().remove(&std_weak_id(owner)))
+    let mut state = i.std_iterator_states.borrow_mut().remove(&std_weak_id(owner))
         .filter(|state| std_weak_same(&state.owner, owner))
         .ok_or_else(|| Throw::type_error("incompatible Iterator helper receiver"))?;
     let records = if state.done { Vec::new() }
@@ -319,16 +311,14 @@ fn std_iterator_return(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> R
         } else { state.source.iter().cloned().collect() };
     state.executing = state.started && !state.done;
     state.done = true;
-    STD_ITERATOR_STATES.with(|registry| registry.borrow_mut().insert(std_weak_id(owner), state));
+    i.std_iterator_states.borrow_mut().insert(std_weak_id(owner), state);
     let mut completion = Ok(());
     for record in records {
         if let Err(error) = std_iterator_close(i, &record) {
             if completion.is_ok() { completion = Err(error); }
         }
     }
-    STD_ITERATOR_STATES.with(|registry| {
-        if let Some(state) = registry.borrow_mut().get_mut(&std_weak_id(owner)) { state.executing = false; }
-    });
+    if let Some(state) = i.std_iterator_states.borrow_mut().get_mut(&std_weak_id(owner)) { state.executing = false; }
     completion?;
     Ok(sequence_result(i, JsValue::Undefined, true))
 }

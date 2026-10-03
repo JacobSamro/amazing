@@ -5,6 +5,7 @@
 #![forbid(unsafe_code)]
 
 mod async_delegate;
+mod async_from_sync;
 mod compiler;
 mod fast_path;
 mod resources;
@@ -240,12 +241,13 @@ enum Instruction {
     Await(Register, Register),
     AsyncIteratorStart(usize, Register),
     AsyncIteratorNext(Register, usize),
+    AsyncIteratorNextAwait(Register, usize),
+    AsyncIteratorBeginBody(usize),
+    AsyncIteratorNeedsClose(Register, usize),
     AsyncIteratorDone(Register, usize, Register),
     AsyncIteratorValue(Register, Register),
-    /// for-await-of's value: awaited only for a sync iterator (CreateAsyncFromSyncIterator's
-    /// continuation); an async iterator's value is used as is. `(dst, slot, value)`.
-    AsyncIteratorAwaitValue(Register, usize, Register),
     AsyncIteratorClose(Register, usize),
+    AsyncIteratorCloseAwait(Register, usize),
     AsyncIteratorCloseCheck(Register),
     /// Plain (sync-only) `for-of`'s iterator start (JSVM-10): unlike
     /// `AsyncIteratorStart`, never tries `@@asyncIterator` -- a sync `for-of`
@@ -1281,14 +1283,9 @@ impl Program {
                                 *pc -= 1;
                             }
                             Ok(async_delegate::AsyncDelegateStep::Await(value)) => {
-                                let promise = if matches!(async_delegate.as_ref().unwrap().phase,
-                                    async_delegate::AsyncDelegatePhase::AwaitingSyncValue { .. }) {
-                                    async_resolve_value(i, value)
-                                } else {
-                                    match async_resolve_value_checked(i, value) {
-                                        Ok(promise) => promise,
-                                        Err(error) => { *async_delegate = None; return Err(error); }
-                                    }
+                                let promise = match async_resolve_value_checked(i, value) {
+                                    Ok(promise) => promise,
+                                    Err(error) => { *async_delegate = None; return Err(error); }
                                 };
                                 awaited_promise = Some(promise);
                                 *await_dst = Some(*dst);
@@ -1329,11 +1326,17 @@ impl Program {
                                 return Err(Throw::type_error("async iterator next is not callable"));
                             }
                             AsyncIteratorState::Iterator { value, next, exhausted: false, sync: false }
-                        } else if let Some(value) = i.custom_iterator(&iterable)? {
+                        } else {
+                            let method = i.get_prop(&iterable, WellKnownSymbol::Iterator.symbol())?;
+                            if callable_function(&method).is_none() {
+                                return Err(Throw::type_error("value is not async iterable"));
+                            }
+                            let value = i.call_value(&method, iterable, Vec::new())?;
+                            if !value.is_object() {
+                                return Err(Throw::type_error("sync iterator is not an object"));
+                            }
                             let next = i.get_prop(&value, "next")?;
                             AsyncIteratorState::Iterator { value, next, exhausted: false, sync: true }
-                        } else {
-                            AsyncIteratorState::Values { values: i.iterate(&iterable)?, index: 0, exhausted: false }
                         };
                         async_iterators[*slot] = Some(state);
                     }
@@ -1350,6 +1353,36 @@ impl Program {
                             AsyncIteratorState::Iterator { value, next, .. } =>
                                 i.call_value(next, value.clone(), Vec::new())?,
                         };
+                    }
+                    Instruction::AsyncIteratorNextAwait(dst, slot) => {
+                        let state = async_iterators[*slot].as_mut()
+                            .ok_or_else(|| Throw::type_error("missing async iterator frame"))?;
+                        // An abrupt step does not run the loop's later close.
+                        // The sync wrapper performs its own close-on-rejection.
+                        let (iterator, next, sync) = match state {
+                            AsyncIteratorState::Iterator { value, next, exhausted, sync } => {
+                                *exhausted = true;
+                                (value.clone(), next.clone(), *sync)
+                            }
+                            _ => unreachable!("ForAwait uses a real iterator record"),
+                        };
+                        let promise = if sync {
+                            async_from_sync_request(i, iterator, next, 0, None)
+                        } else { i.call_value(&next, iterator, Vec::new())? };
+                        awaited_promise = Some(async_resolve_value_checked(i, promise)?);
+                        *await_dst = Some(*dst);
+                    }
+                    Instruction::AsyncIteratorBeginBody(slot) => {
+                        match async_iterators[*slot].as_mut().expect("iterator started") {
+                            AsyncIteratorState::Iterator { exhausted, .. }
+                            | AsyncIteratorState::Values { exhausted, .. } => *exhausted = false,
+                        }
+                    }
+                    Instruction::AsyncIteratorNeedsClose(dst, slot) => {
+                        registers[*dst] = JsValue::Bool(match async_iterators[*slot].as_ref().expect("iterator started") {
+                            AsyncIteratorState::Iterator { exhausted, .. }
+                            | AsyncIteratorState::Values { exhausted, .. } => !exhausted,
+                        });
                     }
                     Instruction::AsyncIteratorDone(dst, slot, source) => {
                         let result = registers[*source].clone();
@@ -1368,20 +1401,7 @@ impl Program {
                     Instruction::AsyncIteratorValue(dst, source) => {
                         registers[*dst] = i.get_prop(&registers[*source], "value")?;
                     }
-                    Instruction::AsyncIteratorAwaitValue(dst, slot, source) => {
-                        let is_async = matches!(async_iterators[*slot].as_ref(),
-                            Some(AsyncIteratorState::Iterator { sync: false, .. }));
-                        if is_async {
-                            registers[*dst] = registers[*source].clone();
-                        } else {
-                            // AsyncFromSyncIteratorContinuation converts an
-                            // abrupt PromiseResolve into a rejected wrapper.
-                            awaited_promise = Some(async_resolve_value(i, registers[*source].clone()));
-                            *await_dst = Some(*dst);
-                            return Ok(None);
-                        }
-                    }
-                    Instruction::AsyncIteratorClose(dst, slot) => {
+                    Instruction::AsyncIteratorClose(dst, slot) | Instruction::AsyncIteratorCloseAwait(dst, slot) => {
                         // AsyncIteratorClose preserves a pending throw over any
                         // return-method failure, including a later await rejection.
                         if let Some(handler) = try_stack.last_mut() {
@@ -1392,6 +1412,10 @@ impl Program {
                             AsyncIteratorState::Values { .. }
                             | AsyncIteratorState::Iterator { exhausted: true, .. } =>
                                 generator_result(i, JsValue::Undefined, true),
+                            AsyncIteratorState::Iterator { value, sync: true, .. }
+                                if matches!(op, Instruction::AsyncIteratorCloseAwait(_, _)) => {
+                                async_from_sync_request(i, value.clone(), JsValue::Undefined, 1, None)
+                            }
                             AsyncIteratorState::Iterator { value, .. } => {
                                 let method = i.get_prop(value, "return")?;
                                 if method.is_undefined() || method.is_null() {
@@ -2092,6 +2116,12 @@ pub(crate) fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValu
         Ok(promise) => promise,
         Err(Throw(error)) => new_promise(i, rejection(i, error)),
     }
+}
+
+pub(crate) fn async_from_sync_request(
+    i: &mut Interpreter, iterator: JsValue, next: JsValue, kind: u8, input: Option<JsValue>,
+) -> JsValue {
+    async_from_sync::request(i, iterator, next, kind, input)
 }
 
 /// PromiseResolve(%Promise%, value), with abrupt constructor reads preserved.

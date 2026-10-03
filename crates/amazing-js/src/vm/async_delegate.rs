@@ -1,3 +1,5 @@
+// Portions ported from lucid-softworks/lumen (crates/lumen/src/eval.rs,
+// yield_delegate_async) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 //! `yield*` inside an async generator (ECMA-262 15.5.5 YieldExpression evaluation with
 //! generatorKind async, 7.4.3 GetIterator(obj, async), 27.1.6 CreateAsyncFromSyncIterator).
 //!
@@ -8,7 +10,7 @@
 //! `YieldDelegateAsync` instruction re-executes after every suspension and feeds this module the
 //! resumption it received: the consumer's `next`/`throw`/`return` after a yield, or the awaited
 //! promise's settlement (0 = fulfilled, 2 = rejected) after an await.
-use super::{callable_function, generator_result, Interpreter};
+use super::{callable_function, Interpreter};
 use crate::value::{JsValue, Throw, WellKnownSymbol};
 
 /// Where an async delegation is suspended.
@@ -17,9 +19,6 @@ pub(super) enum AsyncDelegatePhase {
     Received,
     /// Awaiting the inner iterator's `next`/`throw`/`return` result (`kind` is which one).
     AwaitingResult { kind: u8 },
-    /// Sync-iterator fallback: awaiting the inner result's `value` (CreateAsyncFromSyncIterator's
-    /// continuation), with the already-read `done` flag.
-    AwaitingSyncValue { kind: u8, done: bool },
     /// A `return` resumption reached a done inner result: awaiting its value before returning.
     AwaitingReturnValue,
     /// A `throw` resumption found no inner `throw` method: awaiting the inner `return()` result
@@ -78,14 +77,6 @@ pub(super) fn start(i: &mut Interpreter, iterable: &JsValue) -> Result<AsyncDele
     Ok(AsyncDelegate { iterator, next, sync, phase: AsyncDelegatePhase::Received })
 }
 
-/// Best-effort IteratorClose of a sync inner iterator (its own completion is discarded, since
-/// the caller is already completing abruptly or with the protocol TypeError).
-fn close_sync(i: &mut Interpreter, iterator: &JsValue) {
-    if let Ok(Some(method)) = get_method(i, iterator, "return") {
-        let _ = i.call_value(&method, iterator.clone(), Vec::new());
-    }
-}
-
 /// Advance the delegation with `(kind, input)`: the consumer's resumption (0 next, 1 return,
 /// 2 throw) in `Received`, or an awaited settlement (0 fulfilled, 2 rejected) otherwise. An
 /// `Err` completes the `yield*` with a throw; the caller then drops the delegation state.
@@ -103,18 +94,6 @@ pub(super) fn step(i: &mut Interpreter, state: &mut AsyncDelegate, kind: u8, inp
             }
             let done = i.get_prop(&input, "done")?.to_boolean();
             inner_result(i, state, request, done, &input)
-        }
-        AsyncDelegatePhase::AwaitingSyncValue { kind: request, done } => {
-            if kind == 2 {
-                // CreateAsyncFromSyncIteratorContinuation's closeOnRejection: only `next`/`throw`
-                // results close the sync iterator when their value rejects; `return` does not.
-                if !done && request != 1 {
-                    close_sync(i, &state.iterator);
-                }
-                return Err(Throw(input));
-            }
-            let result = generator_result(i, input, done);
-            inner_result(i, state, request, done, &result)
         }
         AsyncDelegatePhase::AwaitingReturnValue => {
             if kind == 2 { Err(Throw(input)) } else { Ok(AsyncDelegateStep::Return(input)) }
@@ -136,6 +115,11 @@ fn call_inner(i: &mut Interpreter, state: &mut AsyncDelegate, kind: u8, input: J
     -> Result<AsyncDelegateStep, Throw>
 {
     let iterator = state.iterator.clone();
+    if state.sync {
+        let result = super::async_from_sync_request(i, iterator, state.next.clone(), kind, Some(input));
+        state.phase = AsyncDelegatePhase::AwaitingResult { kind };
+        return Ok(AsyncDelegateStep::Await(result));
+    }
     let method = match kind {
         0 => state.next.clone(),
         1 => match get_method(i, &iterator, "return")? {
@@ -146,10 +130,6 @@ fn call_inner(i: &mut Interpreter, state: &mut AsyncDelegate, kind: u8, input: J
         _ => match get_method(i, &iterator, "throw")? {
             Some(method) => method,
             None => {
-                if state.sync {
-                    close_sync(i, &iterator);
-                    return Err(Throw::type_error("delegated iterator does not have a throw method"));
-                }
                 // AsyncIteratorClose(iteratorRecord, NormalCompletion) then the TypeError.
                 let Some(close) = get_method(i, &iterator, "return")? else {
                     return Err(Throw::type_error("delegated iterator does not have a throw method"));
@@ -161,15 +141,6 @@ fn call_inner(i: &mut Interpreter, state: &mut AsyncDelegate, kind: u8, input: J
         },
     };
     let result = i.call_value(&method, iterator, vec![input])?;
-    if state.sync {
-        if !result.is_object() {
-            return Err(Throw::type_error("iterator result is not an object"));
-        }
-        let done = i.get_prop(&result, "done")?.to_boolean();
-        let value = i.get_prop(&result, "value")?;
-        state.phase = AsyncDelegatePhase::AwaitingSyncValue { kind, done };
-        return Ok(AsyncDelegateStep::Await(value));
-    }
     state.phase = AsyncDelegatePhase::AwaitingResult { kind };
     Ok(AsyncDelegateStep::Await(result))
 }

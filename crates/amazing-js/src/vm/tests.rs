@@ -1253,6 +1253,143 @@ fn jsvm17_saved_context_distinguishes_recursive_and_borrowed_resumptions() {
 }
 
 #[test]
+fn jsvm20_foreign_iterator_prototypes_survive_embedding_global_replacement() {
+    let mut i=Interpreter::new();
+    let parent=i.binding_current_realm();
+    let parent_proto=i.run_script("Object.getPrototypeOf([0].values())").unwrap();
+    let child=i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
+    let child_proto=i.binding_eval_in_realm(child,"Object.getPrototypeOf([0].values())").unwrap();
+    assert_ne!(parent_proto,child_proto);
+    assert_eq!(i.binding_eval_in_realm(child,"Object.getPrototypeOf([1].values())").unwrap(),child_proto);
+    let helper=i.binding_eval_in_realm(child,"Iterator.from([1,2]).map(v=>v+1)").unwrap();
+    i.global_env.declare_var("foreignHelper",helper).unwrap();
+    assert_eq!(i.run_script("foreignHelper.next().value + foreignHelper.next().value").unwrap(),JsValue::num(5.0));
+    let function=i.binding_eval_in_realm(child,r#"
+        (async function(){with({}){}
+            var ap=Object.getPrototypeOf([1].values()),mp=Object.getPrototypeOf(new Map().values()),
+                sp=Object.getPrototypeOf('x'[Symbol.iterator]());
+            await 0;
+            return ap===Object.getPrototypeOf([2].values()) && mp===Object.getPrototypeOf(new Map().values())
+                && sp===Object.getPrototypeOf('y'[Symbol.iterator]());
+        })
+    "#).unwrap();
+    let output=i.binding_call_in_realm(child,&function,JsValue::Undefined,Vec::new()).unwrap();
+    i.drain_microtasks().unwrap();
+    let JsValue::Object(promise)=output else {unreachable!()};
+    assert!(matches!(&promise.borrow().exotic,Exotic::Promise(state) if state.state==PromiseFate::Fulfilled(JsValue::Bool(true))));
+    assert_eq!(i.binding_current_realm(),parent);
+    assert_eq!(i.run_script("Object.getPrototypeOf([0].values())").unwrap(),parent_proto);
+}
+
+#[test]
+fn jsvm20_iterator_identity_and_live_cursor_state_cross_coroutine_workers() {
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        for force_thread in [false,true] {
+            if force_thread && backend==ExecutionBackend::Bytecode {continue;}
+            let blocker=if force_thread {"with({}){}"}else{""};
+            let source=format!(r#"
+                var map=new Map([[1,'a'],[2,'b'],[3,'c']]),set=new Set([1,2,3]);
+                var mi=map.values(),si=set.values(),helper=Iterator.from([10,20]).map(v=>v+1);
+                var ap=Object.getPrototypeOf([0].values()),sp=Object.getPrototypeOf('x'[Symbol.iterator]());
+                var mp=Object.getPrototypeOf(mi),sep=Object.getPrototypeOf(si),hp=Object.getPrototypeOf(helper);
+                var mv=[],sv=[],hv=[],identities=false,escaped,escapeValue;
+                async function f(){{{blocker}
+                    identities=Object.getPrototypeOf([1].values())===ap && Object.getPrototypeOf('y'[Symbol.iterator]())===sp
+                        && Object.getPrototypeOf(new Map().values())===mp && Object.getPrototypeOf(new Set().values())===sep
+                        && Object.getPrototypeOf(Iterator.from([1]).map(v=>v))===hp;
+                    mv.push(mi.next().value);map.delete(1);mv.push(mi.next().value);map.clear();map.set(4,'d');mv.push(mi.next().value);
+                    sv.push(si.next().value);set.delete(1);sv.push(si.next().value);set.clear();set.add(4);sv.push(si.next().value);
+                    for await(const value of helper)hv.push(value);
+                    await 0;escaped=Iterator.from([5]).map(v=>v+1);
+                }}
+                f().then(function(){{escapeValue=escaped.next().value}});
+            "#);
+            let mut i=Interpreter::new();
+            i.run_script_with_backend(&source,backend).unwrap_or_else(|e|panic!("{backend:?} thread={force_thread}: {e:?}"));
+            assert_eq!(i.run_script("identities && mv.join(',')==='a,b,d' && sv.join(',')==='1,2,4' && hv.join(',')==='11,21' && escapeValue===6").unwrap(),
+                JsValue::Bool(true),"{backend:?} thread={force_thread}");
+        }
+    }
+}
+
+#[test]
+fn jsvm20_wrappers_preserve_live_iteration_and_yield_star_error_precedence() {
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        let mut i=Interpreter::new();
+        i.run_script_with_backend(r#"
+            var values=[],array=[1],doneReads=0,valueReads=0,thenReads=0;
+            async function live(){for await(const value of array){values.push(value);if(value===1)array.push(2)}}
+            live();
+            var iterable={[Symbol.iterator](){return {next(){return {
+                get done(){doneReads++;return true},get value(){valueReads++;return 7}
+            }}}}};
+            Object.defineProperty(Object.prototype,'then',{get(){thenReads++;return undefined},configurable:true});
+            async function empty(){for await(const value of iterable){throw 97}}
+            empty();
+        "#,backend).unwrap();
+        assert_eq!(i.run_script("values.join(',')==='1,2' && doneReads===1 && valueReads===1 && thenReads>=1").unwrap(),JsValue::Bool(true),"{backend:?}");
+        for request in ["next", "return", "throw"] {
+            for has_method in [false,true] {
+                let source=format!(r#"
+                    var error={{}},closeError={{}},observed,closed=0,log=[],nextValue=1;
+                    var iterator={{next(){{return {{value:nextValue,done:false}}}},return(){{closed++;throw closeError}}}};
+                    if({has_method})iterator.throw=function(){{return {{value:Promise.reject(error),done:false}}}};
+                    var iterable={{[Symbol.iterator](){{return iterator}}}};
+                    async function* f(){{yield* iterable}}
+                    var it=f();
+                    it.next().then(function(){{
+                        if('{request}'==='next')nextValue=Promise.reject(error);
+                        return it['{request}'](error).then(function(){{log.push('wrong')}},function(e){{observed=e}});
+                    }});
+                "#);
+                let mut i=Interpreter::new();i.run_script_with_backend(&source,backend).unwrap();
+                let expected=if request=="return" || (request=="throw"&&!has_method){"closeError"}else{"error"};
+                assert_eq!(i.run_script(&format!("observed==={expected} && closed===1 && log.length===0")).unwrap(),JsValue::Bool(true),"{backend:?}: {request} method={has_method}");
+            }
+        }
+    }
+}
+
+#[test]
+fn jsvm20_sync_iteration_reads_results_before_suspension_and_closes_once() {
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        for force_thread in [false, true] {
+            if force_thread && backend == ExecutionBackend::Bytecode { continue; }
+            let blocker = if force_thread { "with({}){}" } else { "" };
+            for stage in ["next", "done", "value", "constructor", "rejection"] {
+                for done in [false, true] {
+                    let source = format!(r#"
+                        var log=[],error={{}},closeError={{}},closed=0,observed;
+                        var p=Promise.reject(error);
+                        if ('{stage}'==='constructor') {{p=Promise.resolve(1);Object.defineProperty(p,'constructor',{{get(){{log.push('constructor');throw error}}}})}}
+                        var iterator={{next(){{
+                            log.push('next');if('{stage}'==='next')throw error;
+                            return {{get done(){{log.push('done');if('{stage}'==='done')throw error;return {done}}},
+                                get value(){{log.push('value');if('{stage}'==='value')throw error;return p}}}};
+                        }},return(){{closed++;throw closeError}}}};
+                        var iterable={{[Symbol.iterator](){{return iterator}}}};
+                        async function f() {{{blocker}
+                            try{{for await(const value of iterable){{log.push('wrong')}}}}
+                            catch(e){{observed=e;log.push('catch')}}
+                        }}
+                        f();log.push('after');
+                    "#);
+                    let mut i=Interpreter::new();
+                    i.run_script_with_backend(&source,backend).unwrap_or_else(|e|
+                        panic!("{backend:?} thread={force_thread} {stage} done={done}: {e:?}"));
+                    let closes = !done && matches!(stage,"constructor"|"rejection");
+                    assert_eq!(i.run_script(&format!("observed===error && closed==={} && log.indexOf('wrong')===-1 && log.indexOf('after')<log.indexOf('catch')",u8::from(closes))).unwrap(),
+                        JsValue::Bool(true),"{backend:?} thread={force_thread} {stage} done={done}");
+                    let prefix=match stage {"next"=>"next,after", "done"=>"next,done,after", "value"=>"next,done,value,after", "constructor"=>"next,done,value,constructor,after", _=>"next,done,value,after"};
+                    assert_eq!(i.run_script("log.join(',')").unwrap(),JsValue::str(format!("{prefix},catch")),
+                        "{backend:?} thread={force_thread} {stage} done={done}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn jsvm19_await_constructor_abrupt_completion_stays_in_the_active_context() {
     for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
         for force_thread in [false, true] {
@@ -1304,7 +1441,7 @@ fn jsvm19_sync_iterator_and_generator_return_keep_rejected_wrapper_timing() {
                 let mut i = Interpreter::new();
                 i.run_script_with_backend(&source, backend).unwrap_or_else(|e|
                     panic!("{backend:?} thread={force_thread} {iterable}: {e:?}"));
-                assert_eq!(i.run_script("log.indexOf('after')<log.indexOf('catch') && log.indexOf('wrong')===-1 && gets===1 && observed===error").unwrap(),
+                assert_eq!(i.run_script("log.join(',')==='get,after,catch' && gets===1 && observed===error").unwrap(),
                     JsValue::Bool(true), "{backend:?} thread={force_thread} {iterable}: {:?}",
                     i.run_script("log.join(',')").unwrap());
             }

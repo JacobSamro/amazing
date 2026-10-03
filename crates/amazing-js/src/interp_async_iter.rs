@@ -1,3 +1,6 @@
+// Portions ported from lucid-softworks/lumen (crates/lumen/src/eval.rs,
+// for-of async-from-sync continuation and iterator closing)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 //! Async iteration uses the iterator protocol and the existing Promise job queue.
 use super::*;
 
@@ -42,14 +45,15 @@ impl Interpreter {
         Err(Throw::range_error("async iterator promise resolution exceeded the limit"))
     }
 
-    fn await_sync_iteration_value(&mut self, value: JsValue) -> Result<JsValue, Throw> {
-        if let Some(result) = coroutine_await_sync(self, value.clone()) {
-            return result;
+    fn close_async_iterator(&mut self, iterator: &JsValue, sync: bool) -> Result<(), Throw> {
+        if sync {
+            let wrapper = vm::async_from_sync_request(self, iterator.clone(), JsValue::Undefined, 1, None);
+            let result = self.await_iteration_value(wrapper)?;
+            if !result.is_object() {
+                return Err(Throw::type_error("async iterator return result is not an object"));
+            }
+            return Ok(());
         }
-        self.await_iteration_value(value)
-    }
-
-    fn close_async_iterator(&mut self, iterator: &JsValue) -> Result<(), Throw> {
         let method = self.get_prop(iterator, "return")?;
         if method.is_undefined() || method.is_null() { return Ok(()); }
         if callable_function(&method).is_none() {
@@ -76,63 +80,58 @@ impl Interpreter {
             if !iterator.is_object() {
                 return Err(Throw::type_error("async iterator is not an object"));
             }
-            Some(iterator)
+            iterator
         } else {
-            self.custom_iterator(iterable)?
-        };
-        let Some(iterator) = iterator else {
-            // Arrays and strings use the built-in sync iterator path.
-            for value in self.iterate(iterable)? {
-                let value = self.await_sync_iteration_value(value)?;
-                let iteration_env = for_iteration_env(left, env);
-                self.bind_for(left, value, &iteration_env)?;
-                match self.exec_stmt(body, &iteration_env)? {
-                    Flow::Normal | Flow::Continue(None) => {}
-                    Flow::Break(None) => break,
-                    flow => return Ok(flow),
-                }
+            let method = self.get_prop(iterable, WellKnownSymbol::Iterator.symbol())?;
+            if callable_function(&method).is_none() {
+                return Err(Throw::type_error("value is not async iterable"));
             }
-            return Ok(Flow::Normal);
+            let iterator = self.call_value(&method, iterable.clone(), Vec::new())?;
+            if !iterator.is_object() {
+                return Err(Throw::type_error("sync iterator is not an object"));
+            }
+            iterator
         };
         let next = self.get_prop(&iterator, "next")?;
-        if callable_function(&next).is_none() {
+        if async_iterator && callable_function(&next).is_none() {
             return Err(Throw::type_error("async iterator next is not callable"));
         }
         for _ in 0..100_000 {
-            let result = self.call_value(&next, iterator.clone(), Vec::new())?;
             let result = if async_iterator {
-                self.await_iteration_value(result)?
-            } else { result };
+                self.call_value(&next, iterator.clone(), Vec::new())?
+            } else {
+                vm::async_from_sync_request(self, iterator.clone(), next.clone(), 0, None)
+            };
+            let result = self.await_iteration_value(result)?;
             if !result.is_object() {
                 return Err(Throw::type_error("async iterator result is not an object"));
             }
             if self.get_prop(&result, "done")?.to_boolean() { return Ok(Flow::Normal); }
             let value = self.get_prop(&result, "value")?;
-            // Only a sync iterator's value is awaited (CreateAsyncFromSyncIterator); an async
-            // iterator's result value is used as is.
-            let value = if async_iterator { value } else { self.await_sync_iteration_value(value)? };
+            // Sync values have already passed through their wrapper reaction.
+            // Genuine async iterator values remain untouched.
             let iteration_env = for_iteration_env(left, env);
             if let Err(error) = self.bind_for(left, value, &iteration_env) {
-                let _ = self.close_async_iterator(&iterator);
+                let _ = self.close_async_iterator(&iterator, !async_iterator);
                 return Err(error);
             }
             match self.exec_stmt(body, &iteration_env) {
                 Ok(Flow::Normal | Flow::Continue(None)) => {}
                 Ok(Flow::Break(None)) => {
-                    self.close_async_iterator(&iterator)?;
+                    self.close_async_iterator(&iterator, !async_iterator)?;
                     return Ok(Flow::Normal);
                 }
                 Ok(flow) => {
-                    self.close_async_iterator(&iterator)?;
+                    self.close_async_iterator(&iterator, !async_iterator)?;
                     return Ok(flow);
                 }
                 Err(error) => {
-                    let _ = self.close_async_iterator(&iterator);
+                    let _ = self.close_async_iterator(&iterator, !async_iterator);
                     return Err(error);
                 }
             }
         }
-        let _ = self.close_async_iterator(&iterator);
+        let _ = self.close_async_iterator(&iterator, !async_iterator);
         Err(Throw::range_error("async iteration exceeded the limit"))
     }
 }

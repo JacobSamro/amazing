@@ -1,0 +1,40 @@
+{
+  "ticket": "JSVM-20",
+  "base": "be033b44db3b15eb7e958b7e918090e41e96f77a",
+  "platform": "Linux Boat native /tmp source and target",
+  "upstream": "lucid-softworks/lumen crates/lumen/src/eval.rs @ f6c9860d44fa52249cfd647122edea184d32c863, MIT",
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "before_host_sha256": "fe274d03f54d1790ab2819dcbceb8fa7e8129707bd9be2be5cc15364dad75535",
+  "after_host_sha256": "04da03a05034c8aa51a22b95e5973771b071e219be904c0f1effaff49e4932af",
+  "workspace": {"passed":3797,"skipped":17,"doctests_passed":4},
+  "crate": {"passed":564,"skipped":1},
+  "corpus": {
+    "selection": ["language","built-ins/Promise","built-ins/Async","built-ins/Iterator/","built-ins/Array/","built-ins/String/","built-ins/Map/","built-ins/Set/"],
+    "unique_selected_files":31225,
+    "before_passed_files":30442,"after_passed_files":30447,
+    "before_passed_variants":57355,"after_passed_variants":57365,
+    "gained_files":5,"lost_files":0,"gained_variants":10,"lost_variants":0,
+    "classification_changes":5,"timeout_seconds":20,"jobs":8
+  },
+  "after_classification_sha256": {
+    "language":"2c5852e24afbe79f3114673cacd8e7ec7eee7e87207183a39e8b3b112bb1fc93",
+    "built-ins/Promise":"9eda4303668d8fe76be297362b634878ec1a03014c83949bd7fbb78ca3081d0b",
+    "built-ins/Async":"473bb16d538d5cb41d85f35ca23c74b6a1826030f7a3ec49ffb7e1fa94406857",
+    "built-ins/Iterator/":"d5ae4f2b597d937870650f9ff15774489a4288a46a70b9a7b8b70295c9ab068f",
+    "built-ins/Array/":"507173bdfbf748214584a1ee1c69a8d43f4f9aff6bfe3fa9daf949fa179875ce",
+    "built-ins/String/":"9c7ee471265d931f557c43ca0f0ba649f531e87e61df1fc0b1f9aca9310db207",
+    "built-ins/Map/":"90a591591eabff32632898d3dccc084dea53b329b30d8a9dbfd29bf112cbb9c7",
+    "built-ins/Set/":"f27a6d0e646dadef7f04d166003f4e5e1ac412b6a5f7a99138b4ad92f7bfc9eb"
+  },
+  "gained_files": [
+    "language/statements/for-await-of/async-from-sync-iterator-continuation-abrupt-completion-get-constructor.js",
+    "language/statements/for-await-of/ticks-with-async-iter-resolved-promise-and-constructor-lookup-two.js",
+    "language/statements/for-await-of/ticks-with-async-iter-resolved-promise-and-constructor-lookup.js",
+    "language/statements/for-await-of/ticks-with-sync-iter-resolved-promise-and-constructor-lookup.js",
+    "built-ins/AsyncFromSyncIteratorPrototype/throw/throw-undefined-poisoned-return.js"
+  ],
+  "regressions": ["Synchronous done/value and constructor reads before suspension", "Wrapper reactions and outer Await tick ordering", "Next/Return/Throw close and original-error precedence", "Forced AST coroutine prototype identity and live cursor mutation", "Main-worker helper escape and foreign realm embedding-global replacement"],
+  "boundaries": ["Realm-owned installed iterator/collection prototypes", "Interpreter actor-owned instance maps retain weak owner identity and release borrows before JS", "Instance maps do not swap with realms", "WeakMap/WeakSet TLS and general worker support excluded", "No factory, FDI, reference or module observer changes"],
+  "artifacts": ["jsvm20-workspace-final.log","jsvm20-docs-final.log","jsvm20-crate-v3.log","jsvm20-after-*.json","jsvm20-before-built-ins-*.json","jsvm19-after-language.json","jsvm19-after-built-ins-Promise.json","jsvm19-after-built-ins-Async.json"]
+}

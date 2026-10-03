@@ -17,6 +17,8 @@ struct RealmState {
     array_proto: Obj,
     original_array_iterator: JsValue,
     intrinsic_arguments_thrower: JsValue,
+    std_iterator_prototypes: Option<Rc<StdIteratorPrototypes>>,
+    std_collection_iterator_prototypes: Option<Rc<StdCollectionIterPrototypes>>,
     string_proto: Obj,
     number_proto: Obj,
     boolean_proto: Obj,
@@ -65,6 +67,8 @@ impl RealmState {
             array_proto: i.array_proto.clone(),
             original_array_iterator: i.original_array_iterator.clone(),
             intrinsic_arguments_thrower: i.intrinsic_arguments_thrower.clone(),
+            std_iterator_prototypes: i.std_iterator_prototypes.clone(),
+            std_collection_iterator_prototypes: i.std_collection_iterator_prototypes.clone(),
             string_proto: i.string_proto.clone(),
             number_proto: i.number_proto.clone(),
             boolean_proto: i.boolean_proto.clone(),
@@ -111,6 +115,8 @@ impl RealmState {
         i.array_proto = self.array_proto;
         i.original_array_iterator = self.original_array_iterator;
         i.intrinsic_arguments_thrower = self.intrinsic_arguments_thrower;
+        i.std_iterator_prototypes = self.std_iterator_prototypes;
+        i.std_collection_iterator_prototypes = self.std_collection_iterator_prototypes;
         i.string_proto = self.string_proto;
         i.number_proto = self.number_proto;
         i.boolean_proto = self.boolean_proto;

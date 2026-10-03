@@ -172,7 +172,7 @@ fn std_map_has(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result
     let key = std_collection_key(&std_reflect_arg(&args, 0));
     Ok(JsValue::Bool(matches!(&map.borrow().exotic, Exotic::Map(state) if state.entries.iter().any(|(candidate, _)| candidate.same(&key)))))
 }
-fn std_map_delete(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn std_map_delete(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let map = std_collection_map(&this)?;
     let key = std_collection_key(&std_reflect_arg(&args, 0));
     let mut object = map.borrow_mut();
@@ -182,13 +182,13 @@ fn std_map_delete(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         } else { None }
     } else { None };
     drop(object);
-    if let Some(index) = removed { std_collection_iter_removed(&map, Some(index)); }
+    if let Some(index) = removed { std_collection_iter_removed(i, &map, Some(index)); }
     Ok(JsValue::Bool(removed.is_some()))
 }
-fn std_map_clear(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn std_map_clear(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let map = std_collection_map(&this)?;
     if let Exotic::Map(state) = &mut map.borrow_mut().exotic { state.entries.clear(); }
-    std_collection_iter_removed(&map, None);
+    std_collection_iter_removed(i, &map, None);
     Ok(JsValue::Undefined)
 }
 fn std_map_keys(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -243,7 +243,7 @@ fn std_set_has(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result
     let key = std_collection_key(&std_reflect_arg(&args, 0));
     Ok(JsValue::Bool(matches!(&set.borrow().exotic, Exotic::Set(state) if state.entries.iter().any(|candidate| candidate.same(&key)))))
 }
-fn std_set_delete(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn std_set_delete(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let set = std_collection_set(&this)?;
     let key = std_collection_key(&std_reflect_arg(&args, 0));
     let mut object = set.borrow_mut();
@@ -251,13 +251,13 @@ fn std_set_delete(_: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         if let Some(index) = state.entries.iter().position(|candidate| candidate.same(&key)) { state.entries.remove(index); Some(index) } else { None }
     } else { None };
     drop(object);
-    if let Some(index) = removed { std_collection_iter_removed(&set, Some(index)); }
+    if let Some(index) = removed { std_collection_iter_removed(i, &set, Some(index)); }
     Ok(JsValue::Bool(removed.is_some()))
 }
-fn std_set_clear(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn std_set_clear(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let set = std_collection_set(&this)?;
     if let Exotic::Set(state) = &mut set.borrow_mut().exotic { state.entries.clear(); }
-    std_collection_iter_removed(&set, None);
+    std_collection_iter_removed(i, &set, None);
     Ok(JsValue::Undefined)
 }
 fn std_set_values(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {

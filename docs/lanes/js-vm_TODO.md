@@ -1113,3 +1113,39 @@ suspension, successful internal wrapper reaction plus outer Await, abrupt
 normalization, iterator close and original-error precedence. Exact shared AST
 exec_for_await_of sync adapter/close helper is granted; genuine async paths and
 factory/FDI/reference behavior remain outside that ticket.
+
+## JSVM-20: AsyncFromSync continuation and worker iterator state
+
+Fixed dependency `be033b44` (JSVM-19). Port the whole MIT Lumen for-of
+continuation and async yield-star area from `crates/lumen/src/eval.rs` at
+`f6c9860d44fa52249cfd647122edea184d32c863`, adapting the native Promise and
+iterator records to ECMA-262 AsyncFromSyncIteratorContinuation. The wrapper
+reads done/value synchronously, then uses an internal unwrapping reaction and
+the caller's outer Await. Constructor-get and value-rejection failures close
+only unfinished iterators when required, preserving the original throw;
+missing throw instead performs normal close and retains close errors. Return
+does not close again. VM ForAwait and synchronous async yield-star share the
+adapter with the granted AST ForAwait path. Genuine async iterator values and
+synchronous ForOf retain their separate protocol behavior.
+
+Real synchronous iteration exposed worker-thread prototype/state TLS losses.
+Under explicit owner grants, iterator and collection prototype records now
+belong to the realm and transfer through RealmState. Iterator/helper and
+collection cursor maps belong to the Interpreter actor, retain weak owner
+identity checks and release RefCell borrows before JavaScript callbacks. The
+maps do not swap with realms. Map/Set delete and clear update live cursors.
+Prototype records preserve installed identity after embedding-global replacement;
+their obsolete weak global-owner filters are removed. WeakMap/WeakSet and other
+TLS registries are outside this ticket; this is not a general worker-support claim.
+
+Grouped regressions cover both execution backends and forced AST coroutines:
+done/value/constructor ordering, abrupt boundaries, original-error precedence,
+yield-star Next/Return/Throw, live array growth, cross-worker Array/String/Map/Set
+prototype identities, helper escape and cursor delete/clear, and foreign-realm
+round trips. Whole language, Promise, Async, Iterator, Array, String, Map and Set
+selections cover **31225 unique files**: **30442 ->30447 passing files**,
+**57355 ->57365 passing variants**, five gained files/ten variants and zero
+losses. The initial twelve module-worker losses are all restored by the actor
+state transfer. Final native Boat workspace **3797 passed**,17 skipped;
+doctests **four passed**. Compact evidence:
+[js-vm20_evidence.json](js-vm20_evidence.json).
