@@ -146,7 +146,7 @@ fn suspended_class_decorators_keep_receiver_keys_and_extra_initializers() {
                 var f={prefix}function{star}(){{return @(({pause},object).dec) class C{{
                     @(({pause},object).dec) [({pause},key)]=3;
                     static value=9;static{{this.self=C}}
-                }}};
+                }}}};
             "#,prefix=if kind=="generator"{""}else{"async "},star=if kind=="async"{""}else{"*"});
             let mut i=Interpreter::new();i.force_ast_callables=ast;i.run_script(&source).unwrap();compiled(&i,"f",!ast);
             let drive=match kind{
