@@ -198,6 +198,7 @@ impl Serializer<'_> {
                 };
                 map.entry(a.ns.clone()).or_default().push(p.clone());
                 attr(out,&format!("xmlns:{p}"),&units(a.ns.as_deref().unwrap()),self.strict)?;
+                declarations.insert(p.clone(),units(a.ns.as_deref().unwrap()));
                 candidate = Some(p);
             }
             if self.strict && (!valid_local(&a.local) || (a.local == "xmlns" && a.ns.is_none())) { return Err(DomError::InvalidStateError); }
@@ -238,6 +239,10 @@ mod tests {
         dom.set_attribute_qualified_ns(unbound,Some("urn:attr"),"a:value","x").unwrap();
         dom.set_attribute_qualified_ns(unbound,Some(XML),"xml:lang","en").unwrap();
         assert_eq!(text(&dom,unbound,true),"<root xmlns=\"urn:root\" xmlns:a=\"urn:attr\" a:value=\"x\" xml:lang=\"en\"/>");
+        let collision=dom.create_element_ns_in(NodeIdx(0),None,"r").unwrap();
+        dom.set_attribute_qualified_ns(collision,Some("urn:first"),"p:one","a").unwrap();
+        dom.set_attribute_qualified_ns(collision,Some("urn:second"),"p:two","b").unwrap();
+        assert_eq!(text(&dom,collision,true),"<r xmlns:p=\"urn:first\" p:one=\"a\" xmlns:ns1=\"urn:second\" ns1:two=\"b\"/>");
     }
     #[test]
     fn xml_permissive_serialization_and_strict_well_formedness_are_distinct() {
