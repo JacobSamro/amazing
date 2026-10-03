@@ -1,0 +1,130 @@
+{
+  "base": "e15d2d87b2465e4a551431b0f41f5a08c71508e9",
+  "source": "58f4180ccf263ccde3851fff9bd11d530d5205dd",
+  "platform": "Linux Boat native ext4",
+  "workspace_before_from_identical_css52_source": 3939,
+  "workspace_passed": 3946,
+  "all_prior_workspace_passes_retained": true,
+  "workspace_skipped": 17,
+  "doctests_passed": 4,
+  "css_before": 431,
+  "css_after": 438,
+  "new_grouped_tests": 7,
+  "parsing_passed": 4312,
+  "parsing_total": 5126,
+  "parsing_files": 514,
+  "parsing_skipped_nonliteral": 169,
+  "parsing_gained": 0,
+  "parsing_lost": 0,
+  "all_parsing_failure_multiplicities_retained": true,
+  "render": {
+    "css-cascade": {
+      "before": {
+        "pass": 17,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 17,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 21,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-conditional": {
+      "before": {
+        "pass": 29,
+        "mismatch": 37,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 29,
+        "mismatch": 37,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 66,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-fonts": {
+      "before": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 32,
+      "gained": 0,
+      "lost": 0
+    },
+    "selectors": {
+      "before": {
+        "pass": 82,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 82,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 91,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-shadow": {
+      "before": {
+        "pass": 0,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 0,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 35,
+      "gained": 0,
+      "lost": 0
+    }
+  },
+  "renderer_sha256": "d65a5abaaa8a223e913961a5d2edc40192a55ea9df95c802d983a9edc5f16d6d",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "installed_import_gains": "Not claimed; facade actual transport adoption separate"
+}
