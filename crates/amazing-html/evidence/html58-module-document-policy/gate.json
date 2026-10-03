@@ -1,0 +1,29 @@
+{
+  "baseline": "3f6595f328a240845ea8c8078b51df0a94f00a17",
+  "source": "82232376d4424ba5ac05537d52020e3c7a4d3c0c",
+  "series": [
+    "57b9d57dbda0711f9aa33efc5c9ab7088a02f5c6",
+    "82232376d4424ba5ac05537d52020e3c7a4d3c0c"
+  ],
+  "owned_passed": 669,
+  "owned_skipped": 6,
+  "workspace_passed": 4106,
+  "workspace_skipped": 17,
+  "doctests_passed": 4,
+  "cli_html5lib_passed": 1894,
+  "expanded_passed": 1930,
+  "expanded_unsupported": 6,
+  "passing_assertion_losses": 0,
+  "passing_file_losses": 0,
+  "wpt_gains": 0,
+  "generation_api_mechanical_native_dependencies": [
+    "22ef9960028a034f01d85c51830c3e3c2ff0cdf8",
+    "3e6e6bc16a370aeb9941883fd0c862577f6061e6"
+  ],
+  "raw_logs_sha256": {
+    "html58-corrected-after-doc.log": "4699552e3e92688874857db8b0f42549a856f1952563b6fcfb89f4fd5f9f5788",
+    "html58-corrected-after-build.log": "80ce897972df8e4167ff7910ec09ab56f4250782a2beff6c03a8d22be17375f2",
+    "html58-corrected-after-workspace.log": "1751059193d2b7ddee72c086a51c9928e0dec0ed0477adee2572351595eedace",
+    "html58-corrected-after-owned.log": "dabed5f9fca386faa7ebddfc61603f73ec6eb4e2f39f191d14114512817647cb"
+  }
+}
