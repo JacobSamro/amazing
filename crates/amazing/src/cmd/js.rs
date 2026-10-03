@@ -64,7 +64,7 @@ pub(crate) fn script_source_from_node(
     } else { return None; };
     let mut source = String::new();
     for child in dom.children(node) {
-        if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
+        if let amazing_dom::NodeKind::Text { data } | amazing_dom::NodeKind::CDATASection { data } = &dom.get(child).kind {
             source.push_str(data);
         }
     }
