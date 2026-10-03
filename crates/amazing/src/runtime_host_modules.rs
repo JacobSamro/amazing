@@ -346,7 +346,6 @@ impl RuntimeBindings {
         js.binding_call(&dispatch, global, vec![event]).map(|_| ())
     }
     pub(crate) fn dispatch_module_script_event(&self, js: &mut Interpreter, node: NodeIdx, name: &str) -> Result<(), Throw> {
-        js.dispatch_dom_event(node.0, name)?;
         let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
         amazing_bindings::dispatch_user_agent_event(&mut adapter,
             amazing_dom::events::EventTarget::Node(node), name,
@@ -726,6 +725,20 @@ mod tests {
             scheduler.finish_module_script(&module, Some(&error), "https://example.test/root.js", true).unwrap();
         }
         assert!(matches!(scheduler.run_script("errors.length===2 && errors[0]===original && errors[1]===original && events.join(',')==='load,load'").unwrap(), JsValue::Bool(true)));
+    }
+    #[test]
+    fn module_completion_uses_trusted_canonical_events_without_bubbling() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<script id=root></script>"), native_forwarded: false,
+        }));
+        let node = host.borrow_mut().query_selector("script").unwrap();
+        let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/page.html");
+        scheduler.run_script("var target=document.getElementById('root'),seen=[],bubbled=0; for(var type of ['load','error']) { target.addEventListener(type,function(e){seen.push(e);}); document.addEventListener(type,function(){bubbled++;}); }").unwrap();
+        let module = script(ScriptKind::Module, node, true);
+        scheduler.finish_module_script(&module, None, "https://example.test/root.js", true).unwrap();
+        scheduler.finish_module_script(&module, None, "https://example.test/root.js", false).unwrap();
+        assert!(matches!(scheduler.run_script("seen.length===2 && seen[0].type==='load' && seen[1].type==='error' && bubbled===0 && seen.every(e=>e instanceof Event && e.isTrusted && e.target===target && e.currentTarget===null && !e.bubbles && !e.cancelable && !e.composed)").unwrap(), JsValue::Bool(true)));
     }
     #[test]
     fn current_script_tracks_classic_elements_and_restores_null_after_module_execution() {
