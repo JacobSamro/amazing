@@ -1,0 +1,35 @@
+{
+  "node": "v24.18.1",
+  "v8": "13.6.233.17-node.50",
+  "results": {
+    "missing_return": {
+      "log": [
+        "get then",
+        "get return",
+        "get then"
+      ],
+      "done": true,
+      "value_identity": true
+    },
+    "done_return": {
+      "log": [
+        "return"
+      ],
+      "done": true,
+      "value_identity": true
+    },
+    "raw_yield": {
+      "log": [],
+      "done": false,
+      "value_identity": true
+    },
+    "done_next": {
+      "log": [],
+      "done": true,
+      "inner_value_identity": true,
+      "result_value": 0
+    }
+  },
+  "spec": "https://tc39.es/ecma262/2025/multipage/ecmascript-language-functions-and-classes.html#sec-generator-function-definitions-runtime-semantics-evaluation",
+  "scope": "Read-only independent reference; genuine async Yield/delegate completion raw values and absent-return second Await."
+}

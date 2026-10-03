@@ -295,3 +295,55 @@ fn async_disposal_after_await_and_yield_preserves_suppressed_error() {
         ),
     ]);
 }
+
+#[test]
+fn borrowed_methods_yield_in_child_reaction_realm() {
+    let mut failures = Vec::new();
+    let factory = "(async function*(){yield [];return []})";
+    for actor in [false, true] {
+        let mut i = Interpreter::new();
+        let child = i
+            .binding_create_realm(JsValue::object(amazing_js::value::JsObject::ordinary()))
+            .unwrap();
+        let function = i.binding_eval_in_realm(child, factory).unwrap();
+        if actor {
+            let parsed = amazing_js::parse_script(factory).unwrap();
+            let StmtKind::Expression(expression) = &parsed.body[0].kind else {
+                panic!("expression")
+            };
+            let ExprKind::Paren(inner) = &expression.kind else {
+                panic!("group")
+            };
+            let ExprKind::Function(item) = &inner.kind else {
+                panic!("function")
+            };
+            let JsValue::Object(function) = &function else {
+                panic!("factory")
+            };
+            function.borrow_mut().func.as_mut().unwrap().body =
+                FunctionBody::Block(item.body.clone());
+        }
+        let iterator = i
+            .binding_call_in_realm(child, &function, JsValue::Undefined, vec![])
+            .unwrap();
+        let child_array_proto = i.binding_eval_in_realm(child, "Array.prototype").unwrap();
+        let child_object_proto = i.binding_eval_in_realm(child, "Object.prototype").unwrap();
+        i.global_env.declare_var("it", iterator).unwrap();
+        i.global_env
+            .declare_var("childArray", child_array_proto)
+            .unwrap();
+        i.global_env
+            .declare_var("expectedYieldPrototype", child_object_proto.clone())
+            .unwrap();
+        i.global_env
+            .declare_var("childObject", child_object_proto)
+            .unwrap();
+        i.run_script("var ok=false;var next=Object.getPrototypeOf(Object.getPrototypeOf((async function*(){})())).next;var request=next.call(it);var requestParent=request instanceof Promise;request.then(r=>{var first=Object.getPrototypeOf(r)===expectedYieldPrototype&&Object.getPrototypeOf(r.value)===childArray;return next.call(it).then(r=>ok=first&&requestParent&&Object.getPrototypeOf(r)===childObject&&Object.getPrototypeOf(r.value)===childArray&&r.done)})").unwrap();
+        i.drain_microtasks().unwrap();
+        let actual = i.run_script("ok").unwrap();
+        if actual != JsValue::Bool(true) {
+            failures.push(format!("actor={actor}: {actual:?}"));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
