@@ -171,7 +171,9 @@ fn install_filter() -> io::Result<()> {
         // newer syscall is absent; allowing it would bypass the clone flags.
         jump(JEQ, libc::SYS_clone3 as u32, 0, 1),
         stmt(RET, libc::SECCOMP_RET_ERRNO | (libc::ENOSYS as u32)),
-        jump(JEQ, libc::SYS_clone as u32, 0, 4),
+        // Non-clone syscalls skip the entire five-instruction flags guard,
+        // including its deny return, and continue into the explicit allowlist.
+        jump(JEQ, libc::SYS_clone as u32, 0, 5),
         stmt(LD, 16), // first clone argument: flags, low 32 bits
         stmt(AND, libc::CLONE_THREAD as u32),
         jump(JEQ, libc::CLONE_THREAD as u32, 0, 1),
