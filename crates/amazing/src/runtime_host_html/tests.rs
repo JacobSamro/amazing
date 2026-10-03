@@ -1452,8 +1452,11 @@ fn selection_context_helpers_preserve_actual_associations_and_receiver_policy() 
     let denied = js.run_script("try { selectionBorrowed.call(selectionReceiver); throw new Error('access allowed'); } catch(error) { error; }").unwrap();
     let expected = bindings.state.borrow().interfaces[&realm].iter()
         .find(|(interface, _, _)| *interface == Interface::DOMException).unwrap().1.clone();
+    let name = js.binding_get_property(&denied, "name").unwrap();
+    let message = js.binding_get_property(&denied, "message").unwrap();
     let (JsValue::Object(denied), JsValue::Object(expected)) = (denied, expected) else { panic!("native DOMException objects"); };
-    assert!(denied.borrow().proto.as_ref().is_some_and(|prototype| Rc::ptr_eq(&prototype.0, &expected.0)));
+    assert!(denied.borrow().proto.as_ref().is_some_and(|prototype| Rc::ptr_eq(&prototype.0, &expected.0)),
+        "borrowed Selection denial name={name:?} message={message:?}");
     js.run_script("document.getElementById('same').remove()").unwrap();
     bindings.navigate_iframes(&mut js);
     let mut adapter = RuntimeBindingHost { js: &mut js, state: bindings.state.clone() };
