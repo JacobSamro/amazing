@@ -13,7 +13,7 @@
 //!   [`Env::this_binding`] empty and resolution walks outward (§8.1.1).
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::value::{JsValue, Obj, PrivateName, Property, Throw};
@@ -137,9 +137,16 @@ pub enum EnvKind {
     Module,
 }
 
+#[derive(Default)]
+struct GlobalDeclarationRecord {
+    var_names: HashSet<String>,
+    lexicals: HashMap<String, BindingCell>,
+}
+
 pub struct Env {
     realm: Option<u64>,
     global_object: Option<Obj>,
+    global_declarations: Option<Rc<RefCell<GlobalDeclarationRecord>>>,
     pub kind: EnvKind,
     pub parent: Option<EnvHandle>,
     /// Per-binding cells: assignment mutates through `&self` without
@@ -161,6 +168,10 @@ pub struct Env {
 }
 
 impl Env {
+    fn script_cell(&self, name: &str) -> Option<BindingCell> {
+        if self.kind != EnvKind::Global { return None; }
+        self.global_declarations.as_ref()?.borrow().lexicals.get(name).cloned()
+    }
     /// Declares in THIS frame. Same-frame redeclaration is legal ONLY for
     /// `var`-over-`var`; any lexical binding involved (existing or new)
     /// throws (§14.3).
@@ -171,6 +182,15 @@ impl Env {
         mutable: bool,
         lexical: bool,
     ) -> Result<(), Throw> {
+        if let Some(cell) = self.script_cell(name) {
+            let mut binding = cell.0.borrow_mut();
+            if lexical && !binding.initialized {
+                binding.value = value;
+                binding.initialized = true;
+                return Ok(());
+            }
+            return Err(Throw::syntax_error(format!("identifier '{name}' has already been declared")));
+        }
         if let Some(cell) = self.vars.get(name) {
             let mut existing = cell.0.borrow_mut();
             if !existing.initialized
@@ -230,6 +250,7 @@ impl Env {
 
     /// §9.1.2 GetIdentifierReference: walk the chain; None = unresolvable.
     fn resolve_raw(&self, name: &str) -> Option<JsValue> {
+        if let Some(cell) = self.script_cell(name) { return cell.read().ok(); }
         if let Some(b) = self.vars.get(name) {
             if self.kind == EnvKind::Global && !b.0.borrow().lexical {
                 if let Some(object) = &self.global_object {
@@ -246,6 +267,16 @@ impl Env {
     /// `Ok(false)` when unresolved (caller decides global creation);
     /// `Err` for assignment to `const`.
     fn assign_raw(&self, name: &str, value: JsValue, strict: bool) -> Result<bool, Throw> {
+        if let Some(cell) = self.script_cell(name) {
+            let mut binding = cell.0.borrow_mut();
+            if !binding.initialized { return Err(Throw::reference_error(format!("Cannot access '{name}' before initialization"))); }
+            if !binding.mutable {
+                if strict || binding.immutable_strict { return Err(Throw::type_error(format!("assignment to constant variable '{name}'"))); }
+                return Ok(true);
+            }
+            binding.value = value;
+            return Ok(true);
+        }
         if let Some(b) = self.vars.get(name) {
             if b.0.borrow().import_target.is_some() {
                 return Err(Throw::type_error(format!("assignment to import '{name}'")));
@@ -316,6 +347,7 @@ impl EnvHandle {
         EnvHandle(Rc::new(RefCell::new(Env {
             realm,
             global_object: None,
+            global_declarations: (kind == EnvKind::Global).then(|| Rc::new(RefCell::new(GlobalDeclarationRecord::default()))),
             kind,
             parent,
             vars: HashMap::new(),
@@ -378,7 +410,60 @@ impl EnvHandle {
         frame.parent.as_ref().and_then(|parent| parent.resolve_private(name))
     }
 
-    pub(crate) fn set_global_object(&self, object: Obj) { self.0.borrow_mut().global_object = Some(object); }
+    pub(crate) fn set_global_object(&self, object: Obj) {
+        let parent = self.0.borrow().parent.clone();
+        let shared = parent.and_then(|parent| {
+            let frame = parent.0.borrow();
+            (frame.kind == EnvKind::Global && frame.global_object.as_ref().is_some_and(|old| Rc::ptr_eq(&old.0, &object.0)))
+                .then(|| frame.global_declarations.clone()).flatten()
+        });
+        let mut frame = self.0.borrow_mut();
+        if let Some(record) = shared { frame.global_declarations = Some(record); }
+        else if frame.global_object.as_ref().is_some_and(|old| !Rc::ptr_eq(&old.0, &object.0)) && frame.kind == EnvKind::Global {
+            frame.global_declarations = Some(Rc::new(RefCell::new(GlobalDeclarationRecord::default())));
+        }
+        frame.global_object = Some(object);
+    }
+
+    pub(crate) fn has_script_var(&self, name: &str) -> bool {
+        self.0.borrow().global_declarations.as_ref().is_some_and(|record| record.borrow().var_names.contains(name))
+    }
+
+    pub(crate) fn register_script_var(&self, name: &str) {
+        if let Some(record) = &self.0.borrow().global_declarations { record.borrow_mut().var_names.insert(name.to_owned()); }
+    }
+
+    pub(crate) fn install_script_var_cell(&self, name: &str, value: JsValue) {
+        let mut frame = self.0.borrow_mut();
+        frame.vars.entry(name.to_owned()).or_insert_with(|| BindingCell(Rc::new(RefCell::new(Binding {
+            value, mutable: true, immutable_strict: true, lexical: false, initialized: true, import_target: None,
+        }))));
+    }
+
+    pub(crate) fn forget_script_var(&self, name: &str) {
+        if let Some(record) = &self.0.borrow().global_declarations { record.borrow_mut().var_names.remove(name); }
+    }
+
+    pub(crate) fn reserve_script_lexical(&self, name: &str, mutable: bool) -> Result<(), Throw> {
+        let record = self.0.borrow().global_declarations.clone().ok_or_else(|| Throw::type_error("not a global declaration record"))?;
+        let mut record = record.borrow_mut();
+        if record.lexicals.contains_key(name) { return Err(Throw::syntax_error(format!("identifier '{name}' has already been declared"))); }
+        record.lexicals.insert(name.to_owned(), BindingCell(Rc::new(RefCell::new(Binding {
+            value: JsValue::Undefined, mutable, immutable_strict: true, lexical: true, initialized: false, import_target: None,
+        }))));
+        Ok(())
+    }
+
+    pub(crate) fn has_global_lexical(&self, name: &str) -> bool {
+        let mut current = Some(self.clone());
+        while let Some(env) = current {
+            if env.has_local_lexical(name) { return true; }
+            let frame = env.0.borrow();
+            if frame.kind != EnvKind::Global { break; }
+            current = frame.parent.clone();
+        }
+        false
+    }
 
     pub(crate) fn global_binding_object(&self, name: &str) -> Option<Obj> {
         let frame = self.0.borrow();
@@ -458,7 +543,7 @@ impl EnvHandle {
     }
 
     pub(crate) fn has_local_lexical(&self, name: &str) -> bool {
-        self.0.borrow().vars.get(name).is_some_and(|cell| cell.0.borrow().lexical)
+        self.local_cell(name).is_some_and(|cell| cell.0.borrow().lexical)
     }
 
     /// Initialize a parameter's preallocated cell, preserving closure identity.
@@ -559,6 +644,8 @@ impl EnvHandle {
     /// Remove the mirrored environment entry after deleting a configurable
     /// property of the global object. Lexical declarations are never removed.
     pub(crate) fn remove_object_binding(&self, name: &str) -> bool {
+        if self.local_cell(name).is_some_and(|cell| cell.is_lexical()) { return false; }
+        self.forget_script_var(name);
         let mut env = self.0.borrow_mut();
         if env.vars.get(name).is_some_and(|cell| cell.0.borrow().lexical) {
             return false;
@@ -569,10 +656,12 @@ impl EnvHandle {
 
     /// The cell in this frame, without consulting parent environments.
     pub fn local_cell(&self, name: &str) -> Option<BindingCell> {
-        self.0.borrow().vars.get(name).cloned()
+        let frame = self.0.borrow();
+        frame.script_cell(name).or_else(|| frame.vars.get(name).cloned())
     }
 
     pub fn is_uninitialized(&self, name: &str) -> bool {
+        if let Some(cell) = self.local_cell(name) { return cell.is_uninitialized(); }
         let frame = self.0.borrow();
         if let Some(cell) = frame.vars.get(name) {
             return cell.is_uninitialized();
@@ -588,7 +677,7 @@ impl EnvHandle {
     }
 
     pub fn has(&self, name: &str) -> bool {
-        self.0.borrow().vars.contains_key(name)
+        self.local_cell(name).is_some()
             || self
                 .0
                 .borrow()
@@ -599,6 +688,7 @@ impl EnvHandle {
 
     pub fn shares_binding_frame(&self, other: &EnvHandle, name: &str) -> bool {
         fn owner(env: &EnvHandle, name: &str) -> Option<EnvHandle> {
+            if env.local_cell(name).is_some() { return Some(env.clone()); }
             let frame = env.0.borrow();
             if frame.vars.contains_key(name) { return Some(env.clone()); }
             let parent = frame.parent.clone();
