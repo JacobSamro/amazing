@@ -3291,7 +3291,7 @@ mod tests {
             </script>"#,
             |scheduler, script| scheduler.run_script(&script.body).map(|_| ()).map_err(|error| error.describe()),
         ).unwrap();
-        assert_eq!(scheduler.run_script("loads").unwrap(), JsValue::Number(0.0));
+        assert_eq!(scheduler.run_script("loads").unwrap(), JsValue::num(0.0));
         scheduler.dispatch_pending_iframe_loads().unwrap();
     }
 
