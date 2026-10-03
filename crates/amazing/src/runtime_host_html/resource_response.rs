@@ -207,8 +207,9 @@ mod tests {
         scheduler.set_location_url("https://example.test/root/main.html");
         let requests = Rc::new(RefCell::new(Vec::new()));
         let observed = requests.clone();
+        let callback_host = host.clone();
         scheduler.set_frame_resource_loader(Rc::new(move |request| {
-            assert!(host.try_borrow_mut().is_ok(), "transport called with a live DOM borrow");
+            assert!(callback_host.try_borrow_mut().is_ok(), "transport called with a live DOM borrow");
             observed.borrow_mut().push(request.clone());
             Ok(match request.kind {
                 HtmlFrameResourceKind::Document => response("https://example.test/final/child.html",
@@ -231,8 +232,10 @@ mod tests {
         assert_eq!(requests[1].referrer, requests[1].initiator.document_url);
         assert_eq!(requests[1].request_mode, amazing_fetch::RequestMode::NoCors);
         assert_eq!(requests[1].credentials, amazing_fetch::CredentialsMode::Include);
-        assert_eq!(requests[1].initiator.document_generation,
-            requests[0].initiator.document_generation); // distinct documents can share a generation number.
+        for request in requests.iter() {
+            assert_eq!(Some(request.initiator.document_generation),
+                host.borrow().dom.node_generation(request.initiator.document));
+        }
         assert_ne!(requests[1].initiator.document, requests[0].initiator.document);
         assert!(requests[1].embedding.is_none());
         assert_eq!(requests[1].initiator.ancestor_origins, vec![requests[0].initiator.origin.clone()]);
