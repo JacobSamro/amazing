@@ -492,7 +492,8 @@ impl<'a> DisplayListView<'a> {
                         if box_.style.get("box-shadow").is_some() {
                             PaintBounds::viewport(width, height)
                         } else {
-                            PaintBounds::from_layout(box_.border_box)
+                            PaintBounds::from_layout(crate::border_image::BorderImagePlan::from_style(&box_.style)
+                                .and_then(|plan| plan.ink_bounds(box_)).unwrap_or(box_.border_box))
                         },
                         state,
                         hints(box_, is_video),

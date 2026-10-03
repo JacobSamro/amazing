@@ -1,0 +1,15 @@
+{
+  "eligible": 42,
+  "counts": {
+    "mismatch": 29,
+    "pass": 13
+  },
+  "excluded": {
+    "reference-mode": 7,
+    "flagged": 5,
+    "xml-parser-mode": 10,
+    "no-url-resource": 3,
+    "unsupported-resource-kind": 1,
+    "non-relative-resource": 1
+  }
+}

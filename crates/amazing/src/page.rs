@@ -3,6 +3,8 @@ use crate::cmd::js::resolve_script_url;
 use std::collections::{HashMap, HashSet};
 #[path = "font_loader.rs"]
 mod font_loader;
+#[path = "page_border_images.rs"]
+mod page_border_images;
 
 fn load_resource(url: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
     if url.get(..5).is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:")) {
@@ -50,6 +52,7 @@ pub(crate) struct PageImageSnapshot {
 pub(crate) struct PageMedia {
     images: Vec<PageImage>,
     decoded: HashMap<String, amazing_media::Image>,
+    border_sources: HashMap<(String, Option<String>), String>,
     decoder: crate::runtime_host_replaced_content::UtilityImageDecoder,
     pub(crate) warnings: Vec<String>,
 }
@@ -274,6 +277,9 @@ impl amazing_paint::ImageProvider for PageMedia {
     fn image_by_url(&self, url: &str) -> Option<&amazing_media::Image> {
         self.decoded.get(url)
     }
+    fn border_image(&self, _node: Option<amazing_dom::NodeIdx>, url: &str, base: Option<&str>) -> Option<&amazing_media::Image> {
+        self.border_sources.get(&(url.to_owned(),base.map(str::to_owned))).and_then(|resolved|self.decoded.get(resolved))
+    }
 }
 
 /// Paint access to the live document and its computed styles for inline SVG.
@@ -290,6 +296,10 @@ impl amazing_paint::ImageProvider for PagePaint<'_> {
 
     fn image_by_url(&self, url: &str) -> Option<&amazing_media::Image> {
         amazing_paint::ImageProvider::image_by_url(self.media, url)
+    }
+
+    fn border_image(&self, node: Option<amazing_dom::NodeIdx>, url: &str, base: Option<&str>) -> Option<&amazing_media::Image> {
+        amazing_paint::ImageProvider::border_image(self.media,node,url,base)
     }
 
     fn presentation(&self, node: amazing_dom::NodeIdx) -> amazing_paint::image::ImagePresentation {
@@ -407,6 +417,7 @@ pub(crate) fn load_page_media_in_viewport(
         viewport_width: f32,
         device_pixel_ratio: f32,
     ) {
+        page_border_images::collect(node, page, styled, media, attempted);
         if dom.name(node) == Some("img") {
             collect_image(dom, node, page, media, attempted, viewport_width, device_pixel_ratio, false);
         } else if let Some(attribute) = match dom.name(node) {

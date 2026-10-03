@@ -403,6 +403,9 @@ fn resources_for_box(
         {
             resources.insert(PaintResourceKey::BackgroundUrl(url.clone()));
         }
+        if let Some(plan)=crate::border_image::BorderImagePlan::from_style(&box_.style) {
+            if let Some(url)=plan.url {resources.insert(PaintResourceKey::BorderImageUrl{url,source_base:plan.source_base});}
+        }
         if box_.replaced_size.is_some() || box_.svg_root.is_some() {
             resources.insert(PaintResourceKey::ReplacedNode(key.node));
         }

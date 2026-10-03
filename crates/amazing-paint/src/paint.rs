@@ -386,6 +386,10 @@ pub trait ImageProvider {
     fn image_by_url(&self, _url: &str) -> Option<&amazing_media::Image> {
         None
     }
+    /// Decoded border source, resolved by the embedding loader from its winning CSS base.
+    fn border_image(&self, _node: Option<amazing_dom::NodeIdx>, url: &str, _base: Option<&str>) -> Option<&amazing_media::Image> {
+        self.image_by_url(url)
+    }
     /// Rasterize an inline SVG root for this content viewport. The embedding
     /// adapter owns DOM/style access; paint only receives bounded RGBA pixels.
     fn svg(
@@ -788,7 +792,11 @@ pub(crate) fn raster_raw_item(
             local.svg_root = box_.svg_root;
             let color = resolve_text_color(&local.style);
             let clip = ClipRect::viewport(target);
-            let mut budget = 0;
+            // Border-image decorations use the same bounded pixel accounting as
+            // full raster. Keep the existing background-only raw-item policy.
+            let mut budget = if crate::border_image::BorderImagePlan::from_style(&local.style).is_some() {
+                MAX_LAYER_PIXELS
+            } else { 0 };
             paint_decorations(
                 target,
                 &local,
@@ -864,7 +872,11 @@ fn paint_decorations(
         }
     }
     paint_inset_box_shadow(surface, box_, text_color, clip);
-    paint_borders(surface, box_, text_color, clip);
+    match crate::border_image::paint(surface, box_, images, clip.pixels(), budget) {
+        crate::border_image::Outcome::Unavailable => paint_borders(surface, box_, text_color, clip),
+        crate::border_image::Outcome::BudgetExceeded => return false,
+        crate::border_image::Outcome::Painted => {},
+    }
     paint_outline(surface, box_, text_color, clip);
     if let Some(node) = box_.svg_root {
         if let Some(svg) = svg_for_rect(images, node, &box_.content_box) {

@@ -1,0 +1,1 @@
+rendered fixed viewport 60x60 px → /home/user/amazing/out/layout/layout46/artifact/actual.ppm

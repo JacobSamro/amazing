@@ -1,0 +1,460 @@
+{
+  "ticket": "LAYOUT-46",
+  "fixed_base": "927e71c9d428db07206198e92f3d85b3a4045cf3",
+  "workspace": {
+    "passed": 3622,
+    "failed": 0,
+    "skipped": 17
+  },
+  "doctests_passed": 4,
+  "harness_passed": 7,
+  "directories": [
+    {
+      "subdir": "css/CSS2/floats",
+      "before": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/CSS2/normal-flow",
+      "before": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/CSS2/positioning",
+      "before": {
+        "pass": 4,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 4,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-backgrounds",
+      "before": {
+        "pass": 75,
+        "mismatch": 59,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 77,
+        "mismatch": 57,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [
+        "css__css-backgrounds__border-image-outset-003.html",
+        "css__css-backgrounds__border-image-width-should-extend-to-padding.html"
+      ],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-contain",
+      "before": {
+        "pass": 153,
+        "mismatch": 76,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 153,
+        "mismatch": 76,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-display",
+      "before": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-fonts",
+      "before": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-images",
+      "before": {
+        "pass": 92,
+        "mismatch": 49,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 92,
+        "mismatch": 49,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-overflow",
+      "before": {
+        "pass": 81,
+        "mismatch": 262,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 81,
+        "mismatch": 262,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-position",
+      "before": {
+        "pass": 45,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 45,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-ruby",
+      "before": {
+        "pass": 52,
+        "mismatch": 15,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 52,
+        "mismatch": 15,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-sizing",
+      "before": {
+        "pass": 99,
+        "mismatch": 39,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 99,
+        "mismatch": 39,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-tables",
+      "before": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-transforms",
+      "before": {
+        "pass": 141,
+        "mismatch": 207,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 141,
+        "mismatch": 207,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "subdir": "css/css-viewport",
+      "before": {
+        "pass": 52,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 52,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": []
+    }
+  ],
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "totals": {
+    "eligible": 1765,
+    "before_pass": 957,
+    "after_pass": 959,
+    "gained": 2,
+    "lost": 0,
+    "changed": 0,
+    "new": 0,
+    "removed": 0
+  },
+  "local_resources": {
+    "eligible": 42,
+    "before": {
+      "mismatch": 29,
+      "pass": 13
+    },
+    "after": {
+      "mismatch": 29,
+      "pass": 13
+    },
+    "gained": [],
+    "lost": [],
+    "changed": [],
+    "new": [],
+    "removed": [],
+    "decode_unavailable": {
+      "before": [],
+      "after": [
+        "css__css-backgrounds__border-image-006.html",
+        "css__css-backgrounds__border-image-007.html",
+        "css__css-backgrounds__border-image-013.html",
+        "css__css-backgrounds__border-image-calc.html",
+        "css__css-backgrounds__border-image-displayed-with-transparent-border-color.html",
+        "css__css-backgrounds__border-image-repeat-002.htm",
+        "css__css-backgrounds__border-image-repeat-004.htm",
+        "css__css-backgrounds__border-image-repeat-repeat-001.html",
+        "css__css-backgrounds__border-image-repeat-round-003.html",
+        "css__css-backgrounds__border-image-repeat-round-1.html",
+        "css__css-backgrounds__border-image-repeat-round-2.html",
+        "css__css-backgrounds__border-image-repeat-round-stretch-001.html",
+        "css__css-backgrounds__border-image-repeat-round.html",
+        "css__css-backgrounds__border-image-repeat-space-011.html",
+        "css__css-backgrounds__border-image-repeat-space-1.html",
+        "css__css-backgrounds__border-image-repeat-space-10.html",
+        "css__css-backgrounds__border-image-repeat-space-2.html",
+        "css__css-backgrounds__border-image-repeat-space-3.html",
+        "css__css-backgrounds__border-image-repeat-space-4-ref-1.html",
+        "css__css-backgrounds__border-image-repeat-space-4.html",
+        "css__css-backgrounds__border-image-repeat-space-5-ref-1.html",
+        "css__css-backgrounds__border-image-repeat-space-5.html",
+        "css__css-backgrounds__border-image-repeat-space-6.html",
+        "css__css-backgrounds__border-image-repeat-space-7.html",
+        "css__css-backgrounds__border-image-repeat-space-8.html",
+        "css__css-backgrounds__border-image-repeat-space-9.html",
+        "css__css-backgrounds__border-image-repeat-stretch-round-001.html",
+        "css__css-backgrounds__border-image-round-and-stretch.html",
+        "css__css-backgrounds__border-image-shorthand-001.htm",
+        "css__css-backgrounds__border-image-shorthand-002.htm",
+        "css__css-backgrounds__border-image-shorthand-003.htm",
+        "css__css-backgrounds__border-image-slice-004.htm",
+        "css__css-backgrounds__border-image-slice-005.htm",
+        "css__css-backgrounds__border-image-slice-006.htm",
+        "css__css-backgrounds__border-image-slice-007.htm",
+        "css__css-backgrounds__border-image-slice-fill-001.html",
+        "css__css-backgrounds__border-image-slice-fill-002.html",
+        "css__css-backgrounds__border-image-slice-percentage.html",
+        "css__css-backgrounds__border-image-space-001.html",
+        "css__css-backgrounds__border-image-width-001.htm",
+        "css__css-backgrounds__border-image-width-008.html",
+        "css__css-backgrounds__border-image-width-009.html"
+      ]
+    },
+    "decoded_png_support_claimed": false
+  },
+  "baseline_renderer_reproduces_layout45": true,
+  "production_ppm_artifact": {
+    "production_ppm_artifact": "pass",
+    "viewport": [
+      60,
+      60
+    ],
+    "renderer": "6a0466230e4ff918c685f9c4b8a28608daa8bc6c34dde3c512e5857c3183917e"
+  }
+}

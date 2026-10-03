@@ -17,6 +17,7 @@ const MAX_DIFF_PIXELS: usize = 1_048_576;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PaintResourceKey {
     BackgroundUrl(String),
+    BorderImageUrl { url: String, source_base: Option<String> },
     GeneratedUrl(String),
     ReplacedNode(PaintNodeKey),
 }
@@ -206,6 +207,9 @@ impl DisplayListView<'_> {
                 PaintCommand::PaintDecorations(box_, plan) => {
                     for url in plan.layers.iter().filter_map(|layer| layer.url.as_ref()) {
                         resources.insert(PaintResourceKey::BackgroundUrl(url.clone()));
+                    }
+                    if let Some(plan)=crate::border_image::BorderImagePlan::from_style(&box_.style) {
+                        if let Some(url)=plan.url {resources.insert(PaintResourceKey::BorderImageUrl{url,source_base:plan.source_base});}
                     }
                     if let Some(key) = item.key {
                         if box_.replaced_size.is_some() || box_.svg_root.is_some() {

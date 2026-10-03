@@ -45,6 +45,7 @@
 //! - the canvas starts opaque white; transparent backgrounds skip filling
 
 pub mod background;
+pub mod border_image;
 mod blend;
 pub mod clip;
 pub mod color;

@@ -157,7 +157,7 @@ pub fn split_layers(value: &str) -> Vec<&str> {
     result.push(value[start..].trim());
     result
 }
-fn url(value: &str) -> Option<String> {
+pub(crate) fn url(value: &str) -> Option<String> {
     let value = value.trim();
     if !value.get(..4)?.eq_ignore_ascii_case("url(") || !value.ends_with(')') {
         return None;
@@ -201,7 +201,7 @@ fn url(value: &str) -> Option<String> {
 /// Serialized `<gradient>` image function for a background layer. CSS owns
 /// tokenization, color parsing and value preservation; this only recognizes the
 /// function name and returns the bounded original text for the shared raster.
-fn gradient(value: &str) -> Option<String> {
+pub(crate) fn gradient(value: &str) -> Option<String> {
     let value = value.trim();
     if value.len() > MAX_VALUE_BYTES || !value.ends_with(')') {
         return None;
