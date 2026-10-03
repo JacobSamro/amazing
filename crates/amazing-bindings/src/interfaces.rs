@@ -6,6 +6,7 @@ use crate::host::{
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OptionalCapability {
+    CssomGlobal,
     InterfaceClassString(I),
     DomExceptionErrorPrototype,
     CustomElementsGlobal,
@@ -1200,6 +1201,23 @@ pub static INTERFACES: &[D] = &[
         constructor: None, members: ANIMATION },
     D { interface: I::Clipboard, name: "Clipboard", parent: None,
         constructor: None, members: CLIPBOARD },
+    D { interface: I::CSSStyleDeclaration, name: "CSSStyleDeclaration", parent: None,
+        constructor: None, members: &[
+            getter("cssText", O::Cssom(crate::cssom::CssomOp::CssText)),
+            setter("cssText", O::Cssom(crate::cssom::CssomOp::SetCssText)),
+            getter("length", O::Cssom(crate::cssom::CssomOp::Length)),
+            method("item", O::Cssom(crate::cssom::CssomOp::Item), 1),
+            method("getPropertyValue", O::Cssom(crate::cssom::CssomOp::GetPropertyValue), 1),
+            method("getPropertyPriority", O::Cssom(crate::cssom::CssomOp::GetPropertyPriority), 1),
+            method("setProperty", O::Cssom(crate::cssom::CssomOp::SetProperty), 2),
+            method("removeProperty", O::Cssom(crate::cssom::CssomOp::RemoveProperty), 1),
+            getter("parentRule", O::Cssom(crate::cssom::CssomOp::ParentRule)),
+        ] },
+    D { interface: I::CSSStyleProperties, name: "CSSStyleProperties", parent: Some(I::CSSStyleDeclaration),
+        constructor: None, members: &[
+            getter("cssFloat", O::Cssom(crate::cssom::CssomOp::CssFloat)),
+            setter("cssFloat", O::Cssom(crate::cssom::CssomOp::SetCssFloat)),
+        ] },
     D {
         interface: I::Node,
         name: "Node",
@@ -1800,6 +1818,9 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
     }
     for (name, value) in crate::dom_exception::LEGACY_CODES {
         host.install_interface_constant(I::DOMException, name, u32::from(*value))?;
+    }
+    if host.install_cssom()? == OptionalHookInstall::NotSupported {
+        report.not_installed.push(OptionalCapability::CssomGlobal);
     }
     Ok(report)
 }

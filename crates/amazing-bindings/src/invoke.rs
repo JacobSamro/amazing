@@ -156,6 +156,7 @@ pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + Doc
     receiver: H::Value,
     args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    if let O::Cssom(operation) = operation { return host.invoke_cssom(operation, receiver, args); }
     host.with_dom(|dom| { dom.custom_element_push_reaction_frame(); Ok(()) })?;
     let result = invoke_inner(host, operation, receiver, args);
     let created = if matches!(operation, O::CreateElement | O::CreateElementNS) {

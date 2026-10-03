@@ -88,6 +88,7 @@ impl InterfaceBrand {
     pub const SUBSCRIBER: Self = Self(40);
     pub const ANIMATION: Self = Self(41);
     pub const CLIPBOARD: Self = Self(42);
+    pub const CSS_STYLE_DECLARATION: Self = Self(43);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -234,6 +235,8 @@ pub enum Interface {
     Subscriber,
     Animation,
     Clipboard,
+    CSSStyleDeclaration,
+    CSSStyleProperties,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -264,6 +267,7 @@ pub enum LegacyReflectionKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
+    Cssom(crate::cssom::CssomOp),
     /// `true` when the click is driver-initiated (e.g. testdriver's
     /// synthetic `mousedown`/`mouseup`/click sequence, simulating real user
     /// input) and should dispatch as a trusted event; `false` for an
@@ -1020,6 +1024,15 @@ pub enum IterableKind { Values }
 pub trait BindingHost: Sized {
     type Value: Clone;
     type Error;
+
+    /// Optional CSSOM dispatch seam; a host installs its real style callback.
+    fn invoke_cssom(&mut self, _operation: crate::cssom::CssomOp, _receiver: Self::Value,
+        _arguments: &[Self::Value]) -> Result<Self::Value, Self::Error> {
+        Err(self.type_error("CSSOM host callback is not installed"))
+    }
+    fn install_cssom(&mut self) -> Result<OptionalHookInstall, Self::Error> {
+        Ok(OptionalHookInstall::NotSupported)
+    }
 
     fn global_object(&mut self) -> Result<Self::Value, Self::Error>;
     fn create_object(

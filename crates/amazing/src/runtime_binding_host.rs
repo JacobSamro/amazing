@@ -66,9 +66,13 @@ use self::compositor::{CanvasObject, CanvasTarget};
 
 #[path = "runtime_host_dom_bindings.rs"]
 mod dom_bindings;
+#[path = "runtime_host_cssom.rs"]
+mod cssom;
+use cssom::{CssomNative, CssomRuntime};
 
 #[derive(Clone, Copy)]
 enum NativeEntry {
+    Cssom(CssomNative),
     Canvas(CanvasTarget, Member),
     Operation(Operation),
     Net(NetNativeEntry),
@@ -146,6 +150,7 @@ struct BindingState {
     net: NetRuntime,
     integrator_assist: IaRuntime,
     modules: modules::ModuleRuntime,
+    cssom: CssomRuntime,
     /// HTML-29: per-document `document.write`/`writeln` insertion point.
     /// A key present means that document's parser is "active" (its own
     /// top-level scripts are running, or it is inside a `document.open()`/
@@ -700,6 +705,7 @@ pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> 
             state: state.clone(),
         };
         match entry {
+            NativeEntry::Cssom(operation) => adapter.cssom_invoke_native(operation, this, &args),
             NativeEntry::Canvas(target, member) => adapter.invoke_canvas(target, member, this, &args),
             NativeEntry::Operation(operation) => adapter.invoke_operation_with_html_hooks(operation, this, &args),
             NativeEntry::Net(entry) => adapter.invoke_net(entry, this, &args),
@@ -784,6 +790,7 @@ pub(crate) fn install(
         net: NetRuntime::new(),
         integrator_assist: IaRuntime::new(),
         modules: modules::ModuleRuntime::new(),
+        cssom: CssomRuntime::default(),
         write_insertion_points: HashMap::new(),
         active_parsers: HashMap::new(),
         accessor_cache: HashMap::new(),
@@ -866,6 +873,12 @@ impl RuntimeBindingHost<'_> {
 }
 
 impl BindingHost for RuntimeBindingHost<'_> {
+    fn invoke_cssom(&mut self, operation: amazing_bindings::cssom::CssomOp, receiver: JsValue, arguments: &[JsValue]) -> Result<JsValue, Throw> {
+        amazing_bindings::cssom::invoke(self, operation, receiver, arguments)
+    }
+    fn install_cssom(&mut self) -> Result<OptionalHookInstall, Throw> {
+        self.cssom_install()
+    }
     type Value = JsValue;
     type Error = Throw;
 

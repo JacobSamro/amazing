@@ -275,6 +275,9 @@ impl BindingHost for Host {
         self.custom_elements_global = true;
         Ok(OptionalHookInstall::Installed)
     }
+    fn install_cssom(&mut self) -> Result<OptionalHookInstall, String> {
+        Ok(if self.skip_optional_hooks { OptionalHookInstall::NotSupported } else { OptionalHookInstall::Installed })
+    }
     fn is_constructor(&mut self, value: &V) -> Result<bool, String> {
         Ok(matches!(value, V::Dictionary(entries) if entries.iter().any(|(name, value)|
             *name == "__constructor" && *value == V::Bool(true))))
@@ -1298,12 +1301,13 @@ fn unsupported_optional_hooks_are_recorded_without_aborting_installation() {
     assert_eq!(h.installed.len(), INTERFACES.len());
     assert!(h.class_strings.is_empty());
     assert!(!h.dom_exception_error_prototype);
-    assert_eq!(report.not_installed.len(), INTERFACES.len() + 4);
+    assert_eq!(report.not_installed.len(), INTERFACES.len() + 5);
     assert_eq!(report.not_installed[0], crate::OptionalCapability::InterfaceClassString(INTERFACES[0].interface));
     assert_eq!(report.not_installed[INTERFACES.len()], crate::OptionalCapability::DomExceptionErrorPrototype);
     assert_eq!(report.not_installed[INTERFACES.len() + 1], crate::OptionalCapability::CustomElementsGlobal);
     assert_eq!(report.not_installed[INTERFACES.len() + 2], crate::OptionalCapability::PairIterable(Interface::URLSearchParams));
-    assert_eq!(report.not_installed.last(), Some(&crate::OptionalCapability::PairIterable(Interface::FormData)));
+    assert_eq!(report.not_installed[INTERFACES.len() + 3], crate::OptionalCapability::PairIterable(Interface::FormData));
+    assert_eq!(report.not_installed.last(), Some(&crate::OptionalCapability::CssomGlobal));
     assert!(h.constants.contains(&("DOCUMENT_FRAGMENT_NODE", 11)));
 }
 

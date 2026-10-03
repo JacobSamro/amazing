@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "before_source": "961bdcc1b94d96ead412181e0efdbbff936e684b",
+  "after_source": "4564e6e3c7be86a9444809f4e2993d2359b8a51a",
+  "iterator_dependency": "57d219d23a3279971a12e0a6716825f17df5864a",
+  "before_native": {
+    "passed": 3709,
+    "skipped": 17,
+    "doctests": 4
+  },
+  "after_native": {
+    "passed": 3714,
+    "skipped": 17,
+    "doctests": 4
+  },
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection_sha256": "538d9b86963e6ed84d587783ca8ae2074120b0f1d64cbd5f7c2d37b70f7f3885",
+  "before_binary_sha256": "4dd9333557ce0d06aac81efc03dd19f97131ef43954353ff230bc4d7d7c631d8",
+  "after_binary_sha256": "9ab0b5c1c6d58502f13f32e618225d5bfb9f43cdb60f5ba5bcfaf934dd56c0ba",
+  "delta": {
+    "gained_files": 14,
+    "lost_files": 0,
+    "gained_subtests": 583,
+    "lost_subtests": 0
+  },
+  "deadline_rechecks": 0
+}

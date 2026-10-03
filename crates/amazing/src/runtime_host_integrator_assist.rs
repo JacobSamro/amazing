@@ -70,6 +70,13 @@ pub(super) struct IaRuntime {
 }
 
 impl IaRuntime {
+    pub(super) fn cssom_environment(&self) -> amazing_css::MediaEnvironment {
+        amazing_css::MediaEnvironment {
+            viewport_width_px: self.viewport_width_px,
+            viewport_height_px: self.viewport_height_px,
+            ..Default::default()
+        }
+    }
     pub(super) fn new() -> Self {
         let default_environment = amazing_css::MediaEnvironment::default();
         Self {
