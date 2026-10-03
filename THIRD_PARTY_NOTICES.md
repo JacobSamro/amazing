@@ -130,3 +130,5 @@ reproduced in the table row for that upstream.
 - html5lib/html5lib-python @ fd4f032bc090d44fb11a84b352dad7cbee0a4745 — MIT; Copyright (c) 2006-2013 James Graham and other contributors. Complete EncodingParser.getAttribute adapted into crates/amazing-html/src/encoding_prescan.rs; full license encoding_prescan.LICENSE-MIT.
 
 | W3C XML Test Suite 20130923 (https://www.w3.org/XML/Test/) | W3C Software Notice and License (19980720) | Original catalog copyrights include Sun Microsystems1998–1999, OASIS1999–2001 and individual fixture authors; full preserved notices in CATALOG-NOTICES.md | crates/amazing-html/evidence/html70-xml-conformance/manifest.json: normative fixture IDs/metadata/descriptions only; no upstream engine implementation code |
+
+- jsdom/jsdom, MIT, Copyright (c) 2010 Elijah Insua; Selection-impl.js @9547fbf5b60af45d54c9e34d0891c7808f6ee2ce adapted in crates/amazing-dom/src/selection.rs.

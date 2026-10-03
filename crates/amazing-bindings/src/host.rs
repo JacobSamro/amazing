@@ -682,11 +682,14 @@ pub enum Operation {
     RangeStringifier,
     ElementDataset, DatasetGet, DatasetSet, DatasetDelete, DatasetIndexedGet,
     DatasetIndexCount, DatasetSupportedNames,
-    GetSelection, SelectionAnchorNode, SelectionAnchorOffset,
+    GetSelection, WindowGetSelection, SelectionAnchorNode, SelectionAnchorOffset,
     SelectionFocusNode, SelectionFocusOffset, SelectionIsCollapsed,
     SelectionRangeCount, SelectionGetRangeAt, SelectionAddRange,
     SelectionRemoveRange, SelectionRemoveAllRanges, SelectionCollapse,
-    SelectionSelectAllChildren, SelectionToString,
+    SelectionSelectAllChildren, SelectionToString, SelectionType, SelectionDirection,
+    SelectionCollapseToStart, SelectionCollapseToEnd, SelectionExtend,
+    SelectionSetBaseAndExtent, SelectionDeleteFromDocument, SelectionGetComposedRanges,
+    SelectionEventHandlerGet(&'static str), SelectionEventHandlerSet(&'static str),
     DocumentImplementation,
     ImplementationCreateDocumentType,
     ImplementationCreateDocument,
@@ -1036,6 +1039,15 @@ pub struct LegacyPlatformHooks {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IterableKind { Values }
 
+/// Explicit realm source for a fresh exposed live Range. Boundaries never determine wrapper realm.
+#[derive(Clone, Copy, Debug)]
+pub enum RangeCreationContext {
+    Constructor,
+    Document(NodeIdx),
+    Clone(amazing_dom::range::Range),
+    Selection(amazing_dom::selection::SelectionId),
+}
+
 /// The binding layer declares this trait. The driver implements it using the
 /// runtime's backend-neutral capabilities and its same parsed DOM arena.
 ///
@@ -1139,6 +1151,30 @@ pub trait BindingHost: Sized {
     /// The embedding's Window is an EventTarget with a stable external slot.
     fn window_event_target_slot(&self, _value: &Self::Value) -> Option<u64> { None }
     fn window_event_target_value(&self, _slot: u64) -> Option<Self::Value> { None }
+    /// Record the actual realm at a fresh exposed Range allocation, never on lookup.
+    fn range_created(&mut self, _range: amazing_dom::range::Range, _context: RangeCreationContext) -> Result<(), Self::Error> { Ok(()) }
+    /// Allocate a composed snapshot in the actual Selection-associated realm.
+    fn wrap_selection_static_range(&mut self, _selection: amazing_dom::selection::SelectionId,
+        range: amazing_dom::range::StaticRangeId) -> Result<Self::Value, Self::Error> {
+        let key = PlatformKey { arena: self.node_platform_key(self.current_document()).arena,
+            slot: range.slot() as u64, generation: 1 };
+        self.wrap_platform_object(key, InterfaceBrand::STATIC_RANGE)
+    }
+    /// Strong reference to the genuine Range platform value associated with Selection.
+    fn selection_set_range_value(&mut self, _selection: amazing_dom::selection::SelectionId,
+        _range: amazing_dom::range::Range, _value: &Self::Value) -> Result<(), Self::Error> { Ok(()) }
+    fn selection_range_value(&mut self, _selection: amazing_dom::selection::SelectionId,
+        _range: amazing_dom::range::Range) -> Result<Option<Self::Value>, Self::Error> { Ok(None) }
+    fn selection_release_range_value(&mut self, _selection: amazing_dom::selection::SelectionId)
+        -> Result<(), Self::Error> { Ok(()) }
+    /// Actual associated browsing context; inert documents have no Selection.
+    fn document_has_browsing_context(&self, _document: NodeIdx) -> Result<bool, Self::Error> { Ok(false) }
+    /// Resolve a genuine Window receiver. Embeddings must not substitute the caller document.
+    fn selection_document_for_window(&mut self, value: &Self::Value) -> Result<NodeIdx, Self::Error> {
+        if self.window_event_target_slot(value).is_none() { return Err(self.type_error("Expected a Window")); }
+        self.current_document_for_nodes()
+    }
+
     /// Embedding-owned targets (e.g. MessagePort) use Dom::create_event_target slots.
     /// Validate private wrapper identity, realm and liveness before returning a slot.
     fn external_event_target_slot(&self, _value: &Self::Value) -> Option<u64> { None }

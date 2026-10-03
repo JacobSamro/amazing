@@ -133,6 +133,8 @@ struct BindingState {
     // Copy handles introduce no JsValue/Rc roots.
     node_creation_realms: HashMap<(NodeIdx, u64), RealmHandle>,
     realm_documents: HashMap<RealmHandle, (NodeIdx, u64)>,
+    range_creation_realms: HashMap<amazing_dom::range::Range, RealmHandle>,
+    selection_range_roots: HashMap<amazing_dom::selection::SelectionId, (amazing_dom::range::Range, RootId)>,
     roots: Vec<Option<JsValue>>,
     captured_resolvers: Option<(JsValue, JsValue)>,
     promise_resolvers: HashMap<usize, (JsValue, JsValue)>,
@@ -809,6 +811,8 @@ pub(crate) fn install(
         interfaces: HashMap::new(),
         node_creation_realms: HashMap::new(),
         realm_documents: HashMap::new(),
+        range_creation_realms: HashMap::new(),
+        selection_range_roots: HashMap::new(),
         roots: Vec::new(),
         captured_resolvers: None,
         promise_resolvers: HashMap::new(),
@@ -1172,6 +1176,27 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 });
             }
         }
+        if brand == InterfaceBrand::RANGE {
+            let realm = self.dom_range_realm_from_key(key)?;
+            if realm != self.js.binding_current_realm() {
+                let state = self.state.clone();
+                return self.js.binding_with_realm(realm, |js| {
+                    RuntimeBindingHost { js, state }.wrap_platform_object(key, brand)
+                });
+            }
+        }
+        if brand == InterfaceBrand::SELECTION {
+            let selection = self.dom_selection_from_key(key)?;
+            let document = self.state.borrow().host.borrow().dom.selection_document(selection)
+                .map_err(|_| Throw::type_error("Invalid Selection document"))?;
+            let realm = self.dom_node_realm(document)?;
+            if realm != self.js.binding_current_realm() {
+                let state = self.state.clone();
+                return self.js.binding_with_realm(realm, |js| {
+                    RuntimeBindingHost { js, state }.wrap_platform_object(key, brand)
+                });
+            }
+        }
         let interface = self.interface_for(key, brand)?;
         let prototype = self
             .prototype(interface)
@@ -1213,9 +1238,49 @@ impl BindingHost for RuntimeBindingHost<'_> {
         };
         if matches!(brand, InterfaceBrand::NODE | InterfaceBrand::DOM_IMPLEMENTATION) {
             self.node_from_object_key(key).map(|_| key)
+        } else if brand == InterfaceBrand::SELECTION {
+            self.dom_selection_from_key(key).ok().map(|_| key)
+        } else if brand == InterfaceBrand::RANGE {
+            self.dom_range_realm_from_key(key).ok().map(|_| key)
         } else {
             (key.arena == self.state.borrow().arena && key.generation == 1).then_some(key)
         }
+    }
+    fn range_created(&mut self, range: amazing_dom::range::Range, context: amazing_bindings::host::RangeCreationContext) -> Result<(), Throw> {
+        self.dom_register_range_realm(range, context)
+    }
+    fn wrap_selection_static_range(&mut self, selection: amazing_dom::selection::SelectionId,
+        range: amazing_dom::range::StaticRangeId) -> Result<JsValue, Throw> {
+        let document = {
+            let state = self.state.borrow(); let host = state.host.borrow();
+            host.dom.static_range(range).map_err(|_| Throw::type_error("Invalid composed StaticRange"))?;
+            host.dom.selection_document(selection).map_err(|_| Throw::type_error("Invalid Selection document"))?
+        };
+        let realm = self.dom_node_realm(document)?;
+        let key = PlatformKey { arena: self.state.borrow().arena, slot: range.slot() as u64, generation: 1 };
+        let state = self.state.clone();
+        self.js.binding_with_realm(realm, |js| {
+            RuntimeBindingHost { js, state }.wrap_platform_object(key, InterfaceBrand::STATIC_RANGE)
+        })
+    }
+    fn selection_set_range_value(&mut self, selection: amazing_dom::selection::SelectionId,
+        range: amazing_dom::range::Range, value: &JsValue) -> Result<(), Throw> {
+        self.dom_selection_set_range_value(selection, range, value)
+    }
+    fn selection_range_value(&mut self, selection: amazing_dom::selection::SelectionId,
+        range: amazing_dom::range::Range) -> Result<Option<JsValue>, Throw> {
+        self.dom_selection_range_value(selection, range)
+    }
+    fn selection_release_range_value(&mut self, selection: amazing_dom::selection::SelectionId) -> Result<(), Throw> {
+        let old = self.state.borrow_mut().selection_range_roots.remove(&selection);
+        if let Some((_, root)) = old { self.release_value(root); }
+        Ok(())
+    }
+    fn document_has_browsing_context(&self, document: NodeIdx) -> Result<bool, Throw> {
+        Ok(self.html_document_has_browsing_context(document))
+    }
+    fn selection_document_for_window(&mut self, value: &JsValue) -> Result<NodeIdx, Throw> {
+        self.html_window_document_for_selection(value)
     }
     fn window_event_target_slot(&self, value: &JsValue) -> Option<u64> {
         self.dom_window_event_target_slot(value)

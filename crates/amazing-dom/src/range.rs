@@ -37,7 +37,7 @@ impl StaticRangeId {
     pub fn from_slot(slot: usize) -> Self { Self(slot) }
 }
 /// Arena-local, non-reused live range handle. `release_range` is a GC seam, not detach().
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Range(usize);
 impl Range {
     pub const START_TO_START: u16 = 0;
@@ -170,6 +170,7 @@ impl Dom {
             .ok_or(DomError::InvalidStateError)
     }
     pub fn release_range(&mut self, id: Range) {
+        if self.selection_holds_range(id) { return; }
         if let Some(r) = self.ranges.get_mut(id.0) {
             *r = None;
         }
@@ -182,6 +183,7 @@ impl Dom {
     }
     pub(crate) fn put_range(&mut self, id: Range, r: AbstractRange) {
         self.ranges[id.0] = Some(r);
+        self.selection_ranges_changed();
     }
     pub fn range_set_start(&mut self, id: Range, point: BoundaryPoint) -> Result<(), DomError> {
         self.range_set_boundary(id, point, true)
@@ -348,6 +350,7 @@ impl Dom {
                 }
             }
         }
+        self.selection_ranges_changed();
     }
     pub(crate) fn ranges_remove(&mut self, node: NodeIdx, parent: NodeIdx) {
         let index = self.node_index(node);
@@ -374,6 +377,7 @@ impl Dom {
                 }
             }
         }
+        self.selection_ranges_changed();
     }
     pub(crate) fn ranges_replace_data(
         &mut self,
@@ -394,6 +398,7 @@ impl Dom {
                 }
             }
         }
+        self.selection_ranges_changed();
     }
     /// Merge adjacent Text descendants, relocating boundaries before removals.
     pub fn normalize(&mut self, root: NodeIdx) -> Result<(), DomError> {
@@ -435,6 +440,7 @@ impl Dom {
                         }
                     }
                 }
+                self.selection_ranges_changed();
                 length += self.node_length(*current);
             }
             for current in siblings {
@@ -473,6 +479,7 @@ impl Dom {
                 }
             }
         }
+        self.selection_ranges_changed();
         self.replace_character_data(node, offset, data.len() - offset, &[])?;
         Ok(new)
     }

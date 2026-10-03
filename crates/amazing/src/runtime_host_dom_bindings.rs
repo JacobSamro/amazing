@@ -338,9 +338,15 @@ impl RuntimeBindingHost<'_> {
 
     pub(super) fn install_selection_global(&mut self) -> Result<(), Throw> {
         let function = self.native("getSelection", 0,
-            NativeEntry::Operation(Operation::GetSelection), HostCallPolicy::CallOnly);
+            NativeEntry::Operation(Operation::WindowGetSelection), HostCallPolicy::CallOnly);
         let global = self.js.binding_global_object();
-        self.define_data_property(&global, "getSelection", function, true, false, true)
+        self.define_data_property(&global, "getSelection", function, true, false, true)?;
+        for (name, event) in [("onselectionchange", "selectionchange"), ("onselectstart", "selectstart")] {
+            let getter = self.native(name, 0, NativeEntry::Operation(Operation::SelectionEventHandlerGet(event)), HostCallPolicy::CallOnly);
+            let setter = self.native(name, 1, NativeEntry::Operation(Operation::SelectionEventHandlerSet(event)), HostCallPolicy::CallOnly);
+            self.define_accessor_property(&global, name, Some(getter), Some(setter), true, true)?;
+        }
+        Ok(())
     }
 
     pub(super) fn install_window_event_target(&mut self) -> Result<(), Throw> {
@@ -2128,4 +2134,204 @@ mod tests {
         assert_ne!(origins[3],origins[4]);assert_eq!(origins[4],origins[5]);
     }
 
+    #[test]
+    fn selection_programmatic_direction_conversion_and_retained_range_identity() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse("<body></body>"), native_forwarded: false }));
+        let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, 64).unwrap();
+        scheduler.set_location_url("https://example.test/selection");
+        let result = scheduler.run_script(r#"(function(){
+            function check(v,n){if(!v)throw new Error(n);}
+            const s=document.getSelection(); check(s===getSelection(),'singleton');
+            const t=document.createTextNode('abcdef');document.body.appendChild(t);
+            s.setBaseAndExtent(t,5,t,1);check(s.direction==='backward'&&s.anchorOffset===5&&s.focusOffset===1,'direction');
+            const r=s.getRangeAt(0);r.setStart(t,2);check(s.getRangeAt(0)===r&&s.direction==='backward','live range');
+            s.extend(t,6);check(s.direction==='forward'&&s.anchorOffset===5&&s.focusOffset===6,'extend');
+            check(s.getRangeAt(0)!==r&&r.startOffset===2&&r.endOffset===5,'replace not mutate');
+            const newer=s.getRangeAt(0);s.collapseToEnd();check(s.type==='Caret'&&s.getRangeAt(0)!==newer,'collapse replacement');
+            check(s.getRangeAt(4294967296)===s.getRangeAt(0),'ToUint32 index');
+            const marker={};let caught=false;
+            try{s.collapse(t,{valueOf(){throw marker;}});}catch(e){caught=e===marker;}check(caught,'abrupt identity');
+            caught=false;try{s.getRangeAt({valueOf(){s.removeAllRanges();return 0;}});}catch(e){caught=e.name==='IndexSizeError';}
+            check(caught&&s.type==='None','conversion observes current selection');
+            s.setPosition(t,4294967297);check(s.anchorOffset===1,'alias uint32');
+            s.setBaseAndExtent(t,1,t,4);const deleted=s.getRangeAt(0);s.deleteFromDocument();
+            check(t.data==='aef'&&s.getRangeAt(0)===deleted&&s.isCollapsed,'delete retained identity');
+            check(document.implementation.createHTMLDocument('').getSelection()===null,'inert null');
+            caught=false;try{Document.prototype.getSelection.call({});}catch(e){caught=e instanceof TypeError;}check(caught,'wrong receiver');
+            return true;
+        })()"#).unwrap();
+        assert_eq!(result, JsValue::Bool(true));
+    }
+
+    #[test]
+    fn selection_task_is_coalesced_trusted_and_allows_listener_reentry() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse("<body></body>"), native_forwarded: false }));
+        let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, 64).unwrap();
+        scheduler.set_location_url("https://example.test/selection-events");
+        scheduler.run_script(r#"
+            var selectionEvents=0, badSelectionEvent=false, bubbledSelectionEvent=0;
+            var selectionText=document.createTextNode('abc');document.body.appendChild(selectionText);
+            document.body.addEventListener('selectionchange',()=>++bubbledSelectionEvent);
+            document.onselectionchange=function(e){
+                ++selectionEvents;
+                if(e.target!==document||e.bubbles||e.cancelable||!e.isTrusted)badSelectionEvent=true;
+                if(selectionEvents===1){getSelection().setPosition(selectionText,0);getSelection().setPosition(selectionText,1);}
+            };
+            getSelection().setPosition(selectionText,1);getSelection().setPosition(selectionText,2);
+            if(selectionEvents!==0)throw 'synchronous event';
+        "#).unwrap();
+        scheduler.pump_at(std::time::Duration::from_millis(1), false).unwrap();
+        assert_eq!(scheduler.run_script("selectionEvents===2&&!badSelectionEvent&&bubbledSelectionEvent===0").unwrap(), JsValue::Bool(true));
+        scheduler.run_script("document.onselectionchange=null;getSelection().empty();").unwrap();
+        scheduler.pump_at(std::time::Duration::from_millis(2), false).unwrap();
+        assert_eq!(scheduler.run_script("selectionEvents").unwrap(), JsValue::num(2.));
+    }
+
+    #[test]
+    fn selection_cross_realm_ranges_keep_creation_prototypes_and_canonical_identity() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse("<body></body>"), native_forwarded: false }));
+        let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, 64).unwrap();
+        scheduler.set_location_url("https://example.test/selection-realms");
+        let result = scheduler.run_script(r#"(function(){
+            function check(v,n){if(!v)throw new Error(n);}
+            const f=document.createElement('iframe');document.body.appendChild(f);
+            const w=f.contentWindow,d=w.document,s=w.getSelection();
+            check(s instanceof w.Selection&&!(s instanceof Selection),'Selection realm');
+            const t=d.createTextNode('abc');d.body.appendChild(t);
+            const childRange=new w.Range();childRange.selectNodeContents(t);
+            Selection.prototype.addRange.call(s,childRange);
+            check(Selection.prototype.getRangeAt.call(s,0)===childRange,'foreign retained Range');
+            check(s.getRangeAt(0)===childRange&&Object.getPrototypeOf(childRange)===w.Range.prototype,'foreign prototype');
+            const rootFactory=Document.prototype.createRange.call(d);
+            check(Object.getPrototypeOf(rootFactory)===w.Range.prototype,'receiver createRange realm');
+            const childFactory=w.Document.prototype.createRange.call(document);
+            check(Object.getPrototypeOf(childFactory)===Range.prototype,'borrowed child factory receiver');
+            const rootClone=Range.prototype.cloneRange.call(childRange);
+            check(Object.getPrototypeOf(rootClone)===w.Range.prototype,'borrowed clone source realm');
+            function Target(){}const customPrototype=Object.create(w.Range.prototype);Target.prototype=customPrototype;
+            const custom=Reflect.construct(w.Range,[],Target);
+            custom.selectNodeContents(t);s.removeAllRanges();s.addRange(custom);
+            check(s.getRangeAt(0)===custom&&Object.getPrototypeOf(custom)===customPrototype,'NewTarget prototype identity');
+            let bareError=false;try{w.Range();}catch(e){bareError=e instanceof w.TypeError;}
+            check(bareError,'constructor requires new');
+            s.removeAllRanges();w.Selection.prototype.collapse.call(s,t,1);
+            const childCreated=s.getRangeAt(0);check(Object.getPrototypeOf(childCreated)===w.Range.prototype,'child Selection allocation');
+            Selection.prototype.collapse.call(s,t,2);
+            const rootCreated=w.Selection.prototype.getRangeAt.call(s,0);
+            check(Object.getPrototypeOf(rootCreated)===w.Range.prototype&&rootCreated!==childCreated,'borrowed Selection receiver allocation');
+            const shadowHost=d.createElement('div');d.body.appendChild(shadowHost);
+            const closed=shadowHost.attachShadow({mode:'closed'}),shadowText=d.createTextNode('closed');closed.appendChild(shadowText);
+            s.setBaseAndExtent(shadowText,0,shadowText,6);
+            const rootSnapshots=Selection.prototype.getComposedRanges.call(s,{shadowRoots:[closed]});
+            check(Object.getPrototypeOf(rootSnapshots)===Array.prototype,'result array callee realm');
+            check(Object.getPrototypeOf(rootSnapshots[0])===w.StaticRange.prototype&&rootSnapshots[0].startContainer===shadowText,'snapshot Selection realm closed exposure');
+            const childSnapshots=w.Selection.prototype.getComposedRanges.call(s);
+            check(Object.getPrototypeOf(childSnapshots)===w.Array.prototype&&childSnapshots[0].startContainer===d.body,'child result realm rescope');
+            check(Object.getPrototypeOf(childSnapshots[0])===w.StaticRange.prototype,'rescope snapshot receiver realm');
+            s.removeAllRanges();const held=s;f.remove();
+            check(d.getSelection()===null&&held.rangeCount===0,'retained inactive selection');
+            return true;
+        })()"#).unwrap();
+        assert_eq!(result, JsValue::Bool(true));
+    }
+
+}
+
+
+impl RuntimeBindingHost<'_> {
+    pub(super) fn dom_selection_from_key(&self, key: PlatformKey)
+        -> Result<amazing_dom::selection::SelectionId, Throw> {
+        let state = self.state.borrow();
+        if key.arena != state.arena || key.generation != 1 || key.slot > usize::MAX as u64 {
+            return Err(Throw::type_error("Invalid Selection wrapper"));
+        }
+        let selection = amazing_dom::selection::SelectionId::from_slot(key.slot as usize);
+        state.host.borrow().dom.selection(selection)
+            .map_err(|_| Throw::type_error("Stale Selection document"))?;
+        Ok(selection)
+    }
+}
+impl RuntimeBindings {
+    pub(crate) fn take_selection_change_tasks(&self) -> Vec<amazing_dom::selection::SelectionChangeTask> {
+        let host = self.state.borrow().host.clone();
+        host.borrow_mut().dom.drain_selection_change_tasks()
+    }
+    pub(crate) fn fire_selection_change(&self, js: &mut Interpreter,
+        task: amazing_dom::selection::SelectionChangeTask) -> Result<(), Throw> {
+        let host = self.state.borrow().host.clone();
+        // Clear the document flag before availability checks, realm entry or author callbacks.
+        if !host.borrow_mut().dom.begin_selection_change(task) { return Ok(()); }
+        let adapter = RuntimeBindingHost { js, state: self.state.clone() };
+        if !adapter.html_document_has_browsing_context(task.document) { return Ok(()); }
+        let realm = adapter.dom_node_realm(task.document)?;
+        let state = self.state.clone();
+        js.binding_with_realm(realm, |js| {
+            let mut adapter = RuntimeBindingHost { js, state };
+            amazing_bindings::dispatch_user_agent_event(&mut adapter,
+                amazing_dom::events::EventTarget::Node(task.document), "selectionchange",
+                amazing_dom::events::EventInit { bubbles: false, cancelable: false, composed: false })
+        })
+    }
+}
+
+impl RuntimeBindingHost<'_> {
+    pub(super) fn dom_register_range_realm(&mut self, range: amazing_dom::range::Range,
+        context: amazing_bindings::host::RangeCreationContext) -> Result<(), Throw> {
+        use amazing_bindings::host::RangeCreationContext as Context;
+        let realm = match context {
+            Context::Constructor => self.js.binding_current_realm(),
+            Context::Document(document) => self.dom_node_realm(document)?,
+            Context::Clone(source) => {
+                let state = self.state.borrow();
+                state.host.borrow().dom.range(source).map_err(|_| Throw::type_error("Invalid source Range"))?;
+                state.range_creation_realms.get(&source).copied()
+                    .ok_or_else(|| Throw::type_error("Source Range realm is unregistered"))?
+            }
+            Context::Selection(selection) => {
+                let document = self.state.borrow().host.borrow().dom.selection_document(selection)
+                    .map_err(|_| Throw::type_error("Invalid Selection"))?;
+                self.dom_node_realm(document)?
+            }
+        };
+        let state = self.state.borrow();
+        state.host.borrow().dom.range(range).map_err(|_| Throw::type_error("Invalid fresh Range"))?;
+        if state.range_creation_realms.contains_key(&range) { return Err(Throw::type_error("Range allocation already registered")); }
+        drop(state);
+        self.state.borrow_mut().range_creation_realms.insert(range, realm);
+        Ok(())
+    }
+    pub(super) fn dom_range_realm_from_key(&self, key: PlatformKey) -> Result<RealmHandle, Throw> {
+        let state = self.state.borrow();
+        if key.arena != state.arena || key.generation != 1 || key.slot > usize::MAX as u64 {
+            return Err(Throw::type_error("Invalid Range wrapper"));
+        }
+        let range = amazing_dom::range::Range::from_slot(key.slot as usize);
+        state.host.borrow().dom.range(range).map_err(|_| Throw::type_error("Released Range"))?;
+        state.range_creation_realms.get(&range).copied().ok_or_else(|| Throw::type_error("Range creation realm is unregistered"))
+    }
+    fn dom_selection_range_value(&mut self, selection: amazing_dom::selection::SelectionId,
+        range: amazing_dom::range::Range) -> Result<Option<JsValue>, Throw> {
+        let state = self.state.borrow();
+        let selected = state.host.borrow().dom.selection(selection)
+            .map_err(|_| Throw::type_error("Invalid Selection"))?;
+        if selected.range != Some(range) || !state.range_creation_realms.contains_key(&range) {
+            return Err(Throw::type_error("Range is not the registered Selection association"));
+        }
+        let root = state.selection_range_roots.get(&selection).filter(|(stored, _)| *stored == range).map(|(_, root)| *root);
+        drop(state);
+        Ok(root.and_then(|root| self.root_value(root)))
+    }
+    fn dom_selection_set_range_value(&mut self, selection: amazing_dom::selection::SelectionId,
+        range: amazing_dom::range::Range, value: &JsValue) -> Result<(), Throw> {
+        let handle = self.platform_object(value, InterfaceBrand::RANGE).ok_or_else(|| Throw::type_error("Expected a genuine Range"))?;
+        if handle.slot != range.slot() as u64 { return Err(Throw::type_error("Range wrapper does not match association")); }
+        if let Some(existing) = self.dom_selection_range_value(selection, range)? {
+            if !self.same_value(&existing, value) { return Err(Throw::type_error("Selection Range identity changed")); }
+            return Ok(());
+        }
+        let root = self.retain_value(value.clone());
+        let old = self.state.borrow_mut().selection_range_roots.insert(selection, (range, root));
+        if let Some((_, old)) = old { self.release_value(old); }
+        Ok(())
+    }
 }

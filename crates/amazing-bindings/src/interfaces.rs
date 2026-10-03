@@ -277,6 +277,9 @@ const DOCUMENT: &[Member] = &[
     getter("compatMode", O::DocumentCompatMode), getter("referrer", O::DocumentReferrer),
     method("getElementById", O::DocumentGetElementById, 1),
     method("getSelection", O::GetSelection, 0),
+    getter("onselectionchange", O::SelectionEventHandlerGet("selectionchange")), setter("onselectionchange", O::SelectionEventHandlerSet("selectionchange")),
+    getter("onselectstart", O::SelectionEventHandlerGet("selectstart")), setter("onselectstart", O::SelectionEventHandlerSet("selectstart")),
+
     method("getElementsByName", O::DocumentGetElementsByName, 1),
     method("adoptNode", O::DocumentAdoptNode, 1),
     method("importNode", O::DocumentImportNode, 1),
@@ -495,12 +498,21 @@ const SELECTION: &[Member] = &[
     getter("focusOffset", O::SelectionFocusOffset),
     getter("isCollapsed", O::SelectionIsCollapsed),
     getter("rangeCount", O::SelectionRangeCount),
+    getter("type", O::SelectionType),
+    getter("direction", O::SelectionDirection),
     method("getRangeAt", O::SelectionGetRangeAt, 1),
     method("addRange", O::SelectionAddRange, 1),
     method("removeRange", O::SelectionRemoveRange, 1),
     method("removeAllRanges", O::SelectionRemoveAllRanges, 0),
     method("empty", O::SelectionRemoveAllRanges, 0),
     method("collapse", O::SelectionCollapse, 1),
+    method("setPosition", O::SelectionCollapse, 1),
+    method("collapseToStart", O::SelectionCollapseToStart, 0),
+    method("collapseToEnd", O::SelectionCollapseToEnd, 0),
+    method("extend", O::SelectionExtend, 1),
+    method("setBaseAndExtent", O::SelectionSetBaseAndExtent, 4),
+    method("deleteFromDocument", O::SelectionDeleteFromDocument, 0),
+    method("getComposedRanges", O::SelectionGetComposedRanges, 0),
     method("selectAllChildren", O::SelectionSelectAllChildren, 1),
     method("toString", O::SelectionToString, 0),
 ];
@@ -668,6 +680,9 @@ const HTML_BODY: &[Member] = &[
     getter("aLink", O::BodyLegacyColorGet(LC::ActiveLink)), setter("aLink", O::BodyLegacyColorSet(LC::ActiveLink)),
 ];
 const HTML_ELEMENT: &[Member] = &[
+    getter("onselectionchange", O::SelectionEventHandlerGet("selectionchange")), setter("onselectionchange", O::SelectionEventHandlerSet("selectionchange")),
+    getter("onselectstart", O::SelectionEventHandlerGet("selectstart")), setter("onselectstart", O::SelectionEventHandlerSet("selectstart")),
+
     method("click", O::HTMLElementClick(false), 0),
     getter("onclick", O::HTMLElementOnClick), setter("onclick", O::HTMLElementSetOnClick),
     getter("dataset", O::ElementDataset),

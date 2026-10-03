@@ -18,6 +18,7 @@ enum Payload {
     Mutation,
     AbortTimeout(AbortSignalId, u64),
     FormSelection(u32),
+    SelectionChange(amazing_dom::selection::SelectionChangeTask),
 }
 struct TimerRegistration {
     core: TimerId,
@@ -270,6 +271,11 @@ impl DriverScheduler {
         for (signal, delay_ms) in self.bindings.take_abort_timeouts() {
             self.register_abort_timeout(signal, delay_ms)?;
         }
+        for task in self.bindings.take_selection_change_tasks() {
+            let callback = self.own(Payload::SelectionChange(task))?;
+            self.loop_.queue_task(TaskSource::UserInteraction, Some(GLOBAL), callback)
+                .map_err(loop_error)?;
+        }
         for node in self.bindings.take_form_selection_events() {
             let callback = self.own(Payload::FormSelection(node.0))?;
             self.loop_.queue_task(TaskSource::UserInteraction, Some(GLOBAL), callback)
@@ -373,6 +379,11 @@ impl DriverScheduler {
                 if remaining > 0 { return self.register_abort_timeout(signal, remaining); }
                 let bindings = self.bindings.clone();
                 self.enter(|js| bindings.fire_abort_timeout(js, signal))
+            }
+            Payload::SelectionChange(task) => {
+                self.payloads.remove(&callback.0);
+                let bindings = self.bindings.clone();
+                self.enter(|js| bindings.fire_selection_change(js, task))
             }
             Payload::FormSelection(node) => {
                 self.payloads.remove(&callback.0);

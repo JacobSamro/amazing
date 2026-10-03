@@ -102,6 +102,8 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser>(
             node
         } else { host.current_document_for_nodes()? };
         let range = host.with_dom(|dom| dom.create_range(document))?;
+        host.range_created(range, if op == O::CreateRange { crate::host::RangeCreationContext::Document(document) }
+            else { crate::host::RangeCreationContext::Constructor })?;
         return host.wrap_platform_object(range_key(host, range), InterfaceBrand::RANGE);
     }
     if matches!(op, O::RangeStartContainer | O::RangeStartOffset | O::RangeEndContainer
@@ -184,7 +186,10 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser>(
         Output::Node(node) => host.wrap_node(node)?,
         Output::Number(number) => host.number(number),
         Output::Boolean(boolean) => host.boolean(boolean),
-        Output::Range(other) => host.wrap_platform_object(range_key(host, other), InterfaceBrand::RANGE)?,
+        Output::Range(other) => {
+            host.range_created(other, crate::host::RangeCreationContext::Clone(range))?;
+            host.wrap_platform_object(range_key(host, other), InterfaceBrand::RANGE)?
+        },
         Output::String(units) => host.string(&units)?,
     })
 }

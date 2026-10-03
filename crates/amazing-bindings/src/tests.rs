@@ -228,6 +228,9 @@ impl BindingHost for Host {
     fn release_value(&mut self, callback: CallbackId) {
         if let Some(slot) = self.callbacks.get_mut(callback.0 as usize) { *slot = None; }
     }
+    fn document_has_browsing_context(&self, document: NodeIdx) -> Result<bool, String> {
+        Ok(document == NodeIdx(0) && self.dom.node_generation(document).is_some())
+    }
     fn window_event_target_slot(&self, value: &V) -> Option<u64> {
         self.window.as_ref().filter(|(_, window)| window == value).map(|(slot, _)| *slot)
     }
@@ -2742,4 +2745,26 @@ fn native_ua_payload_cancellation_and_activation_share_one_dispatch() {
     assert!(host.dom.input_checked(input).unwrap());
     assert!(!host.dom.input_indeterminate(input).unwrap());
     assert_eq!(host.calls,vec![41,42]);
+}
+
+
+#[test]
+fn selection_programmatic_aliases_directions_and_index_uint32() {
+    let mut h = Host::default(); let parent = element(&mut h); let text = h.dom.create_text(parent, "abcdef");
+    let s = call(&mut h, O::GetSelection, V::Node(NodeIdx(0)), &[]);
+    call(&mut h, O::SelectionSetBaseAndExtent, s.clone(), &[V::Node(text),V::Number(5.),V::Node(text),V::Number(1.)]);
+    assert_eq!(call(&mut h,O::SelectionDirection,s.clone(),&[]),str_value("backward"));
+    assert_eq!(call(&mut h,O::SelectionAnchorOffset,s.clone(),&[]),V::Number(5.));
+    let old=call(&mut h,O::SelectionGetRangeAt,s.clone(),&[V::Number(0.)]);
+    assert_eq!(call(&mut h,O::SelectionGetRangeAt,s.clone(),&[V::Number(4294967296.)]),old);
+    call(&mut h,O::SelectionCollapseToStart,s.clone(),&[]);
+    assert_eq!(call(&mut h,O::SelectionType,s.clone(),&[]),str_value("Caret"));
+    assert_ne!(call(&mut h,O::SelectionGetRangeAt,s.clone(),&[V::Number(0.)]),old);
+    call(&mut h,O::SelectionExtend,s.clone(),&[V::Node(text),V::Number(3.)]);
+    assert_eq!(call(&mut h,O::SelectionType,s.clone(),&[]),str_value("Range"));
+    assert_eq!(call(&mut h,O::SelectionDirection,s.clone(),&[]),str_value("forward"));
+    call(&mut h,O::SelectionRemoveAllRanges,s.clone(),&[]);
+    assert_eq!(call(&mut h,O::SelectionGetComposedRanges,s.clone(),&[]),V::Array(vec![]));
+    assert_eq!(call(&mut h,O::SelectionDirection,s,&[]),str_value("none"));
+    let inert=h.dom.create_document(); assert_eq!(call(&mut h,O::GetSelection,V::Node(inert),&[]),V::Null);
 }
