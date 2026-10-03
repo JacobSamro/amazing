@@ -1,3 +1,6 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/array/array_iterator.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// Array iterator length, index advancement and exhaustion adapted to our values.
 // Symbol constructor, registry, well-known identities, and prototype methods.
 
 fn symbol_method(i: &Interpreter, name: &str, native: crate::value::NativeFn) -> JsValue {
@@ -116,15 +119,15 @@ fn sequence_result(i: &Interpreter, value: JsValue, done: bool) -> JsValue {
 }
 
 fn native_array_iterator_values(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    if !this.is_object() { return Err(Throw::type_error("Array iterator receiver is not an object")); }
+    let this = array_receiver(i, this)?;
     Ok(i.sequence_iterator(this, SequenceIteratorKind::ArrayValues))
 }
 fn native_array_iterator_keys(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    if !this.is_object() { return Err(Throw::type_error("Array iterator receiver is not an object")); }
+    let this = array_receiver(i, this)?;
     Ok(i.sequence_iterator(this, SequenceIteratorKind::ArrayKeys))
 }
 fn native_array_iterator_entries(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    if !this.is_object() { return Err(Throw::type_error("Array iterator receiver is not an object")); }
+    let this = array_receiver(i, this)?;
     Ok(i.sequence_iterator(this, SequenceIteratorKind::ArrayEntries))
 }
 fn native_string_iterator(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -188,17 +191,37 @@ fn native_collection_iterator_next(i: &mut Interpreter, this: JsValue, _: Vec<Js
 }
 fn native_sequence_iterator_next(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let JsValue::Object(object) = this else { return Err(Throw::type_error("incompatible iterator receiver")); };
+    if binary_iterator_state(&object).is_some() {
+        return binary_typed_iterator_next(i, JsValue::Object(object), Vec::new());
+    }
     let state = {
-        let mut object = object.borrow_mut();
-        let Exotic::SequenceIterator(state) = &mut object.exotic else { return Err(Throw::type_error("incompatible iterator receiver")); };
-        let current = state.clone();
-        state.next_index = state.next_index.saturating_add(1);
-        current
+        let object = object.borrow();
+        let Exotic::SequenceIterator(state) = &object.exotic else { return Err(Throw::type_error("incompatible iterator receiver")); };
+        state.clone()
     };
     let index = state.next_index;
     match state.kind {
         SequenceIteratorKind::ArrayKeys | SequenceIteratorKind::ArrayValues | SequenceIteratorKind::ArrayEntries => {
-            if index >= i.array_length(&state.target) { return Ok(sequence_result(i, JsValue::Undefined, true)); }
+            if state.target.is_undefined() { return Ok(sequence_result(i, JsValue::Undefined, true)); }
+            let typed = matches!(&state.target, JsValue::Object(target) if matches!(target.borrow().exotic, Exotic::TypedArray));
+            let length = if typed {
+                let (view, _) = binary_typed(&state.target)?;
+                if binary_view_out_of_bounds(&view) { return Err(Throw::type_error("out-of-bounds TypedArray")); }
+                binary_length(&view)
+            } else {
+                // Get/ToLength are observable and must finish before advancing
+                // the cursor. Inherited live accessors work like own properties.
+                array_search_length(i, &state.target)?
+            };
+            if index >= length {
+                if let Exotic::SequenceIterator(current) = &mut object.borrow_mut().exotic {
+                    current.target = JsValue::Undefined;
+                }
+                return Ok(sequence_result(i, JsValue::Undefined, true));
+            }
+            if let Exotic::SequenceIterator(current) = &mut object.borrow_mut().exotic {
+                current.next_index = index + 1;
+            }
             let value = match state.kind {
                 SequenceIteratorKind::ArrayKeys => JsValue::num(index as f64),
                 SequenceIteratorKind::ArrayValues => i.get_prop(&state.target, index.to_string())?,
@@ -216,10 +239,8 @@ fn native_sequence_iterator_next(i: &mut Interpreter, this: JsValue, _: Vec<JsVa
             let first = text.units()[index];
             let paired = (0xd800..=0xdbff).contains(&first)
                 && text.units().get(index + 1).is_some_and(|next| (0xdc00..=0xdfff).contains(next));
-            if paired {
-                if let Exotic::SequenceIterator(state) = &mut object.borrow_mut().exotic {
-                    state.next_index = state.next_index.saturating_add(1);
-                }
+            if let Exotic::SequenceIterator(state) = &mut object.borrow_mut().exotic {
+                state.next_index = index + if paired { 2 } else { 1 };
             }
             let units = if paired { text.units()[index..index + 2].to_vec() } else { vec![first] };
             Ok(sequence_result(i, JsValue::str_units(units), false))
@@ -279,6 +300,42 @@ fn native_function_has_instance(i: &mut Interpreter, this: JsValue, args: Vec<Js
 #[cfg(test)]
 mod symbol_tests {
     use super::*;
+
+    fn iterator_case(source: &str) {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut runtime = Interpreter::new();
+            let result = runtime.run_script_with_backend(source, backend)
+                .unwrap_or_else(|error| panic!("{backend:?}: {}", error.describe()));
+            assert_eq!(result, JsValue::Bool(true), "{backend:?}");
+        }
+    }
+
+    #[test]
+    fn array_iterators_observe_inherited_live_lengths_and_box_primitive_receivers() {
+        iterator_case("var reads=0; var o=Object.create({get length(){reads++;return '2.9'}}); o[0]='a';o[1]='b';o[Symbol.iterator]=Array.prototype.values; var result=Array.from(o); var boxed=Array.from(Array.prototype.values.call('ab')); result.join('')==='ab' && reads===3 && boxed.join('')==='ab' && Array.prototype.keys.call(7).next().done");
+    }
+
+    #[test]
+    fn array_iterator_exhaustion_is_permanent_and_large_lengths_are_not_scan_capped() {
+        iterator_case("var limit=Infinity,reads=0;var o={get length(){reads++;return limit},0:'a'};var it=Array.prototype.keys.call(o);var first=it.next();limit=0;var end=it.next();limit=3;first.value===0&&!first.done&&end.done&&it.next().done&&reads===2");
+    }
+
+    #[test]
+    fn array_iterator_length_abrupt_completions_preserve_the_current_index() {
+        iterator_case("var marker={},bad=true,reads=0;var length={valueOf(){if(bad){bad=false;throw marker}return 2}};var o={get length(){reads++;return length},0:'a',1:'b'};var it=Array.prototype.values.call(o),caught=false;try{it.next()}catch(e){caught=e===marker}var next=it.next();caught&&next.value==='a'&&!next.done&&reads===2");
+        iterator_case("var marker={},bad=true;var o={get length(){if(bad){bad=false;throw marker}return 1},0:'a'};var it=Array.prototype.values.call(o),caught=false;try{it.next()}catch(e){caught=e===marker}caught&&it.next().value==='a'");
+    }
+
+    #[test]
+    fn array_iterator_indices_advance_before_element_get_and_keys_skip_element_get() {
+        iterator_case("var marker={},gets=0;var o={length:2,get 0(){gets++;throw marker},1:'b'};var it=Array.prototype.values.call(o),caught=false;try{it.next()}catch(e){caught=e===marker}var next=it.next();var key=Array.prototype.keys.call(o).next();caught&&next.value==='b'&&key.value===0&&gets===1");
+        iterator_case("var o={length:2,0:'a',1:'b'};var it=Array.prototype.entries.call(o);var first=it.next().value,second=it.next().value;first!==second&&first[0]===0&&first[1]==='a'&&second[0]===1&&second[1]==='b'");
+    }
+
+    #[test]
+    fn array_iterators_keep_typed_array_bounds_and_shared_next_semantics() {
+        iterator_case("var a=new Uint8Array([4,5]);Object.defineProperty(a,'length',{get(){throw 7}});var it=Array.prototype.values.call(a);var first=it.next();var next=Object.getPrototypeOf([][Symbol.iterator]()).next.call(a.values());var b=new Uint8Array([9]);var detached=Array.prototype.values.call(b);b.buffer.transfer();var caught=false;try{detached.next()}catch(e){caught=e instanceof TypeError}first.value===4&&next.value===4&&caught");
+    }
 
     #[test]
     fn symbols_have_identity_description_and_registry_keys() {
