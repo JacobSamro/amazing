@@ -289,11 +289,15 @@ impl RuntimeBindingHost<'_> {
                 amazing_html::ParseSignal::Script(node) => self.run_written_script(document, node)?,
             }
         }
-        // Deferred classic scripts crossed by writes run after explicit EOF.
+        // The tree builder's deferred ids belong to its private arena. Capture
+        // actual imported nodes before retiring this parser, then run them with
+        // no parser script-nesting level: deferred/module scripts can reopen.
         let deferred = parser.borrow_mut().take_deferred_or_async();
-        for (node, _) in deferred {
-            self.run_written_script(document, node)?;
-        }
+        let deferred: Vec<_> = {
+            let state = self.state.borrow();
+            deferred.into_iter().filter_map(|(node, _)| state.frames.parser_imports.get(&document)
+                .and_then(|import| import.borrow().imported(node))).collect()
+        };
         unregister_active_parser_state(&self.state, document);
         {
             let mut state = self.state.borrow_mut();
@@ -301,6 +305,10 @@ impl RuntimeBindingHost<'_> {
             state.frames.document_write_sessions.remove(&document);
         }
         self.with_dom(|dom| dom.set_document_ready_state(document, ReadyState::Interactive))?;
+        for node in deferred {
+            self.run_written_script(document, node)?;
+            if self.state.borrow().frames.document_write_sessions.contains_key(&document) { return Ok(()); }
+        }
         let init = EventInit { bubbles: false, cancelable: false, composed: false };
         amazing_bindings::dispatch_user_agent_event(self, EventTarget::Node(document), "readystatechange", init)?;
         if self.state.borrow().frames.document_write_sessions.contains_key(&document) { return Ok(()); }
@@ -375,6 +383,18 @@ mod tests {
             [order.join(','),document.getElementById('inner').textContent,document.getElementById('inner').nextSibling.id,
              document.readyState,document.doctype.name].join('|')
         "#).unwrap(), JsValue::str("outer,done|inner|tail|complete|html"));
+    }
+
+    #[test]
+    fn reopened_stream_modules_use_module_registry_and_current_script_policy() {
+        let mut scheduler = scheduler();
+        assert_eq!(scheduler.run_script(r#"
+            document.open();
+            document.write('<!doctype html><script type=module>window.moduleValue=41+1;window.moduleCurrent=document.currentScript;<\/script><p>tail');
+            if(typeof moduleValue!=='undefined') throw new Error('module ran before close');
+            document.close();
+            [moduleValue,moduleCurrent===null,document.readyState,document.body.lastChild.textContent].join('|')
+        "#).unwrap(), JsValue::str("42|true|complete|tail"));
     }
 
     #[test]
