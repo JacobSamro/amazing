@@ -112,7 +112,7 @@ pub(super) fn referrer_policy_name(policy: amazing_fetch::ReferrerPolicy) -> &'s
 }
 
 impl FrameRuntime {
-    pub(super) fn document_referrer_policy(&self, dom: &Dom, document: NodeIdx)
+    pub(in crate::runtime_binding_host) fn document_referrer_policy(&self, dom: &Dom, document: NodeIdx)
         -> Option<amazing_fetch::ReferrerPolicy> {
         if !matches!(dom.kind(document), Some(NodeKind::Document)) { return None; }
         let generation = dom.node_generation(document)?;
@@ -122,12 +122,12 @@ impl FrameRuntime {
 }
 
 impl RuntimeBindingHost<'_> {
-    pub(super) fn html_document_referrer_policy(&self, document: NodeIdx)
+    pub(in crate::runtime_binding_host) fn html_document_referrer_policy(&self, document: NodeIdx)
         -> Option<amazing_fetch::ReferrerPolicy> {
         let state = self.state.borrow(); let host = state.host.borrow();
         state.frames.document_referrer_policy(&host.dom, document)
     }
-    pub(super) fn html_set_document_referrer_policy(&self, document: NodeIdx,
+    pub(in crate::runtime_binding_host) fn html_set_document_referrer_policy(&self, document: NodeIdx,
         policy: amazing_fetch::ReferrerPolicy) -> Result<(), amazing_dom::DomError> {
         let generation = {
             let state = self.state.borrow(); let host = state.host.borrow();
@@ -142,6 +142,12 @@ impl RuntimeBindingHost<'_> {
 }
 
 impl RuntimeBindings {
+    pub(crate) fn document_referrer_policy(&self, document: NodeIdx)
+        -> Option<amazing_fetch::ReferrerPolicy> {
+        let state = self.state.borrow(); let host = state.host.borrow();
+        state.frames.document_referrer_policy(&host.dom, document)
+    }
+
     pub(crate) fn set_document_response_referrer_policy(&self, document: NodeIdx,
         headers: &amazing_net::Headers) -> Result<(), amazing_dom::DomError> {
         let policy = headers.get_all("referrer-policy").into_iter()
