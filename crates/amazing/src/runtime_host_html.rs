@@ -431,10 +431,10 @@ fn fetch_child_script(src: &str, base: &str,
 
 fn content_type(response: &amazing_net::Response, logical_url: &str,
     local_file: bool) -> Option<String> {
-    let mime = response.content_type().unwrap_or("").to_ascii_lowercase();
+    let mime = resource_response::response_mime_type(response)
+        .map(|mime| mime.essence()).unwrap_or_default();
     let unknown = matches!(mime.as_str(), "" | "unknown/unknown" | "application/unknown" | "*/*");
-    let no_sniff = response.headers.get("x-content-type-options")
-        .is_some_and(|value| value.split(',').next().unwrap_or("").trim().eq_ignore_ascii_case("nosniff"));
+    let no_sniff = resource_response::response_nosniff(response);
     if unknown && !no_sniff && has_html_signature(&response.body) {
         return Some("text/html".into());
     }
@@ -949,13 +949,8 @@ impl RuntimeBindings {
                 let mime = content_type(&response, &logical_url,
                     !canonical && (resolver.is_some() || logical_url.starts_with("file:")))
                     .ok_or_else(|| "iframe response has no supported media type".to_owned())?;
-                let charset = response.headers.get("content-type").and_then(|header| {
-                    header.split(';').skip(1).find_map(|parameter| {
-                        let (name, value) = parameter.trim().split_once('=')?;
-                        name.trim().eq_ignore_ascii_case("charset")
-                            .then(|| value.trim().trim_matches('"'))
-                    })
-                });
+                let response_mime = resource_response::response_mime_type(&response);
+                let charset = response_mime.as_ref().and_then(|mime| mime.parameter("charset"));
                 let mut policy = amazing_fetch::service::ClientContext::default();
                 let mut policy_headers = amazing_fetch::HeaderList::default();
                 for (name, value) in response.headers.iter() {

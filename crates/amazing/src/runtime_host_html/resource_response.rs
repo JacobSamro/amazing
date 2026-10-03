@@ -195,6 +195,26 @@ impl RuntimeBindings {
     }
 }
 
+/// Preserve field order and duplicate values for Fetch header algorithms.
+fn response_header_list(response: &amazing_net::Response) -> amazing_fetch::HeaderList {
+    let mut headers = amazing_fetch::HeaderList::default();
+    for (name, value) in response.headers.iter() {
+        // Net Headers already validates names and field values.
+        headers.append(name, value).expect("validated response header");
+    }
+    headers
+}
+
+/// Fetch §3.5 selects the last valid MIME record and carries charset only
+/// across records with the same essence. Quoted lists/parameters stay intact.
+pub(super) fn response_mime_type(response: &amazing_net::Response) -> Option<amazing_fetch::mime::MimeType> {
+    amazing_fetch::mime::extract_mime_type(&response_header_list(response))
+}
+
+pub(super) fn response_nosniff(response: &amazing_net::Response) -> bool {
+    amazing_fetch::security::determine_nosniff(&response_header_list(response))
+}
+
 /// HTML fetch-a-classic-script plus Encoding decode. No HTML meta prescan:
 /// header charset overrides fallback, and a real BOM overrides either one.
 fn decode_classic_response(response: amazing_net::Response,
@@ -202,20 +222,16 @@ fn decode_classic_response(response: amazing_net::Response,
     if !response.is_success() { return Err(format!("classic script status {}", response.status)); }
     if response.body.len() > 16 * 1024 * 1024 { return Err("classic script body too large".into()); }
     ParsedUrl::parse(&response.url).map_err(|error| format!("classic script final URL: {error:?}"))?;
-    let mime = response.content_type().unwrap_or("").to_ascii_lowercase();
+    let record = response_mime_type(&response);
+    let mime = record.as_ref().map(|mime| mime.essence()).unwrap_or_default();
     let javascript = amazing_html::is_javascript_mime_type(&mime);
-    let nosniff = response.headers.get("x-content-type-options")
-        .is_some_and(|value| value.split(',').next().unwrap_or("").trim().eq_ignore_ascii_case("nosniff"));
+    let nosniff = response_nosniff(&response);
     if (!javascript && nosniff) || mime.starts_with("image/") || mime.starts_with("audio/")
         || mime.starts_with("video/") || mime == "text/csv" {
         return Err(format!("blocked classic script media type: {mime}"));
     }
-    let encoding = response.headers.get("content-type").and_then(|header|
-        header.split(';').skip(1).find_map(|parameter| {
-            let (name, value) = parameter.trim().split_once('=')?;
-            if !name.trim().eq_ignore_ascii_case("charset") { return None; }
-            amazing_encoding::encoding_for_label(value.trim().trim_matches('"'))
-        })).unwrap_or(fallback);
+    let encoding = record.as_ref().and_then(|mime| mime.parameter("charset"))
+        .and_then(amazing_encoding::encoding_for_label).unwrap_or(fallback);
     let (encoding, skip) = amazing_encoding::sniff_bom(&response.body).unwrap_or((encoding, 0));
     let text = amazing_encoding::decode(&response.body[skip..], encoding, false)
         .map_err(|error| format!("classic script decode: {error:?}"))?;
@@ -254,6 +270,82 @@ mod tests {
         let mut headers = amazing_net::Headers::new();
         if let Some(mime) = mime { headers.append("Content-Type", mime.to_owned()).unwrap(); }
         amazing_net::Response { url: url.into(), status: 200, reason: "OK".into(), headers, body }
+    }
+
+    #[test]
+    fn response_mime_lists_quotes_charset_and_nosniff_use_fetch_records() {
+        use amazing_encoding::Encoding::{Utf8, Windows1252};
+        let url = "https://example.test/final/resource";
+        for (fields, essence, charset) in [
+            (vec!["text/html; charset=windows-1252", "text/html"], "text/html", Some("windows-1252")),
+            (vec!["text/html; charset=windows-1252", "text/html; charset=UTF-8", "text/html"], "text/html", Some("windows-1252")),
+            (vec!["text/html; charset=windows-1252", "application/xhtml+xml"], "application/xhtml+xml", None),
+            (vec!["bogus", "*/*", "TEXT/HTML; x=\"a,b;c\"; charset=\"windows\\-1252\"", "invalid"], "text/html", Some("windows-1252")),
+            (vec!["application/xml, text/html; charset=windows-1252"], "text/html", Some("windows-1252")),
+        ] {
+            let mut value = response(url, None, b"<!doctype html><p>test".to_vec());
+            for field in fields { value.headers.append("Content-Type", field.to_owned()).unwrap(); }
+            let mime = response_mime_type(&value).unwrap();
+            assert_eq!(mime.essence(), essence);
+            assert_eq!(mime.parameter("charset"), charset);
+            assert_eq!(content_type(&value, url, false).as_deref(), Some(essence));
+        }
+        for (fields, allowed, expected) in [
+            (vec!["image/png", "text/javascript; charset=\"windows\\-1252\""], true, "é"),
+            (vec!["text/javascript", "image/png"], false, ""),
+            (vec!["text/plain", "invalid", "TEXT/JAVASCRIPT"], true, "�"),
+            (vec!["text/javascript; charset=windows-1252", "text/javascript"], true, "é"),
+            (vec!["text/javascript; charset=windows-1252", "application/javascript"], true, "�"),
+        ] {
+            let mut value = response(url, None, vec![0xe9]);
+            for field in fields { value.headers.append("Content-Type", field.to_owned()).unwrap(); }
+            value.headers.append("X-Content-Type-Options", "NOSNIFF, ignored".to_owned()).unwrap();
+            let result = decode_classic_response(value, Utf8);
+            assert_eq!(result.is_ok(), allowed);
+            if allowed { assert_eq!(result.unwrap().0, expected); }
+        }
+        // Missing/invalid MIME remains unknown; no HTTP extension inference.
+        let mut value = response(url, Some("invalid, */*"), b"<!doctype html><p>html".to_vec());
+        assert!(response_mime_type(&value).is_none());
+        assert_eq!(content_type(&value, "https://example.test/r.xml", false).as_deref(), Some("text/html"));
+        value.headers.append("X-Content-Type-Options", "invalid".to_owned()).unwrap();
+        value.headers.append("X-Content-Type-Options", "nosniff".to_owned()).unwrap();
+        assert!(!response_nosniff(&value));
+        assert_eq!(content_type(&value, url, false).as_deref(), Some("text/html"));
+        let mut value = response(url, Some("text/javascript; charset=windows-1252"), vec![0xef,0xbb,0xbf,0xc3,0xa9]);
+        value.headers.append("Content-Type", "text/javascript".to_owned()).unwrap();
+        assert_eq!(decode_classic_response(value, Windows1252).unwrap().0, "é");
+    }
+
+    #[test]
+    fn actual_frame_document_and_script_decode_selected_duplicate_response_mime() {
+        for bom in [false, true] {
+            let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+                "<!doctype html><body><iframe src='/child.xml'></iframe>"), native_forwarded: false }));
+            let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+            scheduler.set_frame_resource_loader(Rc::new(move |request| {
+                let mut value = match request.kind {
+                    HtmlFrameResourceKind::Document => response("https://example.test/final/child.xml", Some("application/xml; charset=UTF-8"),
+                        if bom { b"\xef\xbb\xbf<!doctype html><p id=p>\xc3\xa9</p><script src='child.js'></script>".to_vec() }
+                        else { b"<!doctype html><p id=p>\xe9</p><script src='child.js'></script>".to_vec() }),
+                    HtmlFrameResourceKind::ClassicScript => response("https://example.test/final/child.js", Some("image/png"),
+                        b"window.mimeValue='\xe9';".to_vec()),
+                };
+                value.headers.append("Content-Type", match request.kind {
+                    HtmlFrameResourceKind::Document => "text/html; x=\"a,b;c\"; charset=\"windows\\-1252\"",
+                    HtmlFrameResourceKind::ClassicScript => "text/javascript; charset=windows-1252",
+                }.to_owned()).unwrap();
+                if request.kind == HtmlFrameResourceKind::ClassicScript {
+                    value.headers.append("X-Content-Type-Options", "nosniff".to_owned()).unwrap();
+                }
+                Ok(value)
+            }));
+            scheduler.set_location_url("https://example.test/root.html");
+            scheduler.dispatch_pending_iframe_loads().unwrap();
+            assert_eq!(scheduler.run_script("var f=document.querySelector('iframe');[f.contentDocument.contentType,f.contentDocument.getElementById('p').textContent,f.contentWindow.mimeValue].join('|')").unwrap(),
+                JsValue::str("text/html|é|é"));
+            assert!(host.try_borrow_mut().is_ok());
+        }
     }
 
     #[test]
