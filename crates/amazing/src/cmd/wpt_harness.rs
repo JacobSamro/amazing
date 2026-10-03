@@ -1192,6 +1192,7 @@ fn execute_page(
         let styles = amazing_css::compute(&page.dom, &[]);
         let media = crate::page::load_page_media_in_viewport(&page.dom,
             &file.to_string_lossy(), &styles, options.width as f32, 1.0);
+        drop(page);
         scheduler.set_image_loader_states(&media).map_err(|error| error.describe())
     };
     refresh_images(&mut scheduler)?;
