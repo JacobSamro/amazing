@@ -223,27 +223,15 @@ fn install_test262_module_loader(
     };
     let linker = Rc::new(RefCell::new(ModuleLinker::new(resolve_specifier)));
     let loader_linker = Rc::clone(&linker);
-    let loader_root = root_path.clone();
-    i.binding_set_typed_module_loader_hook(Rc::new(move |interpreter, specifier, referrer| {
-        let candidate = Path::new(referrer).parent().unwrap_or(&loader_root).join(specifier);
-        let canonical = candidate.canonicalize().map_err(|error| Throw::type_error(error.to_string()))?;
-        if !canonical.starts_with(&loader_root) {
-            return Err(Throw::type_error("module specifier escapes Test262 checkout"));
-        }
-        let id = canonical.to_string_lossy().into_owned();
-        let source = std::fs::read_to_string(canonical).map_err(|error| Throw::type_error(error.to_string()))?;
-        let convert_error = |failure: amazing_js::module::ModuleFailure| {
-            if let Some(thrown) = failure.thrown {
-                return thrown;
-            }
-            match failure.phase {
-                ModulePhase::Parse => Throw::syntax_error(failure.message),
-                _ => Throw::type_error(failure.message),
-            }
-        };
-        loader_linker.borrow_mut().link(&id, &source).map_err(convert_error)?;
-        ModuleLinker::evaluate_shared(&loader_linker, &id, interpreter).map_err(convert_error)?;
-        Ok(loader_linker.borrow().namespace_object(&id).expect("evaluated module has a namespace"))
+    i.binding_set_phase_module_loader_hook(Rc::new(move |interpreter, request, referrer| {
+        ModuleLinker::import_shared(&loader_linker, request, referrer, interpreter)
+            .map_err(|failure| {
+                if let Some(thrown) = failure.thrown { return thrown; }
+                match failure.phase {
+                    ModulePhase::Parse => Throw::syntax_error(failure.message),
+                    _ => Throw::type_error(failure.message),
+                }
+            })
     }));
     Ok((linker, root_id))
 }
