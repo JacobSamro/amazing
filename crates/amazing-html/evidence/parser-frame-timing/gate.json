@@ -1,0 +1,18 @@
+{
+  "before": "35b4b91f9479d0029761b87f68c9b858c95ceb8b",
+  "after": "d96f0894a406c8dfe94e07cbb28439e091c06002",
+  "source_series": [
+    "37c331adb00f5e8ded3bc239ed2cb0c5b5055678",
+    "0a8b232138a377b66704d38c1cff28c2afa9328f",
+    "d96f0894a406c8dfe94e07cbb28439e091c06002"
+  ],
+  "owned_passed": 632,
+  "owned_skipped": 6,
+  "workspace_passed": 3876,
+  "workspace_skipped": 17,
+  "doctests_passed": 4,
+  "html5lib_passed": 1894,
+  "expanded_passed": 1930,
+  "expanded_unsupported": 6,
+  "stronger_dom_proof": []
+}
