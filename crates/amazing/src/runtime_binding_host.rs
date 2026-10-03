@@ -716,6 +716,13 @@ pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> 
                 let target = new_target.ok_or_else(|| Throw::type_error("XMLSerializer requires new"))?;
                 // Read the user-observable prototype before allocating native state.
                 let prototype = adapter.js.binding_get_property(&target, "prototype")?;
+                let prototype = if matches!(prototype, JsValue::Object(_)) { prototype } else {
+                    let realm = adapter.js.binding_function_realm(&target)?;
+                    adapter.state.borrow().interfaces.get(&realm)
+                        .and_then(|entries| entries.iter().find(|(kind, _, _)| *kind == Interface::XMLSerializer))
+                        .map(|(_, prototype, _)| prototype.clone())
+                        .ok_or_else(|| Throw::type_error("XMLSerializer intrinsic missing in constructor realm"))?
+                };
                 let value = adapter.dom_xml_serializer_new()?;
                 if let (JsValue::Object(object), JsValue::Object(prototype)) = (&value, prototype) {
                     object.borrow_mut().proto = Some(prototype);

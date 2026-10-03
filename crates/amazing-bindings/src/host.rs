@@ -89,7 +89,8 @@ impl InterfaceBrand {
     pub const ANIMATION: Self = Self(41);
     pub const CLIPBOARD: Self = Self(42);
     pub const CSS_STYLE_DECLARATION: Self = Self(43);
-    pub const XML_SERIALIZER: Self = Self(60);}
+    pub const XML_SERIALIZER: Self = Self(60);
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Interface {

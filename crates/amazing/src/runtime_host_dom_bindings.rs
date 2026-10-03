@@ -1575,6 +1575,19 @@ mod tests {
             check(serializer.serializeToString(local) === '<root xmlns="urn:local"/>');
             check(XMLSerializer.prototype.serializeToString.call(serializer,foreign) === '<child xmlns="urn:foreign"/>');
             check(child.XMLSerializer.prototype.serializeToString.call(new XMLSerializer(),foreign) === '<child xmlns="urn:foreign"/>');
+            const target=child.Function('return 1;');target.prototype=7;
+            for(const constructor of [target,target.bind(null),new Proxy(target,{})]){
+                const reflected=Reflect.construct(XMLSerializer,[],constructor);
+                check(Object.getPrototypeOf(reflected) === child.XMLSerializer.prototype);
+                check(reflected.serializeToString(foreign) === '<child xmlns="urn:foreign"/>');
+            }
+            const marker={};let reads=0;
+            const abrupt=new Proxy(target,{get(t,k){if(k==='prototype'){reads++;throw marker;}return Reflect.get(t,k);}});
+            let caught=false;try{Reflect.construct(XMLSerializer,[],abrupt);}catch(e){caught=e===marker;}
+            check(caught && reads===1);
+            const revoked=Proxy.revocable(target,{});revoked.revoke();
+            let invalid=false;try{Reflect.construct(XMLSerializer,[],revoked.proxy);}catch(e){invalid=e instanceof TypeError;}
+            check(invalid);
             true;
         "#).unwrap();
         assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
