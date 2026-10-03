@@ -201,5 +201,8 @@
   "doctests_passed": 4,
   "gpui_passed": 93,
   "assertion_identity_record": "docs/lanes/integrator_20261003_json_assertion_identity.json",
-  "all_test262_shards_fetched": true
+  "all_test262_shards_fetched": true,
+  "all_test262_shard_boxes_stopped": true,
+  "integrator_primary_and_shell_stopped": true,
+  "box_states_record": ".agents/integrator-primary/batch7-box-states.json"
 }
