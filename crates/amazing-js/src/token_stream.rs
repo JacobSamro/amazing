@@ -25,6 +25,16 @@ impl TokenStream {
             && token.span.start >= span.start && token.span.end <= span.end)
             .map(|token| token.span.start)
     }
+    pub(crate) fn legacy_numeric_at(&self, index: usize) -> bool {
+        matches!(self.tokens.get(index).map(|token| &token.kind), Some(TokenKind::Numeric(_)))
+            && self.before[index].legacy_numeric_ahead()
+    }
+    pub(crate) fn legacy_numeric_in(&self, span: Span) -> Option<SourceLocation> {
+        self.tokens.iter().enumerate().find(|(index, token)|
+            token.span.start >= span.start && token.span.end <= span.end
+                && self.legacy_numeric_at(*index))
+            .map(|(_, token)| token.span.start)
+    }
     pub(crate) fn get(&mut self, index: usize) -> Token {
         while self.tokens.len() <= index {
             if let Some(t) = self.tokens.last() {

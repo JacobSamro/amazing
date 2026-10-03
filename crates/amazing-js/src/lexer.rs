@@ -1,3 +1,5 @@
+// NumericLiteral scanning adapted from lucid-softworks/lumen
+// (crates/lumen/src/lexer.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // String escape decoding portions adapted from lucid-softworks/lumen
 // (crates/lumen/src/lexer.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 //! The ECMA-262 lexical scanner (spec §11–§12): source text → [`Token`]s.
@@ -37,9 +39,6 @@
 //!   arbitrary UTF-16 code units; string escapes have different rules.
 //! - Unicode Space_Separator category beyond NBSP/BOM (e.g. U+2000..U+200A).
 //! - HTML-like comments (`<!--` … `-->`, Annex B).
-//! - Legacy (Annex B) octal literals: `0123` lexes as *decimal* 123, and
-//!   strict-mode early errors around them are deferred with all strict
-//!   checks. Non-octal decimals like `089` behave correctly.
 //! - Tagged template evaluation is deferred; raw (uncooked) chunk text is
 //!   retained in UTF-16 for the runtime migration.
 //! - Decorators (`@`) are rejected.
@@ -567,13 +566,22 @@ impl Lexer {
 
     // ----- numbers ----------------------------------------------------------
 
+    /// Original source provenance is retained in the parser's scanner snapshots,
+    /// independently of the normalized Numeric radix/digit payload.
+    pub(crate) fn legacy_numeric_ahead(&self) -> bool {
+        let mut scanner = self.clone();
+        if scanner.skip_trivia().is_err() { return false; }
+        scanner.cur() == Some('0')
+            && scanner.peek(1).is_some_and(|character| character.is_ascii_digit())
+    }
+
     fn number_token(
         &mut self,
         start: SourceLocation,
         newline_before: bool,
     ) -> Result<Token, SyntaxError> {
         let numeric = self.scan_number()?;
-        if self.cur().is_some_and(is_ident_part) {
+        if self.cur().is_some_and(is_ident_part) || self.cur() == Some('\\') {
             return Err(syntax_error(
                 "identifier character immediately after numeric literal",
                 self.loc(),
@@ -614,6 +622,13 @@ impl Lexer {
         if raw.starts_with('0') && raw.len() > 1
             && self.chars[integer_start..self.idx].contains(&'_') {
             return Err(syntax_error("numeric separator after a leading zero", self.loc()));
+        }
+        // LegacyOctalIntegerLiteral ends at its final octal digit: a later
+        // dot is member access, not a fractional part. Non-octal 08/09 integer
+        // prefixes belong to DecimalIntegerLiteral and can have a fraction.
+        if raw.starts_with('0') && raw.len() > 1
+            && raw.chars().all(|digit| ('0'..='7').contains(&digit)) {
+            return Ok(Numeric::new(raw, 8, false));
         }
         if self.cur() == Some('.') {
             raw.push('.');

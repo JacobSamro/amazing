@@ -38,6 +38,9 @@ impl Parser {
         if let Some(at) = self.tokens.borrow().legacy_escape_in(self.span_from(start)) {
             return Err(self.err_at(at, "legacy string escape is forbidden in modules"));
         }
+        if let Some(at) = self.tokens.borrow().legacy_numeric_in(self.span_from(start)) {
+            return Err(self.err_at(at, "legacy leading-zero literal in strict mode"));
+        }
         cover::validate_program(&declarations)?;
         for name in imports {
             if declarations

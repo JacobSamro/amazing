@@ -73,6 +73,9 @@ impl Parser {
             if let Some(at) = self.tokens.borrow().legacy_escape_in(body.span) {
                 return Err(self.err_at(at, "legacy string escape is forbidden in strict mode"));
             }
+            if let Some(at) = self.tokens.borrow().legacy_numeric_in(body.span) {
+                return Err(self.err_at(at, "legacy leading-zero literal in strict mode"));
+            }
         }
         self.validate_scope_names(&body.body, false)?;
         self.validate_function_params(&params, &body, is_async || is_generator)?;
@@ -591,6 +594,9 @@ impl Parser {
                 Ok((PropKey::Str(s), token.cooked_utf16))
             }
             TokenKind::Numeric(n) => {
+                if self.strict_script && self.tokens.borrow().legacy_numeric_at(self.pos) {
+                    return Err(self.err("legacy leading-zero property name in strict mode"));
+                }
                 self.bump();
                 Ok((PropKey::Num(n), None))
             }

@@ -1337,9 +1337,9 @@ impl Interpreter {
         let v = if n.radix == 10 {
             raw.parse().unwrap_or(f64::NAN)
         } else {
-            u128::from_str_radix(&raw, n.radix as u32)
-                .map(|x| x as f64)
-                .unwrap_or(f64::NAN)
+            BinaryBigInt::parse_radix(&raw, n.radix as u32)
+                .map(|integer| integer.to_f64())
+                .ok_or_else(|| Throw::syntax_error("invalid numeric literal"))?
         };
         Ok(JsValue::num(v))
     }
@@ -2068,7 +2068,10 @@ impl Interpreter {
                 "private names are not yet supported by the runtime",
             )),
             PropKey::Str(s) => Ok(s.clone().into()),
-            PropKey::Num(n) => Ok(number_to_string(self.numeric(n)?.to_number()?).into()),
+            PropKey::Num(n) => {
+                let value = self.numeric(n)?;
+                self.to_property_key(&value)
+            }
             PropKey::Computed(x) => {
                 let v = self.eval_expr(x, e)?;
                 self.to_property_key(&v)

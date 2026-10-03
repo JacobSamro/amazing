@@ -25,6 +25,9 @@ impl Parser {
             if let Some(at) = self.tokens.borrow().legacy_escape_in(self.span_from(start)) {
                 return Err(self.err_at(at, "legacy string escape is forbidden in strict mode"));
             }
+            if let Some(at) = self.tokens.borrow().legacy_numeric_in(self.span_from(start)) {
+                return Err(self.err_at(at, "legacy leading-zero literal in strict mode"));
+            }
         }
         cover::validate_program(&body)?;
         Ok(Program {
@@ -409,6 +412,9 @@ impl Parser {
         if saved_strict || has_use_strict(&block) {
             if let Some(at) = self.tokens.borrow().legacy_escape_in(block.span) {
                 return Err(self.err_at(at, "legacy string escape is forbidden in strict mode"));
+            }
+            if let Some(at) = self.tokens.borrow().legacy_numeric_in(block.span) {
+                return Err(self.err_at(at, "legacy leading-zero literal in strict mode"));
             }
         }
         Ok(block)

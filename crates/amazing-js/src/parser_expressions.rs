@@ -594,8 +594,7 @@ impl Parser {
                 ))
             }
             TokenKind::Numeric(n) => {
-                if self.strict_script && n.radix == 10 && n.raw.starts_with('0')
-                    && n.raw.len() > 1 && n.raw.as_bytes()[1].is_ascii_digit() {
+                if self.strict_script && self.tokens.borrow().legacy_numeric_at(self.pos) {
                     return Err(self.err("legacy leading-zero literal in strict mode"));
                 }
                 self.bump();
