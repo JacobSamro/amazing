@@ -3317,3 +3317,27 @@ are uncredited. Stronger accepted Range baseline56827passes also retained fully.
 Syntax72 byte-identical2702/6. Evidence: amazing-dom/evidence/incremental-import-values.
 HTML55 independently confirmed unchanged passing counters across its13directories;
 its persistent write-session/merged-text gains remain that ticket's responsibility.
+
+## Node creation and relevant realm (WIP, fixed base deb2cefc)
+
+Creation anchors are immutable `(Document NodeIdx, generation)` identities, separate
+from mutable ownerDocument. Adoption preserves the original wrapper realm; clone
+allocates using the current node document and import uses the target document.
+Document clones retain the source document's allocation realm and interface class.
+Template contents use their genuine inert owner document with the host's realm.
+Node platform keys validate actual arena slot generations; existing collection
+keys retain their separate contract.
+
+DOMParser captures its constructor's actual realm, associated document generation
+and typed Origin. Argument conversion precedes entering that saved realm for inert
+parsing. HTML owns actual context/origin registration, including initial parser
+iframe setup. The initial diagnostic baseline is afa9d348; those dependencies must
+be adopted identically into the final before/after pair and receive no Node-ticket
+credit. Bulk WIP source: e416c331, 8177bafc, 67ef42c3. No readiness claim yet.
+
+Copy RealmHandle associations add no JS value or Rc roots. The existing JS realm
+registry permanently owns realm states; this ticket does not claim to implement
+realm garbage collection. Retained native creation anchors preserve exact realm
+identity even when active frame bookkeeping retires its WindowContext. Missing
+or stale associated documents fail Node allocation before arena mutation instead
+of guessing the current or root document.
