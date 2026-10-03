@@ -1,0 +1,36 @@
+{
+  "before": "fde14108684f14c010e5927c13a3fb2d3a0a940b",
+  "after": "3f6595f328a240845ea8c8078b51df0a94f00a17",
+  "before_owned": 660,
+  "after_owned": 667,
+  "owned_skipped": 6,
+  "before_workspace": 4097,
+  "after_workspace": 4104,
+  "workspace_skipped": 17,
+  "doctests": 4,
+  "html5lib_passed": 1894,
+  "expanded_passed": 1930,
+  "expanded_unsupported": 6,
+  "failed_attempt_hashes": [
+    {
+      "file": "html56-root-failed-b384/html56-root-after-build.log",
+      "sha256": "0b435389b1957056514a2089c054cfc0d9a6a782f0c974831b4d9abfc145734c"
+    },
+    {
+      "file": "html56-root-failed-583/html56-root-after-build.log",
+      "sha256": "14f74ccc9f88d8ffa00e5894dbe9e8c182c37312fbb6b15b83f30193233fa6a7"
+    },
+    {
+      "file": "html56-root-failed-583/html56-root-after-owned.log",
+      "sha256": "29fe9b9c7a157687dc6311f7446af3c4c770a0e2d7a499668764b92dd274a9ab"
+    },
+    {
+      "file": "html56-root-failed-9a/html56-root-after-build.log",
+      "sha256": "0f3cb9879424b681222a5d193f14110c39f097dd77716499be7cedeb89166f2d"
+    },
+    {
+      "file": "html56-root-failed-9a/html56-root-after-owned.log",
+      "sha256": "bf6b1bed10c67c1f4b7303e37643692409c203094755fd41b9304e566c97cc87"
+    }
+  ]
+}

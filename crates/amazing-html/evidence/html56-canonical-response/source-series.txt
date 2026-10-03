@@ -1,0 +1,19 @@
+d1d603220f777bd16a2d7e657e8ca73e3ca99f3c html: prepare canonical frame response API and initiating policy snapshots
+e3781b6ca60abacbcd085ae77f43d8b2e3bdfc91 html: prepare actual classic-script response decoding and redirect source URLs
+c41d92731fb2e4d226cf9b3a8bdd74d625a42569 html: group canonical response decoding transport and MIME regressions
+02fc16ba8b00260de9ff15550756222a46c01fda html: capture genuine classic-script fetch mode and enumerated referrer policy
+93bc78b87611b86cec6a81f3094244ddab089d73 html: validate captured policy generations against actual native documents
+eb5ee163a1d34e1933b1a2a87f3d03c989e0a02f html: resolve canonical classic URLs through actual owner base and charset
+a6e8dc9f8299261776f6cafa1848863b1c6a89fb feat(html): retain initiating document policy for frame and script transport
+20cecb3c002b22eea461ddf5c4a956b329e95292 test(html): cover actual creator and response policy snapshots
+37edc57a62dcf96160ccac63247fd0c0dedc3177 feat(html): retain actual document referrer policies across navigation
+9e04af5229f41a8a9f5b6ab78afa305a0a4320b8 fix(html): preserve initiator referrer policy for Location navigation
+6e87580b19cff2c6849416449e2e0ca888f59398 test(html): retain queued and inherited referrer policy snapshots
+05b424a08e0eb37f15578c97035bf86e758325af feat(html): route reopened document classic scripts through canonical responses
+06931784907473de88ea51fdcb1714bebc8fb3f3 test(html): cover canonical responses in reopened document streams
+b38400202f6e567005a90cd5b3ffa30f942302c2 feat(html): expose pure actual document referrer policy to embedding
+479b17e96c569b30cd08095434b9387ff9ee986f fix(html): use actual DOM and policy header APIs for response metadata
+4fc9bfb363816ea987a85974f915dec17e821446 fix(html): guard referrer policy against the actual host document
+583a92ee53d2073d624a6d72b5600d96c88b72f4 test(html): retain referrer policy type in grouped attribute coverage
+9a75763a40f18a863cbf6d92ea82184cc7ba076e test(html): use owned net header values throughout response coverage
+3f6595f328a240845ea8c8078b51df0a94f00a17 test(html): install canonical transport before committing fixture navigation
