@@ -185,14 +185,16 @@ impl StructuredSerializer<'_> {
 
         let (callable, host_object, exotic, boxed, date) = {
             let object = object.borrow();
-            let boxed = [
-                ("[[BooleanData]]", SerializedBoxKind::Boolean),
-                ("[[NumberData]]", SerializedBoxKind::Number),
-                ("[[BigIntData]]", SerializedBoxKind::BigInt),
-                ("[[StringData]]", SerializedBoxKind::String),
-            ]
-            .into_iter()
-            .find_map(|(key, kind)| object.get_own(key).map(|value| (kind, value)));
+            let boxed = object.boxed_primitive.clone().and_then(|value| {
+                let kind = match &value {
+                    JsValue::Bool(_) => SerializedBoxKind::Boolean,
+                    JsValue::Num(_) => SerializedBoxKind::Number,
+                    JsValue::BigInt(_) => SerializedBoxKind::BigInt,
+                    JsValue::Str(_) => SerializedBoxKind::String,
+                    _ => return None,
+                };
+                Some((kind, value))
+            });
             (
                 object.func.is_some(),
                 object.host_identity.is_some(),
@@ -455,15 +457,19 @@ impl Interpreter {
                 }
                 SerializedNode::Boxed { kind, value } => {
                     let primitive = structured_atom_value(value, &objects)?;
-                    let (prototype, slot) = match kind {
-                        SerializedBoxKind::Boolean => (&self.boolean_proto, "[[BooleanData]]"),
-                        SerializedBoxKind::Number => (&self.number_proto, "[[NumberData]]"),
-                        SerializedBoxKind::BigInt => (&self.bigint_proto, "[[BigIntData]]"),
-                        SerializedBoxKind::String => (&self.string_proto, "[[StringData]]"),
+                    let prototype = match kind {
+                        SerializedBoxKind::Boolean => &self.boolean_proto,
+                        SerializedBoxKind::Number => &self.number_proto,
+                        SerializedBoxKind::BigInt => &self.bigint_proto,
+                        SerializedBoxKind::String => &self.string_proto,
                     };
                     let mut object = JsObject::ordinary();
                     object.proto = Some(prototype.clone());
-                    object.set_own(slot, primitive);
+                    if let JsValue::Str(string) = primitive {
+                        object.initialize_string_data(string);
+                    } else {
+                        object.boxed_primitive = Some(primitive);
+                    }
                     JsValue::object(object)
                 }
                 SerializedNode::Date(timestamp) => {

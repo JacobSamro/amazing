@@ -4,6 +4,81 @@ fn object_argument(args: &[JsValue]) -> JsValue {
     args.first().cloned().unwrap_or(JsValue::Undefined)
 }
 
+#[cfg(test)]
+mod boxed_primitive_tests {
+    use super::*;
+    fn check(source: &str) {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script_with_backend(source, backend).unwrap(), JsValue::Bool(true), "{backend:?}");
+        }
+    }
+
+    #[test]
+    fn wrapper_slots_are_private_and_cannot_be_forged() {
+        check(r#"
+            function rejects(method, value) { try { method.call(value); } catch(e) { return e instanceof TypeError; } return false; }
+            var fake = {'[[StringData]]':'abc','[[NumberData]]':7,'[[BooleanData]]':true,'[[BigIntData]]':1n};
+            var n=Object(7), b=Object(true), s=Object('abc'), big=Object(1n);
+            var ok = Reflect.ownKeys(n).length===0 && Reflect.ownKeys(b).length===0 && Reflect.ownKeys(big).length===0 &&
+                Reflect.ownKeys(s).join(',')==='0,1,2,length' &&
+                Object.getOwnPropertyNames(new Proxy(new Proxy(s,{}),{})).join(',')==='0,1,2,length';
+            n['[[NumberData]]']=8; b['[[BooleanData]]']=false; s['[[StringData]]']='changed'; big['[[BigIntData]]']=2n;
+            var d=Object.getOwnPropertyDescriptor(s,'0'), len=Object.getOwnPropertyDescriptor(s,'length');
+            ok && n.valueOf()===7 && b.valueOf()===true && s.valueOf()==='abc' && big.valueOf()===1n &&
+                d.value==='a' && !d.writable && d.enumerable && !d.configurable && len.value===3 && !len.writable &&
+                !len.enumerable && !len.configurable &&
+                rejects(Number.prototype.valueOf,fake) && rejects(Boolean.prototype.valueOf,fake) &&
+                rejects(String.prototype.valueOf,fake) && rejects(BigInt.prototype.valueOf,fake) &&
+                rejects(BigInt.prototype.valueOf,BigInt.prototype) &&
+                Object.prototype.toString.call(fake)==='[object Object]' &&
+                Number.prototype.valueOf()===0 && Boolean.prototype.valueOf()===false && String.prototype.valueOf()==='';
+        "#);
+    }
+
+    #[test]
+    fn coercion_observes_methods_hints_and_json_wrapper_steps() {
+        check(r#"
+            var n=Object(1), s=Object('old'), b=Object(true), log='';
+            n.valueOf=function(){log+='number;';return 9;};
+            s.toString=function(){log+='string;';return 'new';};
+            b.valueOf=function(){throw 1;};
+            var ok=+n===9 && String(s)==='new' && String.prototype.charAt.call(s,0)==='n';
+            log=''; ok=ok && JSON.stringify([n,s,b])==='[9,"new",true]' && log==='number;string;';
+            var key=Object('x'); key.toString=function(){return 'y';};
+            var gap=Object(2); gap.valueOf=function(){return 3;};
+            ok=ok && JSON.stringify({x:1,y:2},[key],gap)==='{\n   "y": 2\n}';
+            var hint=''; n[Symbol.toPrimitive]=function(h){hint=h;return 4;};
+            ok=ok && +n===4 && hint==='number';
+            ok=ok && String(n)==='4' && hint==='string';
+            delete n[Symbol.toPrimitive]; n.valueOf=function(){log+='v;';return {};}; n.toString=function(){log+='s;';return '6';};
+            log=''; ok=ok && +n===6 && log==='v;s;';
+            n.valueOf=function(){throw 'abrupt';};
+            var abrupt=false;try{JSON.stringify(n);}catch(e){abrupt=e==='abrupt';}
+            ok && abrupt;
+        "#);
+    }
+
+    #[test]
+    fn cloned_wrappers_retain_private_data_and_string_descriptors() {
+        check(r#"
+            var values=[Object(true),Object(7),Object('abc'),Object(1n)];
+            var copied=structuredClone(values), ok=true;
+            for(var j=0;j<values.length;j++) {
+                ok=ok && copied[j]!==values[j] && copied[j].valueOf()===values[j].valueOf() &&
+                    Object.getPrototypeOf(copied[j])===Object.getPrototypeOf(values[j]);
+            }
+            var d=Object.getOwnPropertyDescriptor(copied[2],'0');
+            var fake={'[[StringData]]':'user'};var clone=structuredClone(fake);
+            ok && Reflect.ownKeys(copied[0]).length===0 && Reflect.ownKeys(copied[1]).length===0 &&
+                Reflect.ownKeys(copied[3]).length===0 && Reflect.ownKeys(copied[2]).join(',')==='0,1,2,length' &&
+                d.value==='a' && !d.writable && !d.configurable && d.enumerable && copied[2].length===3 &&
+                Object.getPrototypeOf(clone)===Object.prototype && clone['[[StringData]]']==='user' &&
+                Object.prototype.toString.call(clone)==='[object Object]';
+        "#);
+    }
+}
+
 fn object_required(args: &[JsValue]) -> Result<Obj, Throw> {
     match args.first() {
         Some(JsValue::Object(object)) => Ok(object.clone()),
@@ -402,7 +477,7 @@ fn is_valid_identifier_name(s: &str) -> bool {
 fn boolean_value(this: JsValue) -> Result<bool, Throw> {
     match this {
         JsValue::Bool(value) => Ok(value),
-        JsValue::Object(object) => match object.borrow().get_own("[[BooleanData]]") {
+        JsValue::Object(object) => match object.borrow().boxed_primitive.clone() {
             Some(JsValue::Bool(value)) => Ok(value),
             _ => Err(Throw::type_error(
                 "Boolean method called on incompatible receiver",
@@ -523,13 +598,7 @@ impl Interpreter {
             .borrow_mut()
             .define("constructor", symbol_data(constructor.clone(), true, true))
             .unwrap();
-        self.boolean_proto
-            .borrow_mut()
-            .define(
-                "[[BooleanData]]",
-                symbol_data(JsValue::Bool(false), false, false),
-            )
-            .unwrap();
+        self.boolean_proto.borrow_mut().boxed_primitive = Some(JsValue::Bool(false));
         for (name, native) in [
             (
                 "toString",

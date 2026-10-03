@@ -42,7 +42,7 @@ fn intl_string_locale_compare(i: &mut Interpreter, this: JsValue, args: Vec<JsVa
 fn intl_number_to_locale_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let number = match this {
         JsValue::Num(number) => number,
-        JsValue::Object(object) => match object.borrow().get_own("[[NumberData]]") {
+        JsValue::Object(object) => match object.borrow().boxed_primitive.clone() {
             Some(JsValue::Num(number)) => number,
             _ => return Err(Throw::type_error("incompatible Number receiver")),
         },

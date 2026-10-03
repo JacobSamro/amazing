@@ -418,22 +418,19 @@ impl Interpreter {
         let string_proto = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
-            o.define("[[StringData]]", Property {
-                value: JsValue::str(""), writable: false, enumerable: false,
-                configurable: false, getter: None, setter: None,
-            }).unwrap();
+            o.initialize_string_data(crate::value::JsString::from(""));
             o
         })));
         let number_proto = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
-            o.set_own("[[NumberData]]", JsValue::num(0.0));
+            o.boxed_primitive = Some(JsValue::num(0.0));
             o
         })));
         let boolean_proto = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
-            o.set_own("[[BooleanData]]", JsValue::Bool(false));
+            o.boxed_primitive = Some(JsValue::Bool(false));
             o
         })));
         let bigint_proto = Obj(Rc::new(RefCell::new({
@@ -1552,13 +1549,6 @@ impl Interpreter {
             if result.is_object() { return Err(Throw::type_error("@@toPrimitive returned an object")); }
             return Ok(result);
         }
-        if let JsValue::Object(object) = &v {
-            if object.borrow().get_own("valueOf").is_none() && object.borrow().get_own("toString").is_none() {
-                for slot in ["[[BooleanData]]", "[[NumberData]]", "[[StringData]]"] {
-                    if let Some(value) = object.borrow().get_own(slot) { return Ok(value); }
-                }
-            }
-        }
         for name in ["valueOf", "toString"] {
             let method = self.get_prop(&v, name)?;
             if callable_function(&method).is_some() {
@@ -1581,13 +1571,6 @@ impl Interpreter {
             let result = self.call_value(&exotic, v.clone(), vec![JsValue::str(hint)])?;
             if result.is_object() { return Err(Throw::type_error("@@toPrimitive returned an object")); }
             return Ok(result);
-        }
-        if let JsValue::Object(object) = &v {
-            for slot in ["[[BooleanData]]", "[[NumberData]]", "[[StringData]]"] {
-                if let Some(value) = object.borrow().get_own(slot) {
-                    return Ok(value);
-                }
-            }
         }
         let names = if string_hint { ["toString", "valueOf"] } else { ["valueOf", "toString"] };
         for n in names {

@@ -406,7 +406,7 @@ fn bigint_constructor(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Re
 fn bigint_this(this: &JsValue) -> Result<Rc<BinaryBigInt>, Throw> {
     match this {
         JsValue::BigInt(value) => Ok(value.clone()),
-        JsValue::Object(object) => match object.borrow().get_own("[[BigIntData]]") {
+        JsValue::Object(object) => match object.borrow().boxed_primitive.clone() {
             Some(JsValue::BigInt(value)) => Ok(value),
             _ => Err(Throw::type_error("BigInt method called on incompatible receiver")),
         },

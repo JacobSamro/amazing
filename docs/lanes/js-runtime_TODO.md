@@ -1512,5 +1512,42 @@ the identical binary with explicit accepted conformance status. No source
 changes or repeated workspace gate. Evidence: `js-runtime_jsrt39_evidence.json`.
 
 Two remaining Proxy corpus failures belong to general boxed String internal
-storage visibility and legacy enumerate handling, rather than missing Proxy
+storage visibility and Array iterator length lookup, rather than missing Proxy
 invariants; no Proxy-specific key filtering or removed-trap shortcut was added.
+
+## JSRT-40 Private boxed primitive data (2026-10-03)
+
+Frozen base `3d1c2b62ec069836c0c984e87a2b456348fa1a69`. Boolean, Number,
+String and BigInt wrappers now retain their primitive in a private JsObject
+field; ordinary properties named like internal slots have no special meaning.
+All constructors, ToObject, prototype brands, primitive receiver helpers,
+JSON, Intl and structured clone use the private data. SymbolObject remains
+unchanged; BigInt.prototype has no BigInt data. String indices and length
+retain genuine immutable descriptors, including deserialized String wrappers
+and the empty-string String.prototype.
+
+OrdinaryToPrimitive no longer bypasses inherited or own valueOf/toString.
+Generic String methods use observable ToString, while String valueOf/toString
+require genuine string data. JSON Number and String wrappers run observable
+ToNumber/ToString after toJSON and replacer; Boolean/BigInt unwrap directly.
+Replacer property-list wrapper entries and gap objects also perform their
+required observable conversions. Private primitive data retains only a
+primitive JsValue; no environment, object alias or collector contract changes.
+
+Three grouped regressions cover both backends: forged brands and reflective
+visibility, String index/length descriptors, inherited conversion order and
+hints, JSON conversion and abrupt completion, and structured-clone identity,
+prototype and private-data restoration. The gate covers workspace/doctests
+and full language, String, Number, Boolean, BigInt, JSON, Proxy, Object and
+Reflect selections, against the fixed baseline and identical corpus settings.
+
+Final Boat workspace **3769 passed/17 skipped, 79.653 seconds**, **4 doctests**.
+Matched String **1330 → 1331/1341**, JSON **124 → 131/165**,
+Proxy **309 → 310/311**, Object **3355 → 3357/3414**, Reflect **151 → 152/154**.
+Number **330/340**, Boolean **51/51**, BigInt **77/77** and whole language
+**24029/24590** unchanged. Unique union **30443 cases**,
+**29756 → 29768 passing** (+12), **24 gained variants**, zero lost files
+or variants and zero timeouts. Evidence: `js-runtime_jsrt40_evidence.json`.
+The remaining Proxy enumerate fixture fails its for-of stage because this
+frozen base lacks the root-owned ArrayIterator LengthOfArrayLike fix; the
+for-in stage already passes. No duplicate iterator change was included.

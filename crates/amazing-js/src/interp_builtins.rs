@@ -14,13 +14,13 @@ fn native_object(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<
         Some(JsValue::Num(number)) => {
             let mut object = JsObject::ordinary();
 object.proto = Some(i.number_proto.clone());
-            object.define("[[NumberData]]", symbol_data(JsValue::Num(number), true, true)).unwrap();
+            object.boxed_primitive = Some(JsValue::Num(number));
             JsValue::object(object)
         }
         Some(JsValue::Bool(boolean)) => {
             let mut object = JsObject::ordinary();
 object.proto = Some(i.boolean_proto.clone());
-            object.define("[[BooleanData]]", symbol_data(JsValue::Bool(boolean), true, true)).unwrap();
+            object.boxed_primitive = Some(JsValue::Bool(boolean));
             JsValue::object(object)
         }
         Some(JsValue::Str(string)) => {
@@ -32,7 +32,7 @@ object.proto = Some(i.boolean_proto.clone());
         Some(JsValue::BigInt(value)) => {
             let mut object = JsObject::ordinary();
 object.proto = Some(i.bigint_proto.clone());
-            object.define("[[BigIntData]]", symbol_data(JsValue::BigInt(value), true, true)).unwrap();
+            object.boxed_primitive = Some(JsValue::BigInt(value));
             JsValue::object(object)
         }
         Some(JsValue::Symbol(symbol)) => {
@@ -2321,7 +2321,7 @@ fn native_object_assign(
         for key in i.own_property_keys(source)? {
             if !i.object_own_enumerable(source, &key)? { continue; }
             let value = i.get_prop(source, &key)?;
-            if object.borrow().get_own("[[StringData]]").and_then(|data| match data {
+            if object.borrow().boxed_primitive.clone().and_then(|data| match data {
                 JsValue::Str(string) => Some(string.len()), _ => None,
             }).is_some_and(|length| array_index_key(&key).is_some_and(|index| (index as usize) < length)) {
                 return Err(Throw::type_error("Object.assign cannot write a String index"));
@@ -2522,10 +2522,10 @@ fn native_object_to_string(
             _ => {
                 let object = o.borrow();
                 if object.func.is_some() { "Function" }
-                else if object.get_own("[[BooleanData]]").is_some() { "Boolean" }
-                else if object.get_own("[[NumberData]]").is_some() { "Number" }
-                else if object.get_own("[[StringData]]").is_some() { "String" }
-                else if object.get_own("[[BigIntData]]").is_some() { "BigInt" }
+                else if matches!(object.boxed_primitive, Some(JsValue::Bool(_))) { "Boolean" }
+                else if matches!(object.boxed_primitive, Some(JsValue::Num(_))) { "Number" }
+                else if matches!(object.boxed_primitive, Some(JsValue::Str(_))) { "String" }
+                else if matches!(object.boxed_primitive, Some(JsValue::BigInt(_))) { "BigInt" }
                 else if object.get_own("[[DateValue]]").is_some() { "Date" }
                 else { "Object" }
             },
@@ -2735,7 +2735,7 @@ fn native_number(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<
     } else { 0.0 };
     let value = JsValue::num(number);
     if let JsValue::Object(object) = &this {
-        object.borrow_mut().define("[[NumberData]]", symbol_data(value, true, true)).unwrap();
+        object.borrow_mut().boxed_primitive = Some(value);
         Ok(this)
     } else {
         Ok(value)
@@ -2919,18 +2919,13 @@ fn string_this_units(i: &mut Interpreter, this: JsValue) -> Result<crate::value:
     if matches!(this, JsValue::Null | JsValue::Undefined) {
         return Err(Throw::type_error("String method called on null or undefined"));
     }
-    if let JsValue::Object(object) = &this {
-        if let Some(JsValue::Str(data)) = object.borrow().get_own("[[StringData]]") {
-            return Ok(data);
-        }
-    }
     i.to_js_string(&this)
 }
 
 fn native_string_value_of(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     match this {
         JsValue::Str(_) => Ok(this),
-        JsValue::Object(object) => object.borrow().get_own("[[StringData]]")
+        JsValue::Object(object) => object.borrow().boxed_primitive.clone().filter(|v| matches!(v, JsValue::Str(_)))
             .ok_or_else(|| Throw::type_error("incompatible String receiver")),
         _ => Err(Throw::type_error("incompatible String receiver")),
     }
@@ -3287,10 +3282,7 @@ fn native_array_index_of(
 fn native_boolean(_: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let value = JsValue::Bool(a.first().map(|x| x.to_boolean()).unwrap_or(false));
     if let JsValue::Object(object) = &this {
-        object.borrow_mut().define("[[BooleanData]]", Property {
-            value, writable: false, enumerable: false, configurable: false,
-            getter: None, setter: None,
-        }).unwrap();
+        object.borrow_mut().boxed_primitive = Some(value);
         Ok(this)
     } else {
         Ok(value)

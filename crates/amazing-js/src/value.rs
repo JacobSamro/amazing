@@ -972,6 +972,8 @@ pub struct JsObject {
     pub proto: Option<Obj>,
     pub exotic: Exotic,
     pub(crate) arguments_object: bool,
+    /// Engine-private primitive wrapper data; never a JavaScript property key.
+    pub(crate) boxed_primitive: Option<JsValue>,
     /// Whether new own properties may be created.
     pub extensible: bool,
     /// Callable payload; `Some` iff this object is a function.
@@ -1028,6 +1030,7 @@ impl JsObject {
             proto: None,
             exotic: Exotic::Ordinary,
             arguments_object: false,
+            boxed_primitive: None,
             extensible: true,
             func: None,
             constructed: false,
@@ -1063,10 +1066,7 @@ impl JsObject {
             value: JsValue::num(string.units().len() as f64), writable: false,
             enumerable: false, configurable: false, getter: None, setter: None,
         });
-        self.push_prop(PropertyKey::from("[[StringData]]"), Property {
-            value: JsValue::Str(string), writable: true, enumerable: false,
-            configurable: true, getter: None, setter: None,
-        });
+        self.boxed_primitive = Some(JsValue::Str(string));
     }
 
     /// Appends a brand-new own property (caller guarantees the key isn't

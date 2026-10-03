@@ -118,7 +118,7 @@ fn std_number_exponential_text(value: f64, precision: Option<usize>) -> String {
 fn std_number_receiver(this: JsValue) -> Result<f64, Throw> {
     match this {
         JsValue::Num(number) => Ok(number),
-        JsValue::Object(object) => match object.borrow().get_own("[[NumberData]]") {
+        JsValue::Object(object) => match object.borrow().boxed_primitive.clone() {
             Some(JsValue::Num(number)) => Ok(number),
             _ => Err(Throw::type_error("incompatible Number receiver")),
         },
@@ -195,7 +195,7 @@ fn std_number_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
     } else { 0.0 };
     if let JsValue::Object(object) = &this {
         if object.borrow().constructed {
-            object.borrow_mut().define("[[NumberData]]", symbol_data(JsValue::num(value), false, false)).unwrap();
+            object.borrow_mut().boxed_primitive = Some(JsValue::num(value));
             return Ok(this);
         }
     }

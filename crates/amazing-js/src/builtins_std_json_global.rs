@@ -262,11 +262,15 @@ impl StdJsonWriter {
             value = i.call_value(replacer, holder.clone(), vec![JsValue::str(key), value])?;
         }
         let unboxed = if let JsValue::Object(object) = &value {
-            let boxed = object.borrow();
-            boxed.get_own("[[NumberData]]").or_else(|| boxed.get_own("[[StringData]]"))
-                .or_else(|| boxed.get_own("[[BigIntData]]"))
+            object.borrow().boxed_primitive.clone()
         } else { None };
-        if let Some(unboxed) = unboxed { value = unboxed; }
+        if let Some(unboxed) = unboxed {
+            value = match unboxed {
+                JsValue::Num(_) => JsValue::num(i.to_number(&value)?),
+                JsValue::Str(_) => JsValue::Str(i.to_js_string(&value)?),
+                primitive => primitive,
+            };
+        }
         match &value {
             JsValue::Undefined | JsValue::Symbol(_) => return Ok(None),
             JsValue::Null => return Ok(Some("null".to_string())),
@@ -319,11 +323,10 @@ fn std_json_stringify(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Re
                     JsValue::Str(key) => Some(key),
                     JsValue::Num(_) => Some(i.to_js_string(&entry)?),
                     JsValue::Object(object) => {
-                        let boxed = {
-                            let object = object.borrow();
-                            object.get_own("[[StringData]]").or_else(|| object.get_own("[[NumberData]]"))
-                        };
-                        if let Some(value) = boxed { Some(i.to_js_string(&value)?) } else { None }
+                        let boxed = object.borrow().boxed_primitive.clone();
+                        if matches!(boxed, Some(JsValue::Str(_) | JsValue::Num(_))) {
+                            Some(i.to_js_string(&JsValue::Object(object))?)
+                        } else { None }
                     }
                     _ => None,
                 };
@@ -334,11 +337,12 @@ fn std_json_stringify(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Re
     } else { None };
     let mut space = std_reflect_arg(&args, 2);
     if let JsValue::Object(object) = &space {
-        let unboxed = {
-            let object = object.borrow();
-            object.get_own("[[NumberData]]").or_else(|| object.get_own("[[StringData]]"))
-        };
-        if let Some(value) = unboxed { space = value; }
+        let boxed = object.borrow().boxed_primitive.clone();
+        match boxed {
+            Some(JsValue::Num(_)) => space = JsValue::num(i.to_number(&space)?),
+            Some(JsValue::Str(_)) => space = JsValue::Str(i.to_js_string(&space)?),
+            _ => {}
+        }
     }
     let gap = match space {
         JsValue::Num(number) => " ".repeat(if number.is_nan() { 0 } else { number.max(0.0).min(10.0) as usize }),

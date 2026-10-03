@@ -1,0 +1,430 @@
+{
+  "ticket": "JSRT-40",
+  "base_sha": "3d1c2b62ec069836c0c984e87a2b456348fa1a69",
+  "workspace": {
+    "passed": 3769,
+    "skipped": 17,
+    "elapsed_seconds": 79.653
+  },
+  "doctests": 4,
+  "selections": {
+    "language": {
+      "selected": 24590,
+      "before": {
+        "pass": 24029,
+        "fail": 535,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "after": {
+        "pass": 24029,
+        "fail": 535,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 56.004,
+      "elapsed_after": 55.875,
+      "before_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "after_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-String": {
+      "selected": 1341,
+      "before": {
+        "pass": 1330,
+        "fail": 5,
+        "timeout": 0,
+        "unsupported": 6,
+        "skipped": 52531
+      },
+      "after": {
+        "pass": 1331,
+        "fail": 4,
+        "timeout": 0,
+        "unsupported": 6,
+        "skipped": 52531
+      },
+      "gained": [
+        "built-ins/String/S15.5.5.1_A5.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 5.954,
+      "elapsed_after": 5.579,
+      "before_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "after_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Number": {
+      "selected": 340,
+      "before": {
+        "pass": 330,
+        "fail": 10,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53532
+      },
+      "after": {
+        "pass": 330,
+        "fail": 10,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53532
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.735,
+      "elapsed_after": 3.654,
+      "before_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "after_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Boolean": {
+      "selected": 51,
+      "before": {
+        "pass": 51,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53821
+      },
+      "after": {
+        "pass": 51,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53821
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.022,
+      "elapsed_after": 3.269,
+      "before_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "after_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-BigInt": {
+      "selected": 77,
+      "before": {
+        "pass": 77,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53795
+      },
+      "after": {
+        "pass": 77,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53795
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.867,
+      "elapsed_after": 2.984,
+      "before_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "after_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-JSON": {
+      "selected": 165,
+      "before": {
+        "pass": 124,
+        "fail": 41,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53707
+      },
+      "after": {
+        "pass": 131,
+        "fail": 34,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53707
+      },
+      "gained": [
+        "built-ins/JSON/stringify/replacer-array-number-object.js",
+        "built-ins/JSON/stringify/replacer-array-string-object.js",
+        "built-ins/JSON/stringify/space-number-object.js",
+        "built-ins/JSON/stringify/space-string-object.js",
+        "built-ins/JSON/stringify/value-boolean-object.js",
+        "built-ins/JSON/stringify/value-number-object.js",
+        "built-ins/JSON/stringify/value-string-object.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.983,
+      "elapsed_after": 3.166,
+      "before_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "after_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Proxy": {
+      "selected": 311,
+      "before": {
+        "pass": 309,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "after": {
+        "pass": 310,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "gained": [
+        "built-ins/Proxy/ownKeys/trap-is-missing-target-is-proxy.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.429,
+      "elapsed_after": 3.494,
+      "before_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "after_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before": {
+        "pass": 3355,
+        "fail": 58,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "after": {
+        "pass": 3357,
+        "fail": 56,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "gained": [
+        "built-ins/Object/assign/Override-notstringtarget.js",
+        "built-ins/Object/getOwnPropertyNames/15.2.3.4-4-44.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 9.973,
+      "elapsed_after": 10.546,
+      "before_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "after_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Reflect": {
+      "selected": 154,
+      "before": {
+        "pass": 151,
+        "fail": 3,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "after": {
+        "pass": 152,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "gained": [
+        "built-ins/Reflect/ownKeys/order-after-define-property.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.272,
+      "elapsed_after": 2.861,
+      "before_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "after_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    }
+  },
+  "unique": {
+    "selected": 30443,
+    "before_pass": 29756,
+    "after_pass": 29768,
+    "gained_files": [
+      "built-ins/String/S15.5.5.1_A5.js",
+      "built-ins/JSON/stringify/replacer-array-number-object.js",
+      "built-ins/JSON/stringify/replacer-array-string-object.js",
+      "built-ins/JSON/stringify/space-number-object.js",
+      "built-ins/JSON/stringify/space-string-object.js",
+      "built-ins/JSON/stringify/value-boolean-object.js",
+      "built-ins/JSON/stringify/value-number-object.js",
+      "built-ins/JSON/stringify/value-string-object.js",
+      "built-ins/Proxy/ownKeys/trap-is-missing-target-is-proxy.js",
+      "built-ins/Object/assign/Override-notstringtarget.js",
+      "built-ins/Object/getOwnPropertyNames/15.2.3.4-4-44.js",
+      "built-ins/Reflect/ownKeys/order-after-define-property.js"
+    ],
+    "lost_files": [
+
+    ],
+    "gained_variants": [
+      [
+        "built-ins/String/S15.5.5.1_A5.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/String/S15.5.5.1_A5.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/replacer-array-number-object.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/replacer-array-number-object.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/replacer-array-string-object.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/replacer-array-string-object.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/space-number-object.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/space-number-object.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/space-string-object.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/space-string-object.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/value-boolean-object.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/value-boolean-object.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/value-number-object.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/value-number-object.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/value-string-object.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/value-string-object.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/ownKeys/trap-is-missing-target-is-proxy.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/ownKeys/trap-is-missing-target-is-proxy.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/assign/Override-notstringtarget.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/assign/Override-notstringtarget.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyNames/15.2.3.4-4-44.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyNames/15.2.3.4-4-44.js",
+        "strict"
+      ],
+      [
+        "built-ins/Reflect/ownKeys/order-after-define-property.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Reflect/ownKeys/order-after-define-property.js",
+        "strict"
+      ]
+    ],
+    "lost_variants": [
+
+    ]
+  }
+}
