@@ -46,6 +46,10 @@ pub struct Stylesheet {
     /// Animation rules in stylesheet order, including supported group rules.
     pub keyframes: Vec<crate::animation::KeyframesRule>,
     pub(crate) counter_styles: Vec<CounterStyleRule>,
+    pub(crate) imports: Vec<crate::imports::ImportRule>,
+    pub(crate) font_faces: Vec<crate::imports::ConditionalFontFace>,
+    pub(crate) keyframe_media: Vec<Vec<String>>,
+    pub(crate) projected_layers: bool,
     /// Parent of the stylesheet owner node, for implicit `@scope`.
     pub scope_root: Option<amazing_dom::NodeIdx>,
     /// Final fetched URL, or the document URL for an inline stylesheet.
@@ -707,81 +711,11 @@ impl Parser<'_> {
 }
 
 fn supports_condition(tokens: &[Token]) -> bool {
-    let tokens = trim_ws(tokens);
-    if tokens.is_empty() {
-        return false;
-    }
-    if matches!(tokens.first(), Some(Token::Ident(name)) if name.eq_ignore_ascii_case("not")) {
-        return !supports_condition(trim_ws(&tokens[1..]));
-    }
-
-    if matches!(tokens.first(), Some(Token::Function(name)) if name.eq_ignore_ascii_case("selector"))
-        && tokens.get(1) == Some(&Token::OpenParen)
-        && tokens.last() == Some(&Token::CloseParen)
-        && strip_outer_parentheses(&tokens[1..]).is_some()
-    {
-        return crate::selectors::parse_selector(&serialize(&tokens[2..tokens.len() - 1])).is_some();
-    }
-    if matches!(tokens.first(), Some(Token::Function(name)) if name.eq_ignore_ascii_case("at-rule"))
-        && tokens.get(1) == Some(&Token::OpenParen)
-        && tokens.last() == Some(&Token::CloseParen)
-        && strip_outer_parentheses(&tokens[1..]).is_some()
-    {
-        return matches!(trim_ws(&tokens[2..tokens.len() - 1]),
-            [Token::AtKeyword(name)] if matches!(name.to_ascii_lowercase().as_str(),
-                "media" | "supports" | "layer" | "scope" | "keyframes" | "font-face" | "counter-style"));
-    }
-
-    let mut paren_depth = 0usize;
-    let mut square_depth = 0usize;
-    let mut operator: Option<bool> = None; // true = and, false = or
-    let mut segments = Vec::new();
-    let mut start = 0usize;
-    for (index, token) in tokens.iter().enumerate() {
-        match token {
-            Token::OpenParen => paren_depth += 1,
-            Token::CloseParen if paren_depth > 0 => paren_depth -= 1,
-            Token::OpenSquare => square_depth += 1,
-            Token::CloseSquare if square_depth > 0 => square_depth -= 1,
-            Token::Ident(name) if paren_depth == 0 && square_depth == 0 => {
-                let current = if name.eq_ignore_ascii_case("and") {
-                    Some(true)
-                } else if name.eq_ignore_ascii_case("or") {
-                    Some(false)
-                } else {
-                    None
-                };
-                if let Some(current) = current {
-                    if operator.is_some_and(|operator| operator != current) {
-                        return false;
-                    }
-                    operator = Some(current);
-                    segments.push(&tokens[start..index]);
-                    start = index + 1;
-                }
-            }
-            _ => {}
-        }
-    }
-    if let Some(and) = operator {
-        segments.push(&tokens[start..]);
-        return if and {
-            segments.into_iter().all(supports_condition)
-        } else {
-            segments.into_iter().any(supports_condition)
-        };
-    }
-
-    let Some(inner) = strip_outer_parentheses(tokens) else {
-        return false;
-    };
-    if let Some(colon) = top_level_colon(inner) {
-        return supports_declaration(&inner[..colon], &inner[colon + 1..]);
-    }
-    supports_condition(inner)
+    crate::imports::SupportsCondition::parse_tokens(tokens, false)
+        .is_some_and(|condition| condition.evaluate())
 }
 
-fn supports_declaration(name_tokens: &[Token], value_tokens: &[Token]) -> bool {
+pub(crate) fn supports_declaration(name_tokens: &[Token], value_tokens: &[Token]) -> bool {
     let [Token::Ident(name)] = trim_ws(name_tokens) else {
         return false;
     };

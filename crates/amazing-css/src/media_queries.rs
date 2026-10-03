@@ -85,6 +85,8 @@ impl MediaQueryList {
     pub fn parse(css: &str) -> Self {
         Self { queries: split_top_level(css, ',').into_iter().map(|query| query.trim().to_owned()).collect() }
     }
+    /// Normalized list serialization; invalid queries remain non-matching.
+    pub fn css_text(&self) -> String { self.queries.join(", ") }
     pub fn evaluate(&self, environment: &MediaEnvironment) -> bool {
         if self.queries.len() == 1 && self.queries[0].is_empty() { return true; }
         self.queries.iter().any(|query| !query.is_empty() && match_query(query, environment))

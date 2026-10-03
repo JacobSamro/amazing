@@ -41,6 +41,7 @@ pub mod cascade;
 pub mod animation;
 pub mod color;
 mod counter_styles;
+mod imports;
 mod change_classification;
 mod computed;
 mod image_values;
@@ -83,3 +84,7 @@ pub use parser::{
     Declaration, FontFaceRule, FontSource, Rule, Stylesheet, parse_declarations, parse_font_faces,
     parse_stylesheet,
 };
+
+pub use imports::{ImportRule, ImportLayer, SupportsCondition, LoadedStylesheet,
+    ImportProjection, ImportProjectionError, ProjectedFontFace, project_imports};
+#[cfg(test)] mod import_tests;

@@ -24,17 +24,17 @@ struct CompiledScope {
 
 #[derive(Default)]
 struct Layers {
-    children: Vec<(LayerName, usize, Layers)>,
+    children: Vec<(LayerName, (bool, usize), Layers)>,
 }
 impl Layers {
-    fn register(&mut self, path: &[LayerName], sheet: usize) -> Vec<usize> {
+    fn register(&mut self, path: &[LayerName], sheet: usize, projected: bool) -> Vec<usize> {
         let Some((name, tail)) = path.split_first() else {
             return vec![usize::MAX];
         };
         let identity = if matches!(name, LayerName::Anonymous(_)) {
-            sheet
+            (projected, if projected { 0 } else { sheet })
         } else {
-            0
+            (false, 0)
         };
         let index = self
             .children
@@ -46,7 +46,7 @@ impl Layers {
                 self.children.len() - 1
             });
         let mut key = vec![index];
-        key.extend(self.children[index].2.register(tail, sheet));
+        key.extend(self.children[index].2.register(tail, sheet, projected));
         key
     }
 }
@@ -65,7 +65,7 @@ pub(super) fn compile_sheets(
             }) {
                 continue;
             }
-            let key = layers.register(&rule.layer, sheet_index);
+            let key = layers.register(&rule.layer, sheet_index, sheet.projected_layers);
             let selectors: Option<Vec<_>> = rule
                 .selector_srcs
                 .iter()
