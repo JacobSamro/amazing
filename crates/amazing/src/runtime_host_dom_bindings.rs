@@ -1547,4 +1547,29 @@ mod tests {
         assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
     }
 
+    #[test]
+    fn xml_serializer_cross_realm_nodes_receivers_and_prototypes() {
+        let host=Rc::new(RefCell::new(BrowserDomHost {
+            dom:amazing_html::parse("<body><iframe></iframe></body>"),native_forwarded:false }));
+        let mut scheduler=crate::js_scheduler::DriverScheduler::new(host,32).unwrap();
+        scheduler.set_location_url("https://example.test/xml-serializer");
+        scheduler.run_script("globalThis.frame=document.querySelector('iframe');void frame.contentWindow").unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        let result=scheduler.run_script(r#"
+            let step=0;function check(v){step++;if(!v)throw 'XML realm '+step;}
+            const child=frame.contentWindow;
+            const serializer=new child.XMLSerializer();
+            check(child.XMLSerializer !== XMLSerializer);
+            check(Object.getPrototypeOf(serializer) === child.XMLSerializer.prototype);
+            check(Object.getPrototypeOf(serializer) !== XMLSerializer.prototype);
+            const local=document.createElementNS('urn:local','root');
+            const foreign=frame.contentDocument.createElementNS('urn:foreign','child');
+            check(serializer.serializeToString(local) === '<root xmlns="urn:local"/>');
+            check(XMLSerializer.prototype.serializeToString.call(serializer,foreign) === '<child xmlns="urn:foreign"/>');
+            check(child.XMLSerializer.prototype.serializeToString.call(new XMLSerializer(),foreign) === '<child xmlns="urn:foreign"/>');
+            true;
+        "#).unwrap();
+        assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
+    }
+
 }
