@@ -1,0 +1,107 @@
+{
+  "base": "6480e473efe17b991a2e0f683e4d55a51d099b40",
+  "candidate": "7ade4da558bb93e7b8282757bca50ce5f6c6e3d3",
+  "nextest_pass": 3670,
+  "nextest_skip": 17,
+  "doctests_pass": 4,
+  "whole_files": 389,
+  "node_timing_note": "XHR timeout after retained accepted pass omits one prior failing assertion; raw fail decrease is uncredited.",
+  "dom/nodes": {
+    "files": 314,
+    "before": {
+      "pass": 12693,
+      "fail": 287,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 6
+    },
+    "after": {
+      "pass": 12693,
+      "fail": 286,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 6
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_assertions": []
+  },
+  "html/syntax/serializing-html-fragments": {
+    "files": 8,
+    "before": {
+      "pass": 373,
+      "fail": 2,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "after": {
+      "pass": 374,
+      "fail": 1,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "gained": 1,
+    "lost": 0,
+    "gained_assertions": [
+      {
+        "test": "html/syntax/serializing-html-fragments/escaping.html",
+        "name": "template.innerHTML",
+        "multiplicity": 1
+      }
+    ]
+  },
+  "html/semantics/scripting-1/the-template-element": {
+    "files": 67,
+    "before": {
+      "pass": 608,
+      "fail": 557,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "after": {
+      "pass": 610,
+      "fail": 555,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "gained": 2,
+    "lost": 0,
+    "gained_assertions": [
+      {
+        "test": "html/semantics/scripting-1/the-template-element/template-element/template-content-hierarcy.html",
+        "name": "Template content should throw when its ancestor is being appended.",
+        "multiplicity": 1
+      },
+      {
+        "test": "html/semantics/scripting-1/the-template-element/template-element/template-content-hierarcy.html",
+        "name": "Template content should throw exception when its ancestor in a different document but connected via host is being append.",
+        "multiplicity": 1
+      }
+    ]
+  },
+  "html/syntax/parsing": {
+    "files": 72,
+    "before": {
+      "error": 0,
+      "fail": 6,
+      "notrun": 0,
+      "pass": 2702,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 6,
+      "notrun": 0,
+      "pass": 2702,
+      "timeout": 0
+    },
+    "gained": 0,
+    "lost": 0,
+    "before_frozen_binary_sha256": "fc2ee9b09d23acb8badc96e93abbb5607a067e39f89d2a043df50f5d0ac502e4",
+    "after_frozen_binary_sha256": "c841e13aa9e2c38f814dc85f54ee53f3c984e3009d8759f6a5954ccd79bff1a0"
+  }
+}

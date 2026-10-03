@@ -3234,3 +3234,19 @@ Four reopened doc.open/write failures are separate HTML parser-session adapter
 work; two remaining syntax failures are event timing. Evidence: amazing-dom/
 evidence/incremental-import. MAIN --ref HEAD run was excluded; explicit
 source c17694ae was gated. Captured fallback URL hook remains HTML53-owned.
+
+
+### Template contents document context
+
+Fixed6480e473; code f2053c41 through7ade4da5. Fresh inert owner metadata,
+HTML type inheritance only, generation-safe persistent associations, retained
+inert creation flag after source collection, actual contents-document parser
+scripting, fragment-parent context, host-including preinsert cycle validation.
+Boat3670pass17skip4docs; whole67templates608/557->610/555 (+2),8serializer
+373/2->374/1 (+1); all12693 node passes and whole72syntax2702/6 retained.
+Complete389 serial recheck retained knownXHR pass; raw node fail287->286 is
+uncredited timeout omission, not gain. Evidence: amazing-dom/evidence/
+template-document-context. No fixture rewrites or copied engine code.
+Next approved wholeRange.createContextualFragment; capturedHTML53 fallback
+helper takes priority once immutable navigation capture hook arrives. XML
+fragment API/context dependency routedHTML54; CSSOM owner reserves Range rows.
