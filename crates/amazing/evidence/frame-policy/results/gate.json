@@ -1,0 +1,43 @@
+{
+  "before": {
+    "native_summary": "Summary [ 110.366s] 4113 tests run: 4113 passed, 17 skipped",
+    "doctests": 4,
+    "service_sha256": "0b720b8d0545c561f5d2e62c4f792d80eb835322cf9eb54a42e440e1b82e1987",
+    "binary_sha256": "fc9c3cb9a22f0a27c653853d01e686563c1b391d650e9cf6bcfc29abb77b4cbc"
+  },
+  "after": {
+    "native_summary": "Summary [ 110.773s] 4114 tests run: 4114 passed, 17 skipped",
+    "doctests": 4,
+    "service_sha256": "2bb321f55d2cf387c592b684c55673a3be34e95b0b88b5faae62fa229c5d5bdf",
+    "binary_sha256": "490c8e46e98a8665bf4af0cb47650dd74e098141d325242028bb0eee41f5a35c"
+  },
+  "base": "7e4dfecef5cbf934f168aaaad814586a4eaf1dd1",
+  "source": "8a47da1d8f933a54d0217b490a905da6723c71ad",
+  "gate_source": "5feca69f0acb2c55c6ad7ea9d2ac23bc994adac5",
+  "box": "bx_a4ty7cqv",
+  "native_source": "/tmp/amazing-src-frame-policy",
+  "native_target": "/tmp/amazing-target-integrator-runtime",
+  "jobs": 8,
+  "timeout_ms": 60000,
+  "whole_fetch_comparison": {
+    "lost_files": [],
+    "gained_files": [
+      "fetch/api/basic/request-headers.any.js"
+    ],
+    "lost_cases": [],
+    "gained_cases": 6
+  },
+  "strong_comparison": {
+    "before_files": 58,
+    "after_files": 58,
+    "before_cases": 1045,
+    "after_cases": 1045,
+    "lost_files": [],
+    "lost_cases": []
+  },
+  "notes": [
+    "Initial new native test used manual navigation redirect default; corrected to explicitly exercise Follow without changing production guard. Completed immutable BEFORE was retained, exact service hash checked.",
+    "NET37 comments claim62 but actual fixed file list has61. Comparison corrected to validate exact declared IDs; all61 raw records present on both sides.",
+    "Whole Fetch request-headers timeout recovered six passes; sequential strong selection already passes those on both sides. No causal WPT gain claimed."
+  ]
+}
