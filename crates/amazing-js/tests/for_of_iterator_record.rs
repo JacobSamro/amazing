@@ -335,3 +335,33 @@ fn per_iteration_disposal_precedes_close_and_keeps_throw_precedence() {
         ),
     ]);
 }
+#[test]
+fn suspended_generator_body_retains_cached_next_and_live_arrays() {
+    matrix(&[
+        (
+            "var ok=false,a=[1];",
+            "(function*(){for(var x of a)yield x;return 9})",
+            "var it=g(),x=it.next();a.push(2);var y=it.next(),z=it.next();ok=x.value===1&&!x.done&&y.value===2&&!y.done&&z.value===9&&z.done",
+        ),
+        (
+            "var ok=false,reads=0,n=0,inner={get next(){reads++;return function(){if(n++===0){Object.defineProperty(inner,'next',{value(){throw 1}});return {done:false,value:7}}return {done:true}}}},iterable={[Symbol.iterator](){return inner}};",
+            "(function*(){for(var x of iterable)yield x;return 9})",
+            "var it=g(),x=it.next(),y=it.next();ok=x.value===7&&!x.done&&y.value===9&&y.done&&reads===1",
+        ),
+    ]);
+}
+#[test]
+fn injected_generator_return_closes_and_close_throw_replaces_it() {
+    matrix(&[
+        (
+            "var ok=false,log=[],iterable={[Symbol.iterator](){return {next(){return {done:false,value:1}},return(){log.push('close');return {}}}};",
+            "(function*(){for(var x of iterable)yield x})",
+            "var it=g();it.next();var r=it.return(7);ok=r.value===7&&r.done&&log.join(',')==='close'",
+        ),
+        (
+            "var ok=false,marker={},iterable={[Symbol.iterator](){return {next(){return {done:false,value:1}},return(){throw marker}}}};",
+            "(function*(){try{for(var x of iterable)yield x}catch(e){return e===marker}})",
+            "var it=g();it.next();var r=it.return(7);ok=r.value===true&&r.done",
+        ),
+    ]);
+}
