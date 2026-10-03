@@ -291,3 +291,73 @@ fn async_disposal_awaits_after_return_and_preserves_suppressed_error_order() {
         ),
     ]);
 }
+
+#[test]
+fn externally_scheduled_return_and_disposal_never_pump_at_script_entry() {
+    use amazing_js::interp::SchedulingRequest;
+    let factory = "(async function*(){try{await using x={[Symbol.asyncDispose](){log.push('dispose');return cleanup}};yield 1}finally{log.push('finally')}})";
+    let mut failures = Vec::new();
+    for actor in [false, true] {
+        let mut i = Interpreter::new_with_external_scheduler(128).unwrap();
+        i.run_script("var finish,dispose,log=[],ok=false,p=new Promise(r=>finish=r),cleanup=new Promise(r=>dispose=r)").unwrap();
+        i.run_script(&format!("var g={factory}")).unwrap();
+        if actor {
+            let parsed = amazing_js::parse_script(factory).unwrap();
+            let StmtKind::Expression(expression) = &parsed.body[0].kind else {
+                panic!("expression")
+            };
+            let ExprKind::Paren(inner) = &expression.kind else {
+                panic!("group")
+            };
+            let ExprKind::Function(item) = &inner.kind else {
+                panic!("function")
+            };
+            let JsValue::Object(function) = i.run_script("g").unwrap() else {
+                panic!("factory")
+            };
+            function.borrow_mut().func.as_mut().unwrap().body =
+                FunctionBody::Block(item.body.clone());
+        }
+        i.run_script("var it=g();it.next().then(r=>log.push('first'));it.return(p).then(r=>log.push('return:'+r.value));it.next().then(r=>log.push('next:'+r.done))").unwrap();
+        let before = i.run_script("log.length===0").unwrap();
+        // Host checkpoints, never an engine-owned nested drain. Each token is
+        // invoked exactly once; newly emitted reactions join the next batch.
+        let checkpoint = |i: &mut Interpreter| {
+            for _ in 0..100 {
+                let jobs = i.take_scheduling_requests();
+                if jobs.is_empty() {
+                    return;
+                }
+                for job in jobs {
+                    let SchedulingRequest::Microtask { job_token } = job else {
+                        panic!("unexpected host work")
+                    };
+                    i.invoke_one_job(job_token).unwrap();
+                }
+            }
+            panic!("checkpoint did not quiesce");
+        };
+        checkpoint(&mut i);
+        i.run_script("log.push('before');finish(7)").unwrap();
+        let no_entry_pump = i.run_script("log.join(',')==='first,before'").unwrap();
+        checkpoint(&mut i);
+        let cleanup_pending = i
+            .run_script("log.join(',')==='first,before,dispose'")
+            .unwrap();
+        i.run_script("dispose()").unwrap();
+        checkpoint(&mut i);
+        let after = i
+            .run_script("log.join(',')==='first,before,dispose,finally,return:7,next:true'")
+            .unwrap();
+        if [before, no_entry_pump, cleanup_pending, after]
+            .iter()
+            .any(|value| value != &JsValue::Bool(true))
+        {
+            failures.push(format!(
+                "actor={actor}: {}",
+                i.run_script("log.join(',')").unwrap().to_js_string()
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
