@@ -489,8 +489,8 @@ const UNSUPPORTED_MSG: &str =
     "generators require OS threads, which this platform build does not have";
 
 /// Per-generator-instance runtime state (`Exotic::ThreadGenerator`'s payload). `coro` is `None`
-/// only when `spawn_coroutine` itself failed (no OS threads); every method then throws/rejects
-/// with `UNSUPPORTED_MSG` instead of touching a coroutine that doesn't exist. `started` mirrors
+/// after async-generator completion or when `spawn_coroutine` failed (no OS threads).
+/// An unstarted instance without a worker keeps rejecting with `UNSUPPORTED_MSG`. `started` mirrors
 /// GeneratorState's own field of the same name (suspendedStart vs. a real suspended yield), needed
 /// because `.return(v)`/`.throw(e)` on an unstarted generator must not have run any body code, and
 /// our coroutine only tells us "done", not "never started".

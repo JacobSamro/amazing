@@ -51,11 +51,21 @@ fn thread_async_generator_drain(
         let Some(request) = request else {
             return Ok(());
         };
-        let (started, completed) = {
+        let (started, completed, unavailable) = {
             let guard = state.borrow();
-            (guard.started, guard.started && guard.coro.is_none())
+            (
+                guard.started,
+                guard.started && guard.coro.is_none(),
+                !guard.started && guard.coro.is_none(),
+            )
         };
         state.borrow_mut().async_request = Some(request.target);
+        if unavailable {
+            // Preserve the existing platform policy when no worker could be
+            // spawned; it must not become a completed generator after one call.
+            thread_async_generator_finish(i, &state, Err(Throw::type_error(UNSUPPORTED_MSG)))?;
+            continue;
+        }
         if completed || (!started && request.kind != 0) {
             // GeneratorResumeAbrupt at suspendedStart never executes the body.
             let coro = {
