@@ -51,7 +51,9 @@ struct NavigationSource {
     document: NodeIdx,
     generation: u64,
     base_url: String,
+    document_url: String,
     origin: String,
+    fetch_origin: amazing_fetch::Origin,
 }
 
 #[derive(Clone)]
@@ -149,6 +151,8 @@ struct WindowContext {
     parent: JsValue,
     top: JsValue,
     origin: String,
+    fetch_origin: amazing_fetch::Origin,
+    document_url: String,
     installed: bool,
     indices: usize,
 }
@@ -377,19 +381,9 @@ fn parse_response(body: &[u8], mime: &str, charset: Option<&str>) -> Result<(Dom
     Err(format!("unsupported iframe media type: {mime}"))
 }
 
-fn fetch_child_document(logical_url: &str, parent_url: &str,
-    resolver: Option<&FrameResourceResolver>, sandbox: SandboxFlags) -> Result<amazing_net::Response, String> {
-    let parent = HttpUrl::parse(parent_url).map_err(|error| format!("iframe parent URL: {error:?}"))?;
+fn fetch_child_document(logical_url: &str, context: &NavigableContext,
+    resolver: Option<&FrameResourceResolver>) -> Result<amazing_net::Response, String> {
     let target = HttpUrl::parse(logical_url).map_err(|error| format!("iframe URL: {error:?}"))?;
-    let origin = parent.origin().clone();
-    let context = NavigableContext {
-        top_level_origin: origin.clone(), parent_origin: origin.clone(),
-        ancestor_origins: vec![origin], sandbox_flags: sandbox.to_bits(),
-        frame_csp: Default::default(), referrer: parent.serialize(),
-        referrer_policy: "strict-origin-when-cross-origin".into(),
-        now_unix: SystemTime::now().duration_since(UNIX_EPOCH)
-            .unwrap_or_default().as_secs().min(i64::MAX as u64) as i64,
-    };
     // A fixture resolver only changes the transport address. Policy always
     // sees the document's logical URL and its real parent origin.
     if let Some(resolve) = resolver {
@@ -443,8 +437,11 @@ fn fetch_child_document(logical_url: &str, parent_url: &str,
 impl RuntimeBindings {
     pub(super) fn html_set_document_origin(&self, url: &str) {
         let origin = ParsedUrl::parse(url).map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into());
+        let fetch_origin = HttpUrl::parse(url).map(|url| url.origin().clone()).unwrap_or_else(|_| amazing_fetch::Origin::opaque());
         for context in self.state.borrow_mut().frames.contexts.values_mut().filter(|context| context.frame.is_none()) {
             context.origin = origin.clone();
+            context.fetch_origin = fetch_origin.clone();
+            context.document_url = url.to_owned();
         }
     }
 
@@ -517,7 +514,7 @@ impl RuntimeBindings {
     /// it when somehow no realm exists yet (e.g. a test driving it directly
     /// without a prior `navigate_iframes`).
     fn ensure_realm(&self, js: &mut Interpreter, frame: NodeIdx, document: NodeIdx,
-        child_url: &str, sandbox: SandboxFlags) -> Result<RealmHandle, Throw> {
+        child_url: &str, sandbox: SandboxFlags, initiator: Option<&NavigationSource>) -> Result<RealmHandle, Throw> {
         // `about:srcdoc` and `about:blank` both inherit the parent
         // document's origin (neither is opaque on its own -- an unsandboxed
         // `about:blank` iframe is same-origin with its parent, per the
@@ -544,11 +541,22 @@ impl RuntimeBindings {
             let mut state = self.state.borrow_mut();
             state.frames.opaque_origin_counter += 1;
             format!("null (sandboxed #{})", state.frames.opaque_origin_counter)
-        } else if child_url == "about:srcdoc" || child_url == "about:blank" {
-            parent_origin
+        } else if ParsedUrl::parse(child_url).is_ok_and(|url| matches_about_url(&url, "blank")
+            || (matches_about_url(&url, "srcdoc") && url.query().is_none())) {
+            initiator.map(|source| source.origin.clone()).unwrap_or(parent_origin)
         } else {
             ParsedUrl::parse(child_url).map(|url| url.origin().serialize())
                 .unwrap_or_else(|_| "null".into())
+        };
+        let inherits = ParsedUrl::parse(child_url).is_ok_and(|url| matches_about_url(&url, "blank")
+            || (matches_about_url(&url, "srcdoc") && url.query().is_none()));
+        let fetch_origin = if sandbox.sandboxed && !sandbox.allow_same_origin {
+            amazing_fetch::Origin::opaque()
+        } else if inherits {
+            initiator.map(|source| source.fetch_origin.clone()).or_else(|| parent_context.as_ref()
+                .map(|(_, context)| context.fetch_origin.clone())).unwrap_or_else(amazing_fetch::Origin::opaque)
+        } else {
+            HttpUrl::parse(child_url).map(|url| url.origin().clone()).unwrap_or_else(|_| amazing_fetch::Origin::opaque())
         };
         let existing = self.state.borrow().frames.windows.get(&frame).cloned();
         let realm = if let Some((_, proxy)) = existing {
@@ -573,7 +581,7 @@ impl RuntimeBindings {
         let (parent, top) = parent_context.map(|(_, context)| (context.window, context.top))
             .unwrap_or_else(|| (proxy.clone(), proxy.clone()));
         self.state.borrow_mut().frames.contexts.insert(realm, WindowContext {
-            document, frame: Some(frame), global, window: proxy, parent, top, origin,
+            document, frame: Some(frame), global, window: proxy, parent, top, origin, fetch_origin, document_url: child_url.to_owned(),
             installed: false, indices: 0,
         });
         let state = self.state.clone();
@@ -696,32 +704,76 @@ impl RuntimeBindings {
                 state.frames.windows.remove(&node);
                 continue;
             }
-            let base = {
-                let host = host.borrow();
-                let owner = host.dom.owner_document(node).unwrap_or(NodeIdx(0));
-                if owner == NodeIdx(0) { base.clone() }
-                else { host.dom.document_metadata(owner).ok().flatten().map(|metadata| metadata.url.clone()).unwrap_or_else(|| base.clone()) }
+            let owner_context = self.state.borrow().frames.contexts.iter()
+                .find(|(realm, context)| context.document == owner && self.state.borrow().frames.live_context(context, **realm))
+                .map(|(realm, context)| (*realm, context.clone()));
+            let Some((owner_realm, owner_context)) = owner_context else { continue; };
+            let old_realm = self.state.borrow().frames.windows.get(&node).map(|(realm, _)| *realm);
+            let pending = old_realm.and_then(|realm| {
+                let navigation = self.state.borrow().frames.pending_navigations.get(&realm).cloned()?;
+                let valid = {
+                    let state = self.state.borrow(); let host = state.host.borrow();
+                    host.dom.node_generation(navigation.document) == Some(navigation.generation)
+                        && state.frames.contexts.get(&realm).is_some_and(|context| context.document == navigation.document)
+                };
+                if !valid { self.state.borrow_mut().frames.pending_navigations.remove(&realm); return None; }
+                // Only this actual child realm is consumed. Root navigation remains
+                // pending until its scheduler can transfer the creator snapshot.
+                let queued = js.binding_with_realm(realm, |i| Ok(i.take_navigation())).ok().flatten();
+                if queued.as_deref() != Some(navigation.url.as_str()) {
+                    if let Some(url) = queued { let _ = js.binding_with_realm(realm, |i| { i.binding_location_navigate(&url, navigation.replace); Ok(()) }); }
+                    return None;
+                }
+                self.state.borrow_mut().frames.pending_navigations.remove(&realm);
+                Some(navigation)
+            });
+            if pending.is_none() && self.state.borrow().frames.documents.get(&node)
+                .is_some_and(|old| old.src == src && old.srcdoc == srcdoc) { continue; }
+            let source = if let Some(navigation) = &pending { navigation.source.clone() } else {
+                let adapter = RuntimeBindingHost { js, state: self.state.clone() };
+                let Ok(base_url) = adapter.dom_document_base_url(owner) else { continue; };
+                let generation = host.borrow().dom.node_generation(owner).unwrap_or(0);
+                let origin = context_origin(adapter.js, &owner_context, owner_realm).unwrap_or_else(|_| "null".into());
+                NavigationSource { document: owner, generation, base_url,
+                    document_url: owner_context.document_url.clone(), origin,
+                    fetch_origin: owner_context.fetch_origin.clone() }
             };
-            if self.state.borrow().frames.documents.get(&node)
-                .is_some_and(|old| old.src == src && old.srcdoc == srcdoc) {
-                continue;
+            let mut ancestor_origins = Vec::new();
+            let mut ancestor = Some(owner_context.clone());
+            for _ in 0..32 {
+                let Some(context) = ancestor.take() else { break; };
+                ancestor_origins.push(context.fetch_origin.clone());
+                if context.frame.is_none() { break; }
+                let state = self.state.borrow();
+                ancestor = state.frames.contexts.iter().find(|(realm, candidate)|
+                    state.frames.live_context(candidate, **realm) && js.binding_same_value(&candidate.window, &context.parent))
+                    .map(|(_, context)| context.clone());
             }
+            ancestor_origins.reverse();
+            let Some(top_level_origin) = ancestor_origins.first().cloned() else { continue; };
+            let navigation_context = NavigableContext { top_level_origin,
+                parent_origin: owner_context.fetch_origin.clone(), ancestor_origins,
+                sandbox_flags: sandbox.to_bits(), frame_csp: Default::default(),
+                referrer: source.document_url.clone(), referrer_policy: "strict-origin-when-cross-origin".into(),
+                now_unix: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64 };
             let loaded = (|| -> Result<LoadedChildDocument, String> {
                 // `srcdoc` takes priority over `src` per spec: its content is
                 // used verbatim and the navigable's URL becomes "about:srcdoc"
                 // rather than being resolved/fetched.
-                if let Some(html) = srcdoc.as_deref() {
+                if let Some(html) = srcdoc.as_deref().filter(|_| pending.is_none()) {
                     return Ok(LoadedChildDocument::Deferred { source: html.to_owned(),
                         url: "about:srcdoc".into(), mime: "text/html".into(), encoding: "UTF-8" });
                 }
-                let Some(source) = src.as_deref().filter(|source| !source.is_empty()) else {
-                    return Ok(LoadedChildDocument::Eager {
-                        parsed: amazing_html::parse("<!doctype html><html><head></head><body></body></html>"),
-                        url: "about:blank".into(), mime: "text/html".into(), encoding: "UTF-8" });
-                };
-                let logical_url = ParsedUrl::parse(&base).and_then(|base| base.resolve(source))
-                    .map_err(|error| format!("iframe URL: {error:?}"))?.serialize();
-                let response = fetch_child_document(&logical_url, &base, resolver.as_ref(), sandbox)?;
+                let logical_url = if let Some(navigation) = &pending { navigation.url.clone() }
+                    else if let Some(input) = src.as_deref().filter(|source| !source.is_empty()) {
+                        ParsedUrl::parse(&source.base_url).and_then(|base| base.resolve(input))
+                            .map_err(|error| format!("iframe URL: {error:?}"))?.serialize()
+                    } else { "about:blank".into() };
+                if ParsedUrl::parse(&logical_url).is_ok_and(|url| matches_about_url(&url, "blank")) {
+                    return Ok(LoadedChildDocument::Eager { parsed: amazing_html::parse(""),
+                        url: logical_url, mime: "text/html".into(), encoding: "UTF-8" });
+                }
+                let response = fetch_child_document(&logical_url, &navigation_context, resolver.as_ref())?;
                 if !response.is_success() { return Err(format!("iframe status {}", response.status)); }
                 let mime = content_type(&response, &logical_url,
                     resolver.is_some() || logical_url.starts_with("file:"))
@@ -776,13 +828,14 @@ impl RuntimeBindings {
                         Err(_) => (None, url, None),
                     }
                 }
+                Err(_) if pending.is_some() => continue,
                 Err(_) => (None, String::new(), None),
             };
             // Per spec, a `load` event is only queued for this navigation
             // when the element has a `src` or `srcdoc` attribute at all
             // (present, even if empty) -- not for the implicit `about:blank`
             // an iframe with neither gets purely from being inserted.
-            let fire_load_events = src.is_some() || srcdoc.is_some();
+            let fire_load_events = pending.is_some() || src.is_some() || srcdoc.is_some();
             // Realm/WindowProxy creation happens here, synchronously with
             // the navigation commit, not deferred to `setup_iframe_window`'s
             // later tick: `contentDocument`/`contentWindow` must see the
@@ -795,7 +848,13 @@ impl RuntimeBindings {
                 // XML/XHTML and the synchronous initial about:blank document.
                 let enabled = !(sandbox.sandboxed && !sandbox.allow_scripts);
                 let _ = host.borrow_mut().dom.set_document_scripting_enabled(document, enabled);
-                let _ = self.ensure_realm(js, node, document, &url, sandbox);
+                if ParsedUrl::parse(&url).is_ok_and(|url| matches_about_url(&url, "blank")
+                    || (matches_about_url(&url, "srcdoc") && url.query().is_none())) {
+                    if let Some(generation) = host.borrow().dom.node_generation(document) {
+                        self.state.borrow_mut().frames.about_base_urls.insert(document, (generation, source.base_url.clone()));
+                    }
+                }
+                let _ = self.ensure_realm(js, node, document, &url, sandbox, Some(&source));
             }
             let mut state = self.state.borrow_mut();
             let navigation = ChildNavigation { frame: node, requested_src: src.clone(),
@@ -852,6 +911,12 @@ impl RuntimeBindings {
     /// script reads them before or after this tick runs.
     pub(crate) fn setup_iframe_window(&self, js: &mut Interpreter, frame: NodeIdx,
         document: NodeIdx) -> Result<(), Throw> {
+        let pending = self.state.borrow().frames.windows.get(&frame)
+            .is_some_and(|(realm, _)| self.state.borrow().frames.pending_navigations.contains_key(realm));
+        if pending {
+            self.navigate_iframes(js);
+            if self.state.borrow().frames.documents.get(&frame).and_then(|entry| entry.document) != Some(document) { return Ok(()); }
+        }
         let (child_url, sandbox, html) = {
             let mut state = self.state.borrow_mut();
             let entry = state.frames.documents.get_mut(&frame);
@@ -874,7 +939,7 @@ impl RuntimeBindings {
         let existing_realm = self.state.borrow().frames.windows.get(&frame).map(|(realm, _)| *realm);
         let realm = match existing_realm {
             Some(realm) => realm,
-            None => self.ensure_realm(js, frame, document, &child_url, sandbox)?,
+            None => self.ensure_realm(js, frame, document, &child_url, sandbox, None)?,
         };
         let state = self.state.clone();
         // HTML-34: `document_url` is one field shared by the whole host,
@@ -1322,20 +1387,27 @@ impl RuntimeBindingHost<'_> {
         let generations = {
             let state = self.state.borrow();
             let host = state.host.borrow();
-            host.dom.node_generation(target_context.document).zip(host.dom.node_generation(source_context.document))
+            if !state.frames.live_context(&target_context, target) || !state.frames.live_context(&source_context, source) { None }
+            else { host.dom.node_generation(target_context.document).zip(host.dom.node_generation(source_context.document)) }
         };
         let Some((target_generation, source_generation)) = generations else {
             return Err(Throw::type_error("Stale navigation document"));
         };
         Ok(HtmlNavigation { document: target_context.document, generation: target_generation,
             url: url.into(), replace, source: NavigationSource { document: source_context.document,
-                generation: source_generation, base_url, origin } })
+                generation: source_generation, base_url, document_url: source_context.document_url,
+                origin, fetch_origin: source_context.fetch_origin } })
     }
 
     pub(super) fn html_location_navigate(&mut self, url: &str, replace: bool) -> Result<(), Throw> {
         let navigation = self.html_navigation_source(url, replace)?;
         let target = self.js.binding_current_realm();
-        self.state.borrow_mut().frames.pending_navigations.insert(target, navigation);
+        let frame = self.state.borrow().frames.contexts.get(&target).and_then(|context| context.frame);
+        let document = navigation.document;
+        let mut state = self.state.borrow_mut();
+        state.frames.pending_navigations.insert(target, navigation);
+        if let Some(frame) = frame { state.frames.pending_loads.push_back((frame, Some(document), false)); }
+        drop(state);
         self.js.binding_location_navigate(url, replace);
         Ok(())
     }
@@ -1344,9 +1416,22 @@ impl RuntimeBindingHost<'_> {
         let url = self.js.binding_location_href().to_owned();
         let navigation = self.html_navigation_source(&url, false)?;
         let target = self.js.binding_current_realm();
-        self.state.borrow_mut().frames.pending_navigations.insert(target, navigation);
+        let frame = self.state.borrow().frames.contexts.get(&target).and_then(|context| context.frame);
+        let document = navigation.document;
+        let mut state = self.state.borrow_mut();
+        state.frames.pending_navigations.insert(target, navigation);
+        if let Some(frame) = frame { state.frames.pending_loads.push_back((frame, Some(document), false)); }
+        drop(state);
         self.js.binding_location_reload();
         Ok(())
+    }
+
+    /// Actual committed URL, independent of a pending Location or script scope.
+    pub(super) fn html_document_url(&self, document: NodeIdx) -> Option<String> {
+        let state = self.state.borrow();
+        state.frames.contexts.iter().find_map(|(realm, context)|
+            (context.document == document && state.frames.live_context(context, *realm))
+                .then(|| context.document_url.clone()))
     }
 
     /// A navigated child document retains its associated WindowProxy even
@@ -1453,9 +1538,11 @@ impl RuntimeBindingHost<'_> {
         if !self.state.borrow().frames.contexts.contains_key(&realm) {
             let window = self.js.binding_create_window_proxy(realm)?;
             let global = self.js.binding_global_object();
+            let document_url = self.state.borrow().document_url.clone().unwrap_or_else(|| "about:blank".into());
+            let fetch_origin = HttpUrl::parse(&document_url).map(|url| url.origin().clone()).unwrap_or_else(|_| amazing_fetch::Origin::opaque());
             self.state.borrow_mut().frames.contexts.insert(realm, WindowContext {
                 document: NodeIdx(0), frame: None, global, parent: window.clone(), top: window.clone(), window,
-                origin: String::new(), installed: false, indices: 0,
+                origin: ParsedUrl::parse(&document_url).map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into()), fetch_origin, document_url, installed: false, indices: 0,
             });
         }
         let context = self.state.borrow().frames.contexts[&realm].clone();
@@ -2197,6 +2284,55 @@ mod tests {
     use crate::{dom_host::BrowserDomHost, js_scheduler::{DriverScheduler, JS_CAPACITY}};
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::{Shutdown, TcpListener};
+
+    #[test]
+    fn about_documents_capture_creation_base_and_full_blank_url() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+            "<!doctype html><base href='https://example.test/first/'><iframe id=a></iframe><iframe id=b src='about:blank?query#fragment'></iframe><iframe id=c srcdoc='<p>child'></iframe>"), native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/root/page.html");
+        assert_eq!(scheduler.run_script(r#"
+            const a=document.getElementById('a'), b=document.getElementById('b'), c=document.getElementById('c');
+            const old=a.contentDocument;
+            if(old.baseURI!=='https://example.test/first/' || old.compatMode!=='BackCompat') throw new Error('initial creation snapshot');
+            if(b.contentDocument.URL!=='about:blank?query#fragment' || b.contentDocument.baseURI!==old.baseURI) throw new Error('full blank URL');
+            if(c.contentDocument.URL!=='about:srcdoc' || c.contentDocument.baseURI!==old.baseURI) throw new Error('srcdoc snapshot');
+            document.querySelector('base').href='https://example.test/second/';
+            if(old.baseURI!=='https://example.test/first/' || c.contentDocument.baseURI!==old.baseURI) throw new Error('mutable creator');
+            const own=old.createElement('base'); own.href='relative/'; old.head.appendChild(own);
+            if(own.href!=='https://example.test/first/relative/' || old.baseURI!==own.href) throw new Error('base bypass and contribution');
+            const clone=old.cloneNode(true); if(clone.baseURI===old.baseURI) throw new Error('clone copied context snapshot');
+            'captured';
+        "#).unwrap().to_js_string(), "captured");
+    }
+
+    #[test]
+    fn queued_child_location_captures_actual_source_and_last_request() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+            "<!doctype html><base href='https://example.test/root-base/'><iframe id=a></iframe><iframe id=b></iframe>"), native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/root/page.html");
+        scheduler.run_script(r#"
+            const a=document.getElementById('a'), b=document.getElementById('b');
+            const w=a.contentWindow, old=a.contentDocument;
+            const source=b.contentDocument, base=source.createElement('base');
+            base.href='https://example.test/source-base/'; source.head.appendChild(base);
+            b.contentWindow.eval("parent.frames[0].location.href='about:blank?one'");
+            b.contentWindow.eval("parent.frames[0].location.replace('about:blank?two#last')");
+            base.href='https://example.test/changed/';
+        "#).unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script(r#"
+            if(a.contentWindow!==w || a.contentDocument===old) throw new Error('proxy or target identity');
+            if(a.contentDocument.URL!=='about:blank?two#last') throw new Error('last queued request');
+            if(a.contentDocument.baseURI!=='https://example.test/source-base/') throw new Error('source snapshot');
+            if(old.baseURI!=='https://example.test/root-base/') throw new Error('retired document snapshot');
+            location.href='https://other.test/pending';
+            const fresh=document.createElement('iframe'); document.body.appendChild(fresh);
+            if(fresh.contentDocument.baseURI!=='https://example.test/root-base/') throw new Error('pending root became committed document');
+            'navigated';
+        "#).unwrap().to_js_string(), "navigated");
+    }
 
     #[test]
     fn windows_expose_actual_live_children_and_proxy_identity() {
