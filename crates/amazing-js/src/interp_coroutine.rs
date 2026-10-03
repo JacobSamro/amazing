@@ -1,3 +1,6 @@
+// Async-generator Return/Await portions adapted from lucid-softworks/lumen
+// (crates/lumen/src/eval.rs, return statement/yield_one)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Synchronous delegated-yield raw-result adapter portions ported from lucid-softworks/lumen
 // (crates/lumen/src/eval.rs, yield_delegate) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Generators and async generators for the *default* (tree-walking) execution path.
@@ -181,21 +184,34 @@ fn park_segment(i: &mut Interpreter, msg: Suspend) -> Resume {
 /// `None` when the `await` does not belong to such a body (the caller then keeps the
 /// pre-existing synchronous `await_value` behaviour).
 pub(crate) fn coroutine_await(i: &mut Interpreter, value: JsValue) -> Option<Result<JsValue, Throw>> {
-    coroutine_await_mode(i, value, false)
+    coroutine_await_mode(i, value, false, false)
 }
 
 /// A synchronous iterator's value is first normalized by its Promise wrapper,
 /// which rejects instead of propagating a constructor-get abrupt completion.
 pub(crate) fn coroutine_await_sync(i: &mut Interpreter, value: JsValue) -> Option<Result<JsValue, Throw>> {
-    coroutine_await_mode(i, value, true)
+    coroutine_await_mode(i, value, true, false)
 }
 
-fn coroutine_await_mode(i: &mut Interpreter, value: JsValue, sync_wrapper: bool) -> Option<Result<JsValue, Throw>> {
+/// ReturnStatement and injected return own an Await in an async generator,
+/// independently of the legacy policy for its other await/yield operations.
+fn coroutine_return_value(i: &mut Interpreter, value: JsValue) -> Result<JsValue, Throw> {
+    let is_async_generator = i.frames.last().and_then(|frame| frame.own_function.as_ref())
+        .is_some_and(|function| function.borrow().func.as_ref()
+            .is_some_and(|function| function.is_async && function.is_generator));
+    if !is_async_generator { return Ok(value); }
+    match coroutine_await_mode(i, value.clone(), false, true) {
+        Some(result) => result,
+        None => i.await_value(value),
+    }
+}
+
+fn coroutine_await_mode(i: &mut Interpreter, value: JsValue, sync_wrapper: bool, return_owner: bool) -> Option<Result<JsValue, Throw>> {
     if !in_coroutine() {
         return None;
     }
     let owned = SEGMENT.with(|segment| {
-        segment.borrow().as_ref().is_some_and(|segment| segment.awaits && segment.base == i.frames.len())
+        segment.borrow().as_ref().is_some_and(|segment| (segment.awaits || return_owner) && segment.base == i.frames.len())
     });
     if !owned {
         return None;
@@ -314,6 +330,7 @@ fn coroutine_yield_to_expr(i: &mut Interpreter, value: JsValue) -> Result<JsValu
         Resume::Next(v) => Ok(v),
         Resume::Throw(e) => Err(Throw(e)),
         Resume::Return(v) => {
+            let v = coroutine_return_value(i, v)?;
             set_pending_return(v);
             Err(Throw(JsValue::Undefined))
         }
@@ -475,6 +492,13 @@ pub struct ThreadGeneratorState {
     started: bool,
     /// A coroutine-backed plain async function (not a generator): its promise.
     async_target: Option<Obj>,
+    // Async-generator requests retain their capabilities while a Return Await parks.
+    async_queue: VecDeque<ThreadAsyncGeneratorRequest>,
+    async_request: Option<Obj>,
+    async_executing: bool,
+    async_awaiting: bool,
+    async_await_return: bool,
+    body_realm: RealmHandle,
 }
 
 impl std::fmt::Debug for ThreadGeneratorState {
@@ -639,8 +663,7 @@ fn async_generator_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
         };
     }
     let v = args.into_iter().next().unwrap_or(JsValue::Undefined);
-    let resumed = thread_generator_resume(i, &this, match kind { 0 => Resume::Next(v), 1 => Resume::Return(v), _ => Resume::Throw(v) });
-    Ok(thread_async_settle(i, resumed))
+    thread_async_generator_enqueue(i, thread_generator_state(&this)?, kind, v)
 }
 
 fn generator_prototype_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -778,6 +801,12 @@ impl Interpreter {
             is_async,
             started: false,
             async_target: None,
+            async_queue: VecDeque::new(),
+            async_request: None,
+            async_executing: false,
+            async_awaiting: false,
+            async_await_return: false,
+            body_realm: self.binding_current_realm(),
         })));
         JsValue::object(object)
     }
@@ -824,6 +853,12 @@ impl Interpreter {
             is_async: true,
             started: true,
             async_target: Some(target.clone()),
+            async_queue: VecDeque::new(),
+            async_request: None,
+            async_executing: false,
+            async_awaiting: false,
+            async_await_return: false,
+            body_realm: self.binding_current_realm(),
         }));
         if let Err(Throw(error)) = thread_async_function_step(self, state, Resume::Next(JsValue::Undefined)) {
             let error = self.normalize_throw(Throw(error)).0;

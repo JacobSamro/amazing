@@ -1,3 +1,5 @@
+// Async-generator ReturnStatement Await adapted from lucid-softworks/lumen
+// (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // StatementList/try completion portions adapted from lucid-softworks/lumen
 // (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Normal IteratorClose GetMethod/completion portions adapted from lucid-softworks/lumen
@@ -433,12 +435,16 @@ impl Interpreter {
                     x => Ok(x),
                 },
             },
-            StmtKind::Return(e) => Ok(Flow::Return(
-                e.as_ref()
-                    .map(|x| self.eval_expr(x, env))
-                    .transpose()?
-                    .unwrap_or(JsValue::Undefined),
-            )),
+            StmtKind::Return(e) => {
+                let value = match e {
+                    Some(expression) => {
+                        let value = self.eval_expr(expression, env)?;
+                        coroutine_return_value(self, value)?
+                    }
+                    None => JsValue::Undefined,
+                };
+                Ok(Flow::Return(value))
+            }
             StmtKind::Throw(e) => Err(Throw(self.eval_expr(e, env)?)),
             StmtKind::Try(t) => {
                 self.completion = Some(JsValue::Undefined);
