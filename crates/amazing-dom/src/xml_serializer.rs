@@ -278,7 +278,7 @@ mod tests {
         dom.nodes[cycle.0 as usize].first_child=Some(cycle);
         dom.nodes[cycle.0 as usize].last_child=Some(cycle);
         assert_eq!(dom.serialize_xml(cycle,false),Err(DomError::InvalidStateError));
-        let document=dom.create_node_in(NodeIdx(0),NodeKind::Document).unwrap();
+        let document=dom.create_document();
         let child=dom.create_node_in(document,NodeKind::Text { data: "x".into() }).unwrap();
         dom.nodes[document.0 as usize].first_child=Some(child);
         dom.nodes[document.0 as usize].last_child=Some(child);
