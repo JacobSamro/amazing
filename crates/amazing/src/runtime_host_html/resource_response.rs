@@ -101,3 +101,99 @@ pub(super) fn load_document_response(request: &HtmlFrameResourceRequest,
         .map_err(|error| format!("iframe embedding: {error}"))?;
     Ok(response)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::js_scheduler::{DriverScheduler, JS_CAPACITY};
+
+    fn response(url: &str, mime: Option<&str>, body: Vec<u8>) -> amazing_net::Response {
+        let mut headers = amazing_net::Headers::new();
+        if let Some(mime) = mime { headers.append("Content-Type", mime).unwrap(); }
+        amazing_net::Response { url: url.into(), status: 200, reason: "OK".into(), headers, body }
+    }
+
+    #[test]
+    fn classic_response_uses_bom_header_then_actual_fallback_and_media_policy() {
+        use amazing_encoding::Encoding::{Utf8, Windows1252};
+        let url = "https://example.test/redirect/script.js";
+        for (header, fallback, bytes, expected) in [
+            (Some("text/javascript; charset=windows-1252"), Utf8, vec![0xe9], "é"),
+            (Some("text/javascript; charset=windows-1252"), Windows1252, vec![0xef,0xbb,0xbf,0xc3,0xa9], "é"),
+            (Some("text/javascript; charset=bogus"), Windows1252, vec![0xe9], "é"),
+            (None, Utf8, vec![0xe9], "�"),
+        ] {
+            let result = decode_classic_response(response(url, header, bytes), fallback).unwrap();
+            assert_eq!(result, (expected.into(), url.into()));
+        }
+        let bytes = b"// <meta charset=utf-8>\nwindow.value='\xe9';".to_vec();
+        assert!(decode_classic_response(response(url, None, bytes), Windows1252).unwrap().0.ends_with("'é';"));
+        for mime in ["image/png", "audio/wav", "video/mp4", "text/csv"] {
+            assert!(decode_classic_response(response(url, Some(mime), b"1".to_vec()), Utf8).is_err());
+        }
+        for mime in [None, Some("text/plain"), Some("TEXT/JAVASCRIPT")] {
+            let mut value = response(url, mime, b"1".to_vec());
+            value.headers.append("X-Content-Type-Options", "nosniff").unwrap();
+            assert_eq!(decode_classic_response(value, Utf8).is_ok(), mime == Some("TEXT/JAVASCRIPT"));
+        }
+        let mut value = response(url, Some("text/javascript"), Vec::new());
+        value.status = 404;
+        assert!(decode_classic_response(value, Utf8).is_err());
+        assert!(decode_classic_response(response("not a URL", None, Vec::new()), Utf8).is_err());
+        assert!(decode_classic_response(response(url, None, vec![0;16*1024*1024+1]), Utf8).is_err());
+    }
+
+    #[test]
+    fn canonical_document_and_classic_requests_keep_real_redirects_bytes_and_borrow_boundaries() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+            "<!doctype html><body><iframe src='/requested.xml'></iframe>"), native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/root/main.html");
+        let requests = Rc::new(RefCell::new(Vec::new()));
+        let observed = requests.clone();
+        scheduler.set_frame_resource_loader(Rc::new(move |request| {
+            assert!(host.try_borrow_mut().is_ok(), "transport called with a live DOM borrow");
+            observed.borrow_mut().push(request.clone());
+            Ok(match request.kind {
+                HtmlFrameResourceKind::Document => response("https://example.test/final/child.html",
+                    Some("text/html; charset=windows-1252"),
+                    b"<!doctype html><body><script src='script.js'></script><p id=p>\xe9</p>".to_vec()),
+                HtmlFrameResourceKind::ClassicScript => response("https://example.test/scripts/final.js",
+                    Some("text/javascript; charset=windows-1252"), b"window.classicValue='\xe9';".to_vec()),
+            })
+        }));
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script("var f=document.querySelector('iframe');[f.contentDocument.URL,f.contentDocument.characterSet,f.contentDocument.getElementById('p').textContent,f.contentWindow.classicValue].join('|')").unwrap(),
+            JsValue::str("https://example.test/final/child.html|windows-1252|é|é"));
+        let requests = requests.borrow();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].requested_url, "https://example.test/requested.xml");
+        assert_eq!(requests[0].initiator.document_url, "https://example.test/root/main.html");
+        assert!(requests[0].embedding.is_some());
+        assert_eq!(requests[1].requested_url, "https://example.test/final/script.js");
+        assert_eq!(requests[1].initiator.document_url, "https://example.test/final/child.html");
+        assert!(requests[1].embedding.is_none());
+        assert_eq!(requests[1].initiator.ancestor_origins, vec![requests[0].initiator.origin.clone()]);
+    }
+
+    #[test]
+    fn canonical_document_errors_and_unknown_mime_do_not_use_pinned_extensions_or_fallback() {
+        for case in 0..4 {
+            let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+                "<!doctype html><body><iframe src='/requested.xml'></iframe>"), native_forwarded: false }));
+            let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+            scheduler.set_location_url("https://example.test/root.html");
+            scheduler.set_frame_resource_resolver(Rc::new(|_| panic!("canonical failure fell back to pinned transport")));
+            scheduler.set_frame_resource_loader(Rc::new(move |_| {
+                if case == 0 { return Err("actual transport error".into()); }
+                let mut response = response("https://example.test/final.xml", None,
+                    if case == 1 { b"<root/>".to_vec() } else { b"<!doctype html><p>child".to_vec() });
+                if case == 2 { response.headers.append("X-Content-Type-Options", "nosniff").unwrap(); }
+                if case == 3 { response.headers.append("X-Frame-Options", "DENY").unwrap(); }
+                Ok(response)
+            }));
+            scheduler.dispatch_pending_iframe_loads().unwrap();
+            assert_eq!(scheduler.run_script("document.querySelector('iframe').contentDocument").unwrap(), JsValue::Null);
+        }
+    }
+}
