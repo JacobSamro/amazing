@@ -284,6 +284,19 @@ impl FrameRuntime {
             origin: context.fetch_origin.clone(), top_level_origin: current.fetch_origin.clone(), ancestor_origins: ancestors })
     }
 
+    /// Actual live Document realm for native callback/handler installation.
+    /// This performs no realm entry and never substitutes a caller realm.
+    pub(super) fn document_realm(&self, dom: &Dom, document: NodeIdx) -> Option<RealmHandle> {
+        if !matches!(dom.node_generation(document).map(|_| &dom.get(document).kind), Some(NodeKind::Document)) {
+            return None;
+        }
+        self.document_context(dom, document)?;
+        self.contexts.iter().find(|(realm, context)| context.document == document
+            && self.live_context(context, **realm)
+            && dom.node_generation(document) == Some(context.document_generation))
+            .map(|(realm, _)| *realm)
+    }
+
     /// Resolve the requesting realm's actual live Document policy without JS.
     pub(super) fn document_context_for_realm(&self, dom: &Dom, realm: RealmHandle) -> Option<HtmlDocumentContext> {
         let context = self.contexts.get(&realm)?;
