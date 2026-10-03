@@ -15,6 +15,8 @@ fn document_policy_snapshot_uses_actual_origins_ancestry_and_generations() {
     let state = bindings.state.borrow();
     let borrowed = host.borrow();
     let root = state.frames.document_context(&borrowed.dom, NodeIdx(0)).unwrap();
+    assert!(state.frames.document_realm(&borrowed.dom, NodeIdx(0)).is_some());
+    assert!(state.frames.document_realm(&borrowed.dom, NodeIdx(usize::MAX)).is_none());
     assert_eq!(root.document, NodeIdx(0));
     assert_eq!(Some(root.document_generation), borrowed.dom.node_generation(root.document));
     assert_eq!(root.document_url, "https://example.test/committed/page");
@@ -30,6 +32,7 @@ fn document_policy_snapshot_uses_actual_origins_ancestry_and_generations() {
     for (realm, context) in &state.frames.contexts {
         assert_eq!(state.frames.document_creation_origin(&borrowed.dom, context.document, *realm),
             Some(context.fetch_origin.clone()));
+        assert_eq!(state.frames.document_realm(&borrowed.dom, context.document), Some(*realm));
         let by_realm = state.frames.document_context_for_realm(&borrowed.dom, *realm).unwrap();
         let by_document = state.frames.document_context(&borrowed.dom, context.document).unwrap();
         assert_eq!(by_realm.document_url, by_document.document_url);
@@ -57,6 +60,7 @@ fn document_policy_snapshot_uses_actual_origins_ancestry_and_generations() {
     assert!(state.frames.document_creation_origin(&host.borrow().dom, retired, realm).is_none());
     assert!(state.frames.document_context(&host.borrow().dom, retired).is_none());
     assert!(state.frames.document_context_for_realm(&host.borrow().dom, realm).is_none());
+    assert!(state.frames.document_realm(&host.borrow().dom, retired).is_none());
     state.frames.contexts.get_mut(&realm).unwrap().document_generation -= 1;
     let frame = state.frames.contexts[&realm].frame.unwrap();
     let creation_origin = state.frames.document_creation_origin(&host.borrow().dom, retired, realm).unwrap();
@@ -70,11 +74,18 @@ fn document_policy_snapshot_uses_actual_origins_ancestry_and_generations() {
     state.frames.windows.remove(&frame);
     assert!(state.frames.document_creation_origin(&host.borrow().dom, retired, realm).is_none());
     assert_eq!(state.frames.document_origin(&host.borrow().dom, retired), Some(creation_origin));
+    assert!(state.frames.document_realm(&host.borrow().dom, retired).is_none());
+    let inert = host.borrow_mut().dom.create_document();
+    assert!(state.frames.document_realm(&host.borrow().dom, inert).is_none());
+    let element = host.borrow().dom.tree_order(NodeIdx(0)).into_iter().find(|node| host.borrow().dom.local_name(*node) == Some("iframe")).unwrap();
+    assert!(state.frames.document_realm(&host.borrow().dom, element).is_none());
     // A stale root ancestor invalidates the entire child policy snapshot.
     let root_realm = *state.frames.contexts.iter().find(|(_, context)| context.frame.is_none()).unwrap().0;
     state.frames.contexts.get_mut(&root_realm).unwrap().document_generation += 1;
     assert!(state.frames.document_context(&host.borrow().dom, children[1]).is_none());
     assert!(state.frames.document_context_for_realm(&host.borrow().dom, root_realm).is_none());
+    assert!(state.frames.document_realm(&host.borrow().dom, NodeIdx(0)).is_none());
+    assert!(state.frames.document_realm(&host.borrow().dom, children[1]).is_none());
 }
 
 #[test]
