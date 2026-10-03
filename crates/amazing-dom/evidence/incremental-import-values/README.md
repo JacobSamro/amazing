@@ -1,0 +1,9 @@
+# Incremental import value round trips
+
+The generic importer mirrors mapped CharacterData and expanded attributes before topology synchronization in both directions. It skips unchanged values. CharacterData changes use the minimal changed middle with the DOM mutation algorithm, preserving live Range offsets and mapped node identity. Attributes retain actual namespace/prefix/local name, exact UTF16 units and existing Attr identity; newly copied values preserve units too. Forward synchronization imports later parser appends; reverse synchronization retains JavaScript changes before parsing resumes. No topology ownership redesign or HTML adapter-side refresh is introduced.
+
+Three grouped native tests cover parser append/JavaScript edit round trips, exact namespaced attributes/removals, Text/Comment/CDATA/PI values through ordinary children/template contents/closed shadows, mutation observer records and unchanged-value behavior.
+
+Matched fixed Boat gates: workspace3931→3934 passed,17 skipped;4 doctests both. Whole579 pages55425→56943 passing assertions,2348→2347 failures,6 errors; zero lost exact passing assertion names/multiplicities/files. The1518 additional completed assertions are confined to two heavy Range pages and are all uncredited. The final report also retains every56827 passing assertion from the stronger accepted Range baseline. The72-page syntax guard is byte-identical2702/6.
+
+The HTML55 lane independently adopted the same value implementation/test correction on both modern before/after dependencies and confirmed13-directory passing counters unchanged:628 owned/3875 workspace/4docs. Streaming parser gains belong to that separate ticket. Original dependency compile failures and initial logs remain in orchestration scratch. No fixture rewrites or expected-result injection.

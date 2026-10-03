@@ -1,0 +1,66 @@
+{
+  "before": {
+    "source": "78ddc6a7b9a05dbe31ae34cbd92a73bb66f7d626",
+    "binary_sha256": "3b07a2ca05baf663a97039c63e8b45cd9988af1e9aac01459a8948160676edfa",
+    "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "directories": [
+      "dom/nodes",
+      "dom/ranges",
+      "domparsing",
+      "html/syntax/serializing-html-fragments",
+      "html/syntax/parsing",
+      "html/semantics/scripting-1/the-template-element"
+    ]
+  },
+  "after": {
+    "source": "85c76154e195fdbbdb1526f5679394e233917ac0",
+    "binary_sha256": "220c5d8482ef4b56dfd5fda6cb086f95ede0b0612ceae5b0591934fd9e253b48",
+    "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "directories": [
+      "dom/nodes",
+      "dom/ranges",
+      "domparsing",
+      "html/syntax/serializing-html-fragments",
+      "html/syntax/parsing",
+      "html/semantics/scripting-1/the-template-element"
+    ]
+  },
+  "common_base": "184d66f33a7c55778697b860124bb0e956fd96bd",
+  "identical_dependencies": [
+    "99bd90fd4bbd238d32a37f9a1926bc68efe815a9 shared module fixture corrections and tests",
+    "12e307b7fd8b12a43a7a6171705ff5cb83a4e100 runner resource helper mirrored identically"
+  ],
+  "native_before": {
+    "pass": 3931,
+    "skip": 17,
+    "doc": 4
+  },
+  "native_after": {
+    "pass": 3934,
+    "skip": 17,
+    "doc": 4
+  },
+  "platform": "Linux Boat; separate boxes and native /tmp source+target",
+  "timeout_ms": 25000,
+  "credited_wpt_gains": 0,
+  "uncredited_deadline_completions": 1518,
+  "uncredited_pages": {
+    "dom/ranges/Range-mutations-dataChange.html": 1269,
+    "dom/ranges/Range-set.html": 249
+  },
+  "accepted_guard": {
+    "source": "bb5a752e56350d79a9cf1570e9ff3f53f3615e6b",
+    "binary_sha256": "cf36d171ef9d4969f3b047b22a194aa2070940ea957ded2812791802cd21b92e",
+    "passing_assertions": 56827,
+    "lost_assertions": 0,
+    "lost_files": 0
+  },
+  "syntax_guard": {
+    "pages": 72,
+    "pass": 2702,
+    "fail": 6,
+    "raw_sha256": "aa986533ee7600afa72a1aa7d3f41969cab2a3ad9734a1a3c80535ca73399c07"
+  },
+  "fixture_changes": false,
+  "passing_identity": "SHA256 exact UTF16LE subtest names with surrogatepass and Counter multiplicity"
+}

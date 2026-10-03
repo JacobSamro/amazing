@@ -3303,3 +3303,17 @@ zero lost exact passing names/multiplicities/files. Credited43 gains:34 contextu
 fragment,8 template,1 serialization;1 XHR completion uncredited. Whole66 Range
 rows rerun BOTH unchanged frozen binaries at120s:40317/198 identical. Syntax72
 2702/6 byte-identical. Evidence: amazing-bindings/evidence/range-contextual-fragment.
+### Incremental importer exact-value round trips (ready)
+
+Standalone c8e6df9c +portable test44b57c5d mirrors mapped CharacterData and
+namespace-aware exactUTF16 attributes symmetrically before forward/reverse
+topology. Minimal CharacterData edits retain live Range offsets; unchanged
+values skip mutations; actual Attr/node identity and namespace/prefix persist.
+Three meaningful native round-trip groups include template and closedshadow values.
+Fixed184d66f3 +identical99bd module corrections/helper12 gates3931→3934pass,
+17skip,4docs. Whole579 assertions55425→56943,2348→2347fail,6errors,
+zero lost exact passing counters/files. All1518 additional heavyRange completions
+are uncredited. Stronger accepted Range baseline56827passes also retained fully.
+Syntax72 byte-identical2702/6. Evidence: amazing-dom/evidence/incremental-import-values.
+HTML55 independently confirmed unchanged passing counters across its13directories;
+its persistent write-session/merged-text gains remain that ticket's responsibility.
