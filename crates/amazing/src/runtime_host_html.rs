@@ -195,6 +195,19 @@ pub(super) struct HtmlDocumentContext {
 }
 
 impl FrameRuntime {
+    /// The newly allocated context is genuine before its frame entry is
+    /// committed. Read only its exact native Document and current realm.
+    pub(super) fn document_creation_origin(&self, dom: &Dom, document: NodeIdx,
+        realm: RealmHandle) -> Option<amazing_fetch::Origin> {
+        let context = self.contexts.get(&realm)?;
+        if context.document != document || dom.node_generation(document) != Some(context.document_generation)
+            || !matches!(&dom.get(document).kind, amazing_dom::NodeKind::Document) { return None; }
+        if context.frame.is_some_and(|frame| self.windows.get(&frame).is_none_or(|(target, _)| *target != realm)) {
+            return None;
+        }
+        Some(context.fetch_origin.clone())
+    }
+
     pub(super) fn document_origin(&self, dom: &Dom, document: NodeIdx) -> Option<amazing_fetch::Origin> {
         let generation = dom.node_generation(document)?;
         if !matches!(&dom.get(document).kind, amazing_dom::NodeKind::Document) { return None; }
@@ -1482,6 +1495,13 @@ impl RuntimeBindings {
 type IncrementalImportRef = Rc<RefCell<amazing_dom::markup::IncrementalDocumentImport>>;
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn html_document_creation_origin(&self, document: NodeIdx,
+        realm: RealmHandle) -> Option<amazing_fetch::Origin> {
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        state.frames.document_creation_origin(&host.dom, document, realm)
+    }
+
     pub(super) fn html_document_origin(&self, document: NodeIdx) -> Option<amazing_fetch::Origin> {
         let state = self.state.borrow();
         let host = state.host.borrow();
