@@ -146,6 +146,8 @@ pub struct Token {
     /// Identifier spelling contained a Unicode escape; contextual keywords
     /// require their literal source spelling.
     pub escaped_identifier: bool,
+    /// String source spelling contained an escape or line continuation.
+    pub string_has_escape: bool,
     /// Annex B decimal/octal-like escape in a string literal.
     pub legacy_escape: bool,
     /// Lossless cooked code units for string literals and template chunks.
@@ -164,6 +166,7 @@ impl Token {
             newline_before,
             escaped_identifier: false,
             legacy_escape: false,
+            string_has_escape: false,
             cooked_utf16: None,
             raw_utf16: None,
             template_continuation: false,

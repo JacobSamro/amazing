@@ -610,6 +610,7 @@ impl Parser {
                 let token = self.bump();
                 let mut expr = Expr::new(ExprKind::Str(s), self.span_from(start));
                 expr.string_utf16 = token.cooked_utf16;
+                expr.string_has_escape = token.string_has_escape;
                 Ok(expr)
             }
             TokenKind::PrivateIdent(name) => {
@@ -885,7 +886,7 @@ impl Parser {
             return Err(self.err("newline before yield star"));
         }
         let delegate = self.eat_punct(Punct::Star);
-        let argument = if self.starts_expression() && !self.cur().newline_before {
+        let argument = if delegate || self.starts_expression() && !self.cur().newline_before {
             Some(Box::new(self.parse_assignment_expr()?))
         } else {
             None

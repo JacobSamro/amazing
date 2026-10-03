@@ -1,3 +1,5 @@
+// String escape decoding portions adapted from lucid-softworks/lumen
+// (crates/lumen/src/lexer.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 //! The ECMA-262 lexical scanner (spec §11–§12): source text → [`Token`]s.
 //!
 //! Implemented:
@@ -335,6 +337,7 @@ impl Lexer {
         self.advance();
         let mut units = Vec::new();
         let mut legacy_escape = false;
+        let mut string_has_escape = false;
         loop {
             match self.cur() {
                 None | Some('\n') => {
@@ -345,6 +348,7 @@ impl Lexer {
                     break;
                 }
                 Some('\\') => {
+                    string_has_escape = true;
                     legacy_escape |= matches!(self.peek(1), Some('1'..='9'))
                         || self.peek(1) == Some('0')
                             && self.peek(2).is_some_and(|digit| digit.is_ascii_digit());
@@ -362,6 +366,7 @@ impl Lexer {
         let value = String::from_utf16_lossy(&units);
         let mut token = self.mk(TokenKind::Str(value), start, newline_before);
         token.legacy_escape = legacy_escape;
+        token.string_has_escape = string_has_escape;
         token.cooked_utf16 = Some(units);
         Ok(token)
     }
@@ -493,6 +498,16 @@ impl Lexer {
             'v' => '\u{000b}',
             'f' => '\u{000c}',
             '0' if !self.cur().is_some_and(|c| c.is_ascii_digit()) => '\0',
+            '0'..='7' => {
+                let mut value = c as u32 - '0' as u32;
+                // Octal escapes beginning with 4..7 consume at most two digits.
+                for _ in 0..if c <= '3' { 2 } else { 1 } {
+                    let Some(digit @ '0'..='7') = self.cur() else { break };
+                    value = value * 8 + digit as u32 - '0' as u32;
+                    self.advance();
+                }
+                return Ok(Some(value));
+            }
             'x' => {
                 let v = self.take_hex(2)?;
                 return Ok(Some(v));
@@ -509,9 +524,8 @@ impl Lexer {
             }
             // Line continuation: backslash-newline yields nothing. Lone CR
             // cannot occur (normalized up front).
-            '\n' => return Ok(None),
-            // Everything else (including unknown escapes and sloppy-mode
-            // octal lookalikes like `\1`) is the character itself.
+            '\n' | '\u{2028}' | '\u{2029}' => return Ok(None),
+            // Non-octal decimal and unknown escapes retain their character.
             other => other,
         };
         Ok(Some(ch as u32))

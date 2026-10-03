@@ -593,8 +593,9 @@ fn directive_string(stmt: &Stmt) -> Option<&str> {
     match &stmt.kind {
         StmtKind::Expression(Expr {
             kind: ExprKind::Str(value),
+            string_has_escape,
             ..
-        }) => Some(value),
+        }) => Some(if *string_has_escape { "" } else { value }),
         _ => None,
     }
 }

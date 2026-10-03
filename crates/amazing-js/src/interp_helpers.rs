@@ -7,7 +7,7 @@
 fn has_use_strict_directive(statements: &[ast::Stmt]) -> bool {
     statements.iter()
         .take_while(|stmt| matches!(&stmt.kind, StmtKind::Expression(ast::Expr { kind: ExprKind::Str(_), .. })))
-        .any(|stmt| matches!(&stmt.kind, StmtKind::Expression(ast::Expr { kind: ExprKind::Str(value), .. }) if value == "use strict"))
+        .any(|stmt| matches!(&stmt.kind, StmtKind::Expression(ast::Expr { kind: ExprKind::Str(value), string_has_escape: false, .. }) if value == "use strict"))
 }
 
 // Interpreter binding and reference helpers.

@@ -392,6 +392,8 @@ pub struct Expr {
     pub span: Span,
     /// Lossless code units when `kind` is [`ExprKind::Str`].
     pub string_utf16: Option<Vec<u16>>,
+    /// String literal source contained an escape; such a directive cannot enable strictness.
+    pub string_has_escape: bool,
     /// Preserves a cover-grammar distinction in array/object assignment patterns.
     pub trailing_comma_after_spread: bool,
 }
@@ -402,6 +404,7 @@ impl Expr {
             kind,
             span,
             string_utf16: None,
+            string_has_escape: false,
             trailing_comma_after_spread: false,
         }
     }

@@ -52,7 +52,7 @@ fn record_compile_attempt(result: &Result<FunctionCode, CompileError>, params: &
 fn has_use_strict_directive(statements: &[Stmt]) -> bool {
     statements.iter()
         .take_while(|stmt| matches!(&stmt.kind, StmtKind::Expression(Expr { kind: ExprKind::Str(_), .. })))
-        .any(|stmt| matches!(&stmt.kind, StmtKind::Expression(Expr { kind: ExprKind::Str(value), .. }) if value == "use strict"))
+        .any(|stmt| matches!(&stmt.kind, StmtKind::Expression(Expr { kind: ExprKind::Str(value), string_has_escape: false, .. }) if value == "use strict"))
 }
 
 /// Compile the entire AST before any binding mutation or JavaScript execution.
