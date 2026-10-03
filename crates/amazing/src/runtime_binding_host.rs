@@ -66,6 +66,8 @@ use self::compositor::{CanvasObject, CanvasTarget};
 
 #[path = "runtime_host_dom_bindings.rs"]
 mod dom_bindings;
+#[path = "runtime_host_inline_events.rs"]
+mod inline_events;
 #[path = "runtime_host_cssom.rs"]
 mod cssom;
 use cssom::{CssomNative, CssomRuntime};
@@ -290,6 +292,12 @@ impl RuntimeBindings {
         amazing_bindings::dispatch_user_agent_event(&mut adapter,
             amazing_dom::events::EventTarget::Node(NodeIdx(node)), name,
             amazing_dom::events::EventInit { bubbles: true, cancelable: false, composed: false })
+    }
+
+    pub(crate) fn dispatch_user_agent_payload(&self,js:&mut Interpreter,
+        target:amazing_dom::events::EventTarget,event:amazing_dom::events::Event)->Result<bool,Throw> {
+        let mut adapter=RuntimeBindingHost {js,state:self.state.clone()};
+        amazing_bindings::dispatch_user_agent_event_with_payload(&mut adapter,target,event)
     }
 
     pub(crate) fn dispatch_window_event(&self, js: &mut Interpreter, name: &str,
