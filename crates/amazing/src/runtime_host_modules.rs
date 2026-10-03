@@ -62,7 +62,7 @@ impl ModuleResolver for BrowserModuleResolver {
     fn source_url(&self, id: &str) -> Option<String> { Some(self.url(id)) }
     fn resolve_request_error(&self, request: &amazing_js::module::ModuleRequest, referrer: &str, message: &str) -> Option<Throw> {
         self.locate(&request.specifier.to_utf8_lossy(), referrer).err()
-            .map(|_| Throw::syntax_error(message))
+            .map(|_| Throw::type_error(message))
     }
 }
 
@@ -483,7 +483,7 @@ mod tests {
         }));
         driver.run_script("var errors=[];import('./bad.js').catch(e=>errors.push(e));import('./bad.js').catch(e=>errors.push(e));").unwrap();
         driver.pump_at(std::time::Duration::ZERO, false).unwrap();
-        assert!(matches!(driver.run_script("errors.length===2 && errors[0]===errors[1] && errors[0] instanceof SyntaxError").unwrap(), JsValue::Bool(true)));
+        assert!(matches!(driver.run_script("errors.length===2 && errors[0]===errors[1] && errors[0] instanceof TypeError").unwrap(), JsValue::Bool(true)));
     }
     #[test]
     fn browser_async_import_rejections_keep_the_original_error_across_requests() {
