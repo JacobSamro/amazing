@@ -573,6 +573,16 @@ pub struct Property {
 }
 
 impl Property {
+    /// Classification of a completed own descriptor. Callers should use this
+    /// operation rather than infer the descriptor kind from individual slots.
+    pub fn is_accessor(&self) -> bool {
+        self.getter.is_some() || self.setter.is_some()
+    }
+
+    pub fn is_data(&self) -> bool {
+        !self.is_accessor()
+    }
+
     /// Writable/enumerable/configurable defaults for assignment-created
     /// and literal-created data properties (true/true/true).
     pub fn data(value: JsValue) -> Property {
