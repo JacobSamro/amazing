@@ -378,7 +378,7 @@ mod tests {
         };
         bindings.navigate_iframes(&mut js);
         let documents = frames.map(|frame| bindings.state.borrow().frames.documents[&frame].document.unwrap());
-        let adapter = RuntimeBindingHost { js: &mut js, state: bindings.state.clone() };
+        let mut adapter = RuntimeBindingHost { js: &mut js, state: bindings.state.clone() };
         for document in documents[..2].iter().copied() {
             let generation = host.borrow().dom.node_generation(document).unwrap();
             assert_eq!(adapter.document_network_policy(document, generation).unwrap().csp, creator.csp);
@@ -391,6 +391,9 @@ mod tests {
         assert_eq!(seen.borrow()[0].referrer_policy, amazing_fetch::ReferrerPolicy::NoReferrer);
         assert_eq!(seen.borrow()[0].client_context.as_ref().unwrap().csp, creator.csp);
         // Replacing the creator's policy cannot change inherited snapshots.
+        let queued = adapter.html_navigation_source("about:blank", false).unwrap();
+        adapter.html_set_document_referrer_policy(NodeIdx(0), amazing_fetch::ReferrerPolicy::UnsafeUrl).unwrap();
+        assert_eq!(queued.source.referrer_policy, amazing_fetch::ReferrerPolicy::NoReferrer);
         adapter.set_document_network_policy(NodeIdx(0), amazing_fetch::service::ClientContext::default()).unwrap();
         for document in documents[..2].iter().copied() {
             let generation = host.borrow().dom.node_generation(document).unwrap();
