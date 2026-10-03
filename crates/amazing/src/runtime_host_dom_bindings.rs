@@ -1574,6 +1574,13 @@ mod tests {
             check(serializer.serializeToString(local) === '<root xmlns="urn:local"/>');
             check(XMLSerializer.prototype.serializeToString.call(serializer,foreign) === '<child xmlns="urn:foreign"/>');
             check(child.XMLSerializer.prototype.serializeToString.call(new XMLSerializer(),foreign) === '<child xmlns="urn:foreign"/>');
+            const explicitPrototype={};let successfulReads=0;
+            const successful=new Proxy(child.Function('return 1;'),{get(t,k){
+                if(k==='prototype'){successfulReads++;return explicitPrototype;}
+                return Reflect.get(t,k);
+            }});
+            const successfulResult=Reflect.construct(XMLSerializer,[],successful);
+            check(successfulReads===1 && Object.getPrototypeOf(successfulResult)===explicitPrototype);
             const target=child.Function('return 1;');target.prototype=7;
             for(const constructor of [target,target.bind(null),new Proxy(target,{})]){
                 const reflected=Reflect.construct(XMLSerializer,[],constructor);
