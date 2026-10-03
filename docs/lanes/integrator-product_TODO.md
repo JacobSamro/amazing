@@ -35,9 +35,10 @@ The exact pushed `f120de60` news-home window runs but renders page glyphs as box
 chrome text is readable. Its GPUI system-font installer only probes Windows font
 paths. Root commits `938215f9` and `1548855d` share the engine font loader, install
 Linux system faces, and share the page resource cache across font aliases.
-All 93 GPUI tests pass on Boat; same-page after-window inspection is pending.
-The baseline image and metadata are under `.agents/shell/captures/` and are scratch;
-promote inspected, reproducible proof into durable evidence after validation.
+All 93 GPUI tests pass on Boat. The actual before/after Amazing windows were
+captured and inspected; the corrected window renders readable page text.
+Durable images and executable/source/viewport metadata are under
+`crates/amazing-shell-gpui/evidence/linux-font-discovery/`.
 
 ## Other routed product gaps
 
