@@ -1272,6 +1272,9 @@ impl Compiler {
                             continue;
                         }
                     };
+                    if let ast::PropValue::Init(expression) = &property.value {
+                        self.emit(Instruction::NamedPropertyEvaluation(value, Rc::new(expression.clone()), key.clone()));
+                    }
                     self.emit(Instruction::SetObjectProperty(dst, key, value));
                 }
             }
@@ -1516,11 +1519,14 @@ impl Compiler {
                     self.write_member_reference(slot, object, prop)?;
                     slot
                 } else { self.reference(target)?.0 };
-                let value = if let Some(name) = super::super::event_handler::identifier_name(target) {
+                let assigned = if let Some(name) = super::super::event_handler::identifier_name(target) {
                     self.named_class_expression(value, KeyOperand::Static(name.into()))?
                 } else { self.expression(value)? };
-                self.emit(Instruction::StoreReference(slot, value));
-                return Ok(value);
+                if let Some(name) = super::super::event_handler::identifier_name(target) {
+                    self.emit(Instruction::NamedEvaluation(assigned, Rc::new((**value).clone()), name.to_owned()));
+                }
+                self.emit(Instruction::StoreReference(slot, assigned));
+                return Ok(assigned);
             }
             ExprKind::Assign { op, target, value } => {
                 let (slot, old) = self.reference(target)?;
@@ -1558,6 +1564,9 @@ impl Compiler {
                     let right = if let Some(name) = super::super::event_handler::identifier_name(target) {
                         self.named_class_expression(value, KeyOperand::Static(name.into()))?
                     } else { self.expression(value)? };
+                    if let Some(name) = super::super::event_handler::identifier_name(target) {
+                        self.emit(Instruction::NamedEvaluation(right, Rc::new((**value).clone()), name.to_owned()));
+                    }
                     self.emit(Instruction::Move(dst, right));
                     self.emit(Instruction::StoreReference(slot, dst));
                     self.patch(end);

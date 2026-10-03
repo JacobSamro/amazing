@@ -1079,13 +1079,11 @@ impl Interpreter {
                                     } else {
                                         // Same class-self-reference-before-eval need as every other
                                         // NamedEvaluation call site (see the comment on `assign`).
-                                        // `Self::property_function_name` (not the lossy
-                                        // `property_key_as_fn_name` used below for the ordinary
-                                        // function case) keeps a lone-surrogate string key exact.
+                                        // Keep a lone-surrogate property key exact.
                                         self.eval_named_class_expr(x, env, &Self::property_function_name(&k))?
                                     };
                                     if !is_proto_setter {
-                                        self.named_evaluation(x, &mut val, &property_key_as_fn_name(&k));
+                                        self.named_evaluation_utf16(x, &mut val, &Self::property_function_name(&k));
                                     }
                                     val
                                 }
@@ -1535,27 +1533,10 @@ impl Interpreter {
                 Some(name) => self.eval_named_class_expr(r, e, &name.into())?,
                 None => self.eval_expr(r, e)?,
             };
-            // Plain assignment intentionally keeps the pre-existing, value-based heuristic
-            // (rename whatever nameless function/class the RHS produced -- no source-expression
-            // check, no IsIdentifierRef/Reference::Binding restriction) rather than switching to
-            // precise NamedEvaluation here: `amazing-js/src/vm` (js-vm-owned) mirrors this exact
-            // unconditional heuristic for its own bytecode `=` path, and
-            // `assignment_preserves_legacy_function_name_inference` differentially checks both
-            // backends agree. A global-scope target resolves to `Reference::Property` (via
-            // `resolve_reference`'s `global_binding_object` special case), not
-            // `Reference::Binding` -- an earlier attempt to restrict this call to
-            // `Reference::Binding` only regressed every top-level `name = () => {}` (caught via
-            // language/expressions/assignment/fn-name-*.js), so this stays unconditional on the
-            // reference kind, matching the name both backends already agree on. A symbol-keyed
-            // member target with no description has no derivable name at all (`reference_name`
-            // returns `None`, exactly as `amazing-js/src/vm` treats it) -- skipped, not "".
-            // (A no-op for a value `eval_named_class_expr` already named above, since
-            // `infer_function_name` only renames a still-nameless function/class -- and classes
-            // never reach this heuristic for a non-identifier target anyway, matching spec.)
-            self.coerce_reference_key(&mut reference)?;
-            if let Some(name) = reference_name(&reference) {
-                self.infer_function_name(&mut v, &name);
+            if let Some(name) = event_handler::identifier_name(t) {
+                self.named_evaluation(r, &mut v, name);
             }
+            self.coerce_reference_key(&mut reference)?;
             self.put_reference(reference, v.clone(), e)?;
             return Ok(v);
         }
@@ -1580,10 +1561,8 @@ impl Interpreter {
             Some(name) => self.eval_named_class_expr(r, e, &name.into())?,
             None => self.eval_expr(r, e)?,
         };
-        // Same legacy, unconditional value-based heuristic as plain `=` (see the comment
-        // there) applies to the logical-assignment operators.
-        if let Some(name) = reference_name(&reference) {
-            self.infer_function_name(&mut v, &name);
+        if let Some(name) = event_handler::identifier_name(t) {
+            self.named_evaluation(r, &mut v, name);
         }
         if matches!(
             op,
@@ -1612,11 +1591,13 @@ impl Interpreter {
         Ok(out)
     }
 
-    /// Renames `value` if it's a still-nameless function/class object -- the actual rename
-    /// step underneath `named_evaluation` below. Kept at this exact 2-argument signature and
-    /// unconditional (no source-expression check): `amazing-js/src/vm` (js-vm-owned) has its
-    /// own, independent assignment-naming call site that already depends on this signature.
+    /// SetFunctionName for a still-anonymous ECMAScript callable. Preserve the
+    /// existing string entry point; observable names use lossless UTF-16 units.
     fn infer_function_name(&self, value: &mut JsValue, name: &str) {
+        self.infer_function_name_utf16(value, &name.into());
+    }
+
+    fn infer_function_name_utf16(&self, value: &mut JsValue, name: &crate::value::JsString) {
         if let JsValue::Object(object) = value {
             let mut object = object.borrow_mut();
             // Class names are installed before static elements by NamedEvaluation.
@@ -1627,9 +1608,9 @@ impl Interpreter {
                 // turn it into an anonymous ECMAScript function definition.
                 if matches!(function.body, FunctionBody::Native(_)) { return; }
                 if function.name.is_empty() {
-                    function.name = name.to_string();
+                    function.name = name.to_utf8_lossy();
                     object.define("name", Property {
-                        value: JsValue::str(name), writable: false, enumerable: false,
+                        value: JsValue::str(name.clone()), writable: false, enumerable: false,
                         configurable: true, getter: None, setter: None,
                     }).unwrap();
                 }
@@ -1637,17 +1618,15 @@ impl Interpreter {
         }
     }
 
-    /// NamedEvaluation (spec 8.6.3, and its many call sites: LexicalBinding/VariableDeclaration
-    /// initializers, AssignmentExpression incl. `&&=`/`||=`/`??=`, destructuring/parameter
-    /// defaults, object-literal properties, class fields, `export default`) for the tree-walker
-    /// (JSRT-19): only renames when `source` is itself an anonymous function/arrow/class
-    /// definition -- `is_anonymous_function_definition` is what makes `x = (0, function(){})`
-    /// correctly stay unnamed while `x = (function(){})` gets named. This is deliberately a
-    /// separate method from `infer_function_name` (rather than adding the check there) so
-    /// `amazing-js/src/vm`'s own, unrelated call site is untouched.
+    /// NamedEvaluation applies only when the source is an anonymous function
+    /// definition. Parentheses preserve it; comma expressions and existing values do not.
     fn named_evaluation(&self, source: &ast::Expr, value: &mut JsValue, name: &str) {
+        if is_anonymous_function_definition(source) { self.infer_function_name(value, name); }
+    }
+
+    fn named_evaluation_utf16(&self, source: &ast::Expr, value: &mut JsValue, name: &crate::value::JsString) {
         if is_anonymous_function_definition(source) {
-            self.infer_function_name(value, name);
+            self.infer_function_name_utf16(value, name);
         }
     }
 
@@ -2674,16 +2653,18 @@ impl Interpreter {
     // needs on top of it: an accessor's own `name` is "get "/"set " prefixed,
     // and `length` counts the method's own leading required parameters
     // rather than the constructor-style default `method_value` gave it.
-    fn name_class_method(method: &mut JsValue, base_name: &str, kind: ast::MethodKind, params: &[ast::Param]) {
+    fn name_class_method(method: &mut JsValue, base_name: &crate::value::JsString, kind: ast::MethodKind, params: &[ast::Param]) {
         let JsValue::Object(function) = method else { return };
-        let name = match kind {
-            ast::MethodKind::Get => format!("get {base_name}"),
-            ast::MethodKind::Set => format!("set {base_name}"),
-            _ => base_name.to_string(),
+        let mut units: Vec<u16> = match kind {
+            ast::MethodKind::Get => "get ".encode_utf16().collect(),
+            ast::MethodKind::Set => "set ".encode_utf16().collect(),
+            _ => Vec::new(),
         };
+        units.extend_from_slice(base_name.units());
+        let name = crate::value::JsString::from_units(units);
         let length = params.iter().take_while(|param| !param.rest && param.default.is_none()).count();
         let mut function = function.borrow_mut();
-        function.func.as_mut().unwrap().name = name.clone();
+        function.func.as_mut().unwrap().name = name.to_utf8_lossy();
         function.define("name", Property {
             value: JsValue::str(name), writable: false, enumerable: false,
             configurable: true, getter: None, setter: None,

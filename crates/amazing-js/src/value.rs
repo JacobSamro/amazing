@@ -1119,12 +1119,12 @@ impl JsObject {
         o.constructible = !matches!(&func.body, FunctionBody::Native(_));
         o.realm = func.env.realm();
         let length = func.params.iter().take_while(|param| !param.rest && param.default.is_none()).count();
-        o.define("name", Property {
-            value: JsValue::str(&func.name), writable: false, enumerable: false,
-            configurable: true, getter: None, setter: None,
-        }).unwrap();
         o.define("length", Property {
             value: JsValue::num(length as f64), writable: false, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }).unwrap();
+        o.define("name", Property {
+            value: JsValue::str(&func.name), writable: false, enumerable: false,
             configurable: true, getter: None, setter: None,
         }).unwrap();
         o.func = Some(func);

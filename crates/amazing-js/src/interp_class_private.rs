@@ -67,23 +67,14 @@ fn define_field(
                 // static elements run, not after the fact), so an anonymous class field
                 // initializer -- `field = class { static seen = this.name; }` -- needs
                 // `eval_named_class_expr` to make that name visible *during* evaluation.
-                // Reuses the outer, lossless `name: JsString` (a lone-surrogate computed key
-                // stays exact) rather than recomputing it through the lossy `String` helper
-                // `named_evaluation`'s own signature requires below for the ordinary function case.
+                // Class and ordinary function initializer names share the lossless key.
                 let mut v = i.eval_named_class_expr(expr, scope, &name)?;
-                let name = match name_key {
-                    FieldKey::Public(property_key) => property_key_as_fn_name(property_key),
-                    FieldKey::Private(private_name) => private_name.text().to_string(),
-                };
-                i.named_evaluation(expr, &mut v, &name);
+                i.named_evaluation_utf16(expr, &mut v, &name);
                 Ok(v)
             }
             None => Ok(JsValue::Undefined),
         }
     })?;
-    if init.is_some() {
-        i.infer_function_name(&mut value, &name.to_utf8_lossy());
-    }
     for initializer in initializers {
         value = i.call_value(initializer, owner.clone(), vec![value])?;
     }

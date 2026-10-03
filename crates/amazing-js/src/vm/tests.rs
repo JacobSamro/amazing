@@ -1693,14 +1693,23 @@ fn compiler_limits_deep_manually_constructed_ast() {
 }
 
 #[test]
-fn assignment_preserves_legacy_function_name_inference() {
+fn assignment_names_only_anonymous_definitions_at_identifier_targets() {
     for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
         let mut i = Interpreter::new();
         let anonymous = i.run_script("(function () {});").unwrap();
         i.global_env.declare_var("anonymous", anonymous).unwrap();
-        i.run_script_with_backend("named = anonymous;", backend)
-            .unwrap();
-        assert_eq!(i.run_script("named.name;").unwrap(), JsValue::str("named"));
+        let result = i.run_script_with_backend(r#"
+            var holder={},named,positive,comma,logical,logicalNegative;
+            named = anonymous;
+            positive = (function(){});
+            comma = (0,function(){});
+            holder.member = function(){};
+            logical ||= ()=>1;
+            logicalNegative ||= (0,()=>1);
+            named.name==='' && positive.name==='positive' && comma.name==='' &&
+            holder.member.name==='' && logical.name==='logical' && logicalNegative.name==='';
+        "#, backend).unwrap();
+        assert_eq!(result, JsValue::Bool(true), "{backend:?}");
     }
 }
 

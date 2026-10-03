@@ -128,9 +128,8 @@ impl Interpreter {
                     let mut value = self.method_value(method, &class_env, true);
                     if let JsValue::Object(function) = &value { function.borrow_mut().func.as_mut().unwrap().home = Some(home); }
                     let name = match &key {
-                        FieldKey::Public(PropertyKey::String(name)) => name.to_utf8_lossy(),
-                        FieldKey::Public(PropertyKey::Symbol(symbol)) => symbol.descriptive_string(),
-                        FieldKey::Private(name) => name.text().to_string(),
+                        FieldKey::Public(key) => Self::property_function_name(key),
+                        FieldKey::Private(name) => name.text().into(),
                     };
                     Self::name_class_method(&mut value, &name, method.kind, &method.params);
                     let kind = match method.kind { ast::MethodKind::Get => "getter", ast::MethodKind::Set => "setter", _ => "method" };

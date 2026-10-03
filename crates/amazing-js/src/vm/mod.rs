@@ -203,6 +203,7 @@ enum Instruction {
     Declare(String, Register, VarKind),
     ReserveBinding(String, bool),
     NamedEvaluation(Register, Rc<crate::ast::Expr>, String),
+    NamedPropertyEvaluation(Register, Rc<crate::ast::Expr>, KeyOperand),
     Unary(Register, UnOp, Register),
     Binary(Register, BinOp, Register, Register),
     Move(Register, Register),
@@ -819,10 +820,9 @@ impl Program {
                         let mut reference = references[*slot]
                             .take()
                             .ok_or_else(|| Throw::type_error("invalid VM reference lifetime"))?;
-                        let mut value = registers[*src].clone();
+                        let value = registers[*src].clone();
                         if matches!(op, Instruction::StoreReference(..)) {
                             i.coerce_reference_key(&mut reference)?;
-                            if let Some(name) = reference_name(&reference) { i.infer_function_name(&mut value, &name); }
                         }
                         match reference {
                             Reference::Property(receiver, key) => {
@@ -976,6 +976,10 @@ impl Program {
                         if !scope.assign(name, value.clone())? { scope.declare_var(name, value)?; }
                     }
                     Instruction::NamedEvaluation(dst, expression, name) => { i.named_evaluation(expression, &mut registers[*dst], name); }
+                    Instruction::NamedPropertyEvaluation(dst, expression, key) => {
+                        let name = Interpreter::property_function_name(&key.resolve(&registers)?);
+                        i.named_evaluation_utf16(expression, &mut registers[*dst], &name);
+                    }
                     Instruction::Unary(dst, op, src) => {
                         registers[*dst] = i.unary_value(*op, registers[*src].clone())?;
                     }
@@ -1159,16 +1163,8 @@ impl Program {
                         for method in &class.methods {
                             let key = method.key.resolve(&registers)?;
                             let mut value = method.code.instantiate(i, &env);
-                            let name = match &key {
-                                PropertyKey::String(name) => name.to_utf8_lossy(),
-                                PropertyKey::Symbol(symbol) => symbol.descriptive_string(),
-                            };
-                            let name = match method.kind {
-                                crate::ast::MethodKind::Get => format!("get {name}"),
-                                crate::ast::MethodKind::Set => format!("set {name}"),
-                                _ => name,
-                            };
-                            i.infer_function_name(&mut value, &name);
+                            let name = Interpreter::property_function_name(&key);
+                            Interpreter::name_class_method(&mut value, &name, method.kind, &method.code.0.params);
                             let JsValue::Object(function) = &value else { unreachable!() };
                             // A `static` method/accessor is a property of the
                             // constructor itself, with the constructor (not
