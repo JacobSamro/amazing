@@ -193,6 +193,13 @@ fn injected_generator_returns_cannot_mask_finalizer_or_disposer_throws() {
             let expected = if original_throw { "original" } else { "marker" };
             cases.push(format!("var original={{}},marker={{}},same=false;var iterable={{[Symbol.iterator](){{return {{next(){{return {{value:1,done:false}}}},return(){{throw marker}}}}}}}};var g=eval('(function*(){{{actor_prefix}for(var x of iterable) yield x;}})');var it=g();it.next();try{{{signal}}}catch(e){{same=e==={expected}}}same"));
         }
+        for return_value in ["null", "undefined"] {
+            cases.push(format!("var original={{}};var iterable={{[Symbol.iterator](){{return {{next(){{return {{value:1,done:false}}}},return:{return_value}}}}}}};var g=eval('(function*(){{{actor_prefix}for(var x of iterable) yield x;}})');var it=g();it.next();var r=it.return(original);r.done&&r.value===original"));
+        }
+        for return_property in ["return:1", "return(){return 1}"] {
+            cases.push(format!("var original={{}},same=false;var iterable={{[Symbol.iterator](){{return {{next(){{return {{value:1,done:false}}}},{return_property}}}}}}};var g=eval('(function*(){{{actor_prefix}for(var x of iterable) yield x;}})');var it=g();it.next();try{{it.return(original)}}catch(e){{same=e instanceof TypeError}}same"));
+        }
+        cases.push(format!("var original={{}},marker={{}},same=false;var iterable={{[Symbol.iterator](){{return {{next(){{return {{value:1,done:false}}}},get return(){{throw marker}}}}}}}};var g=eval('(function*(){{{actor_prefix}for(var x of iterable) yield x;}})');var it=g();it.next();try{{it.return(original)}}catch(e){{same=e===marker}}same"));
         cases.push(format!("var original={{}},same=false;var iterable={{[Symbol.iterator](){{return {{next(){{return {{value:1,done:false}}}},return(){{throw undefined}}}}}}}};var g=eval('(function*(){{{actor_prefix}for(var x of iterable) yield x;}})');var it=g();it.next();try{{it.return(original)}}catch(e){{same=e===undefined}}same"));
     }
     let borrowed: Vec<_> = cases
