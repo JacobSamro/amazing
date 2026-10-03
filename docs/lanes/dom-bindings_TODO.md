@@ -3361,3 +3361,18 @@ Its registration records real immutable origin metadata only; Node creation-real
 and checked associated-document maps are the ticket delta. HTML parser-timing
 prerequisite 37c331ad awaits owned proof and will be mirrored into both final refs.
 Initial afa9d348 evidence remains a diagnostic, not the authoritative paired gate.
+
+The known template-owner Document creation path now initializes one stable opaque
+Origin per native generation; it does not inherit the host Origin. Genuine
+template owners and their clones expose Document interfaces, including XML hosts.
+This follows the [appropriate template owner algorithm](https://html.spec.whatwg.org/multipage/scripting.html#appropriate-template-contents-owner-document)
+and [DOM Document defaults](https://dom.spec.whatwg.org/#interface-document).
+Retaining a creation realm does not invent a browsing context: defaultView uses
+only the actual live HTML WindowContext lookup, including after frame removal.
+
+Fresh paired refs are dependency-before2b8ea3ab and candidate32ff4b3c on fixed
+deb2cefc. Identical timing37 production prerequisite and test-only0a8 correction
+are present on both; candidate compiler corrections use the existing DOMParser
+web_slot receiver validator and imported HostHandle test type. Original failed
+diagnostics remain scratch. Baseline native4015/17 is green; final whole579
+comparison and HTML timing13 proof remain pending. These are WIP observations.
