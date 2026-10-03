@@ -1133,10 +1133,10 @@ impl RuntimeBindings {
                             Some(src) => {
                                 let url = crate::cmd::js::resolve_script_url(&child_url, src);
                                 let text = if script.kind == crate::cmd::js::ScriptKind::Module {
-                                    self.load_module_source(i, &url).ok()
-                                } else { fetch_child_script(src, &child_url, resolver.as_ref()) };
-                                if let Some(text) = text {
-                                    self.execute_document_script(i, script, &text, &url)?;
+                                    self.load_module_source(i, &url).ok().map(|text| (text, url))
+                                } else { self.fetch_document_classic_script(document, script.node, src, &child_url, resolver.as_ref()) };
+                                if let Some((text, final_url)) = text {
+                                    self.execute_document_script(i, script, &text, &final_url)?;
                                 }
                                 // A fetch failure or unresolvable URL is
                                 // silently skipped, matching how a real
@@ -1210,9 +1210,10 @@ impl RuntimeBindings {
                     let url = script_url;
                     let text = if script.kind == crate::cmd::js::ScriptKind::Module {
                         js.binding_with_realm(realm, |i| self.load_module_source(i, &url).map_err(Throw::type_error)).ok()
-                    } else { fetch_child_script(src, child_url, resolver) };
-                    if let Some(text) = text {
-                        js.binding_with_realm(realm, |i| self.execute_document_script(i, &script, &text, &url))
+                            .map(|text| (text, url.clone()))
+                    } else { self.fetch_document_classic_script(document, script.node, src, child_url, resolver) };
+                    if let Some((text, final_url)) = text {
+                        js.binding_with_realm(realm, |i| self.execute_document_script(i, &script, &text, &final_url))
                     } else if script.kind == crate::cmd::js::ScriptKind::Module {
                         js.binding_with_realm(realm, |i| self.finish_module_script(i, &script, None, &url, false))
                     } else { Ok(()) }
@@ -1323,6 +1324,10 @@ impl RuntimeBindings {
     /// silently assumed correct.
     fn realm_and_base_for_document(&self, root: NodeIdx) -> (Option<RealmHandle>, String) {
         let state = self.state.borrow();
+        if let Some((realm, context)) = state.frames.contexts.iter().find(|(realm, context)|
+            context.document == root && state.frames.live_context(context, **realm)) {
+            return (Some(*realm), context.document_url.clone());
+        }
         if root == NodeIdx(0) {
             return (None, state.document_url.clone().unwrap_or_default());
         }
@@ -1470,12 +1475,14 @@ impl RuntimeBindings {
             let Some(script) = script else { continue }; // wrong type, or no `src`/empty body
             let root = { let state = self.state.borrow(); state.host.borrow().dom.root(node) };
             self.state.borrow_mut().frames.already_started_scripts.insert(node);
-            let (realm, base) = self.realm_and_base_for_document(root);
+            let (realm, legacy_base) = self.realm_and_base_for_document(root);
+            let base = RuntimeBindingHost { js, state: self.state.clone() }
+                .dom_document_base_url(root).unwrap_or(legacy_base);
             let script_url = match realm {
                 Some(realm) => js.binding_with_realm(realm, |i| Ok(self.page_script_url(i, &script, &base))).unwrap_or_else(|_| base.clone()),
                 None => self.page_script_url(js, &script, &base),
             };
-            let run_body = |js: &mut Interpreter, body: &str| {
+            let run_body = |js: &mut Interpreter, body: &str, url: &str| {
                 // A script's own uncaught exception does not stop the page
                 // or suppress its `load` event (that pair reflects fetch
                 // success/failure, not execution success) -- matches
@@ -1483,23 +1490,23 @@ impl RuntimeBindings {
                 // swallows the same `Err` into a diagnostics list rather
                 // than propagating it.
                 let _ = match realm {
-                    Some(realm) => js.binding_with_realm(realm, |i| self.execute_document_script(i, &script, body, &script_url)),
-                    None => self.execute_document_script(js, &script, body, &script_url),
+                    Some(realm) => js.binding_with_realm(realm, |i| self.execute_document_script(i, &script, body, url)),
+                    None => self.execute_document_script(js, &script, body, url),
                 };
             };
             match &script.src {
                 None => {
-                    run_body(js, &script.body);
+                    run_body(js, &script.body, &script_url);
                     if script.kind == crate::cmd::js::ScriptKind::Classic { let _ = self.dispatch_script_event(js, node, "load"); }
                 }
                 Some(src) => match if script.kind == crate::cmd::js::ScriptKind::Module {
                     match realm {
                         Some(realm) => js.binding_with_realm(realm, |i| self.load_module_source(i, &script_url).map_err(Throw::type_error)).ok(),
                         None => self.load_module_source(js, &script_url).ok(),
-                    }
-                } else { fetch_child_script(src, &base, resolver.as_ref()) } {
-                    Some(text) => {
-                        run_body(js, &text);
+                    }.map(|text| (text, script_url.clone()))
+                } else { self.fetch_document_classic_script(root, script.node, src, &base, resolver.as_ref()) } {
+                    Some((text, final_url)) => {
+                        run_body(js, &text, &final_url);
                         if script.kind == crate::cmd::js::ScriptKind::Classic { let _ = self.dispatch_script_event(js, node, "load"); }
                     }
                     None => { let _ = self.dispatch_script_event(js, node, "error"); }
