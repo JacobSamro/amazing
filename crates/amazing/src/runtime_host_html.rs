@@ -645,6 +645,16 @@ impl RuntimeBindings {
             adapter.install_iframe_members()?;
             adapter.install_html_form_globals()?;
             adapter.install_document_write_globals()?;
+            // Real Location uses this realm's bound host dispatch. The legacy
+            // JS fallback bypasses navigation source capture entirely.
+            let arena = adapter.state.borrow().arena;
+            let location = adapter.wrap_platform_object(PlatformKey { arena, slot: 0, generation: 1 }, InterfaceBrand::LOCATION)?;
+            adapter.js.binding_replace_location_object(location)?;
+            let global = adapter.js.binding_global_object();
+            adapter.js.binding_install_put_forwards(&global, "location", "href")?;
+            if let Some(prototype) = adapter.prototype(Interface::Document) {
+                adapter.js.binding_install_put_forwards(&prototype, "location", "href")?;
+            }
             // Wrapped here, inside the child realm, so `document` gets the
             // child's own freshly-installed Document.prototype (its host
             // object cache is per-realm) rather than the caller's; the
@@ -1445,6 +1455,18 @@ impl RuntimeBindingHost<'_> {
         if frame.is_some() { self.js.binding_location_navigate(&url, false); }
         self.js.binding_location_reload();
         Ok(())
+    }
+
+    pub(super) fn html_document_location(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
+        let realm = self.state.borrow().frames.contexts.iter().find_map(|(realm, context)|
+            (context.document == document && self.state.borrow().frames.live_context(context, *realm)).then_some(*realm));
+        let Some(realm) = realm else { return Ok(None); };
+        let state = self.state.clone();
+        self.js.binding_with_realm(realm, |js| {
+            let mut adapter = RuntimeBindingHost { js, state };
+            let arena = adapter.state.borrow().arena;
+            adapter.wrap_platform_object(PlatformKey { arena, slot: 0, generation: 1 }, InterfaceBrand::LOCATION).map(Some)
+        })
     }
 
     /// Actual committed URL, independent of a pending Location or script scope.
