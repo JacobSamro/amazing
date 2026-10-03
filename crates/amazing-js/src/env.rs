@@ -36,6 +36,8 @@ pub struct Binding {
     pub value: JsValue,
     /// `false` for `const`.
     pub mutable: bool,
+    /// Immutable bindings can force strict assignment semantics (const/import/class).
+    pub immutable_strict: bool,
     /// `true` for `let`/`const`: lexical bindings reject ANY same-frame
     /// redeclaration (§14.3.1), unlike `var`-over-`var`.
     pub lexical: bool,
@@ -59,6 +61,7 @@ impl BindingCell {
         BindingCell(Rc::new(RefCell::new(Binding {
             value,
             mutable: false,
+            immutable_strict: true,
             lexical: true,
             initialized: true,
             import_target: None,
@@ -216,6 +219,7 @@ impl Env {
             BindingCell(Rc::new(RefCell::new(Binding {
                 value,
                 mutable,
+                immutable_strict: true,
                 lexical,
                 initialized: true,
                 import_target: None,
@@ -241,7 +245,7 @@ impl Env {
     /// §9.1.5 SetMutableBinding: mutates the nearest declaring frame.
     /// `Ok(false)` when unresolved (caller decides global creation);
     /// `Err` for assignment to `const`.
-    fn assign_raw(&self, name: &str, value: JsValue) -> Result<bool, Throw> {
+    fn assign_raw(&self, name: &str, value: JsValue, strict: bool) -> Result<bool, Throw> {
         if let Some(b) = self.vars.get(name) {
             if b.0.borrow().import_target.is_some() {
                 return Err(Throw::type_error(format!("assignment to import '{name}'")));
@@ -251,9 +255,12 @@ impl Env {
                 return Err(Throw::reference_error(format!("{name} is uninitialized")));
             }
             if !b.mutable {
-                return Err(Throw::type_error(format!(
-                    "assignment to constant variable '{name}'"
-                )));
+                if strict || b.immutable_strict {
+                    return Err(Throw::type_error(format!(
+                        "assignment to constant variable '{name}'"
+                    )));
+                }
+                return Ok(true);
             }
             if self.kind == EnvKind::Global && !b.lexical {
                 if let Some(object) = &self.global_object {
@@ -273,7 +280,7 @@ impl Env {
             Some(p) => p,
             None => return Ok(false),
         };
-        p.0.borrow().assign_raw(name, value)
+        p.0.borrow().assign_raw(name, value, strict)
     }
 
     /// Nearest recorded `this`, walking outward past transparent frames.
@@ -480,6 +487,13 @@ impl EnvHandle {
         self.0.borrow_mut().declare_raw(name, value, mutable, true)
     }
 
+    /// Named function-expression self binding: immutable, but sloppy writes are ignored.
+    pub(crate) fn declare_function_name(&self, name: &str, value: JsValue) -> Result<(), Throw> {
+        self.declare_lexical(name, value, false)?;
+        self.local_cell(name).expect("fresh lexical declaration").0.borrow_mut().immutable_strict = false;
+        Ok(())
+    }
+
     /// True if `declare_lexical(name, ..)` would throw "already declared" on THIS frame right
     /// now, without actually declaring or mutating anything (mirrors `declare_raw`'s conflict
     /// rule with `lexical = true`: any existing same-frame binding conflicts, except the
@@ -512,6 +526,7 @@ impl EnvHandle {
         let cell = BindingCell(Rc::new(RefCell::new(Binding {
             value: JsValue::Undefined,
             mutable,
+            immutable_strict: true,
             lexical: true,
             initialized: false,
             import_target: None,
@@ -532,6 +547,7 @@ impl EnvHandle {
             BindingCell(Rc::new(RefCell::new(Binding {
                 value: JsValue::Undefined,
                 mutable: false,
+                immutable_strict: true,
                 lexical: true,
                 initialized: true,
                 import_target: Some(target),
@@ -596,7 +612,12 @@ impl EnvHandle {
     }
 
     pub fn assign(&self, name: &str, value: JsValue) -> Result<bool, Throw> {
-        self.0.borrow().assign_raw(name, value)
+        self.assign_with_strict(name, value, true)
+    }
+
+    /// SetMutableBinding using the strictness of the originating reference.
+    pub fn assign_with_strict(&self, name: &str, value: JsValue, strict: bool) -> Result<bool, Throw> {
+        self.0.borrow().assign_raw(name, value, strict)
     }
 
     pub fn resolve_this(&self) -> JsValue {

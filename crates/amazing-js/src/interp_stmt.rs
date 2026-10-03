@@ -1122,7 +1122,7 @@ impl Interpreter {
                 if let Some(name) = &f.name {
                     let named_env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
                     let value = self.make_function(f, &named_env);
-                    named_env.declare_lexical(&name.name, value.clone(), false)?;
+                    named_env.declare_function_name(&name.name, value.clone())?;
                     Ok(value)
                 } else {
                     Ok(self.make_function(f, env))
@@ -1686,7 +1686,7 @@ impl Interpreter {
                         return Err(Throw::type_error(format!("Cannot assign to read only property '{name}'")));
                     }
                 }
-                if !env.assign(&name, value.clone())? {
+                if !env.assign_with_strict(&name, value.clone(), self.strict_eval_context)? {
                     let global = JsValue::Object(self.global_obj.clone());
                     self.put_reference(Reference::Property(global, name.into()), value, env)?;
                 }

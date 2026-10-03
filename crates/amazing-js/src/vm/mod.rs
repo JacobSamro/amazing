@@ -1100,7 +1100,7 @@ impl Program {
                     Instruction::MakeNamedFunction(dst, code, name) => {
                         let named_env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
                         let value = code.instantiate(i, &named_env);
-                        named_env.declare_lexical(name, value.clone(), false)?;
+                        named_env.declare_function_name(name, value.clone())?;
                         registers[*dst] = value;
                     }
                     Instruction::MakeClass(dst, class) => {
