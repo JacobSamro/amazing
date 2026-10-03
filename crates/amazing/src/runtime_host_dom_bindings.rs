@@ -37,6 +37,9 @@ impl RuntimeBindingHost<'_> {
         };
         drop(host);
         drop(state);
+        // The live document context owns its committed URL. Shared driver URL
+        // state can temporarily name a child script's execution scope.
+        let url = self.html_document_url(document).unwrap_or(url);
         Ok((self.html_document_fallback_base_url(document).unwrap_or(url), charset))
     }
 
