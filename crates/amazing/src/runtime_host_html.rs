@@ -1428,7 +1428,7 @@ impl RuntimeBindingHost<'_> {
         let target = self.js.binding_current_realm();
         let context = self.state.borrow().frames.contexts.get(&target).cloned()
             .ok_or_else(|| Throw::type_error("Missing reload document"))?;
-        let url = context.document_url;
+        let url = if context.frame.is_some() { context.document_url } else { self.js.binding_location_href().to_owned() };
         let mut navigation = self.html_navigation_source(&url, false)?;
         navigation.reload = true;
         if let Some(frame) = context.frame {
@@ -1442,7 +1442,7 @@ impl RuntimeBindingHost<'_> {
         state.frames.pending_navigations.insert(target, navigation);
         if let Some(frame) = frame { state.frames.pending_loads.push_back((frame, Some(document), false)); }
         drop(state);
-        self.js.binding_location_navigate(&url, false);
+        if frame.is_some() { self.js.binding_location_navigate(&url, false); }
         self.js.binding_location_reload();
         Ok(())
     }
@@ -2343,15 +2343,13 @@ mod tests {
         scheduler.run_script("a.contentWindow.location.reload()").unwrap();
         scheduler.dispatch_pending_iframe_loads().unwrap();
         assert_eq!(scheduler.run_script(r#"
-            if(a.contentWindow!==w || a.contentDocument===old) throw new Error('proxy or target identity');
-            if(a.contentDocument.URL!=='about:blank?two#last') throw new Error('last queued request');
-            if(a.contentDocument.baseURI!=='https://example.test/source-base/') throw new Error('source snapshot');
-            if(old.baseURI!=='https://example.test/root-base/') throw new Error('retired document snapshot');
+            const observations=[a.contentWindow===w,a.contentDocument!==old,a.contentDocument.URL,
+                a.contentDocument.baseURI,old.baseURI];
             location.href='https://other.test/pending';
             const fresh=document.createElement('iframe'); document.body.appendChild(fresh);
-            if(fresh.contentDocument.baseURI!=='https://example.test/root-base/') throw new Error('pending root became committed document');
-            'navigated';
-        "#).unwrap(), JsValue::str("navigated"));
+            observations.push(fresh.contentDocument.baseURI);
+            observations.join('|');
+        "#).unwrap(), JsValue::str("true|true|about:blank?two#last|https://example.test/source-base/|https://example.test/root-base/|https://example.test/root-base/"));
     }
 
     #[test]
