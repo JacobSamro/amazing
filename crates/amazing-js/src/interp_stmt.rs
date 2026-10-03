@@ -2384,7 +2384,7 @@ impl Interpreter {
         if !new_target.is_object() { return Err(Throw::type_error("newTarget is not an object")); }
         let proto = match self.get_prop(&new_target, "prototype")? {
             JsValue::Object(p) => p,
-            _ => self.constructor_fallback_prototype(f, &new_target),
+            _ => self.constructor_fallback_prototype(f, &new_target)?,
         };
         let obj = Obj(Rc::new(RefCell::new({
             let mut x = JsObject::ordinary();

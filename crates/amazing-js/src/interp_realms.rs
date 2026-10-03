@@ -306,6 +306,14 @@ impl Interpreter {
         if Self::is_bound_function(function) {
             return self.invoke_bound_function(function, args, new_target);
         }
+        if let JsValue::Object(object) = function {
+            if matches!(&object.borrow().exotic, Exotic::Proxy(_)) {
+                return match new_target {
+                    Some(new_target) => self.proxy_construct(object, args, new_target),
+                    None => self.proxy_call(object, receiver, args),
+                };
+            }
+        }
         // [[Call]] rejects class constructors before entering their realm.
         if new_target.is_none() && matches!(function, JsValue::Object(object) if object.borrow().class_constructor) {
             return Err(Throw::type_error("class constructor requires new"));
@@ -336,10 +344,32 @@ impl Interpreter {
             .then_some(RealmHandle { agent: self.agent_id, realm })
     }
 
-    fn object_prototype_for_function(&self, function: &JsValue) -> Obj {
-        let id = match function { JsValue::Object(object) => object.borrow().realm, _ => None };
-        id.and_then(|id| self.realms.get(&id).map(|realm| realm.object_proto.clone()))
-            .unwrap_or_else(|| self.object_proto.clone())
+    fn get_function_realm(&self, function: &JsValue) -> Result<RealmHandle, Throw> {
+        let mut current = function.clone();
+        let mut seen = HashSet::new();
+        loop {
+            let JsValue::Object(object) = &current else { return Err(Throw::type_error("function is not callable")); };
+            if !seen.insert(Rc::as_ptr(&object.0)) { return Err(Throw::type_error("cyclic function target")); }
+            if let Some(parts) = self.proxy_parts(object) {
+                current = parts?.0;
+                continue;
+            }
+            if Self::is_bound_function(&current) {
+                let home = object.borrow().func.as_ref().and_then(|function| function.home.clone())
+                    .ok_or_else(|| Throw::type_error("missing bound function data"))?;
+                current = home.borrow().get_own("target").ok_or_else(|| Throw::type_error("missing bound target"))?;
+                continue;
+            }
+            let realm = RealmHandle { agent: self.agent_id, realm: object.borrow().realm.unwrap_or(self.host_realm) };
+            self.check_realm(realm)?;
+            return Ok(realm);
+        }
+    }
+
+    fn object_prototype_for_function(&self, function: &JsValue) -> Result<Obj, Throw> {
+        let realm = self.get_function_realm(function)?;
+        Ok(self.realms.get(&realm.realm).map(|realm| realm.object_proto.clone())
+            .unwrap_or_else(|| self.object_proto.clone()))
     }
     // Keep immutable references: changing a global constructor binding must
     // not change GetPrototypeFromConstructor's intrinsic fallback.
@@ -372,7 +402,7 @@ impl Interpreter {
         }
     }
 
-    fn constructor_fallback_prototype(&self, target: &JsValue, new_target: &JsValue) -> Obj {
+    fn constructor_fallback_prototype(&self, target: &JsValue, new_target: &JsValue) -> Result<Obj, Throw> {
         let JsValue::Object(target) = target else { return self.object_prototype_for_function(new_target); };
         let target_realm = target.borrow().realm.unwrap_or(self.host_realm);
         let target_intrinsics = self.realms.get(&target_realm)
@@ -380,11 +410,13 @@ impl Interpreter {
         let name = target_intrinsics.iter().find_map(|(name, (constructor, _))|
             Rc::ptr_eq(&constructor.0, &target.0).then_some(name));
         let Some(name) = name else { return self.object_prototype_for_function(new_target); };
-        let new_realm = match new_target { JsValue::Object(object) => object.borrow().realm, _ => None };
-        let intrinsics = new_realm.and_then(|realm| self.realms.get(&realm))
+        let new_realm = self.get_function_realm(new_target)?;
+        let intrinsics = self.realms.get(&new_realm.realm)
             .map(|realm| &realm.intrinsic_constructors).unwrap_or(&self.intrinsic_constructors);
-        intrinsics.get(name).map(|(_, prototype)| prototype.clone())
-            .unwrap_or_else(|| self.object_prototype_for_function(new_target))
+        match intrinsics.get(name) {
+            Some((_, prototype)) => Ok(prototype.clone()),
+            None => self.object_prototype_for_function(new_target),
+        }
     }
 
     fn complete_derived_constructor(&mut self, completion: Flow, environment: &EnvHandle, caller: RealmHandle) -> Result<JsValue, Throw> {

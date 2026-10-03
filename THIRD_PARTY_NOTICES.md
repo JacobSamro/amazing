@@ -68,3 +68,5 @@ reproduced in the table row for that upstream.
 | lucid-softworks/lumen @ f6c9860d44fa52249cfd647122edea184d32c863 | MIT | Copyright (c) 2026 Lucid Softworks limited | Annex B declaration discovery and block lexical/function instantiation adapted from crates/lumen/src/interpreter.rs and crates/lumen/src/eval.rs into crates/amazing-js/src/vm/compiler_declarations.rs and vm/mod.rs. |
 
 | boa-dev/boa @ `39cd11214ecb366200157dab96b3919e61e9a391` (`core/engine/src/builtins/function/arguments.rs`) | MIT | Copyright (c) 2019 Jason Williams | `crates/amazing-js/src/interp_arguments.rs`, `crates/amazing-js/src/builtins_std_object_model.rs`: mapped/unmapped arguments creation and exotic descriptor algorithms adapted to BindingCell aliases. |
+
+| boa-dev/boa @ `39cd11214ecb366200157dab96b3919e61e9a391` (`core/engine/src/builtins/proxy/mod.rs`) | MIT | Copyright (c) 2019 Jason Williams | `crates/amazing-js/src/interp_proxy.rs`: Proxy internal-method descriptor compatibility, extensibility and own-key invariants adapted to Amazing. |

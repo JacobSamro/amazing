@@ -1474,3 +1474,43 @@ from the complete language records. Initial iteration's only failure was
 the explicit Bytecode unsupported-fallback declaration fixture, corrected
 by AST seeding before both-backend calls; all production/native cases pass
 in the final repeat. Evidence: `js-runtime_jsrt37_evidence.json`.
+
+## JSRT-39 Proxy invariants and function realms (2026-10-03)
+
+Frozen base `8f3c4b7cbc446561b1fa649ff164f1aaadc2dcc0`. Proxy invariant algorithms
+are ported from Boa `core/engine/src/builtins/proxy/mod.rs` at
+`39cd11214ecb366200157dab96b3919e61e9a391` (MIT), adapted to semantic
+internal methods and existing descriptor records. Define validates compatibility
+and non-configurable claims after the trap; descriptor getters are converted
+once before trap lookup. GetOwnProperty completes the returned descriptor after
+target descriptor/extensibility queries. OwnKeys enforces non-configurable keys
+and exact non-extensible target membership in the observable spec order.
+SetPrototypeOf false short-circuits target probes; true enforces agreement.
+
+Proxy Call dispatch now precedes ordinary callee realm/context setup: argument
+arrays and abrupt errors belong to the original caller realm. GetFunctionRealm
+iteratively follows bound and Proxy targets, rejects revoked wrappers, and
+propagates into realm-specific intrinsic prototype fallback. Ordinary/bound
+context restoration, WindowProxy policy and VM invocation metadata are preserved.
+Revoker own-property order is length then name.
+
+The missed JSRT-37 Reflect.getOwnPropertyDescriptor consumer now uses the live
+Arguments descriptor overlay before binary/default storage. Both direct Reflect
+and a Proxy trap forwarding to Reflect are covered after formal reassignment.
+Four grouped regressions run on both backends for descriptor compatibility,
+conversion and target probe ordering, key invariants, false trap short-circuits,
+mapped forwarding and foreign caller/prototype realms.
+
+Final Boat workspace **3766 passed/17 skipped, 74.281 seconds**, **4 doctests**.
+Matched Proxy **280 → 309/311** (+29), Object **3347 → 3355/3414** (+8),
+Function **502 → 504/515** (+2); Reflect **151/154** and whole language
+**24029/24590** unchanged. Unique union **28984 cases**,
+**28309 → 28348 passing** (+39), **78 gained variants**, zero lost files
+or variants and zero timeouts. The initial after shell stopped on the language
+runner expected conformance exit code; remaining four selections ran against
+the identical binary with explicit accepted conformance status. No source
+changes or repeated workspace gate. Evidence: `js-runtime_jsrt39_evidence.json`.
+
+Two remaining Proxy corpus failures belong to general boxed String internal
+storage visibility and legacy enumerate handling, rather than missing Proxy
+invariants; no Proxy-specific key filtering or removed-trap shortcut was added.

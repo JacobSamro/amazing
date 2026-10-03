@@ -101,7 +101,9 @@ fn std_reflect_get_own_property_descriptor(i: &mut Interpreter, _: JsValue, args
     if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
         return native_object_get_own_property_descriptor(i, JsValue::Undefined, args);
     }
-    let property = if let Some(property) = binary_index_descriptor(&target, &key) {
+    let property = if let Some(result) = arguments_own_property(&target, &key) {
+        result?
+    } else if let Some(property) = binary_index_descriptor(&target, &key) {
         property
     } else if let Some(name) = key.as_string() {
         i.legacy_own_property(&target, name, false)?

@@ -1,0 +1,574 @@
+{
+  "ticket": "JSRT-39",
+  "base_sha": "8f3c4b7cbc446561b1fa649ff164f1aaadc2dcc0",
+  "workspace": {
+    "passed": 3766,
+    "skipped": 17,
+    "elapsed_seconds": 74.281
+  },
+  "doctests": 4,
+  "selections": {
+    "language": {
+      "selected": 24590,
+      "before": {
+        "pass": 24029,
+        "fail": 535,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "after": {
+        "pass": 24029,
+        "fail": 535,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 52.985,
+      "elapsed_after": 53.277,
+      "before_host_sha256": "69cbb8c495327453c1efa9a966812b05708fe31e6d38cb94d064b32dc349912d",
+      "after_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Proxy": {
+      "selected": 311,
+      "before": {
+        "pass": 280,
+        "fail": 31,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "after": {
+        "pass": 309,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "gained": [
+        "built-ins/Proxy/apply/arguments-realm.js",
+        "built-ins/Proxy/apply/null-handler-realm.js",
+        "built-ins/Proxy/apply/trap-is-not-callable-realm.js",
+        "built-ins/Proxy/defineProperty/targetdesc-configurable-desc-not-configurable-realm.js",
+        "built-ins/Proxy/defineProperty/targetdesc-configurable-desc-not-configurable.js",
+        "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor-not-configurable-target-realm.js",
+        "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor-not-configurable-target.js",
+        "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor-realm.js",
+        "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor.js",
+        "built-ins/Proxy/defineProperty/targetdesc-not-configurable-writable-desc-not-writable.js",
+        "built-ins/Proxy/defineProperty/targetdesc-undefined-not-configurable-descriptor-realm.js",
+        "built-ins/Proxy/defineProperty/targetdesc-undefined-not-configurable-descriptor.js",
+        "built-ins/Proxy/defineProperty/targetdesc-undefined-target-is-not-extensible-realm.js",
+        "built-ins/Proxy/defineProperty/targetdesc-undefined-target-is-not-extensible.js",
+        "built-ins/Proxy/get-fn-realm-recursive.js",
+        "built-ins/Proxy/get-fn-realm.js",
+        "built-ins/Proxy/getOwnPropertyDescriptor/resultdesc-is-not-configurable-not-writable-targetdesc-is-writable.js",
+        "built-ins/Proxy/getOwnPropertyDescriptor/resultdesc-is-not-configurable-targetdesc-is-configurable.js",
+        "built-ins/Proxy/getOwnPropertyDescriptor/resultdesc-is-not-configurable-targetdesc-is-undefined.js",
+        "built-ins/Proxy/ownKeys/not-extensible-missing-keys-throws.js",
+        "built-ins/Proxy/ownKeys/not-extensible-new-keys-throws.js",
+        "built-ins/Proxy/ownKeys/return-all-non-configurable-keys.js",
+        "built-ins/Proxy/revocable/revocation-function-property-order.js",
+        "built-ins/Proxy/setPrototypeOf/internals-call-order.js",
+        "built-ins/Proxy/setPrototypeOf/not-extensible-target-not-same-target-prototype.js",
+        "built-ins/Proxy/setPrototypeOf/return-abrupt-from-isextensible-target.js",
+        "built-ins/Proxy/setPrototypeOf/return-abrupt-from-target-getprototypeof.js",
+        "built-ins/Proxy/setPrototypeOf/toboolean-trap-result-false.js",
+        "built-ins/Proxy/setPrototypeOf/toboolean-trap-result-true-target-is-extensible.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.25,
+      "elapsed_after": 3.809,
+      "before_host_sha256": "69cbb8c495327453c1efa9a966812b05708fe31e6d38cb94d064b32dc349912d",
+      "after_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before": {
+        "pass": 3347,
+        "fail": 66,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "after": {
+        "pass": 3355,
+        "fail": 58,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "gained": [
+        "built-ins/Object/getOwnPropertyNames/proxy-invariant-absent-not-configurable-symbol-key.js",
+        "built-ins/Object/getOwnPropertyNames/proxy-invariant-not-extensible-absent-symbol-key.js",
+        "built-ins/Object/getOwnPropertyNames/proxy-invariant-not-extensible-extra-symbol-key.js",
+        "built-ins/Object/getOwnPropertySymbols/proxy-invariant-absent-not-configurable-string-key.js",
+        "built-ins/Object/getOwnPropertySymbols/proxy-invariant-not-extensible-absent-string-key.js",
+        "built-ins/Object/getOwnPropertySymbols/proxy-invariant-not-extensible-extra-string-key.js",
+        "built-ins/Object/keys/proxy-non-enumerable-prop-invariant-1.js",
+        "built-ins/Object/keys/proxy-non-enumerable-prop-invariant-2.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 10.444,
+      "elapsed_after": 9.716,
+      "before_host_sha256": "69cbb8c495327453c1efa9a966812b05708fe31e6d38cb94d064b32dc349912d",
+      "after_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Reflect": {
+      "selected": 154,
+      "before": {
+        "pass": 151,
+        "fail": 3,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "after": {
+        "pass": 151,
+        "fail": 3,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.867,
+      "elapsed_after": 3.225,
+      "before_host_sha256": "69cbb8c495327453c1efa9a966812b05708fe31e6d38cb94d064b32dc349912d",
+      "after_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Function": {
+      "selected": 515,
+      "before": {
+        "pass": 502,
+        "fail": 13,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "after": {
+        "pass": 504,
+        "fail": 11,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "gained": [
+        "built-ins/Function/internals/Construct/base-ctor-revoked-proxy-realm.js",
+        "built-ins/Function/internals/Construct/base-ctor-revoked-proxy.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 4.307,
+      "elapsed_after": 4.512,
+      "before_host_sha256": "69cbb8c495327453c1efa9a966812b05708fe31e6d38cb94d064b32dc349912d",
+      "after_host_sha256": "e1545099bb198097207f470a67069a87081e7abce0667c3339eb34aefdf29880",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    }
+  },
+  "unique": {
+    "selected": 28984,
+    "before_pass": 28309,
+    "after_pass": 28348,
+    "gained_files": [
+      "built-ins/Proxy/apply/arguments-realm.js",
+      "built-ins/Proxy/apply/null-handler-realm.js",
+      "built-ins/Proxy/apply/trap-is-not-callable-realm.js",
+      "built-ins/Proxy/defineProperty/targetdesc-configurable-desc-not-configurable-realm.js",
+      "built-ins/Proxy/defineProperty/targetdesc-configurable-desc-not-configurable.js",
+      "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor-not-configurable-target-realm.js",
+      "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor-not-configurable-target.js",
+      "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor-realm.js",
+      "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor.js",
+      "built-ins/Proxy/defineProperty/targetdesc-not-configurable-writable-desc-not-writable.js",
+      "built-ins/Proxy/defineProperty/targetdesc-undefined-not-configurable-descriptor-realm.js",
+      "built-ins/Proxy/defineProperty/targetdesc-undefined-not-configurable-descriptor.js",
+      "built-ins/Proxy/defineProperty/targetdesc-undefined-target-is-not-extensible-realm.js",
+      "built-ins/Proxy/defineProperty/targetdesc-undefined-target-is-not-extensible.js",
+      "built-ins/Proxy/get-fn-realm-recursive.js",
+      "built-ins/Proxy/get-fn-realm.js",
+      "built-ins/Proxy/getOwnPropertyDescriptor/resultdesc-is-not-configurable-not-writable-targetdesc-is-writable.js",
+      "built-ins/Proxy/getOwnPropertyDescriptor/resultdesc-is-not-configurable-targetdesc-is-configurable.js",
+      "built-ins/Proxy/getOwnPropertyDescriptor/resultdesc-is-not-configurable-targetdesc-is-undefined.js",
+      "built-ins/Proxy/ownKeys/not-extensible-missing-keys-throws.js",
+      "built-ins/Proxy/ownKeys/not-extensible-new-keys-throws.js",
+      "built-ins/Proxy/ownKeys/return-all-non-configurable-keys.js",
+      "built-ins/Proxy/revocable/revocation-function-property-order.js",
+      "built-ins/Proxy/setPrototypeOf/internals-call-order.js",
+      "built-ins/Proxy/setPrototypeOf/not-extensible-target-not-same-target-prototype.js",
+      "built-ins/Proxy/setPrototypeOf/return-abrupt-from-isextensible-target.js",
+      "built-ins/Proxy/setPrototypeOf/return-abrupt-from-target-getprototypeof.js",
+      "built-ins/Proxy/setPrototypeOf/toboolean-trap-result-false.js",
+      "built-ins/Proxy/setPrototypeOf/toboolean-trap-result-true-target-is-extensible.js",
+      "built-ins/Object/getOwnPropertyNames/proxy-invariant-absent-not-configurable-symbol-key.js",
+      "built-ins/Object/getOwnPropertyNames/proxy-invariant-not-extensible-absent-symbol-key.js",
+      "built-ins/Object/getOwnPropertyNames/proxy-invariant-not-extensible-extra-symbol-key.js",
+      "built-ins/Object/getOwnPropertySymbols/proxy-invariant-absent-not-configurable-string-key.js",
+      "built-ins/Object/getOwnPropertySymbols/proxy-invariant-not-extensible-absent-string-key.js",
+      "built-ins/Object/getOwnPropertySymbols/proxy-invariant-not-extensible-extra-string-key.js",
+      "built-ins/Object/keys/proxy-non-enumerable-prop-invariant-1.js",
+      "built-ins/Object/keys/proxy-non-enumerable-prop-invariant-2.js",
+      "built-ins/Function/internals/Construct/base-ctor-revoked-proxy-realm.js",
+      "built-ins/Function/internals/Construct/base-ctor-revoked-proxy.js"
+    ],
+    "lost_files": [
+
+    ],
+    "gained_variants": [
+      [
+        "built-ins/Proxy/apply/arguments-realm.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/apply/arguments-realm.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/apply/null-handler-realm.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/apply/null-handler-realm.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/apply/trap-is-not-callable-realm.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/apply/trap-is-not-callable-realm.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-configurable-desc-not-configurable-realm.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-configurable-desc-not-configurable-realm.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-configurable-desc-not-configurable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-configurable-desc-not-configurable.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor-not-configurable-target-realm.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor-not-configurable-target-realm.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor-not-configurable-target.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor-not-configurable-target.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor-realm.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor-realm.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-not-compatible-descriptor.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-not-configurable-writable-desc-not-writable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-not-configurable-writable-desc-not-writable.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-undefined-not-configurable-descriptor-realm.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-undefined-not-configurable-descriptor-realm.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-undefined-not-configurable-descriptor.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-undefined-not-configurable-descriptor.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-undefined-target-is-not-extensible-realm.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-undefined-target-is-not-extensible-realm.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-undefined-target-is-not-extensible.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/defineProperty/targetdesc-undefined-target-is-not-extensible.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/get-fn-realm-recursive.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/get-fn-realm-recursive.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/get-fn-realm.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/get-fn-realm.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/getOwnPropertyDescriptor/resultdesc-is-not-configurable-not-writable-targetdesc-is-writable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/getOwnPropertyDescriptor/resultdesc-is-not-configurable-not-writable-targetdesc-is-writable.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/getOwnPropertyDescriptor/resultdesc-is-not-configurable-targetdesc-is-configurable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/getOwnPropertyDescriptor/resultdesc-is-not-configurable-targetdesc-is-configurable.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/getOwnPropertyDescriptor/resultdesc-is-not-configurable-targetdesc-is-undefined.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/getOwnPropertyDescriptor/resultdesc-is-not-configurable-targetdesc-is-undefined.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/ownKeys/not-extensible-missing-keys-throws.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/ownKeys/not-extensible-missing-keys-throws.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/ownKeys/not-extensible-new-keys-throws.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/ownKeys/not-extensible-new-keys-throws.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/ownKeys/return-all-non-configurable-keys.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/ownKeys/return-all-non-configurable-keys.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/revocable/revocation-function-property-order.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/revocable/revocation-function-property-order.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/setPrototypeOf/internals-call-order.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/setPrototypeOf/internals-call-order.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/setPrototypeOf/not-extensible-target-not-same-target-prototype.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/setPrototypeOf/not-extensible-target-not-same-target-prototype.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/setPrototypeOf/return-abrupt-from-isextensible-target.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/setPrototypeOf/return-abrupt-from-isextensible-target.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/setPrototypeOf/return-abrupt-from-target-getprototypeof.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/setPrototypeOf/return-abrupt-from-target-getprototypeof.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/setPrototypeOf/toboolean-trap-result-false.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/setPrototypeOf/toboolean-trap-result-false.js",
+        "strict"
+      ],
+      [
+        "built-ins/Proxy/setPrototypeOf/toboolean-trap-result-true-target-is-extensible.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Proxy/setPrototypeOf/toboolean-trap-result-true-target-is-extensible.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyNames/proxy-invariant-absent-not-configurable-symbol-key.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyNames/proxy-invariant-absent-not-configurable-symbol-key.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyNames/proxy-invariant-not-extensible-absent-symbol-key.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyNames/proxy-invariant-not-extensible-absent-symbol-key.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyNames/proxy-invariant-not-extensible-extra-symbol-key.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyNames/proxy-invariant-not-extensible-extra-symbol-key.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertySymbols/proxy-invariant-absent-not-configurable-string-key.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertySymbols/proxy-invariant-absent-not-configurable-string-key.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertySymbols/proxy-invariant-not-extensible-absent-string-key.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertySymbols/proxy-invariant-not-extensible-absent-string-key.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertySymbols/proxy-invariant-not-extensible-extra-string-key.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertySymbols/proxy-invariant-not-extensible-extra-string-key.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/keys/proxy-non-enumerable-prop-invariant-1.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/keys/proxy-non-enumerable-prop-invariant-1.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/keys/proxy-non-enumerable-prop-invariant-2.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/keys/proxy-non-enumerable-prop-invariant-2.js",
+        "strict"
+      ],
+      [
+        "built-ins/Function/internals/Construct/base-ctor-revoked-proxy-realm.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Function/internals/Construct/base-ctor-revoked-proxy-realm.js",
+        "strict"
+      ],
+      [
+        "built-ins/Function/internals/Construct/base-ctor-revoked-proxy.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Function/internals/Construct/base-ctor-revoked-proxy.js",
+        "strict"
+      ]
+    ],
+    "lost_variants": [
+
+    ]
+  }
+}

@@ -1,3 +1,5 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/proxy/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // Proxy exotic objects (ECMA-262 10.5) and their trap dispatch.
 //
 // Every fundamental object operation checks proxy_* first, mirroring the
@@ -17,17 +19,8 @@
 // (binary index fast path, then legacy platform hooks, then plain storage),
 // and are themselves proxy-aware so nested proxies keep working.
 //
-// Known gaps, accepted for this ticket: invariant enforcement covers the
-// highest-value checks per trap (revocation, non-callable traps, the
-// non-configurable/non-extensible-target agreements) but not the complete
-// ECMA-262 invariant list -- e.g. the ownKeys "extensible target must report
-// every non-configurable target key" superset rule is not enforced.
-// Object.freeze/seal/isFrozen/isSealed treat a Proxy's own extensibility
-// through the isExtensible/preventExtensions traps but do not route each
-// property through the target's defineProperty trap. A Proxy inserted
-// mid-prototype-chain is only honored at the well-known entry points below
-// (Object/Reflect getPrototypeOf/setPrototypeOf, `in`, property access);
-// a handful of raw `.proto` field walks elsewhere do not call through it.
+// Invariants use the target's semantic internal methods, including mapped
+// arguments and nested proxies, rather than its raw property storage.
 
 #[derive(Debug)]
 pub struct ProxyState {
@@ -94,6 +87,106 @@ mod prototype_mutation_tests {
     }
 }
 
+#[cfg(test)]
+mod invariant_tests {
+    use super::*;
+
+    fn check(source: &str) {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script_with_backend(source, backend).unwrap(), JsValue::Bool(true), "{backend:?}");
+        }
+    }
+
+    #[test]
+    fn descriptor_compatibility_and_conversion_order() {
+        check(r#"
+            function rejects(f) { try { f(); } catch(e) { return e instanceof TypeError; } return false; }
+            var frozen = {}; Object.defineProperty(frozen,'x',{value:1});
+            var writable = {}; Object.defineProperty(writable,'x',{value:1,writable:true});
+            var configurable = {x:1};
+            var sealed = {}; Object.preventExtensions(sealed);
+            function proxy(t) { return new Proxy(t,{defineProperty(){return true;}}); }
+            var ok = rejects(()=>Reflect.defineProperty(proxy(frozen),'x',{value:2})) &&
+                rejects(()=>Reflect.defineProperty(proxy(frozen),'x',{writable:true})) &&
+                rejects(()=>Reflect.defineProperty(proxy(frozen),'x',{get(){return 1;}})) &&
+                rejects(()=>Reflect.defineProperty(proxy(writable),'x',{writable:false})) &&
+                rejects(()=>Reflect.defineProperty(proxy(configurable),'x',{configurable:false})) &&
+                rejects(()=>Reflect.defineProperty(proxy({}),'x',{configurable:false})) &&
+                rejects(()=>Reflect.defineProperty(proxy(sealed),'x',{value:1})) &&
+                Reflect.defineProperty(proxy(frozen),'x',{value:1}) &&
+                Reflect.defineProperty(proxy({}),'x',{value:1,configurable:true});
+            var log = '', count = 0, descriptor = {get value(){count++;log+='value;';return 7;}};
+            var p = new Proxy({}, {get defineProperty(){log+='trap;';return undefined;}});
+            Reflect.defineProperty(p,'x',descriptor);
+            ok && log === 'value;trap;' && count === 1 && p.x === 7;
+        "#);
+    }
+
+    #[test]
+    fn reported_descriptors_and_keys_observe_target_invariant_order() {
+        check(r#"
+            function rejects(f) { try { f(); } catch(e) { return e instanceof TypeError; } return false; }
+            var target = {}; Object.defineProperty(target,'x',{value:1,writable:true});
+            var ok = rejects(()=>Object.getOwnPropertyDescriptor(new Proxy({}, {getOwnPropertyDescriptor(){return {};}}),'x')) &&
+                rejects(()=>Object.getOwnPropertyDescriptor(new Proxy(target, {getOwnPropertyDescriptor(){return {value:1};}}),'x')) &&
+                rejects(()=>Reflect.ownKeys(new Proxy(target,{ownKeys(){return [];}})));
+            var closed = {x:1}; Object.preventExtensions(closed);
+            ok = ok && rejects(()=>Reflect.ownKeys(new Proxy(closed,{ownKeys(){return [];}}))) &&
+                rejects(()=>Reflect.ownKeys(new Proxy(closed,{ownKeys(){return ['x','y'];}}))) &&
+                rejects(()=>Reflect.ownKeys(new Proxy({}, {ownKeys(){return ['x','x'];}}))) &&
+                rejects(()=>Reflect.ownKeys(new Proxy({}, {ownKeys(){return [1];}}))) &&
+                Reflect.ownKeys(new Proxy(target,{ownKeys(){return ['x','extra'];}})).length === 2;
+            var log = '';
+            var inner = new Proxy({x:1},{
+                getOwnPropertyDescriptor(t,k){log+='desc;';return Reflect.getOwnPropertyDescriptor(t,k);},
+                isExtensible(t){log+='ext;';return Reflect.isExtensible(t);},
+                ownKeys(t){log+='keys;';return Reflect.ownKeys(t);}
+            });
+            var outer = new Proxy(inner,{getOwnPropertyDescriptor(){return {get value(){log+='value;';return 1;},configurable:true};}});
+            Object.getOwnPropertyDescriptor(outer,'x');
+            ok = ok && log === 'desc;ext;value;';
+            log = ''; Reflect.ownKeys(new Proxy(inner,{ownKeys(){return ['x'];}}));
+            ok && log === 'ext;keys;desc;';
+        "#);
+    }
+
+    #[test]
+    fn false_traps_short_circuit_and_mapped_descriptor_forwarding_is_live() {
+        check(r#"
+            var calls = 0;
+            var inner = new Proxy({}, {isExtensible(){calls++;throw 1;},getOwnPropertyDescriptor(){calls++;throw 2;}});
+            var p = new Proxy(inner,{setPrototypeOf(){return false;},defineProperty(){return false;},deleteProperty(){return false;},set(){return false;}});
+            var ok = !Reflect.setPrototypeOf(p,null) && !Reflect.defineProperty(p,'x',{value:1}) &&
+                !Reflect.deleteProperty(p,'x') && !Reflect.set(p,'x',1) && calls === 0;
+            function direct(a) { a=4;return Reflect.getOwnPropertyDescriptor(arguments,'0').value===4; }
+            function forwarded(a) { a=4;var p=new Proxy(arguments,{getOwnPropertyDescriptor(t,k){return Reflect.getOwnPropertyDescriptor(t,k);}});return Object.getOwnPropertyDescriptor(p,'0').value===4; }
+            var revoker = Proxy.revocable({},{}).revoke;
+            ok && direct(1) && forwarded(1) && Object.getOwnPropertyNames(revoker).join(',') === 'length,name';
+        "#);
+    }
+
+    #[test]
+    fn proxy_calls_and_prototype_fallback_use_the_required_realms() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let child = i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
+            let proxy = i.binding_eval_in_realm(child, "new Proxy(function(){},{apply(t,v,a){return a;}})").unwrap();
+            i.define_global("foreignProxy", proxy);
+            assert_eq!(i.run_script_with_backend("foreignProxy(1).constructor === Array", backend).unwrap(), JsValue::Bool(true));
+            let function = i.binding_eval_in_realm(child, "var f=function(){};f.prototype=null;f").unwrap();
+            let expected = i.binding_eval_in_realm(child, "Object.prototype").unwrap();
+            i.define_global("foreignFunction", function);
+            i.define_global("foreignPrototype", expected);
+            assert_eq!(i.run_script_with_backend("Object.getPrototypeOf(Reflect.construct(Object,[],new Proxy(foreignFunction,{})))===foreignPrototype && Object.getPrototypeOf(Reflect.construct(Object,[],foreignFunction.bind(null)))===foreignPrototype", backend).unwrap(), JsValue::Bool(true));
+            let revoked = i.binding_eval_in_realm(child, "var r=Proxy.revocable(function(){},{});r.revoke();r.proxy").unwrap();
+            let error = i.call_value(&revoked, JsValue::Undefined, vec![]).unwrap_err();
+            let expected = i.run_script("TypeError.prototype").unwrap();
+            assert_eq!(native_object_get_prototype_of(&mut i, JsValue::Undefined, vec![error.0]).unwrap(), expected);
+        }
+    }
+}
+
 fn property_key_to_value(key: &PropertyKey) -> JsValue {
     match key {
         PropertyKey::String(s) => JsValue::Str(s.clone()),
@@ -121,6 +214,30 @@ fn complete_property_descriptor(fields: StdDescriptorFields) -> Property {
             configurable: fields.configurable.unwrap_or(false),
         }
     }
+}
+
+// IsCompatiblePropertyDescriptor, adapted to the runtime's ordinary descriptor record.
+fn proxy_compatible_descriptor(fields: &StdDescriptorFields, current: Option<&Property>, extensible: bool) -> bool {
+    let Some(current) = current else { return extensible; };
+    if current.configurable { return true; }
+    if fields.configurable == Some(true)
+        || fields.enumerable.is_some_and(|enumerable| enumerable != current.enumerable) { return false; }
+    let accessor = fields.get.is_some() || fields.set.is_some();
+    let data = fields.value.is_some() || fields.writable.is_some();
+    let old_accessor = current.getter.is_some() || current.setter.is_some();
+    if (accessor && !old_accessor) || (data && old_accessor) { return false; }
+    if data && !current.writable {
+        if fields.writable == Some(true)
+            || fields.value.as_ref().is_some_and(|value| !std_same_value(value, &current.value)) { return false; }
+    }
+    if accessor {
+        for (requested, existing) in [(&fields.get, &current.getter), (&fields.set, &current.setter)] {
+            if let Some(requested) = requested {
+                if !std_same_value(requested, existing.as_ref().unwrap_or(&JsValue::Undefined)) { return false; }
+            }
+        }
+    }
+    true
 }
 
 fn proxy_unreachable_call(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -226,6 +343,10 @@ impl Interpreter {
         });
         object.proto = Some(self.function_proto.clone());
         object.constructible = false;
+        // CreateBuiltinFunction establishes length before name.
+        let name = object.own_prop("name").cloned();
+        object.delete_own("name");
+        if let Some(name) = name { object.define("name", name).unwrap(); }
         object.proxy_revoke = Some(state);
         JsValue::Object(Obj(Rc::new(RefCell::new(object))))
     }
@@ -478,6 +599,31 @@ impl Interpreter {
                 }
                 keys.push(key);
             }
+            let extensible = self.default_is_extensible(&target_obj)?;
+            let target_keys = self.default_own_property_keys(&target_obj)?;
+            let mut non_configurable = Vec::new();
+            let mut configurable = Vec::new();
+            for target_key in target_keys {
+                if self.default_get_own_property(&target_obj, &target_key)?
+                    .is_some_and(|property| !property.configurable) {
+                    non_configurable.push(target_key);
+                } else { configurable.push(target_key); }
+            }
+            if extensible && non_configurable.is_empty() { return Ok(keys); }
+            for required in non_configurable {
+                if !seen.remove(&required) {
+                    return Err(Throw::type_error("proxy ownKeys omitted a non-configurable target key"));
+                }
+            }
+            if extensible { return Ok(keys); }
+            for required in configurable {
+                if !seen.remove(&required) {
+                    return Err(Throw::type_error("proxy ownKeys omitted a non-extensible target key"));
+                }
+            }
+            if !seen.is_empty() {
+                return Err(Throw::type_error("proxy ownKeys added a non-extensible target key"));
+            }
             Ok(keys)
         })())
     }
@@ -491,6 +637,9 @@ impl Interpreter {
             };
             let key_value = property_key_to_value(key);
             let result = self.call_value(&trap, handler.clone(), vec![target.clone(), key_value])?;
+            if !result.is_undefined() && !result.is_object() {
+                return Err(Throw::type_error("proxy getOwnPropertyDescriptor trap must return an object or undefined"));
+            }
             let target_desc = self.default_get_own_property(&target_obj, key)?;
             if result.is_undefined() {
                 if let Some(existing) = &target_desc {
@@ -506,8 +655,28 @@ impl Interpreter {
             if !result.is_object() {
                 return Err(Throw::type_error("proxy getOwnPropertyDescriptor trap must return an object or undefined"));
             }
-            let fields = self.std_descriptor_fields(&result)?;
             let extensible_target = self.default_is_extensible(&target_obj)?;
+            let mut fields = self.std_descriptor_fields(&result)?;
+            fields.enumerable.get_or_insert(false);
+            fields.configurable.get_or_insert(false);
+            if fields.get.is_some() || fields.set.is_some() {
+                fields.get.get_or_insert(JsValue::Undefined);
+                fields.set.get_or_insert(JsValue::Undefined);
+            } else {
+                fields.value.get_or_insert(JsValue::Undefined);
+                fields.writable.get_or_insert(false);
+            }
+            if !proxy_compatible_descriptor(&fields, target_desc.as_ref(), extensible_target) {
+                return Err(Throw::type_error("proxy getOwnPropertyDescriptor reported an incompatible descriptor"));
+            }
+            if fields.configurable == Some(false) {
+                let Some(existing) = &target_desc else {
+                    return Err(Throw::type_error("proxy cannot report a new non-configurable property"));
+                };
+                if existing.configurable || (fields.writable == Some(false) && existing.writable) {
+                    return Err(Throw::type_error("proxy cannot report a target descriptor as frozen"));
+                }
+            }
             let property = complete_property_descriptor(fields);
             match &target_desc {
                 Some(existing) if !existing.configurable && property.configurable => {
@@ -523,17 +692,32 @@ impl Interpreter {
     }
 
     fn proxy_define(&mut self, object: &Obj, key: &PropertyKey, descriptor: &JsValue) -> Option<Result<bool, Throw>> {
-        let (target, handler) = match self.proxy_parts(object)? { Ok(v) => v, Err(e) => return Some(Err(e)) };
+        if !matches!(&object.borrow().exotic, Exotic::Proxy(_)) { return None; }
         Some((|| -> Result<bool, Throw> {
-            let target_obj = self.proxy_target_object(&target)?;
-            let Some(trap) = self.proxy_trap(&handler, "defineProperty")? else {
-                return self.define_own_property(&target_obj, key, descriptor);
-            };
+            // Convert once before revocation and GetMethod; forward the record.
             let fields = self.std_descriptor_fields(descriptor)?;
             let normalized = self.descriptor_fields_to_value(&fields);
+            let (target, handler) = self.proxy_parts(object).unwrap()?;
+            let target_obj = self.proxy_target_object(&target)?;
+            let Some(trap) = self.proxy_trap(&handler, "defineProperty")? else {
+                return self.define_own_property(&target_obj, key, &normalized);
+            };
             let key_value = property_key_to_value(key);
             let result = self.call_value(&trap, handler.clone(), vec![target.clone(), key_value, normalized])?;
-            Ok(result.to_boolean())
+            if !result.to_boolean() { return Ok(false); }
+            let current = self.default_get_own_property(&target_obj, key)?;
+            let extensible = self.default_is_extensible(&target_obj)?;
+            if !proxy_compatible_descriptor(&fields, current.as_ref(), extensible) {
+                return Err(Throw::type_error("proxy defineProperty reported an incompatible descriptor"));
+            }
+            if fields.configurable == Some(false) && current.as_ref().is_none_or(|property| property.configurable) {
+                return Err(Throw::type_error("proxy defineProperty cannot introduce a non-configurable property"));
+            }
+            if current.as_ref().is_some_and(|property| !property.configurable && property.writable)
+                && fields.writable == Some(false) {
+                return Err(Throw::type_error("proxy defineProperty cannot freeze a writable target property"));
+            }
+            Ok(true)
         })())
     }
 
@@ -567,14 +751,14 @@ impl Interpreter {
             };
             let prototype_value = prototype.clone().map(JsValue::Object).unwrap_or(JsValue::Null);
             let result = self.call_value(&trap, handler.clone(), vec![target.clone(), prototype_value.clone()])?.to_boolean();
-            if result { return Ok(true); }
+            if !result { return Ok(false); }
             if !self.default_is_extensible(&target_obj)? {
                 let expected = self.default_get_prototype(&target_obj)?;
                 if !std_same_value(&prototype_value, &expected) {
                     return Err(Throw::type_error("proxy setPrototypeOf invariant violated: must match a non-extensible target's prototype"));
                 }
             }
-            Ok(false)
+            Ok(true)
         })())
     }
 
@@ -614,6 +798,7 @@ impl Interpreter {
     // check Exotic::Proxy before doing anything callable-specific.
 
     fn proxy_call(&mut self, object: &Obj, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+        if object.borrow().func.is_none() { return Err(Throw::type_error("proxy is not callable")); }
         let (target, handler) = self.proxy_parts(object).expect("caller checked Exotic::Proxy")?;
         let trap = self.proxy_trap(&handler, "apply")?;
         match trap {
