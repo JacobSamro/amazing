@@ -2,6 +2,11 @@
 // @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Module evaluation capabilities use internal reactions, never observable then/species.
 impl Interpreter {
+    /// Materialize a host-generated error in this realm before caching it.
+    /// Ordinary JavaScript thrown values retain their original identity.
+    pub fn binding_normalize_throw(&self, error: Throw) -> Throw {
+        self.normalize_throw(error)
+    }
     /// The legacy synchronous entry point owns a checkpoint only in standalone mode.
     pub(crate) fn module_legacy_checkpoint(&mut self) -> Result<(), Throw> {
         if self.external_scheduling.is_none() { self.drain_microtasks() } else { Ok(()) }

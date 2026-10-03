@@ -158,7 +158,25 @@ impl ModuleRuntime {
         // progress, never a synchronous failure cached by the page-script path.
         js.binding_set_phase_module_loader_hook(Rc::new(move |js, request, referrer| {
             let registry = runtime.registry(js);
-            ModuleLinker::import_shared(&registry, request, referrer, js).map_err(module_failure)
+            // Evaluation imports share their canonical module's cached error.
+            // Cache a realm Error object, rather than a native marker that would
+            // materialize a different object every time the job rejects.
+            let key = if request.phase == amazing_js::module::ImportPhase::Evaluation
+                && request.attributes.is_empty()
+            {
+                runtime.resolver(js).locate(&request.specifier.to_utf8_lossy(), referrer)
+                    .ok().map(|id| (js.binding_current_realm(), id))
+            } else { None };
+            if let Some(key) = &key {
+                if let Some(error) = runtime.failures.borrow().get(key).cloned() {
+                    return Err(error);
+                }
+            }
+            ModuleLinker::import_shared(&registry, request, referrer, js).map_err(|failure| {
+                let error = js.binding_normalize_throw(module_failure(failure));
+                if let Some(key) = key { runtime.failures.borrow_mut().insert(key, error.clone()); }
+                error
+            })
         }));
     }
 }
@@ -396,7 +414,8 @@ mod tests {
     fn browser_async_import_rejections_keep_the_original_error_across_requests() {
         let mut driver = scheduler();
         driver.set_module_source_loader(Rc::new(|_| Ok("await Promise.resolve(); throw window.original;".into())));
-        driver.run_script("var original={},errors=[];import('./reject.js').catch(e=>errors.push(e));import('./reject.js').catch(e=>errors.push(e));").unwrap();
+        driver.run_script("var original={},errors=[];window.original=original;import('./reject.js').catch(e=>errors.push(e));import('./reject.js').catch(e=>errors.push(e));").unwrap();
+        assert!(matches!(driver.run_script("window.original===original").unwrap(), JsValue::Bool(true)));
         driver.pump_at(std::time::Duration::ZERO, false).unwrap();
         let actual = driver.run_script("JSON.stringify([errors.length,errors.map(e=>e===original),errors.map(e=>String(e))])").unwrap();
         assert!(matches!(driver.run_script("errors.length===2 && errors[0]===original && errors[1]===original").unwrap(), JsValue::Bool(true)), "async import rejection identity: {actual:?}");
