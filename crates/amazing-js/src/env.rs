@@ -412,7 +412,40 @@ impl EnvHandle {
             return Ok(());
         }
         let value = if env.kind == EnvKind::Global {
-            env.global_object.as_ref().and_then(|object| object.borrow().get_own(name)).unwrap_or(JsValue::Undefined)
+            if let Some(object) = &env.global_object {
+                // Host lexical overlays share the same object environment.
+                // Reuse a parent's installed var cell rather than introducing
+                // a second binding that hides the installed host value.
+                let mut parent = env.parent.clone();
+                let mut overlay = false;
+                while let Some(frame) = parent {
+                    let frame = frame.0.borrow();
+                    if frame.kind != EnvKind::Global || !frame.global_object.as_ref().is_some_and(|parent| Rc::ptr_eq(&parent.0, &object.0)) { break; }
+                    overlay = true;
+                    if let Some(cell) = frame.vars.get(name).filter(|cell| !cell.0.borrow().lexical) {
+                        let cell = cell.clone();
+                        drop(frame);
+                        env.vars.insert(name.to_owned(), cell);
+                        return Ok(());
+                    }
+                    parent = frame.parent.clone();
+                }
+                // Window methods are inherited data properties. Inspect
+                // descriptors only: declaration instantiation must not run an
+                // inherited getter. Stop at the first descriptor, including an
+                // accessor, so a deeper data property cannot bypass it.
+                let mut current = Some(object.clone());
+                let mut value = JsValue::Undefined;
+                while let Some(object) = current {
+                    let object = object.borrow();
+                    if let Some(property) = object.own_prop(name) {
+                        if property.getter.is_none() && property.setter.is_none() { value = property.value.clone(); }
+                        break;
+                    }
+                    current = if overlay { object.proto.clone() } else { None };
+                }
+                value
+            } else { JsValue::Undefined }
         } else { JsValue::Undefined };
         env.declare_raw(name, value, true, false)
     }

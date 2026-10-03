@@ -687,6 +687,30 @@ mod tests {
     }
 
     #[test]
+    fn window_overlay_listener_alias_hoisting_preserves_inherited_data_and_host_cells() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let window = i.binding_global_object();
+            i.binding_define_data_property(&window, "window", window.clone(), BindingPropertyFlags::METHOD).unwrap();
+            i.run_script("var calls=0,hostValue=17;function listener(){if(this!==window)throw 9;calls++}").unwrap();
+            let listener = i.global_env.resolve("listener").unwrap();
+            let prototype = i.binding_create_object(Some(&i.binding_object_prototype())).unwrap();
+            for name in ["addEventListener", "removeEventListener"] {
+                i.binding_define_data_property(&prototype, name, listener.clone(), BindingPropertyFlags::METHOD).unwrap();
+            }
+            i.binding_set_global_prototype(&prototype).unwrap();
+            let original = i.global_env.clone();
+            i.global_env = i.binding_create_global_environment_overlay();
+            i.global_env.declare_lexical("privateHost", JsValue::num(3.0), false).unwrap();
+            i.global_env = i.binding_create_global_environment_overlay();
+            assert_eq!(i.run_script_with_backend("var addEventListener=window.addEventListener.bind(window);var removeEventListener=window.removeEventListener.bind(window);var hostValue;addEventListener();removeEventListener();calls===2&&hostValue===17&&privateHost===3", backend).unwrap(), JsValue::Bool(true), "{backend:?}");
+            assert!(i.global_env.local_cell("hostValue").unwrap().same_target(&original.local_cell("hostValue").unwrap()));
+            i.run_script("var gets=0;Object.defineProperty(Object.getPrototypeOf(window),'inheritedGetter',{get(){gets++;return 7},configurable:true});").unwrap();
+            assert_eq!(i.run_script_with_backend("var inheritedGetter;gets===0", backend).unwrap(), JsValue::Bool(true));
+        }
+    }
+
+    #[test]
     fn reflect_construct_preserves_explicit_new_target_in_native_entry() {
         let mut interpreter = Interpreter::new();
         interpreter.set_host_native_dispatcher(Rc::new(|runtime, _, this, args, new_target| {
