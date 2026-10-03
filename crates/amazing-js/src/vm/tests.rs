@@ -1292,8 +1292,7 @@ fn jsvm21_suspended_scopes_preserve_declaration_identity_and_tdz() {
         for body in bodies {
             for force_ast in [false, true] {
                 let body = body.replace('#', suspension);
-                // With preserves directive position while forcing the AST
-                // coroutine path; nested ordinary declarations still compile.
+                // Explicit actor control selects the AST coroutine path.
                 // Strict bodies cannot contain With; validate their native
                 // declaration scopes without changing their grammar context.
                 if force_ast && body.starts_with("'use strict';") { continue; }
@@ -1301,6 +1300,7 @@ fn jsvm21_suspended_scopes_preserve_declaration_identity_and_tdz() {
                 let source = declaration.replace("BODY", &body);
                 let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 let mut i = Interpreter::new();
+                i.force_ast_callables = force_ast;
                 i.run_script(&source).unwrap_or_else(|error| panic!("{source}: {error:?}"));
                 let function = i.global_env.resolve("outer").unwrap();
                 let JsValue::Object(object) = &function else { unreachable!() };
