@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-37 — async-generator Return/Await boundary** (actual native/coroutine baseline and approved Return-specific queue/realm adapter).
+Frontier: **JS-40 — whole NumericLiteral grammar/value/property-key area** (approved after measured JS39).
 JS-25 parser API is ready; Runtime35 owns its native eval consumer. JS-26 is complete.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
@@ -1883,3 +1883,10 @@ Next JS38 whole async-generator Await/Yield/delegation is approved with VM owner
 Source series84ee155c..2617f911 on fixedready37(313bb5cd). Actual coroutine explicit Await and ordinary Yield operand Await retain original checked conversion/context; genuine async Yield* shares VM cached IteratorRecord phases, yields raw values, performs absent-return second Await after GetMethod, and returns done-inner values raw. Original-context FIFO/close/disposal/realm behavior preserved; no Completed Await/new Job/public schema/frame/opcode additions. Thirteen mixed native/forced-Block groups fail on corrected baseline, passafter;4102workspace/17skip +4docs, owned757/1skip. Whole18optimizeddefault/VM comparisons: language **+1file/+2variants** (24469/45261), allother eightselectors unchanged, **zero losses**. [Proof](js-lang_JS38-evidence.json), [contract](js-lang_JS38-interface.md), [Node/spec reference](js-lang_JS38-delegation-reference.json). Fixture brace correction applied identically before/after; not an engine gain. License header and notice appended for MIT Lumen adaptation.
 
 Next JS39: parked whole synchronous ForOf actual IteratorRecord, with existing parent/VM exact IteratorStart/IteratorStep/compiler seam approval. Adopt one fixed coherent root dependency before matching both-backend live/override/cached-next/step-abrupt/binding/body-close matrices and whole language/Iterator/Array/ForOf selections. No ForAwait/jobs/schema expansion.
+
+
+## JS39 — actual synchronous ForOf IteratorRecord
+
+Source `380910ce` with corrected positive/negative fixture completion `dc688542`/`0f0ef6ad` on fixed coherent `35217ac3`. Cached actual iterator/next, live Array/String overrides, no close on next/done/value errors, binding/body close precedence and suspended-generator ownership. Fifteen grouped native/forced-AST tests; corrected baseline seven new failing groups, all final green. Linux workspace **4223/17 skipped +4 docs**, whole language **+5 files/+10 variants** per mode (24475/45273), nine builtin selections unchanged, all 20 paired reports **zero losses**, no changed remaining failure reason/detail. Final release artifact matches actual measured corpus source. [Evidence](js-lang_JS39-evidence.json), [design](js-lang_JS39-for-of.md).
+
+Next JS40: approved whole NumericLiteral raw legacy provenance, Annex B and strict/dot/exponent/separator/BigInt grammar boundaries, accurate long-radix NumericValue and semantic numeric property keys. Preserve existing VM27 class/strict work; coordinate any token payload representation changes. Whole language/Number/BigInt/Object/Function/Proxy and native/AST literal/property/class/destructuring matrices.
