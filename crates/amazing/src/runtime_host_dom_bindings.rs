@@ -3,6 +3,28 @@ use super::*;
 use amazing_dom::events::{EventClass, EventId};
 
 impl RuntimeBindingHost<'_> {
+    /// Register actual allocation context before importing or exposing nodes.
+    /// Copy realm handles introduce no additional JS object or Rc roots.
+    pub(super) fn dom_register_document_realm(&mut self, document: NodeIdx, realm: RealmHandle)
+        -> Result<(), Throw> {
+        let anchor = self.with_dom(|dom| {
+            if !matches!(dom.get(document).kind, NodeKind::Document) { return Err(DomError::TypeError); }
+            dom.node_creation_document(document)
+        })?;
+        let mut state = self.state.borrow_mut();
+        if state.node_creation_realms.get(&anchor).is_some_and(|existing| *existing != realm) {
+            return Err(Throw::type_error("Document allocation realm already registered"));
+        }
+        state.node_creation_realms.insert(anchor, realm);
+        Ok(())
+    }
+
+    pub(super) fn dom_node_realm(&mut self, node: NodeIdx) -> Result<RealmHandle, Throw> {
+        let anchor = self.with_dom(|dom| dom.node_creation_document(node))?;
+        self.state.borrow().node_creation_realms.get(&anchor).copied()
+            .ok_or_else(|| Throw::type_error("Node creation realm is not registered"))
+    }
+
     pub(super) fn dom_xml_serializer_new(&mut self) -> Result<JsValue, Throw> {
         self.web_allocate(WebObject::XmlSerializer, InterfaceBrand::XML_SERIALIZER)
     }

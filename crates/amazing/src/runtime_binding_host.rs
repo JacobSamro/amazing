@@ -128,6 +128,8 @@ struct BindingState {
     /// prototypes and constructors (HTML-27), so `frame.contentWindow.Array
     /// !== window.Array` extends to `Document`/`Element`/etc. too.
     interfaces: HashMap<RealmHandle, Vec<(Interface, JsValue, JsValue)>>,
+    // Copy handles introduce no JsValue/Rc roots.
+    node_creation_realms: HashMap<(NodeIdx, u64), RealmHandle>,
     roots: Vec<Option<JsValue>>,
     captured_resolvers: Option<(JsValue, JsValue)>,
     promise_resolvers: HashMap<usize, (JsValue, JsValue)>,
@@ -586,7 +588,7 @@ impl RuntimeBindingHost<'_> {
         }
         if brand == InterfaceBrand::NODE {
             let node = self
-                .node_from_platform_key(key)
+                .node_from_object_key(key)
                 .ok_or_else(|| Throw::type_error("Invalid node wrapper"))?;
             let constructed = self.state.borrow().constructed_documents.contains(&node);
             let host = self.state.borrow().host.clone();
@@ -793,6 +795,7 @@ pub(crate) fn install(
         arena,
         functions: Vec::new(),
         interfaces: HashMap::new(),
+        node_creation_realms: HashMap::new(),
         roots: Vec::new(),
         captured_resolvers: None,
         promise_resolvers: HashMap::new(),
@@ -829,6 +832,7 @@ pub(crate) fn install(
         js,
         state: state.clone(),
     };
+    adapter.dom_register_document_realm(NodeIdx(0), adapter.js.binding_current_realm())?;
     install_interfaces(&mut adapter)?;
     adapter.install_dom_unscopables()?;
     adapter.install_window_event_target()?;
@@ -1133,6 +1137,17 @@ impl BindingHost for RuntimeBindingHost<'_> {
         key: PlatformKey,
         brand: InterfaceBrand,
     ) -> Result<JsValue, Throw> {
+        if brand == InterfaceBrand::NODE {
+            let node = self.node_from_object_key(key)
+                .ok_or_else(|| Throw::type_error("Invalid node wrapper"))?;
+            let realm = self.dom_node_realm(node)?;
+            if realm != self.js.binding_current_realm() {
+                let state = self.state.clone();
+                return self.js.binding_with_realm(realm, |js| {
+                    RuntimeBindingHost { js, state }.wrap_platform_object(key, brand)
+                });
+            }
+        }
         let interface = self.interface_for(key, brand)?;
         let prototype = self
             .prototype(interface)
@@ -1155,7 +1170,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
             self.materialize_document_location_unforgeable(&value)?;
         }
         if brand == InterfaceBrand::NODE {
-            if let Some(node) = self.node_from_platform_key(key) {
+            if let Some(node) = self.node_from_object_key(key) {
                 let is_element = {
                     let host = self.state.borrow().host.clone();
                     matches!(&host.borrow().dom.get(node).kind, NodeKind::Element { .. })
@@ -1172,7 +1187,11 @@ impl BindingHost for RuntimeBindingHost<'_> {
             slot: handle.slot,
             generation: handle.generation,
         };
-        (key.arena == self.state.borrow().arena && key.generation == 1).then_some(key)
+        if brand == InterfaceBrand::NODE {
+            self.node_from_object_key(key).map(|_| key)
+        } else {
+            (key.arena == self.state.borrow().arena && key.generation == 1).then_some(key)
+        }
     }
     fn window_event_target_slot(&self, value: &JsValue) -> Option<u64> {
         self.dom_window_event_target_slot(value)
@@ -1186,6 +1205,19 @@ impl BindingHost for RuntimeBindingHost<'_> {
             slot: u64::from(node.0),
             generation: 1,
         }
+    }
+    fn node_object_key(&self, node: NodeIdx) -> PlatformKey {
+        let state = self.state.borrow();
+        let generation = state.host.borrow().dom.node_generation(node)
+            .expect("Node wrapping requires a live node");
+        PlatformKey { arena: state.arena, slot: u64::from(node.0), generation }
+    }
+    fn node_from_object_key(&self, key: PlatformKey) -> Option<NodeIdx> {
+        let state = self.state.borrow();
+        if key.arena != state.arena { return None; }
+        let node = NodeIdx(u32::try_from(key.slot).ok()?);
+        let valid = state.host.borrow().dom.node_generation(node) == Some(key.generation);
+        valid.then_some(node)
     }
     fn node_from_platform_key(&self, key: PlatformKey) -> Option<NodeIdx> {
         let state = self.state.borrow();

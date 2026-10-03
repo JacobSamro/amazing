@@ -146,7 +146,7 @@ pub(crate) fn invoke<H: BindingHost>(
                 if let Some(node) = doctype {
                     if !matches!(dom.get(node).kind, NodeKind::DocumentType { .. }) { return Err(DomError::TypeError); }
                 }
-                let doc = dom.create_document();
+                let doc = dom.create_document_in_realm_of(associated)?;
                 let content_type = match uri.as_deref() {
                     Some("http://www.w3.org/1999/xhtml") => "application/xhtml+xml",
                     Some("http://www.w3.org/2000/svg") => "image/svg+xml",
@@ -172,7 +172,7 @@ pub(crate) fn invoke<H: BindingHost>(
                 _ => None,
             };
             let new_doc = host.with_dom(|dom| {
-                let doc = dom.create_document();
+                let doc = dom.create_document_in_realm_of(associated)?;
                 dom.set_document_metadata(doc, amazing_dom::document_surface::DocumentMetadata {
                     url: "about:blank".into(), content_type: "text/html".into(),
                     character_set: "UTF-8".into(),
