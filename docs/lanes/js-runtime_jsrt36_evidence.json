@@ -1,0 +1,78 @@
+{
+  "ticket": "JSRT-36",
+  "base_sha": "d7fd1d5e65dc2a6e3a9492728247655bc456fe9f",
+  "linux_host": "Boat pool-js-a, native /tmp source and target",
+  "workspace_nextest": {
+    "passed": 3688,
+    "skipped": 17,
+    "elapsed_seconds": 71.475
+  },
+  "workspace_doctests_passed": 4,
+  "grouped_regressions": 2,
+  "selections": {
+    "Proxy": {
+      "selected": 311,
+      "before_files": {
+        "fail": 33,
+        "pass": 278
+      },
+      "after_files": {
+        "fail": 31,
+        "pass": 280
+      },
+      "gained": 2,
+      "lost": 0,
+      "classification_sha256": "56bd7ed8b2e85694af8ab3d9f919f63cb0dae8f151b0b844c6395fe96abbd723",
+      "elapsed_seconds": 3.526
+    },
+    "instanceof": {
+      "selected": 70,
+      "before_files": {
+        "fail": 3,
+        "pass": 67
+      },
+      "after_files": {
+        "pass": 69,
+        "fail": 1
+      },
+      "gained": 2,
+      "lost": 0,
+      "classification_sha256": "d494bb6f29390468c5a6dd56951eeaad746f9a0cd58e420eb25471958548c5c4",
+      "elapsed_seconds": 2.564
+    },
+    "Function": {
+      "selected": 653,
+      "before_files": {
+        "pass": 619,
+        "fail": 34
+      },
+      "after_files": {
+        "pass": 620,
+        "fail": 33
+      },
+      "gained": 1,
+      "lost": 0,
+      "classification_sha256": "027cbd26b793e18036978fce291ea62bfeb3acf0d17c0219e17b2d740596664b",
+      "elapsed_seconds": 5.168
+    }
+  },
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+  "timeout_seconds": 15.0,
+  "jobs": 4,
+  "host_sha256": "dc2bf7a9d652a8a529d8fc5197dc5880cfb3f7147482d0b1bf88a1cf7120e046",
+  "before_host_sha256": "fb2e28a124b4f9fcb710f159630df7f11165b2501a601fbcb1fde43cbdef2588",
+  "unique_union": {
+    "selected": 1032,
+    "before_pass": 964,
+    "after_pass": 967,
+    "gained": 3,
+    "lost": 0
+  },
+  "gained_paths": [
+    "built-ins/Proxy/getPrototypeOf/instanceof-custom-return-accepted.js",
+    "built-ins/Proxy/getPrototypeOf/instanceof-target-not-extensible-not-same-proto-throws.js",
+    "built-ins/Function/prototype/Symbol.hasInstance/value-get-prototype-of-err.js"
+  ]
+}

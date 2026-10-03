@@ -271,7 +271,7 @@ fn native_location_reload(
 }
 
 fn native_window_location_get(
-    _: &mut Interpreter,
+    i: &mut Interpreter,
     this: JsValue,
     _: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
@@ -280,6 +280,9 @@ fn native_window_location_get(
             "location getter receiver is not an object",
         ));
     };
+    let window = if let Some(target) = i.window_proxy_target(
+        &window, WindowProxyOperation::Get, Some(&PropertyKey::from("location")),
+    ) { target?.1 } else { window };
     Ok(window
         .borrow()
         .get_own("[[LocationObject]]")

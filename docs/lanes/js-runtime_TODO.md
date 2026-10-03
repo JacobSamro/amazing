@@ -1331,3 +1331,28 @@ remain unchanged. Unique union **1133 cases**, **913 → 1000 passing**,
 **87 gained, zero lost**, no timeouts. Evidence:
 `js-runtime_jsrt32_evidence.json`. Next: contextual direct-eval parser consumer,
 coordinated with the VM invocation metadata and decorators lane.
+
+## JSRT-36 WindowProxy receiver seams (2026-10-03)
+
+Frozen base `d7fd1d5e65dc2a6e3a9492728247655bc456fe9f`. HTML52's real-root
+Window tests exposed two interpreter bypasses. OrdinaryHasInstance read the
+left operand's first prototype directly, observing exotic hooks only on later
+links. It now uses the existing WindowProxy/Proxy prototype operations at that
+first link as well. The native Window location getter received the WindowProxy
+but read an internal slot directly from the proxy. It now resolves the current
+authorized target and reads that Window's location slot. Existing PutForwards,
+location replacement and setter paths are unchanged.
+
+Two grouped regressions cover both execution backends, root EventTarget
+inheritance, location identity and forwarding, same-origin realm retargeting,
+observable initial Proxy prototype traps and revocation. This changes no
+factory policy, VM metadata or value-model shape. Normative reference:
+[OrdinaryHasInstance](https://tc39.es/ecma262/multipage/abstract-operations.html#sec-ordinaryhasinstance).
+Final Boat workspace **3688 passed/17 skipped, 71.475 seconds**, **4 doctests**.
+Matched 15-second/4-job full Proxy **278 → 280/311**, instanceof **67 → 69/70**,
+Function **619 → 620/653**. Unique union **1032 cases**, **964 → 967 passing**,
+**3 gained, zero lost**, no timeouts. The gained cases exercise initial proxy
+prototype traps, non-extensible target invariants and abrupt prototype lookup
+through Function.prototype's hasInstance. Evidence:
+`js-runtime_jsrt36_evidence.json`. HTML owns driver and WPT validation of this
+standalone dependency; contextual eval remains the next coordinated area.

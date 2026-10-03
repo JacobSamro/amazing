@@ -4,6 +4,53 @@ pub enum WindowProxyOperation {
     GetPrototype, SetPrototype, IsExtensible, PreventExtensions,
 }
 
+#[cfg(test)]
+mod window_proxy_receiver_tests {
+    use super::*;
+
+    #[test]
+    fn root_window_proxy_uses_target_prototype_and_live_location() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let root = i.binding_current_realm();
+            let proxy = i.binding_create_window_proxy(root).unwrap();
+            let prototype = i.run_script_with_backend("class EventTarget{}; EventTarget.prototype", backend).unwrap();
+            i.binding_set_global_prototype(&prototype).unwrap();
+            let location = i.run_script_with_backend("({href:'before'})", backend).unwrap();
+            i.binding_replace_location_object(location.clone()).unwrap();
+            i.binding_install_put_forwards(&i.binding_global_object(), "location", "href").unwrap();
+            assert_eq!(i.run_script_with_backend(
+                "window instanceof EventTarget && Object.getPrototypeOf(window)===EventTarget.prototype && location===window.location", backend,
+            ).unwrap(), JsValue::Bool(true));
+            i.run_script_with_backend("window.location='after'", backend).unwrap();
+            assert_eq!(i.binding_get_property(&location, "href").unwrap(), JsValue::str("after"));
+            assert_eq!(i.binding_get_property(&proxy, "location").unwrap(), location);
+
+            let foreign = i.binding_create_realm(JsValue::object(JsObject::ordinary())).unwrap();
+            let foreign_location = i.binding_with_realm(foreign, |i| {
+                let location = i.run_script("({href:'foreign'})")?;
+                i.binding_replace_location_object(location.clone())?;
+                i.binding_install_put_forwards(&i.binding_global_object(), "location", "href")?;
+                Ok(location)
+            }).unwrap();
+            i.binding_retarget_window_proxy(&proxy, foreign).unwrap();
+            assert_eq!(i.binding_get_property(&proxy, "location").unwrap(), foreign_location);
+            i.run_script_with_backend("window.location='foreign-after'", backend).unwrap();
+            assert_eq!(i.binding_get_property(&foreign_location, "href").unwrap(), JsValue::str("foreign-after"));
+        }
+    }
+
+    #[test]
+    fn instanceof_observes_initial_proxy_prototype_and_revocation() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script_with_backend(
+                "var hits=0;function C(){};var p=new Proxy({}, {getPrototypeOf(){hits++;return C.prototype}}); var ok=p instanceof C && hits===1; var r=Proxy.revocable({},{});r.revoke();try{r.proxy instanceof C;ok=false}catch(e){ok=ok&&e instanceof TypeError};ok", backend,
+            ).unwrap(), JsValue::Bool(true));
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct WindowProxyAccess {
     pub current: RealmHandle,

@@ -1653,7 +1653,13 @@ impl Interpreter {
             }
         }
         let mut c = match a {
-            JsValue::Object(o) => o.borrow().proto.clone(),
+            JsValue::Object(o) => {
+                if let Some(result) = self.window_proxy_prototype(o) {
+                    match result? { JsValue::Object(p) => Some(p), _ => None }
+                } else if let Some(result) = self.proxy_get_prototype(o) {
+                    match result? { JsValue::Object(p) => Some(p), _ => None }
+                } else { o.borrow().proto.clone() }
+            }
             _ => None,
         };
         while let Some(o) = c {
