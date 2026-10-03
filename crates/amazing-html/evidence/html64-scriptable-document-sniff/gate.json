@@ -1,0 +1,19 @@
+{
+  "before": "964535e098c952fa9f2389a7246cccf57d2913c1",
+  "after": "5f7f861c9ba29162578849ef4024af49a2a42bb4",
+  "source_series": [
+    "5f7f861c9ba29162578849ef4024af49a2a42bb4"
+  ],
+  "dependency": "HTML63 full five-source series; HTML62; no HTML61 dependency",
+  "owned_before": 679,
+  "owned_after": 680,
+  "workspace_before": 4116,
+  "workspace_after": 4117,
+  "owned_skip": 6,
+  "workspace_skip": 17,
+  "docs": 4,
+  "cli": 1894,
+  "expanded": 1930,
+  "unsupported": 6,
+  "binary_sha256": "9922c4f9d5fda8bd4cce50ea8e2063e2a3ec74c7ce95ddb422acfc1c5fba1a02  /tmp/amazing-target-html/release/amazing\nafae02009f215d07caa76e073d84fda834e63060ec3b6ca8d7a6e6bd041b17c9  /tmp/amazing-target-html/release/examples/html5lib_host\n"
+}

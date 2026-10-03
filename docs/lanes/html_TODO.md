@@ -3725,3 +3725,5 @@ HTML63 READY: code511→559→781→4a6→964535e098c952fa9f2389a7246cccf57d2913
 ### HTML64 unknown document signature family (WIP, 2026-10-03)
 
 After frozen HTML63, add missing exact case-sensitive <?xml MIME Sniffing §7.1 row (no tag-terminating byte), alongside existing HTML table; explicit/octet-stream and no-sniff remain authoritative. Current spec comment row DOES require a tag-terminating byte, so preserve it. Whole native transport/error family now installs loader BEFORE initial URL/navigation and proves one actual callback, including statuses, redirects, bounds, media, nosniff, embedding, strict XML errors and genuine positive unknown HTML/XML. No file-extension inference or fixture protocol edits. Separate immutable gate required after63 closes.
+
+HTML64 READY source5f7f861c9ba29162578849ef4024af49a2a42bb4: actual XML signature + fullcanonical boundary family; native680workspace4117+4docs,1894/1930trees. Whole13/modules/whole syntax/CSSOM/Selection exact passingCounter/files0lost0gained against READY63 code964. Evidence html64-scriptable-document-sniff; no corpus gains credited.
