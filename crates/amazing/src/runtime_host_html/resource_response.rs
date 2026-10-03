@@ -12,6 +12,10 @@ pub(crate) struct HtmlFrameResourceRequest {
     pub(crate) initiator: HtmlDocumentContext,
     pub(crate) kind: HtmlFrameResourceKind,
     pub(crate) embedding: Option<NavigableContext>,
+    pub(crate) request_mode: amazing_fetch::RequestMode,
+    pub(crate) credentials: amazing_fetch::CredentialsMode,
+    pub(crate) referrer: String,
+    pub(crate) referrer_policy: amazing_fetch::ReferrerPolicy,
 }
 
 /// Returns the actual final URL, response headers and decoded transfer bytes.
@@ -40,16 +44,42 @@ impl RuntimeBindings {
                 .flatten().and_then(amazing_encoding::encoding_for_label);
             let encoding = script_encoding.or_else(|| label.and_then(amazing_encoding::encoding_for_label))
                 .unwrap_or(amazing_encoding::Encoding::Utf8);
-            (loader, context, encoding)
+            let (mode, credentials, referrer_policy) = classic_options(&host.dom, script);
+            (loader, context, encoding, mode, credentials, referrer_policy)
         };
         let Some(loader) = snapshot.0 else {
             return fetch_child_script(src, base, resolver).map(|text| (text, url));
         };
+        let initiator = snapshot.1?;
         let request = HtmlFrameResourceRequest { requested_url: url,
-            initiator: snapshot.1?, kind: HtmlFrameResourceKind::ClassicScript, embedding: None };
+            referrer: initiator.document_url.clone(), initiator,
+            kind: HtmlFrameResourceKind::ClassicScript, embedding: None,
+            request_mode: snapshot.3, credentials: snapshot.4, referrer_policy: snapshot.5 };
         let response = loader(&request).ok()?;
         decode_classic_response(response, snapshot.2).ok()
     }
+}
+
+fn classic_options(dom: &Dom, script: NodeIdx) ->
+    (amazing_fetch::RequestMode, amazing_fetch::CredentialsMode, amazing_fetch::ReferrerPolicy) {
+    use amazing_fetch::{CredentialsMode, ReferrerPolicy, RequestMode};
+    let (mode, credentials) = match dom.get_attribute_ns(script, None, "crossorigin") {
+        None => (RequestMode::NoCors, CredentialsMode::Include),
+        Some(value) if value.eq_ignore_ascii_case("use-credentials") => (RequestMode::Cors, CredentialsMode::Include),
+        Some(_) => (RequestMode::Cors, CredentialsMode::SameOrigin),
+    };
+    // Enumerated content attributes are ASCII case-insensitive; invalid and
+    // empty states use the engine's document default policy.
+    let policy = dom.get_attribute_ns(script, None, "referrerpolicy")
+        .and_then(|value| {
+            let value = value.to_ascii_lowercase();
+            if !matches!(value.as_str(), "no-referrer" | "no-referrer-when-downgrade" | "same-origin"
+                | "origin" | "strict-origin" | "origin-when-cross-origin"
+                | "strict-origin-when-cross-origin" | "unsafe-url") { return None; }
+            ReferrerPolicy::parse_header(&value)
+        })
+        .unwrap_or(ReferrerPolicy::StrictOriginWhenCrossOrigin);
+    (mode, credentials, policy)
 }
 
 /// HTML fetch-a-classic-script plus Encoding decode. No HTML meta prescan:
@@ -114,6 +144,32 @@ mod tests {
     }
 
     #[test]
+    fn classic_options_capture_actual_enumerated_attributes_without_header_token_rules() {
+        use amazing_fetch::{CredentialsMode, ReferrerPolicy, RequestMode};
+        for (attribute, mode, credentials) in [
+            ("", RequestMode::NoCors, CredentialsMode::Include),
+            ("crossorigin", RequestMode::Cors, CredentialsMode::SameOrigin),
+            ("crossorigin=anonymous", RequestMode::Cors, CredentialsMode::SameOrigin),
+            ("crossorigin=USE-CREDENTIALS", RequestMode::Cors, CredentialsMode::Include),
+            ("crossorigin=' use-credentials '", RequestMode::Cors, CredentialsMode::SameOrigin),
+            ("crossorigin=bogus", RequestMode::Cors, CredentialsMode::SameOrigin),
+        ] {
+            for (value, expected) in [
+                ("NO-REFERRER", ReferrerPolicy::NoReferrer),
+                ("origin", ReferrerPolicy::Origin),
+                ("", ReferrerPolicy::StrictOriginWhenCrossOrigin),
+                ("bogus,origin", ReferrerPolicy::StrictOriginWhenCrossOrigin),
+                (" origin ", ReferrerPolicy::StrictOriginWhenCrossOrigin),
+            ] {
+                let dom = amazing_html::parse(&format!("<script {attribute} referrerpolicy='{value}'></script>"));
+                let script = dom.tree_order(NodeIdx(0)).into_iter()
+                    .find(|node| dom.local_name(*node) == Some("script")).unwrap();
+                assert_eq!(classic_options(&dom, script), (mode, credentials, expected));
+            }
+        }
+    }
+
+    #[test]
     fn classic_response_uses_bom_header_then_actual_fallback_and_media_policy() {
         use amazing_encoding::Encoding::{Utf8, Windows1252};
         let url = "https://example.test/redirect/script.js";
@@ -172,6 +228,12 @@ mod tests {
         assert!(requests[0].embedding.is_some());
         assert_eq!(requests[1].requested_url, "https://example.test/final/script.js");
         assert_eq!(requests[1].initiator.document_url, "https://example.test/final/child.html");
+        assert_eq!(requests[1].referrer, requests[1].initiator.document_url);
+        assert_eq!(requests[1].request_mode, amazing_fetch::RequestMode::NoCors);
+        assert_eq!(requests[1].credentials, amazing_fetch::CredentialsMode::Include);
+        assert_eq!(requests[1].initiator.document_generation,
+            requests[0].initiator.document_generation); // distinct documents can share a generation number.
+        assert_ne!(requests[1].initiator.document, requests[0].initiator.document);
         assert!(requests[1].embedding.is_none());
         assert_eq!(requests[1].initiator.ancestor_origins, vec![requests[0].initiator.origin.clone()]);
     }

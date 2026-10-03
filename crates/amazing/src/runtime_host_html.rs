@@ -910,7 +910,12 @@ impl RuntimeBindings {
                 let response = if let Some(loader) = loader {
                     let request = HtmlFrameResourceRequest { requested_url: logical_url.clone(),
                         initiator: source.policy.clone(), kind: HtmlFrameResourceKind::Document,
-                        embedding: Some(navigation_context.clone()) };
+                        embedding: Some(navigation_context.clone()),
+                        request_mode: amazing_fetch::RequestMode::Navigate,
+                        credentials: amazing_fetch::CredentialsMode::Include,
+                        referrer: navigation_context.referrer.clone(),
+                        referrer_policy: amazing_fetch::ReferrerPolicy::parse_header(&navigation_context.referrer_policy)
+                            .unwrap_or(amazing_fetch::ReferrerPolicy::StrictOriginWhenCrossOrigin) };
                     resource_response::load_document_response(&request, &loader)?
                 } else { fetch_child_document(&logical_url, &navigation_context, resolver.as_ref())? };
                 if !response.is_success() { return Err(format!("iframe status {}", response.status)); }
