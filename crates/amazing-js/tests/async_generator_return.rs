@@ -179,3 +179,89 @@ fn ordinary_async_returns_do_not_implicitly_await_inside_try() {
         ),
     ]);
 }
+
+#[test]
+fn bare_and_fallthrough_returns_have_no_operand_await() {
+    matrix(&[
+        (
+            "var ok=false,log=[];",
+            "(async function*(){return})",
+            "g().next().then(r=>log.push('done'));Promise.resolve().then(()=>{log.push('tick');ok=log.join(',')==='done,tick'})",
+        ),
+        (
+            "var ok=false,log=[];",
+            "(async function*(){})",
+            "g().next().then(r=>log.push('done'));Promise.resolve().then(()=>{log.push('tick');ok=log.join(',')==='done,tick'})",
+        ),
+        (
+            "var ok=false,log=[];",
+            "(async function*(){return undefined})",
+            "g().next().then(r=>{log.push('done');ok=log.join(',')==='tick,done'});Promise.resolve().then(()=>log.push('tick'))",
+        ),
+    ]);
+}
+
+#[test]
+fn return_constructor_get_abrupt_is_injected_before_a_reaction() {
+    matrix(&[
+        (
+            "var marker={},ok=false,log=[],p=Promise.resolve(7);Object.defineProperty(p,'constructor',{get(){log.push('get');throw marker}});",
+            "(async function*(){try{yield 1}catch(e){log.push('catch');return e===marker}})",
+            "var it=g();it.next().then(()=>{it.return(p).then(r=>ok=r.done&&r.value===true&&log.join(',')==='get,catch,after');log.push('after')})",
+        ),
+        (
+            "var marker={},ok=false,log=[],p=Promise.resolve(7);Object.defineProperty(p,'constructor',{get(){log.push('get');throw marker}});",
+            "(async function*(){try{return p}catch(e){log.push('catch');return e===marker}})",
+            "g().next().then(r=>ok=r.done&&r.value===true&&log.join(',')==='get,catch,after');log.push('after')",
+        ),
+    ]);
+}
+
+#[test]
+fn borrowed_generator_methods_preserve_body_and_request_realms() {
+    let mut failures = Vec::new();
+    let factory = "(async function*(){yield [];return []})";
+    for actor in [false, true] {
+        let mut i = Interpreter::new();
+        let child = i
+            .binding_create_realm(JsValue::object(amazing_js::value::JsObject::ordinary()))
+            .unwrap();
+        let function = i.binding_eval_in_realm(child, factory).unwrap();
+        if actor {
+            let parsed = amazing_js::parse_script(factory).unwrap();
+            let StmtKind::Expression(expression) = &parsed.body[0].kind else {
+                panic!("expression")
+            };
+            let ExprKind::Paren(inner) = &expression.kind else {
+                panic!("group")
+            };
+            let ExprKind::Function(item) = &inner.kind else {
+                panic!("function")
+            };
+            let JsValue::Object(function) = &function else {
+                panic!("factory")
+            };
+            function.borrow_mut().func.as_mut().unwrap().body =
+                FunctionBody::Block(item.body.clone());
+        }
+        let iterator = i
+            .binding_call_in_realm(child, &function, JsValue::Undefined, vec![])
+            .unwrap();
+        let child_array_proto = i.binding_eval_in_realm(child, "Array.prototype").unwrap();
+        let child_object_proto = i.binding_eval_in_realm(child, "Object.prototype").unwrap();
+        i.global_env.declare_var("it", iterator).unwrap();
+        i.global_env
+            .declare_var("childArray", child_array_proto)
+            .unwrap();
+        i.global_env
+            .declare_var("childObject", child_object_proto)
+            .unwrap();
+        i.run_script("var ok=false;var next=Object.getPrototypeOf(Object.getPrototypeOf((async function*(){})())).next;var request=next.call(it);var requestParent=request instanceof Promise;request.then(r=>{var first=Object.getPrototypeOf(r)===Object.prototype&&Object.getPrototypeOf(r.value)===childArray;return next.call(it).then(r=>ok=first&&requestParent&&Object.getPrototypeOf(r)===childObject&&Object.getPrototypeOf(r.value)===childArray&&r.done)})").unwrap();
+        i.drain_microtasks().unwrap();
+        let actual = i.run_script("ok").unwrap();
+        if actual != JsValue::Bool(true) {
+            failures.push(format!("actor={actor}: {actual:?}"));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
