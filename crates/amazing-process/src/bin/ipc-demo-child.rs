@@ -11,7 +11,7 @@ use std::time::Duration;
 interface! {pub interface Echo(17) => EchoProxy, EchoReceiver {fn echo(message:String) -> String = 1;}}
 interface! {pub interface SandboxProbe(18) => SandboxProbeProxy, SandboxProbeReceiver {fn probe(message:String) -> String = 1;}}
 struct EchoHandler;
-struct SandboxProbeHandler;
+struct SandboxProbeHandler { executable: std::path::PathBuf }
 impl SandboxProbe for SandboxProbeHandler {
     fn probe(&self, message: String) -> Result<String, amazing_ipc::Error> {
         let result = if let Some(path) = message.strip_prefix("open:") {
@@ -38,7 +38,7 @@ impl SandboxProbe for SandboxProbeHandler {
                 ))
             }
         } else if message == "spawn" {
-            std::process::Command::new(std::env::current_exe().unwrap())
+            std::process::Command::new(&self.executable)
                 .arg("--probe-noop")
                 .status()
                 .map(|_| ())
@@ -133,6 +133,10 @@ fn main() {
         ("renderer".into(), "1".into()),
         ("network".into(), "1".into()),
     ]));
+    // Capture the probe target before the sandbox hides /proc. Resolving
+    // current_exe inside the denied spawn probe would panic on readlink rather
+    // than testing the process-creation syscall restriction.
+    let executable = std::env::current_exe().unwrap();
     let Ok(conn) = bootstrap_child(role, caps, |conn, parent, channel| {
         if let Some(delay) = parent
             .0
@@ -146,7 +150,7 @@ fn main() {
             .get("__sandbox_probe")
             .is_some_and(|value| value == "1")
         {
-            conn.bind(18, SandboxProbeReceiver(SandboxProbeHandler));
+            conn.bind(18, SandboxProbeReceiver(SandboxProbeHandler { executable: executable.clone() }));
         }
         // IPC-11c follow-up: a real JS realm for the postMessage/MessagePort
         // cross-process proof (`amazing_process::demo_realm`), instead of the
