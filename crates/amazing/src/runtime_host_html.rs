@@ -2234,7 +2234,10 @@ impl RuntimeBindingHost<'_> {
         let source_origin = match &source { Some(context) => context_origin(self.js, context, source_realm)?, None => "null".into() };
         let target_origin = context_origin(self.js, &target, target_realm)?;
         if source_origin != target_origin && !matches!(operation, Operation::LocationSetHref | Operation::LocationReplace) {
-            return Err(throw_dom_error(self, DomError::SecurityError));
+            let global = self.js.binding_global_object();
+            let constructor = self.js.binding_get_property(&global, "DOMException")?;
+            let error = self.js.binding_construct(&constructor, vec![JsValue::str("Blocked cross-origin Location access"), JsValue::str("SecurityError")])?;
+            return Err(self.js.binding_throw(error));
         }
         let state = self.state.clone();
         let args = if target.frame.is_some() && matches!(operation,
