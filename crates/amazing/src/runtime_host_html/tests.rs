@@ -1394,3 +1394,50 @@ fn active_iframe_write_grafts_synchronously_and_nested_writes_keep_identity() {
     scheduler.dispatch_pending_iframe_loads().unwrap();
     assert_eq!(scheduler.run_script("document.querySelector('iframe').contentWindow.syncPass && !!document.querySelector('iframe').contentDocument.getElementById('tail')").unwrap(), JsValue::Bool(true));
 }
+
+#[test]
+fn selection_context_helpers_preserve_actual_associations_and_receiver_policy() {
+    let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+        "<!doctype html><body><iframe id=same></iframe><iframe id=opaque sandbox='allow-scripts'></iframe>"), native_forwarded: false }));
+    let mut js = Interpreter::new();
+    js.set_dom_host(host.clone());
+    let bindings = crate::runtime_binding_host::install(&mut js, host.clone()).unwrap();
+    bindings.set_document_url(&mut js, "https://example.test/page.html");
+    let root_window = js.binding_global_this();
+    let root_origin = bindings.state.borrow().frames.document_context(&host.borrow().dom, NodeIdx(0)).unwrap().origin;
+    let children = bindings.state.borrow().frames.contexts.values()
+        .filter(|context| context.frame.is_some()).cloned().collect::<Vec<_>>();
+    assert_eq!(children.len(), 2);
+    let same = children.iter().find(|context| context.fetch_origin == root_origin).unwrap().clone();
+    let opaque = children.iter().find(|context| context.fetch_origin != root_origin).unwrap().clone();
+    let inert = host.borrow_mut().dom.create_document();
+    host.borrow_mut().dom.set_document_ready_state(NodeIdx(0), ReadyState::Loading).unwrap();
+    let mut adapter = RuntimeBindingHost { js: &mut js, state: bindings.state.clone() };
+    assert!(adapter.html_document_has_browsing_context(NodeIdx(0)));
+    assert!(adapter.html_document_has_browsing_context(same.document));
+    assert!(!adapter.html_document_has_browsing_context(inert));
+    assert!(!adapter.html_document_has_browsing_context(NodeIdx(u32::MAX)));
+    assert_eq!(adapter.html_window_document_for_selection(&root_window).unwrap(), NodeIdx(0));
+    assert_eq!(adapter.html_window_document_for_selection(&same.window).unwrap(), same.document);
+    assert_eq!(adapter.html_window_document_for_selection(&same.global).unwrap(), same.document);
+    for fake in [JsValue::Undefined, JsValue::Null, JsValue::num(1.0)] {
+        assert!(adapter.html_window_document_for_selection(&fake).is_err());
+    }
+    let error = adapter.html_window_document_for_selection(&opaque.window).unwrap_err();
+    assert_eq!(adapter.js.binding_get_property(&error.0, "name").unwrap(), JsValue::str("SecurityError"));
+    assert_eq!(adapter.js.binding_get_property(&error.0, "code").unwrap(), JsValue::num(18.0));
+    // Generation equality is required even while the context's Window identity remains registered.
+    let realm = *adapter.state.borrow().frames.contexts.iter()
+        .find(|(_, context)| context.document == same.document).unwrap().0;
+    adapter.state.borrow_mut().frames.contexts.get_mut(&realm).unwrap().document_generation += 1;
+    assert!(!adapter.html_document_has_browsing_context(same.document));
+    assert!(adapter.html_window_document_for_selection(&same.window).is_err());
+    adapter.state.borrow_mut().frames.contexts.get_mut(&realm).unwrap().document_generation -= 1;
+    drop(adapter);
+    js.run_script("document.getElementById('same').remove()").unwrap();
+    bindings.navigate_iframes(&mut js);
+    let mut adapter = RuntimeBindingHost { js: &mut js, state: bindings.state.clone() };
+    assert!(!adapter.html_document_has_browsing_context(same.document));
+    assert_eq!(adapter.html_window_document_for_selection(&same.window).unwrap(), same.document);
+    assert!(adapter.html_document_has_browsing_context(NodeIdx(0)));
+}

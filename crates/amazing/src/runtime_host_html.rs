@@ -1885,6 +1885,47 @@ impl RuntimeBindingHost<'_> {
             .ok_or_else(|| Throw::type_error("Invalid Window receiver"))
     }
 
+    /// Association with a real browsing context, independent of readiness or full activity.
+    pub(super) fn html_document_has_browsing_context(&self, document: NodeIdx) -> bool {
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        let Some(generation) = host.dom.node_generation(document) else { return false; };
+        if !matches!(host.dom.get(document).kind, NodeKind::Document) { return false; }
+        state.frames.contexts.iter().any(|(realm, context)| context.document == document
+            && context.document_generation == generation && state.frames.live_context(context, *realm))
+    }
+
+    /// Actual Window receiver and caller policy; never reads author properties or guesses a Document.
+    pub(super) fn html_window_document_for_selection(&mut self, receiver: &JsValue) -> Result<NodeIdx, Throw> {
+        let (target_realm, target) = self.html_window_receiver(receiver)?;
+        let source_realm = self.js.binding_entry_realm();
+        let permitted = {
+            let state = self.state.borrow();
+            let host = state.host.borrow();
+            if host.dom.node_generation(target.document) != Some(target.document_generation)
+                || !matches!(host.dom.get(target.document).kind, NodeKind::Document) {
+                return Err(Throw::type_error("Stale Window Document"));
+            }
+            let source = state.frames.contexts.get(&source_realm)
+                .filter(|source| host.dom.node_generation(source.document) == Some(source.document_generation))
+                .ok_or_else(|| Throw::type_error("Window caller has no actual Document"))?;
+            source_realm == target_realm || source.fetch_origin == target.fetch_origin
+        };
+        if !permitted {
+            // Allocate through the native append-only exception arena without global getters, constructors or reaction checkpoints.
+            let (arena, slot) = {
+                let state = self.state.borrow();
+                let slot = state.host.borrow_mut().dom.create_dom_exception("SecurityError".encode_utf16().collect(),
+                    "Blocked cross-origin Window selection access".encode_utf16().collect());
+                (state.arena, slot)
+            };
+            let error = self.wrap_platform_object(PlatformKey { arena, slot: slot as u64, generation: 1 },
+                InterfaceBrand::DOM_EXCEPTION)?;
+            return Err(self.js.binding_throw(error));
+        }
+        Ok(target.document)
+    }
+
     pub(super) fn html_window_get(&mut self, property: HtmlWindowProperty, receiver: JsValue) -> Result<JsValue, Throw> {
         let bound = match property {
             HtmlWindowProperty::BoundFrames(realm) | HtmlWindowProperty::BoundLength(realm)
