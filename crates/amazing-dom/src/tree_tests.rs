@@ -438,3 +438,52 @@ fn comments_and_processing_instructions_can_surround_document_root() {
     d.pre_insert(pi, NodeIdx(0), None).unwrap();
     assert_links(&d, NodeIdx(0), &[c, root, pi]);
 }
+#[test]
+fn creation_document_identity_survives_adoption_but_clones_use_current_document() {
+    let mut dom = Dom::new();
+    let child_doc = dom.create_document();
+    let child_anchor = dom.node_creation_document(child_doc).unwrap();
+    let text = dom.create_node_in(child_doc, NodeKind::Text { data: "text".into() }).unwrap();
+    dom.adopt(text, NodeIdx(0)).unwrap();
+    assert_eq!(dom.node_creation_document(text).unwrap(), child_anchor);
+    let cloned = dom.clone_node(text, false).unwrap();
+    assert_eq!(dom.node_creation_document(cloned).unwrap(), (NodeIdx(0), 1));
+    let imported = dom.import_node(child_doc, cloned, false).unwrap();
+    assert_eq!(dom.node_creation_document(imported).unwrap(), child_anchor);
+    let doc_copy = dom.clone_node(child_doc, true).unwrap();
+    assert_eq!(dom.node_creation_document(doc_copy).unwrap(), child_anchor);
+    assert_eq!(dom.owner_document(doc_copy), None);
+}
+
+#[test]
+fn template_inert_document_inherits_host_creation_realm_and_new_children_use_target() {
+    let mut dom = Dom::new();
+    let other = dom.create_document();
+    let template = dom.create_element(other, "template");
+    let contents = dom.ensure_template_contents(template).unwrap();
+    let old_child = dom.create_node_in(dom.owner_document(contents).unwrap(), NodeKind::Text { data: "old".into() }).unwrap();
+    dom.pre_insert(old_child, contents, None).unwrap();
+    assert_eq!(dom.node_creation_document(contents).unwrap(), dom.node_creation_document(other).unwrap());
+    dom.adopt(template, NodeIdx(0)).unwrap();
+    assert_eq!(dom.node_creation_document(old_child).unwrap(), dom.node_creation_document(other).unwrap());
+    let new_child = dom.create_node_in(dom.owner_document(contents).unwrap(), NodeKind::Text { data: "new".into() }).unwrap();
+    assert_eq!(dom.node_creation_document(new_child).unwrap(), (NodeIdx(0), 1));
+    let inert = dom.create_document_in_realm_of(other).unwrap();
+    assert_eq!(dom.node_creation_document(inert).unwrap(), dom.node_creation_document(other).unwrap());
+}
+
+#[test]
+fn retired_document_slot_reuse_cannot_alias_existing_node_creation_identity() {
+    let mut dom = Dom::new();
+    let document = dom.create_document();
+    let old = dom.node_creation_document(document).unwrap();
+    let node = dom.create_node_in(document, NodeKind::Text { data: "survivor".into() }).unwrap();
+    dom.adopt(node, NodeIdx(0)).unwrap();
+    dom.retire_unreachable_node(document).unwrap();
+    let replacement = dom.create_document();
+    assert_eq!(replacement, document);
+    assert_ne!(dom.node_creation_document(replacement).unwrap(), old);
+    assert_eq!(dom.node_creation_document(node).unwrap(), old);
+    let new_node = dom.create_node_in(replacement, NodeKind::Text { data: "new".into() }).unwrap();
+    assert_ne!(dom.node_creation_document(new_node).unwrap(), old);
+}

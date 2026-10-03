@@ -1159,6 +1159,11 @@ pub trait BindingHost: Sized {
     /// Nodes share one private brand; their exact interface is read from Dom.
     fn node_platform_key(&self, node: NodeIdx) -> PlatformKey;
     fn node_from_platform_key(&self, key: PlatformKey) -> Option<NodeIdx>;
+    /// Exact Node object identity; collection keys retain their own contracts.
+    fn node_object_key(&self, node: NodeIdx) -> PlatformKey { self.node_platform_key(node) }
+    fn node_from_object_key(&self, key: PlatformKey) -> Option<NodeIdx> {
+        self.node_from_platform_key(key)
+    }
 
     fn is_callable(&self, value: &Self::Value) -> bool;
     /// Invokes user code with explicit this. Never called inside `with_dom`.
@@ -1398,10 +1403,10 @@ pub trait BindingHost: Sized {
     /// Non-node values return None without invoking user code.
     fn node_brand(&self, value: &Self::Value) -> Option<NodeIdx> {
         self.platform_object(value, InterfaceBrand::NODE)
-            .and_then(|key| self.node_from_platform_key(key))
+            .and_then(|key| self.node_from_object_key(key))
     }
     fn wrap_node(&mut self, node: NodeIdx) -> Result<Self::Value, Self::Error> {
-        self.wrap_platform_object(self.node_platform_key(node), InterfaceBrand::NODE)
+        self.wrap_platform_object(self.node_object_key(node), InterfaceBrand::NODE)
     }
     /// Live, same-object NodeList; indexed access, length and item read the arena.
     fn child_nodes(&mut self, parent: NodeIdx) -> Result<Self::Value, Self::Error> {

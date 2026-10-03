@@ -90,6 +90,25 @@ impl Dom {
     pub fn create_document(&mut self) -> NodeIdx {
         self.alloc_unattached(NodeKind::Document)
     }
+    /// Create an inert document in an existing document's relevant realm.
+    /// Its node document remains itself; the immutable allocation anchor is
+    /// separate from the owner-document links changed by adoption.
+    pub fn create_document_in_realm_of(&mut self, document: NodeIdx) -> Result<NodeIdx, DomError> {
+        self.check_node(document)?;
+        if !matches!(self.get(document).kind, NodeKind::Document) {
+            return Err(DomError::TypeError);
+        }
+        let anchor = self.node_creation_document(document)?;
+        let created = self.create_document();
+        self.node_creation_documents[created.0 as usize] = anchor;
+        Ok(created)
+    }
+    /// Immutable, generation-tagged document identity used to resolve the
+    /// node's creation realm. The anchor can outlive the document arena slot.
+    pub fn node_creation_document(&self, node: NodeIdx) -> Result<(NodeIdx, u64), DomError> {
+        self.check_node(node)?;
+        Ok(self.node_creation_documents[node.0 as usize])
+    }
     pub fn create_document_fragment(&mut self, document: NodeIdx) -> Result<NodeIdx, DomError> {
         self.create_node_in(document, NodeKind::DocumentFragment)
     }
@@ -106,6 +125,7 @@ impl Dom {
         }
         let id = self.alloc_unattached(kind);
         self.nodes[id.0 as usize].owner_document = document;
+        self.node_creation_documents[id.0 as usize] = self.node_creation_documents[document.0 as usize];
         if self.is_html_template(id) {
             self.ensure_template_contents(id)?;
         }

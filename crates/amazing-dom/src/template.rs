@@ -54,7 +54,7 @@ impl Dom {
         }
         let html = self.document_metadata(document).ok().flatten()
             .map_or(document == NodeIdx(0), |metadata| metadata.content_type == "text/html");
-        let inert = self.create_document();
+        let inert = self.create_document_in_realm_of(document).expect("template host document");
         // A fresh document inherits only the HTML document type. URL,
         // encoding, mode and browsing context keep their creation defaults.
         let metadata = DocumentMetadata { url: "about:blank".into(),

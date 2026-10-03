@@ -163,6 +163,7 @@ pub struct Dom {
     token_lists: Vec<(NodeIdx, String)>,
     mutation_generation: u64,
     node_generations: Vec<u64>,
+    node_creation_documents: Vec<(NodeIdx, u64)>,
     node_slot_live: Vec<bool>,
     free_node_slots: Vec<NodeIdx>,
     render_epoch: u64,
@@ -251,6 +252,7 @@ impl Dom {
             token_lists: Vec::new(),
             mutation_generation: 0,
             node_generations: Vec::new(),
+            node_creation_documents: Vec::new(),
             node_slot_live: Vec::new(),
             free_node_slots: Vec::new(),
             render_epoch: 0,
@@ -287,6 +289,7 @@ impl Dom {
             prev_sibling: None,
         });
         dom.node_generations.push(1);
+        dom.node_creation_documents.push((NodeIdx(0), 1));
         dom.node_slot_live.push(true);
         dom
     }
@@ -335,6 +338,16 @@ impl Dom {
             self.nodes.push(node);
             self.node_generations.push(1);
             self.node_slot_live.push(true);
+        }
+        let anchor = if matches!(self.nodes[index as usize].kind, NodeKind::Document) {
+            (NodeIdx(index), self.node_generations[index as usize])
+        } else {
+            self.node_creation_documents[0]
+        };
+        if (index as usize) < self.node_creation_documents.len() {
+            self.node_creation_documents[index as usize] = anchor;
+        } else {
+            self.node_creation_documents.push(anchor);
         }
         NodeIdx(index)
     }
@@ -389,6 +402,10 @@ impl Dom {
 
     pub fn append_child(&mut self, parent: NodeIdx, kind: NodeKind) -> NodeIdx {
         let child = self.alloc(kind);
+        if !matches!(self.get(child).kind, NodeKind::Document) {
+            self.node_creation_documents[child.0 as usize] =
+                self.node_creation_documents[self.get(parent).owner_document.0 as usize];
+        }
         self.attach_last(parent, child);
         child
     }
