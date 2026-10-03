@@ -1,0 +1,13 @@
+# HTML69 — canonical XHTML character entity subset
+
+Fixed before READY68 code `f483ddb7c90bb5ef8ff2a5842a25b72efbbf8a8d`. Ordered source `a7c02bbd4e97fe7cb2241594d11ca80ab7478a19` then corrective `4c5e07aacccfe12a8ed7377b2281aa2b970af5c0`.
+
+HTML §14.2 selects its canonical character entity DTD for eleven actual PUBLIC identifiers. Match XML-space-normalized public identifiers for selection while retaining actual raw DocumentType IDs. Reuse the existing complete 2,125-name normative table, requiring exact case and semicolon; preserve two-scalar expansions and XML attribute normalization of replacement Tab/NewLine. Direct numeric references retain their existing whitespace behavior. Standalone=yes undeclared entities remain malformed; unknown names in the selected complete subset are malformed; arbitrary external/internal DTD processing remains explicit unsupported. XML fragment context never invents an inherited DTD. Comments, CDATA and processing instructions retain literal text. No network DTD fetch, MIME/root namespace/system URL/extension inference, new dependency, copied table, or external code port.
+
+Whole native groups cover every public ID, every canonical entity, actual doctype identity, two-scalar/attribute/predefined/numeric behavior, negative case/standalone/system-only/arbitrary/fragment/literal boundaries, and a genuine canonical XHTML response that invokes transport once while retaining real metadata and nodes. Linux 691→695 owned/6skip,4128→4132 workspace/17skip,four doctests,1894 CLI trees and1930 expanded/6unsupported. Whole13+111modules+220wholeHTMLsyntax+192CSSOM+123Selection retains every exact passing-name multiplicity and passing file on identical fixture/selection pins. No corpus gains credited; expanded tree classifications/manifest are byte-identical as decoded records.
+
+Initial a7c02 bulk session71778 release compiled; three new native groups failed from existing table key/fixture delimiter conventions. Preserved MAIN html69-failed/owned.log. Corrective4c5e supplies semicolon-included bare table key and embeds full normative table fixture names without duplicate delimiters, retaining every assertion. Full bulk67694 completed EXIT0 on corrected immutable source; compressed raw reports fetched15328 into MAIN html69-after. No individual-test retry.
+
+Primary checked2026-10-03: https://html.spec.whatwg.org/multipage/xhtml.html#the-xml-parser and https://www.w3.org/TR/REC-xml/#AVNormalize . The canonical linked DTD has exactly2,125 named declarations matching the existing specification table.
+
+Separate HTML66 PageScript collector CDATA integration remains held on both measured sides; parked test-only401d source is excluded, and this ticket does not claim to fix the shared collector boundary.
