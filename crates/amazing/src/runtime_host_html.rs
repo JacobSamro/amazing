@@ -799,6 +799,27 @@ impl RuntimeBindings {
         Ok(realm)
     }
 
+    /// HTML encoding sniffing step 6 uses the actual container Document,
+    /// independently of a navigation's initiating Document or captured policy.
+    fn frame_encoding_fallback(&self, frame: NodeIdx, final_url: &str, sandbox: SandboxFlags)
+        -> amazing_encoding::Encoding {
+        use amazing_encoding::Encoding;
+        if sandbox.sandboxed && !sandbox.allow_same_origin { return Encoding::Windows1252; }
+        // The final remote navigation URL determines its nonsandboxed origin,
+        // exactly as ensure_realm does when committing the actual Document.
+        let Ok(url) = HttpUrl::parse(final_url) else { return Encoding::Windows1252; };
+        let state = self.state.borrow(); let host = state.host.borrow();
+        let inherited = host.dom.owner_document(frame).and_then(|parent| {
+            let context = state.frames.document_context(&host.dom, parent)?;
+            if &context.origin != url.origin() { return None; }
+            let label = host.dom.document_metadata(parent).ok().flatten()
+                .map(|metadata| metadata.character_set.as_str())
+                .or_else(|| (parent == NodeIdx(0)).then_some(state.document_character_set.as_deref()).flatten())?;
+            amazing_encoding::encoding_for_label(label)
+        }).filter(|encoding| !matches!(encoding, Encoding::Utf16Be | Encoding::Utf16Le));
+        inherited.unwrap_or(Encoding::Windows1252)
+    }
+
     pub(crate) fn navigate_iframes(&self, js: &mut Interpreter) {
         let (host, base, resolver) = {
             let state = self.state.borrow();
@@ -966,7 +987,8 @@ impl RuntimeBindings {
                 // documents keep the pre-HTML-34 one-shot parse-then-import,
                 // same as before.
                 if mime == "text/html" {
-                    let decoded = amazing_html::encoding::decode(&response.body, charset);
+                    let fallback = self.frame_encoding_fallback(node, &document_url, sandbox);
+                    let decoded = amazing_html::encoding::decode_with_fallback(&response.body, charset, fallback);
                     return Ok(LoadedChildDocument::Deferred { source: decoded.text,
                         url: document_url, mime, encoding: amazing_html::encoding::canonical_name(decoded.encoding) });
                 }

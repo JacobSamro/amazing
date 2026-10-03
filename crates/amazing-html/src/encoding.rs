@@ -62,7 +62,13 @@ pub struct DecodedHtml {
 /// Decode a complete HTML input using BOM > transport > prescan > fallback.
 /// Malformed byte sequences become U+FFFD. A leading BOM is consumed.
 pub fn decode(bytes: &[u8], transport_label: Option<&str>) -> DecodedHtml {
-    let (encoding, source, skip) = sniff(bytes, transport_label);
+    decode_with_fallback(bytes, transport_label, Encoding::Windows1252)
+}
+
+/// Caller-selected tentative fallback, used only after BOM, transport and meta.
+/// Browsing-context origin and UTF-16 inheritance checks belong to the caller.
+pub fn decode_with_fallback(bytes: &[u8], transport_label: Option<&str>, fallback: Encoding) -> DecodedHtml {
+    let (encoding, source, skip) = sniff_with_fallback(bytes, transport_label, fallback);
     let bytes = &bytes[skip..];
     let text = amazing_encoding::decode(bytes, encoding, false).expect("replacement mode cannot fail");
     DecodedHtml { text, encoding, source }
@@ -71,6 +77,10 @@ pub fn decode(bytes: &[u8], transport_label: Option<&str>) -> DecodedHtml {
 // Both complete and incremental input use this exact choice function. The
 // caller supplies at most the first 1024 bytes when streaming.
 pub(crate) fn sniff(bytes: &[u8], transport_label: Option<&str>) -> (Encoding, Source, usize) {
+    sniff_with_fallback(bytes, transport_label, Encoding::Windows1252)
+}
+
+fn sniff_with_fallback(bytes: &[u8], transport_label: Option<&str>, fallback: Encoding) -> (Encoding, Source, usize) {
     let bom = amazing_encoding::sniff_bom(bytes);
     let (encoding, source, skip) = if let Some((encoding, skip)) = bom {
         (encoding, Source::Bom, skip)
@@ -81,7 +91,7 @@ pub(crate) fn sniff(bytes: &[u8], transport_label: Option<&str>) -> (Encoding, S
     } else if let Some(encoding) = prescan_meta(bytes) {
         (encoding, Source::Meta, 0)
     } else {
-        (Encoding::Windows1252, Source::Default, 0)
+        (fallback, Source::Default, 0)
     };
     (encoding, source, skip)
 }
@@ -257,6 +267,25 @@ mod tests {
     use super::*;
     use crate::{parse, parse_bytes};
     use amazing_dom::NodeIdx;
+
+    #[test]
+    fn caller_fallback_preserves_bom_transport_meta_and_default_precedence() {
+        for fallback in [Encoding::Utf8, Encoding::Windows1253, Encoding::Windows1252] {
+            for (body, transport, expected, source) in [
+                (&b"<p>\xa2"[..], None, fallback, Source::Default),
+                (&b"<meta charset=bogus><p>\xa2"[..], Some("bogus"), fallback, Source::Default),
+                (&b"<meta charset=windows-1252><p>\xa2"[..], None, Encoding::Windows1252, Source::Meta),
+                (&b"<meta charset=UTF-8><p>\xa2"[..], Some("windows-1253"), Encoding::Windows1253, Source::Transport),
+                (&b"\xef\xbb\xbf<p>\xa2"[..], Some("windows-1253"), Encoding::Utf8, Source::Bom),
+            ] {
+                let decoded = decode_with_fallback(body, transport, fallback);
+                assert_eq!((decoded.encoding, decoded.source), (expected, source));
+            }
+        }
+        assert!(decode_with_fallback(b"<p>\xa2", None, Encoding::Windows1253).text.ends_with('Ά'));
+        assert!(decode_with_fallback(b"<p>\xa2", None, Encoding::Utf8).text.ends_with('�'));
+        assert!(decode(b"<p>\xa2", None).text.ends_with('¢'));
+    }
 
     #[test]
     fn content_charset_requires_the_matching_quote_before_using_a_label() {

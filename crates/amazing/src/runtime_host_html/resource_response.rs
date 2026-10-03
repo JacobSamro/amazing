@@ -273,6 +273,47 @@ mod tests {
     }
 
     #[test]
+    fn frame_encoding_inherits_actual_same_origin_container_after_explicit_choices() {
+        for (parent, meta, header, sandbox, child_url, bom, expected, encoding) in [
+            ("UTF-8", "bogus", None, "", "https://example.test/child", false, "�", "UTF-8"),
+            ("windows-1253", "bogus", Some("bogus"), "", "https://example.test/child", false, "Ά", "windows-1253"),
+            ("UTF-16LE", "bogus", None, "", "https://example.test/child", false, "¢", "windows-1252"),
+            ("windows-1253", "windows-1252", None, "", "https://example.test/child", false, "¢", "windows-1252"),
+            ("windows-1253", "windows-1252", Some("UTF-8"), "", "https://example.test/child", false, "�", "UTF-8"),
+            ("windows-1253", "bogus", None, "sandbox='allow-scripts'", "https://example.test/child", false, "¢", "windows-1252"),
+            ("windows-1253", "bogus", None, "sandbox='allow-same-origin'", "https://example.test/child", false, "Ά", "windows-1253"),
+            ("windows-1253", "bogus", None, "", "https://foreign.test/child", false, "¢", "windows-1252"),
+            ("windows-1253", "bogus", Some("windows-1252"), "", "https://example.test/child", true, "é", "UTF-8"),
+        ] {
+            let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(&format!(
+                "<!doctype html><body><iframe {sandbox} src='/child'></iframe>")), native_forwarded: false }));
+            let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+            scheduler.set_frame_resource_loader(Rc::new(move |_| {
+                let mut body = format!("<!doctype html><meta charset={meta}><p>").into_bytes();
+                if bom { body.splice(0..0, [0xef,0xbb,0xbf]); body.extend([0xc3,0xa9]); }
+                else { body.push(0xa2); }
+                let mut value = response(child_url, Some("text/html"), body);
+                if let Some(label) = header {
+                    value.headers.append("Content-Type", format!("text/html; charset={label}")).unwrap();
+                }
+                Ok(value)
+            }));
+            // Set the actual parent's selected metadata before first navigation.
+            scheduler.set_document_metadata(parent, "text/html", "");
+            scheduler.set_location_url("https://example.test/root.html");
+            scheduler.dispatch_pending_iframe_loads().unwrap();
+            let bindings = scheduler.test_bindings();
+            let state = bindings.state.borrow();
+            let document = state.frames.documents.values().find_map(|entry| entry.document).unwrap();
+            let host = host.borrow();
+            assert_eq!(host.dom.document_metadata(document).unwrap().unwrap().character_set, encoding,
+                "parent={parent} meta={meta} header={header:?} sandbox={sandbox} final={child_url}");
+            let text = host.dom.tree_order(document).into_iter().filter_map(|node| host.dom.character_data(node)).collect::<String>();
+            assert_eq!(text, expected);
+        }
+    }
+
+    #[test]
     fn response_mime_lists_quotes_charset_and_nosniff_use_fetch_records() {
         use amazing_encoding::Encoding::{Utf8, Windows1252};
         let url = "https://example.test/final/resource";
