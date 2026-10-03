@@ -128,3 +128,25 @@ fn template_associations_do_not_alias_recycled_node_slots() {
     assert!(matches!(dom.get(new_inert).kind, crate::NodeKind::Document));
     assert!(!dom.document_scripting_enabled(new_inert).unwrap());
 }
+
+#[test]
+fn template_contents_reject_host_including_cycles_before_mutation() {
+    let mut dom = Dom::new();
+    let ancestor = dom.create_element(NodeIdx(0), "div");
+    let template = dom.create_element(ancestor, "template");
+    let contents = dom.ensure_template_contents(template).unwrap();
+    let child = dom.create_element(contents, "p");
+    for target in [contents, child] {
+        assert_eq!(dom.pre_insert(ancestor, target, None), Err(DomError::HierarchyRequestError));
+        assert_eq!(dom.get(ancestor).parent, Some(NodeIdx(0)));
+        assert_eq!(dom.get(template).parent, Some(ancestor));
+        assert_eq!(dom.get(child).parent, Some(contents));
+    }
+    let nested = dom.create_element(child, "template");
+    let nested_contents = dom.ensure_template_contents(nested).unwrap();
+    assert_eq!(dom.pre_insert(template, nested_contents, None), Err(DomError::HierarchyRequestError));
+    assert_eq!(dom.children(nested_contents).count(), 0);
+    let replacement = dom.create_element_ns_in(NodeIdx(0), Some("http://www.w3.org/1999/xhtml"), "b").unwrap();
+    dom.pre_insert(replacement, contents, Some(child)).unwrap();
+    assert_eq!(dom.owner_document(replacement), dom.owner_document(contents));
+}

@@ -216,7 +216,7 @@ impl Dom {
         ) {
             return Err(DomError::HierarchyRequestError);
         }
-        if self.contains(node, Some(parent)) {
+        if self.is_host_including_inclusive_ancestor(node, parent) {
             return Err(DomError::HierarchyRequestError);
         }
         if let Some(child) = child {

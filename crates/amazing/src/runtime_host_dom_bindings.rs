@@ -1388,6 +1388,32 @@ mod tests {
     }
 
     #[test]
+    fn template_fragment_parser_reads_explicit_document_scripting_state() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let template = dom.create_element(html, "template");
+        let contents = dom.ensure_template_contents(template).unwrap();
+        let owner = dom.owner_document(contents).unwrap();
+        dom.set_document_scripting_enabled(owner, true).unwrap();
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host.clone()).unwrap();
+        let result = js.run_script(r#"
+            const t=document.documentElement.firstChild;
+            t.innerHTML='<noscript>&lt;&amp;&gt;</noscript>';
+            t.content.firstChild.textContent === '&lt;&amp;&gt;';
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)), "{result:?}");
+        host.borrow_mut().dom.set_document_scripting_enabled(owner, false).unwrap();
+        let result = js.run_script(r#"
+            t.innerHTML='<noscript>&lt;&amp;&gt;</noscript>';
+            t.content.firstChild.textContent === '<&>';
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)), "{result:?}");
+    }
+
+    #[test]
     fn base_reflection_uses_fallback_url_and_preserves_webidl_strings() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
