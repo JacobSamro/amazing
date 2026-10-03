@@ -66,6 +66,10 @@ impl DriverScheduler {
         let bindings = self.bindings.clone();
         self.enter(|js| bindings.execute_page_script(js, script, source, url))
     }
+    pub(crate) fn load_classic_page_script(&mut self, script: &crate::cmd::js::PageScript,
+        base: &str) -> Result<(String, String), Throw> {
+        self.bindings.load_classic_page_script(&mut self.js, script, base)
+    }
     pub(crate) fn set_module_source_loader(&mut self,
         loader: Rc<crate::runtime_binding_host::modules::ModuleSourceLoader>) {
         self.bindings.set_module_source_loader(loader);

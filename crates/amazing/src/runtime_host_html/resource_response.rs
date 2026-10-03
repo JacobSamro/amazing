@@ -13,6 +13,8 @@ pub(crate) struct HtmlFrameResourceRequest {
     /// Actual initiating policy, retained after its Document is retired.
     pub(crate) client_context: Option<amazing_fetch::service::ClientContext>,
     pub(crate) kind: HtmlFrameResourceKind,
+    pub(crate) nonce: String,
+    pub(crate) integrity: String,
     pub(crate) embedding: Option<NavigableContext>,
     pub(crate) request_mode: amazing_fetch::RequestMode,
     pub(crate) credentials: amazing_fetch::CredentialsMode,
@@ -28,6 +30,31 @@ pub(crate) type HtmlFrameResourceLoader =
 impl RuntimeBindings {
     pub(crate) fn set_frame_resource_loader(&self, loader: HtmlFrameResourceLoader) {
         self.state.borrow_mut().frames.resource_loader = Some(loader);
+    }
+
+    /// Root facade parser entry shares the same actual-document fetch gateway
+    /// as child and reopened-document scripts.
+    pub(crate) fn load_classic_page_script(&self, js: &mut Interpreter,
+        script: &crate::cmd::js::PageScript, base: &str) -> Result<(String, String), Throw> {
+        if script.kind != crate::cmd::js::ScriptKind::Classic {
+            return Err(Throw::type_error("Expected a classic page script"));
+        }
+        let (document, resolver) = {
+            let state = self.state.borrow();
+            let host = state.host.borrow();
+            if host.dom.node_generation(script.node).is_none() {
+                return Err(Throw::type_error("Stale script node"));
+            }
+            let document = host.dom.owner_document(script.node)
+                .filter(|document| host.dom.node_generation(*document).is_some())
+                .ok_or_else(|| Throw::type_error("Script has no live owner Document"))?;
+            (document, state.frames.resolver.clone())
+        };
+        let Some(src) = script.src.as_deref() else {
+            return Ok((script.body.clone(), self.page_script_url(js, script, base)));
+        };
+        self.fetch_document_classic_script(js, document, script.node, src, base, resolver.as_ref())
+            .ok_or_else(|| Throw::type_error("Classic script resource could not be loaded"))
     }
 
     pub(super) fn fetch_document_classic_script(&self, js: &mut Interpreter,
@@ -49,7 +76,9 @@ impl RuntimeBindings {
             let default = state.frames.document_referrer_policy(&host.dom, document)
                 .unwrap_or(amazing_fetch::ReferrerPolicy::StrictOriginWhenCrossOrigin);
             let (mode, credentials, referrer_policy) = classic_options(&host.dom, script, default);
-            (loader, context, encoding, mode, credentials, referrer_policy)
+            (loader, context, encoding, mode, credentials, referrer_policy,
+                host.dom.get_attribute_ns(script, None, "nonce").unwrap_or("").to_owned(),
+                host.dom.get_attribute_ns(script, None, "integrity").unwrap_or("").to_owned())
         };
         let Some(loader) = snapshot.0 else {
             let url = ParsedUrl::parse(base).ok()?.resolve(src).ok()?.serialize();
@@ -66,6 +95,7 @@ impl RuntimeBindings {
         let request = HtmlFrameResourceRequest { requested_url: url,
             referrer: initiator.document_url.clone(), initiator, client_context,
             kind: HtmlFrameResourceKind::ClassicScript, embedding: None,
+            nonce: snapshot.6, integrity: snapshot.7,
             request_mode: snapshot.3, credentials: snapshot.4, referrer_policy: snapshot.5 };
         let response = loader(&request).ok()?;
         decode_classic_response(response, snapshot.2).ok()
@@ -227,6 +257,74 @@ mod tests {
     }
 
     #[test]
+    fn root_classic_bridge_captures_actual_metadata_before_transport_and_executes_decoded_source() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+            "<!doctype html><base href='/assets/'><script src='root.js?q=é' nonce=' actual ' integrity=' sha256-test ' crossorigin=use-credentials referrerpolicy=ORIGIN></script>"), native_forwarded: false }));
+        let node = host.borrow().dom.tree_order(NodeIdx(0)).into_iter()
+            .find(|node| host.borrow().dom.local_name(*node) == Some("script")).unwrap();
+        let script = crate::cmd::js::script_source_from_node(&host.borrow().dom, node).unwrap();
+        let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/root/main.html");
+        scheduler.set_document_metadata("windows-1252", "text/html", "");
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let observed = seen.clone();
+        let callback_host = host.clone();
+        scheduler.set_frame_resource_resolver(Rc::new(|_| panic!("canonical transport selected legacy resolver")));
+        scheduler.set_frame_resource_loader(Rc::new(move |request| {
+            observed.borrow_mut().push(request.clone());
+            let mut host = callback_host.try_borrow_mut().expect("callback retained a DOM borrow");
+            host.dom.set_attribute(node, "nonce", "changed").unwrap();
+            host.dom.set_attribute(node, "integrity", "changed").unwrap();
+            Ok(response("https://example.test/final/root.js", Some("text/javascript; charset=windows-1252"),
+                b"window.rootBridge='\xe9';".to_vec()))
+        }));
+        let (text, url) = scheduler.load_classic_page_script(&script, "https://example.test/wrong/caller.html").unwrap();
+        assert_eq!(text, "window.rootBridge='é';");
+        assert_eq!(url, "https://example.test/final/root.js");
+        let requests = seen.borrow();
+        assert_eq!(requests.len(), 1);
+        let request = &requests[0];
+        assert_eq!(request.kind, HtmlFrameResourceKind::ClassicScript);
+        assert_eq!(request.requested_url, "https://example.test/assets/root.js?q=%E9");
+        assert_eq!(request.nonce, " actual ");
+        assert_eq!(request.integrity, " sha256-test ");
+        assert_eq!(request.initiator.document, NodeIdx(0));
+        assert_eq!(Some(request.initiator.document_generation), host.borrow().dom.node_generation(NodeIdx(0)));
+        assert_eq!(request.referrer, "https://example.test/root/main.html");
+        assert_eq!(request.referrer_policy, amazing_fetch::ReferrerPolicy::Origin);
+        assert_eq!(request.request_mode, amazing_fetch::RequestMode::Cors);
+        assert_eq!(request.credentials, amazing_fetch::CredentialsMode::Include);
+        drop(requests);
+        scheduler.run_page_script(&script, &text, &url).unwrap();
+        assert_eq!(scheduler.run_script("rootBridge").unwrap(), JsValue::str("é"));
+    }
+
+    #[test]
+    fn root_classic_bridge_preserves_inline_and_genuine_owner_failure_boundaries() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+            "<!doctype html><script>window.inlineBridge=1;</script>"), native_forwarded: false }));
+        let node = host.borrow().dom.tree_order(NodeIdx(0)).into_iter()
+            .find(|node| host.borrow().dom.local_name(*node) == Some("script")).unwrap();
+        let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/root/main.html");
+        scheduler.set_frame_resource_loader(Rc::new(|_| Err("genuine transport failure".into())));
+        scheduler.set_frame_resource_resolver(Rc::new(|_| panic!("canonical error selected legacy resolver")));
+        let mut script = crate::cmd::js::script_source_from_node(&host.borrow().dom, node).unwrap();
+        let (body, url) = scheduler.load_classic_page_script(&script, "https://example.test/root/main.html").unwrap();
+        assert_eq!(body, "window.inlineBridge=1;");
+        assert_eq!(url, "https://example.test/root/main.html");
+        script.kind = crate::cmd::js::ScriptKind::Module;
+        assert!(scheduler.load_classic_page_script(&script, &url).is_err());
+        script.kind = crate::cmd::js::ScriptKind::Classic;
+        script.src = Some("failure.js".into());
+        assert!(scheduler.load_classic_page_script(&script, &url).is_err());
+        script.node = NodeIdx(u32::MAX);
+        assert!(scheduler.load_classic_page_script(&script, &url).is_err());
+        script.node = NodeIdx(0);
+        assert!(scheduler.load_classic_page_script(&script, &url).is_err());
+    }
+
+    #[test]
     fn classic_options_capture_actual_enumerated_attributes_without_header_token_rules() {
         use amazing_fetch::{CredentialsMode, ReferrerPolicy, RequestMode};
         for (attribute, mode, credentials) in [
@@ -334,6 +432,7 @@ mod tests {
         assert_eq!(requests[0].requested_url, "https://example.test/requested.xml");
         assert_eq!(requests[0].initiator.document_url, "https://example.test/root/main.html");
         assert!(requests[0].embedding.is_some());
+        assert!(requests[0].nonce.is_empty() && requests[0].integrity.is_empty());
         assert_eq!(requests[1].requested_url, "https://example.test/assets/script.js?q=%E9");
         assert_eq!(requests[1].initiator.document_url, "https://example.test/final/child.html");
         assert_eq!(requests[1].referrer, requests[1].initiator.document_url);
