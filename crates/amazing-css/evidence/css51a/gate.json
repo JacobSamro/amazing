@@ -1,0 +1,17 @@
+{
+  "base": "859a26d430e4bbdaa831d420e47d0fd6ad8b5afc",
+  "platform": "Linux Boat native ext4",
+  "workspace_passed": 3594,
+  "workspace_skipped": 17,
+  "doctests_passed": 4,
+  "parsing_passed": 4312,
+  "parsing_total": 5126,
+  "parsing_files": 509,
+  "parsing_skipped_nonliteral": 169,
+  "fonts_passed": 24,
+  "fonts_total": 32,
+  "fonts_gained": 0,
+  "fonts_lost": 0,
+  "fonts_unchanged": 32,
+  "renderer_sha256": "a38fd1dc373465c51d6b3c12d77694df1310ff64f280809cab8450aa0435cf9b"
+}

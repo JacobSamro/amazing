@@ -113,6 +113,15 @@ impl Default for ComputedStyle {
 impl ComputedStyle {
     pub(crate) fn root_font_size_px(&self) -> f32 { self.root_font_px as f32 }
 
+    /// Copy the parent's actual used-unit context into an anonymous box style.
+    /// This copies only accumulated zoom and the document root font size;
+    /// local property values, custom properties and URL provenance stay intact.
+    /// Anonymous boxes retain their own initial local `zoom` property.
+    pub fn inherit_used_context_from(&mut self, parent: &ComputedStyle) {
+        self.effective_zoom = parent.effective_zoom;
+        self.root_font_px = parent.root_font_px;
+    }
+
     pub(crate) fn set_contextual_value(&mut self, property: &str, css: &str) {
         self.props.insert(property.into(), css.into());
         self.typed.insert(property.into(), values::parse(property, css).unwrap_or(ComputedValue::Unparsed));
@@ -3500,3 +3509,7 @@ pub(crate) mod individual_transforms;
 
 #[path = "font_synthesis.rs"]
 pub(crate) mod font_synthesis;
+
+#[cfg(test)]
+#[path = "used_context_tests.rs"]
+mod used_context_tests;

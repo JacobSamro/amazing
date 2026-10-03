@@ -2928,3 +2928,10 @@ CSS47A final: CSS416/workspace3577/17skip+4docs;4312/5126 unchanged/lost0;wholef
 CSS Shadow1 https://drafts.csswg.org/css-shadow-1/ and Cascade4 flat-tree value processing. Additive explicit scoped principal/pseudo entry points preserve native IDs and driver actual font context; document ordinary selectors cannot enter shadow scopes. Attached open/closed/nested host inheritance, named/manual immediate slot inheritance, UA slot display:contents, flattened membership and nested Document isolation. Existing APIs preserved. :host/::slotted, scoped named resources and actual shadow layout/generated counters remain explicit follow-ons.
 
 CSS50 final: CSS419/workspace3580/17skip+4docs;4312/5126 unchanged/lost0;wholeimages92/141,fonts24/32,transforms145/348 all521stable/lost0. Rendererfdda8fb4d48b2a1a1cb669b0db16f3fbd4ce342a685542c1f2e3db89776bfd6b. Driver scoped collection adoption/installed shadow gains remain separate.
+
+
+### CSS51A — anonymous box used-unit context
+
+Standalone additive `ComputedStyle::inherit_used_context_from` copies only actual accumulated zoom/root font metrics. Anonymous table boxes keep local initial zoom, properties and URL provenance. Parent prioritizes this lower API independently of parked ungated CSS51; layout owns actual table adoption. Grouped regression checks fractional/nested zoom, rem computation and unchanged local property/typed/provenance maps. Fixed clean closed CSS50 plus exact L41/L44 and verified root fuzzy source859a26d4. Workspace/docs, identical15 parsing and fullfonts gate; existing installed behavior unchanged until caller adoption.
+
+CSS51A final: workspace3594/17skip+4docs; identical15 parsing4312/5126; wholefonts24/32, all32stable/lost0. Renderer a38fd1dc373465c51d6b3c12d77694df1310ff64f280809cab8450aa0435cf9b. Only new regression raw2rem expectation was corrected to verify preserved declaration plus typed48px/used zoomed length; implementation remained unchanged.
