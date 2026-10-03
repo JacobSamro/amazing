@@ -72,8 +72,20 @@ impl Serializer<'_> {
         match &self.dom.get(node).kind {
             NodeKind::Element { .. } => self.element(node, inherited, map, out)?,
             NodeKind::Document | NodeKind::DocumentFragment => {
-                if self.strict && matches!(self.dom.get(node).kind, NodeKind::Document)
-                    && self.dom.document_element(node)?.is_none() { return Err(DomError::InvalidStateError); }
+                if self.strict && matches!(self.dom.get(node).kind, NodeKind::Document) {
+                    let mut seen = HashSet::new();
+                    let mut child = self.dom.get(node).first_child;
+                    let mut has_element = false;
+                    while let Some(child_node) = child {
+                        self.dom.check_node(child_node)?;
+                        if !seen.insert(child_node) { return Err(DomError::InvalidStateError); }
+                        if matches!(self.dom.get(child_node).kind, NodeKind::Element { .. }) {
+                            has_element = true; break;
+                        }
+                        child = self.dom.get(child_node).next_sibling;
+                    }
+                    if !has_element { return Err(DomError::InvalidStateError); }
+                }
                 self.children(node,inherited.clone(),map,out)?;
             }
             NodeKind::Text { .. } => out.extend(escaped(&self.dom.character_data_utf16(node).unwrap_or_default(), false, self.strict)?),
@@ -266,5 +278,12 @@ mod tests {
         dom.nodes[cycle.0 as usize].first_child=Some(cycle);
         dom.nodes[cycle.0 as usize].last_child=Some(cycle);
         assert_eq!(dom.serialize_xml(cycle,false),Err(DomError::InvalidStateError));
+        let document=dom.create_node_in(NodeIdx(0),NodeKind::Document).unwrap();
+        let child=dom.create_node_in(document,NodeKind::Text { data: "x".into() }).unwrap();
+        dom.nodes[document.0 as usize].first_child=Some(child);
+        dom.nodes[document.0 as usize].last_child=Some(child);
+        dom.nodes[child.0 as usize].next_sibling=Some(child);
+        assert_eq!(dom.serialize_xml(document,true),Err(DomError::InvalidStateError));
+        assert_eq!(dom.serialize_xml(document,false),Err(DomError::InvalidStateError));
     }
 }
