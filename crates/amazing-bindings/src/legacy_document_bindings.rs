@@ -10,7 +10,8 @@ pub(crate) fn handles(op: O) -> bool {
 pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, args: &[H::Value]) -> Result<H::Value, H::Error> {
     if op == O::WindowLegacyNoop {
         let global = host.global_object()?;
-        if !host.is_nullish(&receiver) && !host.same_value(&receiver, &global) {
+        if !host.is_nullish(&receiver) && !host.same_value(&receiver, &global)
+            && host.window_event_target_slot(&receiver).is_none() {
             return Err(host.type_error("Expected a Window"));
         }
         return Ok(host.undefined());
