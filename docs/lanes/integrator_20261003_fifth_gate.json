@@ -45,7 +45,17 @@
       "gained_assertions": 0,
       "lost_assertions": 0,
       "before_sha256": "bea42da916c55b10437c90b5c210710951caf2a98ba026baf7cc34d1a7d3b4d4",
-      "after_sha256": "26343f8d3e4f91844078264df0bf30b6e9ad242c6985aca16c83d1110e447b3a"
+      "after_sha256": "26343f8d3e4f91844078264df0bf30b6e9ad242c6985aca16c83d1110e447b3a",
+      "nonpassing_classification_changes": [
+        {
+          "test": "dom/nodes/insertion-removing-steps/Node-append-meta-referrer-and-script-from-fragment.html",
+          "before": "fail",
+          "after": "timeout",
+          "before_passing_assertions": 0,
+          "after_passing_assertions": 0,
+          "routed_owner": "html"
+        }
+      ]
     },
     "base": {
       "selection_before": 11,
