@@ -438,7 +438,9 @@ fn incremental_attribute_values_preserve_expanded_identity_and_exact_units() {
 #[test]
 fn incremental_character_data_and_special_containers_keep_raw_units() {
     let mut source=Dom::new();let root=source.create_element(NodeIdx(0),"div");
-    let text=source.create_text(root,"text");let comment=source.create_comment(root,"comment");
+    let text=source.create_text(root,"text");
+    let comment=source.create_node_in(NodeIdx(0),NodeKind::Comment{data:"comment".into()}).unwrap();
+    source.pre_insert(comment,root,None).unwrap();
     let cdata=source.create_node_in(NodeIdx(0),NodeKind::CDATASection{data:"cdata".into()}).unwrap();
     source.pre_insert(cdata,root,None).unwrap();
     let pi=source.create_processing_instruction_in(NodeIdx(0),"pi",&[0xd800]).unwrap();source.pre_insert(pi,root,None).unwrap();
