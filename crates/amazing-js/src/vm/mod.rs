@@ -37,11 +37,20 @@ fn take_registers(count: usize) -> Vec<JsValue> {
 
 pub use compiler::compile;
 pub(crate) use compiler::compile_class_method;
-pub(crate) use compiler::compile_function_item;
+pub(crate) use compiler::{compile_arrow_item, compile_function_item};
 #[allow(unused_imports)] // Re-exported for the runtime async bridge in interp.rs.
 pub(crate) use compiler::{compile_async_body, compile_async_generator_body, compile_generator_body};
 
 pub const DEFAULT_INSTRUCTION_LIMIT: usize = 10_000_000;
+// Ordinary callables previously used the unmetered AST path. A larger internal
+// per-call budget admits substantial finite loops; explicit Program.run fuel
+// remains caller-controlled, and coroutine budgets are unchanged.
+const ORDINARY_FUNCTION_INSTRUCTION_LIMIT: usize = 100_000_000;
+
+pub(crate) fn ordinary_functions_enabled() -> bool {
+    // Keep an independent AST-factory baseline for rollout gates/profiling.
+    std::env::var_os("AMAZING_JS_AST_FUNCTIONS").is_none()
+}
 type Register = usize;
 
 /// This is a capability error, not a JavaScript syntax error. No code has run.
@@ -143,6 +152,7 @@ impl KeyOperand {
 
 #[derive(Debug)]
 enum Instruction {
+    NoOp,
     Constant(Register, JsValue),
     Numeric(Register, Numeric),
     RegExp(Register, Rc<amazing_regex::Regex>),
@@ -213,6 +223,7 @@ enum Instruction {
     Complete(Register),
     Return(Register),
     MakeFunction(Register, FunctionCode),
+    MakeNamedFunction(Register, FunctionCode, String),
     MakeClass(Register, ClassCode),
     Call(Register, Register, Register, Vec<CallArgument>),
     Construct(Register, Register, Vec<CallArgument>),
@@ -310,7 +321,7 @@ struct CompiledFunction {
     name: String,
     params: Vec<crate::ast::Param>,
     body_lexical_names: Vec<String>,
-    skip_generator_arguments: bool,
+    skip_implicit_arguments: bool,
     program: Program,
     is_arrow: bool,
     is_generator: bool,
@@ -329,6 +340,7 @@ struct HoistedFunction {
 #[derive(Debug)]
 pub struct Program {
     code: Vec<Instruction>,
+    statement_spans: Vec<(usize, crate::tokens::Span)>,
     registers: usize,
     references: usize,
     spread_slots: usize,
@@ -578,7 +590,12 @@ impl Program {
         let frame_depth = i.frames.len();
         let previous_strict = i.strict_eval_context;
         if let Some(context) = &frame.call_context {
-            i.frames.push(context.clone());
+            // The initial synchronous resume still has its invocation on
+            // the stack. Install a saved context only after it has left;
+            // recursive invocations of the same function are distinct.
+            if !i.frames.last().is_some_and(|active| active.context_id == context.context_id) {
+                i.frames.push(context.clone());
+            }
         }
         i.strict_eval_context = frame.strict_context;
         let result = self.resume_frame_inner(i, frame, quantum);
@@ -640,9 +657,19 @@ impl Program {
             }
             consume(fuel)?;
             steps += 1;
+            // Preserve statement breakpoints and depth stepping even when
+            // a debugger attaches after this function was compiled. The
+            // side table adds no opcodes or fuel cost to ordinary execution.
+            if let Some(hook) = i.debug_hook.clone() {
+                let start = self.statement_spans.partition_point(|(index, _)| *index < *pc);
+                for (_, span) in self.statement_spans[start..].iter().take_while(|(index, _)| *index == *pc) {
+                    hook.borrow_mut().on_statement(&i.current_script_id, &i.current_script_url, span.start.line, i.depth);
+                }
+            }
             *pc += 1;
             let step = (|| -> Result<Option<Abrupt>, Throw> {
                 match op {
+                    Instruction::NoOp => {}
                     Instruction::Constant(dst, value) => registers[*dst] = value.clone(),
                     Instruction::Numeric(dst, number) => registers[*dst] = i.numeric(number)?,
                     Instruction::RegExp(dst, regex) => registers[*dst] = i.make_regexp(regex.clone())?,
@@ -709,6 +736,11 @@ impl Program {
                         env.initialize_this(result.clone())?;
                         if let Some(frame) = i.frames.last_mut() {
                             frame.this = result.clone();
+                        }
+                        let elements = i.frames.last().and_then(|frame| frame.own_function.clone())
+                            .and_then(|function| function.borrow().class_elements.clone());
+                        if let Some(elements) = elements {
+                            super::initialize_instance_elements(i, &result, &elements)?;
                         }
                         registers[*dst] = result;
                     }
@@ -1068,6 +1100,12 @@ impl Program {
                     }
                     Instruction::MakeFunction(dst, code) => {
                         registers[*dst] = code.instantiate(i, &env);
+                    }
+                    Instruction::MakeNamedFunction(dst, code, name) => {
+                        let named_env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+                        let value = code.instantiate(i, &named_env);
+                        named_env.declare_lexical(name, value.clone(), false)?;
+                        registers[*dst] = value;
                     }
                     Instruction::MakeClass(dst, class) => {
                         let constructor = class.constructor.instantiate(i, &env);
@@ -1744,6 +1782,15 @@ impl FunctionCode {
                 .ok();
             handle.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(prototype);
         }
+        if !self.0.is_arrow && !self.0.is_async && !self.0.is_generator
+            && !self.0.is_method && !self.0.strict {
+            let getter = super::symbol_method(i, "", super::native_legacy_function_caller_getter);
+            let setter = super::symbol_method(i, "", super::native_legacy_function_caller_setter);
+            handle.borrow_mut().define("caller", Property {
+                value: JsValue::Undefined, writable: false, enumerable: false,
+                configurable: true, getter: Some(getter), setter: Some(setter),
+            }).unwrap();
+        }
         JsValue::Object(handle)
     }
 
@@ -1783,11 +1830,23 @@ impl FunctionCode {
                 )?;
                 env.initialize_this(bound.clone())?;
                 if let Some(frame) = i.frames.last_mut() {
-                    frame.this = bound;
+                    frame.this = bound.clone();
+                }
+                let elements = i.frames.last().and_then(|frame| frame.own_function.clone())
+                    .and_then(|function| function.borrow().class_elements.clone());
+                if let Some(elements) = elements {
+                    super::initialize_instance_elements(i, &bound, &elements)?;
                 }
             }
         } else if !is_arrow {
-            env.bind_this(this);
+            env.bind_this(this.clone());
+            if new_target.is_some() {
+                let elements = i.frames.last().and_then(|frame| frame.own_function.clone())
+                    .and_then(|function| function.borrow().class_elements.clone());
+                if let Some(elements) = elements {
+                    super::initialize_instance_elements(i, &this, &elements)?;
+                }
+            }
         }
         // Parameter binding (including destructuring/defaults/rest) and the
         // `arguments` object are handled by the tree walker's `bind_params`,
@@ -1795,10 +1854,10 @@ impl FunctionCode {
         // already skips the `arguments` object for arrows and for a
         // parameter literally named `arguments`.
         // The helper's boolean suppresses the implicit arguments object. FDI
-        // also suppresses it for a generator with no parameter expressions
+        // also suppresses it for a callable with no parameter expressions
         // whose body already owns an arguments declaration.
         let env = i.prepare_function_parameter_environment(&env, &self.0.params, self.0.strict);
-        i.bind_params(&env, &self.0.params, args, is_arrow || self.0.skip_generator_arguments, self.0.strict)?;
+        i.bind_params(&env, &self.0.params, args, is_arrow || self.0.skip_implicit_arguments, self.0.strict)?;
         let env = i.prepare_function_body_environment(&env, &self.0.params, &self.0.program.hoisted)?;
         if self.0.is_generator {
             // FDI runs during the call, while only body execution is deferred.
@@ -1831,7 +1890,7 @@ impl FunctionCode {
             // value wins outright, a non-undefined non-object return value is
             // a TypeError, and otherwise the (by now super()-initialized)
             // `this` is the result -- a ReferenceError if `super()` never ran.
-            return match self.0.program.execute(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT) {
+            return match self.0.program.execute(i, env.clone(), ORDINARY_FUNCTION_INSTRUCTION_LIMIT) {
                 Ok(value) if value.is_object() => Ok(value),
                 Ok(value) if !value.is_undefined() =>
                     Err(Throw::type_error("derived constructor returned a non-object")),
@@ -1839,7 +1898,7 @@ impl FunctionCode {
                 Err(error) => Err(error),
             };
         }
-        self.0.program.execute(i, env, DEFAULT_INSTRUCTION_LIMIT)
+        self.0.program.execute(i, env, ORDINARY_FUNCTION_INSTRUCTION_LIMIT)
     }
 
     /// Start the resumable body in the environment prepared by AST parameter binding.

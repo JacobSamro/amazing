@@ -990,3 +990,70 @@ Next JSVM-17, explicitly requested by the parent: general ordinary-function
 compilation/default policy, fuel and VM loop/property fast paths. Runtime owns
 numeric-array/fromCodePoint/apply algorithms after urgent parameter-environment
 repair. No Test262 harness special cases; measure general workload and zero losses.
+
+## JSVM-17: ordinary callable default and execution policy (complete)
+
+Dependency base `01419c7b`: coherent `a4c5f13` (JS23 saved method context,
+Runtime parameter-environment recovery, VM15/16) plus Runtime tail-deletion
+`fe05da4f` and validated combined `f120de60`, including JS24 module graph.
+The runtime optimization is a separate dependency, with its
+own measured **90.590s ->4.255s** full Unicode construction improvement.
+This VM series does not claim that improvement.
+
+Candidate ordinary function/arrow factories compile atomically by default;
+`AMAZING_JS_AST_FUNCTIONS` preserves the previous factories for diagnosis.
+Methods already used eligible bytecode. Unsupported functions retain AST bodies.
+The native named-function-expression instruction allocates the same private
+immutable self-name environment as the tree evaluator. Sloppy ordinary callable
+caller accessors and ArgumentsObjectNeeded suppression match existing factories.
+
+CallFrame has an invocation token from a std atomic counter, preserved by cloning;
+resume installs a saved context only when that invocation is not already active.
+Recursive calls to the same object remain distinct. Regressions cover ordinary
+caller/strictness, lexical arrows and new.target, named recursion, arguments identity,
+borrowed generator methods and host-driven quanta under a different invocation of
+the same callable. Ordinary per-call fuel is 100 million instructions; explicit
+Program.run fuel and ten-million coroutine budgets remain unchanged.
+
+Independent pre-tail profile on ready16, 30k points: untouched buildString
+**2381ms AST /2479ms opt-in VM**, with three 10k array truncations
+**2286ms /2494ms**. Numeric100k loop **97ms /77ms**, array30k growth **88ms /89ms**,
+codepoint apply20x10k **84ms /88ms**. VM alone does not solve array truncation.
+Runtime's unchanged independent after-tail probe reports default truncate93ms,
+scaled buildString118ms. General scripts and checksums, no harness special case.
+
+First bulk iteration exposed missing compiled constructor field initialization,
+nullish property reads, var loop-head hoisting and scoped function declarations.
+The owned VM now initializes base and derived class elements through the existing
+class adapter, throws on nullish reads, and hoists var loop bindings. Complete
+non-suspending class evaluation also uses that adapter for immutable inner class
+names, validated descriptor definitions and method metadata; native suspended-key
+class evaluation remains a separately bounded follow-up. Ordinary
+scoped-function declarations retain AST execution until lexical instantiation and
+Annex B copies are represented natively. Async/generator compile policy is preserved.
+Corrected bulk crate **515 passed**, one skipped; crate doctest passed.
+The exact old `95e3b1df` full diagnostic was **51223 passed**, 11 timeouts at20s;
+its33 differences from the stronger f120 baseline were25 newer module fixes and
+eight Date deadlines. Final comparison uses the authoritative validated f120
+full baseline (**51256 passed**, three timeouts at60s).
+First final workspace caught one DevTools conditional function-breakpoint loss.
+Programs now retain statement source positions and deliver the existing DebugHook
+seam at execution, including attachment after compilation. Empty declarations and
+statements have distinct no-op positions so skipped branches do not fire hooks.
+The regression covers nested call depth, late hook installation/removal and an
+empty skipped branch. Ordinary live instructions/fuel need no debug-only opcodes.
+Final native Boat workspace **3685 passed**, 17 skipped; doctests **four passed**.
+Whole Test262 against immutable f120: **51256 -> 51282 /53872 files passed**,
+**26 gained, zero lost**; variants **98705 -> 98757**, **52 gained, zero lost**.
+The broad run used20s/eight jobs; all eight changed Date deadline files were replayed
+as one60s batch on the same binary and all16 variants passed. Two timeouts remain.
+The same-binary unchanged full Unicode construction profile measured
+**3234ms AST factories ->2820ms VM default**, a12.8% diagnostic improvement;
+all21 workload checksums matched. This is separate from Runtime tail deletion.
+Callable compile diagnostics now cover all public
+function/arrow/method factory attempts; legacy pre-change diagnostics covered only
+generator/async attempts, so those counter scopes must not be compared directly.
+Final **2429512 accepted /2429893 attempts**, **381 fallbacks**: scoped function
+declarations211, statement kinds129, expression kinds18, yield11, suspending
+class fields/static blocks8, member access4. Compact durable evidence:
+[js-vm17_evidence.json](js-vm17_evidence.json).

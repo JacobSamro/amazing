@@ -26,7 +26,7 @@ fn eval_class_element_scope<T>(
 ) -> Result<T, Throw> {
     let scope = EnvHandle::new(EnvKind::Function, Some(class_env.clone()));
     scope.bind_this(this.clone());
-    i.frames.push(CallFrame { this, home, super_constructor: None, new_target: None, own_function: None });
+    i.frames.push(CallFrame { context_id: CallFrame::next_context_id(), this, home, super_constructor: None, new_target: None, own_function: None });
     let result = body(i, &scope);
     i.frames.pop();
     result

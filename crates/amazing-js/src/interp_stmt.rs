@@ -2196,6 +2196,7 @@ impl Interpreter {
         }
         self.depth += 1;
         self.frames.push(CallFrame {
+            context_id: CallFrame::next_context_id(),
             this: this.clone(),
             home: fun.home.clone(),
             super_constructor: derived_constructor.as_ref().map(|meta| meta.parent.clone()).or(lexical_super_constructor),
@@ -2582,7 +2583,7 @@ impl Interpreter {
         }
     }
     fn make_function(&self, f: &ast::FunctionItem, e: &EnvHandle) -> JsValue {
-        if f.is_generator {
+        if f.is_generator || vm::ordinary_functions_enabled() {
             if let Ok(code) = vm::compile_function_item(f, f.body.span, self.strict_eval_context) {
                 return code.instantiate(self, e);
             }
@@ -2665,6 +2666,15 @@ impl Interpreter {
         JsValue::Object(h)
     }
     fn make_arrow(&self, a: &ast::ArrowFunc, e: &EnvHandle) -> JsValue {
+        if vm::ordinary_functions_enabled() {
+            let span = match &a.body {
+                ast::ArrowBody::Expr(expression) => expression.span,
+                ast::ArrowBody::Block(block) => block.span,
+            };
+            if let Ok(code) = vm::compile_arrow_item(a, span, self.strict_eval_context) {
+                return code.instantiate(self, e);
+            }
+        }
         let body = match &a.body {
             ast::ArrowBody::Expr(x) => FunctionBody::Expr((**x).clone()),
             ast::ArrowBody::Block(b) => FunctionBody::Block(b.clone()),

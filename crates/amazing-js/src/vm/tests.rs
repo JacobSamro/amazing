@@ -1098,6 +1098,130 @@ fn jsvm15_object_spread_operands_suspend_without_losing_literal_state() {
 }
 
 #[test]
+fn jsvm17_default_callables_preserve_caller_metadata_and_binding_semantics() {
+    for source in [
+        "function f(){return f.caller} f()===null;",
+        "function f(){return f.caller} function outer(){return f()} outer()===outer;",
+        "function f(n){if(n===0)return f.caller;return f(n-1)} function outer(){return f(2)} outer()===f;",
+        "function f(){return f.caller} function outer(){'use strict';return f()} outer()===null;",
+        "function f(a){return arguments[0]===a&&arguments.callee===f} f(7);",
+        "function f(){let arguments=7;return arguments} f()===7;",
+        "function f(){function arguments(){}return typeof arguments} f()==='function';",
+        "function f(get=()=>x){var x=2;return get()} var x=1;f()===1;",
+        "function f(){return (()=>[this.x,arguments[0]])()} f.call({x:7},9).join(',')==='7,9';",
+        "function F(){return (()=>new.target)()} new F()===F;",
+        "var f=function named(){return named};f()===f;",
+        "function outer(){return function named(){return named}} var f=outer();f()===f&&typeof named==='undefined';",
+        "function outer(){return function* named(){yield named}} var f=outer();f().next().value===f;",
+        "function f(a,b=2,...rest){} var d=Object.getOwnPropertyDescriptor(f,'prototype');f.length===1&&f.name==='f'&&d.writable&&!d.enumerable&&!d.configurable&&f.prototype.constructor===f;",
+        "function f(){} var d=Object.getOwnPropertyDescriptor(f,'caller');typeof d.get==='function'&&typeof d.set==='function'&&!d.enumerable&&d.configurable;",
+        "var f=(a,b=2)=>a+b;f.length===1&&!Object.hasOwn(f,'prototype')&&f(7)===9;",
+        "const x=9;function f(){for(var x in {v:1}){}return x} f()==='v'&&x===9;",
+        "const x=9;function f(){for(var x of []){}return x} f()===undefined&&x===9;",
+        "function f(x=123){{function x(){}}return x===123} f();",
+        "class B{x=7;#y=9;read(){return this.x+this.#y}} class C extends B{z=11} class D extends B{z=13;constructor(){super()}} new B().read()===16&&new C().read()===16&&new C().z===11&&new D().z===13;",
+        "function f(){try{class C{m(){C=7}}new C().m();return false}catch(e){return e instanceof TypeError}} f();",
+        "function f(){try{class C{static ['prototype'](){}}return false}catch(e){return e instanceof TypeError}} f();",
+    ] {
+        let mut i = Interpreter::new();
+        assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")), JsValue::Bool(true), "{source}");
+    }
+    let mut i = Interpreter::new();
+    i.run_script("function ordinary(n){return n+1} var arrow=n=>n+1;").unwrap();
+    for name in ["ordinary", "arrow"] {
+        let Some(JsValue::Object(function)) = i.global_env.resolve(name) else { unreachable!() };
+        assert!(matches!(&function.borrow().func.as_ref().unwrap().body, FunctionBody::Bytecode(_)), "{name}");
+    }
+    // This finite function exceeds the previous ten-million instruction
+    // budget; explicit Program.run fuel remains independently enforceable.
+    assert_eq!(i.run_script("function f(n){let total=0;for(let k=0;k<n;k++){total+=k}return total} f(750000);").unwrap(), JsValue::num(281249625000.0));
+}
+
+#[test]
+fn jsvm17_compiled_statements_observe_late_debugger_attachment() {
+    #[derive(Default)]
+    struct Recording(Vec<(String, String, u32, u32)>);
+    impl crate::debug_hook::DebugHook for Recording {
+        fn on_statement(&mut self, id: &str, url: &str, line: u32, depth: u32) {
+            self.0.push((id.into(), url.into(), line, depth));
+        }
+    }
+    let mut i = Interpreter::new();
+    // Compile before installing the hook, including an otherwise empty
+    // declaration and statement which need distinct branch positions.
+    i.run_script("function outer(){\nfunction inner(){\nreturn 7;\n}\ninner();\n;\n}").unwrap();
+    i.run_script("function branching(){\nif(false)\n;\nelse\n;\n}").unwrap();
+    let JsValue::Object(function) = i.global_env.resolve("outer").unwrap() else { unreachable!() };
+    assert!(matches!(&function.borrow().func.as_ref().unwrap().body, FunctionBody::Bytecode(_)));
+    let recorder = Rc::new(RefCell::new(Recording::default()));
+    i.set_current_script("compiled", "test://compiled");
+    i.set_debug_hook(Some(recorder.clone()));
+    i.run_script("outer();").unwrap();
+    assert_eq!(recorder.borrow().0.iter().map(|event| (event.2, event.3)).collect::<Vec<_>>(),
+        vec![(1, 0), (2, 1), (5, 1), (3, 2), (6, 1)]);
+    assert!(recorder.borrow().0.iter().all(|event| event.0 == "compiled" && event.1 == "test://compiled"));
+    recorder.borrow_mut().0.clear();
+    i.run_script("branching();").unwrap();
+    assert_eq!(recorder.borrow().0.iter().map(|event| (event.2, event.3)).collect::<Vec<_>>(),
+        vec![(1, 0), (2, 1), (5, 1)]);
+    i.set_debug_hook(None);
+    i.run_script("outer();").unwrap();
+    assert_eq!(recorder.borrow().0.len(), 3);
+}
+
+#[test]
+fn jsvm17_saved_context_distinguishes_recursive_and_borrowed_resumptions() {
+    for source in [
+        // Both suspended generators come from the SAME callable, but have
+        // different invocation identities. The outer resumes the inner.
+        "var inner;function* g(n){if(n){inner=g.call({x:7},0);yield 1;return inner.next().value}yield this.x} var outer=g.call({x:9},1);outer.next();outer.next().value===7;",
+        "var seen;function observe(){seen=observe.caller} function* g(){yield 1;observe();return 7} var it=g();it.next();function caller(){return it.next()} caller().value===7&&seen===g;",
+        "var base={m(){return this.x}};var holder={__proto__:base,*g(){yield 1;return(()=>super.m())()}};var receiver={x:7};var it=holder.g.call(receiver);it.next();function caller(){return it.next()} caller().value===7;",
+    ] {
+        let mut i = Interpreter::new();
+        let result = i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}"));
+        assert_eq!(result, JsValue::Bool(true), "{source}");
+        assert!(i.frames.is_empty());
+    }
+    // A host can suspend an ordinary frame at instruction boundaries, then
+    // resume it with a different caller currently active. Preserve both the
+    // saved invocation and the host caller, restoring the latter afterwards.
+    let mut i = Interpreter::new();
+    let ast = parse_script("function f(){var count=0;while(count<3){count++}return new.target}").unwrap();
+    let crate::ast::StmtKind::Function(function) = &ast.body[0].kind else { unreachable!() };
+    let function = compile_function_item(function, ast.body[0].span, false).unwrap();
+    let env = EnvHandle::new(EnvKind::Function, Some(i.global_env.clone()));
+    let JsValue::Object(own_function) = function.instantiate(&i, &i.global_env) else { unreachable!() };
+    let context = super::super::CallFrame {
+        context_id: super::super::CallFrame::next_context_id(),
+        this: JsValue::num(7.0), home: None, super_constructor: None,
+        new_target: Some(JsValue::num(7.0)), own_function: Some(own_function.clone()),
+    };
+    i.frames.push(context.clone());
+    let code = &function.0.program;
+    let mut frame = code.start_frame(&mut i, env, 1000).unwrap();
+    assert!(matches!(code.resume_frame(&mut i, &mut frame, 1).unwrap(), FrameOutcome::Suspended));
+    assert_eq!(i.frames.len(), 1);
+    i.frames.pop();
+    let caller = super::super::CallFrame {
+        context_id: super::super::CallFrame::next_context_id(),
+        this: JsValue::num(9.0), home: None, super_constructor: None,
+        new_target: Some(JsValue::num(9.0)), own_function: Some(own_function),
+    };
+    i.frames.push(caller.clone());
+    let value = loop {
+        match code.resume_frame(&mut i, &mut frame, 2).unwrap() {
+            FrameOutcome::Completed(value) => break value,
+            FrameOutcome::Suspended => assert_eq!(i.frames.last().unwrap().context_id, caller.context_id),
+            _ => unreachable!(),
+        }
+    };
+    assert_eq!(value, JsValue::num(7.0));
+    assert_eq!(i.frames.len(), 1);
+    assert_eq!(i.frames[0].context_id, caller.context_id);
+}
+
+#[test]
 fn jsvm16_await_uses_internal_reactions_across_all_driver_boundaries() {
     let forms = [
         ("async function f(){try{return await p}catch(e){return 'error:'+e}} var output=f();", false, true, false),

@@ -21,9 +21,9 @@ const MAX_INSTRUCTIONS: usize = 262_144;
 // Deeper valid syntax falls back atomically before instruction execution.
 const MAX_DEPTH: usize = 64;
 
-/// Opt-in measurement of actual runtime generator/async compilation attempts.
+/// Opt-in measurement of actual runtime callable compilation attempts.
 /// Append-only output lets Test262 host subprocesses share a single log.
-fn record_compile_attempt(result: &Result<FunctionCode, CompileError>, params: &[ast::Param], body: &ast::Block) {
+fn record_compile_attempt(result: &Result<FunctionCode, CompileError>, params: &[ast::Param], body: &impl std::fmt::Debug) {
     if let Some(path) = std::env::var_os("AMAZING_JS_VM_COMPILE_LOG") {
         use std::io::Write;
         if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
@@ -86,7 +86,7 @@ pub(crate) fn compile_class_method(method: &ast::ClassMethod, strict: bool) -> R
         is_async: method.is_async,
         is_generator: method.is_generator,
     }, method.span);
-    if method.is_async || method.is_generator { record_compile_attempt(&result, &method.params, &method.body); }
+    record_compile_attempt(&result, &method.params, &method.body);
     let mut code = result?;
     Rc::get_mut(&mut code.0).expect("new method code").is_method = true;
     Ok(code)
@@ -98,7 +98,17 @@ pub(crate) fn compile_function_item(function: &ast::FunctionItem, span: Span, st
     let mut compiler = Compiler::new(false);
     compiler.strict = strict;
     let result = compiler.compile_function(function, span);
-    if function.is_async || function.is_generator { record_compile_attempt(&result, &function.params, &function.body); }
+    record_compile_attempt(&result, &function.params, &function.body);
+    result
+}
+
+pub(crate) fn compile_arrow_item(arrow: &ast::ArrowFunc, span: Span, strict: bool)
+    -> Result<FunctionCode, CompileError>
+{
+    let mut compiler = Compiler::new(false);
+    compiler.strict = strict;
+    let result = compiler.compile_arrow(arrow, span);
+    record_compile_attempt(&result, &arrow.params, &arrow.body);
     result
 }
 
@@ -208,6 +218,7 @@ impl Compiler {
         Self {
             program: Program {
                 code: vec![],
+                statement_spans: Vec::new(),
                 registers: 1,
                 references: 0,
                 spread_slots: 0,
@@ -323,6 +334,11 @@ impl Compiler {
         function: &ast::FunctionItem,
         span: Span,
     ) -> Result<FunctionCode, CompileError> {
+        if !function.is_async && !function.is_generator
+            && Self::has_scoped_function_declaration(&function.body.body, false)
+        {
+            return Err(self.error(span, "scoped function declaration"));
+        }
         self.validate_parameters(&function.params)?;
         let params = function.params.clone();
         let mut child = Self::new(true);
@@ -332,8 +348,7 @@ impl Compiler {
         child.hoist_functions(&function.body.body)?;
         child.statements(&function.body.body, function.body.span)?;
         let body_lexical_names = super::super::block_lexical_names(&function.body.body);
-        let skip_generator_arguments = function.is_generator
-            && !params.iter().any(|p| p.default.is_some() || Self::binding_has_parameter_expression(&p.binding))
+        let skip_implicit_arguments = !params.iter().any(|p| p.default.is_some() || Self::binding_has_parameter_expression(&p.binding))
             && (body_lexical_names.iter().any(|name| name == "arguments")
                 || child.program.functions.iter().any(|function| function.name == "arguments"));
         if child.program.code.len() > MAX_INSTRUCTIONS {
@@ -347,7 +362,7 @@ impl Compiler {
                 .unwrap_or_default(),
             params,
             body_lexical_names,
-            skip_generator_arguments,
+            skip_implicit_arguments,
             program: child.program,
             is_arrow: false,
             is_generator: function.is_generator,
@@ -364,6 +379,11 @@ impl Compiler {
     ) -> Result<FunctionCode, CompileError> {
         if arrow.is_generator {
             return Err(self.error(span, "generator arrow"));
+        }
+        if !arrow.is_async && matches!(&arrow.body, ast::ArrowBody::Block(block)
+            if Self::has_scoped_function_declaration(&block.body, false))
+        {
+            return Err(self.error(span, "scoped function declaration"));
         }
         self.validate_parameters(&arrow.params)?;
         let params = arrow.params.clone();
@@ -384,7 +404,7 @@ impl Compiler {
             name: String::new(),
             params,
             body_lexical_names: Vec::new(),
-            skip_generator_arguments: false,
+            skip_implicit_arguments: false,
             program: child.program,
             is_arrow: true,
             is_generator: false,
@@ -479,6 +499,31 @@ impl Compiler {
         }
         let super_class = super_class.map(|register| ClassSuper { register, implicit: implicit_derived_ctor });
         Ok(ClassCode { constructor, methods, super_class, inferred_name: None })
+    }
+
+    // Nested block declarations need lexical instantiation and conditional Annex B
+    // copies. Keep ordinary bodies on the existing interpreter until those are
+    // represented in bytecode rather than hoisting them into the function scope.
+    fn has_scoped_function_declaration(statements: &[Stmt], scoped: bool) -> bool {
+        statements.iter().any(|statement| match &statement.kind {
+            StmtKind::Function(_) => scoped,
+            StmtKind::Block(block) => Self::has_scoped_function_declaration(&block.body, true),
+            StmtKind::If { then, els, .. } =>
+                Self::has_scoped_function_declaration(std::slice::from_ref(then.as_ref()), true)
+                || els.as_ref().is_some_and(|els| Self::has_scoped_function_declaration(std::slice::from_ref(els.as_ref()), true)),
+            StmtKind::While { body, .. } | StmtKind::DoWhile { body, .. }
+            | StmtKind::For { body, .. } | StmtKind::ForIn { body, .. }
+            | StmtKind::ForOf { body, .. } | StmtKind::ForAwaitOf { body, .. }
+            | StmtKind::Labeled { body, .. } =>
+                Self::has_scoped_function_declaration(std::slice::from_ref(body.as_ref()), true),
+            StmtKind::Switch { cases, .. } => cases.iter().any(|case|
+                Self::has_scoped_function_declaration(&case.body, true)),
+            StmtKind::Try(statement) =>
+                Self::has_scoped_function_declaration(&statement.block.body, true)
+                || statement.catch.as_ref().is_some_and(|catch| Self::has_scoped_function_declaration(&catch.body.body, true))
+                || statement.finally.as_ref().is_some_and(|block| Self::has_scoped_function_declaration(&block.body, true)),
+            _ => false,
+        })
     }
 
     fn hoist_functions(&mut self, statements: &[Stmt]) -> Result<(), CompileError> {
@@ -579,6 +624,8 @@ impl Compiler {
 
     fn statement(&mut self, statement: &Stmt) -> Result<(), CompileError> {
         self.enter(statement.span)?;
+        let start = self.program.code.len();
+        self.program.statement_spans.push((start, statement.span));
         let resources = matches!(&statement.kind, StmtKind::For { init: Some(ast::ForInit::Decl(d)), .. } if d.resource_kind.is_some())
             .then(|| self.begin_resources());
         let result = self.statement_inner(statement);
@@ -586,6 +633,12 @@ impl Compiler {
             Some((slot, handler)) => self.end_resources(slot, handler, statement.span),
             None => Ok(()),
         });
+        // Give otherwise empty declarations/statements their own position:
+        // a branch must not deliver the skipped statement's debugger hook
+        // merely because its next live instruction shares the same offset.
+        if result.is_ok() && self.program.code.len() == start {
+            self.emit(Instruction::NoOp);
+        }
         self.depth -= 1;
         result
     }
@@ -1028,7 +1081,7 @@ impl Compiler {
         match &expression.kind {
             ExprKind::Paren(inner) => self.named_class_expression(inner, name),
             ExprKind::Class(class) if class.name.is_none() => {
-                if (class_has_decorators(class) || class.members.iter().any(|member| matches!(member, ast::ClassMember::Field(_) | ast::ClassMember::StaticBlock(_)))) && !may_suspend(expression) {
+                if !may_suspend(expression) {
                     let dst = self.register(expression.span)?;
                     self.emit(Instruction::TreeEvalNamedClass(dst, Rc::new(expression.clone()), name));
                     return Ok(dst);
@@ -1049,7 +1102,11 @@ impl Compiler {
         // outermost link, to the tree walker so short-circuiting covers
         // every link (`o?.b[f()]` must not call `f`). Super reference operations
         // also need the home object's prototype and the actual this receiver.
-        if (in_optional_chain(expression) || super_reference_operation(expression)) && !may_suspend(expression) {
+        // The class adapter owns immutable inner names, descriptor validation,
+        // fields/private elements and method metadata. Delegate the complete
+        // class when its evaluation cannot suspend this bytecode frame.
+        if (in_optional_chain(expression) || super_reference_operation(expression)
+            || matches!(expression.kind, ExprKind::Class(_))) && !may_suspend(expression) {
             let result = self.register(expression.span).map(|dst| {
                 self.emit(Instruction::TreeEval(dst, Rc::new(expression.clone())));
                 dst
@@ -1238,11 +1295,12 @@ impl Compiler {
                 }
             }
             ExprKind::Function(function) => {
-                if function.is_generator && function.name.is_some() {
-                    return Err(self.error(expression.span, "named generator expression binding"));
-                }
                 let code = self.compile_function(function, expression.span)?;
-                self.emit(Instruction::MakeFunction(dst, code));
+                if let Some(name) = &function.name {
+                    self.emit(Instruction::MakeNamedFunction(dst, code, name.name.clone()));
+                } else {
+                    self.emit(Instruction::MakeFunction(dst, code));
+                }
             }
             ExprKind::Class(class) => {
                 let code = self.compile_class(class, expression.span)?;

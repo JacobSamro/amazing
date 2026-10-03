@@ -1,0 +1,52 @@
+{
+  "ticket": "JSVM-17",
+  "base": "01419c7b7ece3946104350730263e902d42c5398",
+  "platform": "Linux Boat native /tmp source and target",
+  "baseline": "t262-f120de60-validated-batch4.json",
+  "baseline_sha256": "e899c588ed6f60f066ad1873740eeeb12a48e7aaa19961385ee3563e4601923a",
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "host_binary_sha256": "be707ec3c34fa6b8ab13238c078c0313daadaf2d9de86a498d8e9f93b8809bb9",
+  "workspace": {"passed": 3685, "skipped": 17, "doctests_passed": 4},
+  "test262": {
+    "discovered": 53872,
+    "broad_timeout_seconds": 20,
+    "jobs": 8,
+    "broad_elapsed_seconds": 575.73,
+    "broad_passed": 51274,
+    "deadline_replay": {"cluster": "staging/sm/Date/dst-offset-caching-", "timeout_seconds": 60, "files": 8, "passed": 8, "variants_passed": 16, "elapsed_seconds": 56.92, "same_binary": true},
+    "before_passed": 51256,
+    "after_passed": 51282,
+    "gained_files": 26,
+    "lost_files": 0,
+    "before_passed_variants": 98705,
+    "after_passed_variants": 98757,
+    "gained_variants": 52,
+    "lost_variants": 0,
+    "failed_files": 2124,
+    "timeout_files": 2,
+    "unsupported_files": 170,
+    "fixture_skipped_files": 294,
+    "gain_clusters": {"assignment_destructuring_iterator_close": 9, "for_of_iterator_close": 10, "tagged_template_identity": 3, "class_name_and_super": 3, "staging_array_iterator_close": 1}
+  },
+  "compile": {
+    "scope": "all public function, arrow and method factory attempts; not comparable to legacy generator-only counters",
+    "attempts": 2429893,
+    "accepted": 2429512,
+    "fallbacks": 381,
+    "fallback_clusters": {"scoped_function_declaration": 211, "statement_kind": 129, "expression_kind": 18, "yield": 11, "suspending_class": 8, "member_access": 4}
+  },
+  "profile": {
+    "scope": "one diagnostic sample per workload/mode on the same final binary; all21 checksums matched",
+    "milliseconds_columns": ["AST factories", "VM default", "opt-in VM"],
+    "numeric_loop_100000": [93, 73, 72],
+    "array_growth_30000": [60, 54, 55],
+    "array_truncate_three_times_10000": [59, 52, 53],
+    "object_tail_delete_10000": [26, 26, 25],
+    "codepoint_apply_twenty_times_10000": [75, 72, 71],
+    "unchanged_buildString_30000": [86, 75, 75],
+    "unchanged_buildString_1114112": [3234, 2820, 2830],
+    "full_VM_policy_improvement_percent": 12.8,
+    "separate_dependency": "Runtime33 tail deletion measured90590->4255ms; that gain is not attributed to this policy"
+  },
+  "boundaries": ["Unsupported ordinary scoped declarations retain AST execution pending native lexical and Annex B instantiation", "All nonsuspending classes use the existing faithful class adapter; suspended-key native class parity remains separate", "Explicit Program.run and coroutine fuel policies remain unchanged", "No Test262 harness modifications or new dependencies", "No ported source in this series"]
+}

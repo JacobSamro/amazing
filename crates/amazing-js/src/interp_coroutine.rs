@@ -95,6 +95,7 @@ thread_local! {
 /// `new.target`, `super`, `[[HomeObject]]`) and strictness on entry and restores the driver's on
 /// exit, the way the VM keeps them in its resumable frame.
 struct Segment {
+    context_id: u64,
     this: JsValue,
     home: Option<Obj>,
     super_constructor: Option<JsValue>,
@@ -114,6 +115,7 @@ impl Segment {
     fn capture(i: &Interpreter, strict: bool, awaits: bool) -> Segment {
         let frame = i.frames.last();
         Segment {
+            context_id: frame.map(|frame| frame.context_id).unwrap_or_else(CallFrame::next_context_id),
             this: frame.map(|f| f.this.clone()).unwrap_or(JsValue::Undefined),
             home: frame.and_then(|f| f.home.clone()),
             super_constructor: frame.and_then(|f| f.super_constructor.clone()),
@@ -132,6 +134,7 @@ fn enter_segment(i: &mut Interpreter) {
     SEGMENT.with(|segment| {
         if let Some(segment) = segment.borrow_mut().as_mut() {
             i.frames.push(CallFrame {
+                context_id: segment.context_id,
                 this: segment.this.clone(),
                 home: segment.home.clone(),
                 super_constructor: segment.super_constructor.clone(),

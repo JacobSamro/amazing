@@ -40,6 +40,9 @@ pub(super) fn get(
     interpreter: &mut Interpreter, receiver: &JsValue, key: PropertyKey,
     cache: &mut Option<InlineCache>,
 ) -> Result<JsValue, Throw> {
+    if receiver.is_null() || receiver.is_undefined() {
+        return Err(Throw::type_error("cannot read a property of null or undefined"));
+    }
     if let JsValue::Object(object) = receiver {
         if let Some(slot) = cached(cache, object) {
             if let Some(property) = object.borrow().own_data_slot(&key, slot.slot) {

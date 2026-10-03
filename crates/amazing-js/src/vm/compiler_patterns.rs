@@ -126,6 +126,11 @@ impl Compiler {
     }
 
     pub(super) fn bind_for_native(&mut self, left: &ast::ForLeft, value: Register, span: Span) -> Result<(), CompileError> {
+        if let ast::ForLeft::Decl(declaration) = left {
+            if declaration.kind == VarKind::Var {
+                for item in &declaration.decls { self.hoist_pattern(&item.binding); }
+            }
+        }
         // Plain identifiers can reuse the existing single-step binder. Every
         // pattern uses the same native lowering, whether or not it suspends.
         match left {
@@ -139,7 +144,6 @@ impl Compiler {
                     self.emit(Instruction::ResourceCapture(slot, value, kind == ast::ResourceKind::AwaitUsing));
                 }
                 for declaration_item in &declaration.decls {
-                    if declaration.kind == VarKind::Var { self.hoist_pattern(&declaration_item.binding); }
                     self.binding_pattern(&declaration_item.binding, value, declaration.kind, span)?;
                 }
             }

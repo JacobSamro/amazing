@@ -161,6 +161,9 @@ pub struct HostResponse {
 
 #[derive(Clone)]
 struct CallFrame {
+    /// Identifies this invocation across saved-frame clones. Recursive calls
+    /// to the same function still have different identities.
+    context_id: u64,
     this: JsValue,
     home: Option<Obj>,
     super_constructor: Option<JsValue>,
@@ -170,6 +173,13 @@ struct CallFrame {
     /// explicit `super()` call find its OWN class's instance elements
     /// without threading them through every call site separately.
     own_function: Option<Obj>,
+}
+
+impl CallFrame {
+    fn next_context_id() -> u64 {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    }
 }
 
 #[derive(Clone)]
