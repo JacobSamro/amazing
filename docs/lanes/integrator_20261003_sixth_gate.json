@@ -1,0 +1,144 @@
+{
+  "source_commit": "8033f675776214d1d710b1745184f85df4988d2e",
+  "base_commit": "0d5963fe7abda88ec6ea8100efd6e853f278bf4b",
+  "summary": {
+    "files": {
+      "unsupported": 170,
+      "pass": 51678,
+      "fail": 1729,
+      "skipped": 294,
+      "timeout": 1
+    }
+  },
+  "gained_files": 242,
+  "lost_files": [],
+  "gained_variants": 389,
+  "lost_variants": [],
+  "provenance": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+    "host_sha256": "7c75832519673b7e72e92ffb573af0264bb63c757db082b287d7c82d300ad43e",
+    "timeout_seconds": 60.0
+  },
+  "result_sha256": "61fd21b16d7671f359f61933d88c594f37e0accfb20df53b5278cabdde0336ce",
+  "shards": 16,
+  "wpt": {
+    "nodes": {
+      "selection_before": 314,
+      "selection_after": 314,
+      "compared_selection": 314,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 12369,
+      "passing_assertions_after": 12369,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "26343f8d3e4f91844078264df0bf30b6e9ad242c6985aca16c83d1110e447b3a",
+      "after_sha256": "26343f8d3e4f91844078264df0bf30b6e9ad242c6985aca16c83d1110e447b3a"
+    },
+    "base": {
+      "selection_before": 11,
+      "selection_after": 11,
+      "compared_selection": 11,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 13,
+      "passing_assertions_after": 13,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "1e7516c09b19cda5a6b033f0b7d6700ba9f508cdf9be7d7189810ab358c015e4",
+      "after_sha256": "1e7516c09b19cda5a6b033f0b7d6700ba9f508cdf9be7d7189810ab358c015e4"
+    },
+    "syntax": {
+      "selection_before": 220,
+      "selection_after": 220,
+      "compared_selection": 220,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 3095,
+      "passing_assertions_after": 3096,
+      "gained_assertions": 1,
+      "lost_assertions": 0,
+      "before_sha256": "9b77e6118c87d329b9a3dd58474705cbe3a246c210ffc19ca3cf29818d94c52a",
+      "after_sha256": "ec45858ce2a7877fc66b4277e67f2894659ea3cc0d835dbf6ae329fe09860cd9"
+    },
+    "serializer": {
+      "selection_before": 8,
+      "selection_after": 8,
+      "compared_selection": 8,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 373,
+      "passing_assertions_after": 374,
+      "gained_assertions": 1,
+      "lost_assertions": 0,
+      "before_sha256": "515bc5eb676fb6eb462faf90f87fce96e130de7d8b602a43475c344a5e3a42ee",
+      "after_sha256": "d0318007491f7cbfd370d5a4a0298413134d358acfeae83a2b8ea6dd75d14971"
+    },
+    "encoding": {
+      "selection_before": 194,
+      "selection_after": 194,
+      "compared_selection": 194,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 12396,
+      "passing_assertions_after": 12396,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "66b5316330619bd15919629d728ce68d5de3fe4a5b60ccefd0e97d4c19dcaa28",
+      "after_sha256": "b78e6e28db8b1f076cc746113811db44bca6528a8978a1d764ee15284cc68817"
+    },
+    "modules": {
+      "selected": 111,
+      "passing_assertions_before": 129,
+      "passing_assertions_after": 129,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "passing_pages_before": 45,
+      "passing_pages": 45,
+      "selection_sha256": "b14ef1bbafb77fca6aa21b6d03bdb16e45a1e56d63ece1ef73cfa3976c74da63",
+      "binary_sha256": "4e421a9b6e9c338f5be6b3190bacf069c76a5057d7e84dc4660888814be49f35"
+    },
+    "templates": {
+      "selected": 67,
+      "passing_assertions_before": 610,
+      "passing_assertions_after": 610,
+      "lost_assertions": 0
+    },
+    "css-fonts": {
+      "selected": 32,
+      "passing_before": 24,
+      "passing_after": 24,
+      "lost": []
+    },
+    "css-transforms": {
+      "selected": 348,
+      "passing_before": 141,
+      "passing_after": 141,
+      "lost": []
+    }
+  },
+  "all_test262_shard_boxes_stopped": false,
+  "workspace": {
+    "passed": 3787,
+    "skipped": 17,
+    "doctests_passed": 4
+  },
+  "gpui_tests_passed": 93,
+  "platform": "Boat Linux",
+  "wpt_serial_recheck": {
+    "source_unchanged": true,
+    "binary_sha256": "4e421a9b6e9c338f5be6b3190bacf069c76a5057d7e84dc4660888814be49f35",
+    "selected_files": 389,
+    "jobs": 1,
+    "timeout_ms": 25000,
+    "initial_lost_assertion": "dom/nodes/Document-contentType/contentType/xhr_responseType_document.html",
+    "restored_original_pass": true,
+    "retained_initial_report": true,
+    "driver_tests_passed": 405,
+    "workspace_doctests_passed": 4
+  },
+  "log_sha256": {
+    "combined-batch6-workspace.log": "de98fab2eefaf6b816875c87c6d055181579658aa9981cc2d4c738265046ec26",
+    "combined-batch6-docs.log": "9833180a45d0af4f353128aaa15fa22c62156cc5df68a71a3bccde7edb739924",
+    "combined-batch6-gpui-tests.log": "ace1416567592a1ca2dde99d3228c8839375b7e99f406f307a52018c49a394e0",
+    "combined-batch6-serial-native.log": "d64583e81c2643b3964140f62063548b0861628898ac1b32fc8f8eab2d0b10aa",
+    "combined-batch6-serial-docs.log": "5c6e3b5bf22ef2de51c54015c08fa027f798f0406400af098f068cbf3ad3d16b"
+  }
+}
