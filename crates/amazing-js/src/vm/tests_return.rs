@@ -299,10 +299,10 @@ fn injected_normalization_runs_under_saved_invocation_and_strictness() {
         home: None, proto_for_new: None,
     }));
     let Some(JsValue::Object(promise)) = i.global_env.resolve("p") else { unreachable!() };
-    promise.borrow_mut().define_prop(PropertyKey::string("constructor"), Property {
+    promise.borrow_mut().define("constructor", Property {
         value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
         getter: Some(getter), setter: None, accessor: true,
-    });
+    }).unwrap();
     i.run_script("g.next().then(()=>g.return(p).then(r=>out=r.done&&r.value===true))").unwrap();
     i.drain_microtasks().unwrap();
     assert_eq!(i.run_script("observed&&out").unwrap(), JsValue::Bool(true));
