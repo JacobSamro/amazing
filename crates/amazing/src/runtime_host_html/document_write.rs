@@ -409,14 +409,20 @@ mod tests {
         scheduler.run_script("var frame=document.createElement('iframe');document.body.appendChild(frame)").unwrap();
         scheduler.dispatch_pending_iframe_loads().unwrap();
         assert_eq!(scheduler.run_script(r#"
+            var checkpoint="child-open";
+            try {
             var child=frame.contentDocument, win=frame.contentWindow;
             child.open(); child.write('<!doctype html><script>window.childRan=document===parent.frame.contentDocument<\/script><p id=c>child');child.close();
+            checkpoint="inert-open";
             var inert=document.implementation.createHTMLDocument('inert');
             inert.open();inert.write('<script>parent.inertRan=true<\/script><noscript><p id=n>inert</p></noscript>');inert.close();
+            checkpoint="xml";
             var xml=new DOMParser().parseFromString('<root/>','application/xml'), errors=[];
             for(var name of ['open','write','close']) { try {xml[name]('x');errors.push('missing')}catch(e){errors.push(e.name)} }
+            checkpoint="observations";
             [frame.contentDocument===child,frame.contentWindow===win,win.childRan,
              child.getElementById('c').textContent,typeof inertRan,inert.getElementById('n').textContent,errors.join(',')].join('|')
+            } catch(error) { checkpoint+"|"+error.name+"|"+error.message; }
         "#).unwrap(), JsValue::str("true|true|true|child|undefined|inert|InvalidStateError,InvalidStateError,InvalidStateError"));
     }
 }

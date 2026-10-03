@@ -3140,9 +3140,11 @@ mod tests {
         // run before `write()` returns, not merely at some later point.
         assert_eq!(scheduler.run_script(
             "var order = []; order.push('before'); \
-             document.write('<script>order.push(\"written\")<\\/script>'); \
+             document.write('<body><script>order.push(\"written\")<\\/script>'); \
              order.push('after'); order.join(',')"
         ).unwrap(), JsValue::str("before,written,after"));
+        // Explicit body markup preserves this test's body placement intent:
+        // a script alone at the start of a reopened document belongs in head.
         // The written markup is really inserted into the document, not just
         // executed and discarded.
         assert_eq!(scheduler.run_script("document.body.children.length")
