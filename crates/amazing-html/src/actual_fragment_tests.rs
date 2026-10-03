@@ -89,7 +89,7 @@ fn template_fragment_form_rules_ignore_outer_form_pointer_but_preserve_namespace
         other.has_form_ancestor = true;
         let dom = parse(&other, "<form><input></form>");
         assert!(!dom.tree_order(NodeIdx(0)).into_iter().any(|node|
-            dom.namespace(*node) == Some(Namespace::Html) && dom.local_name(*node) == Some("form")));
+            dom.namespace(node) == Some(Namespace::Html) && dom.local_name(node) == Some("form")));
     }
 }
 #[test]
