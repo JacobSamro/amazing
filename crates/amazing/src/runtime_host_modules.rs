@@ -4,12 +4,43 @@ use amazing_js::module::{ModuleFailure, ModuleLinker, ModulePhase, ModuleResolve
 use amazing_js::value::JsObject;
 
 pub(crate) type ModuleSourceLoader = dyn Fn(&str) -> Result<String, String>;
+/// A real browsing-context policy snapshot; never reconstruct origin from URL.
+#[derive(Clone, Debug)]
+pub(crate) struct ModuleResourceRequest {
+    pub(crate) requested_url: String,
+    pub(crate) referrer: String,
+    pub(crate) initiator: html::HtmlDocumentContext,
+    pub(crate) options: ModuleFetchOptions,
+}
+#[derive(Clone, Debug)]
+pub(crate) struct ModuleFetchOptions {
+    pub(crate) credentials: amazing_fetch::CredentialsMode,
+    pub(crate) referrer_policy: String,
+    pub(crate) nonce: String,
+    pub(crate) integrity: String,
+}
+impl Default for ModuleFetchOptions {
+    fn default() -> Self { Self { credentials: amazing_fetch::CredentialsMode::SameOrigin,
+        referrer_policy: String::new(), nonce: String::new(), integrity: String::new() } }
+}
+pub(crate) type ModuleResourceLoader = dyn Fn(ModuleResourceRequest) -> Result<amazing_net::Response, String>;
+fn module_referrer_policy(value: &str) -> String {
+    value.split(',').map(str::trim).filter(|policy| matches!(*policy,
+        "no-referrer" | "no-referrer-when-downgrade" | "origin" | "origin-when-cross-origin"
+        | "same-origin" | "strict-origin" | "strict-origin-when-cross-origin" | "unsafe-url"))
+        .last().unwrap_or("").to_owned()
+}
+type ContextProvider = dyn Fn(RealmHandle) -> Option<html::HtmlDocumentContext>;
 type Registry = Rc<RefCell<ModuleLinker<BrowserModuleResolver>>>;
 type SourceCache = Rc<RefCell<HashMap<String, Result<String, String>>>>;
 
 #[derive(Clone)]
 pub(super) struct ModuleRuntime {
     sources: Rc<RefCell<Rc<ModuleSourceLoader>>>,
+    resources: Rc<RefCell<Option<Rc<ModuleResourceLoader>>>>,
+    contexts: Rc<RefCell<Option<Rc<ContextProvider>>>>,
+    options: Rc<RefCell<HashMap<(RealmHandle, String), ModuleFetchOptions>>>,
+    response_urls: Rc<RefCell<HashMap<(RealmHandle, String), String>>>,
     registries: Rc<RefCell<HashMap<RealmHandle, Registry>>>,
     inline_urls: Rc<RefCell<HashMap<String, String>>>,
     caches: Rc<RefCell<HashMap<RealmHandle, SourceCache>>>,
@@ -22,6 +53,11 @@ pub(super) struct ModuleRuntime {
 #[derive(Clone)]
 struct BrowserModuleResolver {
     sources: Rc<RefCell<Rc<ModuleSourceLoader>>>,
+    resources: Rc<RefCell<Option<Rc<ModuleResourceLoader>>>>,
+    contexts: Rc<RefCell<Option<Rc<ContextProvider>>>>,
+    options: Rc<RefCell<HashMap<(RealmHandle, String), ModuleFetchOptions>>>,
+    response_urls: Rc<RefCell<HashMap<(RealmHandle, String), String>>>,
+    realm: RealmHandle,
     inline_urls: Rc<RefCell<HashMap<String, String>>>,
     fallback: String,
     cache: Rc<RefCell<HashMap<String, Result<String, String>>>>,
@@ -29,7 +65,8 @@ struct BrowserModuleResolver {
 
 impl BrowserModuleResolver {
     fn url(&self, id: &str) -> String {
-        self.inline_urls.borrow().get(id).cloned().unwrap_or_else(|| id.to_owned())
+        self.response_urls.borrow().get(&(self.realm, id.to_owned())).cloned()
+            .or_else(|| self.inline_urls.borrow().get(id).cloned()).unwrap_or_else(|| id.to_owned())
     }
     fn locate(&self, specifier: &str, referrer: &str) -> Result<String, String> {
         // Import maps are a separate driver feature. Bare names must not
@@ -52,8 +89,39 @@ impl ModuleResolver for BrowserModuleResolver {
         let id = self.locate(specifier, referrer)?;
         let cached = self.cache.borrow().get(&id).cloned();
         let source = if let Some(source) = cached { source } else {
-            let loader = self.sources.borrow().clone();
-            let source = loader(&id);
+            let resource_loader = self.resources.borrow().clone();
+            let source = if let Some(loader) = resource_loader {
+                let context_provider = self.contexts.borrow().clone();
+                let context = context_provider.and_then(|provider| provider(self.realm))
+                    .ok_or_else(|| "module request has no live browsing context".to_owned())?;
+                let options_key = if referrer.is_empty() { &id } else { referrer };
+                let options = self.options.borrow().get(&(self.realm, options_key.to_owned())).cloned().unwrap_or_default();
+                self.options.borrow_mut().entry((self.realm, id.clone())).or_insert_with(|| options.clone());
+                let request_referrer = if referrer.is_empty() { context.document_url.clone() } else { self.url(referrer) };
+                let response = loader(ModuleResourceRequest { requested_url: id.clone(),
+                    referrer: request_referrer,
+                    initiator: context, options });
+                response.and_then(|response| {
+                    if !response.is_success() { return Err(format!("module fetch failed: {}", response.status)); }
+                    let mime = response.content_type().unwrap_or("");
+                    if !amazing_html::is_javascript_mime_type(mime) {
+                        return Err(format!("module response is not JavaScript: {mime}"));
+                    }
+                    let final_url = amazing_net::ParsedUrl::parse(&response.url)
+                        .map_err(|error| format!("invalid module response URL: {error}"))?.serialize();
+                    self.response_urls.borrow_mut().insert((self.realm, id.clone()), final_url);
+                    if let Some(policy) = response.headers.get("referrer-policy") {
+                        let policy = module_referrer_policy(policy);
+                        if !policy.is_empty() {
+                            self.options.borrow_mut().entry((self.realm, id.clone())).or_default().referrer_policy = policy;
+                        }
+                    }
+                    Ok(decode_module(&response.body))
+                })
+            } else {
+                let loader = self.sources.borrow().clone();
+                loader(&id)
+            };
             self.cache.borrow_mut().insert(id.clone(), source.clone());
             source
         }?;
@@ -116,6 +184,8 @@ fn module_failure(error: ModuleFailure) -> Throw {
 impl ModuleRuntime {
     pub(super) fn new() -> Self {
         Self { sources: Rc::new(RefCell::new(Rc::new(fetch_module))),
+            resources: Rc::new(RefCell::new(None)), contexts: Rc::new(RefCell::new(None)),
+            options: Rc::new(RefCell::new(HashMap::new())), response_urls: Rc::new(RefCell::new(HashMap::new())),
             registries: Rc::new(RefCell::new(HashMap::new())),
             inline_urls: Rc::new(RefCell::new(HashMap::new())),
             caches: Rc::new(RefCell::new(HashMap::new())),
@@ -128,6 +198,8 @@ impl ModuleRuntime {
         let cache = self.caches.borrow_mut().entry(js.binding_current_realm())
             .or_insert_with(|| Rc::new(RefCell::new(HashMap::new()))).clone();
         BrowserModuleResolver { sources: self.sources.clone(), inline_urls: self.inline_urls.clone(),
+            resources: self.resources.clone(), contexts: self.contexts.clone(), options: self.options.clone(),
+            response_urls: self.response_urls.clone(), realm: js.binding_current_realm(),
             fallback: self.bases.borrow().get(&js.binding_current_realm()).cloned()
                 .unwrap_or_else(|| source_url(js.binding_location_href())), cache }
     }
@@ -193,6 +265,24 @@ impl ModuleRuntime {
 }
 
 impl RuntimeBindings {
+    fn module_script_options(&self, script: &crate::cmd::js::PageScript) -> ModuleFetchOptions {
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        let attrs = host.dom.attrs_of(script.node).unwrap_or(&[]);
+        let attr = |name: &str| attrs.iter().find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.clone()).unwrap_or_default();
+        ModuleFetchOptions {
+            credentials: if attr("crossorigin").eq_ignore_ascii_case("use-credentials") {
+                amazing_fetch::CredentialsMode::Include
+            } else { amazing_fetch::CredentialsMode::SameOrigin },
+            referrer_policy: {
+                let value = attr("referrerpolicy").to_ascii_lowercase();
+                let parsed = module_referrer_policy(&value);
+                if parsed == value { parsed } else { String::new() }
+            },
+            nonce: attr("nonce"), integrity: attr("integrity"),
+        }
+    }
     pub(crate) fn page_script_url(&self, js: &Interpreter, script: &crate::cmd::js::PageScript, page: &str) -> String {
         let runtime = self.state.borrow().modules.clone();
         let mut base = if matches!(page, "about:blank" | "about:srcdoc") { runtime.resolver(js).fallback } else { source_url(page) };
@@ -204,7 +294,9 @@ impl RuntimeBindings {
         };
         if let Some(href) = href && let Ok(url) = amazing_net::url::ParsedUrl::parse(&base)
             .and_then(|url| url.resolve(&String::from_utf16_lossy(&href))) { base = url.serialize(); }
-        script.src.as_deref().map(|src| source_url(&crate::cmd::js::resolve_script_url(&base, src))).unwrap_or(base)
+        let url = script.src.as_deref().map(|src| source_url(&crate::cmd::js::resolve_script_url(&base, src))).unwrap_or(base);
+        runtime.options.borrow_mut().insert((js.binding_current_realm(), url.clone()), self.module_script_options(script));
+        url
     }
     pub(crate) fn finish_module_script(&self, js: &mut Interpreter, script: &crate::cmd::js::PageScript,
         error: Option<&Throw>, url: &str, fetched: bool) -> Result<(), Throw> {
@@ -264,11 +356,14 @@ impl RuntimeBindings {
     pub(crate) fn load_module_source(&self, js: &Interpreter, url: &str) -> Result<String, String> {
         let runtime = self.state.borrow().modules.clone();
         let url = source_url(url);
-        runtime.resolver(js).resolve(&url, &url).map(|(_, source)| source)
+        runtime.resolver(js).resolve(&url, "").map(|(_, source)| source)
     }
     pub(crate) fn set_module_source_loader(&self, loader: Rc<ModuleSourceLoader>) {
         let runtime = self.state.borrow().modules.clone();
         *runtime.sources.borrow_mut() = loader;
+    }
+    pub(crate) fn set_module_resource_loader(&self, loader: Rc<ModuleResourceLoader>) {
+        *self.state.borrow().modules.resources.borrow_mut() = Some(loader);
     }
     pub(crate) fn execute_page_script(&self, js: &mut Interpreter,
         script: &crate::cmd::js::PageScript, source: &str, url: &str) -> Result<JsValue, Throw> {
@@ -290,6 +385,7 @@ impl RuntimeBindings {
             runtime.current_scripts.borrow_mut().insert(document, current).flatten()
         });
         if script.kind == crate::cmd::js::ScriptKind::Classic {
+            runtime.options.borrow_mut().insert((js.binding_current_realm(), url.clone()), self.module_script_options(script));
             let result = js.run_script_with_source_context(source, &url);
             if let Some(document) = document { runtime.current_scripts.borrow_mut().insert(document, previous.flatten()); }
             return result;
@@ -299,6 +395,8 @@ impl RuntimeBindings {
             runtime.inline_urls.borrow_mut().insert(id.clone(), url);
             id
         };
+        runtime.options.borrow_mut().entry((js.binding_current_realm(), id.clone()))
+            .or_insert_with(|| self.module_script_options(script));
         let result = runtime.evaluate(js, &id, source).and_then(|(namespace, pending)| {
             if let Some(promise) = pending {
                 let bindings = self.clone();
@@ -321,6 +419,13 @@ impl RuntimeBindings {
 impl RuntimeBindingHost<'_> {
     pub(super) fn install_module_loader(&mut self) -> Result<(), Throw> {
         let runtime = self.state.borrow().modules.clone();
+        let state = Rc::downgrade(&self.state);
+        *runtime.contexts.borrow_mut() = Some(Rc::new(move |realm| {
+            let state = state.upgrade()?;
+            let state = state.borrow();
+            let host = state.host.borrow();
+            state.frames.document_context_for_realm(&host.dom, realm)
+        }));
         runtime.install(self.js);
         if let Some(prototype) = self.prototype(Interface::Document) {
             let getter = self.native("get currentScript", 0, NativeEntry::CurrentScript, HostCallPolicy::CallOnly);
@@ -356,6 +461,50 @@ mod tests {
     }
     fn script(kind: ScriptKind, node: u32, external: bool) -> PageScript {
         PageScript { kind, node: NodeIdx(node), src: external.then(|| "root.js".into()), body: String::new() }
+    }
+    #[test]
+    fn module_resources_keep_actual_context_options_and_redirected_bases() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<script type=module src=root.js crossorigin=use-credentials referrerpolicy=origin nonce=abc integrity=sha256-test></script>"),
+            native_forwarded: false,
+        }));
+        let node = host.borrow_mut().query_selector("script").unwrap();
+        let mut scheduler = crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/page.html");
+        let requests = Rc::new(RefCell::new(Vec::new()));
+        let recorded = requests.clone();
+        scheduler.set_module_resource_loader(Rc::new(move |request| {
+            // The context snapshot must release all host borrows before transport.
+            let _ = host.borrow_mut();
+            let (url, source) = if request.requested_url.ends_with("/root.js") {
+                ("https://example.test/redirect/root.js", "import './dep.js';window.moduleURL=import.meta.url;")
+            } else {
+                assert_eq!(request.requested_url, "https://example.test/redirect/dep.js");
+                ("https://example.test/redirect/dep.js", "\u{feff}window.dependencyLoaded=true;")
+            };
+            recorded.borrow_mut().push(request);
+            let mut headers = amazing_net::Headers::new();
+            headers.append("content-type", "text/javascript; charset=windows-1252".into()).unwrap();
+            headers.append("referrer-policy", "garbage, no-referrer".into()).unwrap();
+            Ok(amazing_net::Response { url: url.into(), status: 200, reason: "OK".into(), headers, body: source.as_bytes().to_vec() })
+        }));
+        let script = script(ScriptKind::Module, node, true);
+        let url = scheduler.page_script_url("https://example.test/page.html", &script);
+        let source = scheduler.load_module_source(&url).unwrap();
+        scheduler.run_page_script(&script, &source, &url).unwrap();
+        assert!(matches!(scheduler.run_script("dependencyLoaded && moduleURL==='https://example.test/redirect/root.js'").unwrap(), JsValue::Bool(true)));
+        let requests = requests.borrow();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].referrer, "https://example.test/page.html");
+        assert_eq!(requests[0].initiator.document_url, "https://example.test/page.html");
+        assert_eq!(requests[0].initiator.origin, amazing_fetch::HttpUrl::parse("https://example.test/").unwrap().origin());
+        assert_eq!(requests[0].options.credentials, amazing_fetch::CredentialsMode::Include);
+        assert_eq!(requests[0].options.referrer_policy, "origin");
+        assert_eq!(requests[0].options.nonce, "abc");
+        assert_eq!(requests[0].options.integrity, "sha256-test");
+        assert_eq!(requests[1].referrer, "https://example.test/redirect/root.js");
+        assert_eq!(requests[1].options.referrer_policy, "no-referrer");
+        assert_eq!(requests[1].options.credentials, amazing_fetch::CredentialsMode::Include);
     }
     #[test]
     fn static_and_delayed_imports_share_live_namespace_and_fetch_once() {

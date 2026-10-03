@@ -70,6 +70,10 @@ impl DriverScheduler {
         loader: Rc<crate::runtime_binding_host::modules::ModuleSourceLoader>) {
         self.bindings.set_module_source_loader(loader);
     }
+    pub(crate) fn set_module_resource_loader(&mut self,
+        loader: Rc<crate::runtime_binding_host::modules::ModuleResourceLoader>) {
+        self.bindings.set_module_resource_loader(loader);
+    }
     pub(crate) fn load_module_source(&self, url: &str) -> Result<String, String> {
         self.bindings.load_module_source(&self.js, url)
     }
