@@ -2358,6 +2358,8 @@ mod tests {
         }
         assert_eq!(snapshots.len(), 2);
         for (realm, context) in &state.frames.contexts {
+            assert_eq!(state.frames.document_creation_origin(&borrowed.dom, context.document, *realm),
+                Some(context.fetch_origin.clone()));
             let by_realm = state.frames.document_context_for_realm(&borrowed.dom, *realm).unwrap();
             let by_document = state.frames.document_context(&borrowed.dom, context.document).unwrap();
             assert_eq!(by_realm.document_url, by_document.document_url);
@@ -2382,13 +2384,22 @@ mod tests {
         let mut state = bindings.state.borrow_mut();
         assert_eq!(state.frames.document_context(&host.borrow().dom, NodeIdx(0)).unwrap().origin, root.origin);
         state.frames.contexts.get_mut(&realm).unwrap().document_generation += 1;
+        assert!(state.frames.document_creation_origin(&host.borrow().dom, retired, realm).is_none());
         assert!(state.frames.document_context(&host.borrow().dom, retired).is_none());
         assert!(state.frames.document_context_for_realm(&host.borrow().dom, realm).is_none());
         state.frames.contexts.get_mut(&realm).unwrap().document_generation -= 1;
         let frame = state.frames.contexts[&realm].frame.unwrap();
+        let creation_origin = state.frames.document_creation_origin(&host.borrow().dom, retired, realm).unwrap();
+        state.frames.set_inert_document_origin(&host.borrow().dom, retired, creation_origin.clone()).unwrap();
         state.frames.documents.get_mut(&frame).unwrap().document = None;
+        // Context allocation precedes the frame-document commit; its exact
+        // native origin remains available without inventing a live context.
+        assert_eq!(state.frames.document_creation_origin(&host.borrow().dom, retired, realm), Some(creation_origin.clone()));
         assert!(state.frames.document_context(&host.borrow().dom, retired).is_none());
         assert!(state.frames.document_context_for_realm(&host.borrow().dom, realm).is_none());
+        state.frames.windows.remove(&frame);
+        assert!(state.frames.document_creation_origin(&host.borrow().dom, retired, realm).is_none());
+        assert_eq!(state.frames.document_origin(&host.borrow().dom, retired), Some(creation_origin));
         // A stale root ancestor invalidates the entire child policy snapshot.
         let root_realm = *state.frames.contexts.iter().find(|(_, context)| context.frame.is_none()).unwrap().0;
         state.frames.contexts.get_mut(&root_realm).unwrap().document_generation += 1;
