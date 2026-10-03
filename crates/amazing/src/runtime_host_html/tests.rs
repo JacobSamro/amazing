@@ -1447,9 +1447,10 @@ fn selection_context_helpers_preserve_actual_associations_and_receiver_policy() 
         }));
         Ok(js.binding_create_native_function(HostFunctionId(u64::MAX), "selectionBorrowed", 0, JsCallPolicy::CallOnly))
     }).unwrap();
-    js.binding_define_data_property(&root_window, "selectionBorrowed", native, BindingPropertyFlags { writable: true, enumerable: true, configurable: true }).unwrap();
-    js.binding_define_data_property(&root_window, "selectionReceiver", opaque.window.clone(), BindingPropertyFlags { writable: true, enumerable: true, configurable: true }).unwrap();
-    let denied = js.run_script("try { selectionBorrowed.call(selectionReceiver); throw new Error('access allowed'); } catch(error) { error; }").unwrap();
+    let root_global = js.binding_global_object();
+    js.binding_define_data_property(&root_global, "selectionBorrowed", native, BindingPropertyFlags { writable: true, enumerable: true, configurable: true }).unwrap();
+    js.binding_define_data_property(&root_global, "selectionReceiver", opaque.window.clone(), BindingPropertyFlags { writable: true, enumerable: true, configurable: true }).unwrap();
+    let denied = js.run_script("try { window.selectionBorrowed.call(window.selectionReceiver); throw new Error('access allowed'); } catch(error) { error; }").unwrap();
     let expected = bindings.state.borrow().interfaces[&realm].iter()
         .find(|(interface, _, _)| *interface == Interface::DOMException).unwrap().1.clone();
     let name = js.binding_get_property(&denied, "name").unwrap();
