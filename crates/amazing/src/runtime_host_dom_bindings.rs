@@ -66,7 +66,8 @@ impl RuntimeBindingHost<'_> {
             return Err(Throw::type_error("Expected a DOMParser"));
         };
         let host = state.host.borrow();
-        if host.dom.node_generation(*document) != Some(*generation) {
+        if host.dom.node_generation(*document) != Some(*generation)
+            || !matches!(host.dom.get(*document).kind, NodeKind::Document) {
             return Err(Throw::type_error("DOMParser relevant Document is stale"));
         }
         Ok(*document)
