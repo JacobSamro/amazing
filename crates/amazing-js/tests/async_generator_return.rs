@@ -361,3 +361,46 @@ fn externally_scheduled_return_and_disposal_never_pump_at_script_entry() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+#[test]
+fn return_await_precedes_iterator_close_and_preserves_completion_precedence() {
+    let iterable = "var original={},closing={},closed=0,ok=false;var iterable={[Symbol.iterator](){return {next(){return {value:1,done:false}},return(){closed++;throw closing}}}};";
+    matrix(&[
+        (
+            iterable,
+            "(async function*(){try{for(var x of iterable)return Promise.reject(original)}catch(e){return e===original&&closed===1}})",
+            "g().next().then(r=>ok=r.done&&r.value===true,e=>ok=false)",
+        ),
+        (
+            iterable,
+            "(async function*(){try{for(var x of iterable)return Promise.resolve(7)}catch(e){return e===closing&&closed===1}})",
+            "g().next().then(r=>ok=r.done&&r.value===true,e=>ok=false)",
+        ),
+        (
+            iterable,
+            "(async function*(){try{for(var x of iterable)yield x}catch(e){return e===original&&closed===1}})",
+            "var it=g();it.next().then(()=>it.return(Promise.reject(original))).then(r=>ok=r.done&&r.value===true,e=>ok=false)",
+        ),
+        (
+            iterable,
+            "(async function*(){try{for(var x of iterable)yield x}catch(e){return e===closing&&closed===1}})",
+            "var it=g();it.next().then(()=>it.return(Promise.resolve(7))).then(r=>ok=r.done&&r.value===true,e=>ok=false)",
+        ),
+    ]);
+}
+
+#[test]
+fn return_await_preserves_pending_completion_across_finalizer_yield_and_queue() {
+    matrix(&[
+        (
+            "var ok=false,finish,log=[],p=new Promise(r=>finish=r);",
+            "(async function*(){try{yield 1}finally{yield 2}})",
+            "var it=g();it.next().then(()=>{it.return(p).then(r=>log.push(r.value+':'+r.done));it.next().then(r=>ok=r.value===7&&r.done&&log.join(',')==='2:false');finish(7)})",
+        ),
+        (
+            "var ok=false,original={},replacement={};",
+            "(async function*(){try{yield 1}finally{try{yield 2}catch(e){return e===replacement}}})",
+            "var it=g();it.next().then(()=>it.return(original)).then(r=>it.throw(replacement)).then(r=>ok=r.done&&r.value===true,e=>ok=false)",
+        ),
+    ]);
+}
