@@ -5,6 +5,7 @@
 //! wraps the same Document/Element prototypes as the top realm rather than a
 //! fully independent intrinsic set.
 use super::*;
+#[path = "runtime_host_html/document_write.rs"]
 mod document_write;
 use crate::dom_host::BrowserDomHost;
 use amazing_dom::document_surface::ReadyState;
