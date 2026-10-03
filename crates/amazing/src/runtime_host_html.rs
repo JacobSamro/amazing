@@ -2234,9 +2234,11 @@ impl RuntimeBindingHost<'_> {
         let source_origin = match &source { Some(context) => context_origin(self.js, context, source_realm)?, None => "null".into() };
         let target_origin = context_origin(self.js, &target, target_realm)?;
         if source_origin != target_origin && !matches!(operation, Operation::LocationSetHref | Operation::LocationReplace) {
-            let global = self.js.binding_global_object();
-            let constructor = self.js.binding_get_property(&global, "DOMException")?;
-            let error = self.js.binding_construct(&constructor, vec![JsValue::str("Blocked cross-origin Location access"), JsValue::str("SecurityError")])?;
+            let error = self.js.binding_with_realm(source_realm, |js| {
+                let global = js.binding_global_object();
+                let constructor = js.binding_get_property(&global, "DOMException")?;
+                js.binding_construct(&constructor, vec![JsValue::str("Blocked cross-origin Location access"), JsValue::str("SecurityError")])
+            })?;
             return Err(self.js.binding_throw(error));
         }
         let state = self.state.clone();
@@ -2423,6 +2425,42 @@ mod tests {
                 Object.getOwnPropertyDescriptor(location,'href').get.call(w.location));
             observations.join('|');
         "#).unwrap(), JsValue::str("true|true|about:blank?two#last|https://example.test/source-base/|https://example.test/root-base/|https://example.test/root-base/|true|true|about:blank?two#last"));
+    }
+
+    #[test]
+    fn genuine_cross_origin_location_receivers_preserve_policy_and_source() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+            "<!doctype html><iframe sandbox></iframe>"), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(JS_CAPACITY).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = crate::runtime_binding_host::install(&mut js, host).unwrap();
+        js.set_location_url("https://example.test/main.html");
+        let root = js.binding_current_realm();
+        js.binding_set_realm_origin(root, "https://example.test").unwrap();
+        bindings.set_document_url(&mut js, "https://example.test/main.html");
+        let (realm, document) = bindings.state.borrow().frames.contexts.iter()
+            .find(|(_, context)| context.frame.is_some()).map(|(realm, context)| (*realm, context.document)).unwrap();
+        // Expose the real foreign Location for borrowed-call policy checks;
+        // ordinary cross-origin Window.document access remains blocked.
+        let location = RuntimeBindingHost { js: &mut js, state: bindings.state.clone() }
+            .html_document_location(document).unwrap().unwrap();
+        let global = js.binding_global_object();
+        js.binding_set_property(&global, "foreignLocation", location).unwrap();
+        assert_eq!(js.run_script(r#"
+            let rejected=0;
+            for (const check of [()=>foreignLocation.href, ()=>foreignLocation.assign('about:blank'), ()=>foreignLocation.reload()]) {
+                try { check(); } catch(e) { if(e instanceof DOMException && e.name==='SecurityError') rejected++; }
+            }
+            let wrong=false; try { Object.getOwnPropertyDescriptor(location,'href').get.call({}); } catch(e) { wrong=e instanceof TypeError; }
+            Location.prototype.replace.call(foreignLocation,'about:blank?allowed');
+            rejected+'|'+wrong;
+        "#).unwrap(), JsValue::str("3|true"));
+        let state = bindings.state.borrow();
+        let navigation = state.frames.pending_navigations.get(&realm).unwrap();
+        assert_eq!(navigation.source.document, NodeIdx(0));
+        assert_eq!(navigation.source.generation, state.host.borrow().dom.node_generation(NodeIdx(0)).unwrap());
+        assert_eq!(navigation.source.base_url, "https://example.test/main.html");
+        assert_eq!(navigation.url, "about:blank?allowed");
     }
 
     #[test]
