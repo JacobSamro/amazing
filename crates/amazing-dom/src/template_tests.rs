@@ -151,3 +151,19 @@ fn template_contents_reject_host_including_cycles_before_mutation() {
     dom.pre_insert(replacement, contents, Some(child)).unwrap();
     assert_eq!(dom.owner_document(replacement), dom.owner_document(contents));
 }
+
+#[test]
+fn retained_inert_document_keeps_its_creation_flag_after_source_collection() {
+    let mut dom = Dom::new();
+    let document = dom.create_document();
+    let template = dom.create_element_ns_in(document, Some("http://www.w3.org/1999/xhtml"), "template").unwrap();
+    let contents = dom.ensure_template_contents(template).unwrap();
+    let inert = dom.owner_document(contents).unwrap();
+    // A script can retain the inert Document independently after all original
+    // templates and their source document become unreachable.
+    for node in [contents, template, document] { dom.retire_unreachable_node(node).unwrap(); }
+    let nested = dom.create_element_ns_in(inert, Some("http://www.w3.org/1999/xhtml"), "template").unwrap();
+    let nested_contents = dom.ensure_template_contents(nested).unwrap();
+    assert_eq!(dom.owner_document(nested_contents), Some(inert));
+    assert_eq!(dom.ensure_template_contents(nested), Ok(nested_contents));
+}

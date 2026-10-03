@@ -42,7 +42,10 @@ impl Dom {
         let valid = |&(source, version, inert, inert_version): &(NodeIdx, u64, NodeIdx, u64)|
             self.node_generation(source) == Some(version)
                 && self.node_generation(inert) == Some(inert_version);
-        if self.template_owner_documents.iter().filter(|entry| valid(entry)).any(|(_, _, inert, _)| *inert == document) {
+        // Being created by this algorithm is an intrinsic document flag: it
+        // survives collection of the original source document.
+        if self.template_owner_documents.iter().any(|(_, _, inert, version)|
+            *inert == document && self.node_generation(*inert) == Some(*version)) {
             return document;
         }
         if let Some((_, _, inert, _)) = self.template_owner_documents.iter()
