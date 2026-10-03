@@ -3675,3 +3675,27 @@ resource. Root pending replacement snapshot transfer/session history remains
 explicit; no parser/tree/comparator gain claimed. Exact source/series in
 evidence/html53/source.json. Next54 actual HTML/XML fragment parser/context API
 for DOM whole Range, then reopened parser sessions55.
+
+## HTML54 actual fragment APIs ready
+
+Actual HTML URI/localcase/expanded UTF16 attributes/form ancestry/quirks/scripting
+context now drives fragment construction; namespace IDs are translated across
+arenas on export. Direct XML fragment grammar preserves inherited namespace
+scope, CDATA/multiple roots and fatal error boundaries without wrapper source.
+Driver callback maps strict XML source decoding/errors to SyntaxError. Range
+activation and XML imported-script marking remain separate DOM/HTML integration.
+
+605 owned/6 skipped,3593 workspace/17 skipped,four docs;1894 CLI trees and1930
+expanded passes/6 unsupported retained. Whole13 directories preserve every
+exact passing assertion multiplicity: zero gained/zero lost, with no claimed
+WPT parser/comparator gain. Evidence/html54/source.json records all source and
+API dependencies, baseline XHR whole-suite recovery and raw hashes. Parent-granted
+standalone pure document_context(&self,&Dom,document) returns actual generation-
+checked typed document/top/ancestor origins and committed/captured URLs without
+JS callbacks; PSL/site/network storage policy remains caller-owned.
+
+Next55: adopt ready importer eef5/4581/862e/a22e/c176+6480 on a new matched
+fixed baseline, then replace reopened document body-fragment fallback with real
+open/write/close tokenizer sessions. XML Range returned-script marking integrates
+when the owner's actual lower operation is available, traversing ordinary and
+actual template contents and preserving HTML Range append execution policy.

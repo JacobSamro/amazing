@@ -1,0 +1,65 @@
+{
+  "before": "2c9b6b1b3287ee2b188107914a394db38da6be44",
+  "after": "575ee623567b82f0f157272214524c18680cbe70",
+  "prior_ready_html53": "ab8d48b92ebd5c3ad5fc1ceec649a71fca4c28eb",
+  "code_series_after_html53": [
+    {
+      "sha": "b586a7224bd42ee2f31dff5a5eab62fb8159f247",
+      "subject": "DOM: snapshot actual fragment parsing context"
+    },
+    {
+      "sha": "2c9b6b1b3287ee2b188107914a394db38da6be44",
+      "subject": "DOM: correct XML fragment context field declaration"
+    },
+    {
+      "sha": "7200cafdf5cd05bbc6fe9410f7f1600ef2bbd98b",
+      "subject": "html: parse fragments using actual HTML and XML context snapshots"
+    },
+    {
+      "sha": "7a3f4f1bae7c238d6dcd00cf42a71bfa190100ea",
+      "subject": "html: preserve XML fragment template insertion ownership"
+    },
+    {
+      "sha": "8ab37c89bbbf6e2a41eeaa3bba3239e5ad5e9f41",
+      "subject": "html: expose immutable live document policy snapshots"
+    },
+    {
+      "sha": "0bbfff3b54a4754480734016cf56cfaa6c53d064",
+      "subject": "html: refresh actual root generation on committed navigation"
+    },
+    {
+      "sha": "575ee623567b82f0f157272214524c18680cbe70",
+      "subject": "html: retain document root ownership during fragment export"
+    }
+  ],
+  "upstream_lower_context_api": [
+    "513b52c9694a8dd4d98ada84d21661041f13019d",
+    "f0b1cb9013aa3e87c7243e0d2c0650a621d629e6"
+  ],
+  "standalone_policy_api": [
+    "8ab37c89bbbf6e2a41eeaa3bba3239e5ad5e9f41",
+    "0bbfff3b54a4754480734016cf56cfaa6c53d064"
+  ],
+  "gates": {
+    "before_owned": 599,
+    "before_workspace": 3587,
+    "after_owned": 605,
+    "after_owned_skipped": 6,
+    "after_workspace": 3593,
+    "workspace_skipped": 17,
+    "doctests": 4
+  },
+  "baseline_recovery": {
+    "binary_sha256": "d88daa614e292031e00b9eb64ee7263ba70d3a6b0fb7a8650fc76dbe303aa458",
+    "second_deadline_raw_sha256": "a692ae4c0919176471068bab1da3df49f93c27633448fb4dc0c922a179f8cde7"
+  },
+  "first_candidate": {
+    "sha": "0bbfff3b54a4754480734016cf56cfaa6c53d064",
+    "owned_passed": 575,
+    "owned_failed": 30,
+    "cause": "Document.ownerDocument is null at standalone fragment export root; corrected by575ee623"
+  },
+  "wpt_gained": 0,
+  "wpt_lost": 0,
+  "selection_count": 13
+}

@@ -1,0 +1,482 @@
+{
+  "base-url": {
+    "selected": 11,
+    "before": {
+      "error": 0,
+      "fail": 0,
+      "notrun": 0,
+      "pass": 2,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 0,
+      "notrun": 0,
+      "pass": 2,
+      "timeout": 0
+    },
+    "files_before": {
+      "unsupported": 10,
+      "pass": 1
+    },
+    "files_after": {
+      "unsupported": 10,
+      "pass": 1
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "lost_files": [],
+    "raw_before_sha256": "cde59d51e16dcd26199d4397d96a24240207917561436c2e9be215ec084cb706",
+    "raw_after_sha256": "cde59d51e16dcd26199d4397d96a24240207917561436c2e9be215ec084cb706"
+  },
+  "dom": {
+    "selected": 314,
+    "before": {
+      "error": 0,
+      "fail": 265,
+      "notrun": 0,
+      "pass": 12379,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 265,
+      "notrun": 0,
+      "pass": 12379,
+      "timeout": 0
+    },
+    "files_before": {
+      "unsupported": 69,
+      "pass": 156,
+      "timeout": 15,
+      "fail": 68,
+      "error": 6
+    },
+    "files_after": {
+      "unsupported": 69,
+      "pass": 156,
+      "timeout": 15,
+      "fail": 68,
+      "error": 6
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "lost_files": [],
+    "raw_before_sha256": "de643a7e596fb51b6d2cbaaad633ed87b25942755a27c754b8c70e6c1f7ca696",
+    "raw_after_sha256": "ce17f45a7294a3aa45b32e46c90d32b8304ec739e4a16b71be7cd10f0624337b",
+    "initial_before_sha256": "f5b99f3762d073d03417b113684312bd000a9f6f63ac5bf2ae44de42b866b1b5",
+    "baseline_recovery_gained": [
+      [
+        [
+          "dom/nodes/Document-contentType/contentType/xhr_responseType_document.html",
+          "bf8cc0b8dced91155620f90ecac5be808d683e06ffd9f8df86de2e8866891d45"
+        ],
+        1
+      ]
+    ]
+  },
+  "domparsing": {
+    "selected": 68,
+    "before": {
+      "error": 0,
+      "fail": 1284,
+      "notrun": 0,
+      "pass": 223,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 1284,
+      "notrun": 0,
+      "pass": 223,
+      "timeout": 0
+    },
+    "files_before": {
+      "pass": 11,
+      "fail": 41,
+      "unsupported": 7,
+      "error": 9
+    },
+    "files_after": {
+      "pass": 11,
+      "fail": 41,
+      "unsupported": 7,
+      "error": 9
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "lost_files": [],
+    "raw_before_sha256": "e316e4b60dc2df278c27c0a717d96213306fa1f5aaa9dcf3a15e458dcad6824f",
+    "raw_after_sha256": "fcac9cb1463528bb998f5d198c86cec9f61ff582efb6f8db3ab6ff839cf9fe3a"
+  },
+  "encoding": {
+    "selected": 194,
+    "before": {
+      "error": 0,
+      "fail": 357,
+      "notrun": 0,
+      "pass": 12277,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 357,
+      "notrun": 0,
+      "pass": 12277,
+      "timeout": 0
+    },
+    "files_before": {
+      "pass": 27,
+      "fail": 17,
+      "unsupported": 141,
+      "error": 8,
+      "timeout": 1
+    },
+    "files_after": {
+      "pass": 27,
+      "fail": 17,
+      "unsupported": 141,
+      "error": 8,
+      "timeout": 1
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "lost_files": [],
+    "raw_before_sha256": "ad8563735e4474eb04c9cab43b5e1877ffb18963a59aec165dba50c73ebf7e1e",
+    "raw_after_sha256": "a50cac1141cb514a4904cbc0262a06b978c4488934f20236a666bfda2494df4f"
+  },
+  "ranges": {
+    "selected": 66,
+    "before": {
+      "error": 0,
+      "fail": 196,
+      "notrun": 0,
+      "pass": 40025,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 196,
+      "notrun": 0,
+      "pass": 40025,
+      "timeout": 0
+    },
+    "files_before": {
+      "pass": 36,
+      "fail": 23,
+      "error": 6,
+      "unsupported": 1
+    },
+    "files_after": {
+      "pass": 36,
+      "fail": 23,
+      "error": 6,
+      "unsupported": 1
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "lost_files": [],
+    "raw_before_sha256": "abb6a284f233848597134d1bceca99bbcbadba9a70bbb217ab6a7aebaec70bda",
+    "raw_after_sha256": "abb6a284f233848597134d1bceca99bbcbadba9a70bbb217ab6a7aebaec70bda"
+  },
+  "serialization": {
+    "selected": 8,
+    "before": {
+      "error": 0,
+      "fail": 1,
+      "notrun": 0,
+      "pass": 374,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 1,
+      "notrun": 0,
+      "pass": 374,
+      "timeout": 0
+    },
+    "files_before": {
+      "fail": 1,
+      "pass": 7
+    },
+    "files_after": {
+      "fail": 1,
+      "pass": 7
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "lost_files": [],
+    "raw_before_sha256": "d0318007491f7cbfd370d5a4a0298413134d358acfeae83a2b8ea6dd75d14971",
+    "raw_after_sha256": "d0318007491f7cbfd370d5a4a0298413134d358acfeae83a2b8ea6dd75d14971",
+    "initial_before_sha256": "d0318007491f7cbfd370d5a4a0298413134d358acfeae83a2b8ea6dd75d14971",
+    "baseline_recovery_gained": []
+  },
+  "syntax": {
+    "selected": 72,
+    "before": {
+      "error": 0,
+      "fail": 12,
+      "notrun": 0,
+      "pass": 2696,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 12,
+      "notrun": 0,
+      "pass": 2696,
+      "timeout": 0
+    },
+    "files_before": {
+      "fail": 5,
+      "pass": 45,
+      "error": 1,
+      "unsupported": 19,
+      "timeout": 2
+    },
+    "files_after": {
+      "fail": 5,
+      "pass": 45,
+      "error": 1,
+      "unsupported": 19,
+      "timeout": 2
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "lost_files": [],
+    "raw_before_sha256": "6b46c97373456e761561fa60a2041252ba89a5c0c83f58c8389c182636a38e29",
+    "raw_after_sha256": "6b46c97373456e761561fa60a2041252ba89a5c0c83f58c8389c182636a38e29"
+  },
+  "the-base-element": {
+    "selected": 11,
+    "before": {
+      "error": 0,
+      "fail": 1,
+      "notrun": 0,
+      "pass": 15,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 1,
+      "notrun": 0,
+      "pass": 15,
+      "timeout": 0
+    },
+    "files_before": {
+      "pass": 8,
+      "timeout": 1,
+      "error": 1,
+      "fail": 1
+    },
+    "files_after": {
+      "pass": 8,
+      "timeout": 1,
+      "error": 1,
+      "fail": 1
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "lost_files": [],
+    "raw_before_sha256": "098c6fa685e2b8473dc30ab22fea5e4c589e960ba37020aca0669ca5a415dbb2",
+    "raw_after_sha256": "098c6fa685e2b8473dc30ab22fea5e4c589e960ba37020aca0669ca5a415dbb2"
+  },
+  "the-iframe-element": {
+    "selected": 150,
+    "before": {
+      "error": 0,
+      "fail": 51,
+      "notrun": 0,
+      "pass": 15,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 51,
+      "notrun": 0,
+      "pass": 15,
+      "timeout": 0
+    },
+    "files_before": {
+      "timeout": 25,
+      "fail": 33,
+      "unsupported": 53,
+      "pass": 11,
+      "error": 28
+    },
+    "files_after": {
+      "timeout": 25,
+      "fail": 33,
+      "unsupported": 53,
+      "pass": 11,
+      "error": 28
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "lost_files": [],
+    "raw_before_sha256": "9edcf2ddb24574502da0758bdd53ae3f4f0b2f3d289e122058e51cd266fe1fef",
+    "raw_after_sha256": "4e0d3fa40007c482888647e1b75b38c10f4ca842cba5d879dc2d889ee048da28"
+  },
+  "the-template-element": {
+    "selected": 67,
+    "before": {
+      "error": 0,
+      "fail": 557,
+      "notrun": 0,
+      "pass": 608,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 557,
+      "notrun": 0,
+      "pass": 608,
+      "timeout": 0
+    },
+    "files_before": {
+      "fail": 43,
+      "unsupported": 1,
+      "pass": 21,
+      "error": 2
+    },
+    "files_after": {
+      "fail": 43,
+      "unsupported": 1,
+      "pass": 21,
+      "error": 2
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "lost_files": [],
+    "raw_before_sha256": "693053e5b027823014933a89d037f31d1820874c5e63dbb9365dd0ce074bd9fa",
+    "raw_after_sha256": "693053e5b027823014933a89d037f31d1820874c5e63dbb9365dd0ce074bd9fa"
+  },
+  "the-window-object": {
+    "selected": 90,
+    "before": {
+      "error": 0,
+      "fail": 318,
+      "notrun": 0,
+      "pass": 246,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 318,
+      "notrun": 0,
+      "pass": 246,
+      "timeout": 0
+    },
+    "files_before": {
+      "unsupported": 23,
+      "pass": 11,
+      "fail": 35,
+      "error": 20,
+      "timeout": 1
+    },
+    "files_after": {
+      "unsupported": 23,
+      "pass": 11,
+      "fail": 35,
+      "error": 20,
+      "timeout": 1
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "lost_files": [],
+    "raw_before_sha256": "d567e20fa5762803bd2ec0816345193dfbe184d1c53af8a91d116b7fa88f9b89",
+    "raw_after_sha256": "d567e20fa5762803bd2ec0816345193dfbe184d1c53af8a91d116b7fa88f9b89"
+  },
+  "the-windowproxy-exotic-object": {
+    "selected": 8,
+    "before": {
+      "error": 0,
+      "fail": 5,
+      "notrun": 0,
+      "pass": 13,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 5,
+      "notrun": 0,
+      "pass": 13,
+      "timeout": 0
+    },
+    "files_before": {
+      "unsupported": 5,
+      "fail": 2,
+      "pass": 1
+    },
+    "files_after": {
+      "unsupported": 5,
+      "fail": 2,
+      "pass": 1
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "lost_files": [],
+    "raw_before_sha256": "b8d53cc5f7e9105173e90e1e6d2e7d1755607c6f60c937152a6c6f792b422ea1",
+    "raw_after_sha256": "b8d53cc5f7e9105173e90e1e6d2e7d1755607c6f60c937152a6c6f792b422ea1"
+  },
+  "windows": {
+    "selected": 53,
+    "before": {
+      "error": 0,
+      "fail": 35,
+      "notrun": 0,
+      "pass": 4,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 35,
+      "notrun": 0,
+      "pass": 4,
+      "timeout": 0
+    },
+    "files_before": {
+      "timeout": 19,
+      "fail": 17,
+      "unsupported": 10,
+      "error": 7
+    },
+    "files_after": {
+      "timeout": 19,
+      "fail": 17,
+      "unsupported": 10,
+      "error": 7
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "lost_files": [],
+    "raw_before_sha256": "c930eee20fe68e398c5eb29442d22199fbd7aa0f042448388b85a71c1d422990",
+    "raw_after_sha256": "7bdca066eea96916652579780c159492d08f872d0dccb3d8683deffed36b6ed6"
+  }
+}
