@@ -412,6 +412,12 @@ pub trait ImageProvider {
     ) -> Option<&amazing_media::Image> {
         None
     }
+    /// Winning stylesheet provenance distinguishes equal relative URLs in
+    /// principal and generated styles. Existing providers remain compatible.
+    fn background_image_with_base(&self,node:amazing_dom::NodeIdx,url:&str,_base:Option<&str>)
+        ->Option<&amazing_media::Image> {
+        self.background_image(node,url)
+    }
     /// Inline fragments retain node identity; callers supply its computed style.
     fn presentation(&self, _node: amazing_dom::NodeIdx) -> ImagePresentation {
         ImagePresentation::default()

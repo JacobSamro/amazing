@@ -175,7 +175,7 @@ pub(super) fn paint(
             gradient_image = rastered;
             &gradient_image
         } else if let Some(url) = layer.url.as_deref() {
-            let Some(resolved) = images.background_image(node, url) else {
+            let Some(resolved) = images.background_image_with_base(node, url,layer.source_base.as_deref()) else {
                 continue;
             };
             tile = (resolved.width as f64, resolved.height as f64);

@@ -5,6 +5,8 @@ use std::collections::{HashMap, HashSet};
 mod font_loader;
 #[path = "page_border_images.rs"]
 mod page_border_images;
+#[path = "page_background_images.rs"]
+mod page_background_images;
 
 fn load_resource(url: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
     if url.get(..5).is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:")) {
@@ -50,6 +52,7 @@ pub(crate) struct PageImageSnapshot {
 
 #[derive(Default)]
 pub(crate) struct PageMedia {
+    background_sources:HashMap<(amazing_dom::NodeIdx,String,Option<String>),String>,
     images: Vec<PageImage>,
     decoded: HashMap<String, amazing_media::Image>,
     border_sources: HashMap<(String, Option<String>), String>,
@@ -267,6 +270,14 @@ impl amazing_layout::ReplacedElementProvider for PageMedia {
 }
 
 impl amazing_paint::ImageProvider for PageMedia {
+    fn background_image(&self,node:amazing_dom::NodeIdx,url:&str)->Option<&amazing_media::Image> {
+        self.background_sources.get(&(node,url.to_owned(),None)).and_then(|url|self.decoded.get(url))
+            .or_else(||self.decoded.get(url))
+    }
+    fn background_image_with_base(&self,node:amazing_dom::NodeIdx,url:&str,base:Option<&str>)->Option<&amazing_media::Image> {
+        self.background_sources.get(&(node,url.to_owned(),base.map(str::to_owned))).and_then(|resolved|self.decoded.get(resolved))
+            .or_else(||self.decoded.get(url))
+    }
     fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
         self.images
             .iter()
@@ -290,6 +301,12 @@ pub(crate) struct PagePaint<'a> {
 }
 
 impl amazing_paint::ImageProvider for PagePaint<'_> {
+    fn background_image(&self,node:amazing_dom::NodeIdx,url:&str)->Option<&amazing_media::Image> {
+        amazing_paint::ImageProvider::background_image(self.media,node,url)
+    }
+    fn background_image_with_base(&self,node:amazing_dom::NodeIdx,url:&str,base:Option<&str>)->Option<&amazing_media::Image> {
+        amazing_paint::ImageProvider::background_image_with_base(self.media,node,url,base)
+    }
     fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
         amazing_paint::ImageProvider::image(self.media, node)
     }
@@ -418,6 +435,7 @@ pub(crate) fn load_page_media_in_viewport(
         device_pixel_ratio: f32,
     ) {
         page_border_images::collect(node, page, styled, media, attempted);
+        page_background_images::collect(node,page,styled,media,attempted);
         if dom.name(node) == Some("img") {
             collect_image(dom, node, page, media, attempted, viewport_width, device_pixel_ratio, false);
         } else if let Some(attribute) = match dom.name(node) {

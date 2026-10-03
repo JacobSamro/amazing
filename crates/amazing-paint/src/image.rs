@@ -231,6 +231,9 @@ impl crate::ImageProvider for StyledImages<'_> {
     fn background_image(&self, node: amazing_dom::NodeIdx, url: &str) -> Option<&amazing_media::Image> {
         self.images.background_image(node, url)
     }
+    fn background_image_with_base(&self,node:amazing_dom::NodeIdx,url:&str,base:Option<&str>)->Option<&amazing_media::Image> {
+        self.images.background_image_with_base(node,url,base)
+    }
     fn presentation(&self, node: amazing_dom::NodeIdx) -> ImagePresentation {
         self.styles
             .get(node)

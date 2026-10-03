@@ -396,12 +396,13 @@ fn resources_for_box(
 ) -> BTreeSet<PaintResourceKey> {
     let mut resources = BTreeSet::new();
     if kind == PaintItemKind::Decorations {
-        for url in BackgroundPlan::from_style(&box_.style)
-            .layers
-            .iter()
-            .filter_map(|layer| layer.url.as_ref())
-        {
-            resources.insert(PaintResourceKey::BackgroundUrl(url.clone()));
+        for layer in BackgroundPlan::from_style(&box_.style).layers {
+            if let Some(url)=layer.url {
+                resources.insert(match layer.source_base {
+                    Some(base)=>PaintResourceKey::BackgroundUrlWithBase {url,source_base:base},
+                    None=>PaintResourceKey::BackgroundUrl(url),
+                });
+            }
         }
         if let Some(plan)=crate::border_image::BorderImagePlan::from_style(&box_.style) {
             if let Some(url)=plan.url {resources.insert(PaintResourceKey::BorderImageUrl{url,source_base:plan.source_base});}

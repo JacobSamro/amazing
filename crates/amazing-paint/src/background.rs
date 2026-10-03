@@ -34,6 +34,7 @@ pub enum BackgroundSize {
 #[derive(Debug, Clone)]
 pub struct BackgroundLayer {
     pub url: Option<String>,
+    pub source_base:Option<String>,
     /// Serialized CSS `<gradient>` image function for this layer, if any. At
     /// most one of `url`/`gradient` is set; paint rasterizes gradients through
     /// the shared `gradient::raster` path.
@@ -83,6 +84,7 @@ impl BackgroundPlan {
             ));
             layers.push(BackgroundLayer {
                 url: url(value),
+                source_base:style.url_base("background-image").map(str::to_owned),
                 gradient: gradient(value),
                 repeat_x,
                 repeat_y,
