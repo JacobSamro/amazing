@@ -31,7 +31,7 @@ impl RuntimeBindingHost<'_> {
             let content_type = host.dom.document_metadata(document).ok().flatten()
                 .map(|metadata| metadata.content_type.as_str())
                 .or_else(|| (document == NodeIdx(0)).then_some(state.document_content_type.as_deref()).flatten());
-            content_type.is_some_and(|mime| mime != "text/html")
+            content_type.is_some_and(|mime| matches!(mime, "application/xml" | "text/xml") || mime.ends_with("+xml"))
         };
         if xml { return Err(throw_dom_error(self, DomError::InvalidStateError)); }
         Ok(())
