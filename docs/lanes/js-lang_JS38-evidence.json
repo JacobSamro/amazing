@@ -1,0 +1,916 @@
+{
+  "ticket": "JS38",
+  "base_commit": "313bb5cd5d94bd8c1a3d6c5893043bcdb1fa85b8",
+  "baseline_tests_commit": "ec1e8246cf74236bad48ec31ed3592de29dbb24e",
+  "source_commit": "2617f911dfbec5ac4194c051a4dcf8559980eefb",
+  "corpus_source_commit": "3403f86b595d8473e9fe03450d8859b01313e114",
+  "corpora": {
+    "default:language": {
+      "before": {
+        "files": {
+          "pass": 24468,
+          "fail": 96,
+          "timeout": 0,
+          "unsupported": 26,
+          "skipped": 29282
+        },
+        "variants": {
+          "pass": 45259,
+          "fail": 119,
+          "timeout": 0,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 24469,
+          "fail": 95,
+          "timeout": 0,
+          "unsupported": 26,
+          "skipped": 29282
+        },
+        "variants": {
+          "pass": 45261,
+          "fail": 117,
+          "timeout": 0,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "gained_files": [
+        "language/statements/async-generator/yield-star-return-then-getter-ticks.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        "language/statements/async-generator/yield-star-return-then-getter-ticks.js#non-strict",
+        "language/statements/async-generator/yield-star-return-then-getter-ticks.js#strict"
+      ],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "785ba221feb2af4d0810c0f0a9694c0d5864a307d00d06f7a9c34b7a230705fc",
+      "after_classification_sha256": "2d324e0ee82434538b7525c5ec476b75af4a1b8cb51475a6ca928039d55db705",
+      "same_inventory": true
+    },
+    "default:built-ins-Promise": {
+      "before": {
+        "files": {
+          "pass": 732,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53140
+        },
+        "variants": {
+          "pass": 1458,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 732,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53140
+        },
+        "variants": {
+          "pass": 1458,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "875af274a3a8865fcea633cc615dca0e7c8b498138649820a30c764907fbc533",
+      "after_classification_sha256": "875af274a3a8865fcea633cc615dca0e7c8b498138649820a30c764907fbc533",
+      "same_inventory": true
+    },
+    "default:built-ins-Iterator": {
+      "before": {
+        "files": {
+          "pass": 643,
+          "fail": 11,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53218
+        },
+        "variants": {
+          "pass": 1286,
+          "fail": 22,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 643,
+          "fail": 11,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53218
+        },
+        "variants": {
+          "pass": 1286,
+          "fail": 22,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "d5ae4f2b597d937870650f9ff15774489a4288a46a70b9a7b8b70295c9ab068f",
+      "after_classification_sha256": "d5ae4f2b597d937870650f9ff15774489a4288a46a70b9a7b8b70295c9ab068f",
+      "same_inventory": true
+    },
+    "default:built-ins-GeneratorPrototype": {
+      "before": {
+        "files": {
+          "pass": 61,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53811
+        },
+        "variants": {
+          "pass": 122,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 61,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53811
+        },
+        "variants": {
+          "pass": 122,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "3871978eea7c054dc7e4b74562cb0073de7cc839f2b8b738f79913dfa08b465d",
+      "after_classification_sha256": "3871978eea7c054dc7e4b74562cb0073de7cc839f2b8b738f79913dfa08b465d",
+      "same_inventory": true
+    },
+    "default:built-ins-AsyncGeneratorPrototype": {
+      "before": {
+        "files": {
+          "pass": 48,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53824
+        },
+        "variants": {
+          "pass": 96,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 48,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53824
+        },
+        "variants": {
+          "pass": 96,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "0104013711b4d0274d7dd74f69adbdf9897471f1ddd243d89a54d66fc956a0ad",
+      "after_classification_sha256": "0104013711b4d0274d7dd74f69adbdf9897471f1ddd243d89a54d66fc956a0ad",
+      "same_inventory": true
+    },
+    "default:built-ins-GeneratorFunction": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f",
+      "after_classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f",
+      "same_inventory": true
+    },
+    "default:built-ins-AsyncGeneratorFunction": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a",
+      "after_classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a",
+      "same_inventory": true
+    },
+    "default:built-ins-DisposableStack": {
+      "before": {
+        "files": {
+          "pass": 93,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53779
+        },
+        "variants": {
+          "pass": 186,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 93,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53779
+        },
+        "variants": {
+          "pass": 186,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "7533ad53d99cc84610bb51f88f638c9e55622ac98481749875a4802070d26c09",
+      "after_classification_sha256": "7533ad53d99cc84610bb51f88f638c9e55622ac98481749875a4802070d26c09",
+      "same_inventory": true
+    },
+    "default:built-ins-AsyncDisposableStack": {
+      "before": {
+        "files": {
+          "pass": 102,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53768
+        },
+        "variants": {
+          "pass": 204,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 102,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53768
+        },
+        "variants": {
+          "pass": 204,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "a4fc13181a5277153dbeafd1bf8b551c778e4698c65eada50c7faa0d064b5e71",
+      "after_classification_sha256": "a4fc13181a5277153dbeafd1bf8b551c778e4698c65eada50c7faa0d064b5e71",
+      "same_inventory": true
+    },
+    "vm:language": {
+      "before": {
+        "files": {
+          "pass": 24468,
+          "fail": 96,
+          "timeout": 0,
+          "unsupported": 26,
+          "skipped": 29282
+        },
+        "variants": {
+          "pass": 45259,
+          "fail": 119,
+          "timeout": 0,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 24469,
+          "fail": 95,
+          "timeout": 0,
+          "unsupported": 26,
+          "skipped": 29282
+        },
+        "variants": {
+          "pass": 45261,
+          "fail": 117,
+          "timeout": 0,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "gained_files": [
+        "language/statements/async-generator/yield-star-return-then-getter-ticks.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        "language/statements/async-generator/yield-star-return-then-getter-ticks.js#non-strict",
+        "language/statements/async-generator/yield-star-return-then-getter-ticks.js#strict"
+      ],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "785ba221feb2af4d0810c0f0a9694c0d5864a307d00d06f7a9c34b7a230705fc",
+      "after_classification_sha256": "2d324e0ee82434538b7525c5ec476b75af4a1b8cb51475a6ca928039d55db705",
+      "same_inventory": true
+    },
+    "vm:built-ins-Promise": {
+      "before": {
+        "files": {
+          "pass": 732,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53140
+        },
+        "variants": {
+          "pass": 1458,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 732,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53140
+        },
+        "variants": {
+          "pass": 1458,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "875af274a3a8865fcea633cc615dca0e7c8b498138649820a30c764907fbc533",
+      "after_classification_sha256": "875af274a3a8865fcea633cc615dca0e7c8b498138649820a30c764907fbc533",
+      "same_inventory": true
+    },
+    "vm:built-ins-Iterator": {
+      "before": {
+        "files": {
+          "pass": 643,
+          "fail": 11,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53218
+        },
+        "variants": {
+          "pass": 1286,
+          "fail": 22,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 643,
+          "fail": 11,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53218
+        },
+        "variants": {
+          "pass": 1286,
+          "fail": 22,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "d5ae4f2b597d937870650f9ff15774489a4288a46a70b9a7b8b70295c9ab068f",
+      "after_classification_sha256": "d5ae4f2b597d937870650f9ff15774489a4288a46a70b9a7b8b70295c9ab068f",
+      "same_inventory": true
+    },
+    "vm:built-ins-GeneratorPrototype": {
+      "before": {
+        "files": {
+          "pass": 61,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53811
+        },
+        "variants": {
+          "pass": 122,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 61,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53811
+        },
+        "variants": {
+          "pass": 122,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "3871978eea7c054dc7e4b74562cb0073de7cc839f2b8b738f79913dfa08b465d",
+      "after_classification_sha256": "3871978eea7c054dc7e4b74562cb0073de7cc839f2b8b738f79913dfa08b465d",
+      "same_inventory": true
+    },
+    "vm:built-ins-AsyncGeneratorPrototype": {
+      "before": {
+        "files": {
+          "pass": 48,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53824
+        },
+        "variants": {
+          "pass": 96,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 48,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53824
+        },
+        "variants": {
+          "pass": 96,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "0104013711b4d0274d7dd74f69adbdf9897471f1ddd243d89a54d66fc956a0ad",
+      "after_classification_sha256": "0104013711b4d0274d7dd74f69adbdf9897471f1ddd243d89a54d66fc956a0ad",
+      "same_inventory": true
+    },
+    "vm:built-ins-GeneratorFunction": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f",
+      "after_classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f",
+      "same_inventory": true
+    },
+    "vm:built-ins-AsyncGeneratorFunction": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a",
+      "after_classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a",
+      "same_inventory": true
+    },
+    "vm:built-ins-DisposableStack": {
+      "before": {
+        "files": {
+          "pass": 93,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53779
+        },
+        "variants": {
+          "pass": 186,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 93,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53779
+        },
+        "variants": {
+          "pass": 186,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "7533ad53d99cc84610bb51f88f638c9e55622ac98481749875a4802070d26c09",
+      "after_classification_sha256": "7533ad53d99cc84610bb51f88f638c9e55622ac98481749875a4802070d26c09",
+      "same_inventory": true
+    },
+    "vm:built-ins-AsyncDisposableStack": {
+      "before": {
+        "files": {
+          "pass": 102,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53768
+        },
+        "variants": {
+          "pass": 204,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 102,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53768
+        },
+        "variants": {
+          "pass": 204,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "22401b9d970d49ac70dfcb69d1779602587dfc3839de0edd4d53ae02017687d4",
+      "after_host_sha256": "b3d9b32b44255e55542d553829f1cac0490c0f7f0de036198b9dc1929cca0705",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "a4fc13181a5277153dbeafd1bf8b551c778e4698c65eada50c7faa0d064b5e71",
+      "after_classification_sha256": "a4fc13181a5277153dbeafd1bf8b551c778e4698c65eada50c7faa0d064b5e71",
+      "same_inventory": true
+    }
+  },
+  "tested_source_commit": "2617f911dfbec5ac4194c051a4dcf8559980eefb",
+  "workspace": {
+    "passed": 4102,
+    "skipped": 17
+  },
+  "doctests": {
+    "passed": 4
+  },
+  "owned": {
+    "baseline_passed": 744,
+    "baseline_failed_new_groups": 13,
+    "baseline_skipped": 1,
+    "final_passed": 757,
+    "final_skipped": 1
+  },
+  "mixed_regression_groups": 13,
+  "baseline_case_diagnostics": {
+    "actor_failures": 59,
+    "native_failures": 10
+  },
+  "measured_at": "2026-10-03T07:43:36.617952+00:00",
+  "linux": {
+    "box": "bx_2n57r7zz",
+    "pool": "pool-js-b",
+    "native_source": "/tmp/amazing-native-src-js-lang",
+    "native_target": "/tmp/amazing-native-target-js-lang"
+  },
+  "license": {
+    "repo": "lucid-softworks/lumen",
+    "commit": "f6c9860d44fa52249cfd647122edea184d32c863",
+    "path": "crates/lumen/src/eval.rs",
+    "algorithms": [
+      "yield_one",
+      "yield_delegate_async",
+      "async_gen_yield_resume"
+    ],
+    "license": "MIT",
+    "copyright": "Copyright (c) 2026 Lucid Softworks limited"
+  },
+  "provenance": {
+    "before_corpus_commit": "b880becae4cb9143bda0ba22ec86002cc8d0f878",
+    "before_corrected_test_commit": "ec1e8246cf74236bad48ec31ed3592de29dbb24e",
+    "before_language_promise": "Reuse exact ready37 optimized default+VM reports after empty engine/host/runner diff; matching selectors/deadlines/inputs/capabilities/inventories verified",
+    "other_before": "Fresh optimized14 reports covering Iterator/fourgenerator/disposal bothmodes, timeout60,jobs8",
+    "after_corpus_commit": "3403f86b595d8473e9fe03450d8859b01313e114",
+    "after_workspace_commit": "2617f911dfbec5ac4194c051a4dcf8559980eefb",
+    "after_engine_identity": "git diff --exit-code3403..2617 -- crates/amazing-js/src crates/amazing-js/examples/test262_host.rs scripts/test262.py succeeded; only docs/testfixture changed",
+    "fixture_correction": "Initial cached-next setup had a missing closing objectliteral brace. Corrected identically before ec1 and after2617; corrected before still13newgroups fail and744oldownedtests pass. No setup correction counted as engine gain."
+  },
+  "raw_reports": "MAIN .agents/js-lang/js38-before-{default,vm}-{selection}.json and js38-iteration-{default,vm}-{selection}.json; corrected baseline owned/docs and finalworkspace/docs logs retained.",
+  "scope": "Real coroutine explicit Await and ordinary Yield operand Await; genuine async/sync-wrapped delegation shared cached record with corrected absent-return/rawdone-return phases; original-context checked conversion/close/FIFO/realm semantics. No Completed Await, new Job/public schema/frame/opcode changes."
+}
