@@ -1230,3 +1230,41 @@ lexical TDZ bindings before evaluation, validate global descriptors before
 mutation, and maintain actual Window/global-object var linkage. Do not patch
 only the eight reported destructuring TDZ cases. Runtime owns the concurrent
 Array exotic area; no GDI edits are included here.
+
+## JSVM-23: whole GlobalDeclarationInstantiation
+
+Ready source `61104d70` (record layout) and `d72322da` (algorithm/consumers),
+with compatibility-only descriptor helpers `36362276`. The fixed before source
+`5e1d1bdb` includes the same Window overlay repair and installer dependency.
+The Global record shares actual script VarNames and lexical TDZ cells across
+same-object host overlays; installed builtin cells remain separate. Foreign
+realms keep separate records, retained through existing strong EnvHandle clones
+and worker/RealmState captures. No new RealmState field or collector hook.
+
+The algorithm ports Lumen `run_program` GlobalDeclarationInstantiation from
+MIT commit `f6c9860d44fa52249cfd647122edea184d32c863`, adapting validation and
+creation to Amazing's descriptor gateways and shared record. Validation checks
+lexical/var conflicts, restricted properties and CanDeclare before bindings
+mutate. Function declarations replace configurable accessors; var bindings
+retain existing descriptors. Lexicals may shadow configurable builtin properties
+without replacing the corresponding global object property. Successful identifier
+DeleteBinding clears VarNames; deleting an object property directly retains them.
+
+Classic opt-in Programs retain a declaration plan and native lexical/block
+metadata; default program policy is unchanged. AST and VM var initializers use
+prepared references, and global Annex B copies use semantic PutValue. Try/catch/
+finally use ordinary lexical block entry and disposal, preserving completion and
+original nodes; initial Try hoist preserves enclosing lexical barriers and the
+simple catch exception. Modules and eval retain their existing preparation paths.
+
+Final Linux exact-source gate: **3806 workspace tests passed**,17 skipped;
+**four doctests passed**. Eleven whole selections cover **30571 unique files**
+per mode. Default: **29804→29837 files** (+33), **55945→55992 variants** (+47).
+Opt-in VM programs: **29697→29828 files** (+131), **55831→55979 variants** (+148).
+Both modes lose **zero files and variants**. Native groups include actual Window
+binding API listener aliases and `length` accessor replacement, foreign realms,
+forced workers, failed-script atomicity, descriptor behavior and shared closures.
+Runtime callable logs contain 54 fallbacks in each mode: With/statement14,
+yield10, class initialization8, expression18, member4. They remain measured
+fallbacks; class initialization and suspended With are not silently ignored.
+Evidence: [js-vm23_evidence.json](js-vm23_evidence.json).

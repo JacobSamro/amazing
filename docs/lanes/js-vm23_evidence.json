@@ -1,0 +1,95 @@
+{
+  "before_source": "5e1d1bdbb0af16e7d19895f86026dbfdfb9bdcb1",
+  "compatibility_api": "363622762560882382bdc76b62b932cec516d212",
+  "doctests_passed": 4,
+  "jobs": 8,
+  "modes": {
+    "default": {
+      "after_passed_files": 29837,
+      "after_passed_variants": 55992,
+      "before_passed_files": 29804,
+      "before_passed_variants": 55945,
+      "callable_compilation": {
+        "accepted": 1071846,
+        "attempts": 1071900,
+        "fallbacks": 54,
+        "reasons": {
+          "class field or static block": 8,
+          "expression kind": 18,
+          "member access": 4,
+          "statement kind": 14,
+          "yield": 10
+        }
+      },
+      "classification_sha256": {
+        "built-ins/Function/": "894f3213672245258e9b7cbcdeadf23887365093e9e482c0ded913a1ee3b9d7c",
+        "built-ins/Iterator/": "d5ae4f2b597d937870650f9ff15774489a4288a46a70b9a7b8b70295c9ab068f",
+        "built-ins/Object/": "e8e2114e545ee1439f137fa7a2299a798a3fc610bec1bb77205b4a1d5b58ab8f",
+        "built-ins/Promise": "9eda4303668d8fe76be297362b634878ec1a03014c83949bd7fbb78ca3081d0b",
+        "built-ins/Proxy/": "ecb1704deb97478feefc2f838bac33a45d751c5fa33cfe655db47e58903201c5",
+        "built-ins/Reflect/": "1303153f6cec560e7c38755b8c4f17605fcfb1ee9f33466c998656ca7ce7d825",
+        "built-ins/ShadowRealm/": "f54ed5fda3e501a5a64e1b0633d32286e3826193cb2929d6ef01f5a1bb095e7e",
+        "built-ins/Symbol/": "545e1c6a85e9c70a75ce1aed6992688bfe92e827534ed8e0c22e4e7fa871cf1c",
+        "built-ins/eval/": "28a0cfae3cf2798af806325fdf1d70ec901c57e859305a0cf80565b407554a17",
+        "built-ins/global/": "630a82862d43b281a6f158d0a46b73ec60e1e1d7cc355dbab3e21d6df2f7dd25",
+        "language": "2c09d95b37e547b1f72cf6a38dd184bb327219adb46c4958d72d060fb52aa254"
+      },
+      "gained_files": 33,
+      "gained_variants": 47,
+      "host_sha256": [
+        "4d24d8b305585c167443096d759a59589993bee05f20ada6a613c655ea141c3f"
+      ],
+      "lost_files": 0,
+      "lost_variants": 0,
+      "selected_files": 30571,
+      "selections": 11
+    },
+    "vm": {
+      "after_passed_files": 29828,
+      "after_passed_variants": 55979,
+      "before_passed_files": 29697,
+      "before_passed_variants": 55831,
+      "callable_compilation": {
+        "accepted": 581305,
+        "attempts": 581359,
+        "fallbacks": 54,
+        "reasons": {
+          "class field or static block": 8,
+          "expression kind": 18,
+          "member access": 4,
+          "statement kind": 14,
+          "yield": 10
+        }
+      },
+      "classification_sha256": {
+        "built-ins/Function/": "894f3213672245258e9b7cbcdeadf23887365093e9e482c0ded913a1ee3b9d7c",
+        "built-ins/Iterator/": "d5ae4f2b597d937870650f9ff15774489a4288a46a70b9a7b8b70295c9ab068f",
+        "built-ins/Object/": "e8e2114e545ee1439f137fa7a2299a798a3fc610bec1bb77205b4a1d5b58ab8f",
+        "built-ins/Promise": "9eda4303668d8fe76be297362b634878ec1a03014c83949bd7fbb78ca3081d0b",
+        "built-ins/Proxy/": "ecb1704deb97478feefc2f838bac33a45d751c5fa33cfe655db47e58903201c5",
+        "built-ins/Reflect/": "1303153f6cec560e7c38755b8c4f17605fcfb1ee9f33466c998656ca7ce7d825",
+        "built-ins/ShadowRealm/": "f54ed5fda3e501a5a64e1b0633d32286e3826193cb2929d6ef01f5a1bb095e7e",
+        "built-ins/Symbol/": "545e1c6a85e9c70a75ce1aed6992688bfe92e827534ed8e0c22e4e7fa871cf1c",
+        "built-ins/eval/": "28a0cfae3cf2798af806325fdf1d70ec901c57e859305a0cf80565b407554a17",
+        "built-ins/global/": "630a82862d43b281a6f158d0a46b73ec60e1e1d7cc355dbab3e21d6df2f7dd25",
+        "language": "fc40c889dbdf070d69295395667fadd3e098577b5744c4ed44f5eaef31710303"
+      },
+      "gained_files": 131,
+      "gained_variants": 148,
+      "host_sha256": [
+        "4d24d8b305585c167443096d759a59589993bee05f20ada6a613c655ea141c3f"
+      ],
+      "lost_files": 0,
+      "lost_variants": 0,
+      "selected_files": 30571,
+      "selections": 11
+    }
+  },
+  "record_commit": "61104d7038f1d87ae4d97ae05cf9a7510f92c8ff",
+  "source": "d72322dae2fedc09e27e4932ee228e8f49228d1a",
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "ticket": "JSVM-23",
+  "timeout_seconds": 60,
+  "workspace_passed": 3806,
+  "workspace_skipped": 17
+}
