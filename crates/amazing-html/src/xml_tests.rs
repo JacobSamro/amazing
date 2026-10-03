@@ -9,7 +9,7 @@ fn elements(dom: &Dom) -> Vec<NodeIdx> {
 fn text(dom: &Dom) -> String {
     (0..dom.node_count())
         .filter_map(|n| match &dom.get(NodeIdx(n as u32)).kind {
-            NodeKind::Text { data } => Some(data.as_str()),
+            NodeKind::Text { data } | NodeKind::CDATASection { data } => Some(data.as_str()),
             _ => None,
         })
         .collect()
@@ -482,4 +482,32 @@ fn version_info_and_declaration_family_follow_xml_fifth_edition() {
         "<?xml version='1.1'?><r>&#x1;</r>",
     ] { malformed(source); }
     assert!(parse_xml_fragment(&XmlFragmentContext::default(), "<?xml version='1.2'?><r/>").is_err());
+}
+
+#[test]
+fn xml_cdata_preserves_each_lexical_section_and_ordinary_text_boundaries() {
+    let dom = parse_xml("<r xmlns='urn:actual'>before<![CDATA[]]><![CDATA[<x>&unknown;\r\n]]><![CDATA[more]]>after</r>").unwrap();
+    let root = dom.children(NodeIdx(0)).next().unwrap();
+    assert_eq!(dom.namespace_uri(root), Some("urn:actual"));
+    let children: Vec<_> = dom.children(root).collect();
+    assert_eq!(children.len(), 5);
+    for (node, expected) in children.iter().zip([
+        NodeKind::Text { data: "before".into() },
+        NodeKind::CDATASection { data: "".into() },
+        NodeKind::CDATASection { data: "<x>&unknown;\n".into() },
+        NodeKind::CDATASection { data: "more".into() },
+        NodeKind::Text { data: "after".into() },
+    ]) { assert_eq!(dom.get(*node).kind, expected); assert_eq!(dom.get(*node).parent, Some(root)); }
+    assert_eq!(text(&dom), "before<x>&unknown;\nmoreafter");
+    let context = XmlFragmentContext::default();
+    let fragment = parse_xml_fragment(&context, "a<![CDATA[]]><![CDATA[<&not-an-entity;]]>b").unwrap();
+    let nodes: Vec<_> = fragment.children(NodeIdx(0)).collect();
+    assert_eq!(nodes.len(), 4);
+    assert!(matches!(&fragment.get(nodes[1]).kind, NodeKind::CDATASection { data } if data.as_str().is_empty()));
+    assert!(matches!(&fragment.get(nodes[2]).kind, NodeKind::CDATASection { data } if data.as_str() == "<&not-an-entity;"));
+    let large = "<>&not-an-entity;".repeat(1024);
+    let dom = parse_xml(&format!("<r><![CDATA[{large}]]></r>")).unwrap();
+    assert_eq!(text(&dom), large);
+    for source in ["<![CDATA[x]]><r/>", "<r/><![CDATA[x]]>", "<r><![CDATA[x</r>",
+        "<r><![cdata[x]]></r>", "<r><![CDATA[x]]>]]></r>", "<r><![CDATA[\0]]></r>"] { malformed(source); }
 }

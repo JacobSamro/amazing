@@ -258,8 +258,9 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
         } else if p.take("<![CDATA[") {
             if !fragment && stack.is_empty() { return Err(p.error("CDATA outside root")); }
             let data = p.until("]]>")?;
-            if fragment { dom.append_child(parent, NodeKind::CDATASection { data: data.into() }); }
-            else { dom.create_text(parent, data); }
+            // Preserve lexical section boundaries in both document and fragment DOMs.
+            // CDATA is literal CharacterData, not a mergeable ordinary Text token.
+            dom.append_child(parent, NodeKind::CDATASection { data: data.into() });
         } else if p.take("</") {
             let name = p.qname()?;
             p.space();

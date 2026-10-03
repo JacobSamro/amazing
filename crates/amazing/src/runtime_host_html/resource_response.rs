@@ -823,4 +823,27 @@ mod tests {
         }
     }
 
+    #[test]
+    fn xml_response_preserves_cdata_nodes_across_mime_and_byte_encodings() {
+        let source = "<r xmlns='urn:actual'>a<![CDATA[]]><![CDATA[<x>&literal;\r\n]]><![CDATA[é]]>z</r>";
+        for mime in ["text/xml", "application/xml", "application/xhtml+xml", "image/svg+xml"] {
+            for encoding in [amazing_encoding::Encoding::Utf8, amazing_encoding::Encoding::Utf16Le, amazing_encoding::Encoding::Utf16Be] {
+                let mut bytes = match encoding { amazing_encoding::Encoding::Utf16Le => vec![0xff,0xfe],
+                    amazing_encoding::Encoding::Utf16Be => vec![0xfe,0xff], _ => vec![] };
+                bytes.extend(amazing_encoding::encode(source, encoding, true).unwrap());
+                let (dom, label) = parse_response(&bytes, mime, Some("UTF-8")).unwrap();
+                assert_eq!(label, amazing_html::encoding::canonical_name(encoding));
+                let root = dom.children(NodeIdx(0)).next().unwrap();
+                let children: Vec<_> = dom.children(root).collect();
+                assert_eq!(dom.namespace_uri(root), Some("urn:actual"));
+                assert_eq!(children.len(), 5);
+                assert!(matches!(&dom.get(children[0]).kind, NodeKind::Text { data } if data.as_str() == "a"));
+                assert!(matches!(&dom.get(children[1]).kind, NodeKind::CDATASection { data } if data.as_str().is_empty()));
+                assert!(matches!(&dom.get(children[2]).kind, NodeKind::CDATASection { data } if data.as_str() == "<x>&literal;\n"));
+                assert!(matches!(&dom.get(children[3]).kind, NodeKind::CDATASection { data } if data.as_str() == "é"));
+                assert!(matches!(&dom.get(children[4]).kind, NodeKind::Text { data } if data.as_str() == "z"));
+            }
+        }
+    }
+
 }
