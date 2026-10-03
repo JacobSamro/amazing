@@ -398,7 +398,8 @@ mod tests {
         driver.set_module_source_loader(Rc::new(|_| Ok("await Promise.resolve(); throw window.original;".into())));
         driver.run_script("var original={},errors=[];import('./reject.js').catch(e=>errors.push(e));import('./reject.js').catch(e=>errors.push(e));").unwrap();
         driver.pump_at(std::time::Duration::ZERO, false).unwrap();
-        assert!(matches!(driver.run_script("errors.length===2 && errors[0]===original && errors[1]===original").unwrap(), JsValue::Bool(true)));
+        let actual = driver.run_script("JSON.stringify([errors.length,errors.map(e=>e===original),errors.map(e=>String(e))])").unwrap();
+        assert!(matches!(driver.run_script("errors.length===2 && errors[0]===original && errors[1]===original").unwrap(), JsValue::Bool(true)), "async import rejection identity: {actual:?}");
     }
     #[test]
     fn module_text_is_always_utf8_and_bom_is_removed() {
