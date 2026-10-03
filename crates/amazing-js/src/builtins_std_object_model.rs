@@ -216,6 +216,7 @@ impl Interpreter {
         while let Some(object) = cursor {
             if let Some(result) = self.window_proxy_set(&object, key, value.clone(), receiver.clone()) { return result; }
             if let Some(result) = self.proxy_set(&object, key, value.clone(), receiver.clone()) { return result; }
+            if is_module_namespace(&object) { return Ok(false); }
             let property = if let Some(name) = key.as_string() {
                 // Legacy named properties belong to the collection itself.
                 // They do not prevent an ordinary receiver from shadowing one.

@@ -102,3 +102,38 @@ fn deferred_receiver_operations_evaluate_once_while_direct_set_and_private_do_no
         }
     }
 }
+
+#[test]
+fn namespace_prototype_set_rejects_shadowing_without_deferred_evaluation() {
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        let linker = Rc::new(RefCell::new(ModuleLinker::new(|name: &str, _: &str| {
+            if name == "leaf" {
+                Ok((name.into(), "count++;export const value=7;".into()))
+            } else {
+                Err("unresolved".into())
+            }
+        })));
+        let mut i = Interpreter::new();
+        i.run_script("var count=0").unwrap();
+        linker
+            .borrow_mut()
+            .link(
+                "root",
+                "import defer * as ns from 'leaf';globalThis.saved=ns;",
+            )
+            .unwrap();
+        ModuleLinker::evaluate_shared(&linker, "root", &mut i).unwrap();
+        check(
+            &mut i,
+            backend,
+            r#"
+            var ns=saved,child=Object.create(ns),receiver={},failed=0;
+            var methods={__proto__:ns,write(){'use strict';super.value=7}};
+            var a=Reflect.set(child,'value',7),b=Reflect.set(child,'missing',8);
+            try{(function(){'use strict';child.value=7})()}catch(e){if(e instanceof TypeError)failed++}
+            try{methods.write.call(receiver)}catch(e){if(e instanceof TypeError)failed++}
+            !a&&!b&&failed===2&&Reflect.ownKeys(child).length===0&&Reflect.ownKeys(receiver).length===0&&count===0;
+        "#,
+        );
+    }
+}
