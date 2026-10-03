@@ -259,17 +259,17 @@ fn close_get_method_absence_and_receiver_and_arguments_are_exact() {
 fn labeled_control_and_nested_close_order_preserve_loop_targets() {
     matrix(&[
         (
-            "var ok=false,log=[],iterable={[Symbol.iterator](){return {next(){return {done:false,value:1}},return(){log.push('close');return {}}}};",
+            "var ok=false,log=[],iterable={[Symbol.iterator](){return {next(){return {done:false,value:1}},return(){log.push('close');return {}}}}};",
             "(function(){outer:for(var n=0;n<1;n++){for(var x of iterable)continue outer}return log.join(',')==='close'})",
             "ok=g()",
         ),
         (
-            "var ok=false,log=[],outer={[Symbol.iterator](){return {next(){return {done:false,value:1}},return(){log.push('outer');return {}}}},inner={[Symbol.iterator](){return {next(){return {done:false,value:1}},return(){log.push('inner');return {}}}};",
+            "var ok=false,log=[],outer={[Symbol.iterator](){return {next(){return {done:false,value:1}},return(){log.push('outer');return {}}}}},inner={[Symbol.iterator](){return {next(){return {done:false,value:1}},return(){log.push('inner');return {}}}}};",
             "(function(){done:for(var x of outer){for(var y of inner)break done}return log.join(',')==='inner,outer'})",
             "ok=g()",
         ),
         (
-            "var ok=false,closes=0,n=0,iterable={[Symbol.iterator](){return {next(){return {done:n++>1,value:n}},return(){closes++;return {}}}};",
+            "var ok=false,closes=0,n=0,iterable={[Symbol.iterator](){return {next(){return {done:n++>1,value:n}},return(){closes++;return {}}}}};",
             "(function(){for(var x of iterable)continue;return closes===0})",
             "ok=g()",
         ),
@@ -284,12 +284,12 @@ fn binding_and_put_abrupts_close_after_successful_value_step() {
             "ok=g()",
         ),
         (
-            "var ok=false,marker={},log=[],iterable={[Symbol.iterator](){return {next(){return {done:false,value:[]}},return(){log.push('close');return {}}}};",
+            "var ok=false,marker={},log=[],iterable={[Symbol.iterator](){return {next(){return {done:false,value:[]}},return(){log.push('close');return {}}}}};",
             "(function(){try{for(var [x=(()=>{throw marker})()] of iterable){}}catch(e){return e===marker&&log.join(',')==='close'}})",
             "ok=g()",
         ),
         (
-            "var ok=false,marker={},log=[],iterable={[Symbol.iterator](){return {next(){return {done:false,value:1}},return(){log.push('close');return {}}}};",
+            "var ok=false,marker={},log=[],iterable={[Symbol.iterator](){return {next(){return {done:false,value:1}},return(){log.push('close');return {}}}}};",
             "(function(){try{for(var {x=(()=>{throw marker})()} of iterable){}}catch(e){return e===marker&&log.join(',')==='close'}})",
             "ok=g()",
         ),
@@ -324,7 +324,7 @@ fn iteration_cells_and_repeated_block_functions_stay_coherent() {
 fn per_iteration_disposal_precedes_close_and_keeps_throw_precedence() {
     matrix(&[
         (
-            "var ok=false,log=[],resource={[Symbol.dispose](){log.push('dispose')}},iterable={[Symbol.iterator](){return {next(){return {done:false,value:resource}},return(){log.push('close');return {}}}};",
+            "var ok=false,log=[],resource={[Symbol.dispose](){log.push('dispose')}},iterable={[Symbol.iterator](){return {next(){return {done:false,value:resource}},return(){log.push('close');return {}}}}};",
             "(function(){for(using x of iterable){log.push('body');break}return log.join(',')==='body,dispose,close'})",
             "ok=g()",
         ),
@@ -354,7 +354,7 @@ fn suspended_generator_body_retains_cached_next_and_live_arrays() {
 fn injected_generator_return_closes_and_close_throw_replaces_it() {
     matrix(&[
         (
-            "var ok=false,log=[],iterable={[Symbol.iterator](){return {next(){return {done:false,value:1}},return(){log.push('close');return {}}}};",
+            "var ok=false,log=[],iterable={[Symbol.iterator](){return {next(){return {done:false,value:1}},return(){log.push('close');return {}}}}};",
             "(function*(){for(var x of iterable)yield x})",
             "var it=g();it.next();var r=it.return(7);ok=r.value===7&&r.done&&log.join(',')==='close'",
         ),
