@@ -756,7 +756,7 @@ pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> 
             NativeEntry::OptionConstructor => adapter.option_constructor(&args),
             NativeEntry::DocumentWrite => adapter.document_write(this, &args, false),
             NativeEntry::DocumentWriteln => adapter.document_write(this, &args, true),
-            NativeEntry::DocumentOpen => adapter.document_open(this),
+            NativeEntry::DocumentOpen => adapter.document_open(this, &args),
             NativeEntry::DocumentClose => adapter.document_close(this),
             NativeEntry::HtmlWindowGet(property) => adapter.html_window_get(property, this),
             NativeEntry::HtmlWindowReplaceableSet(property) => adapter.html_window_replaceable_set(property, this, &args),

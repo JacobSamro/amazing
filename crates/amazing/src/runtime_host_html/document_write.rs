@@ -37,8 +37,19 @@ impl RuntimeBindingHost<'_> {
         Ok(())
     }
 
-    pub(in super::super) fn document_open(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
+    pub(in super::super) fn document_open(&mut self, receiver: JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
         let document = self.document_receiver_node(&receiver)?;
+        for value in args.iter().take(if args.len() >= 3 { 3 } else { 2 }) {
+            self.to_dom_string(value)?;
+        }
+        if args.len() >= 3 {
+            if self.html_document_context(document).is_none() {
+                return Err(self.document_exception("InvalidAccessError", "Document is not fully active")?);
+            }
+            // This overload opens a Window; it must never erase the current
+            // Document while the browsing-context creation seam is absent.
+            return Err(self.document_exception("NotSupportedError", "Document window-opening overload is unavailable")?);
+        }
         self.check_write_document(document)?;
         self.check_document_open_origin(document)?;
         let ignore = {
@@ -49,6 +60,13 @@ impl RuntimeBindingHost<'_> {
         };
         if !ignore { self.reopen_document(document)?; }
         Ok(receiver)
+    }
+
+    fn document_exception(&mut self, name: &str, message: &str) -> Result<Throw, Throw> {
+        let global = self.js.binding_global_object();
+        let constructor = self.js.binding_get_property(&global, "DOMException")?;
+        let error = self.js.binding_construct(&constructor, vec![JsValue::str(message), JsValue::str(name)])?;
+        Ok(self.js.binding_throw(error))
     }
 
     pub(in super::super) fn document_close(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
@@ -207,13 +225,7 @@ impl RuntimeBindingHost<'_> {
         };
         if let Some((source, target)) = pair {
             if source.fetch_origin != target.fetch_origin {
-                let error = self.js.binding_with_realm(source_realm, |js| {
-                    let global = js.binding_global_object();
-                    let constructor = js.binding_get_property(&global, "DOMException")?;
-                    js.binding_construct(&constructor, vec![JsValue::str("Blocked cross-origin Document.open"),
-                        JsValue::str("SecurityError")])
-                })?;
-                return Err(self.js.binding_throw(error));
+                return Err(self.document_exception("SecurityError", "Blocked cross-origin Document.open")?);
             }
         }
         Ok(())
@@ -409,6 +421,26 @@ mod tests {
             document.close();
             [moduleValue,moduleCurrent===null,document.readyState,document.body.lastChild.textContent].join('|')
         "#).unwrap(), JsValue::str("42|true|complete|tail"));
+    }
+
+    #[test]
+    fn open_converts_arguments_and_keeps_window_overload_outside_document_replacement() {
+        let mut scheduler = scheduler();
+        assert_eq!(scheduler.run_script(r#"
+            var element=document.documentElement,seen=[];
+            try {document.open(Symbol('x'),'unused')}catch(e){seen.push(e.name)}
+            try {document.open({toString(){throw new Error('conversion')}},'unused')}catch(e){seen.push(e.message)}
+            try {document.open('/child','named','',Symbol('ignored'))}catch(e){seen.push(e.name)}
+            var inert=document.implementation.createHTMLDocument('inert'),inertElement=inert.documentElement;
+            try {inert.open('/child','named','')}catch(e){seen.push(e.name)}
+            var xml=new DOMParser().parseFromString('<root/>','application/xml');
+            try {xml.open(Symbol('x'),'unused')}catch(e){seen.push(e.name)}
+            if(document.documentElement!==element || inert.documentElement!==inertElement) throw new Error('overload erased Document');
+            var result=document.open({toString(){seen.push('first');return 'unused'}},
+                                     {toString(){seen.push('second');return 'unused'}});
+            document.write('<!doctype html><p id=p>opened');document.close();
+            [seen.join(','),result===document,document.getElementById('p').textContent].join('|')
+        "#).unwrap(), JsValue::str("TypeError,conversion,NotSupportedError,InvalidAccessError,TypeError,first,second|true|opened"));
     }
 
     #[test]
