@@ -62,6 +62,7 @@ struct NavigationSource {
     fetch_origin: amazing_fetch::Origin,
     /// Policy at initiation, retained even when the source Document retires.
     policy: HtmlDocumentContext,
+    client_context: Option<amazing_fetch::service::ClientContext>,
 }
 
 #[derive(Clone)]
@@ -863,9 +864,10 @@ impl RuntimeBindings {
                 };
                 let Some(policy) = policy else { continue; };
                 let origin = context_origin(adapter.js, &owner_context, owner_realm).unwrap_or_else(|_| "null".into());
+                let client_context = adapter.document_network_policy(owner, generation);
                 NavigationSource { document: owner, generation, base_url,
                     document_url: owner_context.document_url.clone(), origin,
-                    fetch_origin: owner_context.fetch_origin.clone(), policy }
+                    fetch_origin: owner_context.fetch_origin.clone(), policy, client_context }
             };
             let mut ancestor_origins = Vec::new();
             let mut ancestor = Some(owner_context.clone());
@@ -885,6 +887,7 @@ impl RuntimeBindings {
                 sandbox_flags: sandbox.to_bits(), frame_csp: Default::default(),
                 referrer: source.document_url.clone(), referrer_policy: "strict-origin-when-cross-origin".into(),
                 now_unix: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64 };
+            let mut response_policy = None;
             let loaded = (|| -> Result<LoadedChildDocument, String> {
                 // `srcdoc` takes priority over `src` per spec: its content is
                 // used verbatim and the navigable's URL becomes "about:srcdoc"
@@ -910,6 +913,7 @@ impl RuntimeBindings {
                 let response = if let Some(loader) = loader {
                     let request = HtmlFrameResourceRequest { requested_url: logical_url.clone(),
                         initiator: source.policy.clone(), kind: HtmlFrameResourceKind::Document,
+                        client_context: source.client_context.clone(),
                         embedding: Some(navigation_context.clone()),
                         request_mode: amazing_fetch::RequestMode::Navigate,
                         credentials: amazing_fetch::CredentialsMode::Include,
@@ -929,6 +933,10 @@ impl RuntimeBindings {
                             .then(|| value.trim().trim_matches('"'))
                     })
                 });
+                let mut policy = amazing_fetch::service::ClientContext::default();
+                policy.csp = amazing_fetch::CspPolicyList::from_headers(&response.headers)
+                    .map_err(|error| format!("iframe response policy: {error:?}"))?;
+                response_policy = Some(policy);
                 let document_url = if canonical || resolver.is_none() { response.url.clone() } else { logical_url.clone() };
                 // HTML-34: only the HTML case defers to a script-interleaved
                 // parse (`ResumableParser` is HTML-only); XML/XHTML iframe
@@ -999,6 +1007,14 @@ impl RuntimeBindings {
                     }
                 }
                 let _ = self.ensure_realm(js, node, document, &url, sandbox, Some(&source));
+                // Only actual about documents inherit their initiating policy.
+                // Remote documents receive their own response policy, never
+                // the creator's CSP merely because their origin is related.
+                let policy = response_policy.clone().or_else(|| source.client_context.clone());
+                if let Some(policy) = policy {
+                    let adapter = RuntimeBindingHost { js, state: self.state.clone() };
+                    if adapter.set_document_network_policy(document, policy).is_err() { continue; }
+                }
             }
             let mut state = self.state.borrow_mut();
             let navigation = ChildNavigation { frame: node, requested_src: src.clone(),
@@ -1574,10 +1590,11 @@ impl RuntimeBindingHost<'_> {
             let host = state.host.borrow();
             state.frames.document_context(&host.dom, source_context.document)
         }.ok_or_else(|| Throw::type_error("Stale navigation source context"))?;
+        let client_context = self.document_network_policy(source_context.document, source_generation);
         Ok(HtmlNavigation { document: target_context.document, generation: target_generation,
             url: url.into(), replace, reload: false, source: NavigationSource { document: source_context.document,
                 generation: source_generation, base_url, document_url: source_context.document_url,
-                origin, fetch_origin: source_context.fetch_origin, policy } })
+                origin, fetch_origin: source_context.fetch_origin, policy, client_context } })
     }
 
     pub(super) fn html_location_navigate(&mut self, url: &str, replace: bool) -> Result<(), Throw> {

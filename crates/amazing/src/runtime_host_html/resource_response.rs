@@ -10,6 +10,8 @@ pub(crate) enum HtmlFrameResourceKind { Document, ClassicScript }
 pub(crate) struct HtmlFrameResourceRequest {
     pub(crate) requested_url: String,
     pub(crate) initiator: HtmlDocumentContext,
+    /// Actual initiating policy, retained after its Document is retired.
+    pub(crate) client_context: Option<amazing_fetch::service::ClientContext>,
     pub(crate) kind: HtmlFrameResourceKind,
     pub(crate) embedding: Option<NavigableContext>,
     pub(crate) request_mode: amazing_fetch::RequestMode,
@@ -57,8 +59,10 @@ impl RuntimeBindings {
             String::from_utf16_lossy(&adapter.dom_resolve_element_url(script, &units).ok()?)
         };
         let initiator = snapshot.1?;
+        let client_context = RuntimeBindingHost { js, state: self.state.clone() }
+            .document_network_policy(initiator.document, initiator.document_generation);
         let request = HtmlFrameResourceRequest { requested_url: url,
-            referrer: initiator.document_url.clone(), initiator,
+            referrer: initiator.document_url.clone(), initiator, client_context,
             kind: HtmlFrameResourceKind::ClassicScript, embedding: None,
             request_mode: snapshot.3, credentials: snapshot.4, referrer_policy: snapshot.5 };
         let response = loader(&request).ok()?;
