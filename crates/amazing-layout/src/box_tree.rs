@@ -158,7 +158,7 @@ fn build_element(
         box_.table_colspan = table_span(attribute(dom, idx, "span"), 1000, false);
     }
     let classified = classify_children(dom, styled, idx, font_size, fonts, replaced);
-    box_.flow = if box_.style.get("display") == Some("block ruby") {
+    box_.flow = if crate::display_policy::block_ruby(&box_.style) {
         // CSS Display 3 §2.7 changes only ruby's outer display type. Its
         // base/annotation pairing still belongs to a ruby formatting context.
         Flow::Inlines(vec![ruby_inline(dom, styled, idx, parent_font_px)])
@@ -545,8 +545,7 @@ fn split_text_item(items: &mut Vec<InlineNode>, index: usize, at: usize) {
 fn prepare_box_style(style: &mut ComputedStyle) -> bool {
     let original = style.display_before_blockification()
         .or_else(|| style.get("display")).unwrap_or("inline");
-    let inline = matches!(original, "inline" | "inline-block" | "inline-flex"
-        | "inline-grid" | "inline-grid-lanes" | "inline-table" | "ruby");
+    let inline = crate::display_policy::originally_inline(original);
     let positioned = is_out_of_flow(style);
     if positioned || crate::floats::side(style).is_some() {
         let display = amazing_css::blockified_display(style.get("display").unwrap_or("inline"));
@@ -574,6 +573,11 @@ fn formatting_item(mut item: LayoutBox) -> LayoutBox {
 /// `display` computed value → [`Display`]. Unknown values fall back to
 /// CSS's initial `inline`; `none` never reaches here (filtered upstream).
 fn parse_display(style: &ComputedStyle) -> Display {
+    if let Some(display) = crate::display_policy::layout_display(style) {
+        return if display == Display::Inline && crate::floats::side(style).is_some() {
+            Display::Block
+        } else { display };
+    }
     match style.get("display") {
         Some(v)
             if v.eq_ignore_ascii_case("block")
@@ -719,8 +723,7 @@ fn no_wrap_here(style: &ComputedStyle) -> bool {
 }
 
 fn is_atomic_inline_container(style: &ComputedStyle) -> bool {
-    matches!(style.get("display"), Some("inline-flex" | "inline-grid" | "inline-grid-lanes" | "inline-block" | "inline flow-root" | "inline-table"))
-        && crate::floats::side(style).is_none()
+    crate::display_policy::atomic_inline(style) && crate::floats::side(style).is_none()
 }
 
 fn push_atomic_inline(

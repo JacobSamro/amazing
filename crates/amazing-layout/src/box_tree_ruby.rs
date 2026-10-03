@@ -170,10 +170,7 @@ fn role_from_display(display: Option<&str>) -> Option<RubyRole> {
 }
 
 pub(super) fn is_ruby_container(_dom: &Dom, styled: &StyledDom, node: NodeIdx) -> bool {
-    styled
-        .get(node)
-        .and_then(|style| style.get("display"))
-        .is_some_and(|value| value.eq_ignore_ascii_case("ruby"))
+    styled.get(node).is_some_and(crate::display_policy::inline_ruby)
 }
 
 pub(super) fn ruby_inline(

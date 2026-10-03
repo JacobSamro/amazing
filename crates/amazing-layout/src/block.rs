@@ -808,7 +808,8 @@ pub(crate) fn place_atomic_inlines(parent: &mut LayoutBox) {
 }
 
 fn is_inline_block(style: &ComputedStyle) -> bool {
-    matches!(style.get("display"), Some("inline-block" | "inline flow-root" | "inline-grid-lanes"))
+    crate::display_policy::inline_flow_root(style)
+        || style.get("display") == Some("inline-grid-lanes")
 }
 
 fn inline_block_baseline(box_: &LayoutBox) -> f32 {
@@ -1030,6 +1031,7 @@ fn can_collapse_through(block: &LayoutBox, containing_width: f32) -> bool {
 
 pub(crate) fn establishes_bfc(style: &ComputedStyle) -> bool {
     if crate::containment::independent_context(style)
+        || crate::display_policy::independent_inner(style)
         || floats::side(style).is_some()
         || matches!(
             style.get("display"),

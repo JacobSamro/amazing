@@ -70,6 +70,9 @@
 
 pub mod block;
 mod containment;
+mod display_policy;
+#[cfg(test)]
+mod display_policy_tests;
 pub mod box_tree;
 pub use box_tree::font_metric_text_style;
 mod table_tree;

@@ -1,0 +1,7 @@
+# LAYOUT43 compound display consumers
+
+Fixed dependency base `d65d636f6c16938c0c3e4db683f628b992cae413` includes completed LAYOUT42/42A and unchanged CSS38–41. Shared typed decomposition consumes outer/inner display independently of the marker flag. Atomic inline flow-root lists retain specified geometry, BFCs trap float height/child margins, containment excludes non-atomic inline lists, and original inline/run-in metadata survives blockification with table/ruby inner construction. Four grouped actual box/glyph regressions cover the whole consumer family.
+
+CSS Display3 [list-items](https://www.w3.org/TR/css-display-3/#list-items) and [run-in layout](https://www.w3.org/TR/css-display-3/#run-in-layout) define distinct concerns: run-in sibling sequence reparenting/inlinification is not implemented by this type decomposition. No copied upstream code.
+
+The native Linux final gate runs workspace nextest, doctests, seven reftest harness checks and twelve complete pinned static-eligible WPT directories before/after. Final gate: **3586 workspace passed /17 skipped,4 doctests,7 harness checks**; **1403 eligible WPT cases,719→719 passes,zero gained/lost/changed/new/removed**, no operational failures. Exact source hashes, baseline/candidate renderer hashes and all24 classification maps are recorded alongside summary.json. Baseline renderer reproduces completed42A. Eight candidate source hashes verified. Raw logs/metadata are fetched separately; PPM scratch is not durable evidence.

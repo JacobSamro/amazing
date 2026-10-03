@@ -19,7 +19,7 @@ pub(crate) fn independent_context(style: &ComputedStyle) -> bool {
 }
 
 fn applies_layout(style: &ComputedStyle) -> bool {
-    !matches!(style.get("display"), Some("none" | "contents" | "inline"
+    !crate::display_policy::non_atomic_inline(style) && !matches!(style.get("display"), Some("none" | "contents" | "inline"
         | "table-row" | "table-row-group" | "table-column" | "table-column-group"
         | "table-header-group" | "table-footer-group"
         | "ruby" | "ruby-base" | "ruby-text" | "ruby-base-container" | "ruby-text-container"))
@@ -38,7 +38,7 @@ pub(crate) fn intrinsic_inner_sizes(
     let inline = full || contain.split_ascii_whitespace().any(|v| v == "inline-size");
     if !inline { return (None, None); }
     // Size containment does not apply to non-atomic inlines or table boxes.
-    if matches!(style.get("display"), Some("inline" | "table" | "inline-table"
+    if crate::display_policy::non_atomic_inline(style) || crate::display_policy::table(style) || matches!(style.get("display"), Some("inline" | "table" | "inline-table"
         | "table-row" | "table-row-group" | "table-column" | "table-column-group"
         | "table-header-group" | "table-footer-group" | "table-cell"
         | "ruby" | "ruby-base" | "ruby-text" | "ruby-base-container" | "ruby-text-container")) {

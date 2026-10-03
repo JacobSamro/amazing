@@ -20,6 +20,7 @@ pub(crate) enum Role {
 }
 impl Role {
     pub(crate) fn of(style: &ComputedStyle) -> Self {
+        if crate::display_policy::table(style) { return Self::Table; }
         match style
             .get("display")
             .unwrap_or("")
