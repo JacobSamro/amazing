@@ -273,7 +273,7 @@ fn std_json_revive(i: &mut Interpreter, holder: JsValue, key: crate::value::JsSt
     if depth > 512 { return Err(Throw::range_error("JSON reviver recursion limit")); }
     let value = i.get_prop(&holder, key.clone())?;
     if let JsValue::Object(object) = &value {
-        let keys = if std_json_is_array(i, &value)? {
+        let keys = if is_array_value(i, &value)? {
             (0..std_json_length(i, &value)?).map(|index| crate::value::JsString::from(index.to_string())).collect::<Vec<_>>()
         } else { i.enumerable_keys(&value)? };
         for child in keys {
@@ -321,7 +321,7 @@ fn std_json_parse(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
     std_json_revive(i, root, crate::value::JsString::from(""), &reviver, &parser.sources, 0)
 }
 
-fn std_json_is_array(i: &Interpreter, value: &JsValue) -> Result<bool, Throw> {
+fn is_array_value(i: &Interpreter, value: &JsValue) -> Result<bool, Throw> {
     let mut current = value.clone();
     loop {
         let JsValue::Object(object) = &current else { return Ok(false); };
@@ -412,7 +412,7 @@ impl StdJsonWriter {
         self.stack.push(id);
         let indent = self.gap.repeat(depth + 1);
         let outer = self.gap.repeat(depth);
-        let array = std_json_is_array(i, &value)?;
+        let array = is_array_value(i, &value)?;
         let mut parts = Vec::new();
         if array {
             for index in 0..std_json_length(i, &value)? {
@@ -454,7 +454,7 @@ fn std_json_stringify(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Re
     let replacer_value = std_reflect_arg(&args, 1);
     let replacer = if callable_function(&replacer_value).is_some() { Some(replacer_value.clone()) } else { None };
     let keys = if let JsValue::Object(object) = &replacer_value {
-        if replacer.is_none() && std_json_is_array(i, &replacer_value)? {
+        if replacer.is_none() && is_array_value(i, &replacer_value)? {
             let mut list = Vec::new();
             for index in 0..std_json_length(i, &replacer_value)? {
                 let entry = i.get_prop(&replacer_value, &index.to_string())?;

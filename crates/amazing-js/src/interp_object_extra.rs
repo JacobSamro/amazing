@@ -1,7 +1,89 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/object/mod.rs,
+// core/engine/src/object/operations.rs) @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // The remaining Object, Function and Boolean built-ins.
 
 fn object_argument(args: &[JsValue]) -> JsValue {
     args.first().cloned().unwrap_or(JsValue::Undefined)
+}
+
+#[cfg(test)]
+mod object_semantic_tests {
+    use super::*;
+    fn check(source: &str) {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script_with_backend(source, backend).unwrap(), JsValue::Bool(true), "{backend:?}");
+        }
+    }
+    #[test]
+    fn prototype_accessors_and_membership_use_semantic_proxy_methods() {
+        check(r#"
+            var getter=function(){return 1;}, setter=function(v){}, calls='';
+            var ancestor={};Object.defineProperty(ancestor,'x',{get:getter,set:setter,configurable:true});
+            var p=new Proxy({}, {
+                getOwnPropertyDescriptor(t,k){calls+='own;';return undefined;},
+                getPrototypeOf(t){calls+='proto;';return ancestor;}
+            });
+            var ok=Object.prototype.__lookupGetter__.call(p,'x')===getter && calls==='own;proto;';
+            calls='';ok=ok && Object.prototype.__lookupSetter__.call(p,'x')===setter && calls==='own;proto;';
+            calls='';ok=ok && ancestor.isPrototypeOf(p) && calls==='proto;';
+            ok=ok && Object.prototype.isPrototypeOf.call(null,3)===false &&
+                Object.prototype.isPrototypeOf.call(undefined,'x')===false;
+            var threw=false;try{Object.prototype.__lookupGetter__.call(new Proxy({}, {getOwnPropertyDescriptor(){throw 'own';}}),'x');}catch(e){threw=e==='own';}
+            ok && threw;
+        "#);
+    }
+    #[test]
+    fn own_property_predicates_coerce_keys_before_receivers() {
+        check(r#"
+            var own=Object.prototype.hasOwnProperty, enumerable=Object.prototype.propertyIsEnumerable;
+            var ok=own.call('ab','0') && enumerable.call('ab','0') && own.call('ab','length') &&
+                !enumerable.call('ab','length') && !own.call(7,'x') && !enumerable.call(true,'x');
+            var key={toString(){throw 'key';}};
+            for(var method of [own,enumerable]) {
+                var threw=false;try{method.call(null,key);}catch(e){threw=e==='key';}ok=ok&&threw;
+            }
+            var calls=0,p=new Proxy({x:1},{getOwnPropertyDescriptor(t,k){calls++;return Reflect.getOwnPropertyDescriptor(t,k);}});
+            ok && own.call(p,'x') && enumerable.call(p,'x') && calls===2;
+        "#);
+    }
+    #[test]
+    fn builtin_tags_observe_is_array_before_tag_get() {
+        check(r#"
+            var tag=Object.prototype.toString;
+            var revoked=Proxy.revocable([],{get(t,k){revoked.revoke();return undefined;}}), ok=false;
+            var p=revoked.proxy;
+            ok=tag.call(p)==='[object Array]';
+            var threw=false;try{tag.call(revoked.proxy);}catch(e){threw=e instanceof TypeError;}
+            ok=ok&&threw;
+            for(var value of [new Map(),new Set(),Promise.resolve(),Object(1n),Object(Symbol())]) {
+                Object.defineProperty(value,Symbol.toStringTag,{value:42,configurable:true});
+                ok=ok&&tag.call(value)==='[object Object]';
+            }
+            ok && tag.call(new Proxy([],{}))==='[object Array]' && tag.call(Object(3))==='[object Number]' &&
+                tag.call(Object(true))==='[object Boolean]' && tag.call(Object('x'))==='[object String]';
+        "#);
+    }
+    #[test]
+    fn seal_and_freeze_project_minimal_descriptors_in_order() {
+        check(r#"
+            var log='', target={x:1}, p=new Proxy(target,{
+                preventExtensions(t){log+='prevent;';return Reflect.preventExtensions(t);},
+                ownKeys(t){log+='keys;';return Reflect.ownKeys(t);},
+                getOwnPropertyDescriptor(t,k){log+='own;';return Reflect.getOwnPropertyDescriptor(t,k);},
+                defineProperty(t,k,d){log+='define:'+Object.keys(d).join(',')+';';return Reflect.defineProperty(t,k,d);}
+            });
+            Object.seal(p);
+            var ok=log==='prevent;keys;define:configurable;' && target.x===1;
+            log='';Object.freeze(p);
+            ok=ok && log==='prevent;keys;own;define:writable,configurable;' && Object.isFrozen(target);
+            var refused=new Proxy({x:1},{defineProperty(){return false;}}), threw=false;
+            try{Object.seal(refused);}catch(e){threw=e instanceof TypeError;}
+            var accessor={};Object.defineProperty(accessor,'x',{get(){return 1;},configurable:true});
+            log='';Object.freeze(new Proxy(accessor,{defineProperty(t,k,d){log=Object.keys(d).join(',');return Reflect.defineProperty(t,k,d);}}));
+            ok && threw && log==='configurable' && accessor.x===1;
+        "#);
+    }
 }
 
 #[cfg(test)]
@@ -243,14 +325,15 @@ fn object_integrity(
         return Err(Throw::type_error("cannot prevent extensions on this object"));
     }
     for key in i.own_property_keys(&target)? {
-        let existing = i.default_get_own_property(object, &key)?;
-        if let Some(mut property) = existing {
-            property.configurable = false;
-            if freeze && property.getter.is_none() && property.setter.is_none() {
-                property.writable = false;
-            }
-            let descriptor = object_descriptor_value(i, property);
-            i.define_own_property(object, &key, &descriptor)?;
+        let writable = if freeze {
+            let Some(property) = i.default_get_own_property(object, &key)? else { continue; };
+            (property.getter.is_none() && property.setter.is_none()).then_some(false)
+        } else { None };
+        let descriptor = i.descriptor_fields_to_value(&StdDescriptorFields {
+            configurable: Some(false), writable, ..Default::default()
+        });
+        if !i.define_own_property(object, &key, &descriptor)? {
+            return Err(Throw::type_error("cannot set integrity level"));
         }
     }
     Ok(target)
@@ -357,27 +440,22 @@ fn native_object_group_by(
 }
 
 fn native_object_is_prototype_of(
-    _: &mut Interpreter,
+    i: &mut Interpreter,
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    if this.is_null() || this.is_undefined() {
-        return Err(Throw::type_error("isPrototypeOf receiver is nullish"));
-    }
-    let JsValue::Object(prototype) = this else {
-        return Ok(JsValue::Bool(false));
-    };
     let Some(JsValue::Object(object)) = args.first() else {
         return Ok(JsValue::Bool(false));
     };
-    let mut cursor = object.borrow().proto.clone();
-    while let Some(current) = cursor {
+    let JsValue::Object(prototype) = std_legacy_to_object(i, this)? else { unreachable!() };
+    let mut cursor = object.clone();
+    loop {
+        let JsValue::Object(current) = i.default_get_prototype(&cursor)? else { return Ok(JsValue::Bool(false)); };
         if Rc::ptr_eq(&current.0, &prototype.0) {
             return Ok(JsValue::Bool(true));
         }
-        cursor = current.borrow().proto.clone();
+        cursor = current;
     }
-    Ok(JsValue::Bool(false))
 }
 
 fn native_object_to_locale_string(

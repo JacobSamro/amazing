@@ -1,5 +1,7 @@
 // Portions ported from boa-dev/boa (core/engine/src/builtins/function/arguments.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// Portions ported from boa-dev/boa (core/engine/src/builtins/object/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: legacy accessor lookup.
 // Ordinary object operations shared by the standard-library built-ins.
 // These live beside the built-ins until the runtime adopts them.
 
@@ -455,10 +457,7 @@ fn std_object_lookup_accessor(
     let key = i.to_property_key(&std_reflect_arg(&args, 0))?;
     let mut cursor = match &object { JsValue::Object(o) => Some(o.clone()), _ => None };
     while let Some(target) = cursor {
-        let property = match key.as_string() {
-            Some(name) => i.legacy_own_property(&target, name, false)?,
-            None => target.borrow().own_prop(&key).cloned(),
-        };
+        let property = i.default_get_own_property(&target, &key)?;
         if let Some(property) = property {
             if property.getter.is_some() || property.setter.is_some() {
                 let accessor = if want_getter { property.getter } else { property.setter };
@@ -466,7 +465,7 @@ fn std_object_lookup_accessor(
             }
             return Ok(JsValue::Undefined);
         }
-        cursor = target.borrow().proto.clone();
+        cursor = match i.default_get_prototype(&target)? { JsValue::Object(proto) => Some(proto), _ => None };
     }
     Ok(JsValue::Undefined)
 }

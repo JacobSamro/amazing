@@ -1,6 +1,8 @@
 // Portions ported from boa-dev/boa (core/engine/src/builtins/promise/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT:
 // JSRT-30 optional result-capability completion in Promise reaction jobs.
+// Portions ported from boa-dev/boa (core/engine/src/builtins/object/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: prototype tags and own-property order.
 
 fn native_object(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     if let (Some(new_target), Some(active)) = (i.current_new_target(), i.native_stack.last()) {
@@ -2468,38 +2470,25 @@ fn native_object_to_string(
     this: JsValue,
     _: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let base = match &this {
-        JsValue::Undefined => "Undefined",
-        JsValue::Null => "Null",
-        JsValue::Bool(_) => "Boolean",
-        JsValue::Num(_) => "Number",
-        JsValue::BigInt(_) => "BigInt",
-        JsValue::Str(_) => "String",
-        JsValue::Symbol(_) => "Symbol",
-        JsValue::Object(o) if o.borrow().arguments_object => "Arguments",
-        JsValue::Object(o) => match &o.borrow().exotic {
-            Exotic::Array => "Array",
-            Exotic::Map(_) => "Map",
-            Exotic::Set(_) => "Set",
-            Exotic::RegExp(_) => "RegExp",
-            Exotic::Error => "Error",
-            Exotic::Promise(_) => "Promise",
-            _ => {
-                let object = o.borrow();
-                if object.func.is_some() { "Function" }
-                else if matches!(object.boxed_primitive, Some(JsValue::Bool(_))) { "Boolean" }
-                else if matches!(object.boxed_primitive, Some(JsValue::Num(_))) { "Number" }
-                else if matches!(object.boxed_primitive, Some(JsValue::Str(_))) { "String" }
-                else if matches!(object.boxed_primitive, Some(JsValue::BigInt(_))) { "BigInt" }
-                else if object.get_own("[[DateValue]]").is_some() { "Date" }
-                else { "Object" }
-            },
-        },
-    };
     if matches!(this, JsValue::Undefined | JsValue::Null) {
-        return Ok(JsValue::str(format!("[object {base}]")));
+        return Ok(JsValue::str(if this.is_undefined() { "[object Undefined]" } else { "[object Null]" }));
     }
-    let tag = i.get_prop(&this, WellKnownSymbol::ToStringTag.symbol())?;
+    let boxed = std_legacy_to_object(i, this)?;
+    let JsValue::Object(object) = &boxed else { unreachable!() };
+    // IsArray must run before the observable @@toStringTag Get.
+    let base = if is_array_value(i, &boxed)? { "Array" } else {
+        let object = object.borrow();
+        if object.arguments_object { "Arguments" }
+        else if object.func.is_some() { "Function" }
+        else if matches!(object.exotic, Exotic::Error) || i.host_error_brand(&object) { "Error" }
+        else if matches!(object.boxed_primitive, Some(JsValue::Bool(_))) { "Boolean" }
+        else if matches!(object.boxed_primitive, Some(JsValue::Num(_))) { "Number" }
+        else if matches!(object.boxed_primitive, Some(JsValue::Str(_))) { "String" }
+        else if object.get_own("[[DateValue]]").is_some() { "Date" }
+        else if matches!(object.exotic, Exotic::RegExp(_)) { "RegExp" }
+        else { "Object" }
+    };
+    let tag = i.get_prop(&boxed, WellKnownSymbol::ToStringTag.symbol())?;
     let tag = match tag { JsValue::Str(value) => value, _ => base.into() };
     let mut units: Vec<u16> = "[object ".encode_utf16().collect();
     units.extend_from_slice(tag.units());
@@ -3415,17 +3404,15 @@ fn native_has_own_property(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    native_object_has_own(
-        i,
-        JsValue::Undefined,
-        vec![this, args.first().cloned().unwrap_or(JsValue::Undefined)],
-    )
+    let key = i.to_property_key(args.first().unwrap_or(&JsValue::Undefined))?;
+    let JsValue::Object(object) = std_legacy_to_object(i, this)? else { unreachable!() };
+    Ok(JsValue::Bool(i.default_get_own_property(&object, &key)?.is_some()))
 }
 
 fn native_property_is_enumerable(
     i: &mut Interpreter, this: JsValue, args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let JsValue::Object(object) = this else { return Err(Throw::type_error("propertyIsEnumerable receiver is not an object")); };
     let key = i.to_property_key(args.first().unwrap_or(&JsValue::Undefined))?;
+    let JsValue::Object(object) = std_legacy_to_object(i, this)? else { unreachable!() };
     Ok(JsValue::Bool(i.default_get_own_property(&object, &key)?.is_some_and(|property| property.enumerable)))
 }

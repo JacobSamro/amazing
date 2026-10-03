@@ -1591,3 +1591,40 @@ Matched whole JSON **131 → 165/165** (+34, all passing). Whole language
 String **1331/1341** unchanged. Unique union **29975 cases**,
 **29310 → 29344 passing** (+34), **68 gained variants**, zero lost files
 or variants and zero timeouts. Evidence: `js-runtime_jsrt41_evidence.json`.
+
+## JSRT-42 Object prototype and integrity operations (2026-10-03)
+
+Frozen base `e7f120d6dde2dfe9a27adca2dd37ea229852bf0e`. Object prototype
+lookup/tag/receiver algorithms and SetIntegrityLevel are ported from Boa
+`core/engine/src/builtins/object/mod.rs` and `core/engine/src/object/operations.rs`
+at `39cd11214ecb366200157dab96b3919e61e9a391` (MIT). Precise file headers
+and an appended notice preserve attribution; runtime semantic gateways
+replace upstream object/GC dependencies.
+
+Legacy getter/setter lookup uses semantic own descriptors and GetPrototypeOf
+at every step. isPrototypeOf rejects primitive arguments before converting
+its receiver, then follows semantic prototypes. hasOwnProperty and
+propertyIsEnumerable convert the key before ToObject and use semantic own
+descriptors, covering primitive wrappers and abrupt key conversion.
+
+Object.prototype.toString executes fallible IsArray before the observable
+@@toStringTag Get; array branding survives revocation during that later Get.
+Builtin fallback tags use only the specified intrinsic slots. Map/Set/Promise/
+Symbol/BigInt tags come from @@toStringTag; a non-string override yields Object.
+The existing JSON IsArray helper is renamed and shared without changing
+JSON algorithms, Array.isArray, VM metadata or callable policy.
+
+Seal performs PreventExtensions, OwnKeys and configurable:false defines,
+without GetOwnProperty calls. Freeze queries each current descriptor, then
+defines only configurable:false and writable:false for data properties.
+Both operations propagate abrupt completions and reject false Define results.
+Existing TypedArray and legacy/WindowProxy integrity policy stays intact.
+Four grouped regressions cover both backends; full Object/Proxy/Reflect/Array/
+language/JSON before-and-after gate is measured on the fixed base.
+
+Final Boat workspace **3776 passed/17 skipped, 75.486 seconds**, **4 doctests**.
+Matched Object **3357 → 3377/3414** (+20), Reflect **152 → 153/154** (+1);
+whole language **24029/24590**, Array **3233/3332**, Proxy **310/311**,
+JSON **165/165** unchanged. Unique union **31966 cases**,
+**31246 → 31267 passing** (+21), **42 gained variants**, zero lost files
+or variants and zero timeouts. Evidence: `js-runtime_jsrt42_evidence.json`.
