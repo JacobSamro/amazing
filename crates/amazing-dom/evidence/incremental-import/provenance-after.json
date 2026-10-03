@@ -1,0 +1,13 @@
+{
+  "source": "c17694ae",
+  "platform": "Linux Boat pooled dom-bindings",
+  "binary_sha256": "29eaf82bb1fa03ec5906500e3cc6aa64af994b44107d3a56a908178e4685802d",
+  "raw_nodes_serialization_sha256": "38b1267d692b61e4c320ae8b977143c5ecf7c0a71d8c1a97c063a13123c8f626",
+  "raw_syntax_sha256": "aa986533ee7600afa72a1aa7d3f41969cab2a3ad9734a1a3c80535ca73399c07",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "directories": [
+    "dom/nodes",
+    "html/syntax/serializing-html-fragments"
+  ],
+  "syntax_directory": "html/syntax/parsing"
+}

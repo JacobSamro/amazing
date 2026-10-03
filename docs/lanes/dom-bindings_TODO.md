@@ -3216,3 +3216,21 @@ All168 TextDecoder single-byte assertions retained. No fixture rewrite or codec
 algorithm change. Evidence: amazing-bindings/evidence/single-byte-fixture.
 Next: parent-granted validation-aware incremental importer/reparent/document
 moves, coordinated with HTML51; effective base hook for captured HTML52 fallback.
+
+
+### Incremental importer topology and document moves
+
+Fixed 58a2342c adopts HTML51; five code commits eef5c23b through c17694ae.
+Reverse synchronization mirrors external Documents, detached containers and
+actual Document children; forward synchronization preserves node identity and
+uses validated retry ordering before sibling ordering. Late shadow containers
+are discovered after host import. Actual active/inert context is preserved.
+Six meaningful native regressions; Boat3663pass17skip+4docs. Whole72syntax
+2696/12 ->2702/6 (+6 topology assertions), zero lost including all cycle cases.
+Whole8serializer373/2 unchanged;314nodes12691/288/6 ->12693/287/6 zero loss
+also guarding prior accepted12692 passes. Node gains are separate Window
+helper5e9 (+1) and uncredited XHR timing recovery (+1), not importer gains.
+Four reopened doc.open/write failures are separate HTML parser-session adapter
+work; two remaining syntax failures are event timing. Evidence: amazing-dom/
+evidence/incremental-import. MAIN --ref HEAD run was excluded; explicit
+source c17694ae was gated. Captured fallback URL hook remains HTML53-owned.

@@ -1,0 +1,119 @@
+{
+  "dom/nodes": {
+    "before": {
+      "pass": 12691,
+      "fail": 288,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 6
+    },
+    "after": {
+      "pass": 12693,
+      "fail": 287,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 6
+    },
+    "lost": 0,
+    "gained": 2,
+    "lost_names": [],
+    "gained_names": [
+      [
+        "dom/nodes/Document-contentType/contentType/xhr_responseType_document.html",
+        "XHR - retrieve HTML document: document.contentType === 'application/xml'",
+        1
+      ],
+      [
+        "dom/nodes/insertion-removing-steps/insertion-removing-steps-iframe.window.js",
+        "Removing steps (remove): script does not run synchronously during iframe destruction",
+        1
+      ]
+    ]
+  },
+  "html/syntax/serializing-html-fragments": {
+    "before": {
+      "pass": 373,
+      "fail": 2,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "after": {
+      "pass": 373,
+      "fail": 2,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "lost": 0,
+    "gained": 0,
+    "lost_names": [],
+    "gained_names": []
+  },
+  "html/syntax/parsing": {
+    "before": {
+      "error": 0,
+      "fail": 12,
+      "notrun": 0,
+      "pass": 2696,
+      "timeout": 0
+    },
+    "after": {
+      "error": 0,
+      "fail": 6,
+      "notrun": 0,
+      "pass": 2702,
+      "timeout": 0
+    },
+    "lost": 0,
+    "gained": 6,
+    "lost_names": [],
+    "gained_names": [
+      [
+        "html/syntax/parsing/adoption-agency-reparenting-document-target.html",
+        "Adoption agency foster target is a Document that already has an element child",
+        1
+      ],
+      [
+        "html/syntax/parsing/adoption-agency-reparenting.html",
+        "Furthest block adopted into another Document before </b>",
+        1
+      ],
+      [
+        "html/syntax/parsing/adoption-agency-reparenting.html",
+        "Common ancestor adopted into another Document before </b>",
+        1
+      ],
+      [
+        "html/syntax/parsing/adoption-agency-reparenting.html",
+        "Furthest block detached before </b>",
+        1
+      ],
+      [
+        "html/syntax/parsing/adoption-agency-reparenting.html",
+        "Adoption agency with a foster-parenting common ancestor (<tr>)",
+        1
+      ],
+      [
+        "html/syntax/parsing/foster-parenting-into-document-with-element-child.html",
+        "A foster-parented element whose adjusted insertion location is another Document that already has an element child is dropped on the floor",
+        1
+      ]
+    ]
+  },
+  "prior_accepted_nodes": {
+    "lost": 0,
+    "lost_names": []
+  },
+  "base": "58a2342cf33ad9b54542fb186af59aed9b530ac3",
+  "candidate": "c17694ae345ce3bc527e8c6c1d0096b48c9453d1",
+  "nextest_pass": 3663,
+  "nextest_skip": 17,
+  "doctest_pass": 4,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "attribution": {
+    "syntax_importer_gains": 6,
+    "nodes_window_helper_gain": 1,
+    "nodes_xhr_timing_recovery_uncredited": 1
+  }
+}

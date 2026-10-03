@@ -1,0 +1,12 @@
+{
+  "before": {
+    "crates/amazing-dom/src/markup.rs": "2084d96b1167fdf23225fc83e5c3b27964efb68b0e9ce066f86765cc54a633db",
+    "crates/amazing-dom/src/markup_tests.rs": "98a6f01573d2a260bd81b2d618d0670c87755276db77e87619a79ae602140f4c",
+    "crates/amazing/src/runtime_host_dom_bindings.rs": "127683ff419d30231c10a54b89eff3cfcdbb80169db13218a8d324b4364111cc"
+  },
+  "after": {
+    "crates/amazing-dom/src/markup.rs": "96278ecd36d9affbc32dbd494c3328350fe68f94a9ba7b0f3f21d2d9ad9e1e74",
+    "crates/amazing-dom/src/markup_tests.rs": "d4cd6f16ed004918dbed260196308ad9399b64bcac05c9fdcd3a94f0dc0e38b1",
+    "crates/amazing/src/runtime_host_dom_bindings.rs": "12d48fb7305c9603cbeca37e26d2e62cf7e076b15f81f8ee5d2faa974e144efe"
+  }
+}
