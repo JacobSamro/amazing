@@ -1,0 +1,231 @@
+{
+  "ticket": "CSS58",
+  "source": "adc6b6225f22ba498e6bf316a0c843fca414b31b",
+  "source_series": [
+    "b73e094fd1f921a58ddafe5f45f438d9c9cf7697",
+    "df8e8016b4dd557f4657d2d5eaab92b75ec38962",
+    "adc6b6225f22ba498e6bf316a0c843fca414b31b"
+  ],
+  "fixed_base": "357adb007b61b2de8bbd3a94fb73d9bb5793ec3e",
+  "platform": "Linux Boat bx_shgjh66q native ext4 source/target",
+  "workspace_before": 3957,
+  "workspace_after": 3962,
+  "workspace_skip": 17,
+  "doctests": 4,
+  "native_gained": [
+    "amazing-css computed::tree_context::tests::every_nested_function_and_variable_fallback_keeps_its_actual_source",
+    "amazing-css computed::tree_context::tests::native_document_identity_and_invalid_counting_arguments_are_atomic",
+    "amazing-css computed::tree_context::tests::numeric_functions_never_acquire_literal_zero_dimension_exceptions",
+    "amazing-css computed::tree_context::tests::actual_dom_order_counts_only_elements_and_precedes_inheritance",
+    "amazing-css computed::tree_context::tests::open_closed_nested_host_slot_and_inherited_reference_scopes"
+  ],
+  "all_prior_named_native_tests_retained": true,
+  "parsing_passed": 4312,
+  "parsing_total": 5126,
+  "parsing_files": 514,
+  "parsing_nonliteral_skipped": 169,
+  "parsing_failed_classification_multiplicities_retained": true,
+  "changed_existing_failure_details": {
+    "old": [
+      "FAIL /home/user/corpora/wpt/css/css-grid/parsing/grid-area-computed.html: computed grid-row-start: \"span calc(sibling-index() - 2)\" -> Some(\"span calc(sibling-index() - 2)\"), expected \"span 1\""
+    ],
+    "new": [
+      "FAIL /home/user/corpora/wpt/css/css-grid/parsing/grid-area-computed.html: computed grid-row-start: \"span calc(sibling-index() - 2)\" -> Some(\"span calc(1 - 2)\"), expected \"span 1\""
+    ]
+  },
+  "render": {
+    "css-color": {
+      "counts_before": {
+        "pass": 226,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "counts_after": {
+        "pass": 226,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "eligible": 236
+    },
+    "css-images": {
+      "counts_before": {
+        "pass": 92,
+        "mismatch": 49,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "counts_after": {
+        "pass": 92,
+        "mismatch": 49,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "eligible": 141
+    },
+    "css-fonts": {
+      "counts_before": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "counts_after": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "eligible": 32
+    },
+    "css-transforms": {
+      "counts_before": {
+        "pass": 141,
+        "mismatch": 207,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "counts_after": {
+        "pass": 141,
+        "mismatch": 207,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "eligible": 348
+    },
+    "css-backgrounds": {
+      "counts_before": {
+        "pass": 77,
+        "mismatch": 57,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "counts_after": {
+        "pass": 77,
+        "mismatch": 57,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "eligible": 134
+    },
+    "css-cascade": {
+      "counts_before": {
+        "pass": 17,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "counts_after": {
+        "pass": 17,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "eligible": 21
+    },
+    "css-conditional": {
+      "counts_before": {
+        "pass": 29,
+        "mismatch": 37,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "counts_after": {
+        "pass": 29,
+        "mismatch": 37,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "eligible": 66
+    },
+    "selectors": {
+      "counts_before": {
+        "pass": 82,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "counts_after": {
+        "pass": 82,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "eligible": 91
+    },
+    "css-shadow": {
+      "counts_before": {
+        "pass": 0,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "counts_after": {
+        "pass": 0,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gained": [],
+      "lost": [],
+      "eligible": 35
+    }
+  },
+  "render_gained_total": 0,
+  "render_lost_total": 0,
+  "scope": "Independent actual source tree counting on closed56, no held57 shorthand/51 paint. Existing failing grid integer-math clamp detail now contains resolved actual count; classification remains failed. Public Token format unchanged.",
+  "renderer_sha256": "cf655d9506160213ab2a5edefd8f6ce91d8fa78ccb7349ea19560c831a2711a6"
+}
