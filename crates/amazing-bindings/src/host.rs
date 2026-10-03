@@ -670,6 +670,7 @@ pub enum Operation {
     RangeDeleteContents,
     RangeExtractContents,
     RangeCloneContents,
+    RangeCreateContextualFragment,
     RangeInsertNode,
     RangeSurroundContents,
     RangeCloneRange,

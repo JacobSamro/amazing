@@ -1478,6 +1478,106 @@ mod tests {
     }
 
     #[test]
+    fn contextual_range_fragments_use_live_owner_and_conversion_context() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html"); dom.create_element(html, "body");
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = super::super::install(&mut js, host.clone()).unwrap();
+        bindings.set_document_url(&mut js, "https://example.test/range");
+        let result = js.run_script(r#"
+            let step=0;function check(v){step++;if(!v)throw 'range context '+step;}
+            const r=document.createRange();r.selectNodeContents(document.body);
+            const before=r.startContainer, offset=r.startOffset;
+            const a=r.createContextualFragment('<p>one<p>two');
+            const b=r.createContextualFragment('<p>one<p>two');
+            check(a !== b && a.ownerDocument === document && a.firstChild.ownerDocument === document);
+            check(a.childNodes.length === 2 && r.startContainer === before && r.startOffset === offset);
+            r.selectNodeContents(document.documentElement);
+            check(r.createContextualFragment('<span>x</span>').firstChild.localName === 'span');
+            r.setStart(document.createTextNode('detached'),0);
+            check(r.createContextualFragment('<body><b>x</b>').firstChild.localName === 'b');
+            const table=document.createElement('table'), body=document.createElement('tbody');table.append(body);
+            r.selectNodeContents(document.body);
+            const changing={toString(){r.selectNodeContents(body);return '<tr><td>cell</td></tr>';}};
+            check(r.createContextualFragment(changing).firstChild.firstChild.localName === 'td');
+            const t=document.createElement('template');r.selectNodeContents(t.content);
+            const inert=r.createContextualFragment('<noscript>&amp;</noscript>');
+            check(inert.ownerDocument === t.content.ownerDocument && inert.firstChild.textContent === '&');
+            r.selectNodeContents(t);
+            check(r.createContextualFragment('<noscript>&amp;</noscript>').firstChild.textContent === '&amp;');
+            const form=document.createElement('form'), context=document.createElement('div');form.append(context);
+            r.selectNodeContents(context);
+            check(r.createContextualFragment('<form><input></form>').firstChild.localName === 'input');
+            const math=document.createElementNS('http://www.w3.org/1998/Math/MathML','annotation-xml');
+            math.setAttribute('encoding','text/html');r.selectNodeContents(math);
+            check(r.createContextualFragment('<foo></foo>').firstChild.namespaceURI === 'http://www.w3.org/1999/xhtml');
+            math.setAttribute('encoding','application/xml');
+            check(r.createContextualFragment('<foo></foo>').firstChild.namespaceURI === math.namespaceURI);
+            const foreign=document.createElementNS('urn:actual-context','MixedCase');r.selectNodeContents(foreign);
+            check(r.createContextualFragment('<foo></foo>').firstChild.namespaceURI === 'urn:actual-context');
+            check(r.createContextualFragment('<body><p>x').firstChild.namespaceURI === 'http://www.w3.org/1999/xhtml');
+            r.selectNodeContents(document.body);globalThis.contextualRuns=0;
+            const script=r.createContextualFragment('<script>contextualRuns++</script>');check(contextualRuns === 0);
+            document.body.append(script);check(contextualRuns === 1);
+            let missing=false;try{r.createContextualFragment();}catch(e){missing=e instanceof TypeError;}check(missing);
+            let branded=false;try{Range.prototype.createContextualFragment.call({},'');}catch(e){branded=e instanceof TypeError;}check(branded);
+            check(r.createContextualFragment(null).firstChild.data === 'null');
+            r.detach();check(r.createContextualFragment('').childNodes.length === 0);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)), "{result:?}");
+    }
+
+    #[test]
+    fn contextual_range_xml_fragments_keep_namespace_scope_and_fatal_errors() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step=0;function check(v){step++;if(!v)throw 'range XML context '+step;}
+            const doc=new DOMParser().parseFromString('<p:root xmlns:p="urn:parent" xmlns="urn:default" xmlns:x="urn:outer"><c:child xmlns:c="urn:child" xmlns:x="urn:local"/></p:root>','application/xml');
+            const child=doc.documentElement.firstChild,r=doc.createRange();r.selectNodeContents(child);
+            const f=r.createContextualFragment('<x:item x:value="ok"/><plain/><![CDATA[cdata]]>tail');
+            check(f.ownerDocument === doc && f.childNodes.length === 4);
+            check(f.firstChild.namespaceURI === 'urn:local' && f.firstChild.getAttributeNS('urn:local','value') === 'ok');
+            check(f.childNodes[1].namespaceURI === 'urn:default' && f.childNodes[2].nodeType === 4 && f.lastChild.data === 'tail');
+            child.setAttributeNS('http://www.w3.org/2000/xmlns/','xmlns','');
+            check(r.createContextualFragment('<plain/>').firstChild.namespaceURI === null);
+            const bom=r.createContextualFragment('\uFEFF<plain/>');check(bom.firstChild.data === '\uFEFF');
+            check(r.createContextualFragment('').childNodes.length === 0);
+            for(const source of ['<unclosed>','<unbound:item/>','&#0;','<?xml version="1.0"?>','<!DOCTYPE a><a/>','<a xmlns:x="urn:dup" xmlns:y="urn:dup" x:k="1" y:k="2"/>',String.fromCharCode(0xd800)]){
+                let invalid=false;try{r.createContextualFragment(source);}catch(e){invalid=e.name === 'SyntaxError';}check(invalid);
+            }
+            check(child.parentNode === doc.documentElement && r.startContainer === child);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)), "{result:?}");
+    }
+
+    #[test]
+    fn contextual_range_fragment_inherits_current_document_quirks_mode() {
+        use amazing_dom::document_surface::QuirksMode;
+        let mut dom=Dom::new();let html=dom.create_element(NodeIdx(0),"html");dom.create_element(html,"body");
+        dom.set_document_quirks_mode(NodeIdx(0),QuirksMode::Quirks).unwrap();
+        let host=Rc::new(RefCell::new(BrowserDomHost {dom,native_forwarded:false}));
+        let mut js=Interpreter::new_with_external_scheduler(32).unwrap();js.set_dom_host(host.clone());
+        let _bindings=super::super::install(&mut js,host.clone()).unwrap();
+        let result=js.run_script(r#"
+            const r=document.createRange();r.selectNodeContents(document.body);
+            const quirky=r.createContextualFragment('<p>before<table><tr><td>cell</td></tr></table>after');
+            quirky.firstChild.firstElementChild.localName === 'table';
+        "#).unwrap();assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
+        host.borrow_mut().dom.set_document_quirks_mode(NodeIdx(0),QuirksMode::NoQuirks).unwrap();
+        let result=js.run_script(r#"
+            const standard=r.createContextualFragment('<p>before<table><tr><td>cell</td></tr></table>after');
+            standard.firstChild.nextSibling.localName === 'table' && standard.firstChild.firstElementChild === null;
+        "#).unwrap();assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
+    }
+
+    #[test]
     fn base_reflection_uses_fallback_url_and_preserves_webidl_strings() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();

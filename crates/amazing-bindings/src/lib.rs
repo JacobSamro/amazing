@@ -26,6 +26,7 @@ pub mod dom_exception;
 mod interfaces;
 mod invoke;
 mod range_bindings;
+mod range_fragment;
 mod fragment_context;
 mod selection_bindings;
 mod factories;

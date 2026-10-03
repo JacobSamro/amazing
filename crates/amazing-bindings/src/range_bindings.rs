@@ -1,4 +1,4 @@
-use crate::host::{BindingHost, InterfaceBrand, Operation as O, PlatformKey};
+use crate::host::{BindingHost, FragmentContext, FragmentParser, XmlFragmentContext, InterfaceBrand, Operation as O, PlatformKey};
 use amazing_dom::{range::{AbstractRange, BoundaryPoint, Range, StaticRangeId}, DomError, NodeIdx, NodeKind};
 use std::cmp::Ordering;
 
@@ -9,7 +9,7 @@ pub(crate) fn handles(op: O) -> bool {
         | O::RangeSetEnd | O::RangeSetStartBefore | O::RangeSetStartAfter
         | O::RangeSetEndBefore | O::RangeSetEndAfter | O::RangeCollapse
         | O::RangeSelectNode | O::RangeSelectNodeContents | O::RangeDeleteContents
-        | O::RangeExtractContents | O::RangeCloneContents | O::RangeInsertNode
+        | O::RangeExtractContents | O::RangeCloneContents | O::RangeCreateContextualFragment | O::RangeInsertNode
         | O::RangeSurroundContents | O::RangeCloneRange | O::RangeDetach
         | O::RangeIntersectsNode | O::RangeCompareBoundaryPoints
         | O::RangeIsPointInRange | O::RangeComparePoint | O::RangeStringifier)
@@ -61,7 +61,7 @@ fn receiver_range<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result<R
 
 enum Output { Void, Node(NodeIdx), Number(f64), Boolean(bool), Range(Range), String(Vec<u16>) }
 
-pub(crate) fn invoke<H: BindingHost>(
+pub(crate) fn invoke<H: BindingHost + FragmentParser>(
     host: &mut H, op: O, receiver: H::Value, args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
     if op == O::StaticRangeConstructor {
@@ -117,6 +117,9 @@ pub(crate) fn invoke<H: BindingHost>(
         }
     }
     let range = receiver_range(host, &receiver)?;
+    if op == O::RangeCreateContextualFragment {
+        return crate::range_fragment::create(host, range, args);
+    }
     let node = if matches!(op, O::RangeSetStart | O::RangeSetEnd
         | O::RangeSetStartBefore | O::RangeSetStartAfter | O::RangeSetEndBefore
         | O::RangeSetEndAfter | O::RangeSelectNode | O::RangeSelectNodeContents

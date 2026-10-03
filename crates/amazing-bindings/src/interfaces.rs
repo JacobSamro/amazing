@@ -478,6 +478,7 @@ const RANGE: &[Member] = &[
     method("deleteContents", O::RangeDeleteContents, 0),
     method("extractContents", O::RangeExtractContents, 0),
     method("cloneContents", O::RangeCloneContents, 0),
+    method("createContextualFragment", O::RangeCreateContextualFragment, 1),
     method("insertNode", O::RangeInsertNode, 1),
     method("surroundContents", O::RangeSurroundContents, 1),
     method("cloneRange", O::RangeCloneRange, 0),
