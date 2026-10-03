@@ -1007,6 +1007,9 @@ pub struct InterfaceDefinition {
 pub enum HostCallPolicy {
     CallOnly,
     ConstructOnly,
+    /// The constructor allocates its own result and resolves newTarget's
+    /// prototype; the runtime must not preallocate or replace its prototype.
+    ConstructOnlyAllocates,
     CallAndConstruct,
 }
 

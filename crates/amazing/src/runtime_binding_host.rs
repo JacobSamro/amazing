@@ -574,6 +574,7 @@ impl RuntimeBindingHost<'_> {
         let policy = match policy {
             HostCallPolicy::CallOnly => JsCallPolicy::CallOnly,
             HostCallPolicy::ConstructOnly => JsCallPolicy::ConstructOnly,
+            HostCallPolicy::ConstructOnlyAllocates => JsCallPolicy::ConstructOnlyAllocates,
             HostCallPolicy::CallAndConstruct => JsCallPolicy::CallAndConstruct,
         };
         self.js
@@ -1259,7 +1260,11 @@ impl BindingHost for RuntimeBindingHost<'_> {
                     definition.name,
                     length,
                     NativeEntry::Operation(operation),
-                    HostCallPolicy::ConstructOnly,
+                    if operation == Operation::XMLSerializerConstructor {
+                        HostCallPolicy::ConstructOnlyAllocates
+                    } else {
+                        HostCallPolicy::ConstructOnly
+                    },
                 )
             }
             None => self.native(
