@@ -122,6 +122,7 @@ struct XhrPending {
 }
 
 pub(super) struct NetRuntime {
+    document_policies: HashMap<(NodeIdx,u64),ClientContext>,
     fetch_objects: Vec<Rc<RefCell<FetchObject>>>,
     fetch_interfaces: Vec<(FetchInterface, JsValue, JsValue)>,
     fetch_network: NetworkService,
@@ -143,6 +144,7 @@ pub(super) struct NetRuntime {
 impl NetRuntime {
     pub(super) fn new() -> Self {
         Self {
+            document_policies: HashMap::new(),
             fetch_objects: Vec::new(),
             fetch_interfaces: Vec::new(),
             fetch_network: NetworkService::new(DispatchLimits::default()),
@@ -169,6 +171,32 @@ impl Drop for XhrStateOverrideGuard {
 }
 
 impl RuntimeBindingHost<'_> {
+    /// Read only the policy installed on this exact native Document lifetime.
+    /// This pure lookup neither enters a realm nor invokes embedding callbacks.
+    pub(crate) fn document_network_policy(&self,document:NodeIdx,generation:u64)->Option<ClientContext> {
+        let state=self.state.borrow();
+        let host=state.host.borrow();
+        if host.dom.node_generation(document)!=Some(generation)
+            || !matches!(&host.dom.get(document).kind,amazing_dom::NodeKind::Document) {return None;}
+        state.net.document_policies.get(&(document,generation)).cloned()
+    }
+    /// Install a captured creator policy or an actual response policy before
+    /// parser/scripts enter the allocated native Document.
+    pub(crate) fn set_document_network_policy(&self,document:NodeIdx,policy:ClientContext)->Result<(),Throw> {
+        let generation={
+            let state=self.state.borrow();let host=state.host.borrow();
+            let generation=host.dom.node_generation(document)
+                .ok_or_else(||Throw::type_error("Stale network policy document"))?;
+            if !matches!(&host.dom.get(document).kind,amazing_dom::NodeKind::Document) {
+                return Err(Throw::type_error("Network policy requires a native Document"));
+            }
+            generation
+        };
+        let mut state=self.state.borrow_mut();
+        state.net.document_policies.retain(|(node,_),_|*node!=document);
+        state.net.document_policies.insert((document,generation),policy);
+        Ok(())
+    }
     pub(super) fn install_net(&mut self) -> Result<(), Throw> {
         amazing_bindings::fetch_interfaces::install(self)?;
         let fetch = self.js.binding_get_property(&self.js.binding_global_object(), "fetch")?;
@@ -1698,6 +1726,42 @@ impl FetchHost for RuntimeBindingHost<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn document_policy_snapshots_guard_native_identity_and_release_borrows() {
+        use super::*;
+        let host=Rc::new(RefCell::new(BrowserDomHost {dom:amazing_html::parse("<body><div></div>"),native_forwarded:false}));
+        let mut js=Interpreter::new_with_external_scheduler(crate::js_scheduler::JS_CAPACITY).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings=crate::runtime_binding_host::install(&mut js,host.clone()).unwrap();
+        let adapter=RuntimeBindingHost {js:&mut js,state:bindings.state.clone()};
+        let root=NodeIdx(0);let generation=host.borrow().dom.node_generation(root).unwrap();
+        assert!(adapter.document_network_policy(root,generation).is_none());
+        let mut headers=amazing_fetch::HeaderList::default();
+        headers.append("content-security-policy","script-src 'nonce-real'; img-src 'none'").unwrap();
+        let mut policy=ClientContext::default();policy.csp=amazing_fetch::CspPolicyList::from_headers(&headers).unwrap();policy.now_unix=17;
+        adapter.set_document_network_policy(root,policy.clone()).unwrap();
+        let creator=adapter.document_network_policy(root,generation).unwrap();
+        assert_eq!(creator.csp,policy.csp);assert_eq!(creator.now_unix,17);
+        assert!(adapter.document_network_policy(root,generation+1).is_none());
+        let body={let dom=&host.borrow().dom;(0..dom.node_count()).map(|i|NodeIdx(i as u32)).find(|node|dom.name(*node)==Some("body")).unwrap()};
+        assert!(adapter.set_document_network_policy(body,policy.clone()).is_err());
+        assert!(adapter.document_network_policy(body,host.borrow().dom.node_generation(body).unwrap()).is_none());
+        assert!(adapter.document_network_policy(NodeIdx(u32::MAX),1).is_none());
+        assert!(adapter.set_document_network_policy(NodeIdx(u32::MAX),policy.clone()).is_err());
+        // HTML owns the decision to inherit. The seam retains an owned creator
+        // snapshot even after the creator receives a different response policy.
+        let blank=host.borrow_mut().dom.create_document();
+        adapter.set_document_network_policy(blank,creator).unwrap();
+        adapter.set_document_network_policy(root,ClientContext::default()).unwrap();
+        let blank_generation=host.borrow().dom.node_generation(blank).unwrap();
+        assert_eq!(adapter.document_network_policy(blank,blank_generation).unwrap().csp,policy.csp);
+        assert!(adapter.document_network_policy(root,generation).unwrap().csp.policies.is_empty());
+        // Returned policy values hold no state/DOM borrow across the next
+        // actual allocation or embedding action.
+        let snapshot=adapter.document_network_policy(blank,blank_generation).unwrap();
+        assert!(host.try_borrow_mut().is_ok());assert!(bindings.state.try_borrow_mut().is_ok());
+        assert_eq!(snapshot.csp,policy.csp);
+    }
     #[test]
     fn document_query_encoder_keeps_state_and_url_error_escapes() {
         assert_eq!(super::encode_document_query("あい", "iso-2022-jp"), b"\x1b$B$\"$$\x1b(B");
