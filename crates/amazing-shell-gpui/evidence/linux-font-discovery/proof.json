@@ -1,0 +1,54 @@
+{
+  "platform": "Boat Ubuntu/Linux, Xvfb, software Vulkan",
+  "captures": [
+    {
+      "exe": "/tmp/amazing-shell-target-shell/debug/amazing-shell",
+      "sha256": "35d8dc03d96c029690d2529c501a03f8012fa55279b2975486743a58afcc7a40",
+      "commit_tree": "/tmp/amazing-native-src-shell",
+      "args": "--url file:///tmp/amazing-native-src-shell/tests/real-pages/pages/news-home.html",
+      "display": "1280x800",
+      "window": "2097153",
+      "captured": "2026-10-02T23:51:18Z",
+      "source_commit": "f120de608169358b37e7cf2686c38ef9e8bdaa10",
+      "image_sha256": "b998993ef4d46b229c9c03db90bcaa575192041cc1949ce400935d7554d87094",
+      "window_image_size": [
+        1080,
+        760
+      ],
+      "page_viewport": [
+        960,
+        570
+      ],
+      "inspected": true,
+      "label": "before"
+    },
+    {
+      "exe": "/tmp/amazing-shell-target-shell/debug/amazing-shell",
+      "sha256": "b4f0a7b824a9b974705b4041414ec48bc34c83411b1aa2cfb490ad891daf5b6d",
+      "commit_tree": "/tmp/amazing-native-src-shell",
+      "args": "--url file:///tmp/amazing-native-src-shell/tests/real-pages/pages/news-home.html",
+      "display": "1280x800",
+      "window": "2097153",
+      "captured": "2026-10-02T23:59:08Z",
+      "source_commit": "1548855d2b0cb74790d14d82724295cbcf44e8a5",
+      "image_sha256": "3647fba70686d4d8dc517e75d3583a28ec2f93a0293a328fa04d0f12c9f9b1cf",
+      "window_image_size": [
+        1080,
+        760
+      ],
+      "page_viewport": [
+        960,
+        570
+      ],
+      "inspected": true,
+      "label": "after"
+    }
+  ],
+  "shell_tests": {
+    "source_commit": "1548855d2b0cb74790d14d82724295cbcf44e8a5",
+    "passed": 93,
+    "skipped": 0
+  },
+  "observation": "Page headings and article summaries are readable after installing Linux font faces. Before they were solid glyph boxes; browser chrome was readable in both captures.",
+  "remaining": "Header links remain visually adjacent. Broader runtime/CSSOM and first-font metric adoption in GPUI is tracked separately; this is a font-discovery proof, not complete browser conformance."
+}
