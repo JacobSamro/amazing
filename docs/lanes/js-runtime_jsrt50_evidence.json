@@ -1,0 +1,406 @@
+{
+  "ticket": "JSRT-50",
+  "base_sha": "da291df97d58a8a521f7258e6a779a3ba4a97d16",
+  "workspace": {
+    "passed": 3976,
+    "skipped": 17,
+    "elapsed_seconds": 75.214
+  },
+  "doctests": 4,
+  "selections": {
+    "built-ins-Promise": {
+      "selected": 732,
+      "before": {
+        "pass": 659,
+        "fail": 73,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53140
+      },
+      "after": {
+        "pass": 677,
+        "fail": 55,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53140
+      },
+      "gained": [
+        "built-ins/Promise/prototype/Symbol.toStringTag.js",
+        "built-ins/Promise/try/args.js",
+        "built-ins/Promise/try/avoids-wrap-for-subclass.js",
+        "built-ins/Promise/try/avoids-wrap.js",
+        "built-ins/Promise/try/ctx-ctor-for-error.js",
+        "built-ins/Promise/try/ctx-ctor-throws.js",
+        "built-ins/Promise/try/ctx-ctor.js",
+        "built-ins/Promise/try/length.js",
+        "built-ins/Promise/try/name.js",
+        "built-ins/Promise/try/not-a-constructor.js",
+        "built-ins/Promise/try/promise.js",
+        "built-ins/Promise/try/prop-desc.js",
+        "built-ins/Promise/try/return-value.js",
+        "built-ins/Promise/try/throws.js",
+        "built-ins/Promise/withResolvers/ctx-ctor.js",
+        "built-ins/Promise/withResolvers/promise.js",
+        "built-ins/Promise/withResolvers/resolvers.js",
+        "built-ins/Promise/withResolvers/result.js"
+      ],
+      "lost": [],
+      "elapsed_before": 5.861,
+      "elapsed_after": 6.021,
+      "before_host_sha256": "0336c5e8116425fee46653b6a9937cba5860a4dac6c3389c23b76129c270ded4",
+      "after_host_sha256": "bbfbe0c588b3c033a8425d303e0fb13c5d6496f900fa85929cea940e3ee95b14",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before": {
+        "pass": 3410,
+        "fail": 3,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "after": {
+        "pass": 3411,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "gained": [
+        "built-ins/Object/prototype/toString/symbol-tag-promise-builtin.js"
+      ],
+      "lost": [],
+      "elapsed_before": 10.458,
+      "elapsed_after": 10.307,
+      "before_host_sha256": "0336c5e8116425fee46653b6a9937cba5860a4dac6c3389c23b76129c270ded4",
+      "after_host_sha256": "bbfbe0c588b3c033a8425d303e0fb13c5d6496f900fa85929cea940e3ee95b14",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Reflect": {
+      "selected": 154,
+      "before": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "after": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "gained": [],
+      "lost": [],
+      "elapsed_before": 2.915,
+      "elapsed_after": 2.907,
+      "before_host_sha256": "0336c5e8116425fee46653b6a9937cba5860a4dac6c3389c23b76129c270ded4",
+      "after_host_sha256": "bbfbe0c588b3c033a8425d303e0fb13c5d6496f900fa85929cea940e3ee95b14",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Function": {
+      "selected": 515,
+      "before": {
+        "pass": 506,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "after": {
+        "pass": 506,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "gained": [],
+      "lost": [],
+      "elapsed_before": 4.44,
+      "elapsed_after": 4.504,
+      "before_host_sha256": "0336c5e8116425fee46653b6a9937cba5860a4dac6c3389c23b76129c270ded4",
+      "after_host_sha256": "bbfbe0c588b3c033a8425d303e0fb13c5d6496f900fa85929cea940e3ee95b14",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "language": {
+      "selected": 24590,
+      "before": {
+        "pass": 24389,
+        "fail": 175,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "after": {
+        "pass": 24393,
+        "fail": 171,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "gained": [
+        "language/import/import-defer/evaluation-top-level-await/async-cycle-dependency-of-deferred-module/main.js",
+        "language/module-code/top-level-await/fulfillment-order.js",
+        "language/module-code/top-level-await/rejection-order.js",
+        "language/module-code/top-level-await/unobservable-global-async-evaluation-count-reset.js"
+      ],
+      "lost": [],
+      "elapsed_before": 54.651,
+      "elapsed_after": 53.604,
+      "before_host_sha256": "0336c5e8116425fee46653b6a9937cba5860a4dac6c3389c23b76129c270ded4",
+      "after_host_sha256": "bbfbe0c588b3c033a8425d303e0fb13c5d6496f900fa85929cea940e3ee95b14",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    }
+  },
+  "unique": {
+    "selected": 29405,
+    "before_pass": 29117,
+    "after_pass": 29140,
+    "gained_files": [
+      "built-ins/Promise/prototype/Symbol.toStringTag.js",
+      "built-ins/Promise/try/args.js",
+      "built-ins/Promise/try/avoids-wrap-for-subclass.js",
+      "built-ins/Promise/try/avoids-wrap.js",
+      "built-ins/Promise/try/ctx-ctor-for-error.js",
+      "built-ins/Promise/try/ctx-ctor-throws.js",
+      "built-ins/Promise/try/ctx-ctor.js",
+      "built-ins/Promise/try/length.js",
+      "built-ins/Promise/try/name.js",
+      "built-ins/Promise/try/not-a-constructor.js",
+      "built-ins/Promise/try/promise.js",
+      "built-ins/Promise/try/prop-desc.js",
+      "built-ins/Promise/try/return-value.js",
+      "built-ins/Promise/try/throws.js",
+      "built-ins/Promise/withResolvers/ctx-ctor.js",
+      "built-ins/Promise/withResolvers/promise.js",
+      "built-ins/Promise/withResolvers/resolvers.js",
+      "built-ins/Promise/withResolvers/result.js",
+      "built-ins/Object/prototype/toString/symbol-tag-promise-builtin.js",
+      "language/import/import-defer/evaluation-top-level-await/async-cycle-dependency-of-deferred-module/main.js",
+      "language/module-code/top-level-await/fulfillment-order.js",
+      "language/module-code/top-level-await/rejection-order.js",
+      "language/module-code/top-level-await/unobservable-global-async-evaluation-count-reset.js"
+    ],
+    "lost_files": [],
+    "gained_variants": [
+      [
+        "built-ins/Promise/prototype/Symbol.toStringTag.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/prototype/Symbol.toStringTag.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/try/args.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/try/args.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/try/avoids-wrap-for-subclass.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/try/avoids-wrap-for-subclass.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/try/avoids-wrap.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/try/avoids-wrap.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/try/ctx-ctor-for-error.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/try/ctx-ctor-for-error.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/try/ctx-ctor-throws.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/try/ctx-ctor-throws.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/try/ctx-ctor.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/try/ctx-ctor.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/try/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/try/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/try/name.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/try/name.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/try/not-a-constructor.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/try/not-a-constructor.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/try/promise.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/try/promise.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/try/prop-desc.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/try/prop-desc.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/try/return-value.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/try/return-value.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/try/throws.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/try/throws.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/withResolvers/ctx-ctor.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/withResolvers/ctx-ctor.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/withResolvers/promise.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/withResolvers/promise.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/withResolvers/resolvers.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/withResolvers/resolvers.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/withResolvers/result.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/withResolvers/result.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/prototype/toString/symbol-tag-promise-builtin.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/prototype/toString/symbol-tag-promise-builtin.js",
+        "strict"
+      ],
+      [
+        "language/import/import-defer/evaluation-top-level-await/async-cycle-dependency-of-deferred-module/main.js",
+        "module"
+      ],
+      [
+        "language/module-code/top-level-await/fulfillment-order.js",
+        "module"
+      ],
+      [
+        "language/module-code/top-level-await/rejection-order.js",
+        "module"
+      ],
+      [
+        "language/module-code/top-level-await/unobservable-global-async-evaluation-count-reset.js",
+        "module"
+      ]
+    ],
+    "lost_variants": []
+  },
+  "upstream": {
+    "repository": "boa-dev/boa",
+    "path": "core/engine/src/builtins/promise/mod.rs",
+    "sha": "39cd11214ecb366200157dab96b3919e61e9a391",
+    "license": "MIT"
+  },
+  "normative_revision": "https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-promise.try",
+  "first_gate_diagnostic": {
+    "native": {
+      "passed": 3975,
+      "skipped": 17,
+      "elapsed_seconds": 75.08
+    },
+    "doctests": 4,
+    "promise_before": 659,
+    "promise_after": 675,
+    "object_before": 3410,
+    "object_after": 3411,
+    "unrecovered_revision_cases": [
+      "built-ins/Promise/try/avoids-wrap.js",
+      "built-ins/Promise/try/avoids-wrap-for-subclass.js"
+    ],
+    "host_sha256": "cb10e230ad2c3fa66ab0eb7775d8f5fc0666dcf01a48a1f97ee6bfa90e8f9de4",
+    "source_patch_sha256": "29bf3f3a7b258fa5ea537582c39d83ff301a5cf2305ac952b128b38349dd8025",
+    "static_source_sha256": "08594bf5caee3d885ba93c656fc32ed8bcd2049f1ae867526d60b9c4fb0da80f"
+  }
+}

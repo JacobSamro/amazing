@@ -93,3 +93,5 @@ reproduced in the table row for that upstream.
 
 - lucid-softworks/lumen @ f6c9860d44fa52249cfd647122edea184d32c863 — MIT; Copyright (c) 2026 Lucid Softworks limited. Synchronous yield_delegate/GetIterator adapted from crates/lumen/src/eval.rs into crates/amazing-js/src/interp_yield_delegate.rs; raw-result adapters in interp_coroutine.rs and vm/mod.rs (JS35).
 - **boa-dev/boa** — MIT, Copyright (c) 2019 Jason Williams; `core/engine/src/builtins/math/mod.rs` @ `39cd11214ecb366200157dab96b3919e61e9a391`; Math intrinsic method metadata adapted in `crates/amazing-js/src/interp_install.rs`.
+
+- **boa-dev/boa** — MIT, Copyright (c) 2019 Jason Williams; `core/engine/src/builtins/promise/mod.rs` @ `39cd11214ecb366200157dab96b3919e61e9a391`; Promise.try/withResolvers and Promise prototype tag installation adapted in `crates/amazing-js/src/interp_promise_static.rs` and `crates/amazing-js/src/interp_install.rs`.

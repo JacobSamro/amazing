@@ -1724,6 +1724,7 @@ include!("interp_install.rs");
 include!("interp_symbol.rs");
 include!("interp_builtins.rs");
 include!("interp_promise_capability.rs");
+include!("interp_promise_static.rs");
 include!("interp_promise_resolution.rs");
 include!("interp_promise_reactions.rs");
 include!("interp_promise_finally.rs");

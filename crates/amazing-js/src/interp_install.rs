@@ -1,6 +1,7 @@
-// Portions ported from boa-dev/boa (core/engine/src/builtins/math/mod.rs)
+// Portions ported from boa-dev/boa (core/engine/src/builtins/math/mod.rs,
+// core/engine/src/builtins/promise/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
-// Math intrinsic method names, lengths and property attributes adapted to local installers.
+// Math intrinsic metadata and Promise static/tag installation adapted to local installers.
 // Realm builtin installation and native function construction.
 
 include!("builtins_date.rs");
@@ -444,6 +445,10 @@ impl Interpreter {
                 "any",
                 Self::native("any", native_promise_any, &self.function_proto),
             );
+            std_core_define(self, o, "try", 1, native_promise_try);
+            std_core_define(self, o, "withResolvers", 0, native_promise_with_resolvers);
+            self.promise_proto.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
+                symbol_data(JsValue::str("Promise"), false, true)).unwrap();
             o.borrow_mut().define("allKeyed", symbol_data(
                 Self::native_arity("allKeyed", native_promise_all_keyed, &self.function_proto, 1), true, true)).unwrap();
             o.borrow_mut().define("allSettledKeyed", symbol_data(
