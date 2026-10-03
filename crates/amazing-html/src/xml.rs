@@ -80,7 +80,7 @@ pub struct XmlFragmentContext {
 /// Parses XML fragments directly, with fatal namespace/wellformedness errors.
 /// Multiple top-level nodes and text are returned beneath the fragment arena root.
 pub fn parse_xml_fragment(context: &XmlFragmentContext, src: &str) -> Result<Dom, XmlError> {
-    parse_inner(src, Some(context)).map(|(dom, _)| dom)
+    parse_inner(src, Some(context), false).map(|(dom, _)| dom)
 }
 
 struct Frame {
@@ -101,7 +101,7 @@ type ResultXml<T> = Result<T, XmlError>;
 /// The declaration's encoding label describes caller-decoded input; this entry
 /// point does not decode bytes or reinterpret an already-decoded string.
 pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclaration>)> {
-    parse_inner(src, None)
+    parse_inner(src, None, true)
 }
 
 /// Reuses the document declaration grammar during byte encoding selection.
@@ -111,7 +111,13 @@ pub(super) fn encoding_declaration(src: &str) -> Result<Option<String>, XmlError
     parser.declaration().map(|declaration| declaration.encoding)
 }
 
-fn parse_inner(src: &str, context: Option<&XmlFragmentContext>) -> ResultXml<(Dom, Option<XmlDeclaration>)> {
+/// Parses XML after a byte decoder has already removed its one encoding BOM.
+/// Any leading U+FEFF left in this string is content, not another byte marker.
+pub fn parse_xml_decoded(src: &str) -> Result<Dom, XmlError> {
+    parse_inner(src, None, false).map(|(dom, _)| dom)
+}
+
+fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool) -> ResultXml<(Dom, Option<XmlDeclaration>)> {
     let fragment = context.is_some();
     let mut dom = Dom::new();
     if src.len() > 16 * 1024 * 1024 {
@@ -121,7 +127,7 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>) -> ResultXml<(Do
             message: "document exceeds 16 MiB".into(),
         });
     }
-    let input = if fragment { src } else { src.strip_prefix('\u{feff}').unwrap_or(src) };
+    let input = if !strip_bom { src } else { src.strip_prefix('\u{feff}').unwrap_or(src) };
     let normalized = input.replace("\r\n", "\n").replace('\r', "\n");
     let mut p = Parser {
         src: &normalized,

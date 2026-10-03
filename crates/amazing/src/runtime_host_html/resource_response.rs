@@ -734,6 +734,14 @@ mod tests {
         assert!(parse_response(b"<r>\xe9</r>", "application/xml", None).is_err());
         let bytes = [b"\xef\xbb\xbf".as_slice(), "<r>é</r>".as_bytes()].concat();
         assert_eq!(parse_response(&bytes, "text/xml", Some("windows-1252")).unwrap().1, "UTF-8");
+        let doubled = [b"\xef\xbb\xbf".as_slice(), bytes.as_slice()].concat();
+        assert!(parse_response(&doubled, "application/xml", None).is_err());
+        for encoding in [amazing_encoding::Encoding::Utf16Le, amazing_encoding::Encoding::Utf16Be] {
+            let marker = if encoding == amazing_encoding::Encoding::Utf16Le { [0xff, 0xfe] } else { [0xfe, 0xff] };
+            let content = amazing_encoding::encode("<r/>", encoding, true).unwrap();
+            assert!(parse_response(&[marker.as_slice(), content.as_slice()].concat(), "application/xml", None).is_ok());
+            assert!(parse_response(&[marker.as_slice(), marker.as_slice(), content.as_slice()].concat(), "application/xml", None).is_err());
+        }
         assert_eq!(parse_response(b"<r>\xe9</r>", "application/xml", Some("windows-1252")).unwrap().1, "windows-1252");
         assert!(parse_response(b"<r/>", "application/xml", Some("unknown")).is_err());
     }
