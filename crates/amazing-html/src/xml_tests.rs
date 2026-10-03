@@ -180,10 +180,10 @@ fn declaration_grammar_and_encoding_metadata() {
     ] {
         malformed(src);
     }
-    assert_eq!(
-        parse_xml("<?xml version='1.1'?><r/>").unwrap_err().kind,
-        XmlErrorKind::Unsupported
-    );
+    // Forward version declarations retain XML 1.0 processing; accepting the
+    // declaration does not enable XML 1.1-only control character references.
+    parse_xml("<?xml version='1.1'?><r/>").unwrap();
+    malformed("<?xml version='1.1'?><r>&#x1;</r>");
 }
 
 #[test]
@@ -445,4 +445,41 @@ fn xmlns_is_valid_as_an_element_local_name() {
     }
     malformed("<xmlns:r/>");
     malformed("<r xmlns:xmlns='urn:bad'/>");
+}
+
+#[test]
+fn version_info_and_declaration_family_follow_xml_fifth_edition() {
+    for version in ["1.0", "1.1", "1.2", "1.00", "1.999999999999999999999"] {
+        for quote in ['\'', '"'] {
+            let source = format!("<?xml\tversion\r\n= {quote}{version}{quote} encoding = 'UTF-8' standalone='yes' ?><r>&#x85;</r>");
+            let (dom, declaration) = parse_xml_with_declaration(&source).unwrap();
+            assert_eq!(text(&dom), "\u{85}"); // XML 1.0 does not normalize NEL.
+            let declaration = declaration.unwrap();
+            assert_eq!(declaration.encoding.as_deref(), Some("UTF-8"));
+            assert_eq!(declaration.standalone, Some(true));
+            let decoded = crate::xml_encoding::decode(source.as_bytes(), None).unwrap();
+            assert_eq!(decoded.encoding, amazing_encoding::Encoding::Utf8);
+            assert!(parse_xml_decoded(&decoded.text).is_ok());
+        }
+    }
+    for version in ["", "1", "1.", "1.a", "01.0", "0.1", "2.0", "1.٠", "1.0x", "1.0 ", " 1.0", "1..0"] {
+        let source = format!("<?xml version='{version}'?><r/>");
+        malformed(&source);
+        assert!(crate::xml_encoding::decode(source.as_bytes(), None).is_err());
+    }
+    for source in [
+        "<?xml version='1.2' version='1.2'?><r/>",
+        "<?xml Version='1.2'?><r/>",
+        "<?xml version='1.2'encoding='UTF-8'?><r/>",
+        "<?xml version='1.2' standalone='yes' encoding='UTF-8'?><r/>",
+        "<?xml version='1.2' encoding='UTF-8' standalone='true'?><r/>",
+        "<?xml version='1.2' encoding='UTF 8'?><r/>",
+        "<?xml version='1.2' encoding='é'?><r/>",
+        "<?xml version='1.2' standalone='yes' standalone='no'?><r/>",
+        " <?xml version='1.2'?><r/>",
+        "<!--pre--><?xml version='1.2'?><r/>",
+        "<r/><?xml version='1.2'?>",
+        "<?xml version='1.1'?><r>&#x1;</r>",
+    ] { malformed(source); }
+    assert!(parse_xml_fragment(&XmlFragmentContext::default(), "<?xml version='1.2'?><r/>").is_err());
 }

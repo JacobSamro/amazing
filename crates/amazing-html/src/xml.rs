@@ -607,8 +607,11 @@ impl<'a> Parser<'a> {
         self.expect("=")?;
         self.space();
         let version = self.literal()?;
-        if version != "1.0" {
-            return Err(self.special(XmlErrorKind::Unsupported, "only XML 1.0 is supported"));
+        // XML 1.0 Fifth Edition §2.8 VersionNum and forward compatibility:
+        // 1.x declarations are processed with these XML 1.0 character rules.
+        if !version.strip_prefix("1.").is_some_and(|minor| !minor.is_empty()
+            && minor.bytes().all(|byte| byte.is_ascii_digit())) {
+            return Err(self.error("invalid XML version number"));
         }
         let mut result = XmlDeclaration::default();
         let mut separated = self.space();

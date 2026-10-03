@@ -805,4 +805,22 @@ mod tests {
         }
     }
 
+    #[test]
+    fn xml_response_version_declarations_keep_xml_one_zero_processing_rules() {
+        for version in ["1.0", "1.1", "1.2", "1.00", "1.123456789"] {
+            let source = format!("<?xml version='{version}' encoding='windows-1253'?><r>&#x85;</r>");
+            let (dom, label) = parse_response(source.as_bytes(), "application/xml", None).unwrap();
+            assert_eq!(label, "windows-1253");
+            assert!(dom.dump(NodeIdx(0)).contains('\u{85}'));
+            let bytes = amazing_encoding::encode(&source, amazing_encoding::Encoding::Utf16Be, true).unwrap();
+            let (dom, label) = parse_response(&[b"\xfe\xff".as_slice(), bytes.as_slice()].concat(), "text/xml", Some("UTF-8")).unwrap();
+            assert_eq!(label, "UTF-16BE");
+            assert!(dom.dump(NodeIdx(0)).contains('\u{85}'));
+        }
+        for source in ["<?xml version='2.0'?><r/>", "<?xml version='1.'?><r/>",
+            "<?xml version='1.1'?><r>&#x1;</r>", "<?xml version='1.2' standalone='true'?><r/>"] {
+            assert!(parse_response(source.as_bytes(), "application/xml", Some("UTF-8")).is_err());
+        }
+    }
+
 }
