@@ -2160,6 +2160,7 @@ mod tests {
             const foreign=document.implementation.createHTMLDocument(''),foreignText=foreign.createTextNode('foreign');foreign.body.appendChild(foreignText);
             s.setBaseAndExtent(foreignText,{valueOf(){s.setPosition(t,1);return 0;}},foreignText,1);
             check(s.anchorNode===t&&s.anchorOffset===1,'reentrant conversion foreign no-op preserves registered range');
+            check(s.getRangeAt(0).startOffset===1,'reentrant range remains exportable');
             caught=false;try{Document.prototype.getSelection.call({});}catch(e){caught=e instanceof TypeError;}check(caught,'wrong receiver');
             return true;
         })()"#).unwrap();
