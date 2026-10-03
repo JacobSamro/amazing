@@ -107,6 +107,10 @@ impl DriverScheduler {
         resolver: Rc<dyn Fn(&str) -> Option<String>>) {
         self.bindings.set_frame_resource_resolver(resolver);
     }
+    pub(crate) fn set_frame_resource_loader(&mut self,
+        loader: crate::runtime_binding_host::html::HtmlFrameResourceLoader) {
+        self.bindings.set_frame_resource_loader(loader);
+    }
     pub(crate) fn set_child_navigation_hook(&mut self,
         hook: crate::runtime_binding_host::html::ChildNavigationHook) {
         self.bindings.set_child_navigation_hook(hook);

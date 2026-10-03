@@ -7,6 +7,9 @@
 use super::*;
 #[path = "runtime_host_html/document_write.rs"]
 mod document_write;
+#[path = "runtime_host_html/resource_response.rs"]
+mod resource_response;
+pub(crate) use resource_response::{HtmlFrameResourceKind, HtmlFrameResourceLoader, HtmlFrameResourceRequest};
 use crate::dom_host::BrowserDomHost;
 use amazing_dom::document_surface::ReadyState;
 use amazing_net::url::ParsedUrl;
@@ -57,6 +60,8 @@ struct NavigationSource {
     document_url: String,
     origin: String,
     fetch_origin: amazing_fetch::Origin,
+    /// Policy at initiation, retained even when the source Document retires.
+    policy: HtmlDocumentContext,
 }
 
 #[derive(Clone)]
@@ -128,6 +133,7 @@ pub(super) struct FrameRuntime {
     /// own as a failure).
     pending_loads: VecDeque<(NodeIdx, Option<NodeIdx>, bool)>,
     resolver: Option<FrameResourceResolver>,
+    resource_loader: Option<HtmlFrameResourceLoader>,
     navigation_hook: Option<ChildNavigationHook>,
     form_navigation_hook: Option<FormNavigationHook>,
     /// The stable WindowProxy (and its current target realm) for each
@@ -183,15 +189,15 @@ impl HtmlWindowProperty {
 
 /// Immutable policy identity of an actual live browsing-context Document.
 #[derive(Clone, Debug)]
-pub(super) struct HtmlDocumentContext {
-    pub(super) document: NodeIdx,
-    pub(super) document_generation: u64,
-    pub(super) document_url: String,
-    pub(super) fallback_base_url: Option<String>,
-    pub(super) origin: amazing_fetch::Origin,
-    pub(super) top_level_origin: amazing_fetch::Origin,
+pub(crate) struct HtmlDocumentContext {
+    pub(crate) document: NodeIdx,
+    pub(crate) document_generation: u64,
+    pub(crate) document_url: String,
+    pub(crate) fallback_base_url: Option<String>,
+    pub(crate) origin: amazing_fetch::Origin,
+    pub(crate) top_level_origin: amazing_fetch::Origin,
     /// Immediate parent first, top-level last; root has no ancestors.
-    pub(super) ancestor_origins: Vec<amazing_fetch::Origin>,
+    pub(crate) ancestor_origins: Vec<amazing_fetch::Origin>,
 }
 
 impl FrameRuntime {
@@ -850,10 +856,16 @@ impl RuntimeBindings {
                 let adapter = RuntimeBindingHost { js, state: self.state.clone() };
                 let Ok(base_url) = adapter.dom_document_base_url(owner) else { continue; };
                 let generation = host.borrow().dom.node_generation(owner).unwrap_or(0);
+                let policy = {
+                    let state = self.state.borrow();
+                    let host = state.host.borrow();
+                    state.frames.document_context(&host.dom, owner)
+                };
+                let Some(policy) = policy else { continue; };
                 let origin = context_origin(adapter.js, &owner_context, owner_realm).unwrap_or_else(|_| "null".into());
                 NavigationSource { document: owner, generation, base_url,
                     document_url: owner_context.document_url.clone(), origin,
-                    fetch_origin: owner_context.fetch_origin.clone() }
+                    fetch_origin: owner_context.fetch_origin.clone(), policy }
             };
             let mut ancestor_origins = Vec::new();
             let mut ancestor = Some(owner_context.clone());
@@ -893,10 +905,17 @@ impl RuntimeBindings {
                     return Ok(LoadedChildDocument::Eager { parsed: amazing_html::parse(""),
                         url: logical_url, mime: "text/html".into(), encoding: "UTF-8" });
                 }
-                let response = fetch_child_document(&logical_url, &navigation_context, resolver.as_ref())?;
+                let loader = self.state.borrow().frames.resource_loader.clone();
+                let canonical = loader.is_some();
+                let response = if let Some(loader) = loader {
+                    let request = HtmlFrameResourceRequest { requested_url: logical_url.clone(),
+                        initiator: source.policy.clone(), kind: HtmlFrameResourceKind::Document,
+                        embedding: Some(navigation_context.clone()) };
+                    resource_response::load_document_response(&request, &loader)?
+                } else { fetch_child_document(&logical_url, &navigation_context, resolver.as_ref())? };
                 if !response.is_success() { return Err(format!("iframe status {}", response.status)); }
                 let mime = content_type(&response, &logical_url,
-                    resolver.is_some() || logical_url.starts_with("file:"))
+                    !canonical && (resolver.is_some() || logical_url.starts_with("file:")))
                     .ok_or_else(|| "iframe response has no supported media type".to_owned())?;
                 let charset = response.headers.get("content-type").and_then(|header| {
                     header.split(';').skip(1).find_map(|parameter| {
@@ -905,7 +924,7 @@ impl RuntimeBindings {
                             .then(|| value.trim().trim_matches('"'))
                     })
                 });
-                let document_url = if resolver.is_none() { response.url.clone() } else { logical_url.clone() };
+                let document_url = if canonical || resolver.is_none() { response.url.clone() } else { logical_url.clone() };
                 // HTML-34: only the HTML case defers to a script-interleaved
                 // parse (`ResumableParser` is HTML-only); XML/XHTML iframe
                 // documents keep the pre-HTML-34 one-shot parse-then-import,
@@ -1538,10 +1557,15 @@ impl RuntimeBindingHost<'_> {
         let Some((target_generation, source_generation)) = generations else {
             return Err(Throw::type_error("Stale navigation document"));
         };
+        let policy = {
+            let state = self.state.borrow();
+            let host = state.host.borrow();
+            state.frames.document_context(&host.dom, source_context.document)
+        }.ok_or_else(|| Throw::type_error("Stale navigation source context"))?;
         Ok(HtmlNavigation { document: target_context.document, generation: target_generation,
             url: url.into(), replace, reload: false, source: NavigationSource { document: source_context.document,
                 generation: source_generation, base_url, document_url: source_context.document_url,
-                origin, fetch_origin: source_context.fetch_origin } })
+                origin, fetch_origin: source_context.fetch_origin, policy } })
     }
 
     pub(super) fn html_location_navigate(&mut self, url: &str, replace: bool) -> Result<(), Throw> {
