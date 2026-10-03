@@ -1,0 +1,28 @@
+{
+  "base": "8f2bbaa05b2c8ceced0c915dab8eff4cb4197c21",
+  "source": "f08a4af61e5a343db285064159d2dc765a98a8ac",
+  "pin": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selected": 220,
+  "before_passes": 3095,
+  "after_passes": 3096,
+  "lost": [],
+  "gained": [
+    [
+      [
+        "html/syntax/parsing-html-fragments/fragment-parse-form-in-template-001.tentative.html",
+        "management of form element pointer inside of a <template>"
+      ],
+      1
+    ]
+  ],
+  "lost_files": [],
+  "before_raw_sha256": "4f2c3d6e7d9c6ad620a21bd6ff304fa8b05c9a439242152b27bc52ac007c3ef1",
+  "after_raw_sha256": "45b9d0fa4da72be61a8314b9746e81796df2d786d43a0a1d670821abceebd4a2",
+  "owned_passed": 629,
+  "workspace_passed": 3873,
+  "skipped": 17,
+  "doctests_passed": 4,
+  "html5lib_passed": 1894,
+  "expanded_passed": 1930,
+  "expanded_unsupported": 6
+}

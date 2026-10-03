@@ -3699,3 +3699,5 @@ fixed baseline, then replace reopened document body-fragment fallback with real
 open/write/close tokenizer sessions. XML Range returned-script marking integrates
 when the owner's actual lower operation is available, traversing ordinary and
 actual template contents and preserving HTML Range append execution policy.
+
+- 2026-10-03: actual HTML-template fragment form-pointer correction READY: source f08a4af6, whole html/syntax 3095→3096/220 pages, zero lost passing multiplicities/files; workspace3873/17 skipped+4docs; html5lib1894 and expanded1930 retained. Evidence `crates/amazing-html/evidence/html54-template-form/`. Current spec defines parsing-template-contents including actual HTML-template fragment context; stale table-form native expectation corrected preserving outer pointer check.
