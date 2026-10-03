@@ -199,7 +199,13 @@ impl RuntimeBindingHost<'_> {
         };
         if let Some((source, target)) = pair {
             if source.fetch_origin != target.fetch_origin {
-                return Err(throw_dom_error(self, DomError::SecurityError));
+                let error = self.js.binding_with_realm(source_realm, |js| {
+                    let global = js.binding_global_object();
+                    let constructor = js.binding_get_property(&global, "DOMException")?;
+                    js.binding_construct(&constructor, vec![JsValue::str("Blocked cross-origin Document.open"),
+                        JsValue::str("SecurityError")])
+                })?;
+                return Err(self.js.binding_throw(error));
             }
         }
         Ok(())
