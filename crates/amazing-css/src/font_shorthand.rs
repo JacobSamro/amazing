@@ -95,56 +95,39 @@ fn line(css: &str) -> bool {
         || matches!(tokenize(css).as_slice(),[Token::Number(n)] if n.is_finite()&&*n>=0.0)
         || crate::math::number_percentage(css, false)
 }
+fn generic_keyword(name: &str) -> bool {
+    matches!(name.to_ascii_lowercase().as_str(), "serif"|"sans-serif"|"cursive"|"fantasy"
+        |"monospace"|"system-ui"|"ui-serif"|"ui-sans-serif"|"ui-monospace"|"ui-rounded"|"math")
+}
+fn script_generic(tokens: &[Token]) -> Option<&str> {
+    let [Token::Function(name), ..] = tokens else { return None; };
+    if !name.eq_ignore_ascii_case("generic") {return None;}
+    let inner=crate::computed::function_inner(tokens,name)?;
+    let [Token::Ident(script)] = crate::computed::trim_tokens(inner) else {return None;};
+    matches!(script.to_ascii_lowercase().as_str(),"fangsong"|"kai"|"khmer-mul"|"nastaliq")
+        .then_some(script.as_str())
+}
 fn family(t: &[Token]) -> bool {
-    let mut names = 0;
-    let mut quoted = false;
-    let mut generic = false;
-    for token in t {
+    // Commas separate families, never the argument of a generic function.
+    let mut groups=Vec::new();let mut start=0;let mut depth=0usize;
+    for (index,token) in t.iter().enumerate() {
         match token {
-            Token::Whitespace => {}
-            Token::Comma if names > 0 => {
-                names = 0;
-                quoted = false;
-                generic = false;
-            }
-            Token::Str(_) if names == 0 => {
-                names = 1;
-                quoted = true;
-            }
-            Token::Ident(s)
-                if !quoted
-                    && !generic
-                    && !matches!(
-                        s.to_ascii_lowercase().as_str(),
-                        "initial" | "inherit" | "unset" | "revert" | "revert-layer" | "default"
-                    ) =>
-            {
-                let is_generic = matches!(
-                    s.to_ascii_lowercase().as_str(),
-                    "serif"
-                        | "sans-serif"
-                        | "cursive"
-                        | "fantasy"
-                        | "monospace"
-                        | "system-ui"
-                        | "ui-serif"
-                        | "ui-sans-serif"
-                        | "ui-monospace"
-                        | "ui-rounded"
-                        | "emoji"
-                        | "math"
-                        | "fangsong"
-                );
-                if is_generic && names > 0 {
-                    return false;
-                }
-                generic = is_generic;
-                names += 1;
-            }
-            _ => return false,
+            Token::OpenParen=>depth+=1,
+            Token::CloseParen=>{let Some(d)=depth.checked_sub(1) else{return false;};depth=d;},
+            Token::Comma if depth==0=>{groups.push(&t[start..index]);start=index+1;}, _=>{},
         }
     }
-    names > 0
+    if depth!=0 {return false;}
+    groups.push(&t[start..]);
+    groups.into_iter().all(|group| {
+        let group=crate::computed::trim_tokens(group);
+        if matches!(group,[Token::Str(_)]) || script_generic(group).is_some() {return true;}
+        let significant:Vec<_>=group.iter().filter(|t|!matches!(t,Token::Whitespace)).collect();
+        if significant.is_empty() {return false;}
+        significant.iter().all(|t|matches!(t,Token::Ident(s)
+            if !matches!(s.to_ascii_lowercase().as_str(),"initial"|"inherit"|"unset"|"revert"|"revert-layer"|"default")
+                && (!generic_keyword(s)||significant.len()==1)))
+    })
 }
 
 pub(crate) fn canonical_family(css: &str) -> Option<String> {
@@ -153,10 +136,11 @@ pub(crate) fn canonical_family(css: &str) -> Option<String> {
         return None;
     }
     let mut result = Vec::new();
+    let mut in_script_generic=false;
     for token in tokens {
         if let Token::Str(name) = &token {
             let words: Vec<_> = name.split_whitespace().collect();
-            let safe = !words.is_empty()
+            let safe = name == &words.join(" ") && !words.is_empty()
                 && words.iter().all(|w| {
                     w.chars()
                         .next()
@@ -164,7 +148,7 @@ pub(crate) fn canonical_family(css: &str) -> Option<String> {
                         && w.chars()
                             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
                 });
-            let generic = matches!(words.as_slice(),[word] if matches!(word.to_ascii_lowercase().as_str(),"serif"|"sans-serif"|"monospace"|"cursive"|"fantasy"|"system-ui"|"emoji"|"math"|"fangsong"|"ui-serif"|"ui-sans-serif"|"ui-monospace"|"ui-rounded"));
+            let generic = matches!(words.as_slice(),[word] if generic_keyword(word));
             let candidate = tokenize(&words.join(" "));
             if safe && !generic && family(&candidate) {
                 result.extend(candidate);
@@ -172,27 +156,13 @@ pub(crate) fn canonical_family(css: &str) -> Option<String> {
             }
         }
         let token = match token {
-            Token::Ident(name)
-                if matches!(
-                    name.to_ascii_lowercase().as_str(),
-                    "serif"
-                        | "sans-serif"
-                        | "monospace"
-                        | "cursive"
-                        | "fantasy"
-                        | "system-ui"
-                        | "emoji"
-                        | "math"
-                        | "fangsong"
-                        | "ui-serif"
-                        | "ui-sans-serif"
-                        | "ui-monospace"
-                        | "ui-rounded"
-                ) =>
-            {
-                Token::Ident(name.to_ascii_lowercase())
-            }
-            other => other,
+            Token::Function(name) if name.eq_ignore_ascii_case("generic") => {
+                in_script_generic=true;Token::Function("generic".into())
+            },
+            Token::CloseParen=>{in_script_generic=false;Token::CloseParen},
+            Token::Ident(name) if in_script_generic || generic_keyword(&name) =>
+                Token::Ident(name.to_ascii_lowercase()),
+            other=>other,
         };
         result.push(token);
     }
@@ -462,5 +432,27 @@ mod tests {
             s.cssom_property_value("font"),
             Some("700 20px serif".into())
         );
+    }
+    #[test]
+    fn script_generics_named_legacy_families_and_quoted_names_stay_distinct() {
+        for name in ["fangsong","kai","khmer-mul","nastaliq"] {
+            let css=format!("GENERIC({})",name.to_ascii_uppercase());
+            assert_eq!(canonical_family(&css),Some(format!("generic({name})")));
+            let s=style(&format!("font:20px {css}, serif"));
+            assert_eq!(s.get("font-family"),Some(format!("generic({name}), serif").as_str()));
+            assert_eq!(s.cssom_property_value("font-family"),Some(format!("generic({name}), serif")));
+            assert_eq!(s.cssom_property_value("font"),Some(format!("20px generic({name}), serif")));
+            assert_eq!(canonical_family(&format!("\"generic({name})\"")),Some(format!("\"generic({name})\"")));
+        }
+        for invalid in ["generic()","generic(serif)","generic(emoji)","generic(foo)","generic(kai, fangsong)",
+            "generic('kai')","generic(generic(kai))","generic(kai) Arial","Arial generic(kai)",
+            "-webkit-generic(fangsong)","generic(kai),"] {assert!(canonical_family(invalid).is_none(),"{invalid}");}
+        for (css,expected) in [("\"A  B\"","\"A  B\""),("\" A\"","\" A\""),
+            ("\"emoji\"","emoji"),("FangSong","FangSong"),("Arial emoji","Arial emoji")]
+            {assert_eq!(canonical_family(css).as_deref(),Some(expected));}
+        let s=style("font-family:generic(kai);font-family:generic(no-such-script)");
+        assert_eq!(s.get("font-family"),Some("generic(kai)"));
+        let s=style("--bad:generic(no-such-script);font-family:var(--bad)");
+        assert_eq!(s.get("font-family"),Some("serif"));
     }
 }

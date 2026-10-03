@@ -1,0 +1,32 @@
+{
+  "ticket": "CSS-47A",
+  "base": "df70f661f8dd812840a9ba14905d3cabe9c7f82e",
+  "platform": "Boat Linux native /tmp source+target",
+  "workspace": 3577,
+  "workspace_skipped": 17,
+  "doctests": 4,
+  "css_tests": 416,
+  "new_grouped_regressions": 1,
+  "renderer_sha256": "02a32cfff71c698b03ba26b1bbf7eb0eb406d43c8a14a33764323860791c1425",
+  "parsing": {
+    "before": 4312,
+    "after": 4312,
+    "total": 5126,
+    "gained": [],
+    "lost": []
+  },
+  "render": {
+    "fonts": {
+      "before_pass": 24,
+      "after_pass": 24,
+      "total": 32,
+      "unchanged": 32,
+      "gained": [],
+      "lost": []
+    }
+  },
+  "limitations": [
+    "Installed191 CSSOM gate belongs to driver; preserves initial1169 named passing cases",
+    "Parsing does not claim actual script-specific installed font mapping"
+  ]
+}
