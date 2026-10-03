@@ -1,0 +1,13 @@
+{
+  "conditional_omissions": 522,
+  "all_raw_lost_names_accounted_for": true,
+  "each_first_assertion_newly_passes": true,
+  "raw_lost_assertions": 522,
+  "raw_gained_assertions": 17195,
+  "missing_files": 0,
+  "lost_passing_files": 0,
+  "decision": "Accept semantic conditional enumeration change with exact one-to-one proof; retain raw losses; never label raw zero-loss. Connected-shadow behavior explicitly compatibility policy under unresolved primary draft conflict.",
+  "recorded": "2026-10-03T20:36:56.838416+00:00",
+  "evidence": "crates/amazing-dom/evidence/selection-standard/conditional-addRange-proof.json",
+  "source": "a715bca720d6705a7fc601aa72b904d33b288ad5"
+}
