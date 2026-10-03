@@ -1,0 +1,69 @@
+{
+  "after_source": "a715bca720d6705a7fc601aa72b904d33b288ad5",
+  "artifacts": {
+    "after": {
+      "binary_sha256": "92e9f36be1828ffea4459e44ab58a5595589bb9d4a4de3c9868726cc4be7a9ce",
+      "compact_sha256": "01d9277e901d0084a8f7bea1e21f7068765942ed446e30c1084b560111641887",
+      "raw_report_sha256": "1996b96cbb769f7d0464984191423abd8d58935c3bd527e3489ca38b283d0edd"
+    },
+    "before": {
+      "binary_sha256": "1597c9e17a7deb4ec90c4cf3c95d9b66778ab316e414451ce88d3b250a339da6",
+      "compact_sha256": "97719ec7af9f556d016f8dedf3695b7625338342bdac1216879f0c2081506cfe",
+      "raw_report_sha256": "b011202fba4e54b92373bd7597efc28728dca132920660cf4fbe729d428536b8"
+    }
+  },
+  "before_source": "851c0b4a512fa250813f9731436b5995f9740f16",
+  "boundary": "Renderedstringifier/visuallyequivalent containsNode/caret/keyboard/modify remain unsupported; source preserves existing unrenderedcompatibility only.",
+  "loss_classification": {
+    "accepted_xhr_retained": true,
+    "conditional_omissions": 522,
+    "prior_node579_gained": 16,
+    "prior_node579_passing_names_lost": 0,
+    "real_same_assertion_regressions": 0
+  },
+  "native": {
+    "after_pass": 4041,
+    "before_pass": 4030,
+    "doctests_each": 4,
+    "skipped": 17
+  },
+  "raw_comparison": {
+    "gained_passing_names": 17195,
+    "lost_passing_files": [],
+    "lost_passing_names": 522,
+    "missing_files": []
+  },
+  "ready": false,
+  "review_blocker": "Strict522 omitted conditional second-addRange passing names require explicit review classification; no raw zero-loss claim. Every omitted case pairs same first assertion FAIL\u2192PASS.",
+  "selected_pages": 720,
+  "selection123": {
+    "after": {
+      "fail": 294,
+      "pass": 33582
+    },
+    "before": {
+      "fail": 17450,
+      "pass": 16925
+    }
+  },
+  "syntax72": {
+    "byte_identical": true,
+    "error": 1,
+    "fail": 6,
+    "pass": 2702,
+    "sha256": "0569986d9a8f62880c7cc4be274af583606b0acd7aa54beedcf801061eb8a5bb"
+  },
+  "whole_corpus": {
+    "after": {
+      "error": 7,
+      "fail": 2407,
+      "pass": 92407
+    },
+    "before": {
+      "error": 7,
+      "fail": 19569,
+      "pass": 75734
+    }
+  },
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293"
+}
