@@ -156,6 +156,27 @@ impl PositionAxis {
 /// percentage basis. Context units and nonlinear functions remain unsupported.
 pub fn affine_position_axis(css: &str) -> Option<PositionAxis> {
     let tokens = tokenize(css);
+    match trim_tokens(&tokens) {
+        [Token::Dimension(n, unit)] if unit.eq_ignore_ascii_case("px") && n.is_finite() => {
+            return Some(PositionAxis {
+                fraction: 0.0,
+                offset_px: *n,
+            });
+        }
+        [Token::Percentage(n)] if n.is_finite() => {
+            return Some(PositionAxis {
+                fraction: *n / 100.0,
+                offset_px: 0.0,
+            });
+        }
+        [Token::Number(n)] if *n == 0.0 => {
+            return Some(PositionAxis {
+                fraction: 0.0,
+                offset_px: *n,
+            });
+        }
+        _ => {}
+    }
     let significant: Vec<_> = tokens
         .iter()
         .filter(|t| !matches!(t, Token::Whitespace))
@@ -164,7 +185,8 @@ pub fn affine_position_axis(css: &str) -> Option<PositionAxis> {
         match token {
             Token::Dimension(_, unit) if !unit.eq_ignore_ascii_case("px") => return None,
             Token::Function(name) if !name.eq_ignore_ascii_case("calc") => return None,
-            Token::Delim('/') if !matches!(significant.get(i+1),Some(Token::Number(n)) if n.is_finite() && *n!=0.0) => {
+            Token::Delim('/') if !matches!(significant.get(i+1),Some(Token::Number(n)) if n.is_finite() && *n!=0.0) =>
+            {
                 return None;
             }
             _ => {}
@@ -176,6 +198,24 @@ pub fn affine_position_axis(css: &str) -> Option<PositionAxis> {
         fraction,
         offset_px,
     })
+}
+/// Resolve a finite computed px/percentage axis against the actual reference
+/// dimension, including piecewise math. Unresolved context units are rejected.
+pub fn used_position_axis(css: &str, basis: f64) -> Option<f64> {
+    if !basis.is_finite() {
+        return None;
+    }
+    let tokens = tokenize(css);
+    if tokens
+        .iter()
+        .any(|token| matches!(token,Token::Dimension(_,unit) if !unit.eq_ignore_ascii_case("px")))
+    {
+        return None;
+    }
+    if let Some(axis) = affine_position_axis(css) {
+        return axis.resolve(basis);
+    }
+    crate::math::font_size_px(css, basis, 0.0).filter(|value| value.is_finite())
 }
 /// Normalize a generic physical position and extract its two affine axes.
 pub fn affine_position_pair(css: &str) -> Option<(PositionAxis, PositionAxis)> {
@@ -274,6 +314,76 @@ mod tests {
         let s = style("transform-origin:center 2em 0;perspective-origin:calc(2em + 3ex) 20%");
         assert_eq!(s.get("transform-origin"), Some("50% 32px"));
         assert_eq!(s.get("perspective-origin"), Some("calc(2em + 3ex) 20%"));
+    }
+    #[test]
+    fn used_piecewise_position_axes_use_actual_basis_and_reversed_clamp_bounds() {
+        for (css, basis, expected) in [
+            ("min(75%,20px)", 200.0, 20.0),
+            ("max(-25%,-10px)", 200.0, -10.0),
+            ("clamp(100px,50%,20px)", 200.0, 100.0),
+            ("clamp(-20px,50%,30px)", -100.0, -20.0),
+            ("100%", -100.0, -100.0),
+            ("0", 0.0, 0.0),
+        ] {
+            assert_eq!(used_position_axis(css, basis), Some(expected), "{css}");
+        }
+        for css in [
+            "1em",
+            "min(1ex,10px)",
+            "calc(1cqw + 1px)",
+            "calc(1px / 0)",
+            "1e999px",
+        ] {
+            assert!(used_position_axis(css, 100.0).is_none(), "{css}");
+        }
+        assert!(used_position_axis("10px", f64::NAN).is_none());
+    }
+    #[test]
+    fn affine_literals_pairs_and_finite_geometry_are_complete() {
+        for (css, fraction, offset) in [
+            ("0", 0.0, 0.0),
+            ("-0px", 0.0, 0.0),
+            ("12PX", 0.0, 12.0),
+            ("-4px", 0.0, -4.0),
+            ("100%", 1.0, 0.0),
+            ("-25%", -0.25, 0.0),
+        ] {
+            let axis = affine_position_axis(css).unwrap();
+            assert_eq!((axis.fraction, axis.offset_px), (fraction, offset));
+            assert_eq!(axis.resolve(-100.0), Some(fraction * (-100.0) + offset));
+        }
+        for value in [
+            "100% 100%",
+            "0 0",
+            "-1px 20%",
+            "left top",
+            "right 10px bottom 20px",
+        ] {
+            assert!(affine_position_pair(value).is_some(), "{value}");
+        }
+        for value in [
+            "NaNpx",
+            "Infinity%",
+            "1e999px",
+            "1e999%",
+            "1",
+            "12 px",
+            "0,0",
+        ] {
+            assert!(affine_position_axis(value).is_none(), "{value}");
+        }
+        assert!(
+            affine_position_axis("1e308%")
+                .unwrap()
+                .resolve(f64::MAX)
+                .is_none()
+        );
+        assert!(
+            affine_position_axis("10px")
+                .unwrap()
+                .resolve(f64::INFINITY)
+                .is_none()
+        );
     }
     #[test]
     fn affine_used_axes_preserve_actual_negative_basis_and_reject_guesses() {

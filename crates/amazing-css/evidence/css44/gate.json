@@ -1,0 +1,39 @@
+{
+  "ticket": "CSS-44",
+  "base": "56877eaffa0b8dfc7fb7e184a151959376c17ceb",
+  "platform": "Boat Linux native /tmp source+target",
+  "renderer_sha256": "8095e96bd006d5df0c4f3f262bc37a7b0624c12dc61c728d04e97a25e383d353",
+  "workspace": 3564,
+  "workspace_skipped": 17,
+  "doctests": 4,
+  "css_tests": 403,
+  "new_grouped_regressions": 6,
+  "parsing": {
+    "before": 4215,
+    "after": 4215,
+    "total": 5126,
+    "non_literal_skipped": 169,
+    "gained": [],
+    "lost": []
+  },
+  "render": {
+    "images": {
+      "before_pass": 92,
+      "after_pass": 92,
+      "total": 141,
+      "unchanged": 141,
+      "gained": [],
+      "lost": []
+    },
+    "transforms": {
+      "before_pass": 145,
+      "after_pass": 145,
+      "total": 348,
+      "unchanged": 348,
+      "gained": [],
+      "lost": []
+    }
+  },
+  "driver_owner": "js_date CSSOM bridge",
+  "origin_consumer_owner": "layout L44"
+}

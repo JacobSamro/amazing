@@ -41,6 +41,8 @@ mod font_variant_policy;
 mod border_image_policy;
 #[path = "position_values.rs"]
 pub(crate) mod position_values;
+#[path = "computed_cssom.rs"]
+pub(crate) mod cssom;
 // CSS-29: `box-shadow`'s `<shadow>` list grammar moved out too, for the same
 // reason as `grid_values` above (kept this file under the 4,000-line policy
 // after the box-shadow-invalid.html fix). Only `valid_box_shadow` crosses

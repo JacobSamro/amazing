@@ -338,11 +338,28 @@ fn compute_with_optional_animations(
     environment: &MediaEnvironment,
     font_metrics: Option<&dyn crate::font_metric_context::FontMetricContext>,
 ) -> StyledDom {
+    compute_document_with_optional_animations(dom,NodeIdx(0),author_sheets,animated,environment,font_metrics)
+}
+
+/// Compute a native arena Document without cloning/remapping its node indices.
+/// The driver supplies that document's active sheets and actual font context.
+/// Non-document/out-of-arena roots yield an empty styled document.
+pub fn compute_document_with_font_metrics(
+    dom:&Dom, document:NodeIdx, author_sheets:&[Stylesheet], environment:&MediaEnvironment,
+    animated:Option<&AnimatedValues>, context:&dyn crate::font_metric_context::FontMetricContext,
+)->StyledDom {
+    compute_document_with_optional_animations(dom,document,author_sheets,animated,environment,Some(context))
+}
+fn compute_document_with_optional_animations(
+    dom:&Dom, document:NodeIdx, author_sheets:&[Stylesheet], animated:Option<&AnimatedValues>,
+    environment:&MediaEnvironment, font_metrics:Option<&dyn crate::font_metric_context::FontMetricContext>,
+)->StyledDom {
+    if document.0 as usize>=dom.node_count() || !matches!(dom.get(document).kind,amazing_dom::NodeKind::Document) {return StyledDom::default();}
     // Compile UA + author rules up front; invalid selectors drop their rule.
     let ua_rules = compile_sheets(&[parse_stylesheet(UA_SHEET)], true, environment);
     let author_rules = compile_sheets(author_sheets, false, environment);
 
-    let body_link = hints::body_link(dom);
+    let body_link = hints::body_link_in(dom, document);
     let pseudo_targets = PseudoElement::STYLED.map(|pseudo| {
         ua_rules
             .iter()
@@ -352,7 +369,7 @@ fn compute_with_optional_animations(
     let mut out = StyledDom::default();
     style_subtree(
         dom,
-        NodeIdx(0),
+        document,
         None,
         16.0,
         &ua_rules,
@@ -364,7 +381,7 @@ fn compute_with_optional_animations(
         font_metrics,
         &mut out,
     );
-    crate::generated::resolve_document(dom, &mut out, author_sheets, environment);
+    crate::generated::resolve_document_at(dom, document, &mut out, author_sheets, environment);
     out
 }
 

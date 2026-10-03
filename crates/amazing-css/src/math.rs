@@ -315,7 +315,7 @@ pub(crate) fn font_size_px(css: &str, parent_px: f64, root_px: f64) -> Option<f6
                             Value::Length(match name.to_ascii_lowercase().as_str() {
                                 "min" => values.into_iter().reduce(f64::min)?,
                                 "max" => values.into_iter().reduce(f64::max)?,
-                                _ if values.len() == 3 => values[1].clamp(values[0], values[2]),
+                                _ if values.len() == 3 => values[0].max(values[1].min(values[2])),
                                 _ => return None,
                             })
                         }

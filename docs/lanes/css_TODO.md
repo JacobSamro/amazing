@@ -2827,3 +2827,29 @@ hooks remain L44-owned. InitialCSS396green; parsing4163→4215/5126 (+52/lost0).
 Combined final workspace/wholeimages+transforms gate active.
 
 CSS43 final: workspace3558/17skip+4docs; parsing4163→4215/5126 (+52/lost0), wholeimages92/141 andtransforms145/348 unchanged/all489stable/lost0. Rendererabaef3139e14cb76403fff329403f0c535d6130f45de53b31d7fbd2db2dbf7d2. Fivegroupedregressions (fourCSS/onepainter). Next additive CSSOM computed enumeration/serialization seam requested by driver ownerjs_date.
+
+### CSS44 — computed CSSOM/document and used-position seams
+
+Fixed CSS43 `56877eaffa0b8dfc7fb7e184a151959376c17ceb`. Driver owner js_date
+requested public CSSOM declaration/value APIs and native document context.
+Spec https://drafts.csswg.org/cssom/#dom-window-getcomputedstyle and
+https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-getpropertyvalue.
+Supported longhands/valid custom enumeration excludes shorthand aliases and
+unknown literal passthrough; preserve custom case/valid empty values and omit
+invalid/cycles. Independent quad/pair/side-border and existing derived summaries
+serialize through lower CSS; unsupported/unrepresentable returnsNone. Dynamic
+logical border axes included; combined background cross-axis ordering remains
+explicitly unsupported. Empty custom parsing/supports guards fixed without
+allowing ordinary empty values. Native-document font-context computation keeps
+arena indices, scoped active sheets/body hints/generated counters, inherited
+actual aspects, pseudos and invalid-root checks. Driver owns resolved geometry,
+color and WebIDL behavior.
+Layout L44 found calc-only affine API literal gap: explicit px/%/zero handling
+added with finite/negative/overflow cases. used_position_axis(css,actual_basis)
+adds true piecewise calc/min/max/clamp; unresolved metric/container units rejected.
+Core math reversed clamp bounds use CSS minimum precedence instead of panic.
+Six grouped regressions. Final workspace+15directory+489render gate active.
+Next CSS45 additive IDL property-name/shorthand-name enumeration, requested
+after fixed CSS44 gate began; no driver duplicated CSS grammar.
+
+CSS44 final: CSS403/workspace3564/17skip+4docs; parsing4215/5126 unchanged/lost0; images92/141 andtransforms145/348 unchanged/all489stable/lost0. Renderer8095e96bd006d5df0c4f3f262bc37a7b0624c12dc61c728d04e97a25e383d353. Six grouped regressions; installed CSSOM remains driver-owned, actual origin effect geometry layout-owned.

@@ -698,11 +698,14 @@ pub(crate) fn resolve_document(
     sheets: &[crate::Stylesheet],
     environment: &crate::MediaEnvironment,
 ) {
+    resolve_document_at(dom,NodeIdx(0),out,sheets,environment);
+}
+pub(crate) fn resolve_document_at(dom:&Dom,document:NodeIdx,out:&mut StyledDom,sheets:&[crate::Stylesheet],environment:&crate::MediaEnvironment) {
     let mut state = State {
         counter_styles: crate::counter_styles::CounterStyles::new(sheets, environment),
         ..Default::default()
     };
-    walk(dom, NodeIdx(0), out, &mut state);
+    walk(dom, document, out, &mut state);
 }
 
 pub(crate) fn valid_property(property: &str, css: &str) -> bool {

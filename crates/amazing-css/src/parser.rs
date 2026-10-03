@@ -660,8 +660,8 @@ impl Parser<'_> {
         while end > start && matches!(toks.get(end - 1), Some(Token::Whitespace)) {
             end -= 1;
         }
-        if start >= end {
-            return None; // empty value
+        if start > end || (start == end && !property.starts_with("--")) {
+            return None; // only custom declarations can have an empty value
         }
 
         let mut important = false;
@@ -684,7 +684,7 @@ impl Parser<'_> {
             }
         }
 
-        if start >= end {
+        if start > end || (start == end && !property.starts_with("--")) {
             return None;
         }
         let value_tokens = &toks[start..end];
@@ -695,7 +695,7 @@ impl Parser<'_> {
             return None;
         }
         let value = serialize(value_tokens);
-        if value.is_empty() {
+        if value.is_empty() && !property.starts_with("--") {
             return None;
         }
         Some(Declaration {
@@ -786,7 +786,7 @@ fn supports_declaration(name_tokens: &[Token], value_tokens: &[Token]) -> bool {
         return false;
     };
     let value_tokens = trim_ws(value_tokens);
-    if value_tokens.is_empty() || !crate::computed::valid_variable_syntax(value_tokens) {
+    if (value_tokens.is_empty() && !name.starts_with("--")) || !crate::computed::valid_variable_syntax(value_tokens) {
         return false;
     }
     if name.starts_with("--") {

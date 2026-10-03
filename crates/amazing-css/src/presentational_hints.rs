@@ -540,7 +540,11 @@ fn table_borders(dom: &Dom, el: NodeIdx, out: &mut Vec<(String, String)>) {
 }
 
 pub(super) fn body_link(dom: &Dom) -> Option<String> {
-    let mut pending = vec![NodeIdx(0)];
+    body_link_in(dom, NodeIdx(0))
+}
+
+pub(super) fn body_link_in(dom:&Dom, document:NodeIdx)->Option<String> {
+    let mut pending = vec![document];
     while let Some(node) = pending.pop() {
         if dom.namespace(node) == Some(Namespace::Html) && dom.name(node) == Some("body") {
             return attr(dom, node, "link").and_then(legacy_color);
