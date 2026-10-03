@@ -1937,10 +1937,20 @@ mod tests {
         let mut scheduler=crate::js_scheduler::DriverScheduler::new(host,32).unwrap();
         scheduler.set_location_url("https://example.test/parser-realms");
         scheduler.run_script("globalThis.frame=document.querySelector('iframe');void frame.contentWindow").unwrap();
+        let original=scheduler.run_script("frame.contentDocument").unwrap();
+        let state=scheduler.test_bindings().state.clone();
+        let original_origin={
+            let adapter=RuntimeBindingHost {js:&mut scheduler.js,state:state.clone()};
+            let document=adapter.node_brand(&original).unwrap();
+            adapter.html_document_origin(document).unwrap()
+        };
         let result=scheduler.run_script(r#"(function(){let step=0;try{
             function check(v){step++;if(!v)throw 'parser '+step;}
             const inner=frame.contentWindow;const parser=new inner.DOMParser();
-            let converted=0;const source={toString(){converted++;frame.remove();return '<r><child/></r>';}};
+            let converted=0;const source={toString(){converted++;frame.remove();
+                const text=inner.Function('return new Text("retained")')();
+                check(text.ownerDocument===inner.document && Object.getPrototypeOf(text)===inner.Text.prototype);
+                return '<r><child/></r>';}};
             const parsed=DOMParser.prototype.parseFromString.call(parser,source,'application/xml');
             check(converted===1 && Object.getPrototypeOf(parsed)===inner.XMLDocument.prototype);
             check(parsed.URL==='about:srcdoc' && parsed.baseURI==='about:srcdoc');
@@ -1953,8 +1963,16 @@ mod tests {
             check(error.documentElement.localName==='parsererror');
             let wrong=false;try{DOMParser.prototype.parseFromString.call({},source,'text/html');}catch(e){wrong=e instanceof TypeError;}
             check(wrong && converted===1);
+            const retainedParser=new inner.DOMParser();
+            check(Object.getPrototypeOf(retainedParser.parseFromString('<retained/>','application/xml'))===inner.XMLDocument.prototype);
+            globalThis.parsedDoc=parsed;
             return true;}catch(e){return String(e)+' at step '+step;}})()"#).unwrap();
         assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
+        let parsed=scheduler.run_script("parsedDoc").unwrap();
+        let adapter=RuntimeBindingHost {js:&mut scheduler.js,state};
+        let document=adapter.node_brand(&parsed).unwrap();
+        assert_eq!(adapter.html_document_origin(document),Some(original_origin));
+
     }
 
     #[test]
