@@ -1,0 +1,15 @@
+{
+  "before": "52a6af30c56c99365764edf7779f7f537bb548ef",
+  "after": "8004c9314d143b75bf72eece3f471cad96e5bcd0",
+  "owned": 684,
+  "owned_skipped": 6,
+  "workspace": 4121,
+  "workspace_skipped": 17,
+  "doctests": 4,
+  "cli_trees": 1894,
+  "expanded_trees": 1930,
+  "expanded_unsupported": 6,
+  "causal_parser_assertions_gained": 2,
+  "passing_assertions_lost": 0,
+  "passing_files_lost": 0
+}

@@ -1,0 +1,7 @@
+# HTML66 — XML document CDATA fidelity
+
+Fixed before READY65 `52a6af30c56c99365764edf7779f7f537bb548ef`; source `8004c9314d143b75bf72eece3f471cad96e5bcd0`. XML document parsing now retains each CDATA section as CDATASection, matching the existing XML fragment entry point. Empty/adjacent sections and boundaries with ordinary Text nodes survive import and serialization; literal markup/entity data is not tokenized or expanded. Whole native coverage includes namespace owners, CR normalization, large content, UTF8/UTF16BE/LE and XML MIME response families, and unchanged fatal delimiter/control/outside-root errors. Existing native text aggregation now explicitly includes both Text and CDATA, preserving its content assertions.
+
+Linux684 owned/6skip (before682),4121 workspace/17skip (before4119),four doctests,1894 CLI trees,1930 expanded/6unsupported. Whole13+111modules+220syntax+192CSSOM+123Selection preserves every prior passing-name multiplicity and passing file; fixture/selection pins match. Two causal parser assertions gained in domparsing/xml-parse-serialize-roundtrip.html (large CDATA and multiple CDATA sections),286→288 domparsing passes. No dump/comparator/fixture/serializer change. Completed full gate81639; raw compressed evidence fetched44441 under MAIN html66-after.
+
+Primary sources checked2026-10-03: https://www.w3.org/TR/xml/#sec-cdata-sect and https://www.w3.org/TR/DOM-Level-3-Core/core.html#ID-667469212 . No external source port or new dependency. Existing generic importer already preserves actual CDATA kinds.
