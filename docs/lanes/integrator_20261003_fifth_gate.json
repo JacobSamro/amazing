@@ -1,0 +1,111 @@
+{
+  "source_commit": "0d5963fe7abda88ec6ea8100efd6e853f278bf4b",
+  "base_commit": "9a6742f43003a584611fa536377a093fb75cbd5c",
+  "summary": {
+    "files": {
+      "unsupported": 170,
+      "pass": 51436,
+      "fail": 1971,
+      "skipped": 294,
+      "timeout": 1
+    }
+  },
+  "gained_files": 175,
+  "lost_files": [],
+  "gained_variants": 343,
+  "lost_variants": [],
+  "validated_at": "2026-10-03T00:43:20.742371+00:00",
+  "platform": "Boat Linux",
+  "workspace": {
+    "passed": 3751,
+    "skipped": 17,
+    "doctests_passed": 4
+  },
+  "gpui_tests_passed": 93,
+  "provenance": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "host_sha256": "fdf0e8964491079d31dfd877ea2da794b1fe98e8b618f52562966966b4a9900f",
+    "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+    "timeout_seconds": 60.0
+  },
+  "shards": 16,
+  "result_sha256": "cc5b5e4691a48d77dac8800072e453c369aba96e72339583d8c9e7d5a607fc24",
+  "workspace_log_sha256": "5f0014747ade32e62db4c3cd0ea4d7a0c2902cf1992631c83660a97a057f3f0d",
+  "gpui_log_sha256": "845102fb8160c5cac7476a9db80b38f92461b07d0f69428338bf88dc74a10f07",
+  "runtime_seconds": 518,
+  "wpt": {
+    "nodes": {
+      "selection_before": 314,
+      "selection_after": 314,
+      "compared_selection": 314,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 12369,
+      "passing_assertions_after": 12369,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "bea42da916c55b10437c90b5c210710951caf2a98ba026baf7cc34d1a7d3b4d4",
+      "after_sha256": "26343f8d3e4f91844078264df0bf30b6e9ad242c6985aca16c83d1110e447b3a"
+    },
+    "base": {
+      "selection_before": 11,
+      "selection_after": 11,
+      "compared_selection": 11,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 13,
+      "passing_assertions_after": 13,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "1e7516c09b19cda5a6b033f0b7d6700ba9f508cdf9be7d7189810ab358c015e4",
+      "after_sha256": "1e7516c09b19cda5a6b033f0b7d6700ba9f508cdf9be7d7189810ab358c015e4"
+    },
+    "syntax": {
+      "selection_before": 220,
+      "selection_after": 220,
+      "compared_selection": 220,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 3089,
+      "passing_assertions_after": 3095,
+      "gained_assertions": 6,
+      "lost_assertions": 0,
+      "before_sha256": "0d573fcd70823389f54299424c33c729977e61d965a9860bd62509ca8962b65f",
+      "after_sha256": "9b77e6118c87d329b9a3dd58474705cbe3a246c210ffc19ca3cf29818d94c52a"
+    },
+    "serializer": {
+      "selection_before": 8,
+      "selection_after": 8,
+      "compared_selection": 8,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 373,
+      "passing_assertions_after": 373,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "515bc5eb676fb6eb462faf90f87fce96e130de7d8b602a43475c344a5e3a42ee",
+      "after_sha256": "515bc5eb676fb6eb462faf90f87fce96e130de7d8b602a43475c344a5e3a42ee"
+    },
+    "encoding": {
+      "selection_before": 194,
+      "selection_after": 194,
+      "compared_selection": 194,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 12396,
+      "passing_assertions_after": 12396,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "d141cbec297bfc156bdc3fffd11edaca77699f2ccb3547421e442bb822ac9d04",
+      "after_sha256": "66b5316330619bd15919629d728ce68d5de3fe4a5b60ccefd0e97d4c19dcaa28"
+    },
+    "modules": {
+      "selected": 111,
+      "passing_assertions_before": 129,
+      "passing_assertions_after": 129,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "passing_pages_before": 45,
+      "passing_pages": 45,
+      "selection_sha256": "b14ef1bbafb77fca6aa21b6d03bdb16e45a1e56d63ece1ef73cfa3976c74da63",
+      "binary_sha256": "26eb8e582c8b0a7c2a4aa463229b230ac8bc28c9a769db24c857df8e5a40b39f"
+    }
+  },
+  "all_test262_shard_boxes_stopped": true
+}
