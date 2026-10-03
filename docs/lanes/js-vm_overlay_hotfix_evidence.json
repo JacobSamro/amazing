@@ -1,0 +1,32 @@
+{
+  "source": "e9e36c7f",
+  "base": "b2f2a977a118a3fc647f16616e319edd0e69f203",
+  "host_sha256": "6d458301c59a620fa46a42b4e0372f1feb50ffac34d56d5fbaad6f0e689e7d28",
+  "linux_workspace_passed": 3919,
+  "linux_workspace_skipped": 17,
+  "linux_doctests_passed": 4,
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "timeout_seconds": 60,
+  "jobs": 8,
+  "selections": ["language", "built-ins/Object/", "built-ins/Reflect/", "built-ins/eval/", "built-ins/global/"],
+  "selected_files": 28197,
+  "passing_files": 27949,
+  "passing_variants": 52252,
+  "regression_guard": {
+    "source": "d2f2eb4d",
+    "passing_files_in_selection": 27911,
+    "passing_variants_in_selection": 52204,
+    "lost_files": 0,
+    "lost_variants": 0,
+    "qualification": "Published full gate guard; different source base. Additional passes are not attributed to this hotfix."
+  },
+  "classification_sha256": {
+    "language": "f32b1885dc8056ca9815d65a989fc90e902af6db270eaa95ccc5dc69c2439c9a",
+    "built-ins/Object/": "49fb87a6b73d00a3d541bfe81a45d084ea8fafa3561a2b1e7c233157d0516bff",
+    "built-ins/Reflect/": "264c120ea2b9c3154f267913b35100b98205643130a305a51cfe62de4d5588aa",
+    "built-ins/eval/": "28a0cfae3cf2798af806325fdf1d70ec901c57e859305a0cf80565b407554a17",
+    "built-ins/global/": "630a82862d43b281a6f158d0a46b73ec60e1e1d7cc355dbab3e21d6df2f7dd25"
+  },
+  "native_coverage": "Both execution backends: inherited Window listener aliases, shared host var cell identity, and inherited getter not invoked during hoisting.",
+  "browser_wpt": "Integrator owns full actual Window/browser repair gate."
+}
