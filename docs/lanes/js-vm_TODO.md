@@ -1304,7 +1304,7 @@ initialization8, expression18 and member4. Both trace replays retain all
 the language trace, not the ten-selection gate or every unsupported syntax.
 Evidence: [js-vm24_evidence.json](js-vm24_evidence.json).
 
-## JSVM25 — suspended dynamic import arguments (in progress)
+## JSVM25 — suspended dynamic import arguments
 
 Fixed dependency `4c234a11`, the ready JSVM24 source/evidence tree. A single
 DynamicImport opcode receives specifier/options registers evaluated in source
@@ -1318,8 +1318,16 @@ The 180-case matrix compares native and forced AST async functions, generators,
 async generators, object methods and arrows for all three phases, both argument
 abrupts, coercion, attributes and host-loading rejection identity/order. A
 foreign-realm group checks module referrer priority and resumed callee realm.
-Whole language/module/Promise and callable corpora, native gate and actual
-runtime compilation counts are pending.
+Final Linux gate on exact `d47c163b`: **4002 workspace tests passed**, 17
+skipped, and **four doctests passed**. Eleven whole selections in both modes
+cover **30442 unique files** and **56960 variants**. Both retain all **30190
+passing files** and **56538 passing variants**, with **zero file or variant
+losses**. Runtime callable fallback attempts fall **30→12** in each mode,
+removing all 18 expression/DynamicImport rejections. Default attempts/accepted:
+**1067527/1067497→1067519/1067507**; opt-in VM programs:
+**579403/579373→579383/579371**. Remaining reasons are class initialization8
+and member4; these counts cover the full eleven-selection trace.
+Evidence: [js-vm25_evidence.json](js-vm25_evidence.json).
 
 Existing boundary diagnostic: coroutine async-generator `return expression`
 currently returns a raw promise to its driver, which awaits outside the
@@ -1327,6 +1335,6 @@ original statement's try scope. Native Return lowering correctly awaits
 inside that scope (ECMA-26214.10.1 step3). The ImportCall matrix keeps its
 return outside the ImportCall try to isolate synchronous argument errors
 from rejected conversion/options promises, and retains a separate native
-implicit-return Await regression. This series does not claim or implement
+explicit-return Await regression. This series does not claim or implement
 parity across the unresolved AST ReturnStatement boundary; the parent routes
 the complete return/driver area to the language owner.

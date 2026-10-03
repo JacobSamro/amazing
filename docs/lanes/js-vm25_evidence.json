@@ -1,0 +1,107 @@
+{
+  "ticket": "JSVM25",
+  "before": "4c234a11cb0340c69001a65ae259dfb36d1f303b",
+  "source_sha": "d47c163b196dd25e2f144236b933c0d59045a104",
+  "workspace": {
+    "before_passed": 3999,
+    "after_passed": 4002,
+    "skipped": 17,
+    "before_doctests": 4,
+    "after_doctests": 4
+  },
+  "selectors": [
+    "language",
+    "built-ins/Promise",
+    "built-ins/Iterator/",
+    "built-ins/Object/",
+    "built-ins/Reflect/",
+    "built-ins/Proxy/",
+    "built-ins/Function/",
+    "built-ins/AsyncFunction/",
+    "built-ins/GeneratorFunction/",
+    "built-ins/AsyncGeneratorFunction/",
+    "built-ins/AbstractModuleSource/"
+  ],
+  "jobs": 8,
+  "timeout_seconds": 60,
+  "modes": {
+    "default": {
+      "selected_files": 30442,
+      "before_passed_files": 30190,
+      "after_passed_files": 30190,
+      "gained_files": [],
+      "lost_files": [],
+      "before_passed_variants": 56538,
+      "after_passed_variants": 56538,
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_host_sha256": "13bcd4f27a9a48e0d9d17b9588075b7e2908dc4a0b2b92f94fdb1642ce1a9743",
+      "after_host_sha256": "2cbbcde31230f3587c31f8419fc7440b18c5b89dbcf604f6dd28f92ccf6bbbf5",
+      "selected_variants": 56960
+    },
+    "vm": {
+      "selected_files": 30442,
+      "before_passed_files": 30190,
+      "after_passed_files": 30190,
+      "gained_files": [],
+      "lost_files": [],
+      "before_passed_variants": 56538,
+      "after_passed_variants": 56538,
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_host_sha256": "13bcd4f27a9a48e0d9d17b9588075b7e2908dc4a0b2b92f94fdb1642ce1a9743",
+      "after_host_sha256": "2cbbcde31230f3587c31f8419fc7440b18c5b89dbcf604f6dd28f92ccf6bbbf5",
+      "selected_variants": 56960
+    }
+  },
+  "compile_trace": {
+    "default": {
+      "before": {
+        "attempts": 1067527,
+        "accepted": 1067497,
+        "fallbacks": 30,
+        "reasons": {
+          "class field or static block": 8,
+          "expression kind": 18,
+          "member access": 4
+        }
+      },
+      "after": {
+        "attempts": 1067519,
+        "accepted": 1067507,
+        "fallbacks": 12,
+        "reasons": {
+          "class field or static block": 8,
+          "member access": 4
+        }
+      }
+    },
+    "vm": {
+      "before": {
+        "attempts": 579403,
+        "accepted": 579373,
+        "fallbacks": 30,
+        "reasons": {
+          "class field or static block": 8,
+          "expression kind": 18,
+          "member access": 4
+        }
+      },
+      "after": {
+        "attempts": 579383,
+        "accepted": 579371,
+        "fallbacks": 12,
+        "reasons": {
+          "class field or static block": 8,
+          "member access": 4
+        }
+      }
+    }
+  },
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "limitations": [
+    "AST async-generator ReturnStatement currently awaits its value outside the original try scope; native explicit Return Await is retained and tested. The language owner handles the whole coroutine continuation boundary.",
+    "Class field/static block and optional member suspension fallbacks remain atomic."
+  ]
+}
