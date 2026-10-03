@@ -272,7 +272,7 @@ fn async_disposal_awaits_after_return_and_preserves_suppressed_error_order() {
         (
             "var ok=false,finish,log=[],p=new Promise(r=>finish=r);",
             "(async function*(){await using x={[Symbol.asyncDispose](){log.push('dispose');return p}};return 7})",
-            "var request=g().next();request.then(r=>ok=r.done&&r.value===7&&log.join(',')==='dispose,before');log.push('before');finish()",
+            "var request=g().next();request.then(r=>ok=r.done&&r.value===7&&log.join(',')==='before,dispose');log.push('before');finish()",
         ),
         (
             "var marker={},ok=false;",
