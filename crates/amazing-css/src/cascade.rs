@@ -1478,7 +1478,7 @@ fn attr_of<'d>(dom: &'d Dom, el: NodeIdx, name: &str) -> Option<&'d str> {
 /// Values approximate Chrome/Firefox defaults; logical properties are written
 /// physically (`padding-left`) since RTL is unsupported.
 const UA_SHEET: &str = r#"
-html { display: block; color: black; background-color: white;
+html { display: block; color: black;
        font-family: serif; font-size: 16px; }
 head, base, link, meta, script, style, template, title { display: none; }
 [hidden] { display: none; }
@@ -1550,6 +1550,43 @@ mod url_provenance_tests;
 mod tests {
     use super::*;
     use crate::parser::parse_stylesheet;
+
+    #[test]
+    fn ua_root_and_body_backgrounds_are_initial_transparent_not_canvas_white() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(html, "body");
+        let div = dom.create_element(body, "div");
+        let styles = compute(&dom, &[]);
+        for node in [html, body, div] {
+            let style = styles.get(node).unwrap();
+            assert!(style.has_transparent_background());
+            assert_eq!(style.get("background-image"), Some("none"));
+            assert_eq!(style.resolved_color_value("background-color").as_deref(),
+                Some("rgba(0, 0, 0, 0)"));
+        }
+        assert_eq!(styles.get(html).unwrap().get("display"), Some("block"));
+        assert_eq!(styles.get(body).unwrap().get("margin-top"), Some("8px"));
+    }
+
+    #[test]
+    fn root_author_background_and_body_noninheritance_preserve_canvas_selection_inputs() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(html, "body");
+        for (css, root_transparent, body_transparent) in [
+            ("body{background:red}", true, false),
+            ("html{background:white}body{background:red}", false, false),
+            ("html{background:url(root.png)}", false, true),
+            ("html{background:red;background:initial}body{background:blue}", true, false),
+            ("html{background:red;background:revert}body{background:blue}", true, false),
+            ("html{background:red}body{background:inherit}", false, false),
+        ] {
+            let styles = compute(&dom, &[parse_stylesheet(css)]);
+            assert_eq!(styles.get(html).unwrap().has_transparent_background(), root_transparent, "{css}");
+            assert_eq!(styles.get(body).unwrap().has_transparent_background(), body_transparent, "{css}");
+        }
+    }
 
     #[test]
     fn stylesheet_attr_casts_use_each_elements_attributes() {
