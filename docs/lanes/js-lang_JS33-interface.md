@@ -1,0 +1,9 @@
+# JS33: String escapes, directives and delegated yield
+
+Quoted string tokens and expression nodes retain `string_has_escape`, initialized false by their existing constructors and set only from an actual source backslash. Parser, AST interpreter and bytecode compiler still traverse escaped string statements as directives, but only a string without escapes can activate strict mode. This preserves a later genuine directive and avoids fabricated spans or decoding-based guesses. Function, arrow, method, generator, dynamic Function and eval consumers use the same parser/runtime predicates.
+
+String escape decoding adapts the complete escape dispatch from `lucid-softworks/lumen`, `crates/lumen/src/lexer.rs` at `f6c9860d44fa52249cfd647122edea184d32c863` (MIT; Copyright (c) 2026 Lucid Softworks limited). Amazing retains its lossless UTF-16 code-unit representation, existing hex validation, legacy-escape validation and tagged-template poisoning. First octal digits 0–3 permit three digits, 4–7 permit two; 8/9 remain identity escapes. LF, CR/CRLF normalization and U+2028/U+2029 continuations produce no cooked content. The lexer header and appended third-party notice record the port.
+
+`yield*` has a required assignment expression, including across a line terminator after the star. The no-line-terminator restriction before the star and ordinary yield ASI remain unchanged. Shared VM changes are confined to the granted strict-directive predicate; no declaration instantiation or scheduling changes.
+
+Fixed dependency: `96beabbc2465cc131030841f9369265fb4d4d042`. Its engine/host/runner source is identical to measured JS32 source `814beb871b9054f58c4b4b839f0d0dbe91029e97`; JS32 after artifacts provide the matched baseline. Final gate selects whole language, Object, Proxy (10 seconds) and Function (60 seconds), plus workspace nextest and doctests. Five native grouped tests exercise both backends.

@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-27 — reference creation, assignment ordering and strict PutValue** (cluster analysis; shared execution ownership being coordinated).
+Frontier: **JS-33 — string escapes, directive provenance and delegated-yield line terminators** (whole Linux gate active).
 JS-25 parser API is ready; Runtime35 owns its native eval consumer. JS-26 is complete.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
@@ -1837,3 +1837,10 @@ Next proposed cluster: whole AnnexB ordinary-call assignment targets. Parser alr
 Source `814beb87` on fixed ready31 proofc8142a1f. Ordinary sloppy call targets execute call/arguments then immediately ReferenceError, without RHS/returned-value conversion; grouped/static target semantics and native VM suspension lowering retained. Eight grouped backend tests. Linux workspace **3911/17 skipped +4 docs**; whole language **+6files/+6variants**, Function/Object/Proxy unchanged, **zero losses**. Identical-source31 corpus reused as appropriate baseline; fresh whole Function60s baseline closes known deadline sensitivity. [Proof](js-lang_JS32-evidence.json), [design](js-lang_JS32-interface.md).
 
 Next JS33: whole string/template escape, directive provenance and yield-star line-terminator cluster. Verified MITLumen lexer@f6 and exact license; additive Token/Expr.string_has_escape metadata defaultfalse, actual lexical backslash evidence, escaped directives remain in prologue without activating strict mode. VM strict predicate exact grant; Program/GDI/FDI unchanged. Whole language/Function/Object/Proxy and comprehensive escape/continuation/strict/yield tests required.
+
+
+### JS-33 — string escapes, directives and delegated yield
+
+Source `6f4c82b0` on docs-only fixed `96beabbc`, matched identical-code JS32 after baseline. Actual Token/Expr escape provenance prevents escaped strings from activating strictness while preserving prologue traversal; full quoted escape dispatch adds bounded octal and U+2028/U+2029 continuation handling, with exact MIT Lumen lexer attribution. Required delegated yield operand permits post-star line breaks, preserving ordinary ASI and pre-star restriction. Five both-backend groups. Linux workspace **3916/17 skipped +4 docs**, owned **669/1 skipped**; whole language **+12 files/+20 variants** (24322/45033), Function/Object/Proxy unchanged, **zero losses**. [Proof](js-lang_JS33-evidence.json), [design](js-lang_JS33-interface.md).
+
+Next JS34: whole named function-expression immutable binding policy; twelve sloppy direct/arrow/eval failures across sync/async/generator forms. Parent and VM grant immutable_strict scalar, dedicated initialized function-name binding API and strict-aware lexical PutReference, preserving TDZ/import checks and captured cell identity; VM23 tags its new GDI constructors during integration.
