@@ -126,3 +126,29 @@ fn suspended_optional_delete_preserves_strict_failures_and_skips_getters() {
         assert_eq!(i.run_script("ok").unwrap(), JsValue::Bool(true), "AST={force_ast}");
     }
 }
+
+#[test]
+fn suspended_optional_chain_generator_and_microtask_quantums_follow_guards() {
+    for force_ast in [false, true] {
+        let mut i = Interpreter::new();
+        i.force_ast_callables = force_ast;
+        i.run_script(r#"
+            var log=[],nil=null,original={tag:'old',get m(){log.push('get');return function(v){return this.tag+v}}},o=original;
+            function* captured(){return o?.m((log.push('arg'),yield 9,'!'))}
+            function* skipped(){return nil?.m((yield 9))}
+            function* grouped(){return (nil?.m)((yield 9))}
+            var g=captured(),a=g.next();o={tag:'new'};original.tag='retained';var b=g.next();
+            var s=skipped().next(),h=grouped(),c=h.next(),caught=false;
+            try{h.next()}catch(e){caught=e instanceof TypeError}
+            var syncOK=a.value===9&&!a.done&&b.done&&b.value==='retained!'&&s.done&&s.value===undefined&&
+                c.value===9&&!c.done&&caught&&log.join(',')==='get,arg';
+            var q=[],asyncOK=false;
+            async function skippedAwait(){return nil?.m(await Promise.resolve().then(()=>q.push('operand')))}
+            var request=skippedAwait();q.push('after');
+            queueMicrotask(()=>q.push('tick'));
+            request.then(()=>{q.push('done');asyncOK=q.join(',')==='after,tick,done'});
+        "#).unwrap();
+        i.drain_microtasks().unwrap();
+        assert_eq!(i.run_script("syncOK&&asyncOK").unwrap(), JsValue::Bool(true), "AST={force_ast}");
+    }
+}
