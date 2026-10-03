@@ -2348,6 +2348,41 @@ impl RuntimeBindingHost<'_> {
         let receiver_for_scripts = receiver.clone();
         let pre_inserted = self.pre_insertion_nodes(operation, args);
         let result = self.invoke_operation_with_canvas_reset(operation, receiver, args);
+        // XML fragment parsing marks its script elements already started;
+        // HTML Range fragments retain the append-executable Fragment policy.
+        // These ids are the lower operation's actual imported result, including
+        // scripts inside real template contents, never temporary parser ids.
+        if operation == Operation::RangeCreateContextualFragment {
+            if let Ok(value) = &result {
+                if let Some(fragment) = self.node_from_value(value) {
+                    let (document, html_hint) = {
+                        let state = self.state.borrow();
+                        let host = state.host.borrow();
+                        let document = host.dom.owner_document(fragment).unwrap_or(fragment);
+                        (document, host.dom.document_metadata(document).ok().flatten()
+                            .map(|metadata| metadata.content_type == "text/html"))
+                    };
+                    if !html_hint.unwrap_or_else(|| self.is_html_document(document)) {
+                        let scripts = {
+                            let state = self.state.borrow();
+                            let host = state.host.borrow();
+                            let mut pending = vec![fragment];
+                            let mut visited = HashSet::new();
+                            let mut scripts = Vec::new();
+                            while let Some(node) = pending.pop() {
+                                if !visited.insert(node) { continue; }
+                                if matches!(host.dom.namespace(node), Some(Namespace::Html) | Some(Namespace::Svg))
+                                    && host.dom.local_name(node) == Some("script") { scripts.push(node); }
+                                pending.extend(host.dom.children(node));
+                                if let Some(contents) = host.dom.template_contents(node) { pending.push(contents); }
+                            }
+                            scripts
+                        };
+                        self.state.borrow_mut().frames.already_started_scripts.extend(scripts);
+                    }
+                }
+            }
+        }
         if result.is_ok() && matches!(operation,
             Operation::Append | Operation::Prepend | Operation::ReplaceChildren
             | Operation::Before | Operation::After | Operation::ReplaceWith | Operation::Remove
@@ -2409,8 +2444,8 @@ impl RuntimeBindingHost<'_> {
         // would wrongly look like a fresh, runnable candidate. Marked
         // already-started unconditionally at creation time instead, exactly
         // like every other script a fragment/document-parsing algorithm
-        // produces (`Range.createContextualFragment` isn't implemented by
-        // this engine at all yet, so there is nothing to cover there).
+        // produces (XML Range fragments are covered above; HTML Range fragments
+        // retain their separate append-executable policy).
         if matches!(operation, Operation::DOMParserParseFromString) {
             if let Ok(value) = &result {
                 if let Some(document) = self.node_from_value(value) {
