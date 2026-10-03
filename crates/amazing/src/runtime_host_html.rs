@@ -1631,7 +1631,7 @@ impl RuntimeBindingHost<'_> {
         let default_selected = args.get(2).is_some_and(|v| self.to_boolean(v));
         let has_selected = args.get(3).is_some();
         let selected = args.get(3).is_some_and(|v| self.to_boolean(v));
-        let document = self.current_document();
+        let document = self.current_document_for_nodes()?;
         let node = self.with_dom(|dom| {
             let node = dom.create_element_local_in(
                 document, Some("http://www.w3.org/1999/xhtml"), "option")?;
