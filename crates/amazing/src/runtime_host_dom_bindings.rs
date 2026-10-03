@@ -7,12 +7,19 @@ impl RuntimeBindingHost<'_> {
     /// Copy realm handles introduce no additional JS object or Rc roots.
     pub(super) fn dom_register_document_realm(&mut self, document: NodeIdx, realm: RealmHandle)
         -> Result<(), Throw> {
-        let (anchor, generation) = self.with_dom(|dom| {
-            let anchor = dom.node_creation_document(document)?;
-            if !matches!(dom.get(document).kind, NodeKind::Document) { return Err(DomError::TypeError); }
-            let generation = dom.node_generation(document).ok_or(DomError::InvalidNode)?;
-            Ok((anchor, generation))
-        })?;
+        let (anchor, generation) = {
+            let state = self.state.borrow();
+            let host = state.host.borrow();
+            let dom = &host.dom;
+            let anchor = dom.node_creation_document(document)
+                .map_err(|_| Throw::type_error("Expected a live realm Document"))?;
+            if !matches!(dom.get(document).kind, NodeKind::Document) {
+                return Err(Throw::type_error("Expected a realm Document"));
+            }
+            let generation = dom.node_generation(document)
+                .ok_or_else(|| Throw::type_error("Expected a live realm Document"))?;
+            (anchor, generation)
+        };
         // A newly created child context may precede the navigation's final
         // active-frame bookkeeping. Read its actual validated creation record,
         // never infer an Origin from its URL or its parent.
@@ -30,9 +37,11 @@ impl RuntimeBindingHost<'_> {
         Ok(())
     }
 
-    pub(super) fn dom_node_realm(&mut self, node: NodeIdx) -> Result<RealmHandle, Throw> {
-        let anchor = self.with_dom(|dom| dom.node_creation_document(node))?;
-        self.state.borrow().node_creation_realms.get(&anchor).copied()
+    pub(super) fn dom_node_realm(&self, node: NodeIdx) -> Result<RealmHandle, Throw> {
+        let state = self.state.borrow();
+        let anchor = state.host.borrow().dom.node_creation_document(node)
+            .map_err(|_| Throw::type_error("Expected a live node"))?;
+        state.node_creation_realms.get(&anchor).copied()
             .ok_or_else(|| Throw::type_error("Node creation realm is not registered"))
     }
 
