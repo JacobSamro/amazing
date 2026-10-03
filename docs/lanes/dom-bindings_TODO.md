@@ -3250,3 +3250,16 @@ template-document-context. No fixture rewrites or copied engine code.
 Next approved wholeRange.createContextualFragment; capturedHTML53 fallback
 helper takes priority once immutable navigation capture hook arrives. XML
 fragment API/context dependency routedHTML54; CSSOM owner reserves Range rows.
+
+### Native user-agent event payload dispatch
+
+Ready code 79c1fa53 + 0f2307d6 on fixed c85dccf4 (root eb7fa04a plus
+standalone function-realm API). Additive public populated Event dispatcher
+uses trusted dispatch/activation once and returns actual cancellation outcome.
+Native coverage verifies payload, trusted state, checkbox preactivation, rollback,
+and exactly one successful input/change pair. Boat workspace 3867 -> 3868 pass,
+17 skip, four doctests. Whole 482 nodes/events pages retain all 13095 passing
+assertions and passing files. Failures 551 -> 553 reflect two previously
+zero-pass timeout/error completions; one further zero-pass classification changed.
+No WPT gain claimed. Evidence: amazing-bindings/evidence/native-ua-event.
+Facade adoption remains integrator-assist-owned.

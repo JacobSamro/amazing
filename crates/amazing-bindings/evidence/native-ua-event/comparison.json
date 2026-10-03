@@ -1,0 +1,94 @@
+{
+  "files_before": 482,
+  "files_after": 482,
+  "counts": {
+    "before": {
+      "pass": 13095,
+      "fail": 551,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 6
+    },
+    "after": {
+      "pass": 13095,
+      "fail": 553,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 6
+    }
+  },
+  "lost_passing_assertions": {},
+  "gained_passing_assertions": {},
+  "lost_passing_files": [],
+  "classification_changes": [
+    {
+      "test": "dom/events/scrolling/scrollend-event-fires-on-visual-viewport.html",
+      "before": {
+        "status": "error",
+        "counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        }
+      },
+      "after": {
+        "status": "timeout",
+        "counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        }
+      }
+    },
+    {
+      "test": "dom/nodes/insertion-removing-steps/Node-append-meta-referrer-and-script-from-fragment.html",
+      "before": {
+        "status": "timeout",
+        "counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        }
+      },
+      "after": {
+        "status": "fail",
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        }
+      }
+    },
+    {
+      "test": "dom/nodes/moveBefore/fullscreen-preserve.html",
+      "before": {
+        "status": "error",
+        "counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        }
+      },
+      "after": {
+        "status": "fail",
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        }
+      }
+    }
+  ]
+}

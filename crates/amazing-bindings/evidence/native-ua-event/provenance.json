@@ -1,0 +1,38 @@
+{
+  "before": {
+    "source": "c85dccf489fa3a92f56c906b91b16dccbfa39192",
+    "binary_sha256": "cd1c4d5a91707b1ac2d1a47694327dd0eb8f0d2a0a20edda7f2b1ed39431fcb1",
+    "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "directories": [
+      "dom/nodes",
+      "dom/events"
+    ]
+  },
+  "after": {
+    "source": "0f2307d62243746702bafe98039fdf817f68b8e5",
+    "binary_sha256": "deb0180178cc0ced14c493966f55011c34e4b21e50805614cbe758a49f93fb1d",
+    "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "directories": [
+      "dom/nodes",
+      "dom/events"
+    ]
+  },
+  "platform": "Linux Boat; native /tmp source and target",
+  "before_lane": "dom-events-before",
+  "after_lane": "dom-bindings",
+  "before_box": "bx_kxk3rxs5",
+  "native_before": {
+    "pass": 3867,
+    "skip": 17,
+    "doc": 4
+  },
+  "native_after": {
+    "pass": 3868,
+    "skip": 17,
+    "doc": 4
+  },
+  "assertion_identity": "SHA-256 of exact UTF-16LE subtest names, preserving multiplicity",
+  "runner": "crates/amazing-bindings/evidence/dom-b-audit/run-corpus.py",
+  "timeout_ms": 25000,
+  "fixture_changes": false
+}
