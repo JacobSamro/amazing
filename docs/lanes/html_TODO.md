@@ -3648,3 +3648,30 @@ interning/export translation, actual context case/attrs/form ancestor/quirks/
 scripting/shadow snapshot; legacy wrappers retain defaults. XML exact namespace/
 prefix/bindings callback uses strict UTF16 and fatal direct fragment parsing,
 not a generated wrapper. Reopened open/write/close sessions remain55.
+
+## HTML53 captured navigation ready
+
+ 599 owned passed/6 skipped, 3584 workspace passed/17 skipped, four
+doctests. Three grouped native regressions cover blank/srcdoc immutable bases,
+full blank URLs and quirks, clone/retired identity, repeated sibling source
+navigation/reload, pending root versus actual URL, borrowed receiver/cross-origin
+policy and genuine source identity/generation. All 1894 CLI html5lib cases and
+expanded 1930 passes/6 unsupported retained, zero failures.
+
+Whole ten pinned WPT selections retain every exact passing name multiplicity:
+encoding194 12277/357 unchanged; syntax72 2696/12 unchanged; DOM314
+12370/273 to 12379/265 (+9 frame removeChild assertions); serialization8 373/2
+unchanged; Window90 246/318 and WindowProxy8 13/5 unchanged; windows53 2/37 to
+4/35 (+2 browsing context assertions); iframe150 14/52 to 15/51 (+1 base URL
+assertion); BASE11 13/3 to 15/1 (+2 blank/srcdoc fallback assertions); baseURL11
+2 passes unchanged. Total +14, zero lost. These are adapter/context gains, not
+new parser tree passes or comparator corrections. No accepted assertion timed out.
+All unsupported/error/timeout classifications remain in compact records.
+
+
+Owned child contexts now carry immutable about-base/source snapshots and actual
+committed URL/origin, genuine Location receiver routing and retained reload
+resource. Root pending replacement snapshot transfer/session history remains
+explicit; no parser/tree/comparator gain claimed. Exact source/series in
+evidence/html53/source.json. Next54 actual HTML/XML fragment parser/context API
+for DOM whole Range, then reopened parser sessions55.

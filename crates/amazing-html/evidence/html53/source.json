@@ -1,0 +1,40 @@
+{
+  "source": "6fa78cb4d8a05c9077ec5b7a06094c48de6a99dd",
+  "before": "3865e458b974277778021af41919009c0e007ca5",
+  "canonical52": "bf16a5603bbac118d36fcef84a8184350fd42d9e",
+  "code_series": [
+    "179d4f179443c6cd2476dab1340d4d7a7be5bfb9",
+    "5ebf61615cd4efb0cc42fa40df4270fac581b1f2",
+    "1186b5a694fdf40f4b294259ce0f6cea31286547",
+    "362d33283cf9457e4a516bd888986ec26d3ae489",
+    "966ab6af98a80b6f061e03eb434e7a14f62d6056",
+    "3e83f177ba6ca543c05f771a10ad695ab469053b",
+    "65bbb00447bbb6440488499c37c3e79e19ee2eb5",
+    "e14933754e4da40a80cd43fb4b7b72564cf06cdf",
+    "fc13f20fdccbe177f40ebd87dabaff7acc1c6c2c",
+    "d7372f0fff54ab5f1bd05c2b9acb34c1d9b5ffdd",
+    "795299cbfc9b86949a9853cb5074fc4912b662b6",
+    "c174be49c409c59090b865deef088650210000f5",
+    "c8b864b74a42a5cea9170ecdd36ab7006cefcbfa",
+    "0beff3c3d24331ff661a803f303b2bdc5262ba47",
+    "6fa78cb4d8a05c9077ec5b7a06094c48de6a99dd"
+  ],
+  "dom_original_dependencies": [
+    "91470060548c1f93dbc7a010f8ac8555c9986f20",
+    "3865e458b974277778021af41919009c0e007ca5",
+    "b61ab99294b3dd8709051eb91bd0e34f05579361"
+  ],
+  "gate": {
+    "owned_passed": 599,
+    "owned_skipped": 6,
+    "workspace_passed": 3584,
+    "workspace_skipped": 17,
+    "docs_passed": 4,
+    "html5lib_cli_passed": 1894,
+    "expanded_passed": 1930,
+    "expanded_unsupported": 6,
+    "assertions_gained": 14,
+    "assertions_lost": 0
+  },
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293"
+}

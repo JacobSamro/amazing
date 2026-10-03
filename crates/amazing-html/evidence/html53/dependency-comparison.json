@@ -1,0 +1,101 @@
+{
+  "encoding": {
+    "selected": 194,
+    "gained": 0,
+    "lost": 0,
+    "lost_records": [],
+    "counts": {
+      "pass": 12277,
+      "fail": 357
+    }
+  },
+  "syntax": {
+    "selected": 72,
+    "gained": 0,
+    "lost": 0,
+    "lost_records": [],
+    "counts": {
+      "fail": 12,
+      "pass": 2696
+    }
+  },
+  "dom": {
+    "selected": 314,
+    "gained": 0,
+    "lost": 0,
+    "lost_records": [],
+    "counts": {
+      "pass": 12370,
+      "fail": 273
+    }
+  },
+  "serialization": {
+    "selected": 8,
+    "gained": 0,
+    "lost": 0,
+    "lost_records": [],
+    "counts": {
+      "fail": 2,
+      "pass": 373
+    }
+  },
+  "the-window-object": {
+    "selected": 90,
+    "gained": 0,
+    "lost": 0,
+    "lost_records": [],
+    "counts": {
+      "pass": 246,
+      "fail": 318
+    }
+  },
+  "the-windowproxy-exotic-object": {
+    "selected": 8,
+    "gained": 0,
+    "lost": 0,
+    "lost_records": [],
+    "counts": {
+      "fail": 5,
+      "pass": 13
+    }
+  },
+  "windows": {
+    "selected": 53,
+    "gained": 0,
+    "lost": 0,
+    "lost_records": [],
+    "counts": {
+      "fail": 37,
+      "pass": 2
+    }
+  },
+  "the-iframe-element": {
+    "selected": 150,
+    "gained": 0,
+    "lost": 0,
+    "lost_records": [],
+    "counts": {
+      "fail": 52,
+      "pass": 14
+    }
+  },
+  "the-base-element": {
+    "selected": 11,
+    "gained": 0,
+    "lost": 0,
+    "lost_records": [],
+    "counts": {
+      "pass": 13,
+      "fail": 3
+    }
+  },
+  "base-url": {
+    "selected": 11,
+    "gained": 1,
+    "lost": 0,
+    "lost_records": [],
+    "counts": {
+      "pass": 2
+    }
+  }
+}

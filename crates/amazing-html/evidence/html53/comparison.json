@@ -1,0 +1,332 @@
+{
+  "encoding": {
+    "selected": 194,
+    "before": {
+      "pass": 12277,
+      "fail": 357
+    },
+    "after": {
+      "pass": 12277,
+      "fail": 357
+    },
+    "files": {
+      "pass": 27,
+      "fail": 17,
+      "unsupported": 141,
+      "error": 8,
+      "timeout": 1
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "raw_before_sha256": "ad8563735e4474eb04c9cab43b5e1877ffb18963a59aec165dba50c73ebf7e1e",
+    "raw_after_sha256": "3bc6c36cecb604146b7e9a27a075dc8e5acce40cf858be1f1016f97e8c0e96dd"
+  },
+  "syntax": {
+    "selected": 72,
+    "before": {
+      "fail": 12,
+      "pass": 2696
+    },
+    "after": {
+      "fail": 12,
+      "pass": 2696
+    },
+    "files": {
+      "fail": 5,
+      "pass": 45,
+      "error": 1,
+      "unsupported": 19,
+      "timeout": 2
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "raw_before_sha256": "6b46c97373456e761561fa60a2041252ba89a5c0c83f58c8389c182636a38e29",
+    "raw_after_sha256": "6b46c97373456e761561fa60a2041252ba89a5c0c83f58c8389c182636a38e29"
+  },
+  "dom": {
+    "selected": 314,
+    "before": {
+      "pass": 12370,
+      "fail": 273
+    },
+    "after": {
+      "pass": 12379,
+      "fail": 265
+    },
+    "files": {
+      "unsupported": 69,
+      "pass": 156,
+      "timeout": 15,
+      "fail": 68,
+      "error": 6
+    },
+    "gained": 9,
+    "lost": 0,
+    "gained_records": [
+      [
+        [
+          "dom/nodes/Node-removeChild.html",
+          "c0efb599053f8ee23fa1e46a0bc1f5b6e449505b09327233dbd1303483ca423b"
+        ],
+        1
+      ],
+      [
+        [
+          "dom/nodes/Node-removeChild.html",
+          "4cbd9dfbb2b85421515ae1659af2c6697f908cb7dfb7c3e319b93a91205e8a35"
+        ],
+        1
+      ],
+      [
+        [
+          "dom/nodes/Node-removeChild.html",
+          "5645fd49950b0d437c94c252aef11423363c5c1cb4df68ff0abc2ff54eab6eb1"
+        ],
+        1
+      ],
+      [
+        [
+          "dom/nodes/Node-removeChild.html",
+          "92cfa22432636a3cd372a9af18e2e61f8feeed75230dfc9f2b6f770ec3a1b8f5"
+        ],
+        1
+      ],
+      [
+        [
+          "dom/nodes/Node-removeChild.html",
+          "89e1e55ab56b26c9f9b5720b7fa035701a50bffd244c31c7358eca0f269b9423"
+        ],
+        1
+      ],
+      [
+        [
+          "dom/nodes/Node-removeChild.html",
+          "799adbb9326027977106b6974b7d4a6a4ec6cde4927ab839e68ab64aac8eb83f"
+        ],
+        1
+      ],
+      [
+        [
+          "dom/nodes/Node-removeChild.html",
+          "a0e93dd833b9649a839d97ed72445dc266f9370b34e587dd95cd293f7451d792"
+        ],
+        1
+      ],
+      [
+        [
+          "dom/nodes/Node-removeChild.html",
+          "c40357d5571b4a0a76b673ecc8eb4dac26f29976b92df628627c89f898e09749"
+        ],
+        1
+      ],
+      [
+        [
+          "dom/nodes/Node-removeChild.html",
+          "e7bd4314baf534fdc856536f0e155f8a8d69739f19436c979e7cce1a0085d3f8"
+        ],
+        1
+      ]
+    ],
+    "lost_records": [],
+    "raw_before_sha256": "68d9406047d3b0ae80702b20c81a89a81e8369221e392d6fa439bb1f17856216",
+    "raw_after_sha256": "f7a6ab1317b05c33209fb70236da085da5e87d3ddc133ae7bd4cfd2af770e483"
+  },
+  "serialization": {
+    "selected": 8,
+    "before": {
+      "fail": 2,
+      "pass": 373
+    },
+    "after": {
+      "fail": 2,
+      "pass": 373
+    },
+    "files": {
+      "fail": 1,
+      "pass": 7
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "raw_before_sha256": "515bc5eb676fb6eb462faf90f87fce96e130de7d8b602a43475c344a5e3a42ee",
+    "raw_after_sha256": "515bc5eb676fb6eb462faf90f87fce96e130de7d8b602a43475c344a5e3a42ee"
+  },
+  "the-window-object": {
+    "selected": 90,
+    "before": {
+      "pass": 246,
+      "fail": 318
+    },
+    "after": {
+      "pass": 246,
+      "fail": 318
+    },
+    "files": {
+      "unsupported": 23,
+      "pass": 11,
+      "fail": 35,
+      "error": 20,
+      "timeout": 1
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "raw_before_sha256": "d567e20fa5762803bd2ec0816345193dfbe184d1c53af8a91d116b7fa88f9b89",
+    "raw_after_sha256": "d567e20fa5762803bd2ec0816345193dfbe184d1c53af8a91d116b7fa88f9b89"
+  },
+  "the-windowproxy-exotic-object": {
+    "selected": 8,
+    "before": {
+      "fail": 5,
+      "pass": 13
+    },
+    "after": {
+      "fail": 5,
+      "pass": 13
+    },
+    "files": {
+      "unsupported": 5,
+      "fail": 2,
+      "pass": 1
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "raw_before_sha256": "b8d53cc5f7e9105173e90e1e6d2e7d1755607c6f60c937152a6c6f792b422ea1",
+    "raw_after_sha256": "b8d53cc5f7e9105173e90e1e6d2e7d1755607c6f60c937152a6c6f792b422ea1"
+  },
+  "windows": {
+    "selected": 53,
+    "before": {
+      "fail": 37,
+      "pass": 2
+    },
+    "after": {
+      "fail": 35,
+      "pass": 4
+    },
+    "files": {
+      "timeout": 19,
+      "fail": 17,
+      "unsupported": 10,
+      "error": 7
+    },
+    "gained": 2,
+    "lost": 0,
+    "gained_records": [
+      [
+        [
+          "html/browsers/windows/browsing-context.html",
+          "84edf1171c344c7f851b429bbfb6be7999737b8719a8984d59ccf9bfe892984d"
+        ],
+        1
+      ],
+      [
+        [
+          "html/browsers/windows/browsing-context.html",
+          "d441cd58ac32a993ce2a296d2859220053a1861944e32a5f84562284edc24e6e"
+        ],
+        1
+      ]
+    ],
+    "lost_records": [],
+    "raw_before_sha256": "2c855ba2448083c446520382c7dbb7a0eb1771e6c0238f4147b1486ebb36dcc2",
+    "raw_after_sha256": "2620fe065a21a8ee41cdee05d5347f1b8b765e6a1f44b35bb7aad71ce947cefa"
+  },
+  "the-iframe-element": {
+    "selected": 150,
+    "before": {
+      "fail": 52,
+      "pass": 14
+    },
+    "after": {
+      "fail": 51,
+      "pass": 15
+    },
+    "files": {
+      "timeout": 25,
+      "fail": 33,
+      "unsupported": 53,
+      "pass": 11,
+      "error": 28
+    },
+    "gained": 1,
+    "lost": 0,
+    "gained_records": [
+      [
+        [
+          "html/semantics/embedded-content/the-iframe-element/iframe-loading-lazy-base-url-3.html",
+          "8cbd95a58a73679e93635b1ce5a8c5eb7d35716c6500afccb69c5250e7b8ee3c"
+        ],
+        1
+      ]
+    ],
+    "lost_records": [],
+    "raw_before_sha256": "b2cb812c13e935148e4a1ac81af8447cbcbad2e2c604b46dae323fa186ea2ef1",
+    "raw_after_sha256": "85adea8f3d69c21366598eeda2c135f3a752f125f6ff42573654cdc54f8ec219"
+  },
+  "the-base-element": {
+    "selected": 11,
+    "before": {
+      "pass": 13,
+      "fail": 3
+    },
+    "after": {
+      "pass": 15,
+      "fail": 1
+    },
+    "files": {
+      "pass": 8,
+      "timeout": 1,
+      "error": 1,
+      "fail": 1
+    },
+    "gained": 2,
+    "lost": 0,
+    "gained_records": [
+      [
+        [
+          "html/semantics/document-metadata/the-base-element/base_about_blank.html",
+          "00161d62aec630cf2b3ce380bcdc95f4b0d58e35a558dbb8e33e48ceaa0afd55"
+        ],
+        1
+      ],
+      [
+        [
+          "html/semantics/document-metadata/the-base-element/base_srcdoc.html",
+          "a1751710e4fd7214d097f4c9bc2c0503703663e5617bb1867dc02d38364a2b7f"
+        ],
+        1
+      ]
+    ],
+    "lost_records": [],
+    "raw_before_sha256": "c7948c1b2b127b4af222f5726d39bd469c8b6b040bf471c0fb443f694445015c",
+    "raw_after_sha256": "098c6fa685e2b8473dc30ab22fea5e4c589e960ba37020aca0669ca5a415dbb2"
+  },
+  "base-url": {
+    "selected": 11,
+    "before": {
+      "pass": 2
+    },
+    "after": {
+      "pass": 2
+    },
+    "files": {
+      "unsupported": 10,
+      "pass": 1
+    },
+    "gained": 0,
+    "lost": 0,
+    "gained_records": [],
+    "lost_records": [],
+    "raw_before_sha256": "cde59d51e16dcd26199d4397d96a24240207917561436c2e9be215ec084cb706",
+    "raw_after_sha256": "cde59d51e16dcd26199d4397d96a24240207917561436c2e9be215ec084cb706"
+  }
+}
