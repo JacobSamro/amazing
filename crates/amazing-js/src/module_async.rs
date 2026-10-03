@@ -12,8 +12,23 @@ impl<R: ModuleResolver + 'static> ModuleLinker<R> {
     ) -> Result<JsValue, ModuleFailure> {
         linker.borrow_mut().instantiate_pending(id, i)?;
         Self::install_deferred_namespaces(linker, i);
-        let promise = Self::ensure_capability(linker, id, i)?;
-        Self::inner_evaluate(linker, id, i, &mut Vec::new(), &mut 0)?;
+        let evaluation_root = {
+            let registry = linker.borrow();
+            let instance = &registry.instances[id];
+            if matches!(
+                instance.state,
+                ModuleState::EvaluatingAsync | ModuleState::Evaluated
+            ) {
+                instance
+                    .cycle_root
+                    .clone()
+                    .unwrap_or_else(|| id.to_string())
+            } else {
+                id.to_string()
+            }
+        };
+        let promise = Self::ensure_capability(linker, &evaluation_root, i)?;
+        Self::inner_evaluate(linker, &evaluation_root, i, &mut Vec::new(), &mut 0)?;
         Ok(promise)
     }
     /// Host dynamic-import entry point. The result is a Promise; evaluation
@@ -189,36 +204,16 @@ impl<R: ModuleResolver + 'static> ModuleLinker<R> {
         id: &str,
         i: &mut Interpreter,
     ) -> Result<(), ModuleFailure> {
-        let (instance, deps) = {
-            let mut registry = linker.borrow_mut();
-            if let Some(error) = &registry.instances[id].error {
-                return Err(error.clone());
-            }
-            if registry.instances[id].state != ModuleState::Linked {
-                return Ok(());
-            }
-            registry.instances.get_mut(id).unwrap().state = ModuleState::Evaluating;
-            (
-                registry.instances[id].clone(),
-                registry.evaluation_dependencies(id),
-            )
-        };
-        let outcome: Result<(), ModuleFailure> = (|| {
-            for (dep, phase) in deps {
-                if phase == ImportPhase::Evaluation {
-                    Self::evaluate_sync(linker, &dep, i)?;
-                }
-            }
-            i.module_start_body(&instance.program, instance.env, false)
-                .map_err(ModuleFailure::runtime)?;
-            Ok(())
-        })();
-        match outcome {
-            Ok(()) => Self::fulfilled(linker, id, i),
-            Err(error) => {
-                Self::rejected(linker, id, error.clone(), i)?;
-                Err(error)
-            }
+        // ReadyForSyncExecution guarantees this same SCC evaluator returns an
+        // already-settled capability; do not invent a separate cycle/error walk.
+        let completion = Self::evaluate_async_shared(linker, id, i)?;
+        match promise_fate(&completion) {
+            Some(PromiseFate::Fulfilled(_)) => Ok(()),
+            Some(PromiseFate::Rejected(value)) => Err(ModuleFailure::runtime(Throw(value))),
+            _ => Err(ModuleFailure::new(
+                ModulePhase::Async,
+                "deferred synchronous evaluation unexpectedly remained pending",
+            )),
         }
     }
     fn evaluation_dependencies(&self, id: &str) -> Vec<(String, ImportPhase)> {
@@ -294,13 +289,19 @@ impl<R: ModuleResolver + 'static> ModuleLinker<R> {
                 let (on_stack, ancestor, cycle, error, done, asynchronous) = {
                     let registry = linker.borrow();
                     let instance = &registry.instances[&dep];
+                    let cycle = instance.cycle_root.clone().unwrap_or(dep.clone());
+                    let required = if instance.on_stack {
+                        instance
+                    } else {
+                        &registry.instances[&cycle]
+                    };
                     (
                         instance.on_stack,
                         instance.dfs_ancestor,
-                        instance.cycle_root.clone().unwrap_or(dep.clone()),
-                        instance.error.clone(),
-                        instance.state == ModuleState::Evaluated,
-                        instance.async_order.is_some(),
+                        cycle,
+                        required.error.clone(),
+                        required.state == ModuleState::Evaluated,
+                        required.async_order.is_some(),
                     )
                 };
                 if let Some(error) = error {
@@ -435,24 +436,31 @@ impl<R: ModuleResolver + 'static> ModuleLinker<R> {
                 .map_err(ModuleFailure::runtime)?;
         }
         let mut ready = Vec::new();
-        {
-            let mut registry = linker.borrow_mut();
-            for parent in parents {
-                let instance = registry.instances.get_mut(&parent).unwrap();
-                if instance.state == ModuleState::Evaluated || instance.pending_async == 0 {
-                    continue;
-                }
-                instance.pending_async -= 1;
-                if instance.pending_async == 0 {
-                    ready.push((instance.async_order.unwrap_or(u64::MAX), parent));
-                }
-            }
-        }
+        linker
+            .borrow_mut()
+            .gather_ready_ancestors(parents, &mut ready);
         ready.sort_by_key(|(order, _)| *order);
         for (_, parent) in ready {
             Self::execute_async(linker, &parent, i)?;
         }
         Ok(())
+    }
+    fn gather_ready_ancestors(&mut self, parents: Vec<String>, ready: &mut Vec<(u64, String)>) {
+        for parent in parents {
+            let instance = self.instances.get_mut(&parent).unwrap();
+            if instance.state == ModuleState::Evaluated || instance.pending_async == 0 {
+                continue;
+            }
+            instance.pending_async -= 1;
+            if instance.pending_async != 0 {
+                continue;
+            }
+            ready.push((instance.async_order.unwrap_or(u64::MAX), parent.clone()));
+            let ancestors = instance.async_parents.clone();
+            if !self.records[&parent].module.has_top_level_await {
+                self.gather_ready_ancestors(ancestors, ready);
+            }
+        }
     }
     fn rejected(
         linker: &Rc<RefCell<Self>>,
@@ -786,5 +794,107 @@ mod asynchronous_graph_tests {
             JsValue::str("text")
         );
         assert_eq!(linker.borrow().records.len(), 3);
+    }
+}
+
+#[cfg(test)]
+mod module_phase_order_tests {
+    use super::*;
+    #[test]
+    fn mixed_eager_defer_visits_at_first_eager_position_and_preserves_exported_namespace() {
+        let sources = [
+            ("leaf", "order.push('leaf');export const value=42;"),
+            ("middle", "order.push('middle');"),
+        ];
+        let linker = Rc::new(RefCell::new(ModuleLinker::new(
+            move |name: &str, _: &str| {
+                sources
+                    .iter()
+                    .find(|(id, _)| *id == name)
+                    .map(|(id, source)| (id.to_string(), source.to_string()))
+                    .ok_or_else(|| format!("missing {name}"))
+            },
+        )));
+        let mut i = Interpreter::new();
+        i.run_script("var order=[]").unwrap();
+        linker.borrow_mut().link("root","import defer * as lazy from 'leaf';import 'middle';import 'leaf';export {lazy};order.push('root')").unwrap();
+        let exports = ModuleLinker::evaluate_shared(&linker, "root", &mut i).unwrap();
+        i.global_env
+            .declare_var("lazy", exports["lazy"].clone())
+            .unwrap();
+        assert_eq!(
+            i.run_script("order.join(',')").unwrap(),
+            JsValue::str("middle,leaf,root")
+        );
+        assert_eq!(i.run_script("lazy.value").unwrap(), JsValue::num(42.0));
+        assert!(
+            matches!(exports["lazy"],JsValue::Object(ref object) if matches!(object.borrow().exotic,Exotic::DeferredModuleNamespace(_)))
+        );
+    }
+    #[test]
+    fn one_async_leaf_releases_diamond_ancestors_in_async_evaluation_order() {
+        let sources = [
+            ("leaf", "await pending;order.push('leaf');"),
+            ("left", "import 'leaf';order.push('left');"),
+            ("right", "import 'leaf';order.push('right');"),
+            ("both", "import 'left';import 'right';order.push('both');"),
+        ];
+        let linker = Rc::new(RefCell::new(ModuleLinker::new(
+            move |name: &str, _: &str| {
+                sources
+                    .iter()
+                    .find(|(id, _)| *id == name)
+                    .map(|(id, source)| (id.to_string(), source.to_string()))
+                    .ok_or_else(|| format!("missing {name}"))
+            },
+        )));
+        let mut i = Interpreter::new();
+        i.run_script("var order=[],release;var pending=new Promise(r=>release=r)")
+            .unwrap();
+        linker
+            .borrow_mut()
+            .link("root", "import 'both';import 'right';order.push('root');")
+            .unwrap();
+        let completion = ModuleLinker::evaluate_async_shared(&linker, "root", &mut i).unwrap();
+        assert!(promise_fate(&completion).is_none());
+        i.run_script("release()").unwrap();
+        i.drain_microtasks().unwrap();
+        assert_eq!(
+            i.run_script("order.join(',')").unwrap(),
+            JsValue::str("leaf,left,right,both,root")
+        );
+    }
+}
+
+#[cfg(test)]
+mod cycle_root_completion_tests {
+    use super::*;
+    #[test]
+    fn evaluating_completed_cycle_member_returns_pending_cycle_root_capability() {
+        let linker = Rc::new(RefCell::new(ModuleLinker::new(
+            |name: &str, _: &str| match name {
+                "b" => Ok(("b".into(), "import 'a';export const b=1;".into())),
+                "a" => Ok(("a".into(), "import 'b';await pending;throw marker;".into())),
+                _ => Err("missing".into()),
+            },
+        )));
+        let mut i = Interpreter::new();
+        i.run_script("var release,marker={};var pending=new Promise(r=>release=r)")
+            .unwrap();
+        linker
+            .borrow_mut()
+            .link("a", "import 'b';await pending;throw marker;")
+            .unwrap();
+        let a = ModuleLinker::evaluate_async_shared(&linker, "a", &mut i).unwrap();
+        let b = ModuleLinker::evaluate_async_shared(&linker, "b", &mut i).unwrap();
+        assert_eq!(a, b);
+        assert!(promise_fate(&b).is_none());
+        i.run_script("release()").unwrap();
+        i.drain_microtasks().unwrap();
+        assert!(
+            matches!(promise_fate(&b),Some(PromiseFate::Rejected(value)) if value==i.global_env.resolve("marker").unwrap())
+        );
+        let again = ModuleLinker::evaluate_async_shared(&linker, "b", &mut i).unwrap();
+        assert_eq!(again, a);
     }
 }

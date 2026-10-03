@@ -610,7 +610,9 @@ impl Interpreter {
         for d in frame.into_iter().rev() {
             let disposed = self
                 .call_value(&d.method, d.value.clone(), Vec::new())
-                .and_then(|v| if d.method_is_async { self.await_value(v) } else { Ok(v) });
+                .and_then(|v| if d.method_is_async {
+                    coroutine_await(self,v.clone()).unwrap_or_else(||self.await_value(v))
+                } else { Ok(v) });
             if let Err(new_err) = disposed {
                 completion = match completion {
                     Err(prev) => Err(Throw(self.make_suppressed_error(new_err.0, prev.0))),
