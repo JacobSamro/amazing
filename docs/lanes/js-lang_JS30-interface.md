@@ -1,0 +1,17 @@
+# JS-30: Array-pattern IteratorRecords
+
+The fixed dependency is `018674f8182584a58efaf16eb1908bed6ee78b3a`, comprising coherent `0b41fbf17a12e3b3d0af3fc720066a342f0e29b3` plus ready JS-29. Array binding and assignment patterns now acquire actual iterator records for all iterable values, including intrinsic arrays. The record roots the iterator and cached next method through ordinary strong value ownership. Iterator object validation precedes the next getter; next callability is checked when stepping rather than during acquisition.
+
+A shared step operation observes next/result/done. Actual elements additionally observe value; elisions do not. Exhaustion and abrupt stepping set the done bit, preventing subsequent close. Defaults and assignment targets retain their existing evaluation order, including targets that suspend before requesting the first value. Normal completion closes unfinished records; existing throws retain precedence over a failing close. The shared normal IteratorClose helper treats null and undefined return methods as absent, rejects other noncallable values, and validates returned objects.
+
+The previous intrinsic-array shortcut snapshotted length and skipped iterator prototype hooks. Removing it exposes live length changes, overridden next getters, and ArrayIteratorPrototype.return. VM PatternStart/Step/Skip/Rest/Close ordering remains unchanged; the granted VM skip adapter delegates to the same shared record. No for-of lowering or scheduler changes are included.
+
+Algorithms are ported and adapted from `lucid-softworks/lumen`, `crates/lumen/src/eval.rs`, commit `f6c9860d44fa52249cfd647122edea184d32c863` (MIT; Copyright (c) 2026 Lucid Softworks limited). The upstream license and exact source were inspected. Amazing's value, environment, error and iterator APIs replace upstream dependencies; no engine dependencies are added. Attribution headers and an appended notice accompany the source commit.
+
+Nine grouped tests run with both tree-walking and bytecode backends. They cover empty patterns with noncallable next, acquisition failure ordering, cached next and elision getter counts, step failures, GetMethod close rules, nested close order and throw identity, native array length mutation and prototype return, overridden native next/String iteration, and suspended assignment-target return.
+
+The fresh baseline identifies eight sloppy-only TDZ failures in assignment and for-of destructuring independently of this iterator protocol cluster. These remain a reference/global lexical audit request, rather than expanding this ticket into VM-21 scope work.
+
+Linux final proof: **3884 workspace tests passed, 17 skipped; four doctests passed**. Owned JS/regex replay **640 passed, one skipped**. Whole language **24272→24278 files (+6)** and **44950→44962 variants (+12)**; Function **506/887**, Array **2994/5941** and Iterator **641/1283** remain unchanged, with zero lost files and variants in all selections.
+
+Initial Function10s produced one non-strict deadline in built-in-function-object.js. A matched whole Function60s replay on both immutable sources restored the same original passes and proved zero loss. Original classifications and replay proof are retained separately in the evidence. Existing four RegExp literal and two Iterator zip deadline files remain on both10s sides. A provider ensure502 interrupted replay artifact fetch; the orchestrator verified the original box and authorized direct endpoint copying, which recovered both complete records.

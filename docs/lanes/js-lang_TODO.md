@@ -1817,3 +1817,10 @@ Remove unsupported array iterator assumptions only within a faithful protocol
 adapter; late validation of cached next, object iterator validation, mutable
 array length and return hooks, normal-versus-throw completion precedence need
 bulk coverage. Exact shared close/compiler hooks require parent/VM coordination.
+
+
+### JS-30 — array-pattern IteratorRecords
+
+Source `6267fa33` on fixed `018674f8` (coherent0b41 plus ready29). Actual iterator records for native arrays, delayed next callability, iterator object validation, value-free elisions, live array length/prototype hooks and GetMethod close correctness. Nine grouped both-backend regressions including suspended targets. Workspace **3884/17 skipped +4 docs**, owned **640/1 skipped**. Whole language **+6files/+12variants**, whole Function/Array/Iterator unchanged, all **zero losses**; Function matched60s replay resolves one initial10s deadline. [Proof](js-lang_JS30-evidence.json), [design](js-lang_JS30-interface.md).
+
+Next JS31: fixed f9cafadf (VM21 + runtime42/43) plus exact30source, namespace-only enumeration descriptors, receiver GetOwnProperty/DefineOwnProperty for super writes/TDZ and private installation rejection. Preserve direct deferred namespace Set non-evaluation and ordinary nonextensible private installation, plus WindowProxy/Proxy/Arguments/binary ordering. No loader/cache or generic Array descriptor expansion.

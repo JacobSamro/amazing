@@ -1,0 +1,288 @@
+{
+  "base_commit": "018674f8182584a58efaf16eb1908bed6ee78b3a",
+  "source_commit": "6267fa330a2daba804d874511a26306ee985c6e2",
+  "corpora": {
+    "language": {
+      "before": {
+        "files": {
+          "pass": 24272,
+          "fail": 270,
+          "timeout": 4,
+          "unsupported": 26,
+          "skipped": 29300
+        },
+        "variants": {
+          "pass": 44950,
+          "fail": 384,
+          "timeout": 8,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 24278,
+          "fail": 264,
+          "timeout": 4,
+          "unsupported": 26,
+          "skipped": 29300
+        },
+        "variants": {
+          "pass": 44962,
+          "fail": 372,
+          "timeout": 8,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "gained_files": [
+        "language/expressions/assignment/dstr/array-elem-iter-rtrn-close-err.js",
+        "language/expressions/assignment/dstr/array-rest-iter-rtrn-close-err.js",
+        "language/expressions/assignment/dstr/array-rest-iter-rtrn-close-null.js",
+        "language/statements/for-of/dstr/array-elem-iter-rtrn-close-err.js",
+        "language/statements/for-of/dstr/array-rest-iter-rtrn-close-err.js",
+        "language/statements/for-of/dstr/array-rest-iter-rtrn-close-null.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        "language/expressions/assignment/dstr/array-elem-iter-rtrn-close-err.js#non-strict",
+        "language/expressions/assignment/dstr/array-elem-iter-rtrn-close-err.js#strict",
+        "language/expressions/assignment/dstr/array-rest-iter-rtrn-close-err.js#non-strict",
+        "language/expressions/assignment/dstr/array-rest-iter-rtrn-close-err.js#strict",
+        "language/expressions/assignment/dstr/array-rest-iter-rtrn-close-null.js#non-strict",
+        "language/expressions/assignment/dstr/array-rest-iter-rtrn-close-null.js#strict",
+        "language/statements/for-of/dstr/array-elem-iter-rtrn-close-err.js#non-strict",
+        "language/statements/for-of/dstr/array-elem-iter-rtrn-close-err.js#strict",
+        "language/statements/for-of/dstr/array-rest-iter-rtrn-close-err.js#non-strict",
+        "language/statements/for-of/dstr/array-rest-iter-rtrn-close-err.js#strict",
+        "language/statements/for-of/dstr/array-rest-iter-rtrn-close-null.js#non-strict",
+        "language/statements/for-of/dstr/array-rest-iter-rtrn-close-null.js#strict"
+      ],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "13c76ddbd20dff95b40e52aa577925e9dd94013e23452bbc4ff50f921cc0f6d1",
+      "after_host_sha256": "9c4c998abe0481f938b04b5660eec366fd35d152c5215cec217197c933eef9f9",
+      "before_classification_sha256": "adafcae91ae90e4e42c5855036496deedd8b3831e6b53c832ae8ed1d91fe47e8",
+      "after_classification_sha256": "f02362285b830002a1458fe7a78d0d309ff9761c86462fdc6c6beee1dda3e961"
+    },
+    "built-ins-Function": {
+      "before": {
+        "files": {
+          "pass": 506,
+          "fail": 9,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53357
+        },
+        "variants": {
+          "pass": 887,
+          "fail": 18,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 506,
+          "fail": 9,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53357
+        },
+        "variants": {
+          "pass": 887,
+          "fail": 18,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "13c76ddbd20dff95b40e52aa577925e9dd94013e23452bbc4ff50f921cc0f6d1",
+      "after_host_sha256": "9c4c998abe0481f938b04b5660eec366fd35d152c5215cec217197c933eef9f9",
+      "before_classification_sha256": "0ad69b171ab5f55fa177ac4d56012782fbf784eac21a1ea9daf291037a85c74a",
+      "after_classification_sha256": "0ad69b171ab5f55fa177ac4d56012782fbf784eac21a1ea9daf291037a85c74a"
+    },
+    "built-ins-Array": {
+      "before": {
+        "files": {
+          "pass": 2994,
+          "fail": 89,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50788
+        },
+        "variants": {
+          "pass": 5941,
+          "fail": 178,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 2994,
+          "fail": 89,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50788
+        },
+        "variants": {
+          "pass": 5941,
+          "fail": 178,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "13c76ddbd20dff95b40e52aa577925e9dd94013e23452bbc4ff50f921cc0f6d1",
+      "after_host_sha256": "9c4c998abe0481f938b04b5660eec366fd35d152c5215cec217197c933eef9f9",
+      "before_classification_sha256": "044676bd43fc94c497ff1a73a02459fecbad33dee5cf48179e835ee695428683",
+      "after_classification_sha256": "044676bd43fc94c497ff1a73a02459fecbad33dee5cf48179e835ee695428683"
+    },
+    "built-ins-Iterator": {
+      "before": {
+        "files": {
+          "pass": 641,
+          "fail": 11,
+          "timeout": 2,
+          "unsupported": 0,
+          "skipped": 53218
+        },
+        "variants": {
+          "pass": 1283,
+          "fail": 22,
+          "timeout": 3,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 641,
+          "fail": 11,
+          "timeout": 2,
+          "unsupported": 0,
+          "skipped": 53218
+        },
+        "variants": {
+          "pass": 1283,
+          "fail": 22,
+          "timeout": 3,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "13c76ddbd20dff95b40e52aa577925e9dd94013e23452bbc4ff50f921cc0f6d1",
+      "after_host_sha256": "9c4c998abe0481f938b04b5660eec366fd35d152c5215cec217197c933eef9f9",
+      "before_classification_sha256": "509ca2d5cc27030cdacbf5ff5fe630bc43d60b255ea02fd6aa808b67b3a0ea20",
+      "after_classification_sha256": "509ca2d5cc27030cdacbf5ff5fe630bc43d60b255ea02fd6aa808b67b3a0ea20"
+    }
+  },
+  "initial_10s_function_iteration": {
+    "before": {
+      "files": {
+        "pass": 506,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "variants": {
+        "pass": 887,
+        "fail": 18,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 0
+      }
+    },
+    "after": {
+      "files": {
+        "pass": 505,
+        "fail": 9,
+        "timeout": 1,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "variants": {
+        "pass": 886,
+        "fail": 18,
+        "timeout": 1,
+        "unsupported": 0,
+        "skipped": 0
+      }
+    },
+    "gained_files": [],
+    "lost_files": [
+      "built-ins/Function/prototype/toString/built-in-function-object.js"
+    ],
+    "gained_variants": [],
+    "lost_variants": [
+      "built-ins/Function/prototype/toString/built-in-function-object.js#non-strict"
+    ],
+    "same_input": true,
+    "same_runner": true,
+    "same_inventory": true,
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+    "before_host_sha256": "13c76ddbd20dff95b40e52aa577925e9dd94013e23452bbc4ff50f921cc0f6d1",
+    "after_host_sha256": "9c4c998abe0481f938b04b5660eec366fd35d152c5215cec217197c933eef9f9",
+    "before_classification_sha256": "0ad69b171ab5f55fa177ac4d56012782fbf784eac21a1ea9daf291037a85c74a",
+    "after_classification_sha256": "cda1d73234274d26ea59482e9355bc323b3d0c9c0025755924a169ef4744f26a"
+  },
+  "workspace": {
+    "passed": 3884,
+    "skipped": 17,
+    "doctests_passed": 4,
+    "owned_passed": 640,
+    "owned_skipped": 1,
+    "new_both_backend_groups": 9
+  },
+  "deadline_policy": "Whole language/Array/Iterator use matched10s. Initial Function10s had one new non-strict deadline; matched whole Function60s replay recovered it with zero lost files/variants and unchanged inventory/input/runner.",
+  "provider_recovery": "Completed Function60s artifact fetch failed ensure502; orchestrator verified original own box and authorized direct recorded-endpoint copy. Both exact raw artifacts recovered unchanged.",
+  "existing_deadline_files": {
+    "language": [
+      "language/literals/regexp/S7.8.5_A1.1_T2.js",
+      "language/literals/regexp/S7.8.5_A1.4_T2.js",
+      "language/literals/regexp/S7.8.5_A2.1_T2.js",
+      "language/literals/regexp/S7.8.5_A2.4_T2.js"
+    ],
+    "built-ins-Array": [],
+    "built-ins-Iterator": [
+      "built-ins/Iterator/zip/basic-longest.js",
+      "built-ins/Iterator/zipKeyed/basic-longest.js"
+    ]
+  }
+}
