@@ -1,0 +1,20 @@
+{
+  "source_commit": "eb7fa04a9b1d7059d4ad4183acee1b9dc3837aef",
+  "baseline_commit": "8033f675776214d1d710b1745184f85df4988d2e",
+  "test": "dom/nodes/ParentNode-querySelector-escapes.html",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "all_68_ordered_assertion_results_and_messages_identical": true,
+  "generated_name_changes": [
+    {
+      "ordinal": 36,
+      "old": "\"spaces\" should match with \"#sp\\\\61\\tc\\\\65\\u000cs\"",
+      "new": "\"spaces\" should match with \"#sp\\\\61\\tc\\\\65\\fs\"",
+      "status": 0,
+      "canonical_json_strings": [
+        "spaces",
+        "#sp\\61\tc\\65\fs"
+      ]
+    }
+  ],
+  "reason": "JSON41 canonical QuoteJSONString uses short form-feed escape; JSON-decoded generated selector strings are identical. This is an assertion identity rename, not a classification waiver."
+}
