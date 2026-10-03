@@ -153,10 +153,12 @@ impl ModuleRuntime {
     }
     fn install(&self, js: &mut Interpreter) {
         let runtime = self.clone();
-        js.binding_set_typed_module_loader_hook(Rc::new(move |js, specifier, referrer| {
-            let resolver = runtime.resolver(js);
-            let (id, source) = resolver.resolve(specifier, referrer).map_err(Throw::type_error)?;
-            runtime.evaluate(js, &id, &source)
+        // Dynamic imports retain their phase/attributes and settle through the
+        // engine's evaluation capability. A pending top-level await is ordinary
+        // progress, never a synchronous failure cached by the page-script path.
+        js.binding_set_phase_module_loader_hook(Rc::new(move |js, request, referrer| {
+            let registry = runtime.registry(js);
+            ModuleLinker::import_shared(&registry, request, referrer, js).map_err(module_failure)
         }));
     }
 }
@@ -353,6 +355,50 @@ mod tests {
         scheduler.run_script("window.original={marker:1};var errors=[];import('./fail.js').catch(x=>errors.push(x));import('./fail.js').catch(x=>errors.push(x));import('unmapped').catch(x=>window.bare=x instanceof TypeError);").unwrap();
         scheduler.pump_at(std::time::Duration::ZERO, false).unwrap();
         assert!(matches!(scheduler.run_script("errors.length===2 && errors[0]===original && errors[1]===original && bare").unwrap(), JsValue::Bool(true)));
+    }
+    #[test]
+    fn browser_dynamic_import_waits_for_async_graph_and_preserves_namespace_identity() {
+        let mut driver = scheduler();
+        driver.set_module_source_loader(Rc::new(|url| match url {
+            "https://example.test/async.js" => Ok("await new Promise(resolve=>setTimeout(resolve,1)); export const value=7;".into()),
+            _ => Err(format!("missing {url}")),
+        }));
+        driver.run_script("var namespaces=[];import('./async.js').then(ns=>namespaces.push(ns));import('./async.js').then(ns=>namespaces.push(ns));").unwrap();
+        assert!(matches!(driver.run_script("namespaces.length===0").unwrap(), JsValue::Bool(true)));
+        driver.pump_at(std::time::Duration::ZERO, false).unwrap();
+        assert!(matches!(driver.run_script("namespaces.length===0").unwrap(), JsValue::Bool(true)));
+        driver.pump_at(std::time::Duration::from_millis(1), false).unwrap();
+        assert!(matches!(driver.run_script("namespaces.length===2 && namespaces[0]===namespaces[1] && namespaces[0].value===7").unwrap(), JsValue::Bool(true)));
+    }
+    #[test]
+    fn browser_phase_import_keeps_deferred_body_lazy_and_source_dependencies_unfetched() {
+        let mut driver = scheduler();
+        let fetched = Rc::new(RefCell::new(Vec::new()));
+        let requests = fetched.clone();
+        driver.set_module_source_loader(Rc::new(move |url| {
+            requests.borrow_mut().push(url.to_owned());
+            match url {
+                "https://example.test/deferred.js" => Ok("window.deferredRuns=(window.deferredRuns||0)+1; export const value=9;".into()),
+                "https://example.test/source.js" => Ok("import './missing.js'; export default 1;".into()),
+                _ => Err(format!("missing {url}")),
+            }
+        }));
+        driver.run_script("var lazy,sourceError,attributeError;import.defer('./deferred.js').then(ns=>lazy=ns);import.source('./source.js').catch(e=>sourceError=e);import('./attributes.js',{with:{type:'json'}}).catch(e=>attributeError=e);").unwrap();
+        driver.pump_at(std::time::Duration::ZERO, false).unwrap();
+        assert!(matches!(driver.run_script("typeof deferredRuns==='undefined' && sourceError instanceof SyntaxError && attributeError instanceof TypeError").unwrap(), JsValue::Bool(true)));
+        assert_eq!(&*fetched.borrow(), &["https://example.test/deferred.js", "https://example.test/source.js"]);
+        assert!(matches!(driver.run_script("lazy.value===9 && deferredRuns===1").unwrap(), JsValue::Bool(true)));
+        driver.run_script("var evaluated;import('./deferred.js').then(ns=>evaluated=ns);").unwrap();
+        driver.pump_at(std::time::Duration::ZERO, false).unwrap();
+        assert!(matches!(driver.run_script("evaluated.value===9 && evaluated!==lazy && deferredRuns===1").unwrap(), JsValue::Bool(true)));
+    }
+    #[test]
+    fn browser_async_import_rejections_keep_the_original_error_across_requests() {
+        let mut driver = scheduler();
+        driver.set_module_source_loader(Rc::new(|_| Ok("await Promise.resolve(); throw window.original;".into())));
+        driver.run_script("var original={},errors=[];import('./reject.js').catch(e=>errors.push(e));import('./reject.js').catch(e=>errors.push(e));").unwrap();
+        driver.pump_at(std::time::Duration::ZERO, false).unwrap();
+        assert!(matches!(driver.run_script("errors.length===2 && errors[0]===original && errors[1]===original").unwrap(), JsValue::Bool(true)));
     }
     #[test]
     fn module_text_is_always_utf8_and_bom_is_removed() {
