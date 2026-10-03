@@ -87,6 +87,7 @@ impl SandboxFlags {
 pub(super) struct FrameRuntime {
     documents: HashMap<NodeIdx, FrameDocument>,
     contexts: HashMap<RealmHandle, WindowContext>,
+    cross_origin_descriptors: HashMap<(RealmHandle, RealmHandle, String), Property>,
     parser_imports: HashMap<NodeIdx, IncrementalImportRef>,
     /// `(frame, document, fire_load_events)`. `fire_load_events` is false
     /// only for an iframe with neither `src` nor `srcdoc`: its initial
@@ -132,11 +133,17 @@ struct WindowContext {
 }
 
 #[derive(Clone, Copy)]
-pub(super) enum HtmlWindowProperty { Frames, Length, Parent, Top }
+pub(super) enum HtmlWindowProperty {
+    Frames, Length, Parent, Top,
+    BoundFrames(RealmHandle), BoundLength(RealmHandle), BoundParent(RealmHandle), BoundTop(RealmHandle),
+}
 
 impl HtmlWindowProperty {
     fn name(self) -> &'static str {
-        match self { Self::Frames => "frames", Self::Length => "length", Self::Parent => "parent", Self::Top => "top" }
+        match self {
+            Self::Frames | Self::BoundFrames(_) => "frames", Self::Length | Self::BoundLength(_) => "length",
+            Self::Parent | Self::BoundParent(_) => "parent", Self::Top | Self::BoundTop(_) => "top",
+        }
     }
 }
 
@@ -1366,8 +1373,8 @@ impl RuntimeBindingHost<'_> {
         if context.installed { return Ok(()); }
         for property in [HtmlWindowProperty::Frames, HtmlWindowProperty::Length, HtmlWindowProperty::Parent, HtmlWindowProperty::Top] {
             let name = property.name();
-            let getter_name = match property { HtmlWindowProperty::Frames => "get frames", HtmlWindowProperty::Length => "get length", HtmlWindowProperty::Parent => "get parent", HtmlWindowProperty::Top => "get top" };
-            let setter_name = match property { HtmlWindowProperty::Frames => "set frames", HtmlWindowProperty::Length => "set length", HtmlWindowProperty::Parent => "set parent", HtmlWindowProperty::Top => "set top" };
+            let getter_name = match property { HtmlWindowProperty::Frames => "get frames", HtmlWindowProperty::Length => "get length", HtmlWindowProperty::Parent => "get parent", HtmlWindowProperty::Top => "get top", _ => unreachable!() };
+            let setter_name = match property { HtmlWindowProperty::Frames => "set frames", HtmlWindowProperty::Length => "set length", HtmlWindowProperty::Parent => "set parent", HtmlWindowProperty::Top => "set top", _ => unreachable!() };
             let getter = self.native(getter_name, 0, NativeEntry::HtmlWindowGet(property), HostCallPolicy::CallOnly);
             let setter = if matches!(property, HtmlWindowProperty::Top) { None } else {
                 Some(self.native(setter_name, 1, NativeEntry::HtmlWindowReplaceableSet(property), HostCallPolicy::CallOnly))
@@ -1398,6 +1405,50 @@ impl RuntimeBindingHost<'_> {
             let error = js.binding_construct(&constructor, vec![JsValue::str("Blocked cross-origin Window access"), JsValue::str("SecurityError")])?;
             Err(js.binding_throw(error))
         }));
+        let state = self.state.clone();
+        self.js.binding_set_window_proxy_property_hook(Rc::new(move |js, access| {
+            let current = state.borrow().frames.contexts.get(&access.current).cloned();
+            let target = state.borrow().frames.contexts.get(&access.target).cloned();
+            let current_origin = match current { Some(context) => context_origin(js, &context, access.current)?, None => String::new() };
+            let target_origin = match &target { Some(context) => context_origin(js, context, access.target)?, None => access.target_origin };
+            use amazing_js::interp::WindowProxyProperty;
+            if access.current == access.target || current_origin == target_origin {
+                return Ok(WindowProxyProperty::Target);
+            }
+            let Some(JsValue::Str(name)) = access.key else { return Ok(WindowProxyProperty::Descriptor(None)); };
+            let name = name.to_utf8_lossy();
+            let key = (access.current, access.target, name.clone());
+            if let Some(descriptor) = state.borrow().frames.cross_origin_descriptors.get(&key).cloned() {
+                return Ok(WindowProxyProperty::Descriptor(Some(descriptor)));
+            }
+            let bound = match name.as_str() {
+                "window" | "self" | "frames" => Some(("get frames", HtmlWindowProperty::BoundFrames(access.target))),
+                "length" => Some(("get length", HtmlWindowProperty::BoundLength(access.target))),
+                "parent" => Some(("get parent", HtmlWindowProperty::BoundParent(access.target))),
+                "top" => Some(("get top", HtmlWindowProperty::BoundTop(access.target))),
+                _ => None,
+            };
+            let descriptor = if let Some((getter_name, property)) = bound {
+                let getter = RuntimeBindingHost { js, state: state.clone() }.native(getter_name, 0,
+                    NativeEntry::HtmlWindowGet(property), HostCallPolicy::CallOnly);
+                Property { value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
+                    getter: Some(getter), setter: None }
+            } else {
+                let value = name.parse::<usize>().ok().and_then(|index| {
+                    let state = state.borrow();
+                    let target = target.as_ref()?;
+                    let host = state.host.borrow();
+                    host.dom.tree_order(target.document).into_iter()
+                        .filter_map(|node| state.frames.windows.get(&node).map(|(_, window)| window.clone())).nth(index)
+                });
+                let Some(value) = value else { return Ok(WindowProxyProperty::Descriptor(None)); };
+                // Indexed child properties are evaluated afresh as the tree changes.
+                return Ok(WindowProxyProperty::Descriptor(Some(Property { value, writable: false,
+                    enumerable: true, configurable: true, getter: None, setter: None })));
+            };
+            state.borrow_mut().frames.cross_origin_descriptors.insert(key, descriptor.clone());
+            Ok(WindowProxyProperty::Descriptor(Some(descriptor)))
+        }));
         Ok(())
     }
 
@@ -1413,19 +1464,27 @@ impl RuntimeBindingHost<'_> {
     }
 
     pub(super) fn html_window_get(&mut self, property: HtmlWindowProperty, receiver: JsValue) -> Result<JsValue, Throw> {
-        let (realm, context) = self.html_window_receiver(&receiver)?;
+        let bound = match property {
+            HtmlWindowProperty::BoundFrames(realm) | HtmlWindowProperty::BoundLength(realm)
+            | HtmlWindowProperty::BoundParent(realm) | HtmlWindowProperty::BoundTop(realm) => Some(realm),
+            _ => None,
+        };
+        let (realm, context) = if let Some(realm) = bound {
+            (realm, self.state.borrow().frames.contexts.get(&realm).cloned()
+                .ok_or_else(|| Throw::type_error("Stale Window context"))?)
+        } else { self.html_window_receiver(&receiver)? };
         let live = self.state.borrow().frames.live_context(&context, realm);
         Ok(match property {
-            HtmlWindowProperty::Frames => context.window,
-            HtmlWindowProperty::Length => {
+            HtmlWindowProperty::Frames | HtmlWindowProperty::BoundFrames(_) => context.window,
+            HtmlWindowProperty::Length | HtmlWindowProperty::BoundLength(_) => {
                 let state = self.state.borrow();
                 let host = state.host.borrow();
                 let count = if live { host.dom.tree_order(context.document).into_iter()
                     .filter(|node| state.frames.windows.contains_key(node)).count() } else { 0 };
                 JsValue::num(count as f64)
             }
-            HtmlWindowProperty::Parent => if live { context.parent } else { JsValue::Null },
-            HtmlWindowProperty::Top => if live { context.top } else { JsValue::Null },
+            HtmlWindowProperty::Parent | HtmlWindowProperty::BoundParent(_) => if live { context.parent } else { JsValue::Null },
+            HtmlWindowProperty::Top | HtmlWindowProperty::BoundTop(_) => if live { context.top } else { JsValue::Null },
         })
     }
 
@@ -2136,7 +2195,22 @@ mod tests {
             const setter=Object.getOwnPropertyDescriptor(window,'frames').set;
             let setterRejected=false; try { setter.call(child,42); }
             catch(e) { setterRejected=e instanceof DOMException && e.name==='SecurityError'; }
-            valid && rejected && setterRejected
+            const descriptors=['frames','length','parent','top','window','self'].every(name=>{
+                const d=Object.getOwnPropertyDescriptor(child,name);
+                return d.enumerable===false && d.configurable===true && d.set===undefined &&
+                    typeof d.get==='function' && d.get instanceof Function &&
+                    d.get===Object.getOwnPropertyDescriptor(child,name).get &&
+                    d.get.call({})===child[name];
+            });
+            globalThis.oldCrossOriginGetter=Object.getOwnPropertyDescriptor(child,'frames').get;
+            valid && rejected && setterRejected && descriptors
+        "#).unwrap(), JsValue::Bool(true));
+        scheduler.run_script("document.querySelector('iframe').srcdoc='<!doctype html><p>new target</p>'").unwrap();
+        assert_eq!(scheduler.run_script(r#"
+            const current=document.querySelector('iframe').contentWindow;
+            const fresh=Object.getOwnPropertyDescriptor(current,'frames');
+            fresh.get!==oldCrossOriginGetter && fresh.get.call(null)===current &&
+                fresh.set===undefined && Object.getOwnPropertyDescriptor(current,'top').configurable
         "#).unwrap(), JsValue::Bool(true));
     }
 
