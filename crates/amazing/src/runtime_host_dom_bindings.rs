@@ -1522,7 +1522,8 @@ mod tests {
     fn xml_serializer_installed_brand_nodes_utf16_and_namespace_scope() {
         let host=Rc::new(RefCell::new(BrowserDomHost { dom:Dom::new(),native_forwarded:false }));
         let mut js=Interpreter::new_with_external_scheduler(32).unwrap();
-        js.set_dom_host(host.clone());super::super::install(&mut js,host).unwrap();
+        js.set_dom_host(host.clone());let bindings=super::super::install(&mut js,host).unwrap();
+        bindings.set_document_url(&mut js,"https://example.test/xml-serializer");
         let result=js.run_script(r#"
             (function(){let step=0;try{function check(v){step++;if(!v)throw 'XML serialization '+step;}
             const serializer=new XMLSerializer();check(serializer instanceof XMLSerializer);
