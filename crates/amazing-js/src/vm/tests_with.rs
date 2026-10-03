@@ -50,7 +50,7 @@ fn suspended_with_preserves_object_scopes_across_all_callable_drivers() {
                     i.drain_microtasks().unwrap();
                     assert_eq!(i.run_script("result===true&&!failed").unwrap(), JsValue::Bool(true));
                     assert!(i.frames.is_empty());
-                    assert!(!i.strict);
+                    assert!(!i.strict_eval_context);
                 }));
                 if outcome.is_err() { failures.push(format!("AST={force_ast} {kind}: {body}")); }
             }
