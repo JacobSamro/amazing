@@ -264,3 +264,82 @@ fn incremental_import_carries_shadow_roots_and_template_contents() {
     let dest_contents = dest.template_contents(dest_template).unwrap();
     assert_eq!(markup(&dest, dest_contents), "<br>");
 }
+
+#[test]
+fn incremental_import_mirrors_external_document_and_preserves_adopted_identity() {
+    let mut source = Dom::new(); let root = source.create_element(NodeIdx(0), "html");
+    let body = source.create_element(root, "body"); let formatting = source.create_element(body, "b");
+    let block = source.create_element(formatting, "div");
+    let mut dest = Dom::new(); let document = dest.create_document();
+    let other = dest.create_document(); dest.set_document_scripting_enabled(other, true).unwrap();
+    let container = dest.create_element(other, "other");
+    let mut import = IncrementalDocumentImport::new(document); import.sync(&mut dest, &source).unwrap();
+    let live = import.imported(block).unwrap(); dest.pre_insert(live, container, None).unwrap();
+    import.reverse_sync(&mut source, &dest).unwrap();
+    let mirrored_document = source.owner_document(block).unwrap();
+    assert_ne!(mirrored_document, NodeIdx(0));
+    assert!(source.document_scripting_enabled(mirrored_document).unwrap());
+    assert_eq!(source.local_name(source.get(block).parent.unwrap()), Some("other"));
+    // The parser appends below an open node that a script adopted away.
+    let child = source.create_element(block, "span");
+    import.sync(&mut dest, &source).unwrap();
+    assert_eq!(dest.get(live).parent, Some(container));
+    assert_eq!(dest.owner_document(import.imported(child).unwrap()), Some(other));
+    // A later validated parser move comes back into its original document.
+    source.pre_insert(block, body, None).unwrap(); import.sync(&mut dest, &source).unwrap();
+    assert_eq!(import.imported(block), Some(live));
+    assert_eq!(dest.get(live).parent, import.imported(body));
+    assert_eq!(dest.owner_document(live), Some(document));
+}
+
+#[test]
+fn incremental_import_mirrors_live_document_replacement_and_sibling_order() {
+    let mut source = Dom::new(); let old = source.create_element(NodeIdx(0), "old");
+    let mut dest = Dom::new(); let document = dest.create_document();
+    let mut import = IncrementalDocumentImport::new(document); import.sync(&mut dest, &source).unwrap();
+    dest.detach(import.imported(old).unwrap());
+    let replacement = dest.create_element(document, "replacement");
+    let comment = dest.create_node_in(document, NodeKind::Comment { data: "before".into() }).unwrap();
+    dest.pre_insert(comment, document, Some(replacement)).unwrap();
+    import.reverse_sync(&mut source, &dest).unwrap();
+    let children: Vec<_> = source.children(NodeIdx(0)).collect();
+    assert_eq!(children.len(), 2); assert!(matches!(source.get(children[0]).kind, NodeKind::Comment { .. }));
+    assert_eq!(source.document_element(NodeIdx(0)).unwrap(), Some(children[1]));
+    let rejected = source.create_element_ns_in(NodeIdx(0), Some("http://www.w3.org/1999/xhtml"), "second").unwrap();
+    assert_eq!(source.pre_insert(rejected, NodeIdx(0), None), Err(DomError::HierarchyRequestError));
+    import.sync(&mut dest, &source).unwrap();
+    assert_eq!(dest.document_element(document).unwrap(), Some(replacement));
+}
+
+#[test]
+fn incremental_import_retries_ancestor_reversal_and_reorders_siblings() {
+    let mut source = Dom::new(); let root = source.create_element(NodeIdx(0), "root");
+    let a = source.create_element(root, "a"); let b = source.create_element(a, "b");
+    let c = source.create_element(root, "c");
+    let mut dest = Dom::new(); let document = dest.create_document();
+    let mut import = IncrementalDocumentImport::new(document); import.sync(&mut dest, &source).unwrap();
+    source.pre_insert(b, root, Some(c)).unwrap(); source.pre_insert(a, b, None).unwrap();
+    source.pre_insert(c, root, Some(b)).unwrap(); import.sync(&mut dest, &source).unwrap();
+    assert_eq!(markup(&dest, document), "<root><c></c><b><a></a></b></root>");
+    let da = import.imported(a).unwrap(); let db = import.imported(b).unwrap(); let dr = import.imported(root).unwrap();
+    dest.pre_insert(da, dr, None).unwrap(); dest.pre_insert(db, da, None).unwrap();
+    import.reverse_sync(&mut source, &dest).unwrap();
+    assert_eq!(source.get(b).parent, Some(a));
+    assert_eq!(markup(&source, NodeIdx(0)), "<root><c></c><a><b></b></a></root>");
+}
+
+#[test]
+fn incremental_import_preserves_detached_fragment_children() {
+    let mut source = Dom::new(); let root = source.create_element(NodeIdx(0), "root");
+    let open = source.create_element(root, "open");
+    let mut dest = Dom::new(); let document = dest.create_document();
+    let fragment = dest.create_document_fragment(document).unwrap();
+    let mut import = IncrementalDocumentImport::new(document); import.sync(&mut dest, &source).unwrap();
+    let live = import.imported(open).unwrap(); dest.pre_insert(live, fragment, None).unwrap();
+    import.reverse_sync(&mut source, &dest).unwrap();
+    let source_fragment = source.get(open).parent.unwrap();
+    assert!(matches!(source.get(source_fragment).kind, NodeKind::DocumentFragment));
+    source.create_text(open, "continued"); import.sync(&mut dest, &source).unwrap();
+    assert_eq!(dest.get(live).parent, Some(fragment));
+    assert_eq!(markup(&dest, fragment), "<open>continued</open>");
+}
