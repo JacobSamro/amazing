@@ -105,6 +105,11 @@ fn suspended_optional_chain_super_private_and_reference_roots_survive_resume() {
                     first.value==='pause'&&second.done&&second.value==='original!'&&log.join(',')==='child';
             });
         "#).unwrap();
+        for expression in ["method.f", "c.f", "captured"] {
+            let JsValue::Object(function) = i.run_script(expression).unwrap() else { unreachable!() };
+            assert_eq!(matches!(function.borrow().func.as_ref().unwrap().body, FunctionBody::Bytecode(_)), !force_ast,
+                "AST={force_ast}: {expression}");
+        }
         i.drain_microtasks().unwrap();
         assert_eq!(i.run_script("ok").unwrap(), JsValue::Bool(true), "AST={force_ast}");
     }
