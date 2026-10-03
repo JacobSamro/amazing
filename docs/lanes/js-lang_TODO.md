@@ -1790,3 +1790,30 @@ VM owner granted narrow descriptor order and plain/logical identifier companion
 emission; preserve raw reference evaluation order, FDI/factory/context metadata
 and broad nonsuspending class fallback guards. Gate whole language/Function/
 Object/Proxy and both-backend grouped metadata cases.
+
+
+### JS-29 — callable metadata and precise NamedEvaluation
+
+Completed source `0c1f3e31` + `4d7a759d` on fixed JS28 evidence b03ae45b.
+Function length-before-name initial property order, lossless symbol/UTF16 class,
+field and object function names, precise source/target assignment inference in
+both backends, object Init canonical-key NamedEvaluation and shared suspending
+class method metadata. Grouped references still resolve normally while grouped
+assignment targets do not infer names. Existing factory/FDI/HomeObject/context
+and broad class fallback guards stay intact.
+
+Linux workspace **3782/17 skipped +4 docs**, explicit host **1**, ownedJS/regex
+**598/1 skipped**. Five new both-backend grouped integrationtests plus replaced
+legacy heuristic positive/negative regression. Whole language **+12files/+24
+variants**, Function **+2/+4**, Proxy **+1/+2**, Object unchanged, all **zero losses**.
+Same four RegExp literal10s deadline files/eightvariants. Exact proof:
+[js-lang_JS29-evidence.json](js-lang_JS29-evidence.json),
+[js-lang_JS29-interface.md](js-lang_JS29-interface.md).
+
+Next JS30: adopt coherent0b41fbf1 dependency, reclassify actual failures, then
+whole pattern IteratorRecord/GetIterator/IteratorClose fidelity. Reserve VM21
+suspended scoped declarations; existing sloppy TDZ cases may be recovered byVM18.
+Remove unsupported array iterator assumptions only within a faithful protocol
+adapter; late validation of cached next, object iterator validation, mutable
+array length and return hooks, normal-versus-throw completion precedence need
+bulk coverage. Exact shared close/compiler hooks require parent/VM coordination.

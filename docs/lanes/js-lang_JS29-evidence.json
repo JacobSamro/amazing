@@ -1,0 +1,269 @@
+{
+  "base_commit": "b03ae45b096042347d97af935647deaf9118458d",
+  "source_commit": "4d7a759dde83b10bc3545f3463b47e85335a31d9",
+  "corpora": {
+    "language": {
+      "before": {
+        "files": {
+          "pass": 24134,
+          "fail": 408,
+          "timeout": 4,
+          "unsupported": 26,
+          "skipped": 29300
+        },
+        "variants": {
+          "pass": 44721,
+          "fail": 613,
+          "timeout": 8,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 24146,
+          "fail": 396,
+          "timeout": 4,
+          "unsupported": 26,
+          "skipped": 29300
+        },
+        "variants": {
+          "pass": 44745,
+          "fail": 589,
+          "timeout": 8,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "gained_files": [
+        "language/computed-property-names/class/static/method-number-order.js",
+        "language/computed-property-names/class/static/method-string-order.js",
+        "language/computed-property-names/class/static/method-symbol-order.js",
+        "language/expressions/assignment/fn-name-cover.js",
+        "language/expressions/assignment/fn-name-lhs-cover.js",
+        "language/expressions/assignment/fn-name-lhs-member.js",
+        "language/statements/class/definition/fn-length-static-precedence-order.js",
+        "language/statements/class/definition/fn-name-accessor-get.js",
+        "language/statements/class/definition/fn-name-accessor-set.js",
+        "language/statements/class/definition/fn-name-gen-method.js",
+        "language/statements/class/definition/fn-name-method.js",
+        "language/statements/class/definition/fn-name-static-precedence-order.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        "language/computed-property-names/class/static/method-number-order.js#non-strict",
+        "language/computed-property-names/class/static/method-number-order.js#strict",
+        "language/computed-property-names/class/static/method-string-order.js#non-strict",
+        "language/computed-property-names/class/static/method-string-order.js#strict",
+        "language/computed-property-names/class/static/method-symbol-order.js#non-strict",
+        "language/computed-property-names/class/static/method-symbol-order.js#strict",
+        "language/expressions/assignment/fn-name-cover.js#non-strict",
+        "language/expressions/assignment/fn-name-cover.js#strict",
+        "language/expressions/assignment/fn-name-lhs-cover.js#non-strict",
+        "language/expressions/assignment/fn-name-lhs-cover.js#strict",
+        "language/expressions/assignment/fn-name-lhs-member.js#non-strict",
+        "language/expressions/assignment/fn-name-lhs-member.js#strict",
+        "language/statements/class/definition/fn-length-static-precedence-order.js#non-strict",
+        "language/statements/class/definition/fn-length-static-precedence-order.js#strict",
+        "language/statements/class/definition/fn-name-accessor-get.js#non-strict",
+        "language/statements/class/definition/fn-name-accessor-get.js#strict",
+        "language/statements/class/definition/fn-name-accessor-set.js#non-strict",
+        "language/statements/class/definition/fn-name-accessor-set.js#strict",
+        "language/statements/class/definition/fn-name-gen-method.js#non-strict",
+        "language/statements/class/definition/fn-name-gen-method.js#strict",
+        "language/statements/class/definition/fn-name-method.js#non-strict",
+        "language/statements/class/definition/fn-name-method.js#strict",
+        "language/statements/class/definition/fn-name-static-precedence-order.js#non-strict",
+        "language/statements/class/definition/fn-name-static-precedence-order.js#strict"
+      ],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "54341ab18298309c46f1ca75b8015f8a404dcb297ab101ecbf3862ec2158189d",
+      "after_host_sha256": "16c7fb38e45ca47eaf0a49bd9426695cde77fdefd89c3f341222317dbc12032c",
+      "before_classification_sha256": "8c268dc29332aa2fe242b8ee5dd99a6cdabb7299f39ca6515a79f81ba60d687a",
+      "after_classification_sha256": "242fd7baf58847a21c5945a7d5d15c91a8dcedd71cdbb6a0451b51b0f2918bbd"
+    },
+    "built-ins-Object": {
+      "before": {
+        "files": {
+          "pass": 3338,
+          "fail": 75,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50458
+        },
+        "variants": {
+          "pass": 6662,
+          "fail": 144,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 3338,
+          "fail": 75,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50458
+        },
+        "variants": {
+          "pass": 6662,
+          "fail": 144,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "54341ab18298309c46f1ca75b8015f8a404dcb297ab101ecbf3862ec2158189d",
+      "after_host_sha256": "16c7fb38e45ca47eaf0a49bd9426695cde77fdefd89c3f341222317dbc12032c",
+      "before_classification_sha256": "e8e2114e545ee1439f137fa7a2299a798a3fc610bec1bb77205b4a1d5b58ab8f",
+      "after_classification_sha256": "e8e2114e545ee1439f137fa7a2299a798a3fc610bec1bb77205b4a1d5b58ab8f"
+    },
+    "built-ins-Function": {
+      "before": {
+        "files": {
+          "pass": 501,
+          "fail": 13,
+          "timeout": 1,
+          "unsupported": 0,
+          "skipped": 53357
+        },
+        "variants": {
+          "pass": 878,
+          "fail": 26,
+          "timeout": 1,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 503,
+          "fail": 11,
+          "timeout": 1,
+          "unsupported": 0,
+          "skipped": 53357
+        },
+        "variants": {
+          "pass": 882,
+          "fail": 22,
+          "timeout": 1,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [
+        "built-ins/Function/prototype/bind/instance-name-non-string.js",
+        "built-ins/Function/prototype/property-order.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        "built-ins/Function/prototype/bind/instance-name-non-string.js#non-strict",
+        "built-ins/Function/prototype/bind/instance-name-non-string.js#strict",
+        "built-ins/Function/prototype/property-order.js#non-strict",
+        "built-ins/Function/prototype/property-order.js#strict"
+      ],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "54341ab18298309c46f1ca75b8015f8a404dcb297ab101ecbf3862ec2158189d",
+      "after_host_sha256": "16c7fb38e45ca47eaf0a49bd9426695cde77fdefd89c3f341222317dbc12032c",
+      "before_classification_sha256": "35ea1512c7d6e11697c301e842d5ddabc7d058f5ad59e0a008d9b4f19ffc0a16",
+      "after_classification_sha256": "13072d2095153cc9cdd88ee1aa4ee5f7f6c5c7cc80e319e89d37f0f4d16ebc51"
+    },
+    "built-ins-Proxy": {
+      "before": {
+        "files": {
+          "pass": 280,
+          "fail": 31,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53561
+        },
+        "variants": {
+          "pass": 545,
+          "fail": 62,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 281,
+          "fail": 30,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53561
+        },
+        "variants": {
+          "pass": 547,
+          "fail": 60,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [
+        "built-ins/Proxy/revocable/revocation-function-property-order.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        "built-ins/Proxy/revocable/revocation-function-property-order.js#non-strict",
+        "built-ins/Proxy/revocable/revocation-function-property-order.js#strict"
+      ],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "54341ab18298309c46f1ca75b8015f8a404dcb297ab101ecbf3862ec2158189d",
+      "after_host_sha256": "16c7fb38e45ca47eaf0a49bd9426695cde77fdefd89c3f341222317dbc12032c",
+      "before_classification_sha256": "56bd7ed8b2e85694af8ab3d9f919f63cb0dae8f151b0b844c6395fe96abbd723",
+      "after_classification_sha256": "e75416253a46ccb512669ec16a571ee48b413559a097ab9e1e3423c93ffa9c5e"
+    }
+  },
+  "source_series": [
+    "0c1f3e31e39946fe7a4931414ba87955a99d21a4",
+    "4d7a759dde83b10bc3545f3463b47e85335a31d9"
+  ],
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "gate": {
+    "platform": "Linux Boat",
+    "sandbox": "bx_2n57r7zz",
+    "source": "native /tmp/amazing-native-src-js-lang",
+    "workspace_passed": 3782,
+    "workspace_skipped": 17,
+    "doctests_passed": 4,
+    "host_example_passed": 1,
+    "owned_js_regex_passed": 598,
+    "owned_skipped": 1,
+    "new_grouped_tests": 5,
+    "updated_existing_naming_regression": true,
+    "timeout_seconds": 10,
+    "jobs": 8
+  },
+  "iterations": [
+    "0c1f3e31 full workspace3782/17skip+host1+4docs; four corpora +14files/+28variants zero loss, retained as iteration because grouped LHS syntax naming correction missing",
+    "initial --ref HEAD wrapper rejected before remote execution; explicit SHA corrected"
+  ]
+}
