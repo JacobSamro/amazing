@@ -1,5 +1,8 @@
 // Synchronous ForIn/OfBodyEvaluation adapted from lucid-softworks/lumen
 // (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
+// Portions ported from boa-dev/boa (core/engine/src/builtins/error/{mod,aggregate,type}.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// Error-family allocation, metadata and iterable algorithms adapted to Amazing.
 // Async-generator ReturnStatement Await adapted from lucid-softworks/lumen
 // (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // StatementList/try completion portions adapted from lucid-softworks/lumen
@@ -2438,6 +2441,12 @@ impl Interpreter {
             };
         }
         if !new_target.is_object() { return Err(Throw::type_error("newTarget is not an object")); }
+        // Error-family constructors own OrdinaryCreateFromConstructor before
+        // message/cause/iterable evaluation. Generic allocation must not read
+        // newTarget.prototype first or overwrite the returned Error's prototype.
+        if matches!(&fun.body, FunctionBody::Native(native) if runtime_is_error_constructor(*native)) {
+            return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
+        }
         // The intrinsic Promise algorithm owns allocation: its IsCallable
         // executor check precedes GetPrototypeFromConstructor. Dispatch by
         // native identity, never the mutable global binding or function name.

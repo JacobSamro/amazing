@@ -1,3 +1,6 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/error/{mod,aggregate,type}.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// Error-family allocation, metadata and iterable algorithms adapted to Amazing.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/math/mod.rs,
 // core/engine/src/builtins/promise/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
@@ -108,19 +111,15 @@ impl Interpreter {
         // compare against at call time.
         let error_prototype = self.error_proto.clone();
         if let JsValue::Object(function) = &error_constructor {
-            function.borrow_mut().define("prototype", Property {
-                accessor: false,
-                value: JsValue::Object(error_prototype.clone()), writable: true,
-                enumerable: false, configurable: true, getter: None, setter: None,
-            }).unwrap();
+            binary_configure_constructor(function, "Error", 1, &error_prototype);
         }
         {
             let mut prototype = error_prototype.borrow_mut();
             prototype.proto = Some(self.object_proto.clone());
-            prototype.set_own("name", JsValue::str("Error"));
-            prototype.set_own("message", JsValue::str(""));
-            prototype.set_own("toString", Self::native("toString", native_error_to_string, &self.function_proto));
-            prototype.set_own("constructor", error_constructor.clone());
+            prototype.define("name", symbol_data(JsValue::str("Error"), true, true)).unwrap();
+            prototype.define("message", symbol_data(JsValue::str(""), true, true)).unwrap();
+            prototype.define("toString", symbol_data(Self::native("toString", native_error_to_string, &self.function_proto), true, true)).unwrap();
+            prototype.define("constructor", symbol_data(error_constructor.clone(), true, true)).unwrap();
         }
         {
             // `Error.prototype.stack` accessor (proposal error-stack-accessor,
@@ -144,27 +143,29 @@ impl Interpreter {
             runtime_method_attributes(error, "isError", 1);
         }
         self.define_global("Error", error_constructor.clone());
-        for (name, native) in [
-            ("EvalError", native_eval_error as crate::value::NativeFn),
-            ("TypeError", native_type_error as crate::value::NativeFn),
-            ("RangeError", native_range_error as crate::value::NativeFn),
-            ("ReferenceError", native_reference_error as crate::value::NativeFn),
-            ("SyntaxError", native_syntax_error as crate::value::NativeFn),
-            ("URIError", native_uri_error as crate::value::NativeFn),
-            ("AggregateError", native_aggregate_error as crate::value::NativeFn),
-            ("SuppressedError", native_suppressed_error as crate::value::NativeFn),
+        for (name, length, native) in [
+            ("EvalError", 1, native_eval_error as crate::value::NativeFn),
+            ("TypeError", 1, native_type_error as crate::value::NativeFn),
+            ("RangeError", 1, native_range_error as crate::value::NativeFn),
+            ("ReferenceError", 1, native_reference_error as crate::value::NativeFn),
+            ("SyntaxError", 1, native_syntax_error as crate::value::NativeFn),
+            ("URIError", 1, native_uri_error as crate::value::NativeFn),
+            ("AggregateError", 2, native_aggregate_error as crate::value::NativeFn),
+            ("SuppressedError", 3, native_suppressed_error as crate::value::NativeFn),
         ] {
             let constructor = Self::native_constructor(name, native, &self.function_proto);
             if let JsValue::Object(function) = &constructor {
                 if let JsValue::Object(error_function) = &error_constructor {
                     function.borrow_mut().proto = Some(error_function.clone());
                 }
-                if let Some(JsValue::Object(prototype)) = function.borrow().get_own("prototype") {
+                let prototype = function.borrow().get_own("prototype");
+                if let Some(JsValue::Object(prototype)) = prototype {
+                    binary_configure_constructor(function, name, length, &prototype);
                     let mut prototype = prototype.borrow_mut();
                     prototype.proto = Some(error_prototype.clone());
-                    prototype.set_own("name", JsValue::str(name));
-                    prototype.set_own("message", JsValue::str(""));
-                    prototype.set_own("constructor", constructor.clone());
+                    prototype.define("name", symbol_data(JsValue::str(name), true, true)).unwrap();
+                    prototype.define("message", symbol_data(JsValue::str(""), true, true)).unwrap();
+                    prototype.define("constructor", symbol_data(constructor.clone(), true, true)).unwrap();
                 }
             }
             self.define_global(name, constructor);

@@ -1,3 +1,6 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/error/{mod,aggregate,type}.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// Error-family allocation, metadata and iterable algorithms adapted to Amazing.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/array/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // Generic Array search/reduction length protocols; other builtin algorithms unchanged.
@@ -1107,10 +1110,6 @@ fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<Js
 }
 
 fn native_error_value(i: &mut Interpreter, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    // §20.5.1.1: `runtime_error_object` installs "message" via `symbol_data`
-    // ({writable:true, enumerable:false, configurable:true}), matching the
-    // fix this lane made to the equivalent hand-rolled construction --
-    // dev's refactor already covers it plus §20.5.7.1 error `cause`.
     let error = runtime_error_object(i, args.first().unwrap_or(&JsValue::Undefined))?;
     runtime_install_error_cause(i, &error, args.get(1).unwrap_or(&JsValue::Undefined))?;
     Ok(JsValue::Object(error))
