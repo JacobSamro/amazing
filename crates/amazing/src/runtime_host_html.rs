@@ -178,6 +178,8 @@ impl HtmlWindowProperty {
 /// Immutable policy identity of an actual live browsing-context Document.
 #[derive(Clone, Debug)]
 pub(super) struct HtmlDocumentContext {
+    pub(super) document: NodeIdx,
+    pub(super) document_generation: u64,
     pub(super) document_url: String,
     pub(super) fallback_base_url: Option<String>,
     pub(super) origin: amazing_fetch::Origin,
@@ -224,7 +226,8 @@ impl FrameRuntime {
                 matches_about_url(&url, "blank") || (matches_about_url(&url, "srcdoc") && url.query().is_none()));
             (*generation == context.document_generation && applicable).then(|| base.clone())
         });
-        Some(HtmlDocumentContext { document_url: context.document_url.clone(), fallback_base_url,
+        Some(HtmlDocumentContext { document, document_generation: context.document_generation,
+            document_url: context.document_url.clone(), fallback_base_url,
             origin: context.fetch_origin.clone(), top_level_origin: current.fetch_origin.clone(), ancestor_origins: ancestors })
     }
 
@@ -2446,11 +2449,17 @@ mod tests {
         let state = bindings.state.borrow();
         let borrowed = host.borrow();
         let root = state.frames.document_context(&borrowed.dom, NodeIdx(0)).unwrap();
+        assert_eq!(root.document, NodeIdx(0));
+        assert_eq!(Some(root.document_generation), borrowed.dom.node_generation(root.document));
         assert_eq!(root.document_url, "https://example.test/committed/page");
         assert_eq!(root.origin.serialize(), "https://example.test");
         assert!(root.ancestor_origins.is_empty());
         let children: Vec<_> = state.frames.documents.values().filter_map(|entry| entry.document).collect();
         let snapshots: Vec<_> = children.iter().map(|document| state.frames.document_context(&borrowed.dom, *document).unwrap()).collect();
+        for (document, snapshot) in children.iter().zip(&snapshots) {
+            assert_eq!(snapshot.document, *document);
+            assert_eq!(Some(snapshot.document_generation), borrowed.dom.node_generation(*document));
+        }
         assert_eq!(snapshots.len(), 2);
         for (realm, context) in &state.frames.contexts {
             let by_realm = state.frames.document_context_for_realm(&borrowed.dom, *realm).unwrap();
