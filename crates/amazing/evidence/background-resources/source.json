@@ -1,7 +1,7 @@
 {
-  "before_native": "5ea318acc6888d55d9b73623b63bcd220deb944f",
+  "before_native": "f047ee3b0551958f73b2331f79192c813897797a",
   "before_pixels": "ff8d81978711ca7e2cd343f3351f5d2632009b04",
-  "after": "668e33eb9018bb4140c6accbed1d688934010aff",
+  "after": "6570f74c73e2f3dc2b3ad635bbc5eeb425f62594",
   "measured_release_source": "c4939d16b4143a41a09537e695116cedb33c9979",
   "before_renderer": "25cbe763b69edf8dec9e85c208171e0cfafdf1b7bda339c0a057907cb860496b",
   "after_renderer": "ff774748c07c38c0b51bb0df64c651d4d927669700fdaaf92659f994ab80f098",
@@ -15,16 +15,19 @@
   "platform": "Linux Ubuntu 24.04, Boat amazing-builder, native /tmp",
   "box": "bx_ep8e2mv6",
   "native_before": {
-    "passed": 4030,
-    "failed": 1,
+    "passed": 4031,
+    "failed": 0,
     "skipped": 17,
     "doctests": 4
   },
   "native_after": {
-    "passed": 4032,
-    "failed": 1,
+    "passed": 4033,
+    "failed": 0,
     "skipped": 17,
     "doctests": 4
   },
-  "unchanged_native_failure": "amazing-html template_tests::template_table_form_start_is_ignored_and_does_not_capture_later_form"
+  "test_only_corrections": [
+    "c49fc3e4",
+    "f08a4af61e5a343db285064159d2dc765a98a8ac"
+  ]
 }

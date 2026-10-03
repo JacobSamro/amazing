@@ -6,4 +6,4 @@ Fixed source and binary identities, viewport, jobs and timeout are in source.jso
 
 18→37 passing cases, +19/zero lost/new/removed, retaining every old strong13 fallback-era pass. All42 references contain painted pixels. Round1 actual and reference have3756 nonwhite pixels and identical PPM SHA-256; inspected PNGs record genuine orange diamonds. The five remaining round/slice mismatches are listed in comparison.json and remain separately owned lower-layout gaps.
 
-Native before4030/1failed/17skipped and after4032/1failed/17skipped; both4 doctests pass. Both new principal/pseudo real pixels and retained resource identity groups pass. The identical existing HTML template failure remains explicit; this checkpoint does not claim a completely green workspace.
+Final matched native before4031 passed/17 skipped and after4033 passed/17 skipped; both4 doctests pass. Both new principal/pseudo real pixels and retained resource identity groups pass. The HTML owner validated test-only f08 correction aligns the stale template-form expectation with the current Standard; adopted identically on both sides. Final workspace is green.
