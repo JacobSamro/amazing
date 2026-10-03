@@ -44,10 +44,10 @@ fn ordinary_form_end_removes_noncurrent_form_from_the_stack() {
 }
 
 #[test]
-fn template_table_form_start_is_ignored_and_does_not_capture_later_form() {
-    let dom = parse("<!doctype html><body><template><table><form id=ignored><tr><td>x</td></tr></table></template><form id=after>y</form>");
+fn template_table_form_is_inserted_without_capturing_later_form() {
+    let dom = parse("<!doctype html><body><template><table><form id=inside><tr><td>x</td></tr></table></template><form id=after>y</form>");
     let html = markup(&dom, dom.document_body(NodeIdx(0)).unwrap().unwrap());
-    assert!(!html.contains("ignored"));
+    assert!(html.contains("<form id=\"inside\"></form>"));
     assert!(html.ends_with("<form id=\"after\">y</form>"));
 }
 
