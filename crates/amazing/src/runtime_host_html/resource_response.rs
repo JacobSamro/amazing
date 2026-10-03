@@ -252,6 +252,62 @@ mod tests {
     }
 
     #[test]
+    fn actual_creator_and_response_policies_are_installed_before_child_script_fetches() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse("<!doctype html><body>"), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(JS_CAPACITY).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = crate::runtime_binding_host::install(&mut js, host.clone()).unwrap();
+        bindings.set_document_url(&mut js, "https://example.test/root.html");
+        let mut creator = amazing_fetch::service::ClientContext::default();
+        let mut headers = amazing_fetch::HeaderList::default();
+        headers.append("Content-Security-Policy", "img-src 'none'").unwrap();
+        creator.csp = amazing_fetch::CspPolicyList::from_headers(&headers).unwrap();
+        RuntimeBindingHost { js: &mut js, state: bindings.state.clone() }
+            .set_document_network_policy(NodeIdx(0), creator.clone()).unwrap();
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let observed = seen.clone();
+        bindings.set_frame_resource_loader(Rc::new(move |request| {
+            observed.borrow_mut().push(request.clone());
+            let mut response = response(&request.requested_url, Some("text/html"), b"<!doctype html><body>".to_vec());
+            response.headers.append("Content-Security-Policy", "connect-src 'none'").unwrap();
+            Ok(response)
+        }));
+        let frames = {
+            let mut host = host.borrow_mut();
+            let body = host.dom.tree_order(NodeIdx(0)).into_iter().find(|node| host.dom.local_name(*node) == Some("body")).unwrap();
+            let blank = host.dom.create_element(body, "iframe");
+            let srcdoc = host.dom.create_element(body, "iframe");
+            host.dom.set_attribute(srcdoc, "srcdoc", "<p>child").unwrap();
+            let remote = host.dom.create_element(body, "iframe");
+            host.dom.set_attribute(remote, "src", "/remote").unwrap();
+            [blank, srcdoc, remote]
+        };
+        bindings.navigate_iframes(&mut js);
+        let documents = frames.map(|frame| bindings.state.borrow().frames.documents[&frame].document.unwrap());
+        let adapter = RuntimeBindingHost { js: &mut js, state: bindings.state.clone() };
+        for document in documents[..2].iter().copied() {
+            let generation = host.borrow().dom.node_generation(document).unwrap();
+            assert_eq!(adapter.document_network_policy(document, generation).unwrap().csp, creator.csp);
+        }
+        let remote_generation = host.borrow().dom.node_generation(documents[2]).unwrap();
+        let remote = adapter.document_network_policy(documents[2], remote_generation).unwrap();
+        assert_ne!(remote.csp, creator.csp);
+        assert_eq!(seen.borrow()[0].client_context.as_ref().unwrap().csp, creator.csp);
+        // Replacing the creator's policy cannot change inherited snapshots.
+        adapter.set_document_network_policy(NodeIdx(0), amazing_fetch::service::ClientContext::default()).unwrap();
+        for document in documents[..2].iter().copied() {
+            let generation = host.borrow().dom.node_generation(document).unwrap();
+            assert_eq!(adapter.document_network_policy(document, generation).unwrap().csp, creator.csp);
+        }
+        drop(adapter);
+        let script = host.borrow_mut().dom.create_element(documents[2], "script");
+        bindings.fetch_document_classic_script(&mut js, documents[2], script, "/script.js",
+            "https://example.test/remote", None).unwrap();
+        assert_eq!(seen.borrow().last().unwrap().client_context.as_ref().unwrap().csp, remote.csp);
+        assert!(host.try_borrow_mut().is_ok());
+    }
+
+    #[test]
     fn canonical_document_errors_and_unknown_mime_do_not_use_pinned_extensions_or_fallback() {
         for case in 0..4 {
             let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
