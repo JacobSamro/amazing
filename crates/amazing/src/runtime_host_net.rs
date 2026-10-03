@@ -1794,8 +1794,22 @@ mod tests {
         assert!(!bindings.has_pending_network_io());
         js.run_script("var data=new XMLHttpRequest();data.open('GET','data:text/plain,ready');data.send();").unwrap();
         assert!(!bindings.has_pending_network_io());
+        js.run_script("fetch('data:text/plain,ready').then(()=>{});").unwrap();
+        assert!(!bindings.has_pending_network_io());
         js.run_script("var xhr=new XMLHttpRequest();xhr.open('GET','/wait');xhr.send();").unwrap();
         assert!(bindings.has_pending_network_io());
+        let wire = {
+            let state = bindings.state.borrow();
+            match &state.net.xhr_pending.last().unwrap().transport {
+                XhrTransport::Dispatch(pending) => pending.id(), XhrTransport::Data => panic!("HTTP transport"),
+            }
+        };
+        assert!(bindings.state.borrow_mut().net.fetch_network.dispatcher.set_paused(wire, true));
+        assert!(!bindings.has_pending_network_io());
+        assert!(bindings.state.borrow_mut().net.fetch_network.dispatcher.set_paused(wire, false));
+        assert!(bindings.has_pending_network_io());
+        assert!(bindings.state.borrow_mut().net.fetch_network.dispatcher.cancel(wire));
+        assert!(!bindings.has_pending_network_io());
         js.run_script("xhr.abort()").unwrap();
         assert!(!bindings.has_pending_network_io());
         js.run_script("xhr.open('GET','/wait');xhr.send();").unwrap();
