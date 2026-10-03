@@ -1,3 +1,4 @@
+use crate::DomError;
 use crate::{Dom, NodeIdx, NodeKind};
 use crate::markup::IncrementalDocumentImport;
 use crate::shadow::{ShadowMode, ShadowOptions, SlotAssignment};
