@@ -195,12 +195,20 @@ pub(crate) fn coroutine_await_sync(i: &mut Interpreter, value: JsValue) -> Optio
 
 /// ReturnStatement and injected return own an Await in an async generator,
 /// independently of the legacy policy for its other await/yield operations.
-fn coroutine_return_value(i: &mut Interpreter, value: JsValue) -> Result<JsValue, Throw> {
-    let is_async_generator = i.frames.last().and_then(|frame| frame.own_function.as_ref())
+fn current_async_generator(i: &Interpreter) -> bool {
+    i.frames.last().and_then(|frame| frame.own_function.as_ref())
         .is_some_and(|function| function.borrow().func.as_ref()
-            .is_some_and(|function| function.is_async && function.is_generator));
-    if !is_async_generator { return Ok(value); }
-    match coroutine_await_mode(i, value.clone(), false, true) {
+            .is_some_and(|function| function.is_async && function.is_generator))
+}
+
+fn coroutine_return_await(i: &mut Interpreter, value: JsValue) -> Option<Result<JsValue, Throw>> {
+    if !current_async_generator(i) { return None; }
+    coroutine_await_mode(i, value, false, true)
+}
+
+fn coroutine_return_value(i: &mut Interpreter, value: JsValue) -> Result<JsValue, Throw> {
+    if !current_async_generator(i) { return Ok(value); }
+    match coroutine_return_await(i, value.clone()) {
         Some(result) => result,
         None => i.await_value(value),
     }

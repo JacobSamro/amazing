@@ -637,7 +637,9 @@ impl Interpreter {
             let disposed = self
                 .call_value(&d.method, d.value.clone(), Vec::new())
                 .and_then(|v| if d.method_is_async {
-                    coroutine_await(self,v.clone()).unwrap_or_else(||self.await_value(v))
+                    coroutine_return_await(self, v.clone())
+                        .or_else(|| coroutine_await(self, v.clone()))
+                        .unwrap_or_else(|| self.await_value(v))
                 } else { Ok(v) });
             if let Err(new_err) = disposed {
                 completion = match completion {
