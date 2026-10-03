@@ -47,7 +47,7 @@ fn quad(mut values: Vec<String>) -> String {
     }
     values.join(" ")
 }
-fn supported_shorthand(name: &str) -> bool {
+fn serializable_shorthand(name: &str) -> bool {
     matches!(
         name,
         "margin"
@@ -89,6 +89,84 @@ fn supported_shorthand(name: &str) -> bool {
             | "list-style"
             | "background-position"
     )
+}
+const SHORTHANDS: &[&str] = &[
+    "animation",
+    "background",
+    "background-position",
+    "border",
+    "border-block",
+    "border-block-color",
+    "border-block-end",
+    "border-block-start",
+    "border-block-style",
+    "border-block-width",
+    "border-bottom",
+    "border-color",
+    "border-image",
+    "border-inline",
+    "border-inline-color",
+    "border-inline-end",
+    "border-inline-start",
+    "border-inline-style",
+    "border-inline-width",
+    "border-left",
+    "border-radius",
+    "border-right",
+    "border-style",
+    "border-top",
+    "border-width",
+    "contain-intrinsic-size",
+    "flex",
+    "flex-flow",
+    "font",
+    "font-synthesis",
+    "font-variant",
+    "gap",
+    "grid",
+    "grid-area",
+    "grid-column",
+    "grid-row",
+    "grid-template",
+    "inset",
+    "inset-block",
+    "inset-inline",
+    "list-style",
+    "margin",
+    "margin-block",
+    "margin-inline",
+    "outline",
+    "overflow",
+    "padding",
+    "padding-block",
+    "padding-inline",
+    "place-content",
+    "place-items",
+    "place-self",
+    "text-spacing",
+    "text-wrap",
+    "transition",
+    "white-space",
+];
+/// Recognized shorthand names, using the core cascade expansion registry.
+/// Serialization can still be unrepresentable or outside the implemented seam.
+pub fn cssom_shorthand_names() -> impl Iterator<Item = &'static str> {
+    SHORTHANDS.iter().copied()
+}
+/// Supported ordinary property names for CSSOM dashed/camel-case accessors.
+/// Includes shorthand/legacy alias names, excludes custom and unknown names.
+pub fn cssom_property_names() -> Vec<&'static str> {
+    let mut names: Vec<_> = known_properties()
+        .chain(LOGICAL_BORDER_LONGHANDS)
+        .chain(cssom_shorthand_names())
+        .chain(["word-wrap"])
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    names
+}
+fn supported_shorthand(name: &str) -> bool {
+    SHORTHANDS.contains(&name)
 }
 /// Project supported shorthand axes using the same expansion as the cascade.
 /// Reset-only axes are included; unknown/unsupported names return None.
@@ -168,7 +246,7 @@ impl ComputedStyle {
             }
             return self.get(&name).map(str::to_owned);
         }
-        if !supported_shorthand(&name) {
+        if !serializable_shorthand(&name) {
             return None;
         }
         if name == "border" {
@@ -327,5 +405,33 @@ mod tests {
         assert!(names.contains(&"transform-origin"));
         assert!(names.contains(&"border-inline-start-color"));
         assert!(!names.contains(&"font-variant"));
+        let idl = cssom_property_names();
+        for name in [
+            "margin",
+            "background",
+            "font",
+            "animation",
+            "border-radius",
+            "font-variant",
+            "border-inline-start-color",
+            "word-wrap",
+        ] {
+            assert!(idl.contains(&name), "{name}");
+        }
+        assert!(idl.windows(2).all(|w| w[0] < w[1]));
+        assert!(!idl.iter().any(|name| name.starts_with("--")));
+        assert!(
+            cssom_shorthand_longhands("font")
+                .unwrap()
+                .iter()
+                .any(|name| name == "font-family")
+        );
+        assert!(
+            cssom_shorthand_longhands("background")
+                .unwrap()
+                .iter()
+                .any(|name| name == "background-image")
+        );
+        assert_eq!(s.cssom_property_value("font"), None); // unsupported composite serializer, never join every reset axis
     }
 }

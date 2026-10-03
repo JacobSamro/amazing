@@ -2853,3 +2853,16 @@ Next CSS45 additive IDL property-name/shorthand-name enumeration, requested
 after fixed CSS44 gate began; no driver duplicated CSS grammar.
 
 CSS44 final: CSS403/workspace3564/17skip+4docs; parsing4215/5126 unchanged/lost0; images92/141 andtransforms145/348 unchanged/all489stable/lost0. Renderer8095e96bd006d5df0c4f3f262bc37a7b0624c12dc61c728d04e97a25e383d353. Six grouped regressions; installed CSSOM remains driver-owned, actual origin effect geometry layout-owned.
+
+### CSS45 — CSSOM property and shorthand registry
+
+Fixed CSS44 `d7bd30024de2649457396f5dcd752c95935375fb`. Driver owner js_date
+requested IDL names including shorthand accessors. Public cssom_property_names
+returns sorted/deduplicated supported ordinary names; cssom_shorthand_names
+exposes recognized shorthand names. Projection reuses lower expansion for
+font/background/grid/flex/animation reset axes. Serialization stays independent:
+unsupported composite getters remain None, never concatenate reset axes.
+Existing grouped regression expanded for names/order/projection/boundaries.
+Frozen final workspace/docs + identical15parsing + wholeimages/transforms gate.
+
+CSS45 final: workspace3564/17skip+4docs; parsing4215/5126 unchanged/lost0; wholeimages92/141 andtransforms145/348 all489classifications unchanged/lost0. Renderer0db48706510d198e73d827b94e128d6b482e7af522b149653f3e706474b245c4. Installed CSSOM proof remains driver-owned.
