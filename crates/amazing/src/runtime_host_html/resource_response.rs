@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn classic_options_capture_actual_enumerated_attributes_without_header_token_rules() {
-        use amazing_fetch::{CredentialsMode, RequestMode};
+        use amazing_fetch::{CredentialsMode, ReferrerPolicy, RequestMode};
         for (attribute, mode, credentials) in [
             ("", RequestMode::NoCors, CredentialsMode::Include),
             ("crossorigin", RequestMode::Cors, CredentialsMode::SameOrigin),
