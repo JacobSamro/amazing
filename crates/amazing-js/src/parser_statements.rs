@@ -95,7 +95,7 @@ impl Parser {
                 }
                 StmtKind::Function(Box::new(f))
             }
-            TokenKind::Keyword(crate::tokens::Keyword::Class) => {
+            TokenKind::Keyword(crate::tokens::Keyword::Class) | TokenKind::Punct(Punct::At) => {
                 let c = self.parse_class_rest()?;
                 let name = c
                     .name
@@ -1117,7 +1117,8 @@ impl Parser {
             | TokenKind::Ident(_)
             | TokenKind::PrivateIdent(_)
             | TokenKind::Punct(
-                Punct::LParen
+                Punct::At
+                | Punct::LParen
                 | Punct::LBracket
                 | Punct::Lbrace
                 | Punct::Bang

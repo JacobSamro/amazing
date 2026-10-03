@@ -655,7 +655,7 @@ impl Parser {
                     self.span_from(start),
                 ))
             }
-            TokenKind::Keyword(K::Class) => {
+            TokenKind::Keyword(K::Class) | TokenKind::Punct(Punct::At) => {
                 let c = self.parse_class_rest()?;
                 Ok(Expr::new(
                     ExprKind::Class(Box::new(c)),
@@ -1093,6 +1093,7 @@ impl Parser {
                 key: key.clone(),
                 key_utf16: key_utf16.clone(),
                 value: PropValue::Method(ClassMethod {
+                    decorators: Vec::new(),
                     key,
                     key_utf16,
                     kind,

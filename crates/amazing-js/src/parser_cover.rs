@@ -153,12 +153,14 @@ fn function_item(function: &FunctionItem) -> Result<(), SyntaxError> {
 }
 
 fn class_item(class: &ClassItem) -> Result<(), SyntaxError> {
+    for decorator in &class.decorators { expression(decorator, false)?; }
     if let Some(super_class) = &class.super_class {
         expression(super_class, false)?;
     }
     for member in &class.members {
         match member {
             ClassMember::Method(method) => {
+                for decorator in &method.decorators { expression(decorator, false)?; }
                 if let PropKey::Computed(expr) = &method.key {
                     expression(expr, false)?;
                 }
@@ -171,6 +173,7 @@ fn class_item(class: &ClassItem) -> Result<(), SyntaxError> {
                 validate_program(&method.body.body)?;
             }
             ClassMember::Field(field) => {
+                for decorator in &field.decorators { expression(decorator, false)?; }
                 if let PropKey::Computed(expr) = &field.key {
                     expression(expr, false)?;
                 }

@@ -677,6 +677,9 @@ pub(crate) enum InstanceElement {
     Field {
         key: FieldKey,
         init: Option<ast::Expr>,
+        name_key: Option<FieldKey>,
+        initializers: Vec<JsValue>,
+        extra_initializers: Vec<JsValue>,
     },
     PrivateMethod {
         name: PrivateName,
@@ -703,6 +706,9 @@ pub(crate) enum StaticElement {
     Field {
         key: FieldKey,
         init: Option<ast::Expr>,
+        name_key: Option<FieldKey>,
+        initializers: Vec<JsValue>,
+        extra_initializers: Vec<JsValue>,
     },
     PrivateMethod {
         name: PrivateName,
@@ -723,6 +729,7 @@ pub(crate) enum StaticElement {
 #[derive(Debug, Clone)]
 pub(crate) struct ClassElements {
     pub instance: Vec<InstanceElement>,
+    pub method_extra_initializers: Vec<JsValue>,
     pub class_env: crate::env::EnvHandle,
     pub home: Obj,
 }

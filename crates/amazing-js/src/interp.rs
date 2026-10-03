@@ -1697,6 +1697,8 @@ include!("interp_array.rs");
 include!("interp_array_protocol.rs");
 include!("interp_array_factories.rs");
 include!("interp_class_private.rs");
+include!("interp_decorators.rs");
+include!("interp_class_eval.rs");
 include!("interp_object_extra.rs");
 include!("interp_errors.rs");
 include!("interp_bound.rs");
@@ -1740,5 +1742,6 @@ include!("builtins_std_json_global.rs");
 include!("structured_clone.rs");
 include!("interp_regexp.rs");
 include!("interp_tests.rs");
+include!("interp_decorator_tests.rs");
 
 include!("interp_realm_tests.rs");

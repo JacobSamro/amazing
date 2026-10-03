@@ -314,6 +314,8 @@ pub struct Param {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassItem {
+    /// Decorator expressions in source evaluation order.
+    pub decorators: Vec<Expr>,
     /// `None` for anonymous class expressions; declarations always have a
     /// name (parser-enforced).
     pub name: Option<Ident>,
@@ -332,6 +334,8 @@ pub enum ClassMember {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassMethod {
+    /// Decorator expressions in source evaluation order.
+    pub decorators: Vec<Expr>,
     pub key: PropKey,
     /// Lossless code units when `key` is a quoted string literal.
     pub key_utf16: Option<Vec<u16>>,
@@ -356,6 +360,8 @@ pub enum MethodKind {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassField {
+    /// Decorator expressions in source evaluation order.
+    pub decorators: Vec<Expr>,
     pub key: PropKey,
     /// Lossless code units when `key` is a quoted string literal.
     pub key_utf16: Option<Vec<u16>>,

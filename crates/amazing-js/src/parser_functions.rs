@@ -251,15 +251,20 @@ impl Parser {
 
     /// Parses everything after the `class` keyword (consumed here).
     pub(super) fn parse_class_rest(&mut self) -> Result<ClassItem, SyntaxError> {
+        let decorators = self.parse_decorators()?;
+        self.parse_class_with_decorators(decorators)
+    }
+
+    pub(super) fn parse_class_with_decorators(&mut self, decorators: Vec<Expr>) -> Result<ClassItem, SyntaxError> {
         let saved_strict = self.strict_script;
         self.strict_script = true;
-        let result = self.parse_class_rest_inner();
+        let result = self.parse_class_rest_inner(decorators);
         self.strict_script = saved_strict;
         result
     }
 
-    fn parse_class_rest_inner(&mut self) -> Result<ClassItem, SyntaxError> {
-        self.bump(); // class
+    fn parse_class_rest_inner(&mut self, decorators: Vec<Expr>) -> Result<ClassItem, SyntaxError> {
+        if !self.eat_kw(crate::tokens::Keyword::Class) { return Err(self.err("decorators must precede a class")); }
         let name = if matches!(self.cur().kind, TokenKind::Ident(_)) {
             let id = self.expect_ident()?;
             if matches!(id.name.as_str(), "eval" | "arguments" | "implements" | "interface" | "let" | "package" | "private" | "protected" | "public" | "static" | "yield") {
@@ -286,7 +291,9 @@ impl Parser {
             if self.at_eof() {
                 return Err(self.err("unterminated class body: expected `}`"));
             }
+            let decorators = self.parse_decorators()?;
             if self.word("static") && self.nth_punct(1, Punct::Lbrace) {
+                if !decorators.is_empty() { return Err(self.err("static blocks cannot have decorators")); }
                 self.bump();
                 let saved = (self.in_function, self.in_generator, self.in_async,
                     self.in_new_target, self.loop_depth, self.switch_depth,
@@ -312,9 +319,10 @@ impl Parser {
                 continue;
             }
             if self.eat_punct(Punct::Semi) {
+                if !decorators.is_empty() { return Err(self.err("empty class elements cannot have decorators")); }
                 continue;
             }
-            members.push(self.parse_class_member()?);
+            members.push(self.parse_class_member(decorators)?);
         }
         self.bump(); // }
         self.class_heritage.pop();
@@ -341,6 +349,7 @@ impl Parser {
             }
         }
         Ok(ClassItem {
+            decorators,
             name,
             super_class,
             members,
@@ -362,7 +371,7 @@ impl Parser {
         }
     }
 
-    pub(super) fn parse_class_member(&mut self) -> Result<ClassMember, SyntaxError> {
+    pub(super) fn parse_class_member(&mut self, decorators: Vec<Expr>) -> Result<ClassMember, SyntaxError> {
         let start = self.cur_loc();
         let is_static = self.word("static") && self.nth_starts_member_key(1);
         if is_static {
@@ -412,6 +421,9 @@ impl Parser {
             }
             let actual_kind = if kind == MethodKind::Method && !is_static
                 && prop_key_name(&key) == Some("constructor") { MethodKind::Constructor } else { kind };
+            if actual_kind == MethodKind::Constructor && !decorators.is_empty() {
+                return Err(self.err_at(start, "constructors cannot have decorators"));
+            }
             let saved_field = std::mem::replace(&mut self.in_class_field_initializer, 0);
             let saved_super = self.super_call_allowed;
             self.super_call_allowed = actual_kind == MethodKind::Constructor
@@ -451,6 +463,7 @@ impl Parser {
             self.validate_method_params(&params, &body, true, has_use_strict(&body))?;
             self.validate_strict_statements(&body.body)?;
             return Ok(ClassMember::Method(ClassMethod {
+                decorators,
                 key,
                 key_utf16,
                 kind: actual_kind,
@@ -494,6 +507,7 @@ impl Parser {
             self.eat_punct(Punct::Semi);
         }
         Ok(ClassMember::Field(ClassField {
+            decorators,
             key,
             key_utf16,
             is_static,

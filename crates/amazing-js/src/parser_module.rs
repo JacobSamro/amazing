@@ -15,14 +15,15 @@ impl Parser {
                 && !self.nth_punct(1, Punct::Dot)
             {
                 ModuleItem::Import(self.parse_import_declaration(&mut imports)?)
+            } else if self.at_punct(Punct::At) {
+                self.parse_decorated_module_item(&mut exports)?
             } else if self.at_kw(K::Export) {
                 self.parse_export_declaration(&mut exports)?
             } else {
                 let statement = self.parse_stmt()?;
-                declarations.push(statement.clone());
                 ModuleItem::Statement(statement)
             };
-            if let ModuleItem::ExportNamed {
+            if let ModuleItem::Statement(stmt) | ModuleItem::ExportNamed {
                 declaration: Some(stmt),
                 ..
             }
@@ -152,7 +153,7 @@ impl Parser {
         })
     }
 
-    fn parse_export_declaration(
+    pub(super) fn parse_export_declaration(
         &mut self,
         exports: &mut HashSet<String>,
     ) -> Result<ModuleItem, SyntaxError> {
@@ -225,9 +226,10 @@ impl Parser {
             self.register_export(exports, "default", start)?;
             if self.at_kw(K::Function)
                 || self.at_kw(K::Class)
+                || self.at_punct(Punct::At)
                 || self.word("async") && self.nth_is_function(1)
             {
-                let kind = if self.at_kw(K::Class) {
+                let kind = if self.at_kw(K::Class) || self.at_punct(Punct::At) {
                     StmtKind::Class(Box::new(self.parse_class_rest()?))
                 } else {
                     let async_ = self.word("async");

@@ -738,6 +738,7 @@ impl Lexer {
             ';' => self.punct_tok(Punct::Semi),
             ',' => self.punct_tok(Punct::Comma),
             '~' => self.punct_tok(Punct::Tilde),
+            '@' => self.punct_tok(Punct::At),
             ':' => self.punct_tok(Punct::Colon),
             '{' => {
                 self.advance();
@@ -1871,8 +1872,8 @@ mod tests {
 
     #[test]
     fn unknown_characters_are_rejected_with_position() {
-        let e = err_of("a @ b");
+        let e = err_of("a § b");
         assert_eq!(e.column, 3);
-        assert!(e.message.contains('@'));
+        assert!(e.message.contains('§'));
     }
 }

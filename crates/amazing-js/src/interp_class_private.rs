@@ -1,3 +1,5 @@
+// Portions ported from lucid-softworks/lumen (crates/lumen/src/eval.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Private class elements (§15.7, §7.3.29-31, §6.2.10) and instance-element
 // initialization shared by base and derived constructors. `eval_class_inner`
 // in interp.rs builds the per-class `ClassElements`/`StaticElement` list this
@@ -42,8 +44,12 @@ fn define_field(
     class_env: &EnvHandle,
     key: &FieldKey,
     init: &Option<ast::Expr>,
+    name_key: &Option<FieldKey>,
+    initializers: &[JsValue],
+    extra_initializers: &[JsValue],
 ) -> Result<(), Throw> {
-    let name: crate::value::JsString = match key {
+    let name_key = name_key.as_ref().unwrap_or(key);
+    let name: crate::value::JsString = match name_key {
         FieldKey::Public(property_key) => Interpreter::property_function_name(property_key),
         // Private identifier text already includes the leading '#'.
         FieldKey::Private(private_name) => private_name.text().into(),
@@ -65,7 +71,7 @@ fn define_field(
                 // stays exact) rather than recomputing it through the lossy `String` helper
                 // `named_evaluation`'s own signature requires below for the ordinary function case.
                 let mut v = i.eval_named_class_expr(expr, scope, &name)?;
-                let name = match key {
+                let name = match name_key {
                     FieldKey::Public(property_key) => property_key_as_fn_name(property_key),
                     FieldKey::Private(private_name) => private_name.text().to_string(),
                 };
@@ -78,18 +84,28 @@ fn define_field(
     if init.is_some() {
         i.infer_function_name(&mut value, &name.to_utf8_lossy());
     }
+    for initializer in initializers {
+        value = i.call_value(initializer, owner.clone(), vec![value])?;
+    }
     let JsValue::Object(object) = owner else {
         return Err(Throw::type_error("class field target is not an object"));
     };
     match key {
         FieldKey::Public(property_key) => {
-            object.borrow_mut().define(property_key, Property::data(value)).ok();
+            let mut descriptor = JsObject::ordinary();
+            descriptor.set_own("value", value);
+            for attribute in ["writable", "enumerable", "configurable"] {
+                descriptor.set_own(attribute, JsValue::Bool(true));
+            }
+            if !i.define_own_property(object, property_key, &JsValue::object(descriptor))? {
+                return Err(Throw::type_error("could not define class field"));
+            }
         }
         FieldKey::Private(name) => {
             object.borrow_mut().private_add(name.clone(), PrivateElementKind::Field(value))?;
         }
     }
-    Ok(())
+    run_decorator_initializers(i, owner, extra_initializers)
 }
 
 /// InitializeInstanceElements (§15.7.11): replays a class's own instance
@@ -105,9 +121,7 @@ fn initialize_instance_elements(
     let home = Some(elements.home.clone());
     for element in &elements.instance {
         match element {
-            InstanceElement::Field { key, init } => {
-                define_field(i, this, home.clone(), &elements.class_env, key, init)?;
-            }
+            InstanceElement::Field { .. } => {}
             InstanceElement::PrivateMethod { name, value } => {
                 let JsValue::Object(object) = this else {
                     return Err(Throw::type_error("class instance target is not an object"));
@@ -123,6 +137,24 @@ fn initialize_instance_elements(
                     PrivateElementKind::Accessor { get: get.clone(), set: set.clone() },
                 )?;
             }
+        }
+    }
+    run_decorator_initializers(i, this, &elements.method_extra_initializers)?;
+    for element in &elements.instance {
+        if let InstanceElement::Field { key, init, name_key, initializers, extra_initializers } = element {
+            define_field(i, this, home.clone(), &elements.class_env, key, init, name_key, initializers, extra_initializers)?;
+        }
+    }
+    Ok(())
+}
+
+fn initialize_static_private_elements(constructor: &JsValue, statics: &[StaticElement]) -> Result<(), Throw> {
+    let JsValue::Object(object) = constructor else { unreachable!("class constructor") };
+    for element in statics {
+        match element {
+            StaticElement::PrivateMethod { name, value } => object.borrow_mut().private_add(name.clone(), PrivateElementKind::Method(value.clone()))?,
+            StaticElement::PrivateAccessor { name, get, set } => object.borrow_mut().private_add(name.clone(), PrivateElementKind::Accessor { get: get.clone(), set: set.clone() })?,
+            _ => {}
         }
     }
     Ok(())
@@ -143,20 +175,10 @@ fn run_static_elements(
 ) -> Result<(), Throw> {
     for element in statics {
         match element {
-            StaticElement::Field { key, init } => {
-                define_field(i, constructor, Some(home.clone()), class_env, key, init)?;
+            StaticElement::Field { key, init, name_key, initializers, extra_initializers } => {
+                define_field(i, constructor, Some(home.clone()), class_env, key, init, name_key, initializers, extra_initializers)?;
             }
-            StaticElement::PrivateMethod { name, value } => {
-                let JsValue::Object(object) = constructor else { unreachable!("constructor is always an object") };
-                object.borrow_mut().private_add(name.clone(), PrivateElementKind::Method(value.clone()))?;
-            }
-            StaticElement::PrivateAccessor { name, get, set } => {
-                let JsValue::Object(object) = constructor else { unreachable!("constructor is always an object") };
-                object.borrow_mut().private_add(
-                    name.clone(),
-                    PrivateElementKind::Accessor { get: get.clone(), set: set.clone() },
-                )?;
-            }
+            StaticElement::PrivateMethod { .. } | StaticElement::PrivateAccessor { .. } => {}
             StaticElement::Block(block) => {
                 eval_class_element_scope(i, constructor.clone(), Some(home.clone()), class_env, |i, scope| {
                     i.hoist(&block.body, scope)?;

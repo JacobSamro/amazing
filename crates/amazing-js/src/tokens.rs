@@ -305,6 +305,7 @@ pub fn keyword_of(s: &str) -> Option<Keyword> {
 /// Every punctuator in the grammar, matched longest-first by the lexer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Punct {
+    At,
     Lbrace,
     Rbrace,
     LParen,
@@ -419,6 +420,7 @@ impl Punct {
             Punct::BitXor => "^",
             Punct::Bang => "!",
             Punct::Tilde => "~",
+            Punct::At => "@",
             Punct::And => "&&",
             Punct::Or => "||",
             Punct::AndEq => "&=",

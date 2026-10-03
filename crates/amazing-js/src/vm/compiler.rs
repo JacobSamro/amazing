@@ -421,7 +421,7 @@ impl Compiler {
     }
 
     fn compile_class(&mut self, class: &ast::ClassItem, span: Span) -> Result<ClassCode, CompileError> {
-        if class.members.iter().any(|member| matches!(
+        if class_has_decorators(class) || class.members.iter().any(|member| matches!(
             member,
             ast::ClassMember::Field(_) | ast::ClassMember::StaticBlock(_)
         )) {
@@ -1028,7 +1028,7 @@ impl Compiler {
         match &expression.kind {
             ExprKind::Paren(inner) => self.named_class_expression(inner, name),
             ExprKind::Class(class) if class.name.is_none() => {
-                if class.members.iter().any(|member| matches!(member, ast::ClassMember::Field(_) | ast::ClassMember::StaticBlock(_))) && !may_suspend(expression) {
+                if (class_has_decorators(class) || class.members.iter().any(|member| matches!(member, ast::ClassMember::Field(_) | ast::ClassMember::StaticBlock(_)))) && !may_suspend(expression) {
                     let dst = self.register(expression.span)?;
                     self.emit(Instruction::TreeEvalNamedClass(dst, Rc::new(expression.clone()), name));
                     return Ok(dst);
@@ -1674,6 +1674,14 @@ fn private_target(mut target: &Expr) -> Option<(&Expr, &ast::Ident)> {
     }
 }
 
+fn class_has_decorators(class: &ast::ClassItem) -> bool {
+    !class.decorators.is_empty() || class.members.iter().any(|member| match member {
+        ast::ClassMember::Method(method) => !method.decorators.is_empty(),
+        ast::ClassMember::Field(field) => !field.decorators.is_empty(),
+        ast::ClassMember::StaticBlock(_) => false,
+    })
+}
+
 fn key_may_suspend(key: &ast::PropKey) -> bool {
     matches!(key, ast::PropKey::Computed(key) if may_suspend(key))
 }
@@ -1724,10 +1732,10 @@ fn may_suspend(expression: &Expr) -> bool {
         // Field initializers, static blocks and method bodies are their own
         // scopes; only the heritage and computed keys run in this body.
         ExprKind::Class(class) => {
-            class.super_class.as_ref().is_some_and(may_suspend)
+            all(&class.decorators) || class.super_class.as_ref().is_some_and(may_suspend)
                 || class.members.iter().any(|member| match member {
-                    ast::ClassMember::Method(method) => key_may_suspend(&method.key),
-                    ast::ClassMember::Field(field) => key_may_suspend(&field.key),
+                    ast::ClassMember::Method(method) => all(&method.decorators) || key_may_suspend(&method.key),
+                    ast::ClassMember::Field(field) => all(&field.decorators) || key_may_suspend(&field.key),
                     ast::ClassMember::StaticBlock(_) => false,
                 })
         }

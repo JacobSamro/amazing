@@ -53,6 +53,8 @@ use std::collections::{HashMap, HashSet};
 
 #[path = "parser_statements.rs"]
 mod statements;
+#[path = "parser_decorators.rs"]
+mod decorators;
 #[path = "parser_functions.rs"]
 mod functions;
 #[path = "parser_expressions.rs"]
