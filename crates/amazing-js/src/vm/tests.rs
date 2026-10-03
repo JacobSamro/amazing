@@ -1217,6 +1217,7 @@ fn jsvm17_default_callables_preserve_caller_metadata_and_binding_semantics() {
 #[test]
 fn jsvm21_actor_eligibility_preserves_reused_ast_across_realms_and_workers() {
     let mut i = Interpreter::new();
+    i.force_ast_callables = true;
     let parent = i.binding_current_realm();
     let child = i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
     i.global_env.declare_var("realmTag", JsValue::num(11.0)).unwrap();

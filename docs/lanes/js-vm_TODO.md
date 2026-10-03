@@ -1268,3 +1268,18 @@ Runtime callable logs contain 54 fallbacks in each mode: With/statement14,
 yield10, class initialization8, expression18, member4. They remain measured
 fallbacks; class initialization and suspended With are not silently ignored.
 Evidence: [js-vm23_evidence.json](js-vm23_evidence.json).
+
+## JSVM24 — suspended With object environments (in progress)
+
+Fixed dependency `ac6c786f`, with identical Window descriptor fixture correction
+`c03ce24b` on baseline and candidate. Extend the existing function-only With
+lowering to async and generator bodies; top-level programs retain their atomic
+fallback. EnvHandle scopes already reside in suspended VM frames, so this area
+adds no reference types, roots, FDI hooks or Promise policy.
+
+A test-only actor flag disables the four callable compilation seams to preserve
+real coroutine fixtures when syntax becomes natively supported. The full matrix
+compares native and forced AST async functions, generators, async generators,
+object methods and arrows, with resumed lookup/write/delete, proxies,
+unscopables, closures, control flow, external completion, head suspension,
+iteration and disposal. Measured whole-corpus and workspace proof pending.

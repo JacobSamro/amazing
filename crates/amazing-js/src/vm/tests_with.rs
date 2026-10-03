@@ -18,6 +18,9 @@ fn suspended_with_preserves_object_scopes_across_all_callable_drivers() {
         "var o={x:1},failed=false;try{with(null){PAUSE}}catch(e){failed=e instanceof TypeError}return failed",
         "with('abc'){PAUSE;return length===3}",
         "var o={x:3},outer=1;with(o){let x=8;PAUSE;return x===8&&o.x===3&&outer===1}",
+        "var target={x:1},reads=0,o=new Proxy(target,{get(t,k,r){if(k==='x')reads++;return Reflect.get(t,k,r)}});with(o){var first=x;PAUSE;target.x=2;return first===1&&x===2&&reads===2}",
+        "var o={x:1},reads=0,x=7;Object.defineProperty(o,Symbol.unscopables,{get(){reads++;return {x:reads>1}}});with(o){var first=x;PAUSE;return first===1&&x===7&&reads>=2}",
+        "var log=[],o={x:7};with(o){{using resource={[Symbol.dispose](){log.push(x)}};PAUSE;}}return log.join(',')==='7'",
     ];
     let mut failures = Vec::new();
     for force_ast in [false, true] {
@@ -72,6 +75,50 @@ fn suspended_with_restores_scope_on_external_return_and_throw() {
             }
             assert_eq!(i.run_script("log.join(',')==='7,7,9'&&capture()===7&&typeof x==='undefined'").unwrap(), JsValue::Bool(true));
             assert!(i.frames.is_empty());
+            i.run_script("log=[];g=f()").unwrap();
+            if asynchronous {
+                i.run_script("g.next().then(v=>log.push(v.value));").unwrap();
+                i.run_script("g.throw(9).catch(v=>log.push(v));").unwrap();
+            } else {
+                i.run_script("log.push(g.next().value);try{g.throw(9)}catch(e){log.push(e)}").unwrap();
+            }
+            assert_eq!(i.run_script("log.join(',')==='7,7,9'&&typeof x==='undefined'").unwrap(), JsValue::Bool(true));
         }
+    }
+}
+
+#[test]
+fn with_head_suspension_enters_scope_after_resuming_object_evaluation() {
+    for force_ast in [false, true] {
+        let mut i = Interpreter::new();
+        i.force_ast_callables = force_ast;
+        i.run_script("var capture;function* f(){with(yield 1){capture=()=>x;yield x;return x}}var g=f();var a=g.next();var b=g.next({x:7});var c=g.next();").unwrap();
+        assert_eq!(i.run_script("a.value===1&&b.value===7&&!b.done&&c.value===7&&c.done&&capture()===7&&typeof x==='undefined'").unwrap(), JsValue::Bool(true));
+        i.run_script("var out;async function h(){with(await Promise.resolve({x:8})){await 0;return x}}h().then(v=>out=v)").unwrap();
+        assert_eq!(i.run_script("out===8&&typeof x==='undefined'").unwrap(), JsValue::Bool(true));
+        assert!(i.frames.is_empty());
+    }
+}
+
+#[test]
+fn with_async_iteration_and_disposal_keep_original_object_environment() {
+    for force_ast in [false, true] {
+        let mut i = Interpreter::new();
+        i.force_ast_callables = force_ast;
+        i.run_script(r#"
+            var o={x:0},log=[],out,failed=false;
+            async function f(){
+                with(o){
+                    {await using resource={[Symbol.asyncDispose]:async function(){await 0;log.push(x)}};
+                     for await(var x of [Promise.resolve(2),Promise.resolve(4)]){await 0;log.push(x)}
+                    }
+                    return x===4;
+                }
+            }
+            f().then(v=>out=v,()=>failed=true);
+        "#).unwrap();
+        i.drain_microtasks().unwrap();
+        assert_eq!(i.run_script("out===true&&!failed&&o.x===4&&log.join(',')==='2,4,4'&&typeof x==='undefined'").unwrap(), JsValue::Bool(true));
+        assert!(i.frames.is_empty());
     }
 }
