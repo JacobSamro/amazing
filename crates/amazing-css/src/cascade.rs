@@ -70,6 +70,7 @@ impl AnimatedValues {
         origin: AnimatedOrigin,
     ) -> bool {
         let property = property.to_ascii_lowercase();
+        let property = if property == "font-width" { "font-stretch".to_owned() } else { property };
         if self.compositor_owned.contains_key(&(node, property.clone())) {
             return false;
         }
@@ -96,6 +97,7 @@ impl AnimatedValues {
 
     pub fn get(&self, node: NodeIdx, property: &str) -> Option<&AnimatedStyleValue> {
         let property = property.to_ascii_lowercase();
+        let property = if property == "font-width" { "font-stretch".to_owned() } else { property };
         if self.compositor_owned.contains_key(&(node, property.clone())) {
             return None;
         }
@@ -105,7 +107,9 @@ impl AnimatedValues {
     }
 
     pub fn remove(&mut self, node: NodeIdx, property: &str, origin: AnimatedOrigin) {
-        self.values.remove(&(node, property.to_ascii_lowercase(), origin));
+        let property=property.to_ascii_lowercase();
+        let property=if property=="font-width" {"font-stretch".to_owned()} else {property};
+        self.values.remove(&(node, property, origin));
     }
 
     /// Hand the resolved animation to the compositor. CSS no longer inserts

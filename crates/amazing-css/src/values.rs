@@ -540,6 +540,8 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         return crate::svg_presentation::parse_property(property, css);
     }
     match property {
+        "font-width" => return crate::font_selection::canonical("font-stretch",css).map(|_|V::Unparsed),
+        p if crate::font_selection::supported(p) => return crate::font_selection::canonical(p,css).map(|_|V::Unparsed),
         "font" => return crate::font_shorthand::expand(css).map(|_| V::Unparsed),
         "font-variant" => return crate::font_variant::expand(css).map(|_| V::Unparsed),
         "font-synthesis" => return crate::font_properties::expand_synthesis(css).map(|_| V::Unparsed),

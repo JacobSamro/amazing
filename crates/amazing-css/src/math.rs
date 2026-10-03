@@ -134,6 +134,7 @@ impl Parser {
             Token::Dimension(n, unit) if n.is_finite() => {
                 let css = format!("{n}{unit}");
                 crate::values::LengthPercentage::parse(&css).map(|_| Kind::Length)
+                    .or_else(|| matches!(unit.to_ascii_lowercase().as_str(),"cqw"|"cqh"|"cqi"|"cqb"|"cqmin"|"cqmax").then_some(Kind::Length))
                     .or_else(|| crate::values::Angle::parse(&css).map(|_| Kind::Angle))
             }
             // `size` names the calc-size basis inside its calculation.
@@ -157,6 +158,7 @@ impl Parser {
                 let first = self.expression()?;
                 let kind = match name.as_str() {
                     "calc" => first,
+                    "sign" => Kind::Number,
                     "min" | "max" | "clamp" => {
                         let mut kind = first;
                         let mut count = 1;
@@ -222,6 +224,26 @@ pub(crate) fn calc_size(css: &str) -> bool {
 /// Viewport and font-metric units stay unresolved for the layout consumer.
 pub(crate) fn font_size_px(css: &str, parent_px: f64, root_px: f64) -> Option<f64> {
     if !length_percentage(css, true) { return None; }
+    evaluate_numeric(css, parent_px, root_px, false, false)
+}
+
+/// Pure number computation. Context-dependent dimensions remain unresolved.
+pub(crate) fn computed_number(css: &str) -> Option<f64> {
+    if !number_percentage(css, false) { return None; }
+    evaluate_numeric(css, f64::NAN, f64::NAN, true, false)
+}
+/// Percentage-only math, independent of layout geometry.
+pub(crate) fn computed_percentage(css:&str)->Option<f64> {
+    if !percentage(css) {return None;}
+    let tokens:Vec<_>=tokenize(css).into_iter().map(|t|match t {Token::Percentage(n)=>Token::Number(n),other=>other}).collect();
+    computed_number(&crate::syntax::serialize(&tokens))
+}
+/// Pure angle computation in radians, without inventing layout/font context.
+pub(crate) fn computed_angle(css: &str) -> Option<f64> {
+    if !angle(css) { return None; }
+    evaluate_numeric(css, f64::NAN, f64::NAN, false, true)
+}
+fn evaluate_numeric(css: &str, parent_px: f64, root_px: f64, number: bool, angles: bool) -> Option<f64> {
     #[derive(Clone, Copy)]
     enum Value { Number(f64), Length(f64) }
     impl Value {
@@ -252,7 +274,7 @@ pub(crate) fn font_size_px(css: &str, parent_px: f64, root_px: f64) -> Option<f6
             match self { Self::Length(value) if value.is_finite() => Some(value), _ => None }
         }
     }
-    struct Eval { tokens: Vec<Token>, pos: usize, parent_px: f64, root_px: f64 }
+    struct Eval { tokens: Vec<Token>, pos: usize, parent_px: f64, root_px: f64, angles: bool }
     impl Eval {
         fn skip(&mut self) { while matches!(self.tokens.get(self.pos), Some(Token::Whitespace)) { self.pos += 1; } }
         fn eat(&mut self) -> Option<Token> { self.skip(); let token = self.tokens.get(self.pos).cloned(); self.pos += usize::from(token.is_some()); token }
@@ -288,6 +310,7 @@ pub(crate) fn font_size_px(css: &str, parent_px: f64, root_px: f64) -> Option<f6
                 Token::Percentage(value) if value.is_finite() => Some(Value::Length(self.parent_px * value / 100.0)),
                 Token::Dimension(value, unit) if value.is_finite() => {
                     use crate::values::{LengthPercentage as L, RelativeUnit as R};
+                    if self.angles { return crate::values::Angle::parse(&format!("{value}{unit}")).map(|a|Value::Length(a.radians)); }
                     let length = L::parse(&format!("{value}{unit}"))?;
                     match length {
                         L::Px(px) => Some(Value::Length(px)),
@@ -310,14 +333,16 @@ pub(crate) fn font_size_px(css: &str, parent_px: f64, root_px: f64) -> Option<f6
                             while matches!(self.peek(), Some(Token::Comma)) {
                                 self.eat(); values.push(self.expression()?);
                             }
-                            let values: Option<Vec<f64>> = values.into_iter().map(Value::length).collect();
+                            let numbers = matches!(first, Value::Number(_));
+                            let values: Option<Vec<f64>> = values.into_iter().map(|v|match (numbers,v) { (true,Value::Number(n)) | (false,Value::Length(n)) if n.is_finite()=>Some(n),_=>None }).collect();
                             let values = values?;
-                            Value::Length(match name.to_ascii_lowercase().as_str() {
+                            let result = match name.to_ascii_lowercase().as_str() {
                                 "min" => values.into_iter().reduce(f64::min)?,
                                 "max" => values.into_iter().reduce(f64::max)?,
                                 _ if values.len() == 3 => values[0].max(values[1].min(values[2])),
                                 _ => return None,
-                            })
+                            };
+                            if numbers { Value::Number(result) } else { Value::Length(result) }
                         }
                         _ => return None,
                     };
@@ -327,8 +352,8 @@ pub(crate) fn font_size_px(css: &str, parent_px: f64, root_px: f64) -> Option<f6
             }
         }
     }
-    let mut parser = Eval { tokens: tokenize(css), pos: 0, parent_px, root_px };
-    let value = parser.atom()?.length()?;
+    let mut parser = Eval { tokens: tokenize(css), pos: 0, parent_px, root_px, angles };
+    let value = match (number, parser.atom()?) { (true,Value::Number(n)) if n.is_finite()=>n,(false,v)=>v.length()?,_=>return None };
     parser.skip();
     (parser.pos == parser.tokens.len()).then_some(value)
 }

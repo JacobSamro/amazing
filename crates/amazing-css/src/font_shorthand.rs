@@ -24,7 +24,7 @@ pub(crate) const LONGHANDS: &[&str] = &[
     "font-variation-settings",
     "line-height",
 ];
-const WIDTHS: &[(&str, &str)] = &[
+pub(crate) const WIDTHS: &[(&str, &str)] = &[
     ("ultra-condensed", "50%"),
     ("extra-condensed", "62.5%"),
     ("condensed", "75%"),
@@ -147,6 +147,58 @@ fn family(t: &[Token]) -> bool {
     names > 0
 }
 
+pub(crate) fn canonical_family(css: &str) -> Option<String> {
+    let tokens = tokenize(css);
+    if !family(&tokens) {
+        return None;
+    }
+    let mut result = Vec::new();
+    for token in tokens {
+        if let Token::Str(name) = &token {
+            let words: Vec<_> = name.split_whitespace().collect();
+            let safe = !words.is_empty()
+                && words.iter().all(|w| {
+                    w.chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                        && w.chars()
+                            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
+                });
+            let generic = matches!(words.as_slice(),[word] if matches!(word.to_ascii_lowercase().as_str(),"serif"|"sans-serif"|"monospace"|"cursive"|"fantasy"|"system-ui"|"emoji"|"math"|"fangsong"|"ui-serif"|"ui-sans-serif"|"ui-monospace"|"ui-rounded"));
+            let candidate = tokenize(&words.join(" "));
+            if safe && !generic && family(&candidate) {
+                result.extend(candidate);
+                continue;
+            }
+        }
+        let token = match token {
+            Token::Ident(name)
+                if matches!(
+                    name.to_ascii_lowercase().as_str(),
+                    "serif"
+                        | "sans-serif"
+                        | "monospace"
+                        | "cursive"
+                        | "fantasy"
+                        | "system-ui"
+                        | "emoji"
+                        | "math"
+                        | "fangsong"
+                        | "ui-serif"
+                        | "ui-sans-serif"
+                        | "ui-monospace"
+                        | "ui-rounded"
+                ) =>
+            {
+                Token::Ident(name.to_ascii_lowercase())
+            }
+            other => other,
+        };
+        result.push(token);
+    }
+    Some(serialize(&result))
+}
+
 fn initial(name: &str) -> &'static str {
     match name {
         "font-family" => "serif",
@@ -221,7 +273,8 @@ pub(crate) fn expand(css: &str) -> Option<Vec<(String, String)>> {
             (1, lower)
         } else if matches!(lower.as_str(), "bold" | "bolder" | "lighter")
             || (matches!(tokenize(&value).as_slice(),[Token::Number(n)] if n.is_finite()&&(1.0..=1000.0).contains(n)))
-            || crate::math::number_percentage(&value, false)
+            || (matches!(tokenize(&value).first(), Some(Token::Function(_)))
+                && crate::math::number_percentage(&value, false))
         {
             (2, lower)
         } else if WIDTHS.iter().any(|(n, _)| *n == lower) {

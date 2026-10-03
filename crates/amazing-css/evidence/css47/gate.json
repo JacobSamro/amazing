@@ -1,0 +1,58 @@
+{
+  "ticket": "CSS-47",
+  "base": "8c45bd1d30e9a01f1111639288c1710dd70ae056",
+  "platform": "Boat Linux native /tmp source+target",
+  "renderer_sha256": "8eee72f3b7304afd70ba361b5e213b8af37a418076bfd9baa930d9ee4d1ec6a3",
+  "workspace": 3570,
+  "workspace_skipped": 17,
+  "doctests": 4,
+  "css_tests": 409,
+  "new_grouped_regressions": 3,
+  "parsing": {
+    "before": 4231,
+    "after": 4256,
+    "total": 5126,
+    "gained": [
+      "css/css-fonts/parsing/font-family-computed.html: computed font-family: \"\\\"New Century Schoolbook\\\", serif\"",
+      "css/css-fonts/parsing/font-family-invalid.html: invalid font-family: \"#POUND, sans-serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-family-invalid.html: invalid font-family: \"Ahem!, sans-serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-family-invalid.html: invalid font-family: \"Hawaii 5-0, sans-serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-family-invalid.html: invalid font-family: \"Red/Black, sans-serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-family-invalid.html: invalid font-family: \"\\\"Lucida\\\" Grande, sans-serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-family-invalid.html: invalid font-family: \"cursive serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-family-invalid.html: invalid font-family: \"test@foo, sans-serif\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-style-computed.html: computed font-style: \"oblique 0deg\"",
+      "css/css-fonts/parsing/font-style-computed.html: computed font-style: \"oblique 10grad\"",
+      "css/css-fonts/parsing/font-style-computed.html: computed font-style: \"oblique calc(-100deg)\"",
+      "css/css-fonts/parsing/font-style-computed.html: computed font-style: \"oblique calc(100deg)\"",
+      "css/css-fonts/parsing/font-style-computed.html: computed font-style: \"oblique calc(10deg - 10deg)\"",
+      "css/css-fonts/parsing/font-style-computed.html: computed font-style: \"oblique calc(30deg * 2)\"",
+      "css/css-fonts/parsing/font-style-computed.html: computed font-style: \"oblique calc(90deg)\"",
+      "css/css-fonts/parsing/font-style-invalid.html: invalid font-style: \"auto\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-style-invalid.html: invalid font-style: \"italic oblique\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-weight-computed.html: computed font-weight: \"bold\"",
+      "css/css-fonts/parsing/font-weight-computed.html: computed font-weight: \"calc(-100)\"",
+      "css/css-fonts/parsing/font-weight-computed.html: computed font-weight: \"calc(0)\"",
+      "css/css-fonts/parsing/font-weight-computed.html: computed font-weight: \"calc(100 + 100)\"",
+      "css/css-fonts/parsing/font-weight-computed.html: computed font-weight: \"calc(100)\"",
+      "css/css-fonts/parsing/font-weight-computed.html: computed font-weight: \"normal\"",
+      "css/css-fonts/parsing/font-weight-invalid.html: invalid font-weight: \"auto\" unexpectedly parsed",
+      "css/css-fonts/parsing/font-weight-invalid.html: invalid font-weight: \"bold 900\" unexpectedly parsed"
+    ],
+    "lost": []
+  },
+  "render": {
+    "fonts": {
+      "before_pass": 24,
+      "after_pass": 24,
+      "total": 32,
+      "unchanged": 32,
+      "gained": [],
+      "lost": []
+    }
+  },
+  "limitations": [
+    "Values5 random-item accepted but selection remains unresolved",
+    "Container-dependent numeric expressions retain unresolved context; no invented geometry"
+  ]
+}

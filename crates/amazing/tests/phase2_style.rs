@@ -88,7 +88,7 @@ fn html_plus_css_yields_computed_styles() {
 
     let s2 = styled.get(special).unwrap();
     assert_eq!(s2.get("background-color"), Some("yellow")); // id selector
-    assert_eq!(s2.get("font-weight"), Some("bold")); // div > span:first-child
+    assert_eq!(s2.get("font-weight"), Some("700")); // selector winner bold computes to700
     // …and the UA bold for span is NOT set (spans stay normal weight).
     assert_eq!(s2.get("font-style"), Some("normal"));
 }

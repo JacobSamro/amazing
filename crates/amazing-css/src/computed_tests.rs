@@ -67,7 +67,7 @@ fn nested_fallback_and_fallback_commas_survive_substitution() {
         ]),
     );
     assert_eq!(style.get("color"), Some("green"));
-    assert_eq!(style.get("font-family"), Some("serif,sans-serif"));
+    assert_eq!(style.get("font-family"), Some("serif, sans-serif"));
 }
 
 #[test]

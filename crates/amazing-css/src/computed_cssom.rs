@@ -159,7 +159,7 @@ pub fn cssom_property_names() -> Vec<&'static str> {
     let mut names: Vec<_> = known_properties()
         .chain(LOGICAL_BORDER_LONGHANDS)
         .chain(cssom_shorthand_names())
-        .chain(["word-wrap"])
+        .chain(["word-wrap", "font-width"])
         .collect();
     names.sort_unstable();
     names.dedup();
@@ -220,6 +220,9 @@ impl ComputedStyle {
         let name = name.to_ascii_lowercase();
         if name == "font" {
             return crate::font_shorthand::computed(self);
+        }
+        if name == "font-width" {
+            return self.get("font-stretch").map(str::to_owned);
         }
         if name == "word-wrap" {
             return self.get("overflow-wrap").map(str::to_owned);

@@ -1133,7 +1133,7 @@ fn metadata(name: &str) -> Option<PropertyMetadata> {
 
 pub(crate) fn is_supported_property(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
-    metadata(&name).is_some() || crate::text_properties::supported(&name) || logical_border::supported(&name) || name == "contain-intrinsic-size"
+    metadata(&name).is_some() || crate::text_properties::supported(&name) || logical_border::supported(&name) || matches!(name.as_str(), "contain-intrinsic-size" | "font-width")
 }
 
 /// Expands shorthands before cascade ranking so each resulting longhand keeps
@@ -1153,6 +1153,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     if position_values::supported(&property) {
         return if contains_var_function(value) { vec![(property, value.into())] } else { position_values::canonical(&property, value).map(|value| vec![(property, value)]).unwrap_or_default() };
     }
+    if property == "font-width" { return expand_declaration("font-stretch", value); }
     if property == "word-wrap" { return expand_declaration("overflow-wrap", value); }
     if property == "border-image" { return border_image_policy::expand(value).unwrap_or_default(); }
     if property == "border" {
@@ -2792,6 +2793,8 @@ fn compute_normal_value(
     } else { computed };
     let computed = if property.name.starts_with("animation-") || property.name.starts_with("transition-") {
         crate::animation::canonical(property.name, &computed).unwrap_or_else(|| property.initial.to_owned())
+    } else if crate::font_selection::supported(property.name) {
+        crate::font_selection::computed(property.name, &computed, parent).unwrap_or(computed)
     } else if property.name == "font-size" {
         computed_font_size(&computed, parent, root_font_px).unwrap_or(computed)
     } else if position_values::supported(property.name) {

@@ -2884,3 +2884,23 @@ IterationCSS406 green;4231/5126 (+16/lost0), wholefonts24/32 unchanged.
 Frozen full workspace/docs + identical15directory + wholefonts final gate.
 
 CSS46 final: CSS406/workspace3567/17skip+4docs;4215→4231/5126 (+16/lost0);wholefonts24/32 unchanged/all32stable/lost0. Renderer9353f73d5723d0609532e188c7eff5c2350b62e259607680772ac308585a2439. Next coherent selection-value normalization (weight/style/width/family), preserving unavailable metric/context values.
+
+### CSS47 — basic font selection grammars and computed values
+
+Fixed CSS46 8c45bd1d. CSS Fonts4 https://drafts.csswg.org/css-fonts-4/.
+Validate complete weight/style/stretch/family values atomically; actual parent
+relative weights, decimal/pure math numeric computation/range clamping, oblique
+angle conversion/pure math computation and safe family serialization. Width
+keywords normalize to percentages; font-width aliases stretch cascade/animation
+axis and CSSOM. Number/angle/percentage evaluation reuses existing typed math
+without inventing geometry. Sign/container expression typing keeps unavailable
+context unresolved; Values5 random-item compatibility remains Unparsed.
+First same-harness diff identified23 valid losses; whole known-function/type
+cluster fixed before final, grouped regression covers these boundaries.
+IterationCSS409 green,+25 parsing/lost0 and all32font renders stable.
+NextCSS48 native-document/font-context computed pseudo seam requested by js_date;
+layout generated/applicability map remains separate.
+
+Parent granted one driver assertion correction: phase2_style.rs font-weight bold→700 records computed normalization, retaining selector/cascade semantics. First workspace had3569pass/1obsolete expectation; full corrected-source gate rerun.
+
+CSS47 final: CSS409/workspace3570/17skip+4docs;4231→4256/5126 (+25/lost0);wholefonts24/32 unchanged/all32stable/lost0. Renderer8eee72f3b7304afd70ba361b5e213b8af37a418076bfd9baa930d9ee4d1ec6a3.
