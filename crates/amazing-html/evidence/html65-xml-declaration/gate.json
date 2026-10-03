@@ -1,0 +1,18 @@
+{
+  "before": "5f7f861c9ba29162578849ef4024af49a2a42bb4",
+  "after": "52a6af30c56c99365764edf7779f7f537bb548ef",
+  "sources": [
+    "757168d46e453e9f8b6e16bf847340b68b818433",
+    "52a6af30c56c99365764edf7779f7f537bb548ef"
+  ],
+  "owned": 682,
+  "owned_skipped": 6,
+  "workspace": 4119,
+  "workspace_skipped": 17,
+  "doctests": 4,
+  "cli_trees": 1894,
+  "expanded_trees": 1930,
+  "expanded_unsupported": 6,
+  "passing_assertions_lost": 0,
+  "passing_files_lost": 0
+}

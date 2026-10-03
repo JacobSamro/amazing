@@ -1,0 +1,7 @@
+# HTML65 — XML declaration forward compatibility
+
+Fixed before READY64 `5f7f861c9ba29162578849ef4024af49a2a42bb4`. Exact source `757168d46e453e9f8b6e16bf847340b68b818433` then test-only actual NEL-unit correction `52a6af30c56c99365764edf7779f7f537bb548ef`. XML 1.0 Fifth Edition §2.8 VersionNum accepts `1.` followed by nonempty ASCII digits; forward declarations are processed using XML 1.0 rules. Whole declaration grammar coverage retains quote/Eq/separation/order/duplicate/encoding/standalone/placement errors and fragment prohibition, with direct Unicode and actual byte-response precedence. XML 1.0 illegal controls remain fatal and NEL remains unchanged; full XML 1.1 processing is not claimed. No external code port or new dependency.
+
+Linux682 owned/6 skipped (before680),4119 workspace/17 skipped (before4117),four doctests,1894 CLI trees,1930 expanded trees/6unsupported. Whole13 plus111modules,220HTMLsyntax,192CSSOM and123Selection: zero lost or gained exact passing-name multiplicities and passing files; fixture/selection hashes match. No corpus gains credited. Raw reports fetched from completed67143 to MAIN html65-after; comparison retains name hashes and raw report hashes.
+
+Primary source: https://www.w3.org/TR/REC-xml/#sec-prolog-dtd (checked2026-10-03). Existing literal1.1 unsupported expectation corrected to the normative compatible tree plus illegal-control rejection. Initial NEL assertion inspected dump formatting instead of native units; the gated test-only correction preserves the actual character-data assertion.
