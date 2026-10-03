@@ -142,13 +142,18 @@ impl Dom {
         self.collections.get(index).map(|c| c.rebuilds)
     }
     pub fn attribute_utf16(&self, node: NodeIdx, name: &str) -> Option<Vec<u16>> {
-        if let Some(value) = self.nodes.iter().find_map(|candidate| match &candidate.kind {
-            NodeKind::Attr { local_name, namespace_uri: None, value, owner_element: Some(owner), .. }
-                if *owner == node && local_name == name => Some(value.clone()),
-            _ => None,
-        }) { return Some(value); }
-        self.get_attribute_ns(node, None, name).map(|value| value.encode_utf16().collect())
+        self.attribute_ns_utf16(node, None, name)
     }
+
+    /// Expanded-name counterpart retaining attached Attr's exact code units.
+    pub fn attribute_ns_utf16(&self, node: NodeIdx, namespace: Option<&str>, name: &str) -> Option<Vec<u16>> {
+        let namespace = namespace.filter(|uri| !uri.is_empty());
+        if let Some(attr) = self.attached_attr_slot(node, namespace, name) {
+            if let Ok(snapshot) = self.attr_snapshot(attr) { return Some(snapshot.value); }
+        }
+        self.get_attribute_ns(node, namespace, name).map(|value| value.encode_utf16().collect())
+    }
+
 }
 
 #[cfg(test)]

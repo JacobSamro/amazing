@@ -1,4 +1,4 @@
-use crate::host::{BindingHost, FragmentContext, FragmentParser, InterfaceBrand, Operation as O, SelectorEngine};
+use crate::host::{BindingHost, FragmentParser, InterfaceBrand, Operation as O, SelectorEngine};
 use amazing_dom::shadow::{ShadowMode, ShadowOptions, SlotAssignment};
 use amazing_dom::{Dom, DomError, NodeIdx, NodeKind};
 
@@ -220,13 +220,8 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
                     if matches!(op, O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe) { template } else { insertion_parent }
                 } else { insertion_parent };
                 let context_document = dom.owner_document(insertion_parent).unwrap_or(insertion_parent);
-                let scripting_enabled = dom.document_scripting_enabled(context_document)?;
-                let context = if matches!(dom.get(context_node).kind, NodeKind::Document | NodeKind::DocumentFragment) {
-                    FragmentContext { scripting_enabled, local_name: "body".into(), namespace_uri: Some("http://www.w3.org/1999/xhtml".into()) }
-                } else {
-                    FragmentContext { scripting_enabled, local_name: dom.local_name(context_node).ok_or(DomError::TypeError)?.into(),
-                        namespace_uri: dom.namespace_uri(context_node).map(str::to_owned) }
-                };
+                let element = matches!(dom.get(context_node).kind, NodeKind::Element { .. }).then_some(context_node);
+                let context = crate::fragment_context::html(dom, element, context_document)?;
                 Ok((insertion_parent, reference, context, context_node))
             })?;
             // `setHTMLUnsafe` alone parses with declarative shadow roots

@@ -32,7 +32,7 @@ impl Dom {
                     None => attr.prefix.is_none() && attr.local_name == "xmlns",
                     Some(prefix) => attr.prefix == Some("xmlns") && attr.local_name == prefix,
                 };
-                if matches && !attr.value.is_empty() { return Ok(Some(attr.value.to_owned())); }
+                if matches { return Ok((!attr.value.is_empty()).then(|| attr.value.to_owned())); }
             }
             current = self.get(element).parent.filter(|parent|
                 matches!(self.get(*parent).kind, NodeKind::Element { .. }));
@@ -74,5 +74,23 @@ mod tests {
         assert!(dom.is_default_namespace(fragment, None).unwrap());
         let empty = dom.create_document();
         assert_eq!(dom.lookup_namespace_uri(empty, Some("xml")).unwrap(), None);
+    }
+}
+
+#[cfg(test)]
+mod fragment_namespace_tests {
+    use crate::{Dom, NodeIdx};
+    #[test]
+    fn namespace_undeclaration_stops_ancestor_lookup() {
+        let mut dom = Dom::new();
+        let root = dom.create_element_ns_in(NodeIdx(0), Some("urn:root"), "root").unwrap();
+        dom.set_attribute_qualified_ns(root, Some("http://www.w3.org/2000/xmlns/"), "xmlns:p", "urn:parent").unwrap();
+        let child = dom.create_element_ns(root, None, "child").unwrap();
+        dom.set_attribute_qualified_ns(child, Some("http://www.w3.org/2000/xmlns/"), "xmlns", "").unwrap();
+        dom.set_attribute_qualified_ns(child, Some("http://www.w3.org/2000/xmlns/"), "xmlns:p", "").unwrap();
+        assert_eq!(dom.lookup_namespace_uri(child, None), Ok(None));
+        assert_eq!(dom.lookup_namespace_uri(child, Some("p")), Ok(None));
+        assert_eq!(dom.lookup_namespace_uri(root, Some("p")), Ok(Some("urn:parent".into())));
+        assert_eq!(dom.lookup_namespace_uri(child, Some("xml")), Ok(Some("http://www.w3.org/XML/1998/namespace".into())));
     }
 }

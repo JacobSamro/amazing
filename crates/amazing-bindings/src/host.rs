@@ -861,16 +861,43 @@ pub enum Operation {
 /// Context passed to the embedding's HTML fragment parser after the DOM borrow
 /// has ended. Parser results live in a separate arena and are imported by DOM.
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FragmentAttribute {
+    pub namespace_uri: Option<String>,
+    pub prefix: Option<String>,
+    pub local_name: String,
+    pub value: Vec<u16>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FragmentContext {
     /// Exact owner document scripting state, captured before parsing.
     pub scripting_enabled: bool,
+    pub quirks_mode: amazing_dom::document_surface::QuirksMode,
+    pub attributes: Vec<FragmentAttribute>,
+    pub has_form_ancestor: bool,
     pub local_name: String,
     pub namespace_uri: Option<String>,
+}
+
+/// Snapshot of the actual XML context before entering the embedding parser.
+/// `None` names the default prefix; an empty URI preserves undeclaration.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct XmlFragmentContext {
+    pub namespace_uri: Option<String>,
+    pub prefix: Option<String>,
+    pub prefix: Option<String>,
+    pub namespaces: Vec<(Option<String>, String)>,
 }
 
 pub trait FragmentParser: BindingHost {
     fn parse_fragment(&mut self, context: FragmentContext, markup: &[u16])
         -> Result<Dom, DomError>;
+    /// Parse XML fragment grammar directly, with fatal namespace/well-formedness
+    /// errors. Source is DOMString: invalid UTF-16 must produce SyntaxError.
+    fn parse_xml_fragment(&mut self, _context: XmlFragmentContext, _markup: &[u16])
+        -> Result<Dom, DomError> {
+        Err(DomError::NotSupportedError)
+    }
     /// `Element`/`ShadowRoot.setHTMLUnsafe` and `Document.parseHTML(Unsafe)`
     /// need declarative shadow roots enabled during fragment parsing (spec's
     /// "set and filter HTML" always parses with `allowDeclarativeShadowRoots
