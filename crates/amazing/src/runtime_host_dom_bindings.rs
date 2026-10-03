@@ -1566,6 +1566,32 @@ mod tests {
     }
 
     #[test]
+    fn contextual_xml_fragment_scripts_remain_started_after_html_adoption() {
+        let host=Rc::new(RefCell::new(BrowserDomHost {
+            dom:amazing_html::parse("<body></body>"),native_forwarded:false,
+        }));
+        let mut js=Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings=super::super::install(&mut js,host).unwrap();
+        bindings.set_document_url(&mut js,"https://example.test/range-script-policy");
+        let result=js.run_script(r#"
+            const xml=new DOMParser().parseFromString('<root xmlns="http://www.w3.org/1999/xhtml"/>','application/xml');
+            const range=xml.createRange();range.selectNodeContents(xml.documentElement);
+            globalThis.xmlContextualRuns=0;
+            const fragment=range.createContextualFragment('<script>xmlContextualRuns++</script><template><script>xmlContextualRuns++</script></template>');
+            const template=fragment.lastChild;
+            document.body.append(fragment);
+            document.body.append(template.content);
+            if(xmlContextualRuns!==0)throw 'XML fragment script executed after adoption';
+            range.selectNodeContents(document.body);
+            const html=range.createContextualFragment('<script>xmlContextualRuns++</script>');
+            document.body.append(html);
+            xmlContextualRuns===1;
+        "#).unwrap();
+        assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
+    }
+
+    #[test]
     fn contextual_range_fragment_inherits_current_document_quirks_mode() {
         use amazing_dom::document_surface::QuirksMode;
         let mut dom=Dom::new();let html=dom.create_element(NodeIdx(0),"html");dom.create_element(html,"body");
