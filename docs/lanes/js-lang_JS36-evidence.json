@@ -1,0 +1,464 @@
+{
+  "base_commit": "e28b071f8ad6c5e44441d4e252cfad77998984d3",
+  "source_commit": "9095aba58821fa2ee0b3cc18f29ccc384ff2f34e",
+  "corpus_source_commit": "079778247f2e4d8f9e3ec3a61c6bfe1f25b5161f",
+  "corpora": {
+    "language": {
+      "before": {
+        "files": {
+          "pass": 24348,
+          "fail": 194,
+          "timeout": 4,
+          "unsupported": 26,
+          "skipped": 29300
+        },
+        "variants": {
+          "pass": 45071,
+          "fail": 263,
+          "timeout": 8,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 24354,
+          "fail": 188,
+          "timeout": 4,
+          "unsupported": 26,
+          "skipped": 29300
+        },
+        "variants": {
+          "pass": 45083,
+          "fail": 251,
+          "timeout": 8,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "gained_files": [
+        "language/statementList/eval-block-with-statment-block.js",
+        "language/statements/try/completion-values.js",
+        "language/statements/try/cptn-finally-from-catch.js",
+        "language/statements/try/cptn-finally-skip-catch.js",
+        "language/statements/try/cptn-finally-wo-catch.js",
+        "language/statements/using/cptn-value.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        "language/statementList/eval-block-with-statment-block.js#non-strict",
+        "language/statementList/eval-block-with-statment-block.js#strict",
+        "language/statements/try/completion-values.js#non-strict",
+        "language/statements/try/completion-values.js#strict",
+        "language/statements/try/cptn-finally-from-catch.js#non-strict",
+        "language/statements/try/cptn-finally-from-catch.js#strict",
+        "language/statements/try/cptn-finally-skip-catch.js#non-strict",
+        "language/statements/try/cptn-finally-skip-catch.js#strict",
+        "language/statements/try/cptn-finally-wo-catch.js#non-strict",
+        "language/statements/try/cptn-finally-wo-catch.js#strict",
+        "language/statements/using/cptn-value.js#non-strict",
+        "language/statements/using/cptn-value.js#strict"
+      ],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "9f5099868fe148ab20aaa996fff95dc18cdb6fc103c7a35e5a930108b29f8f11",
+      "after_host_sha256": "146d9b48ca7a81b3632aa55cee0099e7a1b6f0d6adf698c26071827a366de6d6",
+      "before_classification_sha256": "ce4f8d67071edcfe069e6a20573fc27da6017888ca32f6083c4d0dfcc48db5e2",
+      "after_classification_sha256": "27afe2d1ef00c16759cdfdb596fa35899ec19546d8c803f78f67971388b25fb7"
+    },
+    "built-ins-DisposableStack": {
+      "before": {
+        "files": {
+          "pass": 93,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53779
+        },
+        "variants": {
+          "pass": 186,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 93,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53779
+        },
+        "variants": {
+          "pass": 186,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "9f5099868fe148ab20aaa996fff95dc18cdb6fc103c7a35e5a930108b29f8f11",
+      "after_host_sha256": "146d9b48ca7a81b3632aa55cee0099e7a1b6f0d6adf698c26071827a366de6d6",
+      "before_classification_sha256": "7533ad53d99cc84610bb51f88f638c9e55622ac98481749875a4802070d26c09",
+      "after_classification_sha256": "7533ad53d99cc84610bb51f88f638c9e55622ac98481749875a4802070d26c09"
+    },
+    "built-ins-AsyncDisposableStack": {
+      "before": {
+        "files": {
+          "pass": 102,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53768
+        },
+        "variants": {
+          "pass": 204,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 102,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53768
+        },
+        "variants": {
+          "pass": 204,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "9f5099868fe148ab20aaa996fff95dc18cdb6fc103c7a35e5a930108b29f8f11",
+      "after_host_sha256": "146d9b48ca7a81b3632aa55cee0099e7a1b6f0d6adf698c26071827a366de6d6",
+      "before_classification_sha256": "a4fc13181a5277153dbeafd1bf8b551c778e4698c65eada50c7faa0d064b5e71",
+      "after_classification_sha256": "a4fc13181a5277153dbeafd1bf8b551c778e4698c65eada50c7faa0d064b5e71"
+    },
+    "built-ins-Promise": {
+      "before": {
+        "files": {
+          "pass": 659,
+          "fail": 73,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53140
+        },
+        "variants": {
+          "pass": 1312,
+          "fail": 146,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 659,
+          "fail": 73,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53140
+        },
+        "variants": {
+          "pass": 1312,
+          "fail": 146,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "9f5099868fe148ab20aaa996fff95dc18cdb6fc103c7a35e5a930108b29f8f11",
+      "after_host_sha256": "146d9b48ca7a81b3632aa55cee0099e7a1b6f0d6adf698c26071827a366de6d6",
+      "before_classification_sha256": "0f054a3aa16922bd126839e2793be301469167fe10d7fdea21b97c35d40ee358",
+      "after_classification_sha256": "0f054a3aa16922bd126839e2793be301469167fe10d7fdea21b97c35d40ee358"
+    },
+    "built-ins-GeneratorPrototype": {
+      "before": {
+        "files": {
+          "pass": 61,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53811
+        },
+        "variants": {
+          "pass": 122,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 61,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53811
+        },
+        "variants": {
+          "pass": 122,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "9f5099868fe148ab20aaa996fff95dc18cdb6fc103c7a35e5a930108b29f8f11",
+      "after_host_sha256": "146d9b48ca7a81b3632aa55cee0099e7a1b6f0d6adf698c26071827a366de6d6",
+      "before_classification_sha256": "3871978eea7c054dc7e4b74562cb0073de7cc839f2b8b738f79913dfa08b465d",
+      "after_classification_sha256": "3871978eea7c054dc7e4b74562cb0073de7cc839f2b8b738f79913dfa08b465d"
+    },
+    "built-ins-AsyncGeneratorPrototype": {
+      "before": {
+        "files": {
+          "pass": 48,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53824
+        },
+        "variants": {
+          "pass": 96,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 48,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53824
+        },
+        "variants": {
+          "pass": 96,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "9f5099868fe148ab20aaa996fff95dc18cdb6fc103c7a35e5a930108b29f8f11",
+      "after_host_sha256": "146d9b48ca7a81b3632aa55cee0099e7a1b6f0d6adf698c26071827a366de6d6",
+      "before_classification_sha256": "0104013711b4d0274d7dd74f69adbdf9897471f1ddd243d89a54d66fc956a0ad",
+      "after_classification_sha256": "0104013711b4d0274d7dd74f69adbdf9897471f1ddd243d89a54d66fc956a0ad"
+    },
+    "built-ins-GeneratorFunction": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "9f5099868fe148ab20aaa996fff95dc18cdb6fc103c7a35e5a930108b29f8f11",
+      "after_host_sha256": "146d9b48ca7a81b3632aa55cee0099e7a1b6f0d6adf698c26071827a366de6d6",
+      "before_classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f",
+      "after_classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f"
+    },
+    "built-ins-AsyncGeneratorFunction": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "9f5099868fe148ab20aaa996fff95dc18cdb6fc103c7a35e5a930108b29f8f11",
+      "after_host_sha256": "146d9b48ca7a81b3632aa55cee0099e7a1b6f0d6adf698c26071827a366de6d6",
+      "before_classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a",
+      "after_classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a"
+    }
+  },
+  "linux_gate": {
+    "workspace_passed": 3939,
+    "workspace_skipped": 17,
+    "doctests_passed": 4,
+    "platform": "Boat Ubuntu24.04 native /tmp source+target",
+    "test_source_commit": "9095aba58821fa2ee0b3cc18f29ccc384ff2f34e",
+    "corpus_source_commit": "079778247f2e4d8f9e3ec3a61c6bfe1f25b5161f",
+    "owned_passed": 692,
+    "owned_skipped": 1
+  },
+  "baseline": {
+    "native": "08e822f5bed3066ecb886cd29764cc40ba9fd858, seven-group matrix six failed / one passed",
+    "language": "JS35 after reused: fixed e28b engine/host/runner identical16be source; tests-only08 adds no runtime change",
+    "disposal_promise": "fresh baseline08 whole three directories",
+    "generator_builtins": "JS35 whole four directory after reused on identical fixed e28b baseline engine"
+  },
+  "limitations": [
+    "With via explicit eval AST adapter on fixed pre24 base; direct native With suspension coverage requires combined24",
+    "No TCO, declaration instantiation, scheduler or public value schema redesign"
+  ],
+  "source_series": [
+    "08e822f5bed3066ecb886cd29764cc40ba9fd858",
+    "2c60900e3720659165411904e0c116dd1fdf0e1f",
+    "5c1a4f5698222d0991cd4720f762e840b79ad4cb",
+    "fe9e06d2b8b6faf36a336d5c1e7c63ac46e3905c",
+    "1da772ac24f49c0e926170a30cf4e898ee0b417d",
+    "599abc5701e9dc4416f385e1712bc0cd2c712671",
+    "523ecc4d64b5b713f07adcdebac2d138f3283e04",
+    "079778247f2e4d8f9e3ec3a61c6bfe1f25b5161f",
+    "9095aba58821fa2ee0b3cc18f29ccc384ff2f34e"
+  ],
+  "generator_actor_audit": {
+    "built-ins-GeneratorPrototype": {
+      "files": 61,
+      "variants": 122,
+      "same_engine_binary": true,
+      "same_input_runner_classification": true,
+      "classification_sha256": "3871978eea7c054dc7e4b74562cb0073de7cc839f2b8b738f79913dfa08b465d"
+    },
+    "built-ins-AsyncGeneratorPrototype": {
+      "files": 48,
+      "variants": 96,
+      "same_engine_binary": true,
+      "same_input_runner_classification": true,
+      "classification_sha256": "0104013711b4d0274d7dd74f69adbdf9897471f1ddd243d89a54d66fc956a0ad"
+    },
+    "built-ins-GeneratorFunction": {
+      "files": 23,
+      "variants": 46,
+      "same_engine_binary": true,
+      "same_input_runner_classification": true,
+      "classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f"
+    },
+    "built-ins-AsyncGeneratorFunction": {
+      "files": 23,
+      "variants": 46,
+      "same_engine_binary": true,
+      "same_input_runner_classification": true,
+      "classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a"
+    }
+  }
+}
