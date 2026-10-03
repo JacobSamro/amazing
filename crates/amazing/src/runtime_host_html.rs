@@ -646,6 +646,15 @@ impl RuntimeBindings {
             state.frames.windows.retain(|node, _| connected.contains(node));
         }
         for (node, src, srcdoc, sandbox) in candidates {
+            let owner = host.borrow().dom.owner_document(node).unwrap_or(NodeIdx(0));
+            // A parent's navigation can retire a document after this sweep
+            // collected its descendants. Never retain or recreate their contexts.
+            if !self.state.borrow().frames.has_document(owner) {
+                let mut state = self.state.borrow_mut();
+                state.frames.documents.remove(&node);
+                state.frames.windows.remove(&node);
+                continue;
+            }
             let base = {
                 let host = host.borrow();
                 let owner = host.dom.owner_document(node).unwrap_or(NodeIdx(0));
@@ -755,6 +764,12 @@ impl RuntimeBindings {
             let hook = state.frames.navigation_hook.clone();
             drop(state);
             if let Some(hook) = hook { hook(navigation); }
+        }
+        {
+            let mut state = self.state.borrow_mut();
+            let live: HashMap<_, _> = state.frames.documents.iter()
+                .map(|(frame, entry)| (*frame, entry.document)).collect();
+            state.frames.pending_loads.retain(|(frame, document, _)| live.get(frame) == Some(document));
         }
         let _ = self.refresh_window_indices(js);
     }
@@ -1255,9 +1270,10 @@ impl RuntimeBindingHost<'_> {
     /// when a parent-realm script reads the document's defaultView.
     pub(super) fn iframe_document_window(&self, document: NodeIdx) -> Option<JsValue> {
         let state = self.state.borrow();
-        let frame = state.frames.documents.iter()
-            .find_map(|(frame, entry)| (entry.document == Some(document)).then_some(frame))?;
-        state.frames.windows.get(frame).map(|(_, proxy)| proxy.clone())
+        state.frames.contexts.iter().find_map(|(realm, context)| {
+            (context.document == document && state.frames.live_context(context, *realm))
+                .then(|| context.window.clone())
+        })
     }
 
     /// `[LegacyFactoryFunction=Option]` from the HTML standard: builds a
@@ -1789,20 +1805,23 @@ impl RuntimeBindingHost<'_> {
         let node = self.iframe_node(&receiver)?;
         let state = self.state.borrow();
         let host = state.host.borrow();
-        if host.dom.root(node) != NodeIdx(0) { return Ok(JsValue::Null); }
+        let owner = host.dom.owner_document(node).unwrap_or(NodeIdx(0));
+        if host.dom.root(node) != owner || !state.frames.has_document(owner) { return Ok(JsValue::Null); }
         let Some(frame) = state.frames.documents.get(&node) else { return Ok(JsValue::Null) };
         let Some(document) = frame.document else { return Ok(JsValue::Null) };
-        // `about:srcdoc` is same-origin-inherited from the parent, like
-        // `about:blank`, so it needs no URL-based origin comparison; a
-        // sandboxed frame without `allow-same-origin` gets a fresh opaque
-        // origin every navigation (see `setup_iframe_window`) and so is
-        // never same-origin with the parent, regardless of its URL.
-        let opaque = frame.sandbox.sandboxed && !frame.sandbox.allow_same_origin;
-        let visible = !opaque && (frame.url == "about:blank" || frame.url == "about:srcdoc"
-            || state.document_url.as_deref().is_some_and(|parent| same_origin(parent, &frame.url)));
+        // Compare actual caller/target contexts, including inherited blank
+        // origins and unique sandbox origins, rather than the top-level URL.
         let realm = state.frames.windows.get(&node).map(|(realm, _)| *realm);
+        let caller_realm = self.js.binding_current_realm();
+        let caller = state.frames.contexts.get(&caller_realm).cloned();
+        let target = realm.and_then(|realm| state.frames.contexts.get(&realm).cloned());
         drop(host);
         drop(state);
+        let visible = match (caller, target, realm) {
+            (Some(caller), Some(target), Some(realm)) => caller_realm == realm
+                || context_origin(self.js, &caller, caller_realm)? == context_origin(self.js, &target, realm)?,
+            _ => false,
+        };
         if !visible { return Ok(JsValue::Null); }
         // Wrap through the child's own realm when one exists, so the host
         // object cache there (keyed per realm) returns the identical wrapper
@@ -1828,7 +1847,9 @@ impl RuntimeBindingHost<'_> {
     pub(super) fn iframe_content_window(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
         let node = self.iframe_node(&receiver)?;
         let state = self.state.borrow();
-        if state.host.borrow().dom.root(node) != NodeIdx(0) { return Ok(JsValue::Null); }
+        let host = state.host.borrow();
+        let owner = host.dom.owner_document(node).unwrap_or(NodeIdx(0));
+        if host.dom.root(node) != owner || !state.frames.has_document(owner) { return Ok(JsValue::Null); }
         let window = state.frames.windows.get(&node).map(|(_, proxy)| proxy.clone());
         Ok(window.unwrap_or(JsValue::Null))
     }
@@ -2033,13 +2054,20 @@ mod tests {
             check(window.length===2 && window[0]===w && window[1]===b.contentWindow);
             check(w.frames===w && w.parent===window && w.top===window && w.length===0);
             const grand=w.document.createElement('iframe'); w.document.body.appendChild(grand);
-            check(w.length===1 && w[0]===grand.contentWindow);
-            check(grand.contentWindow.parent===w && grand.contentWindow.top===window);
+            const grandWindow=grand.contentWindow;
+            check(w.length===1 && w[0]===grandWindow && window.length===2);
+            check(grandWindow.parent===w && grandWindow.top===window);
+            check(grand.contentDocument===grandWindow.document && grand.contentDocument.defaultView===grandWindow);
+            check(w.eval('parent.document.defaultView===parent'));
+            const inert=document.implementation.createHTMLDocument('inert');
+            const hidden=inert.createElement('iframe'); inert.body.appendChild(hidden);
+            check(hidden.contentWindow===null && hidden.contentDocument===null && window.length===2);
             const d=Object.getOwnPropertyDescriptor(window,'0');
             check(d.value===w && !d.writable && d.enumerable && d.configurable);
             check(!Reflect.defineProperty(window,'0',{value:42}));
             check(!Reflect.set(window,'0',42)); check(!Reflect.deleteProperty(window,'0'));
             a.srcdoc='<!doctype html><p>new'; check(a.contentWindow===w && window[0]===w);
+            check(grandWindow.parent===null && grandWindow.top===null && grandWindow.length===0);
             a.remove(); check(window.length===1 && window[0]===b.contentWindow && !('1' in window));
             check(w.parent===null && w.top===null && w.length===0 && w.frames===w);
             true
