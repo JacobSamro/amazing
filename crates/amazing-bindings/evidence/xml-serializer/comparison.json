@@ -1,0 +1,35 @@
+{
+  "lost_passing_assertions": {},
+  "gained_passing_assertions": {
+    "dom/ranges/Range-mutations-dataChange.html": 480,
+    "domparsing/XMLSerializer-serializeToString.html": 29
+  },
+  "lost_passing_files": [],
+  "files": 579,
+  "counts": {
+    "before": {
+      "pass": 55886,
+      "fail": 2347,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 6
+    },
+    "after": {
+      "pass": 56395,
+      "fail": 2318,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 6
+    }
+  },
+  "credited_xmlserializer_gains": 29,
+  "uncredited_deadline_completions": 480,
+  "accepted_c85_guard": {
+    "lost_passing_assertions": {},
+    "gained_passing_assertions": {
+      "dom/ranges/Range-mutations-dataChange.html": 22,
+      "domparsing/XMLSerializer-serializeToString.html": 29
+    },
+    "lost_passing_files": []
+  }
+}

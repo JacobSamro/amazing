@@ -1,0 +1,58 @@
+{
+  "before": {
+    "source": "09608b5412b7d0cd2366fe53eed04d6fa0d12130",
+    "binary_sha256": "b4ca8db3e747764f1942d8d251aa3df2a6e1ab6fe3440dde29bbada900f70303",
+    "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "directories": [
+      "dom/nodes",
+      "dom/ranges",
+      "domparsing",
+      "html/syntax/serializing-html-fragments",
+      "html/syntax/parsing",
+      "html/semantics/scripting-1/the-template-element"
+    ]
+  },
+  "after": {
+    "source": "12e307b7fd8b12a43a7a6171705ff5cb83a4e100",
+    "binary_sha256": "696b2ff552d09d1028da1413afff8caa711bb3241fb38d9570cbbf44e83fcbdb",
+    "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "directories": [
+      "dom/nodes",
+      "dom/ranges",
+      "domparsing",
+      "html/syntax/serializing-html-fragments",
+      "html/syntax/parsing",
+      "html/semantics/scripting-1/the-template-element"
+    ]
+  },
+  "common_base": "c85dccf489fa3a92f56c906b91b16dccbfa39192",
+  "root_base": "eb7fa04a9b1d7059d4ad4183acee1b9dc3837aef",
+  "identical_dependencies": [
+    "cb3a8b459f721213adb00bcf5d295fb25346fb15",
+    "1c48472c0fb577667878e7db3b72a3eb7b90f5fd",
+    "12e307b7fd8b12a43a7a6171705ff5cb83a4e100 runner-only helper fix mirrored before09608"
+  ],
+  "platform": "Linux Boat; native /tmp source and target",
+  "before_lane": "dom-events-before",
+  "after_lane": "dom-xml-after",
+  "native_before": {
+    "pass": 3868,
+    "skip": 17,
+    "doc": 4
+  },
+  "native_after": {
+    "pass": 3873,
+    "skip": 17,
+    "doc": 4
+  },
+  "syntax_guard": {
+    "pages": 72,
+    "pass": 2702,
+    "fail": 6,
+    "raw_sha256": "aa986533ee7600afa72a1aa7d3f41969cab2a3ad9734a1a3c80535ca73399c07"
+  },
+  "fixture_changes": false,
+  "runner": "crates/amazing-bindings/evidence/dom-b-audit/run-corpus.py",
+  "timeout_ms": 25000,
+  "identity": "Exact subtest names SHA-256 over UTF-16LE with surrogatepass, preserving multiplicity"
+}

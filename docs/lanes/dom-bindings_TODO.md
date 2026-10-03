@@ -3263,3 +3263,23 @@ assertions and passing files. Failures 551 -> 553 reflect two previously
 zero-pass timeout/error completions; one further zero-pass classification changed.
 No WPT gain claimed. Evidence: amazing-bindings/evidence/native-ua-event.
 Facade adoption remains integrator-assist-owned.
+
+### XMLSerializer whole namespace/node interface
+
+Ready code8702b002 through12e307b7 on fixedrooteb7fa04a + functionrealm
+APIcb3a8b45 (localc85dccf4), with managed-constructor API1c48472c identical
+before/after. MIT jsdom/w3c-xmlserializer whole node/namespace port at
+265f1e1a192594708281809c8c7730b65acb36f3; source header/fulllicense/notice.
+Permissive serializeToString(false), distinct strict native helper, exactUTF16,
+real namespace/prefix scope, all node kinds/template contents/cycle boundaries.
+Brand60/stateless per-realm wrappers; actual Node arguments validated before
+arena borrow. Managed constructor preserves subclass/custom/foreign fallback
+prototype policy with exactly one observable prototype get. Five causal native
+groups; workspace3868->3873 pass/17skip +four docs. Whole579 corpus
+55886/2347/6 ->56395/2318/6:29 causal XMLSerializer gains (0/33->29/4),
+480 additional Range deadline completions uncredited. Zero lost matched AND
+accepted c85 passing assertions/multiplicities/files. Whole72syntax2702/6
+identical rawhash. Four pinned remaining failures recorded against current
+namespace algorithm in evidence/xml-serializer/audit.md; no fixture rewrites.
+Fresh-box helper omissions fixed identically with pinned html/dom and
+trusted-types/support resource directories; incomplete reports excluded.
