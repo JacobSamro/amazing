@@ -1,0 +1,240 @@
+{
+  "base_commit": "388acb742ff0bb57ba3634b9e4671ba7c439050d",
+  "source_commit": "11436a34efee2615d72913650f78a132f3c3a21a",
+  "corpora": {
+    "language": {
+      "before": {
+        "files": {
+          "pass": 24298,
+          "fail": 244,
+          "timeout": 4,
+          "unsupported": 26,
+          "skipped": 29300
+        },
+        "variants": {
+          "pass": 45001,
+          "fail": 333,
+          "timeout": 8,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 24304,
+          "fail": 238,
+          "timeout": 4,
+          "unsupported": 26,
+          "skipped": 29300
+        },
+        "variants": {
+          "pass": 45007,
+          "fail": 327,
+          "timeout": 8,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "gained_files": [
+        "language/import/import-defer/evaluation-triggers/ignore-private-name-access.js",
+        "language/import/import-defer/evaluation-triggers/trigger-exported-string-super-property-set-exported.js",
+        "language/import/import-defer/evaluation-triggers/trigger-not-exported-string-super-property-set-exported.js",
+        "language/module-code/namespace/internals/enumerate-binding-uninit.js",
+        "language/module-code/namespace/internals/object-keys-binding-uninit.js",
+        "language/module-code/namespace/internals/super-access-to-tdz-binding.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        "language/import/import-defer/evaluation-triggers/ignore-private-name-access.js#module",
+        "language/import/import-defer/evaluation-triggers/trigger-exported-string-super-property-set-exported.js#module",
+        "language/import/import-defer/evaluation-triggers/trigger-not-exported-string-super-property-set-exported.js#module",
+        "language/module-code/namespace/internals/enumerate-binding-uninit.js#module",
+        "language/module-code/namespace/internals/object-keys-binding-uninit.js#module",
+        "language/module-code/namespace/internals/super-access-to-tdz-binding.js#module"
+      ],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "6f7cc7a0f4ee233e04de1de83ba3f91bdee1b050545e2e57f4808fe2fd2b2526",
+      "after_host_sha256": "a48449cc174e871996cd71dce9c2cceaf5daf8d6c84481d39a284aebef8384a3",
+      "before_classification_sha256": "888c3527a095bed543d2e23a1730f64b64c54ed6fe435119434a95a98b3d293c",
+      "after_classification_sha256": "e97c6d6a050319ed55f41283d9b13e0cdffd951a90f69198faf38289ae89204c",
+      "timeout_files": [
+        "language/literals/regexp/S7.8.5_A1.1_T2.js",
+        "language/literals/regexp/S7.8.5_A1.4_T2.js",
+        "language/literals/regexp/S7.8.5_A2.1_T2.js",
+        "language/literals/regexp/S7.8.5_A2.4_T2.js"
+      ]
+    },
+    "built-ins-Object": {
+      "before": {
+        "files": {
+          "pass": 3377,
+          "fail": 36,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50458
+        },
+        "variants": {
+          "pass": 6734,
+          "fail": 72,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 3377,
+          "fail": 36,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50458
+        },
+        "variants": {
+          "pass": 6734,
+          "fail": 72,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "6f7cc7a0f4ee233e04de1de83ba3f91bdee1b050545e2e57f4808fe2fd2b2526",
+      "after_host_sha256": "a48449cc174e871996cd71dce9c2cceaf5daf8d6c84481d39a284aebef8384a3",
+      "before_classification_sha256": "8014fabcd67d7615cd726e6e11c85a1324ffba48b44665963fa57088ff1b3961",
+      "after_classification_sha256": "8014fabcd67d7615cd726e6e11c85a1324ffba48b44665963fa57088ff1b3961",
+      "timeout_files": []
+    },
+    "built-ins-Reflect": {
+      "before": {
+        "files": {
+          "pass": 153,
+          "fail": 1,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53718
+        },
+        "variants": {
+          "pass": 306,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 153,
+          "fail": 1,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53718
+        },
+        "variants": {
+          "pass": 306,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "6f7cc7a0f4ee233e04de1de83ba3f91bdee1b050545e2e57f4808fe2fd2b2526",
+      "after_host_sha256": "a48449cc174e871996cd71dce9c2cceaf5daf8d6c84481d39a284aebef8384a3",
+      "before_classification_sha256": "264c120ea2b9c3154f267913b35100b98205643130a305a51cfe62de4d5588aa",
+      "after_classification_sha256": "264c120ea2b9c3154f267913b35100b98205643130a305a51cfe62de4d5588aa",
+      "timeout_files": []
+    },
+    "built-ins-Proxy": {
+      "before": {
+        "files": {
+          "pass": 311,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53561
+        },
+        "variants": {
+          "pass": 607,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 311,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53561
+        },
+        "variants": {
+          "pass": 607,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "6f7cc7a0f4ee233e04de1de83ba3f91bdee1b050545e2e57f4808fe2fd2b2526",
+      "after_host_sha256": "a48449cc174e871996cd71dce9c2cceaf5daf8d6c84481d39a284aebef8384a3",
+      "before_classification_sha256": "0b90cabd4d8c94a86db74fed5fb1473f04bb0273b56e77e30363754c5a44055a",
+      "after_classification_sha256": "0b90cabd4d8c94a86db74fed5fb1473f04bb0273b56e77e30363754c5a44055a",
+      "timeout_files": []
+    }
+  },
+  "source_series": [
+    "256b03ca",
+    "11436a34efee2615d72913650f78a132f3c3a21a"
+  ],
+  "dependency_components": {
+    "root_coherent": "f9cafadf96568b025adf48f0e321ff41896fdf69",
+    "JS30_source": "6267fa330a2daba804d874511a26306ee985c6e2",
+    "root_driver_correction": "86b406bb"
+  },
+  "workspace": {
+    "before_passed": 3899,
+    "after_passed": 3903,
+    "skipped": 17,
+    "doctests_passed": 4,
+    "new_both_backend_groups": 4
+  },
+  "abandoned_before": {
+    "commit": "21089a4f4dad053e35cc542b43952d16d4872c06",
+    "workspace_passed": 3898,
+    "workspace_failed": 1,
+    "corpus_started": false,
+    "reason": "unseeded browser repeated-import identity fixture; identical minimal root86b correction adopted before measured snapshots"
+  }
+}
