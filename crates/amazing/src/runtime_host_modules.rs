@@ -411,6 +411,17 @@ mod tests {
         assert!(matches!(driver.run_script("evaluated.value===9 && evaluated!==lazy && deferredRuns===1").unwrap(), JsValue::Bool(true)));
     }
     #[test]
+    fn browser_dynamic_import_caches_materialized_dependency_errors() {
+        let mut driver = scheduler();
+        driver.set_module_source_loader(Rc::new(|url| match url {
+            "https://example.test/bad.js" => Ok("import 'unmapped';".into()),
+            _ => Err(format!("missing {url}")),
+        }));
+        driver.run_script("var errors=[];import('./bad.js').catch(e=>errors.push(e));import('./bad.js').catch(e=>errors.push(e));").unwrap();
+        driver.pump_at(std::time::Duration::ZERO, false).unwrap();
+        assert!(matches!(driver.run_script("errors.length===2 && errors[0]===errors[1] && errors[0] instanceof TypeError").unwrap(), JsValue::Bool(true)));
+    }
+    #[test]
     fn browser_async_import_rejections_keep_the_original_error_across_requests() {
         let mut driver = scheduler();
         driver.set_module_source_loader(Rc::new(|_| Ok("await Promise.resolve(); throw window.original;".into())));
