@@ -1,3 +1,5 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/array/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // Shared ECMAScript object operations for generic Array algorithms.
 fn array_set(i: &mut Interpreter, object: &JsValue, key: impl Into<PropertyKey>, value: JsValue) -> Result<(), Throw> {
     let JsValue::Object(target) = object else { return Err(Throw::type_error("array receiver is not an object")); };
@@ -122,9 +124,9 @@ fn native_array_concat(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
     let result = array_species_create(i, &object, 0)?;
     let mut next = 0usize;
     for item in std::iter::once(object).chain(args) {
-        let spread = if let JsValue::Object(handle) = &item {
+        let spread = if item.is_object() {
             let value = i.get_prop(&item, WellKnownSymbol::IsConcatSpreadable.symbol())?;
-            if value.is_undefined() { matches!(handle.borrow().exotic, Exotic::Array) } else { value.to_boolean() }
+            if value.is_undefined() { is_array_value(i, &item)? } else { value.to_boolean() }
         } else { false };
         if spread {
             let length = array_like_length(i, &item)?;
@@ -157,7 +159,6 @@ fn native_array_splice(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
     let inserted = args.len().saturating_sub(2);
     let new_length = (length - delete_count).saturating_add(inserted);
     if new_length > 9_007_199_254_740_991 { return Err(Throw::type_error("splice length exceeds maximum safe integer")); }
-    if length > 1_000_000 || new_length > 1_000_000 { return Err(Throw::range_error("splice array too large")); }
     let removed = array_species_create(i, &object, delete_count)?;
     for index in 0..delete_count {
         if array_has(i, &object, start + index)? {

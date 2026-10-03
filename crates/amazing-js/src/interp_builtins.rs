@@ -1,3 +1,6 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/array/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// Generic Array search/reduction length protocols; other builtin algorithms unchanged.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/promise/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT:
 // JSRT-30 optional result-capability completion in Promise reaction jobs;
@@ -2140,7 +2143,7 @@ fn native_object_to_string(
         else if matches!(object.boxed_primitive, Some(JsValue::Bool(_))) { "Boolean" }
         else if matches!(object.boxed_primitive, Some(JsValue::Num(_))) { "Number" }
         else if matches!(object.boxed_primitive, Some(JsValue::Str(_))) { "String" }
-        else if object.get_own("[[DateValue]]").is_some() { "Date" }
+        else if !matches!(object.exotic, Exotic::Proxy(_)) && object.get_own("[[DateValue]]").is_some() { "Date" }
         else if matches!(object.exotic, Exotic::RegExp(_)) { "RegExp" }
         else { "Object" }
     };
@@ -2857,9 +2860,6 @@ fn native_array_includes(
     if length == 0 { return Ok(JsValue::Bool(false)); }
     let search = args.first().cloned().unwrap_or(JsValue::Undefined);
     let start = array_index(i, args.get(1), length, 0.0)?;
-    if length.saturating_sub(start) > 1_000_000 {
-        return Err(Throw::range_error("array search exceeds iteration limit"));
-    }
     for index in start..length {
         let value = array_get_index(i, &object, index)?;
         if value == search || matches!((&value, &search), (JsValue::Num(a), JsValue::Num(b)) if a.is_nan() && b.is_nan()) {
@@ -2879,9 +2879,6 @@ fn native_array_index_of(
     if length == 0 { return Ok(JsValue::num(-1.0)); }
     let search = args.first().cloned().unwrap_or(JsValue::Undefined);
     let start = array_index(i, args.get(1), length, 0.0)?;
-    if length.saturating_sub(start) > 1_000_000 {
-        return Err(Throw::range_error("array search exceeds iteration limit"));
-    }
     for index in start..length {
         if array_has(i, &object, index)? && array_get_index(i, &object, index)? == search {
             return Ok(JsValue::num(index as f64));

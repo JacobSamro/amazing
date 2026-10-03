@@ -1,0 +1,1285 @@
+{
+  "ticket": "JSRT-59",
+  "base_sha": "2c1ecb65141e84022e6bd4f5899840e68ca224ec",
+  "host_profile": "release",
+  "workspace": {
+    "passed": 4040,
+    "skipped": 17,
+    "elapsed_seconds": 75.127
+  },
+  "doctests": 4,
+  "modes": {
+    "default": {
+      "configuration": "AMAZING_JS_VM unset: existing default execution policy",
+      "unique": {
+        "selected": 34501,
+        "before_pass": 34179,
+        "after_pass": 34217,
+        "gained_files": [
+          "built-ins/Array/prototype/Symbol.unscopables/array-find-from-last.js",
+          "built-ins/Array/prototype/Symbol.unscopables/at.js",
+          "built-ins/Array/prototype/Symbol.unscopables/value.js",
+          "built-ins/Array/prototype/concat/arg-length-exceeding-integer-limit.js",
+          "built-ins/Array/prototype/concat/arg-length-near-integer-limit.js",
+          "built-ins/Array/prototype/concat/is-concat-spreadable-is-array-proxy-revoked.js",
+          "built-ins/Array/prototype/concat/is-concat-spreadable-proxy.js",
+          "built-ins/Array/prototype/copyWithin/length-near-integer-limit.js",
+          "built-ins/Array/prototype/copyWithin/undefined-end.js",
+          "built-ins/Array/prototype/every/15.4.4.16-3-14.js",
+          "built-ins/Array/prototype/every/15.4.4.16-3-29.js",
+          "built-ins/Array/prototype/every/15.4.4.16-3-8.js",
+          "built-ins/Array/prototype/fill/coerced-indexes.js",
+          "built-ins/Array/prototype/fill/length-near-integer-limit.js",
+          "built-ins/Array/prototype/fill/resizable-buffer.js",
+          "built-ins/Array/prototype/findLast/maximum-index.js",
+          "built-ins/Array/prototype/findLastIndex/maximum-index.js",
+          "built-ins/Array/prototype/flat/non-numeric-depth-should-not-throw.js",
+          "built-ins/Array/prototype/flat/proxy-access-count.js",
+          "built-ins/Array/prototype/flatMap/proxy-access-count.js",
+          "built-ins/Array/prototype/indexOf/15.4.4.14-3-14.js",
+          "built-ins/Array/prototype/indexOf/15.4.4.14-3-28.js",
+          "built-ins/Array/prototype/indexOf/15.4.4.14-3-29.js",
+          "built-ins/Array/prototype/indexOf/15.4.4.14-3-8.js",
+          "built-ins/Array/prototype/reduceRight/length-near-integer-limit.js",
+          "built-ins/Array/prototype/reverse/get_if_present_with_delete.js",
+          "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-object.js",
+          "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-proxy.js",
+          "built-ins/Array/prototype/splice/S15.4.4.12_A3_T1.js",
+          "built-ins/Array/prototype/splice/clamps-length-to-integer-limit.js",
+          "built-ins/Array/prototype/splice/create-species-length-exceeding-integer-limit.js",
+          "built-ins/Array/prototype/splice/length-and-deleteCount-exceeding-integer-limit.js",
+          "built-ins/Array/prototype/splice/length-exceeding-integer-limit-shrink-array.js",
+          "built-ins/Array/prototype/splice/length-near-integer-limit-grow-array.js",
+          "built-ins/Array/prototype/toSpliced/length-clamped-to-2pow53minus1.js",
+          "built-ins/Array/prototype/toSpliced/length-exceeding-array-length-limit.js",
+          "built-ins/Array/prototype/unshift/clamps-to-integer-limit.js",
+          "built-ins/Array/prototype/unshift/length-near-integer-limit.js"
+        ],
+        "lost_files": [],
+        "gained_variants": [
+          [
+            "built-ins/Array/prototype/Symbol.unscopables/array-find-from-last.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/Symbol.unscopables/array-find-from-last.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/Symbol.unscopables/at.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/Symbol.unscopables/at.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/Symbol.unscopables/value.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/Symbol.unscopables/value.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/arg-length-exceeding-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/arg-length-exceeding-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/arg-length-near-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/arg-length-near-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/is-concat-spreadable-is-array-proxy-revoked.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/is-concat-spreadable-is-array-proxy-revoked.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/is-concat-spreadable-proxy.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/is-concat-spreadable-proxy.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/copyWithin/length-near-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/copyWithin/length-near-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/copyWithin/undefined-end.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/copyWithin/undefined-end.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/every/15.4.4.16-3-14.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/every/15.4.4.16-3-14.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/every/15.4.4.16-3-29.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/every/15.4.4.16-3-29.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/every/15.4.4.16-3-8.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/every/15.4.4.16-3-8.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/fill/coerced-indexes.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/fill/coerced-indexes.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/fill/length-near-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/fill/length-near-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/fill/resizable-buffer.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/fill/resizable-buffer.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/findLast/maximum-index.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/findLast/maximum-index.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/findLastIndex/maximum-index.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/findLastIndex/maximum-index.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/flat/non-numeric-depth-should-not-throw.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/flat/non-numeric-depth-should-not-throw.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/flat/proxy-access-count.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/flat/proxy-access-count.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/flatMap/proxy-access-count.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/flatMap/proxy-access-count.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-14.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-14.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-28.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-28.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-29.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-29.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-8.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-8.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/reduceRight/length-near-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/reduceRight/length-near-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/reverse/get_if_present_with_delete.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/reverse/get_if_present_with_delete.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-object.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-object.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-proxy.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-proxy.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/S15.4.4.12_A3_T1.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/S15.4.4.12_A3_T1.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/clamps-length-to-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/clamps-length-to-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/create-species-length-exceeding-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/create-species-length-exceeding-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/length-and-deleteCount-exceeding-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/length-and-deleteCount-exceeding-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/length-exceeding-integer-limit-shrink-array.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/length-exceeding-integer-limit-shrink-array.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/length-near-integer-limit-grow-array.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/length-near-integer-limit-grow-array.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/toSpliced/length-clamped-to-2pow53minus1.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/toSpliced/length-clamped-to-2pow53minus1.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/toSpliced/length-exceeding-array-length-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/toSpliced/length-exceeding-array-length-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/unshift/clamps-to-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/unshift/clamps-to-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/unshift/length-near-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/unshift/length-near-integer-limit.js",
+            "strict"
+          ]
+        ],
+        "lost_variants": []
+      },
+      "selections": {
+        "built-ins-Array": {
+          "execution_mode": "default",
+          "selected": 3332,
+          "before": {
+            "pass": 3288,
+            "fail": 43,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50540
+          },
+          "after": {
+            "pass": 3326,
+            "fail": 5,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50540
+          },
+          "gained": [
+            "built-ins/Array/prototype/Symbol.unscopables/array-find-from-last.js",
+            "built-ins/Array/prototype/Symbol.unscopables/at.js",
+            "built-ins/Array/prototype/Symbol.unscopables/value.js",
+            "built-ins/Array/prototype/concat/arg-length-exceeding-integer-limit.js",
+            "built-ins/Array/prototype/concat/arg-length-near-integer-limit.js",
+            "built-ins/Array/prototype/concat/is-concat-spreadable-is-array-proxy-revoked.js",
+            "built-ins/Array/prototype/concat/is-concat-spreadable-proxy.js",
+            "built-ins/Array/prototype/copyWithin/length-near-integer-limit.js",
+            "built-ins/Array/prototype/copyWithin/undefined-end.js",
+            "built-ins/Array/prototype/every/15.4.4.16-3-14.js",
+            "built-ins/Array/prototype/every/15.4.4.16-3-29.js",
+            "built-ins/Array/prototype/every/15.4.4.16-3-8.js",
+            "built-ins/Array/prototype/fill/coerced-indexes.js",
+            "built-ins/Array/prototype/fill/length-near-integer-limit.js",
+            "built-ins/Array/prototype/fill/resizable-buffer.js",
+            "built-ins/Array/prototype/findLast/maximum-index.js",
+            "built-ins/Array/prototype/findLastIndex/maximum-index.js",
+            "built-ins/Array/prototype/flat/non-numeric-depth-should-not-throw.js",
+            "built-ins/Array/prototype/flat/proxy-access-count.js",
+            "built-ins/Array/prototype/flatMap/proxy-access-count.js",
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-14.js",
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-28.js",
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-29.js",
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-8.js",
+            "built-ins/Array/prototype/reduceRight/length-near-integer-limit.js",
+            "built-ins/Array/prototype/reverse/get_if_present_with_delete.js",
+            "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-object.js",
+            "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-proxy.js",
+            "built-ins/Array/prototype/splice/S15.4.4.12_A3_T1.js",
+            "built-ins/Array/prototype/splice/clamps-length-to-integer-limit.js",
+            "built-ins/Array/prototype/splice/create-species-length-exceeding-integer-limit.js",
+            "built-ins/Array/prototype/splice/length-and-deleteCount-exceeding-integer-limit.js",
+            "built-ins/Array/prototype/splice/length-exceeding-integer-limit-shrink-array.js",
+            "built-ins/Array/prototype/splice/length-near-integer-limit-grow-array.js",
+            "built-ins/Array/prototype/toSpliced/length-clamped-to-2pow53minus1.js",
+            "built-ins/Array/prototype/toSpliced/length-exceeding-array-length-limit.js",
+            "built-ins/Array/prototype/unshift/clamps-to-integer-limit.js",
+            "built-ins/Array/prototype/unshift/length-near-integer-limit.js"
+          ],
+          "lost": [],
+          "elapsed_before": 15.043,
+          "elapsed_after": 14.705,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-ArrayIteratorPrototype": {
+          "execution_mode": "default",
+          "selected": 27,
+          "before": {
+            "pass": 26,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53845
+          },
+          "after": {
+            "pass": 26,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53845
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 2.831,
+          "elapsed_after": 3.14,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-TypedArray": {
+          "execution_mode": "default",
+          "selected": 2185,
+          "before": {
+            "pass": 2114,
+            "fail": 70,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 51687
+          },
+          "after": {
+            "pass": 2114,
+            "fail": 70,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 51687
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 23.902,
+          "elapsed_after": 24.148,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Object": {
+          "execution_mode": "default",
+          "selected": 3414,
+          "before": {
+            "pass": 3411,
+            "fail": 2,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50458
+          },
+          "after": {
+            "pass": 3411,
+            "fail": 2,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50458
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 10.455,
+          "elapsed_after": 10.075,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Proxy": {
+          "execution_mode": "default",
+          "selected": 311,
+          "before": {
+            "pass": 311,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53561
+          },
+          "after": {
+            "pass": 311,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53561
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 3.365,
+          "elapsed_after": 3.159,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Reflect": {
+          "execution_mode": "default",
+          "selected": 154,
+          "before": {
+            "pass": 153,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53718
+          },
+          "after": {
+            "pass": 153,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53718
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 2.899,
+          "elapsed_after": 3.099,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Function": {
+          "execution_mode": "default",
+          "selected": 515,
+          "before": {
+            "pass": 507,
+            "fail": 8,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53357
+          },
+          "after": {
+            "pass": 507,
+            "fail": 8,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53357
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 4.488,
+          "elapsed_after": 4.444,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "language": {
+          "execution_mode": "default",
+          "selected": 24590,
+          "before": {
+            "pass": 24395,
+            "fail": 169,
+            "timeout": 0,
+            "unsupported": 26,
+            "skipped": 29282
+          },
+          "after": {
+            "pass": 24395,
+            "fail": 169,
+            "timeout": 0,
+            "unsupported": 26,
+            "skipped": 29282
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 54.286,
+          "elapsed_after": 55.232,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        }
+      }
+    },
+    "bytecode": {
+      "configuration": "AMAZING_JS_VM=1: existing eligible top-level Program compilation with normal fallback",
+      "unique": {
+        "selected": 34501,
+        "before_pass": 34074,
+        "after_pass": 34112,
+        "gained_files": [
+          "built-ins/Array/prototype/Symbol.unscopables/array-find-from-last.js",
+          "built-ins/Array/prototype/Symbol.unscopables/at.js",
+          "built-ins/Array/prototype/Symbol.unscopables/value.js",
+          "built-ins/Array/prototype/concat/arg-length-exceeding-integer-limit.js",
+          "built-ins/Array/prototype/concat/arg-length-near-integer-limit.js",
+          "built-ins/Array/prototype/concat/is-concat-spreadable-is-array-proxy-revoked.js",
+          "built-ins/Array/prototype/concat/is-concat-spreadable-proxy.js",
+          "built-ins/Array/prototype/copyWithin/length-near-integer-limit.js",
+          "built-ins/Array/prototype/copyWithin/undefined-end.js",
+          "built-ins/Array/prototype/every/15.4.4.16-3-14.js",
+          "built-ins/Array/prototype/every/15.4.4.16-3-29.js",
+          "built-ins/Array/prototype/every/15.4.4.16-3-8.js",
+          "built-ins/Array/prototype/fill/coerced-indexes.js",
+          "built-ins/Array/prototype/fill/length-near-integer-limit.js",
+          "built-ins/Array/prototype/fill/resizable-buffer.js",
+          "built-ins/Array/prototype/findLast/maximum-index.js",
+          "built-ins/Array/prototype/findLastIndex/maximum-index.js",
+          "built-ins/Array/prototype/flat/non-numeric-depth-should-not-throw.js",
+          "built-ins/Array/prototype/flat/proxy-access-count.js",
+          "built-ins/Array/prototype/flatMap/proxy-access-count.js",
+          "built-ins/Array/prototype/indexOf/15.4.4.14-3-14.js",
+          "built-ins/Array/prototype/indexOf/15.4.4.14-3-28.js",
+          "built-ins/Array/prototype/indexOf/15.4.4.14-3-29.js",
+          "built-ins/Array/prototype/indexOf/15.4.4.14-3-8.js",
+          "built-ins/Array/prototype/reduceRight/length-near-integer-limit.js",
+          "built-ins/Array/prototype/reverse/get_if_present_with_delete.js",
+          "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-object.js",
+          "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-proxy.js",
+          "built-ins/Array/prototype/splice/S15.4.4.12_A3_T1.js",
+          "built-ins/Array/prototype/splice/clamps-length-to-integer-limit.js",
+          "built-ins/Array/prototype/splice/create-species-length-exceeding-integer-limit.js",
+          "built-ins/Array/prototype/splice/length-and-deleteCount-exceeding-integer-limit.js",
+          "built-ins/Array/prototype/splice/length-exceeding-integer-limit-shrink-array.js",
+          "built-ins/Array/prototype/splice/length-near-integer-limit-grow-array.js",
+          "built-ins/Array/prototype/toSpliced/length-clamped-to-2pow53minus1.js",
+          "built-ins/Array/prototype/toSpliced/length-exceeding-array-length-limit.js",
+          "built-ins/Array/prototype/unshift/clamps-to-integer-limit.js",
+          "built-ins/Array/prototype/unshift/length-near-integer-limit.js"
+        ],
+        "lost_files": [],
+        "gained_variants": [
+          [
+            "built-ins/Array/prototype/Symbol.unscopables/array-find-from-last.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/Symbol.unscopables/array-find-from-last.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/Symbol.unscopables/at.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/Symbol.unscopables/at.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/Symbol.unscopables/value.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/Symbol.unscopables/value.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/arg-length-exceeding-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/arg-length-exceeding-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/arg-length-near-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/arg-length-near-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/is-concat-spreadable-is-array-proxy-revoked.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/is-concat-spreadable-is-array-proxy-revoked.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/is-concat-spreadable-proxy.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/concat/is-concat-spreadable-proxy.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/copyWithin/length-near-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/copyWithin/length-near-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/copyWithin/undefined-end.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/copyWithin/undefined-end.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/every/15.4.4.16-3-14.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/every/15.4.4.16-3-14.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/every/15.4.4.16-3-29.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/every/15.4.4.16-3-29.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/every/15.4.4.16-3-8.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/every/15.4.4.16-3-8.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/fill/coerced-indexes.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/fill/coerced-indexes.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/fill/length-near-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/fill/length-near-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/fill/resizable-buffer.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/fill/resizable-buffer.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/findLast/maximum-index.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/findLast/maximum-index.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/findLastIndex/maximum-index.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/findLastIndex/maximum-index.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/flat/non-numeric-depth-should-not-throw.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/flat/non-numeric-depth-should-not-throw.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/flat/proxy-access-count.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/flat/proxy-access-count.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/flatMap/proxy-access-count.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/flatMap/proxy-access-count.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-14.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-14.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-28.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-28.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-29.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-29.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-8.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-8.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/reduceRight/length-near-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/reduceRight/length-near-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/reverse/get_if_present_with_delete.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/reverse/get_if_present_with_delete.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-object.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-object.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-proxy.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-proxy.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/S15.4.4.12_A3_T1.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/S15.4.4.12_A3_T1.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/clamps-length-to-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/clamps-length-to-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/create-species-length-exceeding-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/create-species-length-exceeding-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/length-and-deleteCount-exceeding-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/length-and-deleteCount-exceeding-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/length-exceeding-integer-limit-shrink-array.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/length-exceeding-integer-limit-shrink-array.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/length-near-integer-limit-grow-array.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/splice/length-near-integer-limit-grow-array.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/toSpliced/length-clamped-to-2pow53minus1.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/toSpliced/length-clamped-to-2pow53minus1.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/toSpliced/length-exceeding-array-length-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/toSpliced/length-exceeding-array-length-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/unshift/clamps-to-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/unshift/clamps-to-integer-limit.js",
+            "strict"
+          ],
+          [
+            "built-ins/Array/prototype/unshift/length-near-integer-limit.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/unshift/length-near-integer-limit.js",
+            "strict"
+          ]
+        ],
+        "lost_variants": []
+      },
+      "selections": {
+        "built-ins-Array": {
+          "execution_mode": "bytecode",
+          "selected": 3332,
+          "before": {
+            "pass": 3284,
+            "fail": 47,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50540
+          },
+          "after": {
+            "pass": 3322,
+            "fail": 9,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50540
+          },
+          "gained": [
+            "built-ins/Array/prototype/Symbol.unscopables/array-find-from-last.js",
+            "built-ins/Array/prototype/Symbol.unscopables/at.js",
+            "built-ins/Array/prototype/Symbol.unscopables/value.js",
+            "built-ins/Array/prototype/concat/arg-length-exceeding-integer-limit.js",
+            "built-ins/Array/prototype/concat/arg-length-near-integer-limit.js",
+            "built-ins/Array/prototype/concat/is-concat-spreadable-is-array-proxy-revoked.js",
+            "built-ins/Array/prototype/concat/is-concat-spreadable-proxy.js",
+            "built-ins/Array/prototype/copyWithin/length-near-integer-limit.js",
+            "built-ins/Array/prototype/copyWithin/undefined-end.js",
+            "built-ins/Array/prototype/every/15.4.4.16-3-14.js",
+            "built-ins/Array/prototype/every/15.4.4.16-3-29.js",
+            "built-ins/Array/prototype/every/15.4.4.16-3-8.js",
+            "built-ins/Array/prototype/fill/coerced-indexes.js",
+            "built-ins/Array/prototype/fill/length-near-integer-limit.js",
+            "built-ins/Array/prototype/fill/resizable-buffer.js",
+            "built-ins/Array/prototype/findLast/maximum-index.js",
+            "built-ins/Array/prototype/findLastIndex/maximum-index.js",
+            "built-ins/Array/prototype/flat/non-numeric-depth-should-not-throw.js",
+            "built-ins/Array/prototype/flat/proxy-access-count.js",
+            "built-ins/Array/prototype/flatMap/proxy-access-count.js",
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-14.js",
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-28.js",
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-29.js",
+            "built-ins/Array/prototype/indexOf/15.4.4.14-3-8.js",
+            "built-ins/Array/prototype/reduceRight/length-near-integer-limit.js",
+            "built-ins/Array/prototype/reverse/get_if_present_with_delete.js",
+            "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-object.js",
+            "built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-proxy.js",
+            "built-ins/Array/prototype/splice/S15.4.4.12_A3_T1.js",
+            "built-ins/Array/prototype/splice/clamps-length-to-integer-limit.js",
+            "built-ins/Array/prototype/splice/create-species-length-exceeding-integer-limit.js",
+            "built-ins/Array/prototype/splice/length-and-deleteCount-exceeding-integer-limit.js",
+            "built-ins/Array/prototype/splice/length-exceeding-integer-limit-shrink-array.js",
+            "built-ins/Array/prototype/splice/length-near-integer-limit-grow-array.js",
+            "built-ins/Array/prototype/toSpliced/length-clamped-to-2pow53minus1.js",
+            "built-ins/Array/prototype/toSpliced/length-exceeding-array-length-limit.js",
+            "built-ins/Array/prototype/unshift/clamps-to-integer-limit.js",
+            "built-ins/Array/prototype/unshift/length-near-integer-limit.js"
+          ],
+          "lost": [],
+          "elapsed_before": 15.01,
+          "elapsed_after": 14.543,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-ArrayIteratorPrototype": {
+          "execution_mode": "bytecode",
+          "selected": 27,
+          "before": {
+            "pass": 26,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53845
+          },
+          "after": {
+            "pass": 26,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53845
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 2.909,
+          "elapsed_after": 2.703,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-TypedArray": {
+          "execution_mode": "bytecode",
+          "selected": 2185,
+          "before": {
+            "pass": 2111,
+            "fail": 73,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 51687
+          },
+          "after": {
+            "pass": 2111,
+            "fail": 73,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 51687
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 24.034,
+          "elapsed_after": 23.74,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Object": {
+          "execution_mode": "bytecode",
+          "selected": 3414,
+          "before": {
+            "pass": 3411,
+            "fail": 2,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50458
+          },
+          "after": {
+            "pass": 3411,
+            "fail": 2,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50458
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 10.39,
+          "elapsed_after": 10.178,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Proxy": {
+          "execution_mode": "bytecode",
+          "selected": 311,
+          "before": {
+            "pass": 311,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53561
+          },
+          "after": {
+            "pass": 311,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53561
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 2.956,
+          "elapsed_after": 3.369,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Reflect": {
+          "execution_mode": "bytecode",
+          "selected": 154,
+          "before": {
+            "pass": 153,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53718
+          },
+          "after": {
+            "pass": 153,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53718
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 3.142,
+          "elapsed_after": 3.072,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Function": {
+          "execution_mode": "bytecode",
+          "selected": 515,
+          "before": {
+            "pass": 507,
+            "fail": 8,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53357
+          },
+          "after": {
+            "pass": 507,
+            "fail": 8,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53357
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 4.463,
+          "elapsed_after": 4.479,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "language": {
+          "execution_mode": "bytecode",
+          "selected": 24590,
+          "before": {
+            "pass": 24297,
+            "fail": 267,
+            "timeout": 0,
+            "unsupported": 26,
+            "skipped": 29282
+          },
+          "after": {
+            "pass": 24297,
+            "fail": 267,
+            "timeout": 0,
+            "unsupported": 26,
+            "skipped": 29282
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 54.307,
+          "elapsed_after": 55.226,
+          "before_host_sha256": "49242420b619ff04915d6798a992489ff1abdca60c62dc8da9cf22f1e5676cc1",
+          "after_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        }
+      }
+    }
+  },
+  "source_sha256": {
+    "crates/amazing-js/src/interp_array.rs": "5a6ec5a0c51b2228a5ef44615c7bf73b127549b021184d561657590c1b53f46f",
+    "crates/amazing-js/src/interp_array_protocol.rs": "c31e251b314086e37ab5bd7847abc83e28f1a0475e8d7d6e6d1c21a3e18789bc",
+    "crates/amazing-js/src/interp_builtins.rs": "0876283fd8edc00fe81fca4edeca6afc72c9010b5fb6aef9d58570d7511c7707"
+  },
+  "diagnostic": {
+    "first_workspace": {
+      "passed": 4039,
+      "failed": 1
+    },
+    "cause": "new fallback-brand fixture was masked by existing nonstandard Date.prototype @@toStringTag; final fixture deletes that explicit inherited tag solely to isolate fallback",
+    "remaining_actual_array_failure": "built-ins/Array/prototype/toString/non-callable-join-string-tag.js",
+    "next_ticket": "JSRT60 separately approved Date tag installation removal; no gain claimed here"
+  }
+}
