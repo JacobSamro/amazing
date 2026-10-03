@@ -1,0 +1,5 @@
+# Genuine Window identity and ordinary properties
+
+Closed dependency rootff8 plus fixture-only correctionsc49 andf08, held constant during native checks. Source7da562ca6cf2f6b3071353c30ccf00d8bc048b13 removes the legacy DOM-node marker from the actual installed global object after module loader setup. Existing genuine realm/event/WindowProxy hooks remain unchanged. No engine property algorithm changes or facade dependencies.
+
+The grouped native test covers main and actual child Window ordinary body/documentElement property storage, main var linkage, child eval linkage, separate Document.body/documentElement accessors and Window/defaultView identities. The initial whole workspace4031/1 existing HTML expectation failure/17skip and4 docs proves the new group green. Exact validated f08 current-Standard expectation correction then applied; final source05b9a755628ff7779f6867fb912828bd3c92fbb8 passed the final Linux Boat workspace gate: **4032 tests passed/17 skipped +4 doctests**. The genuine main/child Window group passed. Logs fetched to MAIN `.agents/integrator-runtime/evidence/window-final`; no pending native failure.
