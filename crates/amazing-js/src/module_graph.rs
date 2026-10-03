@@ -17,6 +17,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             .get(id)
             .into_iter()
             .flatten()
+            .filter(|request| self.request_metadata.get(&(id.into(),(*request).clone())).is_none_or(|r| r.phase != ImportPhase::Source))
             .filter_map(|request| self.records[id].dependencies.get(request).cloned())
             .collect()
     }
@@ -49,6 +50,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             if let Some(failure) = self.request_failures.get(&(id.into(), request.clone())) {
                 return Err(failure.clone());
             }
+            if self.request_metadata.get(&(id.into(),request.clone())).is_some_and(|r| r.phase == ImportPhase::Source) { continue; }
             self.first_graph_failure(&record.dependencies[request], false, visited)?;
         }
         Ok(())
@@ -70,6 +72,10 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         name: &str,
         resolve_set: &mut HashSet<(String, String)>,
     ) -> ExportResolution {
+        if self.synthetic.contains_key(id) {
+            return if name == "default" { ExportResolution::Binding(id.into(),"\0module.default".into()) }
+                else { ExportResolution::Missing };
+        }
         if !resolve_set.insert((id.into(), name.into())) {
             return ExportResolution::Missing;
         }
@@ -97,11 +103,11 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                     .unwrap_or_else(|| "\0module.default".into());
                     return ExportResolution::Binding(id.into(), binding);
                 }
-                ModuleItem::ExportNamed { names, from, .. } => {
+                ModuleItem::ExportNamed { names, from, attributes, .. } => {
                     if let Some(entry) = names.iter().find(|entry| entry.exported == name) {
                         if let Some(from) = from {
                             return self.resolve_export(
-                                &record.dependencies[from],
+                                &record.dependencies[&export_key(from, attributes)],
                                 &entry.local,
                                 resolve_set,
                             );
@@ -113,7 +119,10 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                                     .iter()
                                     .find(|binding| binding.local.name == entry.local)
                                 {
-                                    let dependency = &record.dependencies[&import.from];
+                                    if import.phase.as_deref()==Some("source") || import.phase.as_deref()==Some("defer") {
+                                        return ExportResolution::Binding(id.into(),entry.local.clone());
+                                    }
+                                    let dependency = &record.dependencies[&import_key(import)];
                                     return if binding.imported == "*" {
                                         ExportResolution::Namespace(dependency.clone())
                                     } else {
@@ -132,9 +141,9 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                 ModuleItem::ExportAll {
                     as_name: Some(alias),
                     from,
-                    ..
+                    attributes, ..
                 } if alias == name => {
-                    return ExportResolution::Namespace(record.dependencies[from].clone());
+                    return ExportResolution::Namespace(record.dependencies[&export_key(from, attributes)].clone());
                 }
                 _ => {}
             }
@@ -147,10 +156,10 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             if let ModuleItem::ExportAll {
                 as_name: None,
                 from,
-                ..
+                attributes, ..
             } = item
             {
-                let resolution = self.resolve_export(&record.dependencies[from], name, resolve_set);
+                let resolution = self.resolve_export(&record.dependencies[&export_key(from, attributes)], name, resolve_set);
                 if resolution == ExportResolution::Ambiguous {
                     return resolution;
                 }

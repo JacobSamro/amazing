@@ -398,6 +398,7 @@ impl Interpreter {
         if let Some(result) = self.proxy_get_own_property(target, key) { return result; }
         if let Some(result) = self.window_proxy_own_property(target, key) { return result; }
         if let Some(result) = arguments_own_property(target, key) { return result; }
+        if let Some(result)=self.namespace_own_property(target,key) {return result;}
         if let Some(descriptor) = binary_index_descriptor(target, key) { return Ok(descriptor); }
         match key.as_string() {
             Some(name) => self.legacy_own_property(target, name.clone(), false),
@@ -408,6 +409,7 @@ impl Interpreter {
     fn default_has_property(&mut self, target: &Obj, key: &PropertyKey) -> Result<bool, Throw> {
         if let Some(result) = self.proxy_has(target, key) { return result; }
         if let Some(result) = self.window_proxy_has(target, key) { return result; }
+        if let Some(result)=self.namespace_has(target,key) {return result;}
         if let Some(descriptor) = binary_index_descriptor(target, key) { return Ok(descriptor.is_some()); }
         match key.as_string() {
             Some(name) => self.legacy_has_property(target, name.clone()),
@@ -418,6 +420,7 @@ impl Interpreter {
     fn default_delete_property(&mut self, target: &Obj, key: &PropertyKey) -> Result<bool, Throw> {
         if let Some(result) = self.proxy_delete(target, key) { return result; }
         if let Some(result) = self.window_proxy_delete(target, key) { return result; }
+        if let Some(result)=self.namespace_delete(target,key) {return result;}
         if let Some(deleted) = binary_delete_index(target, key) { return Ok(deleted); }
         if let Some(name) = key.as_string() {
             if let Some(deleted) = self.legacy_delete(target, name.clone())? { return Ok(deleted); }
@@ -446,7 +449,7 @@ impl Interpreter {
         // ordinary handler inherit the Proxy itself and recurse on trap lookup.
         if Rc::ptr_eq(&target.0, &self.object_proto.0)
             || self.realms.values().any(|realm| Rc::ptr_eq(&target.0, &realm.object_proto.0))
-            || matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
+            || is_module_namespace(target) {
             return Ok(false);
         }
         if !target.borrow().extensible { return Ok(false); }
@@ -456,7 +459,7 @@ impl Interpreter {
             // OrdinarySetPrototypeOf only follows ordinary [[GetPrototypeOf]]
             // methods. It must neither invoke a Proxy trap nor chase its result:
             // a trap can return itself forever, throw, or have observable effects.
-            if matches!(candidate.borrow().exotic, Exotic::Proxy(_) | Exotic::ModuleNamespace(_))
+            if matches!(candidate.borrow().exotic, Exotic::Proxy(_) | Exotic::ModuleNamespace(_) | Exotic::DeferredModuleNamespace(_))
                 || self.is_window_proxy(&candidate) { break; }
             cursor = candidate.borrow().proto.clone();
         }

@@ -964,13 +964,8 @@ impl Interpreter {
             ExprKind::DynamicImport(args) => {
                 self.dynamic_import(args, env)
             }
-            // import.source(...)/import.defer(...) (the source/deferred phase-imports proposal):
-            // no host hook returns a Module Source object yet, so this always rejects rather than
-            // resolving -- distinct from a missing `module_loader` hook's ordinary "unsupported"
-            // rejection, since even a fully wired driver has nothing to fulfill this with.
-            ExprKind::DynamicImportPhase { .. } => Ok(new_promise(self, PromiseFate::Rejected(
-                Throw::type_error("import phase requests (import.source/import.defer) are not implemented").0,
-            ))),
+            ExprKind::DynamicImportPhase { phase,args } => self.dynamic_import_phase(args,env,
+                if phase=="source" {crate::module::ImportPhase::Source} else {crate::module::ImportPhase::Defer}),
             ExprKind::ImportMeta => env.resolve("\0import.meta")
                 .ok_or_else(|| Throw::type_error("import.meta is only available in modules")),
             ExprKind::Super => {
@@ -1915,11 +1910,10 @@ impl Interpreter {
                 if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete proxy property")); }
                 return Ok(JsValue::Bool(deleted));
             }
-            if matches!(o.borrow().exotic, Exotic::ModuleNamespace(_)) {
-                if o.borrow().own_prop(&k).is_some() {
-                    return Err(Throw::type_error("module namespace export cannot be deleted"));
-                }
-                return Ok(JsValue::Bool(true));
+            if let Some(result)=self.namespace_delete(&o,&k) {
+                let deleted=result?;
+                if !deleted&&self.strict_eval_context {return Err(Throw::type_error("module namespace export cannot be deleted"));}
+                return Ok(JsValue::Bool(deleted));
             }
             if let Some(deleted) = binary_delete_index(&o, &k) {
                 if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete typed array index")); }

@@ -62,9 +62,9 @@ impl Interpreter {
     fn define_own_property(&mut self, target: &Obj, key: &PropertyKey, descriptor: &JsValue) -> Result<bool, Throw> {
         if let Some(result) = self.window_proxy_define(target, key, descriptor) { return result; }
         if let Some(result) = self.proxy_define(target, key, descriptor) { return result; }
-        if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
-            let JsValue::Object(fields) = descriptor else { return Err(Throw::type_error("property descriptor must be an object")); };
-            return namespace_define_allowed(self, target, key, fields);
+        if is_module_namespace(target) {
+            let fields=self.std_descriptor_fields(descriptor)?;
+            return namespace_define_fields(self,target,key,&fields);
         }
         if let JsValue::Object(descriptor_object) = descriptor {
             if let Some(result) = binary_define_index_object(self, target, key, descriptor_object) {
@@ -200,7 +200,7 @@ impl Interpreter {
         if matches!(&receiver, JsValue::Object(object) if Rc::ptr_eq(&object.0, &target.0)) {
             arguments_write_mapping(target, key, value.clone())?;
         }
-        if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
+        if is_module_namespace(target) {
             return Ok(false);
         }
         if let Some(name) = key.as_string() {

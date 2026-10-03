@@ -237,7 +237,8 @@ impl fmt::Debug for Obj {
             (Exotic::SymbolObject(_), _) => write!(f, "[symbol object]"),
             (Exotic::Generator(_), _) => write!(f, "[generator]"),
             (Exotic::ThreadGenerator(_), _) => write!(f, "[generator]"),
-            (Exotic::ModuleNamespace(_), _) => write!(f, "[module namespace]"),
+            (Exotic::ModuleNamespace(_) | Exotic::DeferredModuleNamespace(_), _) => write!(f, "[module namespace]"),
+            (Exotic::ModuleCallback(_), _) => write!(f, "[module continuation]"),
             (Exotic::WindowProxy(_), _) => write!(f, "[WindowProxy]"),
             (Exotic::Proxy(_), _) => write!(f, "[proxy]"),
             (Exotic::DisposableStack(_), _) => write!(f, "[disposable stack]"),
@@ -789,6 +790,8 @@ pub enum Exotic {
     /// (JSVM-8; see `crates/amazing-js/src/interp_coroutine.rs`).
     ThreadGenerator(Rc<RefCell<crate::interp::ThreadGeneratorState>>),
     ModuleNamespace(std::collections::BTreeMap<String, crate::env::BindingCell>),
+    DeferredModuleNamespace(Rc<DeferredNamespaceState>),
+    ModuleCallback(Rc<ModuleCallbackState>),
     Proxy(Rc<crate::interp::ProxyState>),
     DisposableStack(DisposableStackState),
 }
@@ -1460,3 +1463,5 @@ mod tests {
         assert!(!cb.has_property("absent"));
     }
 }
+
+include!("value_module.rs");

@@ -98,7 +98,7 @@ fn std_reflect_get_own_property_descriptor(i: &mut Interpreter, _: JsValue, args
             .map(|property| object_descriptor_value(i, property)).unwrap_or(JsValue::Undefined));
     }
     if let Some(result) = i.window_proxy_descriptor(&target, &key) { return result; }
-    if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
+    if is_module_namespace(&target) {
         return native_object_get_own_property_descriptor(i, JsValue::Undefined, args);
     }
     let property = if let Some(result) = arguments_own_property(&target, &key) {

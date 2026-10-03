@@ -30,13 +30,7 @@ impl Interpreter {
         let k = text.as_deref().unwrap_or("");
         match v {
             JsValue::Object(o) => {
-                if let Exotic::ModuleNamespace(exports) = &o.borrow().exotic {
-                    if let Some(name) = key.as_string() {
-                        return match exports.get(&name.to_utf8_lossy()).cloned() {
-                            Some(cell) => cell.read(), None => Ok(JsValue::Undefined),
-                        };
-                    }
-                }
+                if let Some(result)=self.namespace_get(o,key) {return result;}
                 if let Some(result) = binary_get_index(self, o, key) { return result; }
                 if key.as_string().is_some() {
                 if let Some(node) = Self::dom_dataset_id(o) {
@@ -132,7 +126,7 @@ impl Interpreter {
                 Err(Throw::type_error("cannot set proxy property"))
             } else { Ok(()) };
         }
-        if matches!(o.borrow().exotic, Exotic::ModuleNamespace(_)) {
+        if is_module_namespace(&o) {
             return Err(Throw::type_error("module namespace properties cannot be assigned"));
         }
         if let Some(result) = binary_set_index(self, &o, &key, x.clone()) { return result; }
@@ -315,6 +309,7 @@ impl Interpreter {
                 return self.binding_with_realm(realm, |i| i.own_property_keys(&JsValue::Object(global)));
             }
             if let Some(result) = self.proxy_own_keys(object) { return result; }
+            if let Some(result)=self.namespace_keys(object) {return result;}
         }
         match v {
             JsValue::Object(object) if binary_own_keys(object).is_some() => Ok(binary_own_keys(object).unwrap()),

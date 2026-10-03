@@ -174,6 +174,7 @@ impl Interpreter {
         while let Some(object) = cursor {
             if let Some(result) = self.window_proxy_has(&object, &PropertyKey::String(key.clone())) { return result; }
             if let Some(result) = self.proxy_has(&object, &PropertyKey::String(key.clone())) { return result; }
+            if let Some(result)=self.namespace_has(&object,&PropertyKey::String(key.clone())) {return result;}
             if let Some((handle, hooks)) = self.legacy_for(&object) {
                 if let Some(index) = array_index(&key) {
                     // WebIDL: an array-index-shaped key is never a named

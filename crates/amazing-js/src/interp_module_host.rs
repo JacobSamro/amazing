@@ -20,9 +20,14 @@ pub type ModuleLoaderHook = dyn Fn(&mut Interpreter, &str, &str) -> Result<JsVal
 /// borrow survives JavaScript execution or a nested import job.
 pub type TypedModuleLoaderHook = dyn Fn(&mut Interpreter, &str, &str) -> Result<JsValue, Throw>;
 
+/// Phase-aware hosts may return a pending Promise. The import capability adopts
+/// it through the ordinary Promise resolution procedure in the importing realm.
+pub type PhaseModuleLoaderHook = dyn Fn(&mut Interpreter, &crate::module::ModuleRequest, &str) -> Result<JsValue, Throw>;
+
 struct ModuleImportJob {
-    hook: Rc<TypedModuleLoaderHook>,
-    specifier: String,
+    hook: Option<Rc<TypedModuleLoaderHook>>,
+    phase_hook: Option<Rc<PhaseModuleLoaderHook>>,
+    request: crate::module::ModuleRequest,
     referrer: String,
     promise: Obj,
     realm: RealmHandle,
@@ -165,9 +170,17 @@ impl Interpreter {
         self.module_loader = Some(hook);
     }
 
+    pub fn binding_set_phase_module_loader_hook(&mut self, hook: Rc<PhaseModuleLoaderHook>) {
+        self.phase_module_loader = Some(hook);
+    }
+
     /// Argument evaluation may throw synchronously; subsequent conversion,
     /// attribute validation and host loading reject the returned promise.
     fn dynamic_import(&mut self, args: &[ast::Expr], env: &EnvHandle) -> Result<JsValue, Throw> {
+        self.dynamic_import_phase(args,env,crate::module::ImportPhase::Evaluation)
+    }
+
+    fn dynamic_import_phase(&mut self,args:&[ast::Expr],env:&EnvHandle,phase:crate::module::ImportPhase) -> Result<JsValue,Throw> {
         let specifier = args.first().ok_or_else(|| Throw::type_error("import() requires a specifier"))?;
         let value = self.eval_expr(specifier, env)?;
         let options = match args.get(1) {
@@ -180,52 +193,91 @@ impl Interpreter {
             _ => env.source_context().unwrap_or_default().to_string(),
         };
         let specifier_string = match self.to_js_string(&value) {
-            Ok(s) => s.to_string(),
+            Ok(s) => s,
             Err(thrown) => return Ok(new_promise(self, PromiseFate::Rejected(self.normalize_throw(thrown).0))),
         };
-        if let Err(error) = self.validate_import_options(&options) {
-            return Ok(new_promise(self, PromiseFate::Rejected(self.normalize_throw(error).0)));
-        }
-        let Some(hook) = self.module_loader.clone() else {
-            return Ok(new_promise(self, PromiseFate::Rejected(
-                self.normalize_throw(Throw::type_error("dynamic import is not supported by this host")).0,
-            )));
+        let attributes=match self.validate_import_options(&options) {
+            Ok(attributes)=>attributes,
+            Err(error)=>return Ok(new_promise(self,PromiseFate::Rejected(self.normalize_throw(error).0))),
         };
+        let request=crate::module::ModuleRequest::new(specifier_string,phase,attributes);
+        let hook=self.module_loader.clone();let phase_hook=self.phase_module_loader.clone();
+        if phase_hook.is_none() && (hook.is_none() || phase != crate::module::ImportPhase::Evaluation || !request.attributes.is_empty()) {
+            return Ok(new_promise(self, PromiseFate::Rejected(
+                self.normalize_throw(Throw::type_error("host does not support this module request")).0,
+            )));
+        }
         let promise = new_promise(self, PromiseFate::Pending);
         let JsValue::Object(target) = &promise else { unreachable!() };
         self.enqueue_job(Job::ModuleImport(ModuleImportJob {
-            hook, specifier: specifier_string, referrer, promise: target.clone(),
+            hook, phase_hook, request, referrer, promise: target.clone(),
             realm: self.binding_current_realm(),
         }))?;
         Ok(promise)
     }
 
-    fn validate_import_options(&mut self, options: &JsValue) -> Result<(), Throw> {
-        if options.is_undefined() { return Ok(()); }
+    fn validate_import_options(&mut self, options: &JsValue) -> Result<Vec<(crate::value::JsString,crate::value::JsString)>, Throw> {
+        if options.is_undefined() { return Ok(Vec::new()); }
         if !options.is_object() { return Err(Throw::type_error("import options must be an object")); }
         let attributes = self.get_prop(options, "with")?;
-        if attributes.is_undefined() { return Ok(()); }
+        if attributes.is_undefined() { return Ok(Vec::new()); }
         let JsValue::Object(object) = &attributes else {
             return Err(Throw::type_error("import attributes must be an object"));
         };
-        let mut nonempty = false;
+        let mut result = Vec::new();
         for key in self.own_property_keys(&attributes)? {
             if key.as_string().is_none() { continue; }
             if !self.default_get_own_property(object, &key)?.is_some_and(|p| p.enumerable) { continue; }
-            let value = self.get_prop(&attributes, key)?;
-            if !matches!(value, JsValue::Str(_)) { return Err(Throw::type_error("import attribute values must be strings")); }
-            nonempty = true;
+            let value = self.get_prop(&attributes, key.clone())?;
+            let JsValue::Str(value)=value else { return Err(Throw::type_error("import attribute values must be strings")); };
+            result.push((key.as_string().unwrap().clone(),value));
         }
-        if nonempty { return Err(Throw::type_error("host does not support import attributes")); }
-        Ok(())
+        Ok(result)
     }
 
     fn run_module_import_job(&mut self, job: ModuleImportJob) -> Result<(), Throw> {
         self.binding_with_realm(job.realm, |i| {
-            match (job.hook)(i, &job.specifier, &job.referrer) {
+            let result=match job.phase_hook {
+                Some(hook)=>hook(i,&job.request,&job.referrer),
+                None=>job.hook.unwrap()(i,&job.request.specifier.to_utf8_lossy(),&job.referrer),
+            };
+            match result {
                 Ok(namespace) => vm::async_complete(i, &job.promise, namespace),
                 Err(error) => settle_promise(&job.promise, PromiseFate::Rejected(i.normalize_throw(error).0), i),
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod phase_import_tests {
+    use super::*;
+    #[test]
+    fn every_phase_evaluates_arguments_synchronously_and_rejects_conversion_attributes_in_order() {
+        for phase in ["source","defer"] {
+            for backend in [ExecutionBackend::TreeWalk,ExecutionBackend::Bytecode] {
+                let mut i=Interpreter::new();
+                i.run_script_with_backend(&format!("var log=[],marker={{}},caught=false,rejected;try{{import.{phase}('x',(()=>{{throw marker}})())}}catch(e){{caught=e===marker}};import.{phase}({{toString(){{log.push('string');return 'x'}}}},{{get with(){{log.push('with');return {{get a(){{log.push('a');return 'v'}},get b(){{log.push('b');throw marker}}}}}}}}).catch(e=>rejected=e===marker);"),backend).unwrap();
+                i.drain_microtasks().unwrap();
+                assert_eq!(i.run_script("caught&&rejected&&log.join(',')==='string,with,a,b'").unwrap(),JsValue::Bool(true));
+            }
+        }
+    }
+    #[test]
+    fn phase_hook_receives_lossless_sorted_attributes_after_all_validation_and_adopts_pending_result() {
+        let mut i=Interpreter::new_with_external_scheduler(64).unwrap();
+        let calls=Rc::new(RefCell::new(Vec::new()));let seen=calls.clone();
+        i.binding_set_phase_module_loader_hook(Rc::new(move |i,request,_| {
+            seen.borrow_mut().push(request.clone());
+            i.run_script("Promise.resolve({value:7})")
+        }));
+        i.run_script("var done;import.defer('\\uD800',{with:{z:'last',a:'first'}}).then(ns=>done=ns.value)").unwrap();
+        assert!(calls.borrow().is_empty());
+        loop {let requests=i.take_scheduling_requests();if requests.is_empty(){break;}
+            for request in requests {let SchedulingRequest::Microtask {job_token}=request else {panic!("unexpected timer")};
+                i.invoke_one_job(job_token).unwrap();}}
+        assert_eq!(i.run_script("done").unwrap(),JsValue::num(7.0));
+        let seen=calls.borrow();assert_eq!(seen[0].phase,crate::module::ImportPhase::Defer);
+        assert_eq!(seen[0].specifier.units(),&[0xd800]);assert_eq!(seen[0].attributes[0].0.to_utf8_lossy(),"a");
     }
 }

@@ -72,3 +72,5 @@ reproduced in the table row for that upstream.
 | boa-dev/boa @ `39cd11214ecb366200157dab96b3919e61e9a391` (`core/engine/src/builtins/proxy/mod.rs`) | MIT | Copyright (c) 2019 Jason Williams | `crates/amazing-js/src/interp_proxy.rs`: Proxy internal-method descriptor compatibility, extensibility and own-key invariants adapted to Amazing. |
 
 | boa-dev/boa @ `39cd11214ecb366200157dab96b3919e61e9a391` (`core/engine/src/builtins/json/mod.rs`) | MIT | Copyright (c) 2019 Jason Williams | `crates/amazing-js/src/builtins_std_json_global.rs`: raw JSON creation/brand, reviver internalization and UTF-16 serialization algorithms adapted to semantic Amazing object operations. |
+
+- lucid-softworks/lumen — MIT, Copyright (c) 2026 Lucid Softworks Limited. Module phases, canonical requests, asynchronous DFS/SCC evaluation and namespace operations adapted at f6c9860d44fa52249cfd647122edea184d32c863 from crates/lumen/src/modules.rs into crates/amazing-js/src/module_requests.rs, module_async.rs, value_module.rs, interp_module_evaluation.rs and interp_module_namespace.rs.
