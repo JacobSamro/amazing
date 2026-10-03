@@ -2227,7 +2227,7 @@ impl RuntimeBindingHost<'_> {
             _ => false,
         }).cloned();
         let Some((target_realm, target)) = target else {
-            return invoke_operation(self, operation, receiver, args);
+            return invoke(self, operation, receiver, args);
         };
         let source_realm = self.js.binding_incumbent_realm();
         let source = contexts.iter().find(|(realm, _)| *realm == source_realm).map(|(_, context)| context.clone());
@@ -2250,7 +2250,7 @@ impl RuntimeBindingHost<'_> {
         } else { args.to_vec() };
         self.js.binding_with_realm(target_realm, |js| {
             let mut adapter = RuntimeBindingHost { js, state };
-            invoke_operation(&mut adapter, operation, receiver, &args)
+            invoke(&mut adapter, operation, receiver, &args)
         })
     }
 
