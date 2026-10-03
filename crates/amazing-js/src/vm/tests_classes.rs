@@ -113,6 +113,30 @@ fn suspended_class_strictness_and_heritage_errors_keep_original_throw() {
 }
 
 #[test]
+fn coroutine_class_strictness_tracks_yield_and_restores_sloppy_body() {
+    for ast in [false,true] {
+        for asynchronous in [false,true] {
+            let mut i=Interpreter::new();i.force_ast_callables=ast;
+            let source=format!(r#"
+                var log=[],done=false,error,object={{x:'inside'}};
+                var f={prefix}function*(){{with(object){{
+                    try{{using resource={{[Symbol.dispose](){{log.push('dispose')}}}};
+                        class C{{[(yield 0,classLeak=1,'x')]=1}}
+                    }}catch(e){{log.push(e instanceof ReferenceError?'strict':'wrong')}}
+                    sloppyAfterYield=3;log.push(x);return true;
+                }}}};
+            "#,prefix=if asynchronous{"async "}else{""});
+            i.run_script(&source).unwrap();compiled(&i,"f",!ast);
+            let drive=if asynchronous{"var g=f();g.next().then(()=>g.next()).then(r=>done=r.value,e=>error=e)"}
+                else{"var g=f();g.next();done=g.next().value"};
+            i.run_script(drive).unwrap();i.drain_microtasks().unwrap();
+            assert_eq!(i.run_script("done&&error===undefined&&sloppyAfterYield===3&&typeof classLeak==='undefined'&&log.join(',')==='dispose,strict,inside'").unwrap(),JsValue::Bool(true),"AST={ast} async={asynchronous}");
+            assert!(!i.strict_eval_context);
+        }
+    }
+}
+
+#[test]
 fn rooted_class_phases_survive_every_instruction_quantum() {
     let ast=crate::parser::parse_script("function* f(){return class C{[(yield 0,'x')]=1;#p=2;read(){return this.#p};static{}}}").unwrap();
     let crate::ast::StmtKind::Function(function)=&ast.body[0].kind else{unreachable!()};

@@ -167,6 +167,10 @@ fn leave_segment(i: &mut Interpreter) {
         if let Some(segment) = segment.borrow_mut().as_mut() {
             segment.completion = std::mem::replace(&mut i.completion, segment.saved_completion.clone());
             i.frames.pop();
+            // A class evaluation may enter strict mode after this segment
+            // began. Retain its actual suspended strictness, then restore
+            // the driver; the class wrapper still restores its outer scope.
+            segment.strict = i.strict_eval_context;
             i.strict_eval_context = segment.saved_strict;
         }
     });
