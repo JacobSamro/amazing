@@ -823,7 +823,8 @@ impl NetworkService {
                 let ancestors = &self.active[&id].context.frame_ancestors;
                 let redirects = matches!(status, 301 | 302 | 303 | 307 | 308)
                     && headers.iter().any(|(name, value)| name.eq_ignore_ascii_case("location") && !value.is_empty());
-                if !ancestors.is_empty() && !redirects {
+                if self.active[&id].pending.policy().mode == crate::RequestMode::Navigate
+                    && !ancestors.is_empty() && !redirects {
                     let mut fields = HeaderList::default();
                     let check = headers.iter().try_for_each(|(name, value)| fields.append(name, value))
                         .and_then(|_| HttpUrl::parse(url)
@@ -1159,6 +1160,62 @@ mod tests {
         .unwrap()
     }
 
+    #[test]
+    fn embedding_headers_apply_to_navigation_not_resources_or_fetch_and_skip_redirect_heads() {
+        let listener=TcpListener::bind("127.0.0.1:0").unwrap();listener.set_nonblocking(true).unwrap();
+        let base=format!("http://127.0.0.1:{}",listener.local_addr().unwrap().port());
+        let server=thread::spawn(move || {
+            let deadline=Instant::now()+Duration::from_secs(8);let mut received=0;
+            while received<17 && Instant::now()<deadline {
+                let (mut socket,_)=match listener.accept() {
+                    Ok(value)=>value,Err(error) if error.kind()==std::io::ErrorKind::WouldBlock=>{thread::sleep(Duration::from_millis(1));continue;},
+                    Err(error)=>panic!("accept: {error}"),
+                };
+                socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+                let mut bytes=Vec::new();while !bytes.ends_with(b"\r\n\r\n") {let mut byte=[0];socket.read_exact(&mut byte).unwrap();bytes.push(byte[0]);}
+                let line=String::from_utf8(bytes).unwrap();let path=line.split_whitespace().nth(1).unwrap();
+                let response=if let Some(tail)=path.strip_prefix("/redirect/") {
+                    format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: /resource/{tail}\r\nX-Frame-Options: DENY\r\nContent-Security-Policy: frame-ancestors 'none'\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                } else if let Some(tail)=path.strip_prefix("/redirect-allow/") {
+                    format!("HTTP/1.1 302 Found\r\nLocation: /allow/{tail}\r\nX-Frame-Options: DENY\r\nContent-Security-Policy: frame-ancestors 'none'\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                } else {
+                    let policy=if path.starts_with("/allow/") {""} else {"X-Frame-Options: DENY\r\nContent-Security-Policy: frame-ancestors 'none'\r\n"};
+                    format!("HTTP/1.1 200 OK\r\n{policy}Content-Type: text/plain\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                };
+                socket.write_all(response.as_bytes()).unwrap();received+=1;
+            }
+            received
+        });
+        let mut service=NetworkService::new(DispatchLimits::default());let mut pending=BTreeMap::new();
+        for redirect in [false,true] {for (kind,destination) in [None,None,Some(Destination::Script),Some(Destination::Image),Some(Destination::Font)].into_iter().enumerate() {
+            let url=HttpUrl::parse(&format!("{base}/{}/case{kind}",if redirect {"redirect"}else {"resource"})).unwrap();
+            let origin=url.origin().clone();let mut request=if kind==0 {
+                ApiRequest::child_navigation(url.clone(),&crate::api::NavigableContext {top_level_origin:origin.clone(),parent_origin:origin.clone(),ancestor_origins:vec![origin.clone()],
+                    sandbox_flags:0,frame_csp:Default::default(),referrer:url.serialize(),referrer_policy:String::new(),now_unix:0}).unwrap()
+            } else {request(&url)};
+            request.cache=ApiCache::NoStore;
+            let context=ClientContext {frame_ancestors:vec![origin],csp_destination:CspDestination::Frame,..Default::default()};
+            let id=match destination {Some(destination)=>service.start_subresource(request,context,destination),None=>service.start(request,context).unwrap()};
+            pending.insert(id,kind!=0);
+        }}
+        let url=HttpUrl::parse(&format!("{base}/redirect-allow/navigation")).unwrap();let mut allowed=request(&url);allowed.mode=crate::RequestMode::Navigate;allowed.cache=ApiCache::NoStore;
+        let id=service.start(allowed,ClientContext {frame_ancestors:vec![url.origin().clone()],..Default::default()}).unwrap();pending.insert(id,true);
+        let deadline=Instant::now()+Duration::from_secs(6);
+        while !pending.is_empty() && Instant::now()<deadline {
+            for event in service.step(8192,Instant::now()) {
+                let (id,result)=match event {
+                    ServiceEvent::Finished {id,result}=>(id,result.and_then(|mut response|response.body.bytes())),
+                    ServiceEvent::SubresourceFinished {id,response}=>(id,Ok(response.body)),
+                    ServiceEvent::SubresourceFailed {id,error}=>(id,Err(error)),_=>continue,
+                };
+                let expected=pending.remove(&id).expect("one terminal result per request");
+                if expected {assert_eq!(result.unwrap(),b"ok");}
+                else {assert!(matches!(result,Err(ApiError::Network(FetchError::FrameEmbedding))),"{result:?}");}
+            }
+            if !pending.is_empty() {thread::sleep(Duration::from_millis(1));}
+        }
+        assert!(pending.is_empty(),"pending: {pending:?}");assert_eq!(server.join().unwrap(),17);
+    }
     #[test]
     fn websocket_checks_connect_src_and_mixed_content_before_dispatch() {
         let origin = HttpUrl::parse("https://client.example/")
