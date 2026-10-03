@@ -790,7 +790,7 @@
     }
   },
   "proof": [
-    "Eight grouped whole-class native/forced-AST matrices including 198 table cases, plus sync/async generator strict-key With/disposal companion matrix.",
+    "Eight grouped whole-class native/forced-AST matrices including 66 table cases, plus sync/async generator strict-key With/disposal companion matrix.",
     "All 30442 selected files / 56960 variants retain classifications and failure reasons in both modes; no new host abnormal exits.",
     "Aggregate callable compile fallbacks 16 to 0. Whole language and explicit class selections overlap; this is not a claim of 16 distinct failing files.",
     "Nonsuspending class/optional-chain AST adapters and top-level With program fallback remain explicit. No default program-policy flip.",

@@ -1434,7 +1434,7 @@ are **1428309/1428293→1428421/1428421**; opt-in VM programs
 **802824/802808→802936/802936**. This proves callable compilation coverage,
 not elimination of explicit nonsuspending AST adapters or a program policy flip.
 
-Eight class matrix groups include 198 native/forced-AST callable cases, TDZ and
+Eight class matrix groups include 66 native/forced-AST table cases, TDZ and
 private heritage/brands, decorator receiver/key conversion, With/try/disposal,
 foreign async realms and every-instruction quantum stops. An additional
 sync/async generator group proves strict class keys after Yield and subsequent
