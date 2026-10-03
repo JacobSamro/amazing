@@ -457,8 +457,9 @@ mod tests {
         scheduler.set_location_url("https://example.test/page.html");
         scheduler
     }
-    fn script(kind: ScriptKind, node: u32, external: bool) -> PageScript {
-        PageScript { kind, node: NodeIdx(node), src: external.then(|| "root.js".into()), body: String::new() }
+    fn script(driver: &crate::js_scheduler::DriverScheduler, kind: ScriptKind, node: u32, external: bool) -> PageScript {
+        let node_generation = driver.test_bindings().state.borrow().host.borrow().dom.node_generation(NodeIdx(node));
+        PageScript { kind, node: NodeIdx(node), node_generation, src: external.then(|| "root.js".into()), body: String::new() }
     }
     #[test]
     fn module_resources_keep_actual_context_options_and_redirected_bases() {
@@ -488,7 +489,7 @@ mod tests {
             headers.append("referrer-policy", "unknown, ".into()).unwrap();
             Ok(amazing_net::Response { url: url.into(), status: 200, reason: "OK".into(), headers, body: source.as_bytes().to_vec() })
         }));
-        let script = script(ScriptKind::Module, node, true);
+        let script = script(&scheduler, ScriptKind::Module, node, true);
         let url = scheduler.page_script_url("https://example.test/page.html", &script);
         let source = scheduler.load_module_source(&url).unwrap();
         scheduler.run_page_script(&script, &source, &url).unwrap();
@@ -560,12 +561,12 @@ mod tests {
                 _ => Err(format!("missing {url}")),
             }
         }));
-        scheduler.run_page_script(&script(ScriptKind::Module, 1, true),
+        scheduler.run_page_script(&script(&scheduler, ScriptKind::Module, 1, true),
             "import * as ns from './counter.js'; window.ns=ns; ns.bump(); window.meta=import.meta.url;",
             "https://example.test/lib/root.js").unwrap();
-        scheduler.run_page_script(&script(ScriptKind::Classic, 2, true),
+        scheduler.run_page_script(&script(&scheduler, ScriptKind::Classic, 2, true),
             "var delayed=()=>import('./counter.js');", "https://example.test/lib/classic.js").unwrap();
-        scheduler.run_page_script(&script(ScriptKind::Classic, 3, true),
+        scheduler.run_page_script(&script(&scheduler, ScriptKind::Classic, 3, true),
             "delayed().then(x=>{window.same=x===ns;window.count=x.count;});", "https://example.test/other/script.js").unwrap();
         scheduler.pump_at(std::time::Duration::ZERO, false).unwrap();
         assert!(matches!(scheduler.run_script("same && count===2 && meta==='https://example.test/lib/root.js'").unwrap(), JsValue::Bool(true)));
@@ -575,7 +576,7 @@ mod tests {
     fn inline_modules_have_distinct_lexicals_and_document_url_metadata() {
         let mut scheduler = scheduler();
         for (node, value) in [(1, "first"), (2, "second")] {
-            scheduler.run_page_script(&script(ScriptKind::Module, node, false),
+            scheduler.run_page_script(&script(&scheduler, ScriptKind::Module, node, false),
                 &format!("let privateName='{value}';window.{value}=privateName;window.url{node}=import.meta.url;"),
                 "https://example.test/page.html").unwrap();
         }
@@ -639,7 +640,7 @@ mod tests {
     fn pending_page_modules_resume_without_blocking_load_and_share_import_namespace() {
         let mut driver = scheduler();
         driver.run_script("window.order=[];").unwrap();
-        let module = script(ScriptKind::Module, 0, true);
+        let module = script(&driver, ScriptKind::Module, 0, true);
         driver.run_page_script(&module,
             "order.push('start');await new Promise(resolve=>setTimeout(resolve,1));order.push('end');export const value=7;",
             "https://example.test/root.js").unwrap();
@@ -657,7 +658,7 @@ mod tests {
         let mut driver = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
         driver.set_location_url("https://example.test/page.html");
         driver.run_script("window.original={};var errors=[],events=[];window.addEventListener('error',e=>{errors.push(e.error);events.push('error');});document.getElementById('root').addEventListener('load',()=>events.push('load'));").unwrap();
-        let module = script(ScriptKind::Module, node, true);
+        let module = script(&driver, ScriptKind::Module, node, true);
         driver.run_page_script(&module, "await new Promise(resolve=>setTimeout(resolve,1));throw window.original;", "https://example.test/root.js").unwrap();
         driver.finish_module_script(&module, None, "https://example.test/root.js", true).unwrap();
         assert!(matches!(driver.run_script("events.join(',')==='load' && errors.length===0").unwrap(), JsValue::Bool(true)));
@@ -707,7 +708,7 @@ mod tests {
             "https://example.test/child.js" => Ok("export const value=7;".into()),
             _ => Err(format!("missing {url}")),
         }));
-        scheduler.run_page_script(&script(ScriptKind::Module, 1, true),
+        scheduler.run_page_script(&script(&scheduler, ScriptKind::Module, 1, true),
             "window.loaded=import('./child.js').then(ns=>window.result=ns.value);", "https://example.test/root.js").unwrap();
         scheduler.pump_at(std::time::Duration::ZERO, false).unwrap();
         assert!(matches!(scheduler.run_script("result===7").unwrap(), JsValue::Bool(true)));
@@ -719,7 +720,7 @@ mod tests {
         let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
         scheduler.set_location_url("https://example.test/page.html");
         scheduler.run_script("var original={},errors=[],events=[];window.addEventListener('error',e=>errors.push(e.error));document.getElementById('root').addEventListener('load',()=>events.push('load'));").unwrap();
-        let module = script(ScriptKind::Module, node, true);
+        let module = script(&scheduler, ScriptKind::Module, node, true);
         for _ in 0..2 {
             let error = scheduler.run_page_script(&module, "throw original", "https://example.test/root.js").unwrap_err();
             scheduler.finish_module_script(&module, Some(&error), "https://example.test/root.js", true).unwrap();
@@ -745,8 +746,8 @@ mod tests {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse("<script id=root></script>"), native_forwarded: false }));
         let node = host.borrow_mut().query_selector("script").unwrap();
         let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
-        scheduler.run_page_script(&script(ScriptKind::Classic, node, false), "window.classic=document.currentScript.id;", "https://example.test/page.html").unwrap();
-        scheduler.run_page_script(&script(ScriptKind::Module, node, false), "window.moduleCurrent=document.currentScript;", "https://example.test/page.html").unwrap();
+        scheduler.run_page_script(&script(&scheduler, ScriptKind::Classic, node, false), "window.classic=document.currentScript.id;", "https://example.test/page.html").unwrap();
+        scheduler.run_page_script(&script(&scheduler, ScriptKind::Module, node, false), "window.moduleCurrent=document.currentScript;", "https://example.test/page.html").unwrap();
         assert!(matches!(scheduler.run_script("classic==='root' && moduleCurrent===null && document.currentScript===null").unwrap(), JsValue::Bool(true)));
     }
     #[test]
@@ -764,7 +765,7 @@ mod tests {
             Ok("window.calls=(window.calls||0)+1;export const count=window.calls;".into())
         }));
         scheduler.set_location_url("https://example.test/page.html");
-        scheduler.run_page_script(&script(ScriptKind::Module, 1000, true),
+        scheduler.run_page_script(&script(&scheduler, ScriptKind::Module, 1000, true),
             "import './counter.js';", "https://example.test/root.js").unwrap();
         scheduler.dispatch_pending_iframe_loads().unwrap();
         assert!(matches!(scheduler.run_script("var child=document.querySelector('iframe').contentWindow;calls===1 && child.calls===1 && child.moduleURL==='https://example.test/page.html' && child.document.currentScript===null").unwrap(), JsValue::Bool(true)));
@@ -782,7 +783,7 @@ mod tests {
             assert_eq!(url, "https://example.test/alpha/dep.js");
             Ok("export const value=3".into())
         }));
-        let inline = script(ScriptKind::Classic, node, false);
+        let inline = script(&scheduler, ScriptKind::Classic, node, false);
         let url = scheduler.page_script_url("https://example.test/page.html", &inline);
         scheduler.run_page_script(&inline, "var delayed=()=>import('./dep.js');", &url).unwrap();
         scheduler.run_script("document.querySelector('base').setAttribute('href','/beta/');delayed().then(ns=>window.value=ns.value)").unwrap();

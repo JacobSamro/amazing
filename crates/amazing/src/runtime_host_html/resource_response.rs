@@ -42,7 +42,7 @@ impl RuntimeBindings {
         let (document, resolver) = {
             let state = self.state.borrow();
             let host = state.host.borrow();
-            if host.dom.node_generation(script.node).is_none() {
+            if script.node_generation.is_none() || host.dom.node_generation(script.node) != script.node_generation {
                 return Err(Throw::type_error("Stale script node"));
             }
             let document = host.dom.owner_document(script.node)
@@ -322,6 +322,36 @@ mod tests {
         assert!(scheduler.load_classic_page_script(&script, &url).is_err());
         script.node = NodeIdx(0);
         assert!(scheduler.load_classic_page_script(&script, &url).is_err());
+    }
+
+    #[test]
+    fn root_classic_bridge_rejects_same_slot_with_a_different_captured_generation() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+            "<!doctype html><script src='live.js'></script>"), native_forwarded: false }));
+        let node = host.borrow().dom.tree_order(NodeIdx(0)).into_iter()
+            .find(|node| host.borrow().dom.local_name(*node) == Some("script")).unwrap();
+        let mut script = crate::cmd::js::script_source_from_node(&host.borrow().dom, node).unwrap();
+        let captured = script.node_generation.unwrap();
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/page.html");
+        let calls = Rc::new(RefCell::new(0));
+        let recorded = calls.clone();
+        scheduler.set_frame_resource_loader(Rc::new(move |request| {
+            *recorded.borrow_mut() += 1;
+            Ok(response(&request.requested_url, Some("text/javascript"), b"window.actualGeneration=1;".to_vec()))
+        }));
+        // A stale generation from the same slot must never fetch the replacement's attributes.
+        script.node_generation = Some(captured.wrapping_add(1));
+        assert!(scheduler.load_classic_page_script(&script, "https://example.test/page.html").is_err());
+        script.src = None;
+        assert!(scheduler.load_classic_page_script(&script, "https://example.test/page.html").is_err());
+        script.node_generation = None;
+        assert!(scheduler.load_classic_page_script(&script, "https://example.test/page.html").is_err());
+        assert_eq!(*calls.borrow(), 0);
+        script.node_generation = Some(captured);
+        script.src = Some("live.js".into());
+        assert!(scheduler.load_classic_page_script(&script, "https://example.test/page.html").is_ok());
+        assert_eq!(*calls.borrow(), 1);
     }
 
     #[test]

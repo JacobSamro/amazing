@@ -11,6 +11,8 @@ pub(crate) struct PageScript {
     /// narrow_write_insertion_point`) rather than always landing at the end
     /// of the body.
     pub(crate) node: amazing_dom::NodeIdx,
+    /// Captured when this script record is created; a recycled slot is a different node.
+    pub(crate) node_generation: Option<u64>,
     pub(crate) src: Option<String>,
     pub(crate) body: String,
 }
@@ -47,6 +49,7 @@ pub(crate) fn script_source_from_node(
     dom: &amazing_dom::Dom,
     node: amazing_dom::NodeIdx,
 ) -> Option<PageScript> {
+    let node_generation = Some(dom.node_generation(node)?);
     let attrs = dom.attrs_of(node).unwrap_or(&[]);
     let script_type = attrs
         .iter()
@@ -89,7 +92,7 @@ pub(crate) fn script_source_from_node(
                 .map(|(_, value)| value.clone())
         });
     if src.is_some() || !source.trim().is_empty() {
-        Some(PageScript { node, src, body: source, kind })
+        Some(PageScript { node, node_generation, src, body: source, kind })
     } else {
         None
     }
@@ -526,14 +529,14 @@ pub(crate) fn cmd_run(path: Option<&str>) -> ExitCode {
         Err(code) => return code,
     };
     let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_dom::Dom::new(), native_forwarded: false }));
-    let mut scheduler = match crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY) {
+    let mut scheduler = match crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY) {
         Ok(scheduler) => scheduler,
         Err(error) => { eprintln!("amazing run: {}", error.describe()); return ExitCode::FAILURE; }
     };
     let entry = if let Some(path) = path {
         let url = crate::runtime_binding_host::modules::source_url(path);
         scheduler.set_location_url(&url);
-        let script = PageScript { kind: ScriptKind::Classic, node: amazing_dom::NodeIdx(0), src: Some(url.clone()), body: String::new() };
+        let script = PageScript { kind: ScriptKind::Classic, node: amazing_dom::NodeIdx(0), node_generation: host.borrow().dom.node_generation(amazing_dom::NodeIdx(0)), src: Some(url.clone()), body: String::new() };
         scheduler.run_page_script(&script, &source, &url)
     } else { scheduler.run_script(&source) };
     let checkpoint = scheduler.pump_at(std::time::Duration::from_millis(16), true);

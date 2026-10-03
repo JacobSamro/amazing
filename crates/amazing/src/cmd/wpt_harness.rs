@@ -1749,6 +1749,7 @@ mod any_window_tests {
             native_forwarded: false,
         }));
         let node = host.borrow_mut().query_selector("script").unwrap();
+        let node_generation = host.borrow().dom.node_generation(amazing_dom::NodeIdx(node));
         let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
         let page = "http://web-platform.test/pages/index.html";
         scheduler.set_location_url(page);
@@ -1756,7 +1757,7 @@ mod any_window_tests {
             assert_eq!(url, "http://web-platform.test/alpha/dependency.js");
             Ok("export const value=7".into())
         }));
-        let script = crate::cmd::js::PageScript { node: amazing_dom::NodeIdx(node),
+        let script = crate::cmd::js::PageScript { node: amazing_dom::NodeIdx(node), node_generation,
             src: Some("main.js".into()), body: String::new(), kind: crate::cmd::js::ScriptKind::Classic };
         let url = scheduler.page_script_url(page, &script);
         let text = super::source(&root, &super::script_file(&root, &url).unwrap(), true).unwrap();
