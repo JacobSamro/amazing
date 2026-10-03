@@ -1338,3 +1338,22 @@ from rejected conversion/options promises, and retains a separate native
 explicit-return Await regression. This series does not claim or implement
 parity across the unresolved AST ReturnStatement boundary; the parent routes
 the complete return/driver area to the language owner.
+
+## JSVM25R — checked injected async-generator Return (in progress)
+
+Fixed common dependency `175107c0` is coherent `88f64b9f` plus ready JSVM25.
+The native companion captures the body realm independently of its VM frame,
+reuses saved invocation/strictness for checked PromiseResolve and body resume,
+and delivers constructor-get abrupt completion at the original yield before
+installing reactions. Initial/completed Return uses checked PromiseResolve
+in its actual caller/drain context. Native explicit Return already awaits
+inside its statement; Completed settlement adds no second Await.
+
+Realm expectations were checked on Boat with Node **v24.18.1** and the current
+ECMA-262 Yield/Await/AsyncGeneratorYield algorithms. The actual context below
+the generator after implicit Yield Await is its body-realm builtin reaction,
+so borrowed-parent next creates a parent request Promise but a child yielded
+result. This holds for operand/bare yield, post-Await yield, finalizer yield
+and queued requests. No original-resumer realm is captured or substituted.
+See [js-vm25r_realm_reference.json](js-vm25r_realm_reference.json). The AST
+continuation counterpart remains the language owner's separately gated area.

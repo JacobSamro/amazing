@@ -226,7 +226,7 @@ fn borrowed_generator_methods_preserve_body_and_request_realms() {
         i.global_env
             .declare_var("childObject", child_object_proto)
             .unwrap();
-        i.run_script("var ok=false;var next=Object.getPrototypeOf(Object.getPrototypeOf((async function*(){})())).next;var request=next.call(it);var requestParent=request instanceof Promise;request.then(r=>{var first=Object.getPrototypeOf(r)===Object.prototype&&Object.getPrototypeOf(r.value)===childArray;return next.call(it).then(r=>ok=first&&requestParent&&Object.getPrototypeOf(r)===childObject&&Object.getPrototypeOf(r.value)===childArray&&r.done)})").unwrap();
+        i.run_script("var ok=false;var next=Object.getPrototypeOf(Object.getPrototypeOf((async function*(){})())).next;var request=next.call(it);var requestParent=request instanceof Promise;request.then(r=>{var first=Object.getPrototypeOf(r)===childObject&&Object.getPrototypeOf(r.value)===childArray;return next.call(it).then(r=>ok=first&&requestParent&&Object.getPrototypeOf(r)===childObject&&Object.getPrototypeOf(r.value)===childArray&&r.done)})").unwrap();
         i.drain_microtasks().unwrap();
         let actual = i.run_script("ok").unwrap();
         if actual != JsValue::Bool(true) {
@@ -286,7 +286,12 @@ fn injected_normalization_runs_under_saved_invocation_and_strictness() {
     use super::*;
     fn constructor(i: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
         let Some(JsValue::Object(expected)) = i.global_env.resolve("f") else { unreachable!() };
-        let observed = i.frames.last().and_then(|frame| frame.own_function.as_ref())
+        // The constructor getter has its own native invocation. The nearest
+        // interpreted invocation beneath it must be the saved generator,
+        // not the unrelated function that called the borrowed return method.
+        let observed = i.frames.iter().rev().filter_map(|frame| frame.own_function.as_ref())
+            .find(|function| function.borrow().func.as_ref().is_some_and(|function|
+                matches!(function.body, FunctionBody::Block(_) | FunctionBody::Expr(_) | FunctionBody::Bytecode(_))))
             .is_some_and(|active| Rc::ptr_eq(&active.0, &expected.0));
         i.global_env.assign("observed", JsValue::Bool(observed && i.strict_eval_context))?;
         Err(Throw(i.global_env.resolve("marker").unwrap()))
@@ -308,4 +313,57 @@ fn injected_normalization_runs_under_saved_invocation_and_strictness() {
     assert_eq!(i.run_script("observed&&out").unwrap(), JsValue::Bool(true));
     assert!(i.frames.is_empty());
     assert!(!i.strict_eval_context);
+}
+
+#[test]
+fn queued_borrowed_next_requests_use_the_actual_reaction_realm() {
+    let mut i = Interpreter::new();
+    let parent = i.binding_current_realm();
+    let child = i.binding_create_realm(JsValue::object(crate::value::JsObject::ordinary())).unwrap();
+    let function = i.binding_eval_in_realm(child,
+        "(async function*(){await 0;yield [];yield [];return []})").unwrap();
+    let iterator = i.binding_call_in_realm(child, &function, JsValue::Undefined, vec![]).unwrap();
+    let child_array = i.binding_eval_in_realm(child, "Array.prototype").unwrap();
+    let child_object = i.binding_eval_in_realm(child, "Object.prototype").unwrap();
+    i.global_env.declare_var("it", iterator).unwrap();
+    i.global_env.declare_var("childArray", child_array).unwrap();
+    i.global_env.declare_var("childObject", child_object).unwrap();
+    i.run_script("var next=Object.getPrototypeOf(Object.getPrototypeOf((async function*(){})())).next,checks=[],order=[],ok=false;var a=next.call(it),b=next.call(it),c=next.call(it);var parentPromises=a instanceof Promise&&b instanceof Promise&&c instanceof Promise;a.then(r=>{checks.push(!r.done&&Object.getPrototypeOf(r)===childObject&&Object.getPrototypeOf(r.value)===childArray);order.push('a')});b.then(r=>{checks.push(!r.done&&Object.getPrototypeOf(r)===childObject&&Object.getPrototypeOf(r.value)===childArray);order.push('b')});c.then(r=>{checks.push(r.done&&Object.getPrototypeOf(r)===childObject&&Object.getPrototypeOf(r.value)===childArray);order.push('c');ok=parentPromises&&checks.every(x=>x)&&order.join(',')==='a,b,c'})").unwrap();
+    i.drain_microtasks().unwrap();
+    assert_eq!(i.run_script("ok").unwrap(), JsValue::Bool(true),
+        "{:?}", i.run_script("JSON.stringify([checks,order])").unwrap());
+    assert_eq!(i.binding_current_realm(), parent);
+    assert!(i.frames.is_empty());
+}
+
+#[test]
+fn borrowed_yield_results_follow_the_actual_await_reaction_realm() {
+    for (body, finalizer) in [
+        ("yield [];return []", false),
+        ("yield;return []", false),
+        ("await 0;yield [];return []", false),
+        ("await 0;yield;return []", false),
+        ("try{yield []}finally{yield []}", true),
+    ] {
+        let mut i = Interpreter::new();
+        let parent = i.binding_current_realm();
+        let child = i.binding_create_realm(JsValue::object(crate::value::JsObject::ordinary())).unwrap();
+        let function = i.binding_eval_in_realm(child, &format!("(async function*(){{{body}}})")).unwrap();
+        let iterator = i.binding_call_in_realm(child, &function, JsValue::Undefined, vec![]).unwrap();
+        let child_array = i.binding_eval_in_realm(child, "Array.prototype").unwrap();
+        let child_object = i.binding_eval_in_realm(child, "Object.prototype").unwrap();
+        i.global_env.declare_var("it", iterator).unwrap();
+        i.global_env.declare_var("childArray", child_array).unwrap();
+        i.global_env.declare_var("childObject", child_object).unwrap();
+        i.run_script("var methods=Object.getPrototypeOf(Object.getPrototypeOf((async function*(){})())),checks=[],ok=false;function record(r){checks.push(Object.getPrototypeOf(r)===childObject&&(r.value===undefined||typeof r.value==='number'||Object.getPrototypeOf(r.value)===childArray));return r}").unwrap();
+        let second = if finalizer { "methods.return.call(it,7)" } else { "methods.next.call(it)" };
+        let tail = if finalizer { "return methods.next.call(it).then(r=>{record(r);ok=r.done&&r.value===7&&checks.every(x=>x)})" }
+            else { "ok=r.done&&checks.every(x=>x)" };
+        i.run_script(&format!("var request=methods.next.call(it);var parentRequest=request instanceof Promise;request.then(r=>{{record(r);return {second}.then(r=>{{record(r);{tail}}})}})")).unwrap();
+        i.drain_microtasks().unwrap();
+        assert_eq!(i.run_script("ok&&parentRequest").unwrap(), JsValue::Bool(true),
+            "{body}: {:?}", i.run_script("JSON.stringify(checks)").unwrap());
+        assert_eq!(i.binding_current_realm(), parent);
+        assert!(i.frames.is_empty());
+    }
 }

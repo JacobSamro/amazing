@@ -1,0 +1,117 @@
+{
+  "engine": "v24.18.1",
+  "cases": [
+    {
+      "name": "first-operand",
+      "parentRequest": true,
+      "results": [
+        {
+          "done": false,
+          "result": "child",
+          "value": "child-array"
+        },
+        {
+          "done": true,
+          "result": "child",
+          "value": "undefined"
+        }
+      ]
+    },
+    {
+      "name": "first-bare",
+      "parentRequest": true,
+      "results": [
+        {
+          "done": false,
+          "result": "child",
+          "value": "undefined"
+        },
+        {
+          "done": true,
+          "result": "child",
+          "value": "undefined"
+        }
+      ]
+    },
+    {
+      "name": "post-await-operand",
+      "parentRequest": true,
+      "results": [
+        {
+          "done": false,
+          "result": "child",
+          "value": "child-array"
+        },
+        {
+          "done": true,
+          "result": "child",
+          "value": "undefined"
+        }
+      ]
+    },
+    {
+      "name": "post-await-bare",
+      "parentRequest": true,
+      "results": [
+        {
+          "done": false,
+          "result": "child",
+          "value": "undefined"
+        },
+        {
+          "done": true,
+          "result": "child",
+          "value": "undefined"
+        }
+      ]
+    },
+    {
+      "name": "finally-operand",
+      "parentRequest": true,
+      "results": [
+        {
+          "done": false,
+          "result": "child",
+          "value": "child-array"
+        },
+        {
+          "done": false,
+          "result": "child",
+          "value": "child-array"
+        },
+        {
+          "done": true,
+          "result": "child",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "name": "queued-operand",
+      "parentRequests": true,
+      "results": [
+        {
+          "done": false,
+          "result": "child",
+          "value": "child-array"
+        },
+        {
+          "done": false,
+          "result": "child",
+          "value": "child-array"
+        },
+        {
+          "done": true,
+          "result": "child",
+          "value": "child-array"
+        }
+      ]
+    }
+  ],
+  "spec_sources": [
+    "https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-yield",
+    "https://tc39.es/ecma262/multipage/control-abstraction-objects.html#await",
+    "https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-asyncgeneratoryield"
+  ],
+  "trace": "Yield awaits its operand in the generator context. The Await reaction's builtin is created in the body realm and resumes that context; at AsyncGeneratorYield the actual second-top context is that reaction, so CompleteStep creates the yielded result in the body realm. The borrowed next request's Promise remains in the borrowed builtin realm."
+}
