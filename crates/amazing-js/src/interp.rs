@@ -1740,6 +1740,7 @@ include!("interp_array_protocol.rs");
 include!("interp_array_factories.rs");
 include!("interp_class_private.rs");
 include!("interp_decorators.rs");
+include!("interp_class_evaluation_state.rs");
 include!("interp_class_eval.rs");
 include!("interp_object_extra.rs");
 include!("interp_errors.rs");
