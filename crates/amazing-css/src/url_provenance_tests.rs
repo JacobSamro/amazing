@@ -4,6 +4,7 @@ use super::*;
 fn sheet(css: &str, base: &str) -> Stylesheet {
     let mut sheet = parse_stylesheet(css);
     sheet.base_url = Some(base.into());
+    sheet.resource_context=Some(if base.contains("a.test") {11}else{22});
     sheet
 }
 
@@ -24,6 +25,7 @@ fn background_url_collision_uses_winner_after_variables_and_rollback() {
         assert!(style.get("background-image").unwrap().contains("shared.png"));
         assert_eq!(style.url_base("background-image"), Some(base));
         assert_eq!(style.clone().url_base("background-image"), Some(base));
+        assert_eq!(style.url_context("background-image"),Some(if base.contains("a.test") {11}else{22}));
     }
 }
 
@@ -35,7 +37,7 @@ fn background_inheritance_shorthand_resets_and_pseudo_keep_their_actual_source()
     let nodes: Vec<_> = ["inherit", "shorthand", "variable", "initial", "unset", "reset", "ordinary"]
         .iter().map(|class| {
             let node = dom.create_element(parent, "i");
-            dom.set_attribute(node, "class", class);
+            dom.set_attribute(node, "class", class).unwrap();
             node
         }).collect();
     let sheets = [
@@ -45,16 +47,18 @@ fn background_inheritance_shorthand_resets_and_pseudo_keep_their_actual_source()
     let result = compute(&dom, &sheets);
     for node in &nodes[..3] {
         assert_eq!(result.get(*node).unwrap().url_base("background-image"), Some("https://a.test/theme/a.css"));
+        assert_eq!(result.get(*node).unwrap().url_context("background-image"),Some(11));
     }
     for node in &nodes[3..] {
         let style = result.get(*node).unwrap();
         assert_eq!(style.get("background-image"), Some("none"));
         // Reset declarations may retain an unused source; no inherited source
         // survives on an undeclared or CSS-wide initial/unset image longhand.
-        if *node != nodes[5] { assert_eq!(style.url_base("background-image"), None); }
+        if *node != nodes[5] { assert_eq!(style.url_base("background-image"), None);assert_eq!(style.url_context("background-image"),None); }
     }
     for (pseudo, base) in [(PseudoElement::Before, "https://a.test/theme/a.css"), (PseudoElement::After, "https://b.test/theme/b.css")] {
         assert_eq!(result.get_pseudo(parent, pseudo).unwrap().url_base("background-image"), Some(base));
+        assert_eq!(result.get_pseudo(parent,pseudo).unwrap().url_context("background-image"),Some(if pseudo==PseudoElement::Before {11}else{22}));
     }
 }
 
@@ -84,6 +88,24 @@ fn scoped_principal_and_computed_pseudo_use_shadow_sheet_url_without_document_le
             let pseudo = compute_document_pseudo_with_shadow_font_metrics(&dom, NodeIdx(0), node,
                 PseudoElement::Before, &document_sheets, &shadows, &environment, None, &NoMetrics).unwrap();
             assert_eq!(pseudo.url_base("background-image"), Some(base));
+            assert_eq!(pseudo.url_context("background-image"),Some(if node==light {11}else{22}));
         }
     }
+}
+
+#[test]
+fn source_only_changes_invalidate_style_and_mutation_drops_opaque_provenance() {
+    let mut dom=Dom::new();let node=dom.create_element(NodeIdx(0),"p");
+    let before=sheet("p{background-image:url(same.png)}","https://same.test/same.css");
+    let mut after=before.clone();after.resource_context=Some(99);
+    let old=compute(&dom,&[before.clone()]);let new=compute(&dom,&[after.clone()]);
+    assert_eq!(old.get(node).unwrap().get("background-image"),new.get(node).unwrap().get("background-image"));
+    assert_ne!(old.get(node),new.get(node));
+    let invalidator=StyleInvalidator::new(&[after],2);
+    let delta=recompute_roots(&dom,&old,invalidator.collect(&[],1));
+    assert!(delta.full_rebuild);assert!(delta.changed.contains_key(&node));
+    assert_eq!(delta.styles.get(node).unwrap().url_context("background-image"),Some(99));
+    let mut changed=new.get(node).unwrap().clone();changed.set("background-image","url(other.png)");
+    assert_eq!(changed.url_context("background-image"),None);
+    assert_eq!(new.get(node).unwrap().url_context("background-image"),Some(99));
 }

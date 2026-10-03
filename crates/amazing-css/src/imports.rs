@@ -231,6 +231,8 @@ pub struct LoadedStylesheet {
 pub struct ProjectedFontFace {
     pub font_face: FontFaceRule,
     pub base_url: Option<String>,
+    /// Actual source occurrence transport context, independent of request origin.
+    pub resource_context: Option<u64>,
     pub scope_root: Option<amazing_dom::NodeIdx>,
     pub media: Vec<String>,
 }
@@ -250,8 +252,15 @@ fn matches_media(media: &[String], environment: &MediaEnvironment) -> bool {
 /// environment changes; no transport or source URL resolution occurs here.
 /// Depth128 /4096 active instances and layer depth128 are explicit limits.
 pub fn project_imports(root: &LoadedStylesheet, environment: &MediaEnvironment) -> Result<ImportProjection, ImportProjectionError> {
+    project_imports_with_media(root,environment,&[])
+}
+/// Project a loaded sheet under its actual link/style owner's media conditions.
+/// Conditions are conjunctive; false/invalid root media produces no occurrences,
+/// layer markers or fonts. Reproject the same loaded graph on environment changes.
+pub fn project_imports_with_media(root:&LoadedStylesheet,environment:&MediaEnvironment,media:&[String])->Result<ImportProjection,ImportProjectionError> {
     let mut result = ImportProjection::default();
-    project(root, environment, &[], &[], root.sheet.scope_root, &mut Vec::new(), 0, &mut 0, &mut result)?;
+    if !matches_media(media,environment) {return Ok(result);}
+    project(root, environment, &[], media, root.sheet.scope_root, &mut Vec::new(), 0, &mut 0, &mut result)?;
     Ok(result)
 }
 fn project(loaded: &LoadedStylesheet, environment: &MediaEnvironment, prefix: &[LayerName], media: &[String], owner: Option<amazing_dom::NodeIdx>, ancestors: &mut Vec<String>, depth: usize, instances: &mut usize, result: &mut ImportProjection) -> Result<(), ImportProjectionError> {
@@ -290,6 +299,7 @@ fn project(loaded: &LoadedStylesheet, environment: &MediaEnvironment, prefix: &[
             let mut marker = Stylesheet::default();
             marker.scope_root = owner;
             marker.base_url = loaded.sheet.base_url.clone();
+            marker.resource_context=loaded.sheet.resource_context;
             marker.projected_layers = true;
             marker.rules.push(Rule { layer: path.clone(), scopes: vec![], media: conditions.clone(), selector_srcs: vec![], declarations: vec![] });
             result.stylesheets.push(marker);
@@ -308,6 +318,7 @@ fn segment(source: &Stylesheet, start: usize, end: usize, prefix: &[LayerName], 
     if start==end && !final_segment { return Ok(()); }
     let mut sheet = Stylesheet::default();
     sheet.scope_root = owner; sheet.base_url = source.base_url.clone(); sheet.projected_layers = true;
+    sheet.resource_context=source.resource_context;
     for source_rule in &source.rules[start..end] {
         let mut rule = source_rule.clone();
         let mut path = prefix.to_vec();
@@ -339,7 +350,7 @@ fn segment(source: &Stylesheet, start: usize, end: usize, prefix: &[LayerName], 
             let mut conditions = media.to_vec(); conditions.extend(face.media.clone());
             if matches_media(&conditions, environment) {
                 sheet.font_faces.push(ConditionalFontFace {face:face.face.clone(),media:conditions.clone()});
-                result.font_faces.push(ProjectedFontFace {font_face:face.face.clone(),base_url:source.base_url.clone(),scope_root:owner,media:conditions});
+                result.font_faces.push(ProjectedFontFace {font_face:face.face.clone(),base_url:source.base_url.clone(),resource_context:source.resource_context,scope_root:owner,media:conditions});
             }
         }
     }

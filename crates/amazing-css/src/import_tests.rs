@@ -126,3 +126,38 @@ fn actual_ancestor_cycles_and_graph_bounds_are_explicit_errors_not_global_url_de
     for index in 0..4096 {many.imports.push((index,loaded("","https://same.test/same.css")));}
     assert_eq!(project_imports(&many,&MediaEnvironment::default()).unwrap_err(),ImportProjectionError::InstanceLimit);
 }
+
+#[test]
+fn owner_media_applies_to_all_segments_import_layers_keyframes_and_fonts() {
+    let mut root=loaded("@import 'child' layer(imported); @font-face{font-family:Root;src:url(root.woff2)} @keyframes root{to{opacity:0}} p{color:red}","https://root.test/style.css");
+    root.imports.push((0,loaded("@font-face{font-family:Child;src:url(child.woff2)} @keyframes child{to{opacity:0}} p{height:5px}","https://child.test/style.css")));
+    let media=vec!["screen".into(),"(min-width:100px)".into()];
+    let env=MediaEnvironment::default();
+    assert_eq!(project_imports(&root,&env).unwrap(),project_imports_with_media(&root,&env,&[]).unwrap());
+    let projected=project_imports_with_media(&root,&env,&media).unwrap();
+    assert_eq!(projected.font_faces.len(),2);assert_eq!(keyframes_rules(&projected.stylesheets).len(),2);
+    assert!(projected.stylesheets.iter().flat_map(|sheet|&sheet.rules).all(|rule|rule.media.starts_with(&media)));
+    assert!(projected.font_faces.iter().all(|face|face.media.starts_with(&media)));
+    for query in [vec!["print".into()],vec!["screen".into(),"(min-width:999999px)".into()],vec!["(invalid:)".into()]] {
+        let result=project_imports_with_media(&root,&env,&query).unwrap();assert!(result.stylesheets.is_empty());assert!(result.font_faces.is_empty());
+    }
+    let print=MediaEnvironment{media_type:MediaType::Print,..env};
+    assert!(project_imports_with_media(&root,&print,&media).unwrap().stylesheets.is_empty());
+    assert!(!project_imports_with_media(&root,&print,&["print".into()]).unwrap().stylesheets.is_empty());
+}
+#[test]
+fn repeated_source_occurrences_keep_distinct_opaque_tags_and_actual_font_referrers() {
+    let mut root=loaded("@import 'same' layer(first);@import 'same' layer(last);p{width:2px}","https://root.test/style.css");
+    root.sheet.resource_context=Some(100);
+    for (index,tag) in [(0,200),(1,300)] {
+        let mut child=loaded("@font-face{font-family:One;src:url(one.woff2)}p{background-image:url(same.png)}","https://same.test/style.css");
+        child.sheet.resource_context=Some(tag);root.imports.push((index,child));
+    }
+    let result=project_imports(&root,&MediaEnvironment::default()).unwrap();
+    assert_eq!(result.font_faces.iter().map(|face|face.resource_context).collect::<Vec<_>>(),vec![Some(200),Some(300)]);
+    assert!(result.font_faces.iter().all(|face|face.base_url.as_deref()==Some("https://same.test/style.css")));
+    let mut dom=Dom::new();let node=dom.create_element(NodeIdx(0),"p");
+    let styles=compute(&dom,&result.stylesheets);assert_eq!(styles.get(node).unwrap().url_context("background-image"),Some(300));
+    assert!(result.stylesheets.iter().any(|sheet|sheet.resource_context==Some(100)));
+    let mut same=root.clone();same.sheet.resource_context=Some(101);assert_ne!(root.sheet,same.sheet);
+}

@@ -93,6 +93,7 @@ pub struct ComputedStyle {
     effective_zoom: f64,
     author_specified: BTreeSet<String>,
     url_bases: BTreeMap<String, String>,
+    url_contexts: BTreeMap<String,u64>,
 }
 
 impl Default for ComputedStyle {
@@ -112,6 +113,7 @@ impl Default for ComputedStyle {
             effective_zoom: 1.0,
             author_specified: BTreeSet::new(),
             url_bases: BTreeMap::new(),
+            url_contexts: BTreeMap::new(),
         }
     }
 }
@@ -217,6 +219,12 @@ impl ComputedStyle {
         self.url_bases.get(property).map(String::as_str)
     }
 
+    /// Opaque transport context of the actual winning URL declaration.
+    pub fn url_context(&self,property:&str)->Option<u64> {self.url_contexts.get(property).copied()}
+    pub(crate) fn set_url_context(&mut self,property:&str,context:Option<u64>) {
+        self.url_contexts.remove(property);
+        if let Some(context)=context {self.url_contexts.insert(property.into(),context);}
+    }
     pub(crate) fn set_url_base(&mut self, property: &str, base: Option<&str>) {
         self.url_bases.remove(property);
         if let Some(base) = base {
@@ -404,6 +412,7 @@ impl ComputedStyle {
             self.relative_colors.remove(&longhand);
             self.update_precise_color(&longhand,&expanded);
             self.url_bases.remove(&longhand);
+            self.url_contexts.remove(&longhand);
             if longhand == "font-size-adjust" { self.font_size_adjust_inherited = false; }
             self.props.insert(longhand, expanded);
         }
@@ -2704,6 +2713,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
         effective_zoom: 1.0,
         author_specified: BTreeSet::new(),
         url_bases: parent.map(|parent| parent.url_bases.clone()).unwrap_or_default(),
+        url_contexts:parent.map(|parent|parent.url_contexts.clone()).unwrap_or_default(),
     };
     contain_intrinsic::resolve_lengths(&mut style.props, style.root_font_px);
     individual_transforms::resolve(&mut style.props, style.root_font_px);

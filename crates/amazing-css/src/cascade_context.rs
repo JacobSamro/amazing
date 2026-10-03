@@ -13,6 +13,7 @@ pub(super) struct CompiledRule {
     scopes: Vec<CompiledScope>,
     owner: Option<NodeIdx>,
     pub(super) base_url: Option<String>,
+    pub(super) resource_context: Option<u64>,
     pub(super) tree: Option<NodeIdx>,
     pub(super) context_depth: usize,
     implicit_scope_prefixes: Vec<bool>,
@@ -93,6 +94,7 @@ pub(super) fn compile_sheets(
                             layer: 0,
                             owner: sheet.scope_root,
                             base_url: sheet.base_url.clone(),
+                            resource_context: sheet.resource_context,
                             tree: None,
                             context_depth: 0,
                             implicit_scope_prefixes: rule.selector_srcs.iter().map(|source|

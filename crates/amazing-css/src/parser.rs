@@ -54,6 +54,8 @@ pub struct Stylesheet {
     pub scope_root: Option<amazing_dom::NodeIdx>,
     /// Final fetched URL, or the document URL for an inline stylesheet.
     pub base_url: Option<String>,
+    /// Opaque immutable transport context owned and interpreted only by the driver.
+    pub resource_context: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

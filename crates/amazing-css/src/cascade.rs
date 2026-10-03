@@ -569,6 +569,7 @@ enum Origin {
 struct Candidate<'a> {
     value: &'a str,
     base_url: Option<&'a str>,
+    resource_context: Option<u64>,
     important: bool,
     inline: bool,
     origin: Origin,
@@ -705,6 +706,7 @@ fn compute_one(
         prop: String,
         value: String,
         base_url: Option<String>,
+        resource_context: Option<u64>,
         important: bool,
         inline: bool,
         origin: Origin,
@@ -735,6 +737,7 @@ fn compute_one(
                 prop,
                 value,
                 base_url: None,
+                resource_context: None,
                 important: false,
                 inline: false,
                 origin: Origin::Hint,
@@ -759,6 +762,7 @@ fn compute_one(
                     prop: property,
                     value,
                     base_url: rule.base_url.clone(),
+                    resource_context: rule.resource_context,
                     important: decl.important,
                     inline: false,
                     origin: if rule.ua { Origin::Ua } else { Origin::Author },
@@ -788,6 +792,7 @@ fn compute_one(
                 prop: property,
                 value,
                 base_url: None,
+                resource_context: None,
                 important: decl.important,
                 inline: true,
                 origin: Origin::Author,
@@ -812,6 +817,7 @@ fn compute_one(
                 prop: property.clone(),
                 value: sample.css.clone(),
                 base_url: None,
+                resource_context: None,
                 important: false,
                 inline: false,
                 origin: match origin {
@@ -836,6 +842,7 @@ fn compute_one(
         let cand = Candidate {
             value: &d.value,
             base_url: d.base_url.as_deref(),
+            resource_context: d.resource_context,
             important: d.important,
             inline: d.inline,
             origin: d.origin,
@@ -1160,7 +1167,16 @@ fn resolve_candidate_pool<'a>(
             None if property == "list-style-image" => parent_style.and_then(|parent| parent.url_base(property)),
             None => None,
         };
+        let context=match winner {
+            Some(candidate) if matches!(computed::substituted_css_wide(&style,property,candidate.value),Some(computed::CssWide::Inherit)) ||
+                (computed::is_inherited_property(property) && matches!(computed::substituted_css_wide(&style,property,candidate.value),Some(computed::CssWide::Unset)))=>parent_style.and_then(|parent|parent.url_context(property)),
+            Some(candidate) if matches!(computed::substituted_css_wide(&style,property,candidate.value),Some(computed::CssWide::Initial|computed::CssWide::Unset))=>None,
+            Some(candidate)=>candidate.resource_context,
+            None if property=="list-style-image"=>parent_style.and_then(|parent|parent.url_context(property)),
+            None=>None,
+        };
         style.set_url_base(property, base);
+        style.set_url_context(property,context);
     }
     for property in author_properties {
         style.mark_author_specified(property);
@@ -1356,6 +1372,7 @@ pub fn compute_element_paint_style(
         candidates.entry(property).or_default().push(Candidate {
             value,
             base_url: None,
+                resource_context: None,
             important: *important,
             inline: *is_inline,
             origin: *origin,
