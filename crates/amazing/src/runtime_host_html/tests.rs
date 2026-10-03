@@ -1436,10 +1436,20 @@ fn selection_context_helpers_preserve_actual_associations_and_receiver_policy() 
     adapter.state.borrow_mut().frames.contexts.get_mut(&realm).unwrap().document_generation -= 1;
     drop(adapter);
     // A root caller executing a borrowed child-realm operation gets the callee's exception prototype.
-    let denied = js.binding_with_realm(realm, |js| {
-        let mut adapter = RuntimeBindingHost { js, state: bindings.state.clone() };
-        Ok(adapter.html_window_document_for_selection(&opaque.window).unwrap_err().0)
+    let state = bindings.state.clone();
+    let native = js.binding_with_realm(realm, |js| {
+        let normal = crate::runtime_binding_host::build_host_native_dispatcher(state.clone());
+        let state = state.clone();
+        js.set_host_native_dispatcher(Rc::new(move |js, id, receiver, args, new_target| {
+            if id != HostFunctionId(u64::MAX) { return normal(js, id, receiver, args, new_target); }
+            let mut adapter = RuntimeBindingHost { js, state: state.clone() };
+            adapter.html_window_document_for_selection(&receiver).map(|document| JsValue::num(document.0 as f64))
+        }));
+        Ok(js.binding_create_native_function(HostFunctionId(u64::MAX), "selectionBorrowed", 0, JsCallPolicy::CallOnly))
     }).unwrap();
+    js.binding_define_data_property(&root_window, "selectionBorrowed", native, true, true, true).unwrap();
+    js.binding_define_data_property(&root_window, "selectionReceiver", opaque.window.clone(), true, true, true).unwrap();
+    let denied = js.run_script("try { selectionBorrowed.call(selectionReceiver); throw new Error('access allowed'); } catch(error) { error; }").unwrap();
     let expected = bindings.state.borrow().interfaces[&realm].iter()
         .find(|(interface, _, _)| *interface == Interface::DOMException).unwrap().1.clone();
     let (JsValue::Object(denied), JsValue::Object(expected)) = (denied, expected) else { panic!("native DOMException objects"); };
