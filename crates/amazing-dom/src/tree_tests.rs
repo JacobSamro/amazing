@@ -526,3 +526,29 @@ fn lazy_original_later_attached_and_adopted_attributes_keep_creation_identity() 
     assert_eq!(dom.node_creation_document(cloned_attr).unwrap(),source_anchor);
     assert_ne!(cloned_attr,later);
 }
+
+#[test]
+fn template_owner_creation_flag_survives_source_generation_retirement_but_is_not_cloned() {
+    let mut dom=Dom::new();
+    let source=dom.create_document_in_realm_of(NodeIdx(0)).unwrap();
+    let template=dom.create_element(source,"template");
+    let contents=dom.ensure_template_contents(template).unwrap();
+    let inert=dom.owner_document(contents).unwrap();
+    assert!(dom.is_template_contents_owner_document(inert));
+    assert!(!dom.is_template_contents_owner_document(source));
+    dom.adopt(template,NodeIdx(0)).unwrap();
+    let new_inert=dom.owner_document(contents).unwrap();
+    assert_ne!(new_inert,inert);
+    dom.retire_unreachable_node(source).unwrap();
+    let replacement=dom.create_document_in_realm_of(NodeIdx(0)).unwrap();
+    assert_eq!(replacement,source);
+    assert!(dom.is_template_contents_owner_document(inert));
+    assert!(!dom.is_template_contents_owner_document(replacement));
+    let nested=dom.create_element(inert,"template");
+    let nested_contents=dom.ensure_template_contents(nested).unwrap();
+    assert_eq!(dom.owner_document(nested_contents),Some(inert));
+    let clone=dom.clone_node(inert,false).unwrap();
+    assert!(!dom.is_template_contents_owner_document(clone));
+    assert_eq!(dom.node_creation_document(clone).unwrap(),dom.node_creation_document(NodeIdx(0)).unwrap());
+    assert!(!dom.is_template_contents_owner_document(NodeIdx(u32::MAX)));
+}

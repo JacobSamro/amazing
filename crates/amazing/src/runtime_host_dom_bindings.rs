@@ -103,6 +103,21 @@ impl RuntimeBindingHost<'_> {
         Ok(document)
     }
 
+    /// Only this explicit DOM creation algorithm has an uninitialized default
+    /// opaque origin. Never fill arbitrary missing document origins.
+    pub(super) fn dom_initialize_template_document_origin(&self, document: NodeIdx) -> Result<(), Throw> {
+        let template_owner={
+            let state=self.state.borrow();
+            let host=state.host.borrow();
+            host.dom.is_template_contents_owner_document(document)
+        };
+        if template_owner && self.html_document_origin(document).is_none() {
+            self.html_set_inert_document_origin(document,amazing_fetch::Origin::opaque())
+                .map_err(|_| Throw::type_error("Template document origin initialization failed"))?;
+        }
+        Ok(())
+    }
+
     pub(super) fn dom_xml_serializer_new(&mut self) -> Result<JsValue, Throw> {
         self.web_allocate(WebObject::XmlSerializer, InterfaceBrand::XML_SERIALIZER)
     }
@@ -2073,6 +2088,42 @@ mod tests {
             let document=adapter.node_brand(&value).unwrap();
             assert_eq!(adapter.html_document_origin(document),Some(if index==8 {root_origin.clone()} else {child_origin.clone()}));
         }
+    }
+
+    #[test]
+    fn template_owner_documents_have_distinct_stable_default_opaque_origins_and_document_class() {
+        let host=Rc::new(RefCell::new(BrowserDomHost {dom:amazing_html::parse("<body></body>"),native_forwarded:false}));
+        let mut scheduler=crate::js_scheduler::DriverScheduler::new(host,32).unwrap();
+        scheduler.set_location_url("https://example.test/template-origin");
+        let docs=scheduler.run_script(r#"(function(){
+            const template=document.createElement('template');
+            const owner=template.content.ownerDocument;
+            const nested=owner.createElement('template');
+            if(nested.content.ownerDocument!==owner)throw 'owner reuse';
+            const other=document.implementation.createHTMLDocument('other');
+            const otherOwner=other.createElement('template').content.ownerDocument;
+            const xml=document.implementation.createDocument(null,'r',null);
+            const xmlOwner=xml.createElementNS('http://www.w3.org/1999/xhtml','template').content.ownerDocument;
+            const xmlClone=xmlOwner.cloneNode(true);
+            if(Object.getPrototypeOf(xmlOwner)!==Document.prototype || Object.getPrototypeOf(xmlClone)!==Document.prototype)throw 'generic Document class';
+            return [owner,owner.cloneNode(true),nested.content.ownerDocument,otherOwner,xmlOwner,xmlClone];
+        })()"#).unwrap();
+        let state=scheduler.test_bindings().state.clone();
+        let mut adapter=RuntimeBindingHost {js:&mut scheduler.js,state};
+        let root_origin=adapter.html_document_origin(NodeIdx(0)).unwrap();
+        let mut origins=Vec::new();
+        for index in 0..6 {
+            let value=adapter.get_property(&docs,&index.to_string()).unwrap();
+            let document=adapter.node_brand(&value).unwrap();
+            let origin=adapter.html_document_origin(document).unwrap();
+            assert!(origin.opaque_id().is_some());assert_ne!(origin,root_origin);
+            adapter.dom_initialize_template_document_origin(document).unwrap();
+            assert_eq!(adapter.html_document_origin(document),Some(origin.clone()));
+            origins.push(origin);
+        }
+        assert_eq!(origins[0],origins[1]);assert_eq!(origins[0],origins[2]);
+        assert_ne!(origins[0],origins[3]);assert_ne!(origins[0],origins[4]);
+        assert_ne!(origins[3],origins[4]);assert_eq!(origins[4],origins[5]);
     }
 
 }

@@ -38,14 +38,22 @@ impl Dom {
             .map(|(template, _, _, _)| *template)
     }
 
+    /// Intrinsic identity of a genuine document created by the appropriate
+    /// template owner algorithm. It survives retirement of its source document.
+    pub fn is_template_contents_owner_document(&self, document: NodeIdx) -> bool {
+        let Some(generation)=self.node_generation(document) else { return false; };
+        matches!(self.get(document).kind,NodeKind::Document)
+            && self.template_owner_documents.iter().any(|(_,_,inert,version)|
+                *inert==document && *version==generation)
+    }
+
     pub(crate) fn appropriate_template_document(&mut self, document: NodeIdx) -> NodeIdx {
         let valid = |&(source, version, inert, inert_version): &(NodeIdx, u64, NodeIdx, u64)|
             self.node_generation(source) == Some(version)
                 && self.node_generation(inert) == Some(inert_version);
         // Being created by this algorithm is an intrinsic document flag: it
         // survives collection of the original source document.
-        if self.template_owner_documents.iter().any(|(_, _, inert, version)|
-            *inert == document && self.node_generation(*inert) == Some(*version)) {
+        if self.is_template_contents_owner_document(document) {
             return document;
         }
         if let Some((_, _, inert, _)) = self.template_owner_documents.iter()

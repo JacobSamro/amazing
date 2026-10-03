@@ -597,7 +597,8 @@ impl RuntimeBindingHost<'_> {
             let host = self.state.borrow().host.clone();
             let host = host.borrow();
             return Ok(match &host.dom.get(node).kind {
-                NodeKind::Document if !constructed && host.dom.document_metadata(node).ok().flatten()
+                NodeKind::Document if !constructed && !host.dom.is_template_contents_owner_document(node)
+                    && host.dom.document_metadata(node).ok().flatten()
                     .is_some_and(|metadata| metadata.content_type != "text/html") => Interface::XMLDocument,
                 NodeKind::Document => Interface::Document,
                 NodeKind::DocumentFragment if host.dom.is_shadow_root(node) => Interface::ShadowRoot,
@@ -1154,6 +1155,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
         if matches!(brand, InterfaceBrand::NODE | InterfaceBrand::DOM_IMPLEMENTATION) {
             let node = self.node_from_object_key(key)
                 .ok_or_else(|| Throw::type_error("Invalid node wrapper"))?;
+            self.dom_initialize_template_document_origin(node)?;
             let realm = self.dom_node_realm(node)?;
             if realm != self.js.binding_current_realm() {
                 let state = self.state.clone();
@@ -1896,6 +1898,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
         self.state.borrow_mut().constructed_documents.insert((document, generation));
     }
     fn capture_document_origin(&self, source: NodeIdx) -> Result<Option<amazing_fetch::Origin>, Throw> {
+        self.dom_initialize_template_document_origin(source)?;
         let state = self.state.borrow();
         let host = state.host.borrow();
         if host.dom.node_generation(source).is_none()
@@ -1920,7 +1923,8 @@ impl BindingHost for RuntimeBindingHost<'_> {
         let source_generation = dom.node_generation(source).expect("Cloned source is live");
         let copy_generation = dom.node_generation(copy).expect("Fresh cloned Document");
         let mut state = self.state.borrow_mut();
-        if state.constructed_documents.contains(&(source, source_generation)) {
+        if state.constructed_documents.contains(&(source, source_generation))
+            || dom.is_template_contents_owner_document(source) {
             state.constructed_documents.insert((copy, copy_generation));
         }
     }
