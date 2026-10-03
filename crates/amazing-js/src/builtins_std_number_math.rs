@@ -1,3 +1,7 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/number/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// Formatting entry conversion/validation order adapted to the existing exact
+// decimal formatter; upstream formatting dependencies are not imported.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/math/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // Number's decimal formatting works from the exact binary64 rational. This
@@ -248,32 +252,36 @@ fn std_number_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) 
 fn std_number_to_locale_string(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     std_number_to_string(i, this, vec![])
 }
-fn std_number_digits(i: &mut Interpreter, value: JsValue, default: Option<usize>, max: usize) -> Result<usize, Throw> {
-    if value.is_undefined() { if let Some(default) = default { return Ok(default); } }
-    let number = i.to_number(&value)?;
-    if !number.is_finite() || number.trunc() < 0.0 || number.trunc() > max as f64 {
+fn std_number_digits(number: f64, minimum: usize) -> Result<usize, Throw> {
+    if !(minimum as f64..=100.0).contains(&number) {
         return Err(Throw::range_error("invalid precision"));
     }
-    Ok(number.trunc() as usize)
+    Ok(number as usize)
 }
 fn std_number_to_fixed(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let value = std_number_receiver(this)?;
-    let digits = std_number_digits(i, std_reflect_arg(&args, 0), Some(0), 100)?;
+    let fraction = to_integer_or_infinity(i, &std_reflect_arg(&args, 0))?;
+    // toFixed validates the range even for NaN/infinity.
+    let digits = std_number_digits(fraction, 0)?;
     Ok(JsValue::str(std_number_fixed(value, digits)))
 }
 fn std_number_to_exponential(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let value = std_number_receiver(this)?;
-    let fraction = if args.first().is_none_or(JsValue::is_undefined) { None }
-        else { Some(std_number_digits(i, args[0].clone(), None, 100)?) };
+    let argument = std_reflect_arg(&args, 0);
+    let fraction = to_integer_or_infinity(i, &argument)?;
+    // Argument coercion is observable, but range validation follows this return.
+    if !value.is_finite() { return Ok(JsValue::str(crate::value::number_to_string(value))); }
+    let digits = std_number_digits(fraction, 0)?;
+    let fraction = if argument.is_undefined() { None } else { Some(digits) };
     Ok(JsValue::str(std_number_exponential_text(value, fraction)))
 }
 fn std_number_to_precision(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let value = std_number_receiver(this)?;
     let precision = std_reflect_arg(&args, 0);
     if precision.is_undefined() { return Ok(JsValue::str(crate::value::number_to_string(value))); }
-    let precision = std_number_digits(i, precision, None, 100)?;
-    if precision == 0 { return Err(Throw::range_error("precision must be at least one")); }
+    let precision = to_integer_or_infinity(i, &precision)?;
     if !value.is_finite() { return Ok(JsValue::str(crate::value::number_to_string(value))); }
+    let precision = std_number_digits(precision, 1)?;
     let (digits, exponent) = std_number_significant(value, precision);
     let mut text = if exponent < -6 || exponent >= precision as i32 {
         let mut out = digits[..1].to_string();
@@ -371,4 +379,108 @@ fn std_math_f16_round(value: f64) -> f64 {
     let significand = std_math_even_round(magnitude / 2f64.powi(exponent) * 1024.0);
     let rounded = significand * 2f64.powi(exponent - 10);
     if rounded > 65504.0 { sign * f64::INFINITY } else { sign * rounded }
+}
+
+#[cfg(test)]
+mod number_format_entry_tests {
+    use super::*;
+    fn check(source: &str) {
+        for backend in [ExecutionBackend::TreeWalk,ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();
+            assert_eq!(i.run_script_with_backend(source,backend).unwrap_or_else(|e|panic!("{backend:?}: {}",e.describe())),JsValue::Bool(true),"{backend:?}");
+        }
+    }
+    #[test]
+    fn digit_conversion_uses_integer_or_infinity_and_complete_ranges() {
+        check(r#"
+          var valid=true,f=Number.prototype.toFixed,e=Number.prototype.toExponential,p=Number.prototype.toPrecision;
+          for(var digits of [NaN,undefined,null,false,'bad',-0,-0.9]){
+            valid=valid && f.call(12.25,digits)==='12' && e.call(12.25,digits)===(digits===undefined?'1.225e+1':'1e+1');
+          }
+          for(var digits of [1,1.9,true,'1'])valid=valid && f.call(12.25,digits)==='12.3' && e.call(12.25,digits)==='1.2e+1' && p.call(12.25,digits)==='1e+1';
+          valid=valid && f.call(0,100.9).length===102 && e.call(0,100.9).length===105 && p.call(0,100.9).length===101;
+          for(var method of [f,e,p])for(var digits of [101,Infinity,-Infinity,-1]){
+            try{method.call(1,digits);valid=false;}catch(error){valid=valid && error instanceof RangeError;}
+          }
+          for(var digits of [0,NaN,null,false,-0.9]){try{p.call(1,digits);valid=false;}catch(error){valid=valid && error instanceof RangeError;}}
+          valid=valid && p.call(12.25)==='12.25';valid;
+        "#);
+    }
+    #[test]
+    fn nonfinite_receiver_returns_follow_coercion_before_distinct_range_checks() {
+        check(r#"
+          var valid=true,error={},f=Number.prototype.toFixed,e=Number.prototype.toExponential,p=Number.prototype.toPrecision;
+          for(var number of [NaN,Infinity,-Infinity]){
+            var expected=number!==number?'NaN':number<0?'-Infinity':'Infinity';
+            for(var method of [f,e,p]){
+              var calls=0,arg={valueOf(){calls++;return 1;}};
+              valid=valid && method.call(number,arg)===expected && calls===1;
+              var arg={valueOf(){throw error;}};
+              try{method.call(number,arg);valid=false;}catch(thrown){valid=valid && thrown===error;}
+              for(var arg of [Symbol(),1n]){try{method.call(number,arg);valid=false;}catch(thrown){valid=valid && thrown instanceof TypeError;}}
+            }
+            for(var digits of [-1,101,Infinity,-Infinity]){
+              valid=valid && e.call(number,digits)===expected && p.call(number,digits)===expected;
+              try{f.call(number,digits);valid=false;}catch(thrown){valid=valid && thrown instanceof RangeError;}
+            }
+            valid=valid && f.call(number,NaN)===expected && e.call(number,NaN)===expected && p.call(number,NaN)===expected;
+          }
+          valid;
+        "#);
+    }
+    #[test]
+    fn number_brand_checks_precede_argument_coercion_and_preserve_abrupt_identity() {
+        check(r#"
+          var valid=true,error={},calls=0,arg={valueOf(){calls++;throw error;}},methods=[Number.prototype.toFixed,Number.prototype.toExponential,Number.prototype.toPrecision];
+          for(var method of methods){
+            for(var receiver of [undefined,null,true,'1',1n,Symbol(),{},Object.create(Number.prototype),new Proxy(new Number(1),{})]){
+              try{method.call(receiver,arg);valid=false;}catch(thrown){valid=valid && thrown instanceof TypeError && thrown!==error;}
+            }
+            valid=valid && calls===0;
+          }
+          for(var method of methods){try{method.call(new Number(1),arg);valid=false;}catch(thrown){valid=valid && thrown===error;}}
+          valid=valid && calls===3;
+          var log=[],precision={[Symbol.toPrimitive](hint){log.push(hint);return 2;},valueOf(){throw 'unused';}};
+          valid=valid && Number.prototype.toFixed.call(1.25,precision)==='1.25' && log.join(',')==='number';valid;
+        "#);
+    }
+    #[test]
+    fn exact_decimal_formatter_sign_ties_and_shortest_paths_stay_intact() {
+        check(r#"
+          var valid=true;
+          for(var sign of [1,-1]){
+            valid=valid && (sign*2.5).toFixed(0)===(sign===1?'3':'-3');
+            valid=valid && (sign*1.005).toFixed(2)===(sign===1?'1.00':'-1.00');
+            valid=valid && (sign*9.99).toPrecision(2)===(sign===1?'10':'-10');
+            valid=valid && (sign*9.99).toExponential(1)===(sign===1?'1.0e+1':'-1.0e+1');
+          }
+          valid=valid && (-0).toFixed(2)==='0.00' && (-0).toExponential(2)==='0.00e+0' && (-0).toPrecision(2)==='0.0';
+          valid=valid && (1e21).toFixed(2)==='1e+21' && (0.000001).toPrecision(1)==='0.000001' && (0.0000001).toPrecision(1)==='1e-7';
+          valid=valid && (123.25).toExponential()==='1.2325e+2' && Number.prototype.toPrecision.call(new Number(1.25),3)==='1.25';
+          valid=valid && Number.prototype.toFixed.call(Number.prototype,1)==='0.0';valid;
+        "#);
+    }
+    #[test]
+    fn formatting_metadata_and_foreign_builtin_errors_keep_intrinsic_identity() {
+        for backend in [ExecutionBackend::TreeWalk,ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();let global=i.binding_create_object(None).unwrap();let child=i.binding_create_realm(global).unwrap();
+            for(name,source) in [("foreignFixed","Number.prototype.toFixed"),("foreignExp","Number.prototype.toExponential"),("foreignPrecision","Number.prototype.toPrecision"),("foreignRange","RangeError.prototype"),("foreignType","TypeError.prototype")] {
+                let value=i.binding_eval_in_realm(child,source).unwrap();i.global_env.declare_var(name,value).unwrap();
+            }
+            assert_eq!(i.run_script_with_backend(r#"
+              var valid=true,error={};
+              for(var method of [foreignFixed,foreignExp,foreignPrecision]){
+                try{method.call(1,101);valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===foreignRange;}
+                try{method.call({},1);valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===foreignType;}
+                try{method.call(1,{valueOf(){throw error;}});valid=false;}catch(e){valid=valid && e===error;}
+              }
+              for(var name of ['toFixed','toExponential','toPrecision']){
+                var d=Object.getOwnPropertyDescriptor(Number.prototype,name),method=d.value;
+                valid=valid && d.writable && !d.enumerable && d.configurable && method.length===1 && method.name===name && !Object.hasOwn(method,'prototype');
+                try{new method(1);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+              }
+              valid;
+            "#,backend).unwrap(),JsValue::Bool(true));
+        }
+    }
 }

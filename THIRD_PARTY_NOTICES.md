@@ -108,3 +108,5 @@ reproduced in the table row for that upstream.
 - boa-dev/boa — MIT, Copyright (c) 2019 Jason Williams and contributors; core/engine/src/builtins/math/mod.rs @ 39cd11214ecb366200157dab96b3919e61e9a391: Math.sumPrecise iterator algorithm adapted in crates/amazing-js/src/interp_math_sum.rs and its dispatch in builtins_std_number_math.rs.
 
 - Gumichocopengin8/xsum.rs — MIT, Copyright 2015, 2018, 2021, 2024 Radford M. Neal; Copyright 2025 Keita Nonaka; src/xsum_small.rs, src/accumulators/small_accumulator.rs and src/constants.rs @ 7668ca84cb00dc8f4a5fc69229d1d317e9735601: safe exact small superaccumulator adapted in crates/amazing-js/src/interp_math_sum.rs.
+
+- boa-dev/boa — MIT, Copyright (c) 2019 Jason Williams and contributors; core/engine/src/builtins/number/mod.rs @ 39cd11214ecb366200157dab96b3919e61e9a391: whole toFixed/toExponential/toPrecision entry conversion, validation and nonfinite ordering adapted in crates/amazing-js/src/builtins_std_number_math.rs, preserving Amazing's existing exact decimal formatter.
