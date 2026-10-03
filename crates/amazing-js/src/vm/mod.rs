@@ -1,3 +1,5 @@
+// Portions ported from lucid-softworks/lumen (crates/lumen/src/eval.rs,
+// declare_block_lexicals/annexb_fn_sync_eval) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 //! Experimental register VM. Compilation rejects unsupported syntax atomically;
 //! execution never falls back to AST statement/expression evaluation.
 #![forbid(unsafe_code)]
@@ -152,6 +154,8 @@ impl KeyOperand {
 
 #[derive(Debug)]
 enum Instruction {
+    InitBlockFunctions(Vec<Rc<crate::ast::FunctionItem>>),
+    CopyBlockFunction(String),
     NoOp,
     Constant(Register, JsValue),
     Numeric(Register, Numeric),
@@ -951,6 +955,20 @@ impl Program {
                         }
                     },
                     Instruction::ReserveBinding(name, mutable) => { env.declare_uninitialized(name, *mutable)?; }
+                    Instruction::InitBlockFunctions(functions) => {
+                        for function in functions {
+                            if let Some(name) = &function.name {
+                                let value = i.make_function(function, env);
+                                if env.local_cell(&name.name).is_some() { env.assign(&name.name, value)?; }
+                                else { env.declare_lexical(&name.name, value, true)?; }
+                            }
+                        }
+                    }
+                    Instruction::CopyBlockFunction(name) => {
+                        let value = env.local_cell(name).ok_or_else(|| Throw::reference_error("missing block function"))?.read()?;
+                        let scope = env.var_scope();
+                        if !scope.assign(name, value.clone())? { scope.declare_var(name, value)?; }
+                    }
                     Instruction::NamedEvaluation(dst, expression, name) => { i.named_evaluation(expression, &mut registers[*dst], name); }
                     Instruction::Unary(dst, op, src) => {
                         registers[*dst] = i.unary_value(*op, registers[*src].clone())?;

@@ -1,0 +1,59 @@
+{
+  "ticket": "JSVM-18",
+  "base": "31d628061841cacb6d1c9f438fd55028b832150d",
+  "base_source_equals": "0d5963fe7abda88ec6ea8100efd6e853f278bf4b",
+  "platform": "Linux Boat native /tmp source and target",
+  "baseline": "t262-0d5963fe-validated-batch6.json",
+  "baseline_sha256": "cc5b5e4691a48d77dac8800072e453c369aba96e72339583d8c9e7d5a607fc24",
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "host_sha256": "340b4ee05babfa2cd69c2d093fe4eeee06dee5915d1a110d1de6a459cb901653",
+  "workspace": {"passed": 3752, "skipped": 17, "doctests_passed": 4},
+  "affected_corpus": {
+    "language_before_passed": 23865,
+    "language_after_passed": 23866,
+    "language_gained_files": 1,
+    "language_gained_variants": 1,
+    "function_passed_files_unchanged": 502,
+    "function_passed_variants_unchanged": 879,
+    "lost_files": 0,
+    "lost_variants": 0
+  },
+  "full_corpus": {
+    "discovered": 53872,
+    "broad_timeout_seconds": 20,
+    "jobs": 8,
+    "broad_elapsed_seconds": 709.891,
+    "broad_passed": 51429,
+    "deadline_replay_timeout_seconds": 60,
+    "deadline_replay_same_binary": true,
+    "deadline_replay": [
+      {"cluster": "staging/sm/Date/dst-offset-caching-", "files": 8, "passed_variants": 16, "elapsed_seconds": 55.891},
+      {"cluster": "staging/sm/TypedArray/sort_modifications.js", "files": 1, "passed_variants": 2, "elapsed_seconds": 117.399},
+      {"cluster": "staging/sm/regress/regress-1507322-deep-weakmap.js", "files": 1, "unsupported_variants": 2, "reason": "host.gc", "elapsed_seconds": 39.497}
+    ],
+    "before_passed_files": 51436,
+    "after_passed_files": 51438,
+    "gained_files": 2,
+    "lost_files": 0,
+    "before_passed_variants": 99058,
+    "after_passed_variants": 99061,
+    "gained_variants": 3,
+    "lost_variants": 0,
+    "after_failed_files": 1969,
+    "after_timeout_files": 1,
+    "after_unsupported_files": 170,
+    "fixture_skipped_files": 294,
+    "gains": ["annexB/language/function-code/block-decl-nested-blocks-with-fun-decl.js", "staging/sm/lexical-environment/catch-body.js"]
+  },
+  "compile": {
+    "scope": "all public callable factory attempts during whole Test262; repeated runtime compilation attempts, not unique files",
+    "attempts": 2439656,
+    "accepted": 2439486,
+    "fallbacks": 170,
+    "scoped_declaration_rejections": 0,
+    "fallback_clusters": {"statement_kind": 129, "expression_kind": 18, "yield": 11, "suspending_class": 8, "member_access": 4}
+  },
+  "boundaries": ["Ordinary function, arrow and method scoped declaration lowering; async/generator policy unchanged", "Fresh lexical closures and compiler-only per-occurrence Annex B eligibility", "Formal-name and intervening lexical conflicts, duplicate functions, if/label/switch/loop/try/catch/finally scopes", "Block TDZ placeholders and separate catch parameter/body environments", "Twenty meaningful semantic and native-acceptance regression cases", "No new dependencies or shared eval/reference grammar edits"],
+  "port": {"repository": "lucid-softworks/lumen", "commit": "f6c9860d44fa52249cfd647122edea184d32c863", "license": "MIT", "upstream_paths": ["crates/lumen/src/interpreter.rs", "crates/lumen/src/eval.rs"], "own_paths": ["crates/amazing-js/src/vm/compiler_declarations.rs", "crates/amazing-js/src/vm/mod.rs"], "notices": "appended row in THIRD_PARTY_NOTICES.md"}
+}

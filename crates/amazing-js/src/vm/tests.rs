@@ -1138,6 +1138,37 @@ fn jsvm17_default_callables_preserve_caller_metadata_and_binding_semantics() {
 }
 
 #[test]
+fn jsvm18_block_declarations_preserve_lexical_identity_and_annex_b_boundaries() {
+    for source in [
+        "function outer(){var before=f;{function f(){return 7}}return before===undefined&&f()===7} outer();",
+        "function outer(){if(false){function f(){}}return f===undefined} outer();",
+        "function outer(){'use strict';{function f(){return 7}if(f()!==7)return false}return typeof f==='undefined'} outer();",
+        "function outer(){{function* g(){yield 7}if(g().next().value!==7)return false}return typeof g==='undefined'} outer();",
+        "function outer(){{async function f(){return 7}async function* g(){yield 9}if(typeof f!=='function'||typeof g!=='function')return false}return typeof f==='undefined'&&typeof g==='undefined'} outer();",
+        "function outer(x=123){{function x(){}}return x===123} outer();",
+        "function outer(){let f=123;{function f(){return 7}if(f()!==7)return false}return f===123} outer();",
+        "function outer(){var a=[];for(let n=0;n<3;n++){function f(){return n}a.push(f)}return a[0]!==a[1]&&a.map(f=>f()).join(',')==='0,1,2'&&f===a[2]} outer();",
+        "function outer(){{var before=f;function f(){return 1}function f(){return 2}if(before()!==2)return false}return f()===2} outer();",
+        "function outer(){{function f(){return 1}{function f(){return 2}if(f()!==2)return false}}return f()===1} outer();",
+        "function outer(){if(true)function f(){f=7;return f}var saved=f;return saved()===7&&f===saved} outer();",
+        "function outer(){label:function f(){return 7}return f()===7} outer();",
+        "function outer(){{var before=f;label:function f(){return 7}if(before()!==7)return false}return f()===7} outer();",
+        "function outer(){switch(0){case 0:if(f()!==2)return false;function f(){return 1}break;case 1:function f(){return 2}}return f()===2} outer();",
+        "function outer(){try{throw 123}catch(f){{function f(){return 7}}}return f()===7} outer();",
+        "function outer(){try{throw {f:123}}catch({f}){{function f(){return 7}}}return typeof f==='undefined'} outer();",
+        "function outer(){try{function f(){return 7}}finally{function g(){return 9}}return f()===7&&g()===9} outer();",
+        "var x=7;function outer(){{try{x;return false}catch(e){if(!(e instanceof ReferenceError))return false}let x=9;function f(){return x}return f()===9}} outer();",
+        "function outer(){{const {x=(()=>f())()}={};function f(){return 7}return x===7}} outer();",
+        "function outer(){var result;for(let [f] of [ [123] ]){{function f(){return 7}result=f()}}return result===7&&typeof f==='undefined'} outer();",
+    ] {
+        let mut i = Interpreter::new();
+        assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")), JsValue::Bool(true), "{source}");
+        let Some(JsValue::Object(function)) = i.global_env.resolve("outer") else { unreachable!() };
+        assert!(matches!(&function.borrow().func.as_ref().unwrap().body, FunctionBody::Bytecode(_)), "{source}");
+    }
+}
+
+#[test]
 fn jsvm17_compiled_statements_observe_late_debugger_attachment() {
     #[derive(Default)]
     struct Recording(Vec<(String, String, u32, u32)>);

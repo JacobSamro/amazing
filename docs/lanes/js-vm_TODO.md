@@ -1057,3 +1057,31 @@ Final **2429512 accepted /2429893 attempts**, **381 fallbacks**: scoped function
 declarations211, statement kinds129, expression kinds18, yield11, suspending
 class fields/static blocks8, member access4. Compact durable evidence:
 [js-vm17_evidence.json](js-vm17_evidence.json).
+
+## JSVM-18: ordinary scoped declarations (complete)
+
+Coherent dependency0d5963fe adopted by merge31d62806. Port the whole Lumen
+`collect_annexb_funcs` and block-instantiation area from MIT commit
+f6c9860d44fa52249cfd647122edea184d32c863 (local upstream source and MIT license
+checked). Compiler discovery records per-occurrence eligibility transiently,
+reserves eligible legacy variables and emits fresh lexical function initialization
+plus conditional var-copy operations. No AST address escapes compilation.
+Handle ordinary function/arrow/method block, if, switch, loop, label and
+try/catch/finally boundaries together, with formal-name, intervening lexical and
+catch-pattern conflicts. Async/generator policy remains separately unchanged.
+Block lexical placeholders precede initializer evaluation; catch parameters and
+body lexicals occupy distinct scopes. Twenty meaningful regression cases cover
+closure identity, duplicates, legacy copies, labels, non-plain functions and TDZ.
+Final native Boat workspace **3752 passed**,17 skipped; doctests **four passed**.
+Whole Test262 **51436 ->51438 /53872 files passed**, **two gained, zero lost**;
+variants **99058 ->99061**, **three gained, zero lost**. Broad20s/eight jobs plus
+the whole changed10file60s deadline batch used the same binary: Date8 and
+TypedArray sort pass; deep-weakmap retains its host.gc unsupported classification.
+One timeout remains, unchanged. Full callable **2439486 accepted /2439656 attempts**,
+**170 fallback** (129statement/18expression/11yield/8class/4member), with zero scoped
+declaration rejection. Compact evidence: [js-vm18_evidence.json](js-vm18_evidence.json).
+
+Next approved JSVM-19: whole checked Await normalization and abrupt constructor
+getter timing, preserving AsyncFromSync wrapper rejection timing and async
+generator Return behavior. Coordinate exact AST coroutine and module observer
+consumers after coherent Runtime35 adoption; no blanket Promise consumer rewrite.

@@ -14,6 +14,8 @@ mod patterns;
 use patterns::pattern_target;
 #[path = "compiler_resources.rs"]
 mod resources;
+#[path = "compiler_declarations.rs"]
+mod declarations;
 
 const MAX_REGISTERS: usize = 65_536;
 const MAX_INSTRUCTIONS: usize = 262_144;
@@ -173,6 +175,9 @@ pub(crate) fn compile_async_generator_body(body: &ast::Block, strict: bool) -> R
 }
 
 struct Compiler {
+    native_declarations: bool,
+    annex_b: std::collections::HashSet<usize>,
+    block_function_nodes: std::collections::HashSet<usize>,
     program: Program,
     depth: usize,
     is_generator: bool,
@@ -216,6 +221,9 @@ struct LoopCtx {
 impl Compiler {
     fn new(is_function: bool) -> Self {
         Self {
+            native_declarations: false,
+            annex_b: std::collections::HashSet::new(),
+            block_function_nodes: std::collections::HashSet::new(),
             program: Program {
                 code: vec![],
                 statement_spans: Vec::new(),
@@ -334,17 +342,14 @@ impl Compiler {
         function: &ast::FunctionItem,
         span: Span,
     ) -> Result<FunctionCode, CompileError> {
-        if !function.is_async && !function.is_generator
-            && Self::has_scoped_function_declaration(&function.body.body, false)
-        {
-            return Err(self.error(span, "scoped function declaration"));
-        }
         self.validate_parameters(&function.params)?;
         let params = function.params.clone();
         let mut child = Self::new(true);
         child.strict = self.strict || has_use_strict_directive(&function.body.body);
         child.is_generator = function.is_generator;
         child.is_async = function.is_async;
+        child.native_declarations = !function.is_async && !function.is_generator;
+        if child.native_declarations { child.annex_declarations(&function.body.body, &params); }
         child.hoist_functions(&function.body.body)?;
         child.statements(&function.body.body, function.body.span)?;
         let body_lexical_names = super::super::block_lexical_names(&function.body.body);
@@ -380,22 +385,19 @@ impl Compiler {
         if arrow.is_generator {
             return Err(self.error(span, "generator arrow"));
         }
-        if !arrow.is_async && matches!(&arrow.body, ast::ArrowBody::Block(block)
-            if Self::has_scoped_function_declaration(&block.body, false))
-        {
-            return Err(self.error(span, "scoped function declaration"));
-        }
         self.validate_parameters(&arrow.params)?;
         let params = arrow.params.clone();
         let mut child = Self::new(true);
         child.strict = self.strict || matches!(&arrow.body, ast::ArrowBody::Block(block) if has_use_strict_directive(&block.body));
         child.is_async = arrow.is_async;
+        child.native_declarations = !arrow.is_async;
         match &arrow.body {
             ast::ArrowBody::Expr(expression) => {
                 let value = child.expression(expression)?;
                 child.emit(Instruction::Return(value));
             }
             ast::ArrowBody::Block(block) => {
+                if child.native_declarations { child.annex_declarations(&block.body, &params); }
                 child.hoist_functions(&block.body)?;
                 child.statements(&block.body, block.span)?;
             }
@@ -504,30 +506,9 @@ impl Compiler {
     // Nested block declarations need lexical instantiation and conditional Annex B
     // copies. Keep ordinary bodies on the existing interpreter until those are
     // represented in bytecode rather than hoisting them into the function scope.
-    fn has_scoped_function_declaration(statements: &[Stmt], scoped: bool) -> bool {
-        statements.iter().any(|statement| match &statement.kind {
-            StmtKind::Function(_) => scoped,
-            StmtKind::Block(block) => Self::has_scoped_function_declaration(&block.body, true),
-            StmtKind::If { then, els, .. } =>
-                Self::has_scoped_function_declaration(std::slice::from_ref(then.as_ref()), true)
-                || els.as_ref().is_some_and(|els| Self::has_scoped_function_declaration(std::slice::from_ref(els.as_ref()), true)),
-            StmtKind::While { body, .. } | StmtKind::DoWhile { body, .. }
-            | StmtKind::For { body, .. } | StmtKind::ForIn { body, .. }
-            | StmtKind::ForOf { body, .. } | StmtKind::ForAwaitOf { body, .. }
-            | StmtKind::Labeled { body, .. } =>
-                Self::has_scoped_function_declaration(std::slice::from_ref(body.as_ref()), true),
-            StmtKind::Switch { cases, .. } => cases.iter().any(|case|
-                Self::has_scoped_function_declaration(&case.body, true)),
-            StmtKind::Try(statement) =>
-                Self::has_scoped_function_declaration(&statement.block.body, true)
-                || statement.catch.as_ref().is_some_and(|catch| Self::has_scoped_function_declaration(&catch.body.body, true))
-                || statement.finally.as_ref().is_some_and(|block| Self::has_scoped_function_declaration(&block.body, true)),
-            _ => false,
-        })
-    }
-
     fn hoist_functions(&mut self, statements: &[Stmt]) -> Result<(), CompileError> {
         for statement in statements {
+            if self.native_declarations && !matches!(statement.kind, StmtKind::Function(_)) { continue; }
             match &statement.kind {
                 StmtKind::Function(function) => {
                     let Some(name) = &function.name else {
@@ -645,7 +626,18 @@ impl Compiler {
 
     fn statement_inner(&mut self, statement: &Stmt) -> Result<(), CompileError> {
         match &statement.kind {
-            StmtKind::Empty | StmtKind::Debugger | StmtKind::Function(_) => {}
+            StmtKind::Empty | StmtKind::Debugger => {}
+            StmtKind::Function(function) => {
+                if self.native_declarations && self.annex_b.contains(&(function.as_ref() as *const ast::FunctionItem as usize)) {
+                    let implicit = !self.block_function_nodes.contains(&(function.as_ref() as *const ast::FunctionItem as usize));
+                    if implicit {
+                        self.emit(Instruction::EnterScope);
+                        self.instantiate_block(std::slice::from_ref(statement));
+                    }
+                    if let Some(name) = &function.name { self.emit(Instruction::CopyBlockFunction(name.name.clone())); }
+                    if implicit { self.emit(Instruction::LeaveScope); }
+                }
+            }
             StmtKind::Expression(expression) => {
                 let value = self.expression(expression)?;
                 self.emit(Instruction::Complete(value));
@@ -664,7 +656,7 @@ impl Compiler {
                     if declaration.kind == VarKind::Const && binding.init.is_none() {
                         return Err(self.error(binding.span, "const requires an initializer"));
                     }
-                    if declaration.kind != VarKind::Var && (declaration.resource_kind.is_some() || !matches!(binding.binding, Binding::Ident(_))) {
+                    if declaration.kind != VarKind::Var && (!self.native_declarations || self.scope_depth == 0) && (declaration.resource_kind.is_some() || !matches!(binding.binding, Binding::Ident(_))) {
                         self.reserve_pattern(&binding.binding, declaration.kind == VarKind::Let);
                     }
                     let value = match &binding.init {
@@ -697,6 +689,7 @@ impl Compiler {
             StmtKind::Block(block) => {
                 self.emit(Instruction::Complete(0));
                 self.emit(Instruction::EnterScope);
+                self.instantiate_block(&block.body);
                 self.statements(&block.body, block.span)?;
                 self.emit(Instruction::LeaveScope);
             }
@@ -704,11 +697,11 @@ impl Compiler {
                 self.emit(Instruction::Complete(0));
                 let test = self.expression(cond)?;
                 let branch = self.emit(Instruction::Branch(test, Condition::Falsy, 0));
-                self.statement(then)?;
+                self.if_branch(then)?;
                 let end = self.emit(Instruction::Jump(0));
                 self.patch(branch);
                 if let Some(els) = els {
-                    self.statement(els)?;
+                    self.if_branch(els)?;
                 }
                 self.patch(end);
             }
@@ -757,6 +750,9 @@ impl Compiler {
                 let mut per_iteration = Vec::new();
                 if let Some(declaration) = lexical {
                     self.emit(Instruction::EnterScope);
+                    if self.native_declarations {
+                        for item in &declaration.decls { self.reserve_pattern(&item.binding, declaration.kind == VarKind::Let); }
+                    }
                     if declaration.kind == VarKind::Let {
                         for binding in &declaration.decls {
                             if let Binding::Ident(name) = &binding.binding {
@@ -912,6 +908,9 @@ impl Compiler {
                 let labels = std::mem::take(&mut self.pending_labels);
                 self.push_loop(labels, false);
                 self.emit(Instruction::EnterScope);
+                if self.native_declarations {
+                    for case in cases { self.instantiate_block(&case.body); }
+                }
                 let resources = cases.iter().flat_map(|case| &case.body)
                     .any(|s| matches!(&s.kind, StmtKind::Var(d) if d.resource_kind.is_some()))
                     .then(|| self.begin_resources());
@@ -1012,6 +1011,7 @@ impl Compiler {
                     end: 0,
                 });
                 self.emit(Instruction::EnterScope);
+                self.instantiate_block(&statement.block.body);
                 self.statements(&statement.block.body, statement.block.span)?;
                 self.emit(Instruction::LeaveScope);
                 self.emit(Instruction::TryNormal);
@@ -1024,7 +1024,10 @@ impl Compiler {
                         self.reserve_pattern(binding, true);
                         self.binding_pattern(binding, value, VarKind::Let, catch.body.span)?;
                     } else { self.emit(Instruction::EnterCatch(None)); }
+                    if self.native_declarations { self.emit(Instruction::EnterScope); }
+                    self.instantiate_block(&catch.body.body);
                     self.statements(&catch.body.body, catch.body.span)?;
+                    if self.native_declarations { self.emit(Instruction::LeaveScope); }
                     self.emit(Instruction::LeaveScope);
                     self.emit(Instruction::TryNormal);
                     Some(start)
@@ -1035,6 +1038,7 @@ impl Compiler {
                 let finally = if let Some(finally) = &statement.finally {
                     let start = self.program.code.len();
                     self.emit(Instruction::EnterScope);
+                    self.instantiate_block(&finally.body);
                     self.statements(&finally.body, finally.span)?;
                     self.emit(Instruction::LeaveScope);
                     self.emit(Instruction::EndFinally);
