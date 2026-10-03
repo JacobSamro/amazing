@@ -253,10 +253,25 @@ fn borrowed_generator_methods_preserve_body_and_request_realms() {
         i.global_env
             .declare_var("childArray", child_array_proto)
             .unwrap();
+        // Node/V8 on Boat and the normative Await/Yield trace establish
+        // that native Yield's implicit Await resumes through a child-realm
+        // callback. The actor's deliberately preserved legacy Yield policy
+        // does not Await its operand; keep that diagnostic explicit rather
+        // than claiming whole Yield parity in this Return-only ticket.
+        i.global_env
+            .declare_var(
+                "expectedYieldPrototype",
+                if actor {
+                    JsValue::Object(i.object_proto.clone())
+                } else {
+                    child_object_proto.clone()
+                },
+            )
+            .unwrap();
         i.global_env
             .declare_var("childObject", child_object_proto)
             .unwrap();
-        i.run_script("var ok=false;var next=Object.getPrototypeOf(Object.getPrototypeOf((async function*(){})())).next;var request=next.call(it);var requestParent=request instanceof Promise;request.then(r=>{var first=Object.getPrototypeOf(r)===Object.prototype&&Object.getPrototypeOf(r.value)===childArray;return next.call(it).then(r=>ok=first&&requestParent&&Object.getPrototypeOf(r)===childObject&&Object.getPrototypeOf(r.value)===childArray&&r.done)})").unwrap();
+        i.run_script("var ok=false;var next=Object.getPrototypeOf(Object.getPrototypeOf((async function*(){})())).next;var request=next.call(it);var requestParent=request instanceof Promise;request.then(r=>{var first=Object.getPrototypeOf(r)===expectedYieldPrototype&&Object.getPrototypeOf(r.value)===childArray;return next.call(it).then(r=>ok=first&&requestParent&&Object.getPrototypeOf(r)===childObject&&Object.getPrototypeOf(r.value)===childArray&&r.done)})").unwrap();
         i.drain_microtasks().unwrap();
         let actual = i.run_script("ok").unwrap();
         if actual != JsValue::Bool(true) {
