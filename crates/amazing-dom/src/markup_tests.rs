@@ -374,3 +374,89 @@ fn incremental_import_discovers_shadow_root_added_after_host_was_imported() {
     assert!(dest.shadow_data(live_root).unwrap().declarative);
     assert_eq!(markup(&dest, live_root), "later");
 }
+
+#[test]
+fn incremental_values_round_trip_preserves_parser_appends_and_live_ranges() {
+    use crate::range::BoundaryPoint;
+    use crate::mutation::ObserveOptions;
+    let mut source=Dom::new();let root=source.create_element(NodeIdx(0),"p");
+    let text=source.create_text(root,"a");
+    let mut dest=Dom::new();let document=dest.create_document();
+    let mut import=IncrementalDocumentImport::new(document);import.sync(&mut dest,&source).unwrap();
+    let live=import.imported(text).unwrap();let live_root=import.imported(root).unwrap();
+    let range=dest.create_range(document).unwrap();
+    dest.range_set_start(range,BoundaryPoint::new(live,1)).unwrap();
+    dest.range_set_end(range,BoundaryPoint::new(live,1)).unwrap();
+    let observer=dest.create_mutation_observer(1);
+    dest.observe(observer,live,ObserveOptions{character_data:Some(true),character_data_old_value:Some(true),..Default::default()}).unwrap();
+    source.append_text_data(text,"b");import.sync(&mut dest,&source).unwrap();
+    assert_eq!(dest.character_data_utf16(live).unwrap(),vec![97,98]);
+    assert_eq!(dest.range(range).unwrap().start,BoundaryPoint::new(live,1));
+    let records=dest.take_mutation_records(observer);assert_eq!(records.len(),1);
+    assert_eq!(records[0].old_value_utf16,Some(vec![97]));
+    dest.replace_character_data(live,0,1,&[0xd800]).unwrap();
+    dest.set_attribute(live_root,"data-js","kept").unwrap();
+    import.reverse_sync(&mut source,&dest).unwrap();
+    assert_eq!(source.character_data_utf16(text).unwrap(),vec![0xd800,98]);
+    assert_eq!(source.get_attribute_ns(root,None,"data-js"),Some("kept"));
+    source.append_text_data(text,"c");import.sync(&mut dest,&source).unwrap();
+    assert_eq!(dest.character_data_utf16(live).unwrap(),vec![0xd800,98,99]);
+    assert_eq!(import.imported(text),Some(live));
+    dest.take_mutation_records(observer);
+    import.reverse_sync(&mut source,&dest).unwrap();import.sync(&mut dest,&source).unwrap();
+    assert!(dest.take_mutation_records(observer).is_empty(),"unchanged values must not mutate again");
+}
+
+#[test]
+fn incremental_attribute_values_preserve_expanded_identity_and_exact_units() {
+    let mut source=Dom::new();let root=source.create_element(NodeIdx(0),"div");
+    source.set_attribute_expanded(root,Some("urn:attr"),Some("p"),"value","initial").unwrap();
+    source.set_attribute(root,"remove","old").unwrap();
+    let attr=source.get_attribute_node(root,Some("urn:attr"),"value").unwrap();
+    source.set_attr_value(attr,vec![0xd800,65]).unwrap();
+    let mut dest=Dom::new();dest.create_element_ns_in(NodeIdx(0),Some("urn:unrelated"),"x:other").unwrap();
+    let document=dest.create_document();let mut import=IncrementalDocumentImport::new(document);
+    import.sync(&mut dest,&source).unwrap();let live=import.imported(root).unwrap();
+    let identity=dest.get_attribute_node(live,Some("urn:attr"),"value").unwrap();
+    assert_eq!(dest.attr_snapshot(identity).unwrap().value,vec![0xd800,65]);
+    assert_eq!(dest.attr_snapshot(identity).unwrap().prefix.as_deref(),Some("p"));
+    source.set_attr_value(attr,vec![0xdc00,66]).unwrap();source.remove_attribute(root,"remove").unwrap();
+    source.set_attribute_expanded(root,Some("urn:second"),Some("q"),"value","added").unwrap();
+    import.sync(&mut dest,&source).unwrap();
+    assert_eq!(dest.get_attribute_node(live,Some("urn:attr"),"value"),Some(identity));
+    assert_eq!(dest.attr_snapshot(identity).unwrap().value,vec![0xdc00,66]);
+    assert_eq!(dest.get_attribute_ns(live,None,"remove"),None);
+    assert_eq!(dest.attribute_ns(live,Some("urn:second"),"value").unwrap().prefix,Some("q"));
+    dest.set_attr_value(identity,vec![0xd800,0xdc00,67]).unwrap();
+    dest.remove_attribute_ns(live,Some("urn:second"),"value").unwrap();
+    import.reverse_sync(&mut source,&dest).unwrap();
+    assert_eq!(source.get_attribute_node(root,Some("urn:attr"),"value"),Some(attr));
+    assert_eq!(source.attr_snapshot(attr).unwrap().value,vec![0xd800,0xdc00,67]);
+    assert_eq!(source.attribute_ns(root,Some("urn:second"),"value"),None);
+}
+
+#[test]
+fn incremental_character_data_and_special_containers_keep_raw_units() {
+    let mut source=Dom::new();let root=source.create_element(NodeIdx(0),"div");
+    let text=source.create_text(root,"text");let comment=source.create_comment(root,"comment");
+    let cdata=source.create_node_in(NodeIdx(0),NodeKind::CDATASection{data:"cdata".into()}).unwrap();
+    source.pre_insert(cdata,root,None).unwrap();
+    let pi=source.create_processing_instruction_in(NodeIdx(0),"pi",&[0xd800]).unwrap();source.pre_insert(pi,root,None).unwrap();
+    let template=source.create_element(root,"template");let contents=source.ensure_template_contents(template).unwrap();
+    let inert=source.create_text(contents,"a");
+    let shadow=source.attach_shadow(root,ShadowOptions{mode:ShadowMode::Closed,delegates_focus:false,
+        slot_assignment:SlotAssignment::Named,clonable:true,serializable:true}).unwrap();
+    let shadow_text=source.create_text(shadow,"s");
+    let nodes=[text,comment,cdata,pi,inert,shadow_text];
+    let mut dest=Dom::new();let document=dest.create_document();let mut import=IncrementalDocumentImport::new(document);
+    import.sync(&mut dest,&source).unwrap();
+    assert_eq!(dest.character_data_utf16(import.imported(pi).unwrap()).unwrap(),vec![0xd800]);
+    for node in nodes {source.replace_character_data(node,0,source.node_length(node),&[0xdc00,88]).unwrap();}
+    import.sync(&mut dest,&source).unwrap();
+    for node in nodes {
+        let live=import.imported(node).unwrap();assert_eq!(dest.character_data_utf16(live).unwrap(),vec![0xdc00,88]);
+        dest.replace_character_data(live,0,2,&[89,0xd800]).unwrap();
+    }
+    import.reverse_sync(&mut source,&dest).unwrap();
+    for node in nodes {assert_eq!(source.character_data_utf16(node).unwrap(),vec![89,0xd800]);}
+}

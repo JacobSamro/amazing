@@ -346,8 +346,9 @@ impl IncrementalDocumentImport {
     /// Imports every source node not yet copied since the last call,
     /// preserving previously imported nodes' destination identity. Safe to
     /// call repeatedly (at every parser pause, and once more after `Eof`);
-    /// a call with nothing new to copy is a no-op.
+    /// unchanged values do not produce repeated mutations.
     pub fn sync(&mut self, dest: &mut Dom, source: &Dom) -> Result<(), DomError> {
+        self.sync_values(dest, source)?;
         self.sync_positions(dest, source)?;
         // Open parser nodes may have been adopted into another document or a
         // detached subtree. Visit all mapped containers, not only root zero.
@@ -358,6 +359,50 @@ impl IncrementalDocumentImport {
             self.sync_special_containers(dest, source, s)?;
         }
         self.sync_positions(dest, source)?;
+        Ok(())
+    }
+
+    fn sync_values(&self, dest: &mut Dom, source: &Dom) -> Result<(), DomError> {
+        for (&s, &d) in &self.map { Self::copy_node_values(dest, d, source, s)?; }
+        Ok(())
+    }
+
+    /// Mirror values through mutation APIs while retaining mapped identities.
+    /// A parser continuation usually appends to an existing Text node; applying
+    /// its changed middle, rather than resetting all data, preserves unaffected
+    /// live Range offsets. Compare exact units, including lone surrogates.
+    fn copy_node_values(dest: &mut Dom, d: NodeIdx, source: &Dom, s: NodeIdx) -> Result<(), DomError> {
+        source.check_node(s)?;
+        dest.check_node(d)?;
+        if let Some(value) = source.character_data_utf16(s) {
+            let old = dest.character_data_utf16(d).ok_or(DomError::InvalidNodeTypeError)?;
+            if old != value {
+                let prefix = old.iter().zip(&value).take_while(|(a,b)| a == b).count();
+                let suffix = old[prefix..].iter().rev().zip(value[prefix..].iter().rev())
+                    .take_while(|(a,b)| a == b).count();
+                dest.replace_character_data(d, prefix, old.len()-prefix-suffix,
+                    &value[prefix..value.len()-suffix])?;
+            }
+        } else if matches!(source.get(s).kind, NodeKind::Element { .. }) {
+            let attributes = source.attributes_expanded(s).unwrap();
+            let removed: Vec<_> = dest.attributes_expanded(d).ok_or(DomError::InvalidNodeTypeError)?
+                .into_iter().filter(|old| !attributes.iter().any(|a|
+                    a.namespace_uri == old.namespace_uri && a.local_name == old.local_name))
+                .map(|a| (a.namespace_uri.map(str::to_owned), a.local_name.to_owned())).collect();
+            for (uri, local) in removed { dest.remove_attribute_ns(d, uri.as_deref(), &local)?; }
+            for a in attributes {
+                let value = source.attribute_ns_utf16(s, a.namespace_uri, a.local_name)
+                    .unwrap_or_else(|| a.value.encode_utf16().collect());
+                if dest.attribute_ns_utf16(d, a.namespace_uri, a.local_name).as_ref() == Some(&value) { continue; }
+                let display = String::from_utf16_lossy(&value);
+                dest.set_attribute_expanded(d, a.namespace_uri, a.prefix, a.local_name, &display)?;
+                if display.encode_utf16().ne(value.iter().copied()) {
+                    let attr = dest.get_attribute_node(d, a.namespace_uri, a.local_name)
+                        .ok_or(DomError::InvalidNode)?;
+                    dest.store_attr_value_units(attr, value)?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -506,10 +551,6 @@ impl IncrementalDocumentImport {
             NodeKind::Element { .. } => {
                 let created = dest.create_element_expanded_in(dest_document, source.namespace_uri(node),
                     source.prefix(node), source.local_name(node).unwrap())?;
-                for attr in source.attributes_expanded(node).unwrap() {
-                    dest.set_attribute_expanded(created, attr.namespace_uri, attr.prefix,
-                        attr.local_name, attr.value)?;
-                }
                 created
             }
             NodeKind::Text { .. } | NodeKind::CDATASection { .. } | NodeKind::Comment { .. } => {
@@ -533,6 +574,7 @@ impl IncrementalDocumentImport {
                 return Err(DomError::NotSupportedError),
         };
         if attach { dest.pre_insert(created, dest_parent, None)?; }
+        Self::copy_node_values(dest, created, source, node)?;
         if let Some(root) = source.shadow_root_of_host(node) {
             let source_data = source.shadow_data(root).expect("attached parser shadow root").clone();
             let copied_root = dest.attach_shadow(created, source_data.options)?;
@@ -584,6 +626,7 @@ impl IncrementalDocumentImport {
     /// validation without changing the destination's browsing context.
     pub fn reverse_sync(&mut self, source: &mut Dom, dest: &Dom) -> Result<(), DomError> {
         let pairs: Vec<(NodeIdx, NodeIdx)> = self.map.iter().map(|(&s, &d)| (s, d)).collect();
+        for &(s, d) in &pairs { Self::copy_node_values(source, s, dest, d)?; }
         // `dest`'s current shape was reached by some sequence of
         // individually-valid DOM mutations (a real `Dom` can never hold an
         // actual cycle), so *some* order exists in which replaying every
@@ -801,10 +844,6 @@ impl IncrementalDocumentImport {
             NodeKind::Element { .. } => {
                 let created = source.create_element_expanded_in(source_document, dest.namespace_uri(node),
                     dest.prefix(node), dest.local_name(node).unwrap())?;
-                for attr in dest.attributes_expanded(node).unwrap() {
-                    source.set_attribute_expanded(created, attr.namespace_uri, attr.prefix,
-                        attr.local_name, attr.value)?;
-                }
                 created
             }
             NodeKind::Text { .. } | NodeKind::CDATASection { .. } | NodeKind::Comment { .. } => {
@@ -826,6 +865,7 @@ impl IncrementalDocumentImport {
                 })?,
             NodeKind::Document | NodeKind::DocumentFragment | NodeKind::Attr { .. } => return Ok(None),
         };
+        Self::copy_node_values(source, created, dest, node)?;
         source.attach_before(source_parent, None, created);
         self.record(created, node);
         Ok(Some(created))
