@@ -100,3 +100,17 @@ fn xml_fragment_fatal_errors_never_use_html_recovery() {
     assert!(crate::parse_xml("<a/><b/>").is_err());
     assert!(crate::parse_xml("text").is_err());
 }
+
+#[test]
+fn xml_fragment_template_children_use_inert_contents_document() {
+    let dom = parse_xml_fragment(&XmlFragmentContext::default(),
+        "<template xmlns='http://www.w3.org/1999/xhtml'><b/><![CDATA[x]]></template><tail/>").unwrap();
+    let template = dom.children(NodeIdx(0)).next().unwrap();
+    assert!(dom.children(template).next().is_none());
+    let contents = dom.template_contents(template).expect("XML template contents");
+    let children: Vec<_> = dom.children(contents).collect();
+    assert_eq!(children.len(), 2);
+    assert_eq!(dom.namespace(children[0]), Some(Namespace::Html));
+    assert!(matches!(dom.get(children[1]).kind, NodeKind::CDATASection { .. }));
+    assert_eq!(dom.owner_document(children[0]), dom.owner_document(contents));
+}

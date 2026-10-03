@@ -171,7 +171,10 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>) -> ResultXml<(Do
     let mut root_seen = false;
     let mut doctype_seen = false;
     while !p.rest().is_empty() {
-        let parent = stack.last().map_or(NodeIdx(0), |f| f.node);
+        let mut parent = stack.last().map_or(NodeIdx(0), |f| f.node);
+        if fragment && dom.namespace_uri(parent) == Some(HTML_NAMESPACE) && dom.local_name(parent) == Some("template") {
+            parent = p.dom_result(dom.ensure_template_contents(parent))?;
+        }
         if p.take("<!--") {
             let data = p.until("-->")?;
             if data.contains("--") || data.ends_with('-') {
@@ -335,7 +338,8 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>) -> ResultXml<(Do
                 resolved.push(XmlAttribute { name, value });
             }
             let node = if fragment {
-                let node = p.dom_result(dom.create_element_expanded_in(NodeIdx(0),
+                let document = dom.owner_document(parent).unwrap_or(NodeIdx(0));
+                let node = p.dom_result(dom.create_element_expanded_in(document,
                     name.namespace_uri.as_deref(), split_name(&name.qualified).0, &name.local))?;
                 dom.attach_last(parent, node);
                 node

@@ -275,9 +275,11 @@ fn export_fragment(source: Dom, context: &str, html_context: bool) -> Result<Dom
                 target.set_attribute_expanded(node, attribute.namespace_uri, attribute.prefix,
                     attribute.local_name, attribute.value).expect("parser attribute identity");
                 if let Some(units) = source.attribute_ns_utf16(source_node, attribute.namespace_uri, attribute.local_name) {
-                    let attr = target.get_attribute_node(node, attribute.namespace_uri, attribute.local_name)
-                        .expect("cloned attribute");
-                    target.set_attr_value(attr, units).expect("cloned attribute units");
+                    if !units.iter().copied().eq(attribute.value.encode_utf16()) {
+                        let attr = target.get_attribute_node(node, attribute.namespace_uri, attribute.local_name)
+                            .expect("cloned attribute");
+                        target.set_attr_value(attr, units).expect("cloned attribute units");
+                    }
                 }
             }
             node
