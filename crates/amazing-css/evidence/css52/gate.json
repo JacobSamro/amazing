@@ -1,0 +1,64 @@
+{
+  "base": "8a4ee7fe0eccc8eb61675f5a10b3899d909d60b7",
+  "source": "cc42e153",
+  "platform": "Linux Boat native ext4",
+  "workspace_before_passed": 3932,
+  "workspace_passed": 3939,
+  "workspace_skipped": 17,
+  "doctests_passed": 4,
+  "new_grouped_tests": 7,
+  "parsing_passed": 4312,
+  "parsing_total": 5126,
+  "parsing_files": 514,
+  "parsing_skipped_nonliteral": 169,
+  "parsing_gained": 0,
+  "parsing_lost": 0,
+  "render": {
+    "selectors": {
+      "before": {
+        "pass": 82,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 82,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 91,
+      "gained": 0,
+      "lost": 0
+    },
+    "shadow": {
+      "before": {
+        "pass": 0,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 0,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 35,
+      "gained": 0,
+      "lost": 0
+    }
+  },
+  "renderer_sha256": "feeb425e1d2cee35f095ae47256d5aba332ab0cd212b5e797206bec407010f5c",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "installed_shadow_gains": 0,
+  "source_snapshot_verified": true
+}
