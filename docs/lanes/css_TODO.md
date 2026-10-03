@@ -3003,5 +3003,8 @@ CSS53 final corrected58f: workspace3946/17skip+4docs, all prior3939 native named
 - Three new grouped tests plus expanded original URL-provenance groups cover owner-media reproject,
   root/import fonts/layers/keyframes, repeated same-URL occurrence identity, principal/pseudo/shadow
   winners, inheritance/reset/clone/mutation and source-only retained invalidation.
-- Gate pending on closed ready CSS54; whole native/imports/cascade, all17 parsing selections and
-  exact same relevant render selections. Actual fetched/decoded driver pipeline is separately gated.
+- READY source17a0458c / frozen6e8b24fc: Boat workspace3952→3955 (+3 grouped tests), four
+  doctests, all17 parsing4312/5126 with every failure multiplicity retained; nine whole static
+  selections688/1104, all1104 classifications unchanged/lost0. Same-source baseline-path correction
+  reran whole last four selections with byte-identical renderer; evidence `evidence/css55`.
+  Actual fetched/decoded driver pipeline is separately gated.

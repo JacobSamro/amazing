@@ -1,0 +1,148 @@
+{
+  "source": "6e8b24fcc6a208498c965156c9cf351a20e321c8",
+  "source_commit": "17a0458c01813fa824ddcdc99ccf3fd21ca0152b",
+  "baseline_sources": [
+    "8709f429aadc3faefe9dbc4124910f4c937f9743",
+    "58f4180ccf263ccde3851fff9bd11d530d5205dd"
+  ],
+  "platform": "Linux Boat bx_shgjh66q native ext4 source/target",
+  "workspace_before": 3952,
+  "workspace_after": 3955,
+  "workspace_skip": 17,
+  "native_gained": [
+    "amazing-css cascade::url_provenance_tests::source_only_changes_invalidate_style_and_mutation_drops_opaque_provenance",
+    "amazing-css import_tests::owner_media_applies_to_all_segments_import_layers_keyframes_and_fonts",
+    "amazing-css import_tests::repeated_source_occurrences_keep_distinct_opaque_tags_and_actual_font_referrers"
+  ],
+  "all_prior_named_native_tests_retained": true,
+  "doctests": 4,
+  "parsing_passed": 4312,
+  "parsing_total": 5126,
+  "parsing_files": 514,
+  "parsing_nonliteral_skipped": 169,
+  "parsing_all_failure_multiplicities_and_directory_counts_retained": true,
+  "render": {
+    "css-color": {
+      "counts": {
+        "pass": 226,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 236,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-images": {
+      "counts": {
+        "pass": 92,
+        "mismatch": 49,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 141,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-fonts": {
+      "counts": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 32,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-transforms": {
+      "counts": {
+        "pass": 141,
+        "mismatch": 207,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 348,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-backgrounds": {
+      "counts": {
+        "pass": 77,
+        "mismatch": 57,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 134,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-cascade": {
+      "counts": {
+        "pass": 17,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 21,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-conditional": {
+      "counts": {
+        "pass": 29,
+        "mismatch": 37,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 66,
+      "gained": 0,
+      "lost": 0
+    },
+    "selectors": {
+      "counts": {
+        "pass": 82,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 91,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-shadow": {
+      "counts": {
+        "pass": 0,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 35,
+      "gained": 0,
+      "lost": 0
+    }
+  },
+  "harness_correction": "Frozen first gate used incorrect nested CSS53 baseline path for last four selections. Retained full output; identical6e8 source follow-on reran whole cascade/conditional/selectors/shadow against exact flat CSS53 maps. No feature or baseline change.",
+  "renderer_sha256": "bbacc48fd2bcff06e38bf9c8957b265dad4f3c7cb8f8d369d0daf2ae5ae1ddce",
+  "supplemental_renderer_identical": true,
+  "render_cases": 1104,
+  "render_passed": 688
+}
