@@ -222,7 +222,7 @@ mod tests {
 
     fn response(url: &str, mime: Option<&str>, body: Vec<u8>) -> amazing_net::Response {
         let mut headers = amazing_net::Headers::new();
-        if let Some(mime) = mime { headers.append("Content-Type", mime).unwrap(); }
+        if let Some(mime) = mime { headers.append("Content-Type", mime.to_owned()).unwrap(); }
         amazing_net::Response { url: url.into(), status: 200, reason: "OK".into(), headers, body }
     }
 
@@ -256,9 +256,9 @@ mod tests {
     fn referrer_policy_headers_attributes_and_generation_keep_actual_document_state() {
         use amazing_fetch::ReferrerPolicy::*;
         let mut headers = amazing_net::Headers::new();
-        headers.append("Referrer-Policy", "origin, invalid").unwrap();
-        headers.append("Referrer-Policy", "no-referrer, same-origin").unwrap();
-        headers.append("Referrer-Policy", "INVALID").unwrap();
+        headers.append("Referrer-Policy", "origin, invalid".to_owned()).unwrap();
+        headers.append("Referrer-Policy", "no-referrer, same-origin".to_owned()).unwrap();
+        headers.append("Referrer-Policy", "INVALID".to_owned()).unwrap();
         assert_eq!(response_referrer_policy(&headers), SameOrigin);
         for value in ["", " origin ", "origin,no-referrer", "bogus"] {
             assert_eq!(attribute_referrer_policy(Some(value)), None);
@@ -296,7 +296,7 @@ mod tests {
         }
         for mime in [None, Some("text/plain"), Some("TEXT/JAVASCRIPT")] {
             let mut value = response(url, mime, b"1".to_vec());
-            value.headers.append("X-Content-Type-Options", "nosniff").unwrap();
+            value.headers.append("X-Content-Type-Options", "nosniff".to_owned()).unwrap();
             assert_eq!(decode_classic_response(value, Utf8).is_ok(), mime == Some("TEXT/JAVASCRIPT"));
         }
         let mut value = response(url, Some("text/javascript"), Vec::new());
@@ -368,8 +368,8 @@ mod tests {
         bindings.set_frame_resource_loader(Rc::new(move |request| {
             observed.borrow_mut().push(request.clone());
             let mut response = response(&request.requested_url, Some("text/html"), b"<!doctype html><body>".to_vec());
-            response.headers.append("Content-Security-Policy", "connect-src 'none'").unwrap();
-            response.headers.append("Referrer-Policy", "origin, same-origin").unwrap();
+            response.headers.append("Content-Security-Policy", "connect-src 'none'".to_owned()).unwrap();
+            response.headers.append("Referrer-Policy", "origin, same-origin".to_owned()).unwrap();
             Ok(response)
         }));
         let frames = {
@@ -450,8 +450,8 @@ mod tests {
                 if case == 0 { return Err("actual transport error".into()); }
                 let mut response = response("https://example.test/final.xml", None,
                     if case == 1 { b"<root/>".to_vec() } else { b"<!doctype html><p>child".to_vec() });
-                if case == 2 { response.headers.append("X-Content-Type-Options", "nosniff").unwrap(); }
-                if case == 3 { response.headers.append("X-Frame-Options", "DENY").unwrap(); }
+                if case == 2 { response.headers.append("X-Content-Type-Options", "nosniff".to_owned()).unwrap(); }
+                if case == 3 { response.headers.append("X-Frame-Options", "DENY".to_owned()).unwrap(); }
                 Ok(response)
             }));
             scheduler.dispatch_pending_iframe_loads().unwrap();
