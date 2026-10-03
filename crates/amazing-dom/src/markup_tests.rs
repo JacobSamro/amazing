@@ -359,3 +359,18 @@ fn incremental_import_replaces_root_without_transient_document_full_error() {
     assert_eq!(markup(&dest, document), "<new><open></open></new>");
     assert!(dest.get(import.imported(old).unwrap()).parent.is_none());
 }
+
+#[test]
+fn incremental_import_discovers_shadow_root_added_after_host_was_imported() {
+    let mut source = Dom::new(); let host = source.create_element(NodeIdx(0), "div");
+    let mut dest = Dom::new(); let document = dest.create_document();
+    let mut import = IncrementalDocumentImport::new(document); import.sync(&mut dest, &source).unwrap();
+    let options = ShadowOptions { mode: ShadowMode::Open, delegates_focus: false,
+        slot_assignment: SlotAssignment::Named, clonable: true, serializable: true };
+    let root = source.attach_declarative_shadow(host, options, false).unwrap();
+    source.create_text(root, "later"); import.sync(&mut dest, &source).unwrap();
+    let live_root = dest.shadow_root_of_host(import.imported(host).unwrap()).unwrap();
+    assert_eq!(import.imported(root), Some(live_root));
+    assert!(dest.shadow_data(live_root).unwrap().declarative);
+    assert_eq!(markup(&dest, live_root), "later");
+}

@@ -415,6 +415,16 @@ impl IncrementalDocumentImport {
 
     fn ensure_source_node(&mut self, dest: &mut Dom, source: &Dom, node: NodeIdx) -> Result<NodeIdx, DomError> {
         if let Some(&mapped) = self.map.get(&node) { return Ok(mapped); }
+        if let Some(template) = source.template_of_contents(node) {
+            self.ensure_source_node(dest, source, template)?;
+            self.sync_special_containers(dest, source, template)?;
+            return self.map.get(&node).copied().ok_or(DomError::InvalidNode);
+        }
+        if let Some(data) = source.shadow_data(node) {
+            self.ensure_source_node(dest, source, data.host)?;
+            self.sync_special_containers(dest, source, data.host)?;
+            return self.map.get(&node).copied().ok_or(DomError::InvalidNode);
+        }
         let source_parent = source.get(node).parent;
         let parent = if let Some(parent) = source_parent {
             self.ensure_source_node(dest, source, parent)?
@@ -462,13 +472,27 @@ impl IncrementalDocumentImport {
     fn sync_special_containers(&mut self, dest: &mut Dom, source: &Dom,
         node: NodeIdx) -> Result<(), DomError> {
         if let Some(root) = source.shadow_root_of_host(node) {
-            let dest_root = *self.map.get(&root).expect("shadow root mapped at host's own import_one");
+            let dest_root = if let Some(&mapped) = self.map.get(&root) { mapped } else {
+                let host = self.map[&node];
+                let data = source.shadow_data(root).expect("attached source shadow root");
+                let created = dest.attach_shadow(host, data.options.clone())?;
+                let copied = dest.shadow_roots.iter_mut().find(|data| data.root == created)
+                    .expect("new mirrored shadow root");
+                copied.declarative = data.declarative;
+                copied.available_to_element_internals = data.available_to_element_internals;
+                copied.keep_custom_element_registry_null = data.keep_custom_element_registry_null;
+                self.record(root, created);
+                created
+            };
             self.sync_children(dest, source, root, dest_root)?;
         }
         if source.is_html_template(node) {
             if let Some(contents) = source.template_contents(node) {
-                let dest_contents = *self.map.get(&contents)
-                    .expect("template contents mapped at template's own import_one");
+                let dest_contents = if let Some(&mapped) = self.map.get(&contents) { mapped } else {
+                    let created = dest.ensure_template_contents(self.map[&node])?;
+                    self.record(contents, created);
+                    created
+                };
                 self.sync_children(dest, source, contents, dest_contents)?;
             }
         }
