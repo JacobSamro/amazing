@@ -130,11 +130,11 @@ fn identical_relative_backgrounds_retain_distinct_stylesheet_resource_lifetimes(
     let old_resource=PaintResourceKey::BackgroundUrlWithBase {url:"pixel.png".into(),source_base:"https://one.test/sheet.css".into()};
     let PaintViewUpdate::Delta(delta)=old.update(&new) else {panic!("base change preserves item identity")};
     assert_eq!(delta.retired_resources,[old_resource.clone()]);
-    let mut retained=crate::retained_paint::RetainedPaintView::from_view(&old).unwrap();
+    let mut retained=crate::display_list_view::RetainedPaintView::from_view(&old).unwrap();
     let changed=*new.items().iter().find(|item|item.key.is_some_and(|key|key.node.node==NodeIdx(2))
         &&item.kind==crate::display_list_view::PaintItemKind::Decorations).unwrap();
     let Flow::Blocks(children)=&new_root.flow else {unreachable!()};
-    let delta=retained.apply_damage(&[crate::retained_paint::PaintDamage::Upsert {item:changed,box_:&children[0]}],
+    let delta=retained.apply_damage(&[crate::display_list_view::PaintDamage::Upsert {item:changed,box_:&children[0]}],
         &text,&crate::paint::NoImages).unwrap();
     assert_eq!(delta.retired_resources,[old_resource]);
 }
