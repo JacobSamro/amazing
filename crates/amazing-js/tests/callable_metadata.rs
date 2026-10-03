@@ -94,11 +94,13 @@ fn assignment_naming_preserves_reference_conversion_order_and_negative_forms() {
         var events=[],holder={},key={[Symbol.toPrimitive](){events.push('key');return 'method';}};
         holder[key]=(events.push('value'),function(){});
         var first=events.join(',')==='value,key' && holder.method.name==='';
-        var plain,grouped,logical,negative,existing=(0,function(){}),reassigned;
+        var plain,grouped,logical,negative,existing=(0,function(){}),reassigned,groupedTarget,groupedLogical;
         plain=function(){};grouped=(function(){});logical??=()=>0;
         negative??=(0,()=>0);reassigned=existing;
+        ((groupedTarget))=function(){};(groupedLogical)||=()=>0;
         first && plain.name==='plain' && grouped.name==='grouped' && logical.name==='logical' &&
-        negative.name==='' && reassigned.name==='' && existing.name==='';
+        negative.name==='' && reassigned.name==='' && existing.name==='' &&
+        groupedTarget.name==='' && groupedLogical.name==='';
     "#,
     );
 }

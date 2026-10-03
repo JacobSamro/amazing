@@ -1519,11 +1519,11 @@ impl Compiler {
                     self.write_member_reference(slot, object, prop)?;
                     slot
                 } else { self.reference(target)?.0 };
-                let assigned = if let Some(name) = super::super::event_handler::identifier_name(target) {
-                    self.named_class_expression(value, KeyOperand::Static(name.into()))?
+                let assigned = if let ExprKind::Ident(identifier) = &target.kind {
+                    self.named_class_expression(value, KeyOperand::Static(identifier.name.as_str().into()))?
                 } else { self.expression(value)? };
-                if let Some(name) = super::super::event_handler::identifier_name(target) {
-                    self.emit(Instruction::NamedEvaluation(assigned, Rc::new((**value).clone()), name.to_owned()));
+                if let ExprKind::Ident(identifier) = &target.kind {
+                    self.emit(Instruction::NamedEvaluation(assigned, Rc::new((**value).clone()), identifier.name.clone()));
                 }
                 self.emit(Instruction::StoreReference(slot, assigned));
                 return Ok(assigned);
@@ -1561,11 +1561,11 @@ impl Compiler {
                     let rhs = self.emit(Instruction::Branch(old, condition, 0));
                     let end = self.emit(Instruction::Jump(0));
                     self.patch(rhs);
-                    let right = if let Some(name) = super::super::event_handler::identifier_name(target) {
-                        self.named_class_expression(value, KeyOperand::Static(name.into()))?
+                    let right = if let ExprKind::Ident(identifier) = &target.kind {
+                        self.named_class_expression(value, KeyOperand::Static(identifier.name.as_str().into()))?
                     } else { self.expression(value)? };
-                    if let Some(name) = super::super::event_handler::identifier_name(target) {
-                        self.emit(Instruction::NamedEvaluation(right, Rc::new((**value).clone()), name.to_owned()));
+                    if let ExprKind::Ident(identifier) = &target.kind {
+                        self.emit(Instruction::NamedEvaluation(right, Rc::new((**value).clone()), identifier.name.clone()));
                     }
                     self.emit(Instruction::Move(dst, right));
                     self.emit(Instruction::StoreReference(slot, dst));

@@ -1499,6 +1499,7 @@ impl Interpreter {
         r: &ast::Expr,
         e: &EnvHandle,
     ) -> Result<JsValue, Throw> {
+        let inferred_name = match &t.kind { ExprKind::Ident(identifier) => Some(identifier.name.as_str()), _ => None };
         if op == ast::AssignOp::Assign {
             if let ExprKind::Member { obj, prop: MemberProp::Private(identifier), .. } = &t.kind {
                 let receiver = self.eval_expr(obj, e)?;
@@ -1529,11 +1530,11 @@ impl Interpreter {
             // `reference`'s resolved kind: a global binding and `obj.prop` can both resolve to
             // `Reference::Property`, but only the former is an IdentifierRef) -- `holder.C=class
             // {}` must stay unnamed while `C=class{}` (even at global scope) must not.
-            let mut v = match event_handler::identifier_name(t) {
+            let mut v = match inferred_name {
                 Some(name) => self.eval_named_class_expr(r, e, &name.into())?,
                 None => self.eval_expr(r, e)?,
             };
-            if let Some(name) = event_handler::identifier_name(t) {
+            if let Some(name) = inferred_name {
                 self.named_evaluation(r, &mut v, name);
             }
             self.coerce_reference_key(&mut reference)?;
@@ -1557,11 +1558,11 @@ impl Interpreter {
         // Same class-self-reference-before-eval need, and same strict IsIdentifierRef gate
         // (13.15.4's LogicalAssignmentEvaluation goes through the same NamedEvaluation
         // definition as plain `=`), as `assign`'s AssignOp::Assign arm above.
-        let mut v = match event_handler::identifier_name(t) {
+        let mut v = match inferred_name {
             Some(name) => self.eval_named_class_expr(r, e, &name.into())?,
             None => self.eval_expr(r, e)?,
         };
-        if let Some(name) = event_handler::identifier_name(t) {
+        if let Some(name) = inferred_name {
             self.named_evaluation(r, &mut v, name);
         }
         if matches!(
