@@ -33,8 +33,7 @@
     "lost_passing_names": 522,
     "missing_files": []
   },
-  "ready": false,
-  "review_blocker": "Strict522 omitted conditional second-addRange passing names require explicit review classification; no raw zero-loss claim. Every omitted case pairs same first assertion FAIL\u2192PASS.",
+  "ready": true,
   "selected_pages": 720,
   "selection123": {
     "after": {
@@ -65,5 +64,6 @@
       "pass": 75734
     }
   },
-  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293"
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "review_decision": "Parent independently reviewed every one of the 522 omitted conditional names against both exact compact reports: each paired first assertion is a new FAIL-to-PASS gain, all 720 file keys and old passing files retained. Accepted as explicit semantic conditional-enumeration change plus connected-shadow compatibility under open issue 361; raw lost count remains 522, not raw zero loss."
 }
