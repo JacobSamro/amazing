@@ -62,6 +62,7 @@ mod tests {
         let node = host.borrow().dom.children(host.borrow().dom.document_body(NodeIdx(0)).unwrap().unwrap()).next().unwrap();
         scheduler.run_script("var trace=[];document.getElementById('check').addEventListener('click',()=>trace.push('before'))").unwrap();
         scheduler.install_inline_handler(node.0, "click", "trace.push(this.id+':'+event.isTrusted);return false").unwrap();
+        let initial_root = host.borrow().dom.events().event_handler(amazing_dom::events::EventTarget::Node(node), "click").unwrap();
         scheduler.run_script("document.getElementById('check').addEventListener('click',()=>trace.push('after'))").unwrap();
         let event = || {
             let mut event = amazing_dom::events::Event::new("click", amazing_dom::events::EventInit {
@@ -76,7 +77,7 @@ mod tests {
         assert_eq!(scheduler.run_script("trace.join('|')+';'+document.getElementById('check').checked").unwrap(),
             JsValue::str("before|check:true|after|before|replacement|after;true"));
         let state = scheduler.test_bindings().state.borrow();
-        assert_eq!(state.roots.iter().filter(|value|value.is_none()).count(), 1,
+        assert!(state.roots[initial_root.0 as usize].is_none(),
             "replacing the handler releases its previous callback root");
     }
 }
