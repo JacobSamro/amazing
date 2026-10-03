@@ -86,6 +86,7 @@ impl SandboxFlags {
 #[derive(Default)]
 pub(super) struct FrameRuntime {
     documents: HashMap<NodeIdx, FrameDocument>,
+    contexts: HashMap<RealmHandle, WindowContext>,
     parser_imports: HashMap<NodeIdx, IncrementalImportRef>,
     /// `(frame, document, fire_load_events)`. `fire_load_events` is false
     /// only for an iframe with neither `src` nor `srcdoc`: its initial
@@ -113,6 +114,52 @@ pub(super) struct FrameRuntime {
     /// alternative considered instead). See `run_pending_scripts` for the
     /// rule for when a script does/doesn't get added here.
     already_started_scripts: HashSet<NodeIdx>,
+}
+
+// Each Window is the global target of one actual browsing context. The proxy
+// is stable across navigation; stale globals retain their own document identity.
+#[derive(Clone)]
+struct WindowContext {
+    document: NodeIdx,
+    frame: Option<NodeIdx>,
+    global: JsValue,
+    window: JsValue,
+    parent: JsValue,
+    top: JsValue,
+    origin: String,
+    installed: bool,
+    indices: usize,
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum HtmlWindowProperty { Frames, Length, Parent, Top }
+
+impl HtmlWindowProperty {
+    fn name(self) -> &'static str {
+        match self { Self::Frames => "frames", Self::Length => "length", Self::Parent => "parent", Self::Top => "top" }
+    }
+}
+
+impl FrameRuntime {
+    pub(super) fn has_document(&self, document: NodeIdx) -> bool {
+        document == NodeIdx(0) || self.documents.values().any(|frame| frame.document == Some(document))
+    }
+
+    pub(super) fn frame_for_document(&self, document: NodeIdx) -> Option<NodeIdx> {
+        self.documents.iter().find_map(|(node, frame)| (frame.document == Some(document)).then_some(*node))
+    }
+
+    fn live_context(&self, context: &WindowContext, realm: RealmHandle) -> bool {
+        context.frame.is_none() || context.frame.is_some_and(|frame|
+            self.windows.get(&frame).is_some_and(|(current, _)| *current == realm)
+                && self.documents.get(&frame).is_some_and(|entry| entry.document == Some(context.document)))
+    }
+}
+
+fn context_origin(js: &mut Interpreter, context: &WindowContext, realm: RealmHandle) -> Result<String, Throw> {
+    if context.frame.is_some() { return Ok(context.origin.clone()); }
+    js.binding_with_realm(realm, |js| Ok(ParsedUrl::parse(js.binding_location_href())
+        .map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into())))
 }
 
 /// Runnable script elements in tree order for the non-interleaved fallback.
@@ -443,15 +490,21 @@ impl RuntimeBindings {
         // per navigation instead of whatever its URL would otherwise
         // resolve to, so it can never observe or be observed as
         // same-origin with anything, including its own earlier navigations.
+        let parent_document = self.state.borrow().host.borrow().dom.owner_document(frame).unwrap_or(NodeIdx(0));
+        let parent_context = self.state.borrow().frames.contexts.iter()
+            .find(|(realm, context)| context.document == parent_document
+                && self.state.borrow().frames.live_context(context, **realm))
+            .map(|(realm, context)| (*realm, context.clone()));
+        let parent_origin = match &parent_context {
+            Some((realm, context)) => context_origin(js, context, *realm)?,
+            None => "null".into(),
+        };
         let origin = if sandbox.sandboxed && !sandbox.allow_same_origin {
             let mut state = self.state.borrow_mut();
             state.frames.opaque_origin_counter += 1;
             format!("null (sandboxed #{})", state.frames.opaque_origin_counter)
         } else if child_url == "about:srcdoc" || child_url == "about:blank" {
-            self.state.borrow().document_url.as_deref()
-                .and_then(|parent| ParsedUrl::parse(parent).ok())
-                .map(|url| url.origin().serialize())
-                .unwrap_or_else(|| "null".into())
+            parent_origin
         } else {
             ParsedUrl::parse(child_url).map(|url| url.origin().serialize())
                 .unwrap_or_else(|_| "null".into())
@@ -474,6 +527,14 @@ impl RuntimeBindings {
         let module_base = if matches!(child_url, "about:blank" | "about:srcdoc") {
             self.state.borrow().document_url.clone().unwrap_or_else(|| "about:blank".into())
         } else { child_url.to_owned() };
+        let proxy = self.state.borrow().frames.windows[&frame].1.clone();
+        let global = js.binding_realm_global(realm)?;
+        let (parent, top) = parent_context.map(|(_, context)| (context.window, context.top))
+            .unwrap_or_else(|| (proxy.clone(), proxy.clone()));
+        self.state.borrow_mut().frames.contexts.insert(realm, WindowContext {
+            document, frame: Some(frame), global, window: proxy, parent, top, origin,
+            installed: false, indices: 0,
+        });
         let state = self.state.clone();
         js.binding_with_realm(realm, |i| {
             self.set_module_document_base(i, &module_base);
@@ -483,6 +544,7 @@ impl RuntimeBindings {
             // child (DOM methods, `contentWindow`/`contentDocument`
             // getters, etc.) throws "host function dispatcher is not
             // installed".
+            i.set_location_url(child_url);
             i.set_host_native_dispatcher(build_host_native_dispatcher(state.clone()));
             let mut adapter = RuntimeBindingHost { js: i, state: state.clone() };
             // A real Document/Element/Array/... surface for this realm, not
@@ -557,7 +619,18 @@ impl RuntimeBindings {
         let Some(base) = base else { return };
         let candidates = {
             let host = host.borrow();
-            host.dom.tree_order(NodeIdx(0)).into_iter().filter_map(|node| {
+            let state = self.state.borrow();
+            let mut nodes = Vec::new();
+            let mut documents = VecDeque::from([NodeIdx(0)]);
+            while let Some(document) = documents.pop_front() {
+                for node in host.dom.tree_order(document) {
+                    if let Some(child) = state.frames.documents.get(&node).and_then(|entry| entry.document) {
+                        documents.push_back(child);
+                    }
+                    nodes.push(node);
+                }
+            }
+            nodes.into_iter().filter_map(|node| {
                 (host.dom.namespace(node) == Some(Namespace::Html)
                     && host.dom.local_name(node) == Some("iframe"))
                     .then(|| (node,
@@ -573,6 +646,12 @@ impl RuntimeBindings {
             state.frames.windows.retain(|node, _| connected.contains(node));
         }
         for (node, src, srcdoc, sandbox) in candidates {
+            let base = {
+                let host = host.borrow();
+                let owner = host.dom.owner_document(node).unwrap_or(NodeIdx(0));
+                if owner == NodeIdx(0) { base.clone() }
+                else { host.dom.document_metadata(owner).ok().flatten().map(|metadata| metadata.url.clone()).unwrap_or_else(|| base.clone()) }
+            };
             if self.state.borrow().frames.documents.get(&node)
                 .is_some_and(|old| old.src == src && old.srcdoc == srcdoc) {
                 continue;
@@ -677,6 +756,35 @@ impl RuntimeBindings {
             drop(state);
             if let Some(hook) = hook { hook(navigation); }
         }
+        let _ = self.refresh_window_indices(js);
+    }
+
+    fn refresh_window_indices(&self, js: &mut Interpreter) -> Result<(), Throw> {
+        let contexts = self.state.borrow().frames.contexts.iter()
+            .map(|(realm, context)| (*realm, context.clone())).collect::<Vec<_>>();
+        for (realm, context) in contexts {
+            let children = {
+                let state = self.state.borrow();
+                if !state.frames.live_context(&context, realm) { Vec::new() }
+                else {
+                    let host = state.host.borrow();
+                    host.dom.tree_order(context.document).into_iter()
+                        .filter_map(|node| state.frames.windows.get(&node).map(|(_, window)| window.clone()))
+                        .collect::<Vec<_>>()
+                }
+            };
+            for index in 0..context.indices.max(children.len()) {
+                let name = index.to_string();
+                if let Some(window) = children.get(index) {
+                    js.binding_define_data_property(&context.global, &name, window.clone(),
+                        amazing_js::interp::BindingPropertyFlags { writable: false, enumerable: true, configurable: true })?;
+                } else { js.binding_delete_property(&context.global, &name)?; }
+            }
+            if let Some(context) = self.state.borrow_mut().frames.contexts.get_mut(&realm) {
+                context.indices = children.len();
+            }
+        }
+        Ok(())
     }
 
     /// Run a connected iframe's classic scripts, deferred here (rather than
@@ -1223,7 +1331,93 @@ impl RuntimeBindingHost<'_> {
         let open = self.native("open", 0, NativeEntry::DocumentOpen, HostCallPolicy::CallOnly);
         self.define_data_property(&prototype, "open", open, true, false, true)?;
         let close = self.native("close", 0, NativeEntry::DocumentClose, HostCallPolicy::CallOnly);
-        self.define_data_property(&prototype, "close", close, true, false, true)
+        self.define_data_property(&prototype, "close", close, true, false, true)?;
+        self.install_html_window_context()
+    }
+
+    fn install_html_window_context(&mut self) -> Result<(), Throw> {
+        let realm = self.js.binding_current_realm();
+        if !self.state.borrow().frames.contexts.contains_key(&realm) {
+            let window = self.js.binding_create_window_proxy(realm)?;
+            let global = self.js.binding_global_object();
+            self.state.borrow_mut().frames.contexts.insert(realm, WindowContext {
+                document: NodeIdx(0), frame: None, global, parent: window.clone(), top: window.clone(), window,
+                origin: String::new(), installed: false, indices: 0,
+            });
+        }
+        let context = self.state.borrow().frames.contexts[&realm].clone();
+        if context.installed { return Ok(()); }
+        for property in [HtmlWindowProperty::Frames, HtmlWindowProperty::Length, HtmlWindowProperty::Parent, HtmlWindowProperty::Top] {
+            let name = property.name();
+            let getter_name = match property { HtmlWindowProperty::Frames => "get frames", HtmlWindowProperty::Length => "get length", HtmlWindowProperty::Parent => "get parent", HtmlWindowProperty::Top => "get top" };
+            let setter_name = match property { HtmlWindowProperty::Frames => "set frames", HtmlWindowProperty::Length => "set length", HtmlWindowProperty::Parent => "set parent", HtmlWindowProperty::Top => "set top" };
+            let getter = self.native(getter_name, 0, NativeEntry::HtmlWindowGet(property), HostCallPolicy::CallOnly);
+            let setter = if matches!(property, HtmlWindowProperty::Top) { None } else {
+                Some(self.native(setter_name, 1, NativeEntry::HtmlWindowReplaceableSet(property), HostCallPolicy::CallOnly))
+            };
+            self.js.binding_define_accessor_property(&context.global, name, Some(&getter), setter.as_ref(),
+                true, !matches!(property, HtmlWindowProperty::Top))?;
+        }
+        self.state.borrow_mut().frames.contexts.get_mut(&realm).unwrap().installed = true;
+        let state = self.state.clone();
+        self.js.binding_set_window_proxy_access_hook(Rc::new(move |js, access| {
+            let current = state.borrow().frames.contexts.get(&access.current).cloned();
+            let target = state.borrow().frames.contexts.get(&access.target).cloned();
+            let current_origin = match current { Some(context) => context_origin(js, &context, access.current)?, None => String::new() };
+            let target_origin = match target { Some(context) => context_origin(js, &context, access.target)?, None => access.target_origin };
+            if access.current == access.target || current_origin == target_origin { return Ok(()); }
+            let name = match access.key { Some(JsValue::Str(name)) => Some(name.to_utf8_lossy()), _ => None };
+            let permitted = name.as_deref().is_some_and(|name| {
+                matches!(name, "window" | "self" | "frames" | "length" | "parent" | "top")
+                    || name.parse::<u32>().is_ok_and(|index| index != u32::MAX && index.to_string() == name
+                        && state.borrow().frames.contexts.get(&access.target).is_some_and(|context| (index as usize) < context.indices))
+            });
+            if permitted && matches!(access.operation, amazing_js::interp::WindowProxyOperation::Get
+                | amazing_js::interp::WindowProxyOperation::GetOwnProperty | amazing_js::interp::WindowProxyOperation::Has) {
+                return Ok(());
+            }
+            let global = js.binding_global_object();
+            let constructor = js.binding_get_property(&global, "DOMException")?;
+            let error = js.binding_construct(&constructor, vec![JsValue::str("Blocked cross-origin Window access"), JsValue::str("SecurityError")])?;
+            Err(js.binding_throw(error))
+        }));
+        Ok(())
+    }
+
+    fn html_window_receiver(&self, receiver: &JsValue) -> Result<(RealmHandle, WindowContext), Throw> {
+        let state = self.state.borrow();
+        let contexts = &state.frames.contexts;
+        let exact_global = contexts.iter().find(|(_, context)| self.js.binding_same_value(receiver, &context.global));
+        let live_proxy = contexts.iter().find(|(realm, context)| self.js.binding_same_value(receiver, &context.window)
+            && state.frames.live_context(context, **realm));
+        let detached_proxy = contexts.iter().find(|(_, context)| self.js.binding_same_value(receiver, &context.window));
+        exact_global.or(live_proxy).or(detached_proxy).map(|(realm, context)| (*realm, context.clone()))
+            .ok_or_else(|| Throw::type_error("Invalid Window receiver"))
+    }
+
+    pub(super) fn html_window_get(&mut self, property: HtmlWindowProperty, receiver: JsValue) -> Result<JsValue, Throw> {
+        let (realm, context) = self.html_window_receiver(&receiver)?;
+        let live = self.state.borrow().frames.live_context(&context, realm);
+        Ok(match property {
+            HtmlWindowProperty::Frames => context.window,
+            HtmlWindowProperty::Length => {
+                let state = self.state.borrow();
+                let host = state.host.borrow();
+                let count = if live { host.dom.tree_order(context.document).into_iter()
+                    .filter(|node| state.frames.windows.contains_key(node)).count() } else { 0 };
+                JsValue::num(count as f64)
+            }
+            HtmlWindowProperty::Parent => if live { context.parent } else { JsValue::Null },
+            HtmlWindowProperty::Top => if live { context.top } else { JsValue::Null },
+        })
+    }
+
+    pub(super) fn html_window_replaceable_set(&mut self, property: HtmlWindowProperty, receiver: JsValue,
+        args: &[JsValue]) -> Result<JsValue, Throw> {
+        let owner = self.html_window_receiver(&receiver).map(|(_, context)| context.global).unwrap_or(receiver);
+        self.js.binding_define_data_property(&owner, property.name(), args.first().cloned().unwrap_or(JsValue::Undefined),
+            amazing_js::interp::BindingPropertyFlags { writable: true, enumerable: true, configurable: true })?;
+        Ok(JsValue::Undefined)
     }
 
     fn document_receiver_node(&self, receiver: &JsValue) -> Result<NodeIdx, Throw> {
@@ -1310,6 +1504,7 @@ impl RuntimeBindingHost<'_> {
                     }
                 } else { parser.swap_dom(&mut host.dom); }
             }
+            RuntimeBindings { state: self.state.clone() }.navigate_iframes(self.js);
             let Some(source_node) = script else { return Ok(()); };
             let node = match &import { Some(import) => import.borrow().imported(source_node), None => Some(source_node) };
             let script = node.and_then(|node| crate::cmd::js::script_source_from_node(&host.borrow().dom, node));
@@ -1823,6 +2018,70 @@ mod tests {
     use crate::{dom_host::BrowserDomHost, js_scheduler::{DriverScheduler, JS_CAPACITY}};
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::{Shutdown, TcpListener};
+
+    #[test]
+    fn windows_expose_actual_live_children_and_proxy_identity() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse("<!doctype html><iframe id=a></iframe><iframe id=b></iframe>"), native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(r#"
+            const a=document.getElementById('a'), b=document.getElementById('b');
+            const w=a.contentWindow;
+            let checkpoint=0; function check(x) { checkpoint++; if(!x) throw new Error('live Window topology '+checkpoint); }
+            check(window===self && window===globalThis && window===document.defaultView);
+            check(window.frames===window && window.parent===window && window.top===window);
+            check(window.length===2 && window[0]===w && window[1]===b.contentWindow);
+            check(w.frames===w && w.parent===window && w.top===window && w.length===0);
+            const grand=w.document.createElement('iframe'); w.document.body.appendChild(grand);
+            check(w.length===1 && w[0]===grand.contentWindow);
+            check(grand.contentWindow.parent===w && grand.contentWindow.top===window);
+            const d=Object.getOwnPropertyDescriptor(window,'0');
+            check(d.value===w && !d.writable && d.enumerable && d.configurable);
+            check(!Reflect.defineProperty(window,'0',{value:42}));
+            check(!Reflect.set(window,'0',42)); check(!Reflect.deleteProperty(window,'0'));
+            a.srcdoc='<!doctype html><p>new'; check(a.contentWindow===w && window[0]===w);
+            a.remove(); check(window.length===1 && window[0]===b.contentWindow && !('1' in window));
+            check(w.parent===null && w.top===null && w.length===0 && w.frames===w);
+            true
+        "#).unwrap_or_else(|error| panic!("Window topology failed: {:?}", scheduler.js.binding_get_property(&error.0, "message"))), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn window_getters_check_receiver_and_replaceable_descriptors() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse("<!doctype html><iframe></iframe>"), native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(r#"
+            function check(x) { if(!x) throw new Error('Window descriptors'); }
+            const child=document.querySelector('iframe').contentWindow;
+            for(const name of ['frames','length','parent']) {
+                const d=Object.getOwnPropertyDescriptor(window,name);
+                check(typeof d.get==='function' && typeof d.set==='function' && d.enumerable && d.configurable);
+                let rejected=false; try { d.get.call({}); } catch(e) { rejected=e instanceof TypeError; } check(rejected);
+                check(d.get.call(child)===(name==='frames'?child:name==='length'?0:window));
+                const ordinary={}; d.set.call(ordinary,456); check(ordinary[name]===456);
+                d.set.call(child,123); check(child[name]===123);
+                const replaced=Object.getOwnPropertyDescriptor(child,name);
+                check(replaced.writable && replaced.enumerable && replaced.configurable);
+            }
+            const top=Object.getOwnPropertyDescriptor(window,'top');
+            check(top.get.call(child)===window && top.set===undefined && !top.configurable && top.enumerable);
+            true
+        "#).unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn cross_origin_window_topology_is_readable_but_document_is_protected() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse("<!doctype html><iframe sandbox></iframe>"), native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(r#"
+            const child=document.querySelector('iframe').contentWindow;
+            const valid=child.frames===child && child.parent===window && child.top===window && child.length===0;
+            let rejected=false; try { child.document; } catch(e) { rejected=e instanceof DOMException && e.name==='SecurityError'; }
+            valid && rejected
+        "#).unwrap(), JsValue::Bool(true));
+    }
 
     fn response_with_mime(mime: Option<&str>, no_sniff: bool) -> amazing_net::Response {
         let mut headers = amazing_net::Headers::new();

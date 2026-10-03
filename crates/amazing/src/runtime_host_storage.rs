@@ -221,7 +221,7 @@ impl RuntimeBindings {
 
 impl RuntimeBindingHost<'_> {
     fn dispatch_storage_event(&mut self, delivery: StorageEventDelivery) -> Result<(), Throw> {
-        let window = self.js.binding_global_object();
+        let window = self.js.binding_global_this();
         let event = invoke(self, Operation::EventConstructor, JsValue::Undefined,
             &[JsValue::str("storage")])?;
         let units = |value: Option<Vec<u16>>| value.map_or(JsValue::Null,
