@@ -151,4 +151,18 @@ mod decorator_tests {
         "#);
     }
 
+    #[test]
+    fn class_heritage_rejects_nonconstructors_before_observable_prototype_reads() {
+        both(r#"
+            var arrow=()=>{},calls=0,rejected=0;
+            var bound=arrow.bind(null),proxy=new Proxy(arrow,{get(){calls++;throw 1;}});
+            Object.defineProperty(arrow,'prototype',{get(){calls++;throw 1;}});
+            Object.defineProperty(bound,'prototype',{get(){calls++;throw 1;}});
+            for(var value of [arrow,bound,proxy]){
+                try {class C extends value{}}catch(e){if(e instanceof TypeError)rejected++;}
+            }
+            calls===0 && rejected===3;
+        "#);
+    }
+
 }

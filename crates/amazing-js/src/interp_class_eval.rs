@@ -78,7 +78,7 @@ impl Interpreter {
         let prototype_parent = match &superclass {
             None => Some(self.object_proto.clone()),
             Some(JsValue::Null) => None,
-            Some(parent) if is_constructor(parent) => match self.get_prop(parent, "prototype")? {
+            Some(parent) if class_is_constructor(parent) => match self.get_prop(parent, "prototype")? {
                 JsValue::Object(prototype) => Some(prototype),
                 JsValue::Null => None,
                 _ => return Err(Throw::type_error("super constructor prototype is not an object or null")),
@@ -225,4 +225,27 @@ fn auto_accessor_set(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
     let FieldKey::Private(name) = decorator_access_key(i)? else { unreachable!() };
     private_field_set(i, &this, &name, args.first().cloned().unwrap_or(JsValue::Undefined))?;
     Ok(JsValue::Undefined)
+}
+
+// Fixed-base function metadata may still mark arrows constructible. Follow only
+// internal exotic slots: IsConstructor must never observe a prototype getter.
+fn class_is_constructor(value: &JsValue) -> bool {
+    let mut value = value.clone();
+    loop {
+        let JsValue::Object(object) = &value else { return false; };
+        let next = {
+            let object = object.borrow();
+            if !object.constructible { return false; }
+            let Some(function) = &object.func else { return false; };
+            if function.is_arrow || function.is_async || function.is_generator { return false; }
+            if let Exotic::Proxy(proxy) = &object.exotic {
+                if proxy.revoked.get() { return object.constructible; }
+                Some(proxy.target.borrow().clone())
+            } else if Interpreter::is_bound_function(&value) {
+                function.home.as_ref().and_then(|data| data.borrow().get_own("target"))
+            } else { return true; }
+        };
+        let Some(next) = next else { return false; };
+        value = next;
+    }
 }
