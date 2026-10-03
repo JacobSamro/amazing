@@ -1,0 +1,299 @@
+{
+  "base_commit": "00c53334a13d7a2925a50cd9a109f4921359d577",
+  "source_commit": "16be977a1615a290b55e46fdc6d9ea07e7a0d886",
+  "corpora": {
+    "language": {
+      "before": {
+        "files": {
+          "pass": 24336,
+          "fail": 206,
+          "timeout": 4,
+          "unsupported": 26,
+          "skipped": 29300
+        },
+        "variants": {
+          "pass": 45047,
+          "fail": 287,
+          "timeout": 8,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 24348,
+          "fail": 194,
+          "timeout": 4,
+          "unsupported": 26,
+          "skipped": 29300
+        },
+        "variants": {
+          "pass": 45071,
+          "fail": 263,
+          "timeout": 8,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "gained_files": [
+        "language/expressions/yield/star-in-rltn-expr.js",
+        "language/expressions/yield/star-iterable.js",
+        "language/expressions/yield/star-return-is-null.js",
+        "language/expressions/yield/star-rhs-iter-nrml-res-done-no-value.js",
+        "language/expressions/yield/star-rhs-iter-rtrn-res-done-no-value.js",
+        "language/expressions/yield/star-rhs-iter-thrw-res-done-no-value.js",
+        "language/expressions/yield/star-rhs-iter-thrw-violation-no-rtrn.js",
+        "language/expressions/yield/star-rhs-iter-thrw-violation-rtrn-call-err.js",
+        "language/expressions/yield/star-rhs-iter-thrw-violation-rtrn-get-err.js",
+        "language/expressions/yield/star-rhs-iter-thrw-violation-rtrn-invoke.js",
+        "language/expressions/yield/star-string.js",
+        "language/expressions/yield/star-throw-is-null.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        "language/expressions/yield/star-in-rltn-expr.js#non-strict",
+        "language/expressions/yield/star-in-rltn-expr.js#strict",
+        "language/expressions/yield/star-iterable.js#non-strict",
+        "language/expressions/yield/star-iterable.js#strict",
+        "language/expressions/yield/star-return-is-null.js#non-strict",
+        "language/expressions/yield/star-return-is-null.js#strict",
+        "language/expressions/yield/star-rhs-iter-nrml-res-done-no-value.js#non-strict",
+        "language/expressions/yield/star-rhs-iter-nrml-res-done-no-value.js#strict",
+        "language/expressions/yield/star-rhs-iter-rtrn-res-done-no-value.js#non-strict",
+        "language/expressions/yield/star-rhs-iter-rtrn-res-done-no-value.js#strict",
+        "language/expressions/yield/star-rhs-iter-thrw-res-done-no-value.js#non-strict",
+        "language/expressions/yield/star-rhs-iter-thrw-res-done-no-value.js#strict",
+        "language/expressions/yield/star-rhs-iter-thrw-violation-no-rtrn.js#non-strict",
+        "language/expressions/yield/star-rhs-iter-thrw-violation-no-rtrn.js#strict",
+        "language/expressions/yield/star-rhs-iter-thrw-violation-rtrn-call-err.js#non-strict",
+        "language/expressions/yield/star-rhs-iter-thrw-violation-rtrn-call-err.js#strict",
+        "language/expressions/yield/star-rhs-iter-thrw-violation-rtrn-get-err.js#non-strict",
+        "language/expressions/yield/star-rhs-iter-thrw-violation-rtrn-get-err.js#strict",
+        "language/expressions/yield/star-rhs-iter-thrw-violation-rtrn-invoke.js#non-strict",
+        "language/expressions/yield/star-rhs-iter-thrw-violation-rtrn-invoke.js#strict",
+        "language/expressions/yield/star-string.js#non-strict",
+        "language/expressions/yield/star-string.js#strict",
+        "language/expressions/yield/star-throw-is-null.js#non-strict",
+        "language/expressions/yield/star-throw-is-null.js#strict"
+      ],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "987f7cb68d18ce5799c09b6910b6da7d0a1617315303d0f70dd89af44b4086af",
+      "after_host_sha256": "9f5099868fe148ab20aaa996fff95dc18cdb6fc103c7a35e5a930108b29f8f11",
+      "before_classification_sha256": "2373abb7f182fc12f2bf6b1858b7ccd4eb319f32e7582c1a2e4b662d07437f95",
+      "after_classification_sha256": "ce4f8d67071edcfe069e6a20573fc27da6017888ca32f6083c4d0dfcc48db5e2"
+    },
+    "built-ins-GeneratorPrototype": {
+      "before": {
+        "files": {
+          "pass": 61,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53811
+        },
+        "variants": {
+          "pass": 122,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 61,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53811
+        },
+        "variants": {
+          "pass": 122,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "987f7cb68d18ce5799c09b6910b6da7d0a1617315303d0f70dd89af44b4086af",
+      "after_host_sha256": "9f5099868fe148ab20aaa996fff95dc18cdb6fc103c7a35e5a930108b29f8f11",
+      "before_classification_sha256": "3871978eea7c054dc7e4b74562cb0073de7cc839f2b8b738f79913dfa08b465d",
+      "after_classification_sha256": "3871978eea7c054dc7e4b74562cb0073de7cc839f2b8b738f79913dfa08b465d"
+    },
+    "built-ins-AsyncGeneratorPrototype": {
+      "before": {
+        "files": {
+          "pass": 48,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53824
+        },
+        "variants": {
+          "pass": 96,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 48,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53824
+        },
+        "variants": {
+          "pass": 96,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "987f7cb68d18ce5799c09b6910b6da7d0a1617315303d0f70dd89af44b4086af",
+      "after_host_sha256": "9f5099868fe148ab20aaa996fff95dc18cdb6fc103c7a35e5a930108b29f8f11",
+      "before_classification_sha256": "0104013711b4d0274d7dd74f69adbdf9897471f1ddd243d89a54d66fc956a0ad",
+      "after_classification_sha256": "0104013711b4d0274d7dd74f69adbdf9897471f1ddd243d89a54d66fc956a0ad"
+    },
+    "built-ins-GeneratorFunction": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "987f7cb68d18ce5799c09b6910b6da7d0a1617315303d0f70dd89af44b4086af",
+      "after_host_sha256": "9f5099868fe148ab20aaa996fff95dc18cdb6fc103c7a35e5a930108b29f8f11",
+      "before_classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f",
+      "after_classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f"
+    },
+    "built-ins-AsyncGeneratorFunction": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "same_input": true,
+      "same_runner": true,
+      "same_inventory": true,
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_host_sha256": "987f7cb68d18ce5799c09b6910b6da7d0a1617315303d0f70dd89af44b4086af",
+      "after_host_sha256": "9f5099868fe148ab20aaa996fff95dc18cdb6fc103c7a35e5a930108b29f8f11",
+      "before_classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a",
+      "after_classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a"
+    }
+  },
+  "platform": "Linux Boat",
+  "workspace_passed": 3930,
+  "workspace_skipped": 17,
+  "doctests_passed": 4,
+  "owned_passed": 683,
+  "owned_skipped": 1,
+  "new_both_backend_groups": 9,
+  "source_series": [
+    "608253657d8f8674379895fbdebad868726d402e",
+    "16be977a1615a290b55e46fdc6d9ea07e7a0d886"
+  ],
+  "baseline_reuse": "JS34 after language: docs-only00c53334 dependency has identical engine/host/runner source to5e4e0dd3; four generator builtin baselines freshly measured",
+  "port": {
+    "repository": "lucid-softworks/lumen",
+    "commit": "f6c9860d44fa52249cfd647122edea184d32c863",
+    "path": "crates/lumen/src/eval.rs",
+    "license": "MIT",
+    "copyright": "Copyright (c) 2026 Lucid Softworks limited"
+  },
+  "async_scope": "Existing VM async_delegate unchanged; legacy AST async coroutine scheduling policy preserved, no async scheduling conformance claim"
+}

@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-33 — string escapes, directive provenance and delegated-yield line terminators** (whole Linux gate active).
+Frontier: **JS-36 — try/finally/disposal completion boundaries and Empty/value audit** (scope and representation audit).
 JS-25 parser API is ready; Runtime35 owns its native eval consumer. JS-26 is complete.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
@@ -1851,3 +1851,10 @@ Next JS34: whole named function-expression immutable binding policy; twelve slop
 Source `5e4e0dd3` on fixed docs-only `bf832ea4` (engine identical ready33 source6f). Immutable-strict metadata distinguishes const/import/class from named function self bindings. Sloppy self writes ignore value; strict writes throw; AST/VM/arrow/eval captures share same retained cells. Five grouped tests, no GDI/FDI/scheduler redesign. Linux workspace **3921/17 skipped +4 docs**, owned **674/1 skipped**; whole language **+14 files/+14 variants**, Function/Object/Proxy unchanged, **zero losses**. [Proof](js-lang_JS34-evidence.json), [design](js-lang_JS34-interface.md). VM23 owner must tag its separately added GDI cells true and preserve strict-aware global lexical assignment during integration.
 
 Next JS35: whole synchronous delegated-yield actual IteratorRecord and semantic next/throw/return forwarding. Parent and VM exact grants cover shared record/helper, raw iterator-result identity carrier in FrameOutcome/Suspend and sync consumers; no job/scheduling redesign. Legacy AST async-generator scheduling remains explicitly outside the sync conformance claim; whole async generator selections still guard regressions.
+
+
+### JS-35 — synchronous delegated-yield protocol
+
+Source `60825365` + exhaustive-test completion `16be977a` on measured ready34 proof`00c53334`. Shared actual IteratorRecord caches next, semantic GetMethod/null handling and missing-throw close precedence; raw iterator-result carriers preserve identity and avoid premature value Get in both VM and coroutine sync drivers. Record cleared on errors/completion, strong rooted values across suspension; no job/scheduling redesign and legacy AST async policy unchanged. Nine both-backend groups. Linux workspace **3930/17 skipped +4 docs**, owned **683/1 skipped**; whole language **+12 files/+24 variants** (24348/45071), whole GeneratorPrototype **61/122**, AsyncGeneratorPrototype **48/96**, GeneratorFunction **23/46**, AsyncGeneratorFunction **23/46** unchanged, all **zero losses**. [Proof](js-lang_JS35-evidence.json), [design](js-lang_JS35-interface.md).
+
+Next JS36: whole try/finally/disposal completion boundaries. Parent grants normal-finally protected completion restore and disposal protected completion; broad Empty/value propagation must be audited. AST/VM empty blocks currently reset Undefined rather than preserve Empty, so a wider representation proposal is needed before claiming whole completion semantics. Universal call boundary changes require precise finding and Runtime grant.
