@@ -1870,12 +1870,13 @@ mod tests {
 
     #[test]
     fn node_factories_use_document_realm_and_child_constructors_use_child_document() {
-        let host=Rc::new(RefCell::new(BrowserDomHost { dom:amazing_html::parse("<body><iframe></iframe></body>"),native_forwarded:false }));
+        let host=Rc::new(RefCell::new(BrowserDomHost { dom:amazing_html::parse("<body><div id='namedBeforeSetup'></div><iframe></iframe></body>"),native_forwarded:false }));
         let mut scheduler=crate::js_scheduler::DriverScheduler::new(host,32).unwrap();
         scheduler.set_location_url("https://example.test/node-realms");
         scheduler.run_script("globalThis.frame=document.querySelector('iframe');void frame.contentWindow").unwrap();
         let result=scheduler.run_script(r#"(function(){let step=0;try{
             function check(v){step++;if(!v)throw 'factory '+step;}
+            check(window.namedBeforeSetup===document.getElementById('namedBeforeSetup'));
             const inner=frame.contentWindow;
             for(const [method,iface,args] of [['createTextNode','Text',['x']],['createComment','Comment',['x']],
                 ['createProcessingInstruction','ProcessingInstruction',['t','d']],['createDocumentFragment','DocumentFragment',[]],
