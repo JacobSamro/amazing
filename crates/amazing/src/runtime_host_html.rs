@@ -5,6 +5,7 @@
 //! wraps the same Document/Element prototypes as the top realm rather than a
 //! fully independent intrinsic set.
 use super::*;
+mod document_write;
 use crate::dom_host::BrowserDomHost;
 use amazing_dom::document_surface::ReadyState;
 use amazing_net::url::ParsedUrl;
@@ -114,6 +115,7 @@ pub(super) struct FrameRuntime {
     /// Queued Location changes carry their actual source, even after it moves.
     pending_navigations: HashMap<RealmHandle, HtmlNavigation>,
     parser_imports: HashMap<NodeIdx, IncrementalImportRef>,
+    document_write_sessions: HashMap<NodeIdx, document_write::DocumentWriteSession>,
     /// `(frame, document, fire_load_events)`. `fire_load_events` is false
     /// only for an iframe with neither `src` nor `srcdoc`: its initial
     /// `about:blank` is created for `contentDocument`/`contentWindow` to see,
@@ -1782,215 +1784,7 @@ impl RuntimeBindingHost<'_> {
         Ok(JsValue::Undefined)
     }
 
-    fn document_receiver_node(&self, receiver: &JsValue) -> Result<NodeIdx, Throw> {
-        let key = self.platform_object(receiver, InterfaceBrand::NODE)
-            .ok_or_else(|| Throw::type_error("Invalid Document receiver"))?;
-        let node = self.node_from_platform_key(key)
-            .ok_or_else(|| Throw::type_error("Stale Document receiver"))?;
-        let state = self.state.borrow();
-        let host = state.host.borrow();
-        if !matches!(host.dom.get(node).kind, NodeKind::Document) {
-            return Err(Throw::type_error("Invalid Document receiver"));
-        }
-        Ok(node)
-    }
 
-    pub(super) fn document_open(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
-        let document = self.document_receiver_node(&receiver)?;
-        // No-op while already parsing/open (matches treating repeated
-        // `open()` calls as idempotent rather than implementing the spec's
-        // "ignore-opens-during-unload" counter); otherwise this *is* the
-        // implicit replace `write()` performs when called outside a parser.
-        if !self.state.borrow().write_insertion_points.contains_key(&document) {
-            self.reopen_document(document)?;
-        }
-        Ok(receiver)
-    }
-
-    pub(super) fn document_close(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
-        let document = self.document_receiver_node(&receiver)?;
-        end_document_parsing_state(&self.state, document);
-        Ok(JsValue::Undefined)
-    }
-
-    pub(super) fn document_write(&mut self, receiver: JsValue, args: &[JsValue],
-        newline: bool) -> Result<JsValue, Throw> {
-        let document = self.document_receiver_node(&receiver)?;
-        let mut text = String::new();
-        for arg in args {
-            let units = self.to_dom_string(arg)?;
-            text.push_str(&String::from_utf16_lossy(&units));
-        }
-        if newline { text.push('\n'); }
-        // HTML-31: a live, script-interleaved parser for this document
-        // inserts real input-stream text at its own paused cursor -- the
-        // actual WHATWG "insertion point" -- instead of `write_into_
-        // document`'s DOM-fragment splice, which remains the fallback for
-        // every document that never had one (iframes, and any top-level
-        // document once its own interleaved parse has reached `Eof`).
-        let parser = self.state.borrow().active_parsers.get(&document).cloned();
-        if let Some(parser) = parser {
-            self.write_into_active_parser(document, &parser, &text)?;
-            return Ok(JsValue::Undefined);
-        }
-        self.write_into_document(document, &text)?;
-        Ok(JsValue::Undefined)
-    }
-
-    fn write_into_active_parser(&mut self, document: NodeIdx,
-        parser: &Rc<RefCell<amazing_html::ResumableParser>>, text: &str) -> Result<(), Throw> {
-        let host = self.state.borrow().host.clone();
-        let import = self.state.borrow().frames.parser_imports.get(&document).cloned();
-        parser.borrow_mut().begin_write(text);
-        loop {
-            // Top-level parsing shares the arena by swapping. Child parsing
-            // uses the registered identity-preserving importer in both directions.
-            {
-                let mut parser = parser.borrow_mut();
-                let mut host = host.borrow_mut();
-                if let Some(import) = &import {
-                    if let Err(error) = import.borrow_mut().reverse_sync(parser.dom_mut(), &host.dom) {
-                        parser.end_write();
-                        return Err(Throw::type_error(format!("document.write reverse graft: {error:?}")));
-                    }
-                } else { parser.swap_dom(&mut host.dom); }
-            }
-            let script = parser.borrow_mut().run_write();
-            {
-                let mut parser = parser.borrow_mut();
-                let mut host = host.borrow_mut();
-                if let Some(import) = &import {
-                    if let Err(error) = import.borrow_mut().sync(&mut host.dom, parser.dom()) {
-                        if script.is_some() { parser.end_write(); }
-                        return Err(Throw::type_error(format!("document.write graft: {error:?}")));
-                    }
-                } else { parser.swap_dom(&mut host.dom); }
-            }
-            RuntimeBindings { state: self.state.clone() }.navigate_iframes(self.js);
-            let Some(source_node) = script else { return Ok(()); };
-            let node = match &import { Some(import) => import.borrow().imported(source_node), None => Some(source_node) };
-            let script = node.and_then(|node| crate::cmd::js::script_source_from_node(&host.borrow().dom, node));
-            let outcome = if let Some(script) = script {
-                let body = match script.src {
-                    None => Some(script.body),
-                    Some(src) => {
-                        let state = self.state.borrow();
-                        state.document_url.as_deref().and_then(|base|
-                            fetch_child_script(&src, base, state.frames.resolver.as_ref()))
-                    }
-                };
-                match body { Some(body) => self.js.run_script(&body).map(|_| ()), None => Ok(()) }
-            } else { Ok(()) };
-            if let Err(error) = outcome {
-                parser.borrow_mut().end_write();
-                return Err(error);
-            }
-        }
-    }
-
-    /// Replaces `document`'s entire content with a fresh, empty
-    /// `<html><head></head><body></body></html>` and marks its parser
-    /// active with the insertion point at the start of that new, empty
-    /// body -- `document.open()`'s full-document replacement, and the step
-    /// `write()`/`writeln()` perform implicitly when called while the
-    /// document is not already being parsed.
-    fn reopen_document(&mut self, document: NodeIdx) -> Result<(), Throw> {
-        // No `<!doctype html>`: `import_fragment` copies each of the
-        // skeleton's top-level nodes into a `DocumentFragment` one at a
-        // time (`import_node_into`/`pre_insert`), and a `DocumentType` is
-        // never a valid `DocumentFragment` child -- a real
-        // `document.open()` doesn't add one either.
-        let skeleton = amazing_html::parse("<html><head></head><body></body></html>");
-        let body = self.with_dom(|dom| {
-            let fragment = dom.import_fragment(&skeleton, document)?;
-            dom.replace_all(document, Some(fragment))?;
-            Ok(dom.document_body(document)?.unwrap_or(document))
-        })?;
-        self.state.borrow_mut().write_insertion_points.insert(document, (body, None));
-        Ok(())
-    }
-
-    /// Parses `text` as an HTML fragment and inserts it at `document`'s
-    /// current parser insertion point (`BindingState::write_insertion_points`),
-    /// implicitly performing `document.open()`'s full-document replace first
-    /// if the document's parser is not currently marked active -- e.g. a
-    /// `write()` call from a `setTimeout` after the document has already
-    /// finished loading. Any classic `<script>` elements the fragment
-    /// introduces run synchronously and in document order before this
-    /// returns, inline immediately and external fetched relative to the
-    /// document's own URL, each narrowing the insertion point to its own
-    /// position first (a *nested* write from such a script lands right
-    /// after that script, not after the original writing script); the
-    /// outer insertion point is restored once they have all run, so a
-    /// second `write()` call from the original script still lands in
-    /// sequence after the first.
-    fn write_into_document(&mut self, document: NodeIdx, text: &str) -> Result<(), Throw> {
-        if !self.state.borrow().write_insertion_points.contains_key(&document) {
-            self.reopen_document(document)?;
-        }
-        let scripting_enabled = self.with_dom(|dom| dom.document_scripting_enabled(document))?;
-        let mode = if scripting_enabled { amazing_html::ScriptingMode::Enabled }
-            else { amazing_html::ScriptingMode::Disabled };
-        let parsed = amazing_html::parse_fragment_with_scripting_mode("body", Namespace::Html, text, mode)
-            .map_err(|_| Throw::type_error("Unable to parse document.write markup"))?;
-        let anchor = self.state.borrow().write_insertion_points.get(&document).copied();
-        let children = self.with_dom(|dom| {
-            let (parent, before) = match anchor {
-                // `parent == document` is the placeholder `begin_document_
-                // parsing_state` leaves before any script has narrowed it
-                // (or a stale one from a document that was never
-                // reopened): fall back to the old body/head/document-
-                // element resolution rather than inserting directly under
-                // the Document node, which `pre_insert` rejects.
-                Some((parent, before)) if parent != document => (parent, before),
-                _ => {
-                    let insertion_parent = dom.document_body(document)?
-                        .or(dom.document_head(document)?)
-                        .or(dom.document_element(document)?)
-                        .unwrap_or(document);
-                    (insertion_parent, None)
-                }
-            };
-            let fragment = dom.import_fragment(&parsed, document)?;
-            let children: Vec<NodeIdx> = dom.children(fragment).collect();
-            dom.pre_insert(fragment, parent, before)?;
-            Ok(children)
-        })?;
-        if !scripting_enabled { return Ok(()); }
-        let mut scripts = Vec::new();
-        {
-            let state = self.state.borrow();
-            let host = state.host.borrow();
-            for &child in &children {
-                collect_classic_scripts(&host.dom, child, &mut scripts);
-            }
-        }
-        if scripts.is_empty() { return Ok(()); }
-        let base = self.state.borrow().document_url.clone();
-        let resolver = self.state.borrow().frames.resolver.clone();
-        let saved = self.state.borrow().write_insertion_points.get(&document).copied();
-        let bindings = RuntimeBindings { state: self.state.clone() };
-        for script in &scripts {
-            narrow_write_insertion_point_state(&self.state, document, script.node);
-            let base = base.as_deref().unwrap_or("about:blank");
-            match &script.src {
-                None => { bindings.execute_document_script(self.js, script, &script.body, base)?; }
-                Some(src) => {
-                    let url = crate::cmd::js::resolve_script_url(base, src);
-                    let text = if script.kind == crate::cmd::js::ScriptKind::Module {
-                        bindings.load_module_source(self.js, &url).ok()
-                    } else { fetch_child_script(src, base, resolver.as_ref()) };
-                    if let Some(text) = text {
-                        bindings.execute_document_script(self.js, script, &text, &url)?;
-                    }
-                }
-            }
-        }
-        if let Some(point) = saved {
-            self.state.borrow_mut().write_insertion_points.insert(document, point);
-        }
-        Ok(())
-    }
 }
 
 impl RuntimeBindingHost<'_> {
