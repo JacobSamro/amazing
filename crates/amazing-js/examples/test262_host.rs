@@ -1,19 +1,20 @@
 //! Isolated, phase-aware Test262 process host. Protocol is documented in scripts/test262.py.
 use amazing_js::value::{FunctionBody, JsFunction, JsObject, JsValue, NativeFn, Property, Throw};
 use amazing_js::{Interpreter, parse_script};
-use amazing_js::interp::RealmHandle;
-use std::collections::HashMap;
 use std::{
     cell::RefCell,
     io::{self, Read},
     rc::Rc,
+    sync::Mutex,
 };
 
-thread_local! {
-    static UNSUPPORTED: RefCell<Option<String>> = const { RefCell::new(None) };
-    static STRING: RefCell<HashMap<RealmHandle, JsValue>> = RefCell::new(HashMap::new());
-    static ASYNC_DONE: RefCell<Option<Result<(), String>>> = const { RefCell::new(None) };
-}
+// Each process serves one test variant. Coroutine callbacks may execute on
+// another OS thread, but their protocol completion belongs to this process.
+static UNSUPPORTED: Mutex<Option<String>> = Mutex::new(None);
+static ASYNC_DONE: Mutex<Option<Result<(), String>>> = Mutex::new(None);
+// A lexical binding is realm-local, retained by coroutine environments, and
+// cannot be named by ECMAScript source or observed as a global object property.
+const CAPTURED_STRING: &str = "\0test262.String";
 
 fn quote(s: &str) -> String {
     let mut out = String::from("\"");
@@ -33,7 +34,7 @@ fn quote(s: &str) -> String {
 }
 
 fn emit(phase: &str, kind: &str, detail: &str) {
-    let unsupported = UNSUPPORTED.with(|s| s.borrow().clone());
+    let unsupported = UNSUPPORTED.lock().expect("host protocol state").clone();
     println!(
         "\nTEST262_RESULT {{\"protocol\":1,\"phase\":{},\"error_type\":{},\"detail\":{},\"unsupported\":{}}}",
         quote(phase),
@@ -65,11 +66,9 @@ fn put(obj: &mut JsObject, name: &str, value: JsValue) {
     obj.define(name, p).expect("ordinary host property");
 }
 fn unsupported(name: &str) -> Result<JsValue, Throw> {
-    UNSUPPORTED.with(|s| {
-        if s.borrow().is_none() {
-            *s.borrow_mut() = Some(name.into());
-        }
-    });
+    let mut state = UNSUPPORTED.lock().expect("host protocol state");
+    if state.is_none() { *state = Some(name.into()); }
+    drop(state);
     Err(Throw::type_error(format!(
         "unsupported Test262 host operation: {name}"
     )))
@@ -96,9 +95,8 @@ fn abstract_module(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<J
     unsupported("host.AbstractModuleSource")
 }
 fn coerce(i: &mut Interpreter, v: JsValue) -> Result<String, Throw> {
-    let string = STRING
-        .with(|s| s.borrow().get(&i.binding_current_realm()).cloned())
-        .expect("captured String intrinsic");
+    let string = i.global_env.resolve(CAPTURED_STRING)
+        .ok_or_else(|| Throw::type_error("Test262 String intrinsic was not installed"))?;
     match i.call_value(&string, JsValue::Undefined, vec![v])? {
         JsValue::Str(s) => Ok(s.to_string()),
         _ => Err(Throw::type_error("String did not return a string")),
@@ -111,19 +109,22 @@ fn eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, 
 fn print(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     // Prefix and JSON-escape output so test text cannot impersonate a result frame.
     let text = coerce(i, args.first().cloned().unwrap_or(JsValue::Undefined))?;
-    ASYNC_DONE.with(|done| {
-        if text == "Test262:AsyncTestComplete" {
-            let mut done = done.borrow_mut();
-            *done = Some(if done.is_some() { Err("$DONE called more than once".into()) } else { Ok(()) });
-        } else if let Some(detail) = text.strip_prefix("Test262:AsyncTestFailure:") {
-            *done.borrow_mut() = Some(Err(detail.to_string()));
-        }
-    });
+    record_print(&text);
     println!("TEST262_PRINT {}", quote(&text));
     Ok(JsValue::Undefined)
 }
+fn record_print(text: &str) {
+    let mut done = ASYNC_DONE.lock().expect("host protocol state");
+    if text == "Test262:AsyncTestComplete" {
+        *done = Some(if done.is_some() { Err("$DONE called more than once".into()) } else { Ok(()) });
+    } else if let Some(detail) = text.strip_prefix("Test262:AsyncTestFailure:") {
+        *done = Some(Err(detail.to_string()));
+    }
+}
 fn install(i: &mut Interpreter) {
-    STRING.with(|s| { s.borrow_mut().insert(i.binding_current_realm(), i.global_env.resolve("String").unwrap()); });
+    let string = i.global_env.resolve("String").expect("String intrinsic");
+    i.global_env.declare_lexical(CAPTURED_STRING, string, false)
+        .expect("private Test262 intrinsic binding");
     let mut host = JsObject::ordinary();
     host.proto = Some(i.object_proto.clone());
     put(&mut host, "global", JsValue::Object(i.global_obj.clone()));
@@ -323,7 +324,7 @@ fn run() -> io::Result<()> {
         helpers.push((field(&mut input)?, field(&mut input)?));
     }
     let async_test = helpers.iter().any(|(name, _)| name == "doneprintHandle.js");
-    ASYNC_DONE.with(|done| *done.borrow_mut() = None);
+    *ASYNC_DONE.lock().expect("host protocol state") = None;
     let program = match parse_script(&source) {
         Ok(p) => p,
         Err(e) => {
@@ -363,7 +364,7 @@ fn run() -> io::Result<()> {
     match execution {
         Ok(_) => {
             if async_test {
-                match ASYNC_DONE.with(|done| done.borrow().clone()) {
+                match ASYNC_DONE.lock().expect("host protocol state").clone() {
                     Some(Ok(())) => emit("complete", "", ""),
                     Some(Err(detail)) => emit("runtime", "Test262Error", &detail),
                     None => emit("runtime", "Test262Error", "$DONE was not called"),
@@ -461,5 +462,44 @@ fn main() -> std::process::ExitCode {
             eprintln!("Test262 host protocol: {e}");
             std::process::ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod protocol_tests {
+    use super::*;
+
+    #[test]
+    fn captured_intrinsics_and_worker_protocol_share_the_test_lifetime() {
+        let mut i = Interpreter::new();
+        install(&mut i);
+        i.run_script("String=function(){throw new Error('replaced')}").unwrap();
+        assert_eq!(coerce(&mut i, JsValue::num(17.0)).unwrap(), "17");
+        assert!(i.global_obj.borrow().get_own(CAPTURED_STRING).is_none());
+        assert!(i.global_env.assign(CAPTURED_STRING, JsValue::Undefined).is_err());
+        let foreign = i.binding_create_realm(JsValue::object(JsObject::ordinary())).unwrap();
+        i.binding_with_realm(foreign, |i| {
+            install(i);
+            i.run_script("String=function(){return 'replaced'}")?;
+            assert_eq!(coerce(i, JsValue::num(23.0))?, "23");
+            Ok(())
+        }).unwrap();
+        assert_eq!(coerce(&mut i, JsValue::num(29.0)).unwrap(), "29");
+
+        *ASYNC_DONE.lock().unwrap() = None;
+        *UNSUPPORTED.lock().unwrap() = None;
+        std::thread::spawn(|| {
+            record_print("Test262:AsyncTestComplete");
+            let _ = unsupported("host.agent");
+        }).join().unwrap();
+        assert_eq!(*ASYNC_DONE.lock().unwrap(), Some(Ok(())));
+        assert_eq!(UNSUPPORTED.lock().unwrap().as_deref(), Some("host.agent"));
+        std::thread::spawn(|| record_print("Test262:AsyncTestComplete")).join().unwrap();
+        assert_eq!(*ASYNC_DONE.lock().unwrap(), Some(Err("$DONE called more than once".into())));
+        *ASYNC_DONE.lock().unwrap() = None;
+        std::thread::spawn(|| record_print("Test262:AsyncTestFailure:original")).join().unwrap();
+        assert_eq!(*ASYNC_DONE.lock().unwrap(), Some(Err("original".into())));
+        *ASYNC_DONE.lock().unwrap() = None;
+        *UNSUPPORTED.lock().unwrap() = None;
     }
 }
