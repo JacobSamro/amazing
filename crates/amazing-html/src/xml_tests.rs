@@ -532,7 +532,7 @@ fn xml_document_templates_use_actual_inert_contents_and_node_documents() {
     let dom = parse_xml(source).unwrap();
     assert_eq!(dom.document_metadata(NodeIdx(0)).unwrap().unwrap().content_type, "application/xml");
     for child in dom.children(NodeIdx(0)) { assert_xml_node_documents(&dom, child, NodeIdx(0)); }
-    let template = elements(&dom).into_iter().find(|node| dom.get_attribute(*node, "id") == Some("t")).unwrap();
+    let template = elements(&dom).into_iter().find(|node| dom.get_attribute_ns(*node, None, "id") == Some("t")).unwrap();
     let contents = dom.template_contents(template).unwrap();
     let children: Vec<_> = dom.children(contents).collect();
     assert_eq!(children.len(), 7);
