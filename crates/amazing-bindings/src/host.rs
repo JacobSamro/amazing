@@ -920,6 +920,15 @@ pub enum DocumentField { URL, DocumentURI, CharacterSet, ContentType, CompatMode
 
 /// Browsing-context data comes from the driver, not guesses from the DOM tree.
 pub trait DocumentHost: BindingHost {
+    /// Effective base of this actual document, including embedding fallback.
+    fn document_base_url(&mut self, document: NodeIdx) -> Result<Vec<u16>, Self::Error>
+    where Self: UrlReflection {
+        let href = self.with_dom(|dom| dom.document_base_href(document))?;
+        match href {
+            Some(href) => self.resolve_url(&href),
+            None => self.document_field(document, DocumentField::URL),
+        }
+    }
     /// The document's associated WindowProxy, or None for an inert document.
     /// Child-realm embedders supply the proxy belonging to that document.
     fn document_default_view(&mut self, _document: NodeIdx) -> Result<Option<Self::Value>, Self::Error> {

@@ -24,32 +24,54 @@ impl RuntimeBindingHost<'_> {
             .unwrap_or_else(|_| input.to_vec())
     }
 
+    fn dom_document_url_context(&self, document: NodeIdx) -> Result<(String, String), DomError> {
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        let metadata = host.dom.document_metadata(document)?;
+        let (url, charset) = if document == NodeIdx(0) {
+            (state.document_url.clone().unwrap_or_else(|| "about:blank".into()),
+                state.document_character_set.clone().unwrap_or_else(|| "UTF-8".into()))
+        } else {
+            (metadata.map(|data| data.url.clone()).unwrap_or_else(|| "about:blank".into()),
+                metadata.map(|data| data.character_set.clone()).unwrap_or_else(|| "UTF-8".into()))
+        };
+        drop(host);
+        drop(state);
+        Ok((self.html_document_fallback_base_url(document).unwrap_or(url), charset))
+    }
+
+    /// Pure document base lookup, safe during navigation before script callbacks.
+    pub(super) fn dom_document_base_url(&self, document: NodeIdx) -> Result<String, DomError> {
+        let (fallback, charset) = self.dom_document_url_context(document)?;
+        let href = self.state.borrow().host.borrow().dom.document_base_href(document)?;
+        let Some(href) = href else { return Ok(fallback); };
+        let encoder = |query: &str| super::runtime_host_net::encode_document_query(query, &charset);
+        let parsed = amazing_net::ParsedUrl::parse(&fallback).ok();
+        let resolved = amazing_net::ParsedUrl::parse_with_query_encoder(
+            &String::from_utf16_lossy(&href), parsed.as_ref(), &encoder);
+        Ok(match resolved {
+            Ok(url) if !matches!(url.scheme(), "data" | "javascript") => url.serialize(),
+            _ => fallback,
+        })
+    }
+
     pub(super) fn dom_resolve_element_url(&mut self, element: NodeIdx, input: &[u16]) -> Result<Vec<u16>, Throw> {
-        let (document_url, charset, base_href) = {
+        let (document, is_base) = {
             let state = self.state.borrow();
             let host = state.host.borrow();
-            let document = host.dom.owner_document(element).unwrap_or(NodeIdx(0));
-            let metadata = host.dom.document_metadata(document).ok().flatten();
-            let (url, charset) = if document == NodeIdx(0) {
-                (state.document_url.clone().unwrap_or_else(|| "about:blank".into()),
-                    state.document_character_set.clone().unwrap_or_else(|| "UTF-8".into()))
-            } else {
-                (metadata.map(|data| data.url.clone()).unwrap_or_else(|| "about:blank".into()),
-                    metadata.map(|data| data.character_set.clone()).unwrap_or_else(|| "UTF-8".into()))
-            };
-            // HTMLBaseElement.href uses fallback document URL, ignoring itself
-            // and every other base element (HTML #the-base-element).
-            let is_base = host.dom.namespace_uri(element) == Some("http://www.w3.org/1999/xhtml")
-                && host.dom.local_name(element) == Some("base");
-            (url, charset, if is_base { None } else { host.dom.document_base_href(document).ok().flatten() })
+            (host.dom.owner_document(element).unwrap_or(NodeIdx(0)),
+                host.dom.namespace_uri(element) == Some("http://www.w3.org/1999/xhtml")
+                    && host.dom.local_name(element) == Some("base"))
         };
+        let (fallback, charset) = self.dom_document_url_context(document)
+            .map_err(|error| throw_dom_error(self, error))?;
+        // A base element's own href always resolves against fallback, avoiding
+        // circular consumption of its own frozen base contribution.
+        let base = if is_base { fallback } else {
+            self.dom_document_base_url(document).map_err(|error| throw_dom_error(self, error))?
+        };
+        let base = amazing_net::ParsedUrl::parse(&base).ok();
         let encoder = |query: &str| super::runtime_host_net::encode_document_query(query, &charset);
-        let mut base = amazing_net::ParsedUrl::parse(&document_url).ok();
-        if let (Some(url), Some(href)) = (&base, base_href) {
-            if let Ok(resolved) = url.resolve_with_query_encoder(&String::from_utf16_lossy(&href), &encoder) {
-                if !matches!(resolved.scheme(), "data" | "javascript") { base = Some(resolved); }
-            }
-        }
         let scalar = String::from_utf16_lossy(input);
         let resolved = amazing_net::ParsedUrl::parse_with_query_encoder(&scalar, base.as_ref(), &encoder);
         Ok(resolved.map(|url| url.serialize().encode_utf16().collect())
@@ -1451,6 +1473,41 @@ mod tests {
         let resolved=RuntimeBindingHost { js:&mut js,state:bindings.state.clone() }
             .dom_resolve_element_url(base,&"next?あ".encode_utf16().collect::<Vec<_>>()).unwrap();
         assert_eq!(String::from_utf16(&resolved).unwrap(),"https://child.test/base/next?%82%A0");
+    }
+
+    #[test]
+    fn document_base_lookup_uses_actual_document_metadata_and_first_href() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = super::super::install(&mut js, host.clone()).unwrap();
+        bindings.set_document_url(&mut js, "https://root.test/dir/page?x#fragment");
+        let document = {
+            let mut host = host.borrow_mut();
+            let doc = host.dom.create_document();
+            host.dom.set_document_metadata(doc, amazing_dom::document_surface::DocumentMetadata {
+                url: "https://child.test/dir/page?x#child".into(),
+                content_type: "text/html".into(), character_set: "Shift_JIS".into(),
+            }).unwrap();
+            doc
+        };
+        let mut adapter = RuntimeBindingHost { js: &mut js, state: bindings.state.clone() };
+        assert_eq!(adapter.dom_document_base_url(NodeIdx(0)).unwrap(), "https://root.test/dir/page?x#fragment");
+        assert_eq!(adapter.dom_document_base_url(document).unwrap(), "https://child.test/dir/page?x#child");
+        let first = {
+            let mut host = host.borrow_mut();
+            let first = host.dom.create_element_ns_in(document, Some("http://www.w3.org/1999/xhtml"), "base").unwrap();
+            host.dom.set_attribute(first, "href", "next?あ#retained").unwrap();
+            host.dom.pre_insert(first, document, None).unwrap();
+            first
+        };
+        assert_eq!(adapter.dom_document_base_url(document).unwrap(), "https://child.test/dir/next?%82%A0#retained");
+        let units = DocumentHost::document_base_url(&mut adapter, document).unwrap();
+        assert_eq!(String::from_utf16(&units).unwrap(), "https://child.test/dir/next?%82%A0#retained");
+        for invalid in ["http://[", "data:text/plain,ignored", "javascript:ignored"] {
+            host.borrow_mut().dom.set_attribute(first, "href", invalid).unwrap();
+            assert_eq!(adapter.dom_document_base_url(document).unwrap(), "https://child.test/dir/page?x#child");
+        }
     }
 
 }

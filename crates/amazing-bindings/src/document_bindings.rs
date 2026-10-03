@@ -16,14 +16,8 @@ pub(crate) fn invoke<H: DocumentHost + UrlReflection>(host: &mut H, op: O, recei
     args: &[H::Value]) -> Result<H::Value, H::Error> {
     if op == O::NodeBaseURI {
         let node = host.node_brand(&receiver).ok_or_else(|| host.type_error("Expected a Node"))?;
-        let (document, href) = host.with_dom(|dom| {
-            let document = dom.owner_document(node).unwrap_or(node);
-            Ok((document, dom.document_base_href(document)?))
-        })?;
-        let units = match href {
-            Some(href) => host.resolve_url(&href)?,
-            None => host.document_field(document, DocumentField::URL)?,
-        };
+        let document = host.with_dom(|dom| Ok(dom.owner_document(node).unwrap_or(node)))?;
+        let units = host.document_base_url(document)?;
         return host.string(&units);
     }
     let node = host.node_brand(&receiver).ok_or_else(|| host.type_error("Expected a Document"))?;

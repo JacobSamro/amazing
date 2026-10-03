@@ -2023,6 +2023,10 @@ impl AbortHost for RuntimeBindingHost<'_> {
 }
 
 impl DocumentHost for RuntimeBindingHost<'_> {
+    fn document_base_url(&mut self, document: NodeIdx) -> Result<Vec<u16>, Throw> {
+        self.dom_document_base_url(document).map(|url| url.encode_utf16().collect())
+            .map_err(|error| throw_dom_error(self, error))
+    }
     fn document_default_view(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
         self.dom_document_default_view(document)
     }
