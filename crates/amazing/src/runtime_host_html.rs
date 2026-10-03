@@ -2321,7 +2321,7 @@ mod tests {
             if(own.href!=='https://example.test/first/relative/' || old.baseURI!==own.href) throw new Error('base bypass and contribution');
             const clone=old.cloneNode(true); if(clone.baseURI===old.baseURI) throw new Error('clone copied context snapshot');
             'captured';
-        "#).unwrap().to_js_string(), "captured");
+        "#).unwrap(), JsValue::str("captured"));
     }
 
     #[test]
@@ -2351,7 +2351,7 @@ mod tests {
             const fresh=document.createElement('iframe'); document.body.appendChild(fresh);
             if(fresh.contentDocument.baseURI!=='https://example.test/root-base/') throw new Error('pending root became committed document');
             'navigated';
-        "#).unwrap().to_js_string(), "navigated");
+        "#).unwrap(), JsValue::str("navigated"));
     }
 
     #[test]
