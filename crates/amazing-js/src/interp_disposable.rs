@@ -128,6 +128,7 @@ impl Interpreter {
             }
             let disposed_getter = std_collection_method(self, "get disposed", 0, disposed_getter_fn);
             prototype.borrow_mut().define("disposed", Property {
+                accessor: true,
                 value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
                 getter: Some(disposed_getter), setter: None,
             }).unwrap();

@@ -1666,6 +1666,7 @@ impl PageOwner {
                                 .js
                                 .binding_call(getter, value.clone(), Vec::new())
                                 .unwrap_or(JsValue::Undefined),
+                            None if property.is_accessor() => JsValue::Undefined,
                             None => property.value.clone(),
                         };
                         fields.push((key, self.js_value_to_json(&field_value, depth + 1)));
@@ -1800,6 +1801,7 @@ impl PageOwner {
                 Some(getter) => {
                     self.scheduler.js.binding_call(getter, value.clone(), Vec::new()).unwrap_or(JsValue::Undefined)
                 }
+                None if property.is_accessor() => JsValue::Undefined,
                 None => property.value.clone(),
             };
             properties.push(self.property_preview(key, &property_value));
@@ -1856,6 +1858,7 @@ impl PageOwner {
                     .js
                     .binding_call(getter, object.clone(), Vec::new())
                     .unwrap_or(amazing_js::value::JsValue::Undefined),
+                None if property.is_accessor() => amazing_js::value::JsValue::Undefined,
                 None => property.value.clone(),
             };
             let mut remote = self.remote_object(&value);

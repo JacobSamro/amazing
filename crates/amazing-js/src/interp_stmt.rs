@@ -1056,12 +1056,14 @@ impl Interpreter {
                                     let function_value = self.object_method_value(method, env, &o, &k);
                                     let JsValue::Object(object) = &o else { unreachable!() };
                                     let mut property = object.borrow().own_prop(&k).cloned()
-                                        .filter(|property| property.getter.is_some() || property.setter.is_some())
+                                        .filter(|property| property.is_accessor())
                                         .unwrap_or(Property {
+                                            accessor: false,
                                             value: JsValue::Undefined, writable: false,
                                             enumerable: true, configurable: true,
                                             getter: None, setter: None,
                                         });
+                                    property.accessor = true;
                                     if method.kind == ast::MethodKind::Get { property.getter = Some(function_value); }
                                     else { property.setter = Some(function_value); }
                                     object.borrow_mut().define(&k, property)
@@ -1618,6 +1620,7 @@ impl Interpreter {
                 if function.name.is_empty() {
                     function.name = name.to_utf8_lossy();
                     object.define("name", Property {
+                        accessor: false,
                         value: JsValue::str(name.clone()), writable: false, enumerable: false,
                         configurable: true, getter: None, setter: None,
                     }).unwrap();
@@ -1984,6 +1987,7 @@ impl Interpreter {
             unreachable!("array literal construction always yields an object")
         };
         let _ = template_obj.borrow_mut().define("raw", Property {
+            accessor: false,
             value: raw_array,
             writable: false,
             enumerable: false,
@@ -2466,6 +2470,7 @@ impl Interpreter {
             // (enumerable:true, configurable:true), which is wrong for both
             // kinds, not just generators.
             h.borrow_mut().define("prototype", Property {
+                accessor: false,
                 value: JsValue::Object(p.clone()), writable: true, enumerable: false,
                 configurable: false, getter: None, setter: None,
             }).unwrap();
@@ -2482,6 +2487,7 @@ impl Interpreter {
             let getter = symbol_method(self, "", native_legacy_function_caller_getter);
             let setter = symbol_method(self, "", native_legacy_function_caller_setter);
             h.borrow_mut().define("caller", Property {
+                accessor: true,
                 value: JsValue::Undefined, writable: false, enumerable: false,
                 configurable: true, getter: Some(getter), setter: Some(setter),
             }).unwrap();
@@ -2597,6 +2603,7 @@ impl Interpreter {
                 x
             })));
             handle.borrow_mut().define("prototype", Property {
+                accessor: false,
                 value: JsValue::Object(p.clone()), writable: true, enumerable: false,
                 configurable: false, getter: None, setter: None,
             }).unwrap();
@@ -2630,15 +2637,18 @@ impl Interpreter {
     {
         let JsValue::Object(object) = target else { unreachable!() };
         let mut descriptor = object.borrow().own_prop(key).cloned().unwrap_or(Property {
+            accessor: false,
             value: JsValue::Undefined, writable: true, enumerable: false,
             configurable: true, getter: None, setter: None,
         });
         if matches!(kind, ast::MethodKind::Get | ast::MethodKind::Set) {
             descriptor.writable = false;
+            descriptor.accessor = true;
             if kind == ast::MethodKind::Get { descriptor.getter = Some(value); }
             else { descriptor.setter = Some(value); }
         } else {
             descriptor = Property {
+                accessor: false,
                 value, writable: true, enumerable: false, configurable: true,
                 getter: None, setter: None,
             };
@@ -2684,10 +2694,12 @@ impl Interpreter {
         let mut function = function.borrow_mut();
         function.func.as_mut().unwrap().name = name.to_utf8_lossy();
         function.define("name", Property {
+            accessor: false,
             value: JsValue::str(name), writable: false, enumerable: false,
             configurable: true, getter: None, setter: None,
         }).expect("method name property");
         function.define("length", Property {
+            accessor: false,
             value: JsValue::num(length as f64), writable: false, enumerable: false,
             configurable: true, getter: None, setter: None,
         }).expect("method length property");
@@ -2790,6 +2802,7 @@ impl Interpreter {
         let _ = document.define(
             "title",
             Property {
+                accessor: true,
                 value: JsValue::Undefined,
                 writable: false,
                 enumerable: true,
@@ -2810,6 +2823,7 @@ impl Interpreter {
         let _ = element.define(
             "textContent",
             Property {
+                accessor: true,
                 value: JsValue::Undefined,
                 writable: false,
                 enumerable: true,
@@ -2823,6 +2837,7 @@ impl Interpreter {
         let _ = element.define(
             "innerText",
             Property {
+                accessor: true,
                 value: JsValue::Undefined,
                 writable: false,
                 enumerable: true,
@@ -2844,6 +2859,7 @@ impl Interpreter {
         let _ = element.define(
             "innerHTML",
             Property {
+                accessor: true,
                 value: JsValue::Undefined,
                 writable: false,
                 enumerable: true,
@@ -2973,6 +2989,7 @@ impl Interpreter {
         let _ = element.define(
             "onclick",
             Property {
+                accessor: true,
                 value: JsValue::Null,
                 writable: false,
                 enumerable: true,

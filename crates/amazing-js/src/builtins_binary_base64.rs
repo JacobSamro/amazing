@@ -266,7 +266,7 @@ fn base64_result_object(i: &Interpreter, read: usize, written: usize) -> JsValue
     let value = i.object_value();
     if let JsValue::Object(object) = &value {
         let mut object = object.borrow_mut();
-        let data = |n: usize| Property { value: JsValue::num(n as f64), writable: true, enumerable: true, configurable: true, getter: None, setter: None };
+        let data = |n: usize| Property { accessor: false, value: JsValue::num(n as f64), writable: true, enumerable: true, configurable: true, getter: None, setter: None };
         let _ = object.define("read", data(read));
         let _ = object.define("written", data(written));
     }

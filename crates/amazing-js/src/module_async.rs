@@ -150,6 +150,7 @@ impl<R: ModuleResolver + 'static> ModuleLinker<R> {
                 let _ = object.define(
                     name.as_str(),
                     Property {
+                        accessor: false,
                         value: JsValue::Undefined,
                         writable: true,
                         enumerable: true,
@@ -162,6 +163,7 @@ impl<R: ModuleResolver + 'static> ModuleLinker<R> {
             let _ = object.define(
                 WellKnownSymbol::ToStringTag.symbol(),
                 Property {
+                    accessor: false,
                     value: JsValue::str("Deferred Module"),
                     writable: false,
                     enumerable: false,

@@ -158,7 +158,7 @@ impl RuntimeBindingHost<'_> {
             for key in object.own_property_keys() {
                 let mut property = object.own_prop(key.clone()).unwrap().clone();
                 property.configurable = false;
-                if property.getter.is_none() && property.setter.is_none() { property.writable = false; }
+                if property.is_data() { property.writable = false; }
                 object.define(key, property).map_err(|_| Throw::type_error("Cannot freeze message ports"))?;
             }
             object.extensible = false;
@@ -339,6 +339,40 @@ impl RuntimeBindingHost<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn installed_host_keeps_empty_accessors_in_cache_and_freezes_data_arrays() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        dom.create_element(html, "body");
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = super::super::install(&mut js, host).unwrap();
+        let prototype = js.run_script(r#"
+            Object.defineProperties({}, {
+                empty: {get: undefined, set: undefined, enumerable: true},
+                value: {value: 12, enumerable: true},
+                hidden: {get: undefined, set: undefined}
+            })
+        "#).unwrap();
+        let JsValue::Object(prototype) = prototype else { panic!("prototype object") };
+        let mut adapter = RuntimeBindingHost { js: &mut js, state: bindings.state.clone() };
+        let cached = adapter.prototype_accessors(&prototype);
+        assert_eq!(cached.len(), 1);
+        assert_eq!(cached[0].0, PropertyKey::from("empty"));
+        assert!(cached[0].1.is_accessor());
+        assert!(cached[0].1.getter.is_none() && cached[0].1.setter.is_none());
+        assert!(Rc::ptr_eq(&cached, &adapter.prototype_accessors(&prototype)));
+        let frozen = adapter.dom_frozen_array(vec![JsValue::Num(3.0)]).unwrap();
+        let JsValue::Object(frozen) = frozen else { panic!("frozen array") };
+        let frozen = frozen.borrow();
+        assert!(!frozen.extensible);
+        for key in frozen.own_property_keys() {
+            let property = frozen.own_prop(key).unwrap();
+            assert!(property.is_data() && !property.writable && !property.configurable);
+        }
+    }
 
     #[test]
     fn checkbox_radio_activation_orders_events_rolls_back_and_handles_tree_changes() {

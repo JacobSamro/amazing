@@ -470,8 +470,7 @@ impl RuntimeBindingHost<'_> {
                 // pure perf fix, not a behavior change.
                 .filter(|name| matches!(name, PropertyKey::String(_)))
                 .filter_map(|name| current.own_prop(name.clone()).cloned()
-                    .filter(|property| property.enumerable
-                        && (property.getter.is_some() || property.setter.is_some()))
+                    .filter(|property| property.enumerable && property.is_accessor())
                     .map(|property| (name, property)))
                 .collect::<Vec<_>>()
         });

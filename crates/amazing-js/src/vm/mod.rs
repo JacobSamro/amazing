@@ -887,12 +887,14 @@ impl Program {
                         i.configure_object_method(&method, &registers[*object], &key, *kind, &code.0.params);
                         if matches!(kind, crate::ast::MethodKind::Get | crate::ast::MethodKind::Set) {
                             let mut property = target.borrow().own_prop(&key).cloned()
-                                .filter(|property| property.getter.is_some() || property.setter.is_some())
+                                .filter(|property| property.is_accessor())
                                 .unwrap_or(Property {
+                                    accessor: false,
                                     value: JsValue::Undefined, writable: false,
                                     enumerable: true, configurable: true,
                                     getter: None, setter: None,
                                 });
+                            property.accessor = true;
                             if *kind == crate::ast::MethodKind::Get {
                                 property.getter = Some(method.clone());
                             } else {
@@ -1124,6 +1126,7 @@ impl Program {
                             let mut object = callable.borrow_mut();
                             object.func.as_mut().unwrap().name = name.to_utf8_lossy();
                             object.define("name", Property {
+                                accessor: false,
                                 value: JsValue::str(name), writable: false, enumerable: false,
                                 configurable: true, getter: None, setter: None,
                             }).map_err(|_| Throw::type_error("could not define class name"))?;
@@ -1167,6 +1170,7 @@ impl Program {
                         // MakeConstructor(F, false, proto): a class constructor's
                         // `prototype` is non-writable/non-enumerable/non-configurable.
                         callable.borrow_mut().define("prototype", Property {
+                            accessor: false,
                             value: JsValue::Object(prototype.clone()),
                             writable: false,
                             enumerable: false,
@@ -1175,6 +1179,7 @@ impl Program {
                             setter: None,
                         }).ok();
                         prototype.borrow_mut().define("constructor", Property {
+                            accessor: false,
                             value: constructor.clone(),
                             writable: true,
                             enumerable: false,
@@ -1799,6 +1804,7 @@ impl FunctionCode {
                 // included) -- this had been silently missing for every
                 // VM-compiled ordinary function, not just classes.
                 prototype.borrow_mut().define("constructor", Property {
+                    accessor: false,
                     value: JsValue::Object(handle.clone()),
                     writable: true,
                     enumerable: false,
@@ -1812,6 +1818,7 @@ impl FunctionCode {
             handle
                 .borrow_mut()
                 .define("prototype", Property {
+                    accessor: false,
                     value: JsValue::Object(prototype.clone()),
                     writable: true,
                     enumerable: false,
@@ -1827,6 +1834,7 @@ impl FunctionCode {
             let getter = super::symbol_method(i, "", super::native_legacy_function_caller_getter);
             let setter = super::symbol_method(i, "", super::native_legacy_function_caller_setter);
             handle.borrow_mut().define("caller", Property {
+                accessor: true,
                 value: JsValue::Undefined, writable: false, enumerable: false,
                 configurable: true, getter: Some(getter), setter: Some(setter),
             }).unwrap();

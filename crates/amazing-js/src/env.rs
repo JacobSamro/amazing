@@ -215,7 +215,7 @@ impl Env {
             if let Some(object) = &self.global_object {
                 let mut object = object.borrow_mut();
                 if let Some(mut property) = object.own_prop(name).cloned() {
-                    if property.writable && property.getter.is_none() && property.setter.is_none() {
+                    if property.writable && property.is_data() {
                         property.value = value.clone();
                         let _ = object.define(name, property);
                     }
@@ -297,7 +297,7 @@ impl Env {
                 if let Some(object) = &self.global_object {
                     let mut object = object.borrow_mut();
                     if let Some(mut property) = object.own_prop(name).cloned() {
-                        if property.writable && property.getter.is_none() && property.setter.is_none() {
+                        if property.writable && property.is_data() {
                             property.value = value.clone();
                             let _ = object.define(name, property);
                         }

@@ -51,6 +51,7 @@ fn regexp_source(pattern: &[u16]) -> crate::value::JsString {
 }
 fn regexp_property(value: JsValue, writable: bool) -> crate::value::Property {
     crate::value::Property {
+        accessor: false,
         value,
         writable,
         enumerable: false,
@@ -84,6 +85,7 @@ impl Interpreter {
             let _ = object.borrow_mut().define(
                 "prototype",
                 crate::value::Property {
+                    accessor: false,
                     value: JsValue::Object(self.regexp_proto.clone()),
                     writable: false,
                     enumerable: false,
@@ -148,6 +150,7 @@ impl Interpreter {
                 &self.function_proto,
             );
             let mut prop = regexp_property(JsValue::Undefined, false);
+            prop.accessor = true;
             prop.getter = Some(getter);
             let _ = self.regexp_proto.borrow_mut().define(name, prop);
         }
@@ -224,8 +227,10 @@ impl Interpreter {
                         &self.function_proto,
                     );
                     let mut prop = regexp_property(JsValue::Undefined, false);
+                    prop.accessor = true;
                     prop.getter = Some(getter);
                     if has_setter {
+                        prop.accessor = true;
                         prop.setter = Some(Self::native_arity(
                             &format!("set {key}"),
                             native_regexp_legacy_setter,
@@ -244,6 +249,7 @@ impl Interpreter {
                     &self.function_proto,
                 );
                 let mut prop = regexp_property(JsValue::Undefined, false);
+                prop.accessor = true;
                 prop.getter = Some(getter);
                 let _ = object.borrow_mut().define(key, prop);
             }
@@ -260,6 +266,7 @@ impl Interpreter {
             let _ = object.borrow_mut().define(
                 WellKnownSymbol::Species.symbol(),
                 crate::value::Property {
+                    accessor: true,
                     value: JsValue::Undefined,
                     writable: false,
                     enumerable: false,
@@ -287,7 +294,7 @@ impl Interpreter {
         let _ = self
             .regexp_string_iterator_proto
             .borrow_mut()
-            .define("next", crate::value::Property { value: next, writable: true, enumerable: false, configurable: true, getter: None, setter: None });
+            .define("next", crate::value::Property { accessor: false, value: next, writable: true, enumerable: false, configurable: true, getter: None, setter: None });
         let self_iter = Self::native(
             "[Symbol.iterator]",
             native_iterator_self_placeholder,
@@ -299,11 +306,11 @@ impl Interpreter {
         }
         let _ = self.regexp_string_iterator_proto.borrow_mut().define(
             WellKnownSymbol::Iterator.symbol(),
-            crate::value::Property { value: self_iter, writable: true, enumerable: false, configurable: true, getter: None, setter: None },
+            crate::value::Property { accessor: false, value: self_iter, writable: true, enumerable: false, configurable: true, getter: None, setter: None },
         );
         let _ = self.regexp_string_iterator_proto.borrow_mut().define(
             WellKnownSymbol::ToStringTag.symbol(),
-            crate::value::Property { value: JsValue::str("RegExp String Iterator"), writable: false, enumerable: false, configurable: true, getter: None, setter: None },
+            crate::value::Property { accessor: false, value: JsValue::str("RegExp String Iterator"), writable: false, enumerable: false, configurable: true, getter: None, setter: None },
         );
     }
 }
@@ -1220,6 +1227,7 @@ const RSI_UNICODE: &str = "%RegExpStringIterator.unicode%";
 const RSI_DONE: &str = "%RegExpStringIterator.done%";
 fn regexp_iter_state(value: JsValue) -> crate::value::Property {
     crate::value::Property {
+        accessor: false,
         value,
         writable: true,
         enumerable: false,

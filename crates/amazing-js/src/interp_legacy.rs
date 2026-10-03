@@ -42,7 +42,7 @@ fn array_index(key: &crate::value::JsString) -> Option<u32> {
 }
 
 fn property(value: JsValue, writable: bool, enumerable: bool) -> Property {
-    Property { value, writable, enumerable, configurable: true, getter: None, setter: None }
+    Property { accessor: false, value, writable, enumerable, configurable: true, getter: None, setter: None }
 }
 
 fn pair_method(i: &Interpreter, name: &str, callback: crate::value::NativeFn, length: f64) -> JsValue {
@@ -227,7 +227,7 @@ impl Interpreter {
             // accept indices beyond the currently reported range (growth).
             // A non-data descriptor is always rejected outright, matching
             // WebIDL's "invalid descriptor for indexed property" case.
-            if prop.getter.is_some() || prop.setter.is_some() { return Err(Throw::type_error("indexed property requires a data descriptor")); }
+            if prop.is_accessor() { return Err(Throw::type_error("indexed property requires a data descriptor")); }
             let Some(setter) = hooks.indexed_setter else { return Ok(false); };
             setter(self, handle, index, prop.value.clone())?;
             return Ok(true);
@@ -239,7 +239,7 @@ impl Interpreter {
             let supported = self.supported_name(&hooks, handle, &key)?;
             if supported && hooks.named_setter.is_none() { return Err(Throw::type_error("named property has no setter")); }
             if let Some(setter) = hooks.named_setter {
-                if prop.getter.is_some() || prop.setter.is_some() { return Err(Throw::type_error("named property requires a data descriptor")); }
+                if prop.is_accessor() { return Err(Throw::type_error("named property requires a data descriptor")); }
                 setter(self, handle, key.units(), prop.value.clone())?;
                 return Ok(true);
             }
@@ -311,18 +311,18 @@ impl Interpreter {
             ("entries", Self::native("entries", legacy_entries, &self.function_proto)),
             ("forEach", for_each),
         ] {
-            prototype.borrow_mut().define(name, Property { value: function, writable: true, enumerable: false, configurable: true, getter: None, setter: None })
+            prototype.borrow_mut().define(name, Property { accessor: false, value: function, writable: true, enumerable: false, configurable: true, getter: None, setter: None })
                 .map_err(|_| Throw::type_error("cannot install iterable method"))?;
         }
-        prototype.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), Property { value: values, writable: true, enumerable: false, configurable: true, getter: None, setter: None })
+        prototype.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), Property { accessor: false, value: values, writable: true, enumerable: false, configurable: true, getter: None, setter: None })
             .map_err(|_| Throw::type_error("cannot install iterable symbol"))?;
         let next = Self::native("next", legacy_iterator_next, &self.function_proto);
-        self.legacy_iterator_proto.borrow_mut().define("next", Property { value: next, writable: true, enumerable: false, configurable: true, getter: None, setter: None })
+        self.legacy_iterator_proto.borrow_mut().define("next", Property { accessor: false, value: next, writable: true, enumerable: false, configurable: true, getter: None, setter: None })
             .map_err(|_| Throw::type_error("cannot install iterator next"))?;
         let self_iterator = Self::native("[Symbol.iterator]", legacy_iterator_self, &self.function_proto);
-        self.legacy_iterator_proto.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), Property { value: self_iterator, writable: true, enumerable: false, configurable: true, getter: None, setter: None })
+        self.legacy_iterator_proto.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), Property { accessor: false, value: self_iterator, writable: true, enumerable: false, configurable: true, getter: None, setter: None })
             .map_err(|_| Throw::type_error("cannot install iterator symbol"))?;
-        self.legacy_iterator_proto.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(), Property { value: JsValue::str("Array Iterator"), writable: false, enumerable: false, configurable: true, getter: None, setter: None })
+        self.legacy_iterator_proto.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(), Property { accessor: false, value: JsValue::str("Array Iterator"), writable: false, enumerable: false, configurable: true, getter: None, setter: None })
             .map_err(|_| Throw::type_error("cannot install iterator tag"))?;
         Ok(())
     }
@@ -668,7 +668,7 @@ mod tests {
         hooks.named_setter = Some(Rc::new(move |_, _, _, _| { *record.borrow_mut() += 1; Ok(()) }));
         i.binding_define_legacy_platform_object(7, hooks);
         let JsValue::Object(owner) = &object else { unreachable!() };
-        owner.borrow_mut().define("item", Property { value: JsValue::num(3.0), writable: false, enumerable: true, configurable: false, getter: None, setter: None }).unwrap();
+        owner.borrow_mut().define("item", Property { accessor: false, value: JsValue::num(3.0), writable: false, enumerable: true, configurable: false, getter: None, setter: None }).unwrap();
         assert!(i.binding_define_data_property(&object, "item", JsValue::num(4.0), BindingPropertyFlags::METHOD).is_err());
         assert_eq!(*invoked.borrow(), 0);
     }

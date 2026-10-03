@@ -102,6 +102,7 @@ impl Interpreter {
         } else { target.borrow().own_prop(key).cloned() }.or_else(|| {
             if key.as_string().is_some_and(|name| name.to_utf8_lossy() == "length") {
                 target.borrow().func.as_ref().map(|function| Property {
+                    accessor: false,
                     value: JsValue::num(function.params.len() as f64),
                     writable: false, enumerable: false, configurable: true,
                     getter: None, setter: None,
@@ -113,6 +114,7 @@ impl Interpreter {
         let Some(mut property) = original.clone() else {
             if !target.borrow().extensible { return Ok(false); }
             let mut property = Property {
+                accessor: new_accessor,
                 value: JsValue::Undefined, writable: false, enumerable: fields.enumerable.unwrap_or(false),
                 configurable: fields.configurable.unwrap_or(false), getter: None, setter: None,
             };
@@ -129,7 +131,7 @@ impl Interpreter {
             target.borrow_mut().define(key, property).unwrap();
             return Ok(true);
         };
-        let old_accessor = property.getter.is_some() || property.setter.is_some();
+        let old_accessor = property.is_accessor();
         if !property.configurable {
             if fields.configurable == Some(true) || fields.enumerable.is_some_and(|v| v != property.enumerable) {
                 return Ok(false);
@@ -153,9 +155,11 @@ impl Interpreter {
             }
         }
         if new_accessor && !old_accessor {
+            property.accessor = true;
             property.value = JsValue::Undefined;
             property.writable = false;
         } else if new_data && old_accessor {
+            property.accessor = false;
             property.getter = None;
             property.setter = None;
             property.value = JsValue::Undefined;
@@ -225,11 +229,11 @@ impl Interpreter {
                 self.legacy_own_property(&object, name, inherited)?
             } else { object.borrow().own_prop(key).cloned() };
             if let Some(property) = property {
-                if let Some(setter) = property.setter {
+                if let Some(setter) = property.setter.clone() {
                     self.call_value(&setter, receiver, vec![value])?;
                     return Ok(true);
                 }
-                if property.getter.is_some() || !property.writable { return Ok(false); }
+                if property.is_accessor() || !property.writable { return Ok(false); }
                 break;
             }
             cursor = if let Some(result) = self.window_proxy_prototype(&object) {
@@ -250,7 +254,7 @@ impl Interpreter {
             },
         };
         if let Some(property) = &existing {
-            if property.getter.is_some() || property.setter.is_some() || !property.writable { return Ok(false); }
+            if property.is_accessor() || !property.writable { return Ok(false); }
         } else if !receiver_object.borrow().extensible { return Ok(false); }
         if let Some(result) = binary_set_index(self, &receiver_object, key, value.clone()) {
             result?;
@@ -334,6 +338,7 @@ impl Interpreter {
             return Ok(false);
         }
         let property = Property {
+            accessor: false,
             value, writable: true, enumerable: true, configurable: true, getter: None, setter: None,
         };
         if let Some(name) = key.as_string() {
@@ -429,7 +434,7 @@ fn std_object_lookup_accessor(
     while let Some(target) = cursor {
         let property = i.default_get_own_property(&target, &key)?;
         if let Some(property) = property {
-            if property.getter.is_some() || property.setter.is_some() {
+            if property.is_accessor() {
                 let accessor = if want_getter { property.getter } else { property.setter };
                 return Ok(accessor.unwrap_or(JsValue::Undefined));
             }

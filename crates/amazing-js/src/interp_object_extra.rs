@@ -35,6 +35,111 @@ mod object_semantic_tests {
     }
 
     #[test]
+    fn empty_accessor_kinds_survive_completion_generic_updates_and_conversion() {
+        check(r#"
+            var valid=true;
+            function accessor(d){return 'get' in d && 'set' in d && !('value' in d) && !('writable' in d);}
+            for(var object of [{},[]]){
+                Object.defineProperty(object,'0',{get:undefined,set:undefined,enumerable:true,configurable:true});
+                var d=Object.getOwnPropertyDescriptor(object,'0');
+                valid=valid && accessor(d) && d.get===undefined && d.set===undefined && object[0]===undefined;
+                Object.defineProperty(object,'0',{enumerable:false});
+                valid=valid && accessor(Reflect.getOwnPropertyDescriptor(object,'0'));
+                Object.defineProperty(object,'0',{value:7});d=Reflect.getOwnPropertyDescriptor(object,'0');
+                valid=valid && d.value===7 && !d.writable && !('get' in d) && !('set' in d);
+                Object.defineProperty(object,'0',{get:undefined});
+                valid=valid && accessor(Object.getOwnPropertyDescriptor(object,'0')) && object[0]===undefined;
+                Object.freeze(object);d=Object.getOwnPropertyDescriptor(object,'0');
+                valid=valid && accessor(d) && !d.configurable && Object.isFrozen(object);
+                valid=valid && Reflect.defineProperty(object,'0',{get:undefined,set:undefined});
+                valid=valid && !Reflect.defineProperty(object,'0',{value:undefined});
+            }
+            valid;
+        "#);
+    }
+
+    #[test]
+    fn empty_accessors_reject_receiver_writes_and_proxy_kind_mismatches() {
+        check(r#"
+            var valid=true, target={}, receiver={}, sentinel={};
+            Object.defineProperty(target,'x',{get:undefined,set:undefined});
+            valid=valid && !Reflect.set(target,'x',undefined,receiver) && !('x' in receiver);
+            var p=new Proxy(target,{get(){return undefined;},set(){return true;}});
+            valid=valid && p.x===undefined;
+            try{Reflect.set(p,'x',undefined);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+            p=new Proxy(target,{getOwnPropertyDescriptor(){return {value:undefined,writable:false,enumerable:false,configurable:false};}});
+            try{Object.getOwnPropertyDescriptor(p,'x');valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+            p=new Proxy(target,{defineProperty(){return true;}});
+            try{Reflect.defineProperty(p,'x',{value:undefined});valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+            var inherited=Object.create(target);
+            try{(function(){'use strict';inherited.x=undefined;})();valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+            valid=valid && !Object.prototype.hasOwnProperty.call(inherited,'x');
+            var setterThis, proto={set y(v){setterThis=this;this.value=v;}};
+            valid=valid && Reflect.set(proto,'y',3,receiver) && setterThis===receiver && receiver.value===3;
+            valid;
+        "#);
+    }
+
+    #[test]
+    fn freeze_preserves_accessor_kind_and_uses_accessor_descriptor_shape() {
+        check(r#"
+            var target={}, seen=[], valid=true;
+            Object.defineProperty(target,'x',{set:undefined,configurable:true});
+            var p=new Proxy(target,{defineProperty(t,k,d){seen.push(k+':'+Object.keys(d).sort().join(','));return Reflect.defineProperty(t,k,d);}});
+            Object.freeze(p);
+            var d=Object.getOwnPropertyDescriptor(p,'x');
+            valid=valid && seen.join(',')==='x:configurable' && 'get' in d && 'set' in d && !('writable' in d);
+            var getter=function(){return 5;},setter=function(v){};
+            var o={};Object.defineProperty(o,'a',{get:getter,set:setter,configurable:true});Object.seal(o);
+            d=Reflect.getOwnPropertyDescriptor(o,'a');
+            valid=valid && d.get===getter && d.set===setter && !('value' in d) && !d.configurable;
+            valid;
+        "#);
+    }
+
+    #[test]
+    fn mapped_arguments_empty_accessors_detach_aliases_and_keep_kind() {
+        check(r#"
+            function f(a){var args=arguments;Object.defineProperty(args,'0',{get:undefined,set:undefined});a=9;
+                var d=Reflect.getOwnPropertyDescriptor(args,'0');
+                return a===9 && args[0]===undefined && 'get' in d && 'set' in d && !('value' in d);}
+            function g(a){var args=arguments;Object.freeze(args);a=9;
+                return args[0]===3 && Object.getOwnPropertyDescriptor(args,'0').value===3;}
+            var valid=f(3) && g(3);
+            var o={};Object.defineProperty(o,'x',{value:7,writable:false,configurable:true});
+            function read(){return o.x;}
+            valid=valid && read()===7 && read()===7;
+            Object.defineProperty(o,'x',{get:undefined,set:undefined});
+            valid && read()===undefined && read()===undefined;
+        "#);
+    }
+
+    #[test]
+    fn host_empty_accessor_projection_and_data_slot_guards_keep_explicit_kind() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let object = i.binding_create_object(None).unwrap();
+            i.binding_define_accessor_property(&object, "empty", None, None, true, true).unwrap();
+            let descriptor = i.binding_get_own_property(&object, "empty").unwrap().unwrap();
+            assert!(descriptor.is_accessor() && !descriptor.is_data());
+            let mut inactive = Property::accessor(None, None);
+            inactive.value = JsValue::num(99.0);
+            let JsValue::Object(owner) = &object else { unreachable!() };
+            owner.borrow_mut().define("inactive", inactive).unwrap();
+            let slot = owner.borrow().own_slot_index(&PropertyKey::from("inactive")).unwrap();
+            assert!(owner.borrow().own_data_slot(&PropertyKey::from("inactive"), slot).is_none());
+            i.global_env.declare_var("hostObject", object).unwrap();
+            let result = i.run_script_with_backend(r#"
+                var d=Object.getOwnPropertyDescriptor(hostObject,'empty'),r=Reflect.getOwnPropertyDescriptor(hostObject,'empty');
+                hostObject.empty===undefined && hostObject.inactive===undefined &&
+                    'get' in d && 'set' in d && !('value' in d) &&
+                    'get' in r && 'set' in r && !('writable' in r);
+            "#, backend).unwrap();
+            assert_eq!(result, JsValue::Bool(true), "{backend:?}");
+        }
+    }
+
+    #[test]
     fn static_object_proxy_trap_order_and_abrupt_identity_are_semantic() {
         check(r#"
             var log=[], valid=true, target={}, sentinel={};
@@ -390,7 +495,7 @@ fn object_integrity(
     for key in i.own_property_keys(&target)? {
         let writable = if freeze {
             let Some(property) = i.default_get_own_property(object, &key)? else { continue; };
-            (property.getter.is_none() && property.setter.is_none()).then_some(false)
+            (property.is_data()).then_some(false)
         } else { None };
         let descriptor = i.descriptor_fields_to_value(&StdDescriptorFields {
             configurable: Some(false), writable, ..Default::default()
@@ -432,8 +537,7 @@ fn object_integrity_test(
         if let Some(property) = i.default_get_own_property(object, &key)? {
             if property.configurable
                 || (freeze
-                    && property.getter.is_none()
-                    && property.setter.is_none()
+                    && property.is_data()
                     && property.writable)
             {
                 return Ok(JsValue::Bool(false));

@@ -77,6 +77,7 @@ impl Interpreter {
             let setter = Self::native(setter_name, setter, &self.function_proto);
             // Accessors store the callable object itself (JSRT callable identity).
             base.borrow_mut().define(key, Property {
+                accessor: true,
                 value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
                 getter: Some(getter),
                 setter: Some(setter),

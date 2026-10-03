@@ -2306,3 +2306,45 @@ fn end_to_end_accessibility_nodes_updated_reflects_a_mutation_between_two_reads(
     shutdown.store(true, Ordering::Relaxed);
     let _ = join.join();
 }
+
+#[test]
+fn real_cdp_empty_accessors_project_undefined_without_losing_data_or_getters() {
+    let host = spawn_test_host("http://example.test/descriptors.html", "<title>Descriptors</title>");
+    let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+    let addr = server.local_addr().expect("local_addr");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let worker_shutdown = shutdown.clone();
+    let join = std::thread::spawn(move || server.serve(worker_shutdown));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+    let source = "globalThis.descriptorProbe = Object.defineProperties({}, {empty: {get: undefined, set: undefined, enumerable: true}, data: {value: 7, enumerable: true}, active: {get() {return 11}, enumerable: true}})";
+    let evaluated = client.result("Runtime.evaluate", Json::Object(vec![
+        ("expression".into(), Json::String(source.into())),
+        ("generatePreview".into(), Json::Bool(true)),
+    ]));
+    let result = evaluated.get("result").expect("result");
+    let id = result.get("objectId").and_then(Json::as_str).expect("object id").to_owned();
+    let preview = result.get("preview").and_then(|p| p.get("properties"))
+        .and_then(Json::as_array).expect("preview properties");
+    let empty = preview.iter().find(|p| p.get("name").and_then(Json::as_str) == Some("empty")).expect("empty preview");
+    assert_eq!(empty.get("type").and_then(Json::as_str), Some("undefined"), "{empty}");
+    let properties = client.result("Runtime.getProperties", Json::Object(vec![
+        ("objectId".into(), Json::String(id)), ("ownProperties".into(), Json::Bool(true)),
+    ]));
+    let properties = properties.get("result").and_then(Json::as_array).expect("properties");
+    for (name, expected) in [("empty", None), ("data", Some(7.0)), ("active", Some(11.0))] {
+        let property = properties.iter().find(|p| p.get("name").and_then(Json::as_str) == Some(name)).expect("property");
+        let value = property.get("value").expect("remote value");
+        if let Some(expected) = expected { assert_eq!(value.get("value").and_then(Json::as_f64), Some(expected), "{value}"); }
+        else { assert_eq!(value.get("type").and_then(Json::as_str), Some("undefined"), "{value}"); }
+    }
+    let by_value = client.result("Runtime.evaluate", Json::Object(vec![
+        ("expression".into(), Json::String("descriptorProbe".into())),
+        ("returnByValue".into(), Json::Bool(true)),
+    ]));
+    let value = by_value.get("result").and_then(|r| r.get("value")).expect("value");
+    assert!(matches!(value.get("empty"), Some(Json::Null)), "{value}");
+    assert_eq!(value.get("data").and_then(Json::as_f64), Some(7.0));
+    assert_eq!(value.get("active").and_then(Json::as_f64), Some(11.0));
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = join.join();
+}

@@ -111,7 +111,7 @@ fn std_reflect_get_own_property_descriptor(i: &mut Interpreter, _: JsValue, args
     let Some(property) = property else { return Ok(JsValue::Undefined) };
     let mut descriptor = JsObject::ordinary();
     descriptor.proto = Some(i.object_proto.clone());
-    if property.getter.is_some() || property.setter.is_some() {
+    if property.is_accessor() {
         descriptor.set_own("get", property.getter.unwrap_or(JsValue::Undefined));
         descriptor.set_own("set", property.setter.unwrap_or(JsValue::Undefined));
     } else {

@@ -26,8 +26,8 @@ impl Interpreter {
         // must expose "length" before "name" in property order.
         let _ = handle.borrow_mut().delete_own("name");
         let _ = handle.borrow_mut().delete_own("length");
-        let _ = handle.borrow_mut().define("length", Property { value: JsValue::num(arity as f64), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
-        let _ = handle.borrow_mut().define("name", Property { value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
+        let _ = handle.borrow_mut().define("length", Property { accessor: false, value: JsValue::num(arity as f64), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
+        let _ = handle.borrow_mut().define("name", Property { accessor: false, value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         JsValue::Object(handle)
     }
     /// Only builtins with a spec [[Construct]] method opt in here.
@@ -40,6 +40,7 @@ impl Interpreter {
             o.borrow_mut().constructible = true;
             let prototype = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
             o.borrow_mut().define("prototype", Property {
+                accessor: false,
                 value: JsValue::Object(prototype), writable: true, enumerable: false,
                 configurable: true, getter: None, setter: None,
             }).unwrap();
@@ -104,6 +105,7 @@ impl Interpreter {
         let error_prototype = self.error_proto.clone();
         if let JsValue::Object(function) = &error_constructor {
             function.borrow_mut().define("prototype", Property {
+                accessor: false,
                 value: JsValue::Object(error_prototype.clone()), writable: true,
                 enumerable: false, configurable: true, getter: None, setter: None,
             }).unwrap();
@@ -127,6 +129,7 @@ impl Interpreter {
             let setter = symbol_method(self, "set stack", native_error_stack_setter);
             symbol_method_length(&setter, 1);
             error_prototype.borrow_mut().define("stack", Property {
+                accessor: true,
                 value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
                 getter: Some(getter), setter: Some(setter),
             }).unwrap();
@@ -208,6 +211,7 @@ impl Interpreter {
                 let JsValue::Object(ctor_obj) = &ctor else { unreachable!("native_constructor_arity always returns an object") };
                 ctor_obj.borrow_mut().proto = Some(function_constructor.clone());
                 ctor_obj.borrow_mut().define("prototype", Property {
+                    accessor: false,
                     value: JsValue::Object(proto.clone()), writable: false, enumerable: false,
                     configurable: false, getter: None, setter: None,
                 }).unwrap();
@@ -234,6 +238,7 @@ impl Interpreter {
         let proto_setter = symbol_method(self, "set __proto__", native_object_proto_setter);
         symbol_method_length(&proto_setter, 1);
         self.object_proto.borrow_mut().define("__proto__", Property {
+            accessor: true,
             value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
             getter: Some(proto_getter), setter: Some(proto_setter),
         }).unwrap();
@@ -396,6 +401,7 @@ impl Interpreter {
         if let JsValue::Object(o) = &promise_ctor {
             let getter = symbol_method(self, "get [Symbol.species]", native_array_species);
             o.borrow_mut().define(WellKnownSymbol::Species.symbol(), Property {
+                accessor: true,
                 value: JsValue::Undefined, writable: false, enumerable: false,
                 configurable: true, getter: Some(getter), setter: None,
             }).unwrap();
@@ -488,10 +494,12 @@ impl Interpreter {
             if let JsValue::Object(object) = &thrower {
                 let mut o = object.borrow_mut();
                 o.define("length", Property {
+                    accessor: false,
                     value: JsValue::num(0.0), writable: false, enumerable: false,
                     configurable: false, getter: None, setter: None,
                 }).unwrap();
                 o.define("name", Property {
+                    accessor: false,
                     value: JsValue::str(""), writable: false, enumerable: false,
                     configurable: false, getter: None, setter: None,
                 }).unwrap();
@@ -499,6 +507,7 @@ impl Interpreter {
             }
             for name in ["caller", "arguments"] {
                 self.function_proto.borrow_mut().define(name, Property {
+                    accessor: true,
                     value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
                     getter: Some(thrower.clone()), setter: Some(thrower.clone()),
                 }).unwrap();
@@ -573,10 +582,12 @@ impl Interpreter {
         let string_ctor = Self::native_constructor("String", native_string, &self.function_proto);
         if let JsValue::Object(object) = &string_ctor {
             let _ = object.borrow_mut().define("length", Property {
+                accessor: false,
                 value: JsValue::num(1.0), writable: false, enumerable: false,
                 configurable: true, getter: None, setter: None,
             });
             let _ = object.borrow_mut().define("prototype", Property {
+                accessor: false,
                 value: JsValue::Object(self.string_proto.clone()), writable: false,
                 enumerable: false, configurable: false, getter: None, setter: None,
             });
@@ -589,6 +600,7 @@ impl Interpreter {
                 function.borrow_mut().constructible = false;
                 function.borrow_mut().delete_own("prototype");
                 let _ = function.borrow_mut().define("length", Property {
+                    accessor: false,
                     value: JsValue::num(1.0), writable: false, enumerable: false,
                     configurable: true, getter: None, setter: None,
                 });
@@ -596,10 +608,12 @@ impl Interpreter {
             let _ = object.borrow_mut().define("fromCharCode", regexp_property(from_char_code, true));
         }
         let _ = self.string_proto.borrow_mut().define("constructor", Property {
+            accessor: false,
             value: string_ctor.clone(), writable: true, enumerable: false,
             configurable: true, getter: None, setter: None,
         });
         let _ = self.string_proto.borrow_mut().define("length", Property {
+            accessor: false,
             value: JsValue::num(0.0), writable: false, enumerable: false,
             configurable: false, getter: None, setter: None,
         });
@@ -635,11 +649,13 @@ impl Interpreter {
                 object.borrow_mut().constructible = false;
                 object.borrow_mut().delete_own("prototype");
                 let _ = object.borrow_mut().define("length", Property {
+                    accessor: false,
                     value: JsValue::num(arity), writable: false, enumerable: false,
                     configurable: true, getter: None, setter: None,
                 });
             }
             let _ = self.string_proto.borrow_mut().define(name, Property {
+                accessor: false,
                 value: method, writable: true,
                 enumerable: false, configurable: true, getter: None, setter: None,
             });
@@ -685,6 +701,7 @@ impl Interpreter {
     fn define_global(&self, n: &str, v: JsValue) {
         let constant = matches!(n, "undefined" | "NaN" | "Infinity");
         let _ = self.global_obj.borrow_mut().define(n, Property {
+            accessor: false,
             value: v.clone(), writable: !constant, enumerable: false,
             configurable: !constant, getter: None, setter: None,
         });

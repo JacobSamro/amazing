@@ -54,6 +54,7 @@ impl Interpreter {
         let _ = function.define(
             "name",
             Property {
+                accessor: false,
                 value: JsValue::str(name),
                 writable: false,
                 enumerable: false,
@@ -65,6 +66,7 @@ impl Interpreter {
         let _ = function.define(
             "length",
             Property {
+                accessor: false,
                 value: JsValue::num(length as f64),
                 writable: false,
                 enumerable: false,

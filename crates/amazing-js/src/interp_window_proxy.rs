@@ -17,7 +17,7 @@ mod window_proxy_receiver_tests {
             let proxy = i.binding_create_window_proxy(target).unwrap();
             i.define_global("foreignWindow", proxy.clone());
             let getter = i.run_script_with_backend("(function(){return this===foreignWindow})", backend).unwrap();
-            let descriptor = Property { value: JsValue::Undefined, writable: false,
+            let descriptor = Property { accessor: true, value: JsValue::Undefined, writable: false,
                 enumerable: false, configurable: true, getter: Some(getter.clone()), setter: None };
             i.binding_with_realm(target, |i| {
                 i.run_script("var targetHits=0;Object.defineProperty(globalThis,'safe',{get(){targetHits++;return 'target'},set(v){targetHits+=100},configurable:true});var hidden=42")?;
@@ -342,7 +342,7 @@ impl Interpreter {
             let Some(property) = property else { return JsValue::Undefined; };
             let mut descriptor = JsObject::ordinary();
             descriptor.proto = Some(self.object_proto.clone());
-            if property.getter.is_some() || property.setter.is_some() {
+            if property.is_accessor() {
                 descriptor.set_own("get", property.getter.unwrap_or(JsValue::Undefined));
                 descriptor.set_own("set", property.setter.unwrap_or(JsValue::Undefined));
             } else {

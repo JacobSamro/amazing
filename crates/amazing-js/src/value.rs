@@ -1,3 +1,6 @@
+// Portions ported from boa-dev/boa (core/engine/src/property/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// Completed descriptor kind adapted to a scalar tag without changing value roots.
 //! The ECMAScript value model: language values, objects, and the abstract
 //! coercion operations (spec §6, §7.1).
 //!
@@ -559,10 +562,11 @@ pub fn number_to_string(n: f64) -> String {
     }
 }
 
-/// One own property (spec §6.1.7 data descriptor; accessors stored but
-/// unexercised until class accessors land).
+/// A completed own property descriptor. Its kind remains distinct even when
+/// an accessor has neither a getter nor a setter.
 #[derive(Debug, Clone)]
 pub struct Property {
+    pub accessor: bool,
     pub value: JsValue,
     pub writable: bool,
     pub enumerable: bool,
@@ -576,17 +580,23 @@ impl Property {
     /// Classification of a completed own descriptor. Callers should use this
     /// operation rather than infer the descriptor kind from individual slots.
     pub fn is_accessor(&self) -> bool {
-        self.getter.is_some() || self.setter.is_some()
+        self.accessor
     }
 
     pub fn is_data(&self) -> bool {
         !self.is_accessor()
     }
 
+    pub fn accessor(getter: Option<JsValue>, setter: Option<JsValue>) -> Property {
+        Property { accessor: true, value: JsValue::Undefined, writable: false,
+            enumerable: false, configurable: true, getter, setter }
+    }
+
     /// Writable/enumerable/configurable defaults for assignment-created
     /// and literal-created data properties (true/true/true).
     pub fn data(value: JsValue) -> Property {
         Property {
+            accessor: false,
             value,
             writable: true,
             enumerable: true,
@@ -1076,11 +1086,13 @@ impl JsObject {
         debug_assert!(self.props.is_empty());
         for (index, unit) in string.units().iter().enumerate() {
             self.push_prop(PropertyKey::from(index.to_string()), Property {
+                accessor: false,
                 value: JsValue::str_units(vec![*unit]), writable: false,
                 enumerable: true, configurable: false, getter: None, setter: None,
             });
         }
         self.push_prop(PropertyKey::from("length"), Property {
+            accessor: false,
             value: JsValue::num(string.units().len() as f64), writable: false,
             enumerable: false, configurable: false, getter: None, setter: None,
         });
@@ -1105,6 +1117,7 @@ impl JsObject {
         o.push_prop(
             PropertyKey::from("length"),
             Property {
+                accessor: false,
                 value: JsValue::num(0.0),
                 writable: true,
                 enumerable: false,
@@ -1132,10 +1145,12 @@ impl JsObject {
         o.realm = func.env.realm();
         let length = func.params.iter().take_while(|param| !param.rest && param.default.is_none()).count();
         o.define("length", Property {
+            accessor: false,
             value: JsValue::num(length as f64), writable: false, enumerable: false,
             configurable: true, getter: None, setter: None,
         }).unwrap();
         o.define("name", Property {
+            accessor: false,
             value: JsValue::str(&func.name), writable: false, enumerable: false,
             configurable: true, getter: None, setter: None,
         }).unwrap();
@@ -1180,6 +1195,7 @@ impl JsObject {
             let existing = &mut self.props[slot].1;
             if existing.writable != prop.writable || existing.enumerable != prop.enumerable
                 || existing.configurable != prop.configurable
+                || existing.accessor != prop.accessor
                 || existing.getter.is_some() != prop.getter.is_some()
                 || existing.setter.is_some() != prop.setter.is_some() {
                 self.shape_version = self.shape_version.wrapping_add(1);
@@ -1196,7 +1212,7 @@ impl JsObject {
     /// a stale cache if a version ever wraps.
     pub(crate) fn own_data_slot(&self, key: &PropertyKey, slot: usize) -> Option<&Property> {
         let (actual, property) = self.props.get(slot)?;
-        (actual == key && property.getter.is_none() && property.setter.is_none())
+        (actual == key && property.is_data())
             .then_some(property)
     }
 
@@ -1431,6 +1447,7 @@ mod tests {
     fn delete_respects_configurable_flag() {
         let mut o = JsObject::ordinary();
         let frozen = Property {
+            accessor: false,
             value: JsValue::num(1.0),
             writable: false,
             enumerable: true,

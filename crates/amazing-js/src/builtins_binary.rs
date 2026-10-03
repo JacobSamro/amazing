@@ -296,13 +296,13 @@ fn binary_write_value(i: &mut Interpreter, view: &BinaryView, kind: BinaryKind, 
 }
 
 fn binary_property(value: JsValue) -> Property {
-    Property { value, writable: false, enumerable: false, configurable: true, getter: None, setter: None }
+    Property { accessor: false, value, writable: false, enumerable: false, configurable: true, getter: None, setter: None }
 }
 fn binary_writable_property(value: JsValue) -> Property {
-    Property { value, writable: true, enumerable: false, configurable: true, getter: None, setter: None }
+    Property { accessor: false, value, writable: true, enumerable: false, configurable: true, getter: None, setter: None }
 }
 fn binary_locked_property(value: JsValue) -> Property {
-    Property { value, writable: false, enumerable: false, configurable: false, getter: None, setter: None }
+    Property { accessor: false, value, writable: false, enumerable: false, configurable: false, getter: None, setter: None }
 }
 fn binary_configure_constructor(object: &Obj, name: &str, length: usize, prototype: &Obj) {
     let mut object = object.borrow_mut();
@@ -311,7 +311,7 @@ fn binary_configure_constructor(object: &Obj, name: &str, length: usize, prototy
     let _ = object.define("prototype", binary_locked_property(JsValue::Object(prototype.clone())));
 }
 fn binary_accessor(function: JsValue, setter: Option<JsValue>, enumerable: bool) -> Property {
-    Property { value: JsValue::Undefined, writable: false, enumerable, configurable: true,
+    Property { accessor: true, value: JsValue::Undefined, writable: false, enumerable, configurable: true,
         getter: Some(function), setter }
 }
 fn binary_method(i: &Interpreter, object: &Obj, name: &str, f: crate::value::NativeFn, arity: usize) {
@@ -622,6 +622,7 @@ fn binary_set_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, value:
 fn binary_index_descriptor(object: &Obj, key: &PropertyKey) -> Option<Option<Property>> {
     let (view, kind, index) = binary_index_view(object, key)?;
     Some(index.filter(|index| *index < binary_length(&view)).map(|index| Property {
+        accessor: false,
         value: binary_read(&view, kind, index * kind.size(), true).unwrap_or(JsValue::Undefined),
         writable: true, enumerable: true, configurable: true, getter: None, setter: None,
     }))
@@ -635,7 +636,7 @@ fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, pro
         let Some(index) = index.filter(|index| *index < binary_length(&view)) else {
             return Err(Throw::type_error("invalid TypedArray index"));
         };
-        if property.getter.is_some() || property.setter.is_some() || !property.configurable
+        if property.is_accessor() || !property.configurable
             || !property.enumerable || !property.writable {
             return Err(Throw::type_error("incompatible TypedArray element descriptor"));
         }

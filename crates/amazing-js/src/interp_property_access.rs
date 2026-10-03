@@ -16,10 +16,12 @@ impl Interpreter {
                 let (realm, global, property) = target?;
                 if let WindowProxyProperty::Descriptor(property) = property {
                     return match property {
-                        Some(property) => match property.getter {
-                            Some(getter) => self.call_value(&getter, receiver, Vec::new()),
-                            None => Ok(property.value),
-                        },
+                        Some(property) => if property.is_accessor() {
+                            match property.getter {
+                                Some(getter) => self.call_value(&getter, receiver, Vec::new()),
+                                None => Ok(JsValue::Undefined),
+                            }
+                        } else { Ok(property.value) },
                         None => Ok(JsValue::Undefined),
                     };
                 }
@@ -84,11 +86,11 @@ impl Interpreter {
                 };
                 let prototype = o.borrow().proto.clone();
                 if let Some(property) = property {
-                    if let Some(getter) = property.getter {
-                        self.call_value(&getter, receiver, Vec::new())
-                    } else {
-                        Ok(property.value)
-                    }
+                    if property.is_accessor() {
+                        if let Some(getter) = property.getter {
+                            self.call_value(&getter, receiver, Vec::new())
+                        } else { Ok(JsValue::Undefined) }
+                    } else { Ok(property.value) }
                 } else if let Some(p) = prototype {
                     self.get_prop_receiver(&JsValue::Object(p), key, receiver)
                 } else {
@@ -166,11 +168,11 @@ impl Interpreter {
             while let Some(prototype) = cursor {
                 let descriptor = prototype.borrow().own_prop(&key).cloned();
                 if let Some(descriptor) = descriptor {
-                    if let Some(setter) = descriptor.setter {
+                    if let Some(setter) = descriptor.setter.clone() {
                         self.call_value(&setter, JsValue::Object(o.clone()), vec![x])?;
                         return Ok(());
                     }
-                    if descriptor.getter.is_some() || !descriptor.writable {
+                    if descriptor.is_accessor() || !descriptor.writable {
                         return Err(Throw::type_error("property has no writable setter"));
                     }
                     break;
@@ -198,7 +200,7 @@ impl Interpreter {
             if !property.writable {
                 return Err(Throw::type_error("cannot assign to a read-only property"));
             }
-            if property.getter.is_some() {
+            if property.is_accessor() {
                 return Err(Throw::type_error("property has no setter"));
             }
         } else if !o.borrow().extensible {

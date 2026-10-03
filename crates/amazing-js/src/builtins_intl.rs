@@ -728,6 +728,7 @@ fn intl_method(i: &Interpreter, owner: &Obj, name: &str, arity: usize, native: c
         function.borrow_mut().delete_own("prototype");
     }
     let _ = owner.borrow_mut().define(name, Property {
+        accessor: false,
         value: method, writable: true, enumerable: false,
         configurable: true, getter: None, setter: None,
     });

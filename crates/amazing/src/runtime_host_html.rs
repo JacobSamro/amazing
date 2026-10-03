@@ -1708,7 +1708,7 @@ impl RuntimeBindingHost<'_> {
             let descriptor = if let Some(property) = bound {
                 let getter = RuntimeBindingHost { js, state: state.clone() }.native("", 0,
                     NativeEntry::HtmlWindowGet(property), HostCallPolicy::CallOnly);
-                Property { value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
+                Property { accessor: true, value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
                     getter: Some(getter), setter: None }
             } else {
                 let value = name.parse::<usize>().ok().and_then(|index| {
@@ -1720,7 +1720,7 @@ impl RuntimeBindingHost<'_> {
                 });
                 let Some(value) = value else { return Ok(WindowProxyProperty::Descriptor(None)); };
                 // Indexed child properties are evaluated afresh as the tree changes.
-                return Ok(WindowProxyProperty::Descriptor(Some(Property { value, writable: false,
+                return Ok(WindowProxyProperty::Descriptor(Some(Property { accessor: false, value, writable: false,
                     enumerable: true, configurable: true, getter: None, setter: None })));
             };
             state.borrow_mut().frames.cross_origin_descriptors.insert(key, descriptor.clone());

@@ -188,7 +188,7 @@ impl Interpreter {
                 symbol_data(JsValue::str(format!("Temporal.{name}")), false, true)).unwrap();
             for field in std_temporal_fields(kind) {
                 let getter = symbol_method(self, &format!("get {field}"), std_temporal_getter);
-                let property = Property { value: JsValue::Undefined, writable: false,
+                let property = Property { accessor: true, value: JsValue::Undefined, writable: false,
                     enumerable: false, configurable: true,
                     getter: Some(getter), setter: None };
                 prototype.borrow_mut().define(*field, property).unwrap();

@@ -352,7 +352,7 @@ fn std_json_raw(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<J
     }
     let mut object = JsObject::ordinary();
     object.raw_json = Some(source.clone());
-    object.define("rawJSON", Property { value: JsValue::Str(source), writable: false,
+    object.define("rawJSON", Property { accessor: false, value: JsValue::Str(source), writable: false,
         enumerable: true, configurable: false, getter: None, setter: None }).unwrap();
     object.extensible = false;
     Ok(JsValue::object(object))

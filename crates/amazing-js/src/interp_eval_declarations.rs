@@ -30,7 +30,7 @@ impl Interpreter {
             let allowed = match global.own_prop(name.as_str()) {
                 None => global.extensible,
                 Some(property) => property.configurable || (property.writable && property.enumerable
-                    && property.getter.is_none() && property.setter.is_none()),
+                    && property.is_data()),
             };
             if !allowed { return Err(Throw::type_error("cannot declare global function")); }
         }

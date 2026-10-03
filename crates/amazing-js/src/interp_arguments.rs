@@ -48,11 +48,13 @@ impl Interpreter {
         object.proto = Some(self.object_proto.clone());
         object.arguments_object = true;
         object.define("length", Property {
+            accessor: false,
             value: JsValue::num(args.len() as f64), writable: true, enumerable: false,
             configurable: true, getter: None, setter: None,
         }).unwrap();
         for (index, value) in args.iter().enumerate() { object.set_own(index.to_string(), value.clone()); }
         object.define(WellKnownSymbol::Iterator.symbol(), Property {
+            accessor: false,
             value: self.original_array_iterator.clone(), writable: true, enumerable: false,
             configurable: true, getter: None, setter: None,
         }).unwrap();
@@ -72,12 +74,14 @@ impl Interpreter {
             object.exotic = Exotic::Arguments(map);
             if let Some(callee) = self.frames.last().and_then(|frame| frame.own_function.clone()) {
                 object.define("callee", Property {
+                    accessor: false,
                     value: JsValue::Object(callee), writable: true, enumerable: false,
                     configurable: true, getter: None, setter: None,
                 }).unwrap();
             }
         } else {
             object.define("callee", Property {
+                accessor: true,
                 value: JsValue::Undefined, writable: false, enumerable: false, configurable: false,
                 getter: Some(self.intrinsic_arguments_thrower.clone()),
                 setter: Some(self.intrinsic_arguments_thrower.clone()),

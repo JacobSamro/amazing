@@ -200,6 +200,7 @@ impl Interpreter {
         });
         object.proto = Some(self.function_proto.clone());
         let _ = object.define("name", Property {
+            accessor: false,
             value: JsValue::str(name),
             writable: false,
             enumerable: false,
@@ -208,6 +209,7 @@ impl Interpreter {
             setter: None,
         });
         let _ = object.define("length", Property {
+            accessor: false,
             value: JsValue::num(length as f64),
             writable: false,
             enumerable: false,
@@ -259,7 +261,7 @@ impl Interpreter {
         flags: BindingPropertyFlags,
     ) -> Result<(), Throw> {
         let owner = Self::binding_owner(owner)?;
-        let property = Property { value, writable: flags.writable, enumerable: flags.enumerable, configurable: flags.configurable, getter: None, setter: None };
+        let property = Property { accessor: false, value, writable: flags.writable, enumerable: flags.enumerable, configurable: flags.configurable, getter: None, setter: None };
         if self.legacy_define(&owner, name, &property)? { return Ok(()); }
         Self::binding_can_define(&owner, name)?;
         owner.borrow_mut().define(name, property).map_err(|_| Throw::type_error("could not define property"))
@@ -281,6 +283,7 @@ impl Interpreter {
             return Err(Throw::type_error("object is not extensible"));
         }
         let property = Property {
+            accessor: false,
             value, writable: flags.writable, enumerable: flags.enumerable,
             configurable: flags.configurable, getter: None, setter: None,
         };
@@ -308,7 +311,7 @@ impl Interpreter {
         let getter = callable(getter)?;
         let setter = callable(setter)?;
         let owner = Self::binding_owner(owner)?;
-        let property = Property { value: JsValue::Undefined, writable: false, enumerable, configurable, getter, setter };
+        let property = Property { accessor: true, value: JsValue::Undefined, writable: false, enumerable, configurable, getter, setter };
         if self.legacy_define(&owner, name, &property)? { return Ok(()); }
         Self::binding_can_define(&owner, name)?;
         owner.borrow_mut().define(name, property).map_err(|_| Throw::type_error("could not define property"))
@@ -365,11 +368,11 @@ impl Interpreter {
                 while let Some(prototype) = cursor {
                     let descriptor = prototype.borrow().own_prop(name).cloned();
                     if let Some(descriptor) = descriptor {
-                        if let Some(setter) = descriptor.setter {
+                        if let Some(setter) = descriptor.setter.clone() {
                             self.call_value(&setter, object.clone(), vec![value])?;
                             return Ok(());
                         }
-                        if descriptor.getter.is_some() || !descriptor.writable {
+                        if descriptor.is_accessor() || !descriptor.writable {
                             return Err(Throw::type_error("property has no writable setter"));
                         }
                         break;

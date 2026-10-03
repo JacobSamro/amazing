@@ -58,6 +58,7 @@ impl Interpreter {
         for proto in [&self.map_proto, &self.set_proto] {
             let getter = std_collection_method(self, "get size", 0, std_collection_size);
             proto.borrow_mut().define("size", Property {
+                accessor: true,
                 value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
                 getter: Some(getter), setter: None,
             }).unwrap();

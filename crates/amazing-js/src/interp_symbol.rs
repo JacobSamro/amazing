@@ -21,7 +21,7 @@ fn symbol_method_length(value: &JsValue, length: u32) {
 }
 
 fn symbol_data(value: JsValue, writable: bool, configurable: bool) -> Property {
-    Property { value, writable, enumerable: false, configurable, getter: None, setter: None }
+    Property { accessor: false, value, writable, enumerable: false, configurable, getter: None, setter: None }
 }
 
 impl Interpreter {
@@ -60,6 +60,7 @@ impl Interpreter {
             }
             let getter = symbol_method(self, "get description", native_symbol_description);
             prototype.define("description", Property {
+                accessor: true,
                 value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
                 getter: Some(getter), setter: None,
             }).unwrap();

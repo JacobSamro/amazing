@@ -1024,8 +1024,8 @@ fn native_function_bind(
         function.func.as_mut().unwrap().home = Some(data);
         function.constructible = target_constructible;
         function.delete_own("prototype");
-        function.define("name", Property { value: JsValue::str(format!("bound {target_name}")), writable: false, enumerable: false, configurable: true, getter: None, setter: None }).unwrap();
-        function.define("length", Property { value: JsValue::num((target_length - bound_count as f64).max(0.0)), writable: false, enumerable: false, configurable: true, getter: None, setter: None }).unwrap();
+        function.define("name", Property { accessor: false, value: JsValue::str(format!("bound {target_name}")), writable: false, enumerable: false, configurable: true, getter: None, setter: None }).unwrap();
+        function.define("length", Property { accessor: false, value: JsValue::num((target_length - bound_count as f64).max(0.0)), writable: false, enumerable: false, configurable: true, getter: None, setter: None }).unwrap();
     }
     Ok(bound)
 }
@@ -1311,6 +1311,7 @@ fn native_error_stack_setter(i: &mut Interpreter, this: JsValue, args: Vec<JsVal
                 return Err(Throw::type_error("cannot create property \"stack\" on a non-extensible object"));
             }
             object.borrow_mut().define("stack", Property {
+                accessor: false,
                 value, writable: true, enumerable: true, configurable: true,
                 getter: None, setter: None,
             }).unwrap();
@@ -1318,7 +1319,7 @@ fn native_error_stack_setter(i: &mut Interpreter, this: JsValue, args: Vec<JsVal
         Some(descriptor) => {
             if let Some(setter) = descriptor.setter.clone() {
                 i.call_value(&setter, this.clone(), vec![value])?;
-            } else if descriptor.getter.is_some() {
+            } else if descriptor.is_accessor() {
                 return Err(Throw::type_error("\"stack\" has no setter"));
             } else if !descriptor.writable {
                 return Err(Throw::type_error("cannot assign to read only property \"stack\""));
@@ -2098,12 +2099,14 @@ fn native_object_get_own_property_descriptor(
     let JsValue::Object(object) = target else {
         let property = match target {
             JsValue::Str(string) if key == PropertyKey::from("length") => Some(Property {
+                accessor: false,
                 value: JsValue::num(string.len() as f64), writable: false,
                 enumerable: false, configurable: false, getter: None, setter: None,
             }),
             JsValue::Str(string) => array_index_key(&key)
                 .and_then(|index| string.units().get(index as usize).copied())
                 .map(|unit| Property {
+                    accessor: false,
                     value: JsValue::Str(crate::value::JsString::from_units(vec![unit])), writable: false,
                     enumerable: true, configurable: false, getter: None, setter: None,
                 }),
@@ -2145,7 +2148,7 @@ fn object_descriptor_value(i: &Interpreter, property: Property) -> JsValue {
     descriptor.proto = Some(i.object_proto.clone());
     descriptor.set_own("enumerable", JsValue::Bool(property.enumerable));
     descriptor.set_own("configurable", JsValue::Bool(property.configurable));
-    if property.getter.is_some() || property.setter.is_some() {
+    if property.is_accessor() {
         descriptor.set_own("get", property.getter.unwrap_or(JsValue::Undefined));
         descriptor.set_own("set", property.setter.unwrap_or(JsValue::Undefined));
     } else {

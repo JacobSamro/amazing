@@ -1738,6 +1738,7 @@ mod class_name_tests {
             let mut namespace = JsObject::ordinary();
             namespace.proto = Some(host.object_proto.clone());
             namespace.define("specifier", Property {
+                accessor: false,
                 value: JsValue::str(specifier), writable: false, enumerable: true, configurable: false,
                 getter: None, setter: None,
             }).unwrap();

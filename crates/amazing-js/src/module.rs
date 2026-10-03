@@ -823,6 +823,7 @@ fn fill_namespace(namespace: &JsValue, exports: &BTreeMap<String, BindingCell>) 
             .define(
                 name.as_str(),
                 Property {
+                    accessor: false,
                     value: JsValue::Undefined,
                     writable: true,
                     enumerable: true,
@@ -837,6 +838,7 @@ fn fill_namespace(namespace: &JsValue, exports: &BTreeMap<String, BindingCell>) 
         .define(
             WellKnownSymbol::ToStringTag.symbol(),
             Property {
+                accessor: false,
                 value: JsValue::str("Module"),
                 writable: false,
                 enumerable: false,

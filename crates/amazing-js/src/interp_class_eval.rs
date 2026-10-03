@@ -57,9 +57,11 @@ impl Interpreter {
         }
         let FieldKey::Public(key) = &element.key else { unreachable!() };
         let property = if accessor {
-            let mut property = target.borrow().own_prop(key).filter(|property| property.getter.is_some() || property.setter.is_some()).cloned().unwrap_or(Property {
+            let mut property = target.borrow().own_prop(key).filter(|property| property.is_accessor()).cloned().unwrap_or(Property {
+                accessor: false,
                 value: JsValue::Undefined, writable: false, enumerable: false, configurable: true, getter: None, setter: None,
             });
+            property.accessor = true;
             if matches!(element.kind, "getter" | "accessor") { property.getter = Some(element.get.clone()); }
             if matches!(element.kind, "setter" | "accessor") { property.setter = Some(element.set.clone()); }
             property
@@ -107,7 +109,7 @@ impl Interpreter {
             let mut object = object.borrow_mut();
             object.class_constructor = true;
             object.constructible = true;
-            object.define("prototype", Property { value: JsValue::Object(prototype.clone()), writable: false, enumerable: false, configurable: false, getter: None, setter: None }).unwrap();
+            object.define("prototype", Property { accessor: false, value: JsValue::Object(prototype.clone()), writable: false, enumerable: false, configurable: false, getter: None, setter: None }).unwrap();
             if let Some(parent) = &superclass {
                 if let JsValue::Object(parent) = parent { object.proto = Some(parent.clone()); }
                 object.derived_constructor = Some(DerivedConstructor { parent: parent.clone(), implicit: constructor.is_none() });
@@ -116,7 +118,7 @@ impl Interpreter {
             function.home = Some(prototype.clone());
             function.proto_for_new = Some(prototype.clone());
             function.name = class_name.to_utf8_lossy();
-            object.define("name", Property { value: JsValue::str(class_name.clone()), writable: false, enumerable: false, configurable: true, getter: None, setter: None }).unwrap();
+            object.define("name", Property { accessor: false, value: JsValue::str(class_name.clone()), writable: false, enumerable: false, configurable: true, getter: None, setter: None }).unwrap();
         }
         let mut definitions = Vec::new();
         for member in &class.members {

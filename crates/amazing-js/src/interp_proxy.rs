@@ -197,6 +197,7 @@ fn property_key_to_value(key: &PropertyKey) -> JsValue {
 fn complete_property_descriptor(fields: StdDescriptorFields) -> Property {
     if fields.get.is_some() || fields.set.is_some() {
         Property {
+            accessor: true,
             value: JsValue::Undefined,
             writable: false,
             getter: fields.get.filter(|v| !v.is_undefined()),
@@ -206,6 +207,7 @@ fn complete_property_descriptor(fields: StdDescriptorFields) -> Property {
         }
     } else {
         Property {
+            accessor: false,
             value: fields.value.unwrap_or(JsValue::Undefined),
             writable: fields.writable.unwrap_or(false),
             getter: None,
@@ -224,7 +226,7 @@ fn proxy_compatible_descriptor(fields: &StdDescriptorFields, current: Option<&Pr
         || fields.enumerable.is_some_and(|enumerable| enumerable != current.enumerable) { return false; }
     let accessor = fields.get.is_some() || fields.set.is_some();
     let data = fields.value.is_some() || fields.writable.is_some();
-    let old_accessor = current.getter.is_some() || current.setter.is_some();
+    let old_accessor = current.is_accessor();
     if (accessor && !old_accessor) || (data && old_accessor) { return false; }
     if data && !current.writable {
         if fields.writable == Some(true)
@@ -495,11 +497,11 @@ impl Interpreter {
             let result = self.call_value(&trap, handler.clone(), vec![target.clone(), key_value, receiver])?;
             if let Some(existing) = self.default_get_own_property(&target_obj, key)? {
                 if !existing.configurable {
-                    if existing.getter.is_none() && existing.setter.is_none() && !existing.writable
+                    if existing.is_data() && !existing.writable
                         && !std_same_value(&result, &existing.value) {
                         return Err(Throw::type_error("proxy get invariant violated: non-configurable, non-writable target property value mismatch"));
                     }
-                    if existing.setter.is_some() && existing.getter.is_none() && !result.is_undefined() {
+                    if existing.is_accessor() && existing.getter.is_none() && !result.is_undefined() {
                         return Err(Throw::type_error("proxy get invariant violated: non-configurable accessor with no getter must report undefined"));
                     }
                 }
@@ -520,11 +522,11 @@ impl Interpreter {
             if result {
                 if let Some(existing) = self.default_get_own_property(&target_obj, key)? {
                     if !existing.configurable {
-                        if existing.getter.is_none() && existing.setter.is_none() && !existing.writable
+                        if existing.is_data() && !existing.writable
                             && !std_same_value(&value, &existing.value) {
                             return Err(Throw::type_error("proxy set invariant violated: non-configurable, non-writable target property value mismatch"));
                         }
-                        if existing.getter.is_some() && existing.setter.is_none() {
+                        if existing.is_accessor() && existing.setter.is_none() {
                             return Err(Throw::type_error("proxy set invariant violated: non-configurable accessor with no setter cannot be set"));
                         }
                     }

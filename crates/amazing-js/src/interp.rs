@@ -689,6 +689,7 @@ impl Interpreter {
         let _ = location.define(
             "href",
             Property {
+                accessor: true,
                 value: JsValue::Undefined,
                 writable: false,
                 enumerable: true,
@@ -726,6 +727,7 @@ impl Interpreter {
         let _ = self.global_obj.borrow_mut().define(
             "location",
             Property {
+                accessor: true,
                 value: JsValue::Undefined,
                 writable: false,
                 enumerable: true,

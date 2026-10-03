@@ -779,6 +779,7 @@ impl Interpreter {
                 .define(
                     WellKnownSymbol::Species.symbol(),
                     Property {
+                        accessor: true,
                         value: JsValue::Undefined,
                         writable: false,
                         enumerable: false,

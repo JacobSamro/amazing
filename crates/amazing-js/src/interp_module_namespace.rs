@@ -58,6 +58,7 @@ impl Interpreter {
                     .get(&key.as_string().unwrap().to_utf8_lossy())
                     .map(|cell| {
                         cell.read().map(|value| Property {
+                            accessor: false,
                             value,
                             writable: true,
                             enumerable: true,
