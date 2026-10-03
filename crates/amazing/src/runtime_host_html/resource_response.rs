@@ -74,7 +74,7 @@ impl RuntimeBindings {
 
 fn classic_options(dom: &Dom, script: NodeIdx, default: amazing_fetch::ReferrerPolicy) ->
     (amazing_fetch::RequestMode, amazing_fetch::CredentialsMode, amazing_fetch::ReferrerPolicy) {
-    use amazing_fetch::{CredentialsMode, ReferrerPolicy, RequestMode};
+    use amazing_fetch::{CredentialsMode, RequestMode};
     let (mode, credentials) = match dom.get_attribute_ns(script, None, "crossorigin") {
         None => (RequestMode::NoCors, CredentialsMode::Include),
         Some(value) if value.eq_ignore_ascii_case("use-credentials") => (RequestMode::Cors, CredentialsMode::Include),
@@ -114,7 +114,7 @@ pub(super) fn referrer_policy_name(policy: amazing_fetch::ReferrerPolicy) -> &'s
 impl FrameRuntime {
     pub(in crate::runtime_binding_host) fn document_referrer_policy(&self, dom: &Dom, document: NodeIdx)
         -> Option<amazing_fetch::ReferrerPolicy> {
-        if !matches!(dom.kind(document), Some(NodeKind::Document)) { return None; }
+        if !matches!(dom.node_generation(document).map(|_| &dom.get(document).kind), Some(NodeKind::Document)) { return None; }
         let generation = dom.node_generation(document)?;
         Some(self.document_referrer_policies.get(&document).filter(|(saved, _)| *saved == generation)
             .map(|(_, policy)| *policy).unwrap_or(amazing_fetch::ReferrerPolicy::StrictOriginWhenCrossOrigin))
@@ -131,7 +131,7 @@ impl RuntimeBindingHost<'_> {
         policy: amazing_fetch::ReferrerPolicy) -> Result<(), amazing_dom::DomError> {
         let generation = {
             let state = self.state.borrow(); let host = state.host.borrow();
-            if !matches!(host.dom.kind(document), Some(NodeKind::Document)) {
+            if !matches!(host.dom.node_generation(document).map(|_| &dom.get(document).kind), Some(NodeKind::Document)) {
                 return Err(amazing_dom::DomError::InvalidStateError);
             }
             host.dom.node_generation(document).ok_or(amazing_dom::DomError::InvalidStateError)?
@@ -155,7 +155,7 @@ impl RuntimeBindings {
         let Some(policy) = policy else { return Ok(()); };
         let generation = {
             let state = self.state.borrow(); let host = state.host.borrow();
-            if !matches!(host.dom.kind(document), Some(NodeKind::Document)) {
+            if !matches!(host.dom.node_generation(document).map(|_| &dom.get(document).kind), Some(NodeKind::Document)) {
                 return Err(amazing_dom::DomError::InvalidStateError);
             }
             host.dom.node_generation(document).ok_or(amazing_dom::DomError::InvalidStateError)?
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn classic_options_capture_actual_enumerated_attributes_without_header_token_rules() {
-        use amazing_fetch::{CredentialsMode, ReferrerPolicy, RequestMode};
+        use amazing_fetch::{CredentialsMode, RequestMode};
         for (attribute, mode, credentials) in [
             ("", RequestMode::NoCors, CredentialsMode::Include),
             ("crossorigin", RequestMode::Cors, CredentialsMode::SameOrigin),

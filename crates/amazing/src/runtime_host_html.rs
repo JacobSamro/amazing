@@ -943,7 +943,11 @@ impl RuntimeBindings {
                     })
                 });
                 let mut policy = amazing_fetch::service::ClientContext::default();
-                policy.csp = amazing_fetch::CspPolicyList::from_headers(&response.headers)
+                let mut policy_headers = amazing_fetch::HeaderList::default();
+                for (name, value) in response.headers.iter() {
+                    policy_headers.append(name, value).map_err(|error| format!("iframe response header: {error:?}"))?;
+                }
+                policy.csp = amazing_fetch::CspPolicyList::from_headers(&policy_headers)
                     .map_err(|error| format!("iframe response policy: {error:?}"))?;
                 response_referrer_policy = Some(resource_response::response_referrer_policy(&response.headers));
                 response_policy = Some(policy);
