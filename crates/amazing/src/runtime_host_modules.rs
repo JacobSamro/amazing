@@ -525,8 +525,13 @@ mod tests {
         headers.append("Referrer-Policy", "no-referrer".into()).unwrap();
         bindings.set_document_response_referrer_policy(NodeIdx(0), &headers).unwrap();
         bindings.set_document_url(&mut js, "https://example.test/page.html");
-        let documents = bindings.state.borrow().frames.contexts.values()
-            .filter(|context| context.frame.is_some()).map(|context| context.document).collect::<Vec<_>>();
+        let documents = {
+            let state = bindings.state.borrow();
+            let host = state.host.borrow();
+            (0..host.dom.node_count()).map(|index| NodeIdx(index as u32))
+                .filter(|document| state.frames.frame_for_document(*document).is_some())
+                .collect::<Vec<_>>()
+        };
         assert_eq!(documents.len(), 2);
         let nodes = documents.iter().map(|document| host.borrow_mut().dom.create_element(*document, "script")).collect::<Vec<_>>();
         for node in &nodes {
