@@ -687,3 +687,6 @@ mod tests {
         assert_eq!(parse_css_color("rgb(from red r g b /)"), None);
     }
 }
+
+#[path="color_values.rs"]
+pub(crate) mod precise;

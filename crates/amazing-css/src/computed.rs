@@ -86,6 +86,9 @@ pub struct ComputedStyle {
     typed: BTreeMap<String, ComputedValue>,
     custom: BTreeMap<String, CustomValue>,
     relative_colors: BTreeMap<String, String>,
+    precise_colors: BTreeMap<String, crate::color::precise::ColorValue>,
+    contextual_colors: BTreeMap<String, String>,
+    precise_dark_scheme: bool,
     root_font_px: f64,
     effective_zoom: f64,
     author_specified: BTreeSet<String>,
@@ -102,6 +105,9 @@ impl Default for ComputedStyle {
             typed: BTreeMap::new(),
             custom: BTreeMap::new(),
             relative_colors: BTreeMap::new(),
+            precise_colors: BTreeMap::new(),
+            contextual_colors: BTreeMap::new(),
+            precise_dark_scheme: false,
             root_font_px: 16.0,
             effective_zoom: 1.0,
             author_specified: BTreeSet::new(),
@@ -122,7 +128,58 @@ impl ComputedStyle {
         self.root_font_px = parent.root_font_px;
     }
 
+    /// Precise computed color serialization using this element's actual color context.
+    pub fn resolved_color_value(&self, property:&str)->Option<String> {
+        self.precise_color(property).map(|color|color.serialize())
+    }
+    fn precise_color(&self,property:&str)->Option<crate::color::precise::ColorValue> {
+        if property!="color" && !property.ends_with("-color") {return None;}
+        let current=self.precise_colors.get("color");
+        if property!="color" && let Some(source)=self.contextual_colors.get(property) {
+            return crate::color::precise::ColorValue::resolve(source,current,self.precise_dark_scheme);
+        }
+        self.precise_colors.get(property).cloned()
+    }
+    /// True only for an entirely image-free background with exactly zero color alpha.
+    /// Unresolved colors and image-bearing layers conservatively return false.
+    pub fn has_transparent_background(&self)->bool {
+        let Some(images)=self.get("background-image") else{return false};
+        let tokens=tokenize(images);
+        let significant:Vec<_>=tokens.iter().filter(|t|!matches!(t,Token::Whitespace)).collect();
+        if significant.is_empty() || significant.len()%2==0 || !significant.iter().enumerate().all(|(i,t)| {
+            if i%2==0 {matches!(t,Token::Ident(name) if name.eq_ignore_ascii_case("none"))}
+            else {matches!(t,Token::Comma)}
+        }) {return false;}
+        self.precise_color("background-color").is_some_and(|color|color.alpha.unwrap_or(0.0)==0.0)
+    }
+    fn resolve_precise_colors(&mut self,parent:Option<&Self>,environment:&MediaEnvironment) {
+        self.precise_dark_scheme=self.used_color_scheme_is_dark(environment);
+        if let Some(source)=self.contextual_colors.remove("color") {
+            let initial=PROPERTIES.iter().find(|p|p.name=="color")
+                .and_then(|p|crate::color::precise::ColorValue::parse(p.initial));
+            let current=parent.and_then(|p|p.precise_colors.get("color")).or(initial.as_ref());
+            if let Some(value)=crate::color::precise::ColorValue::resolve(&source,current,self.precise_dark_scheme) {
+                self.precise_colors.insert("color".into(),value);
+            }
+        }
+        for (property,source) in &self.contextual_colors {
+            if let Some(value)=crate::color::precise::ColorValue::resolve(source,self.precise_colors.get("color"),self.precise_dark_scheme) {
+                self.precise_colors.insert(property.clone(),value);
+            }
+        }
+    }
+    fn update_precise_color(&mut self,property:&str,css:&str) {
+        self.precise_colors.remove(property);self.contextual_colors.remove(property);
+        if property!="color" && !property.ends_with("-color") {return;}
+        if property!="color" {self.contextual_colors.insert(property.into(),css.into());}
+        if let Some(value)=crate::color::precise::ColorValue::resolve(css,self.precise_colors.get("color"),self.precise_dark_scheme) {
+            self.precise_colors.insert(property.into(),value);
+        }
+    }
+
+
     pub(crate) fn set_contextual_value(&mut self, property: &str, css: &str) {
+        self.update_precise_color(property,css);
         self.props.insert(property.into(), css.into());
         self.typed.insert(property.into(), values::parse(property, css).unwrap_or(ComputedValue::Unparsed));
     }
@@ -148,6 +205,7 @@ impl ComputedStyle {
             self.typed.insert("transform".into(), ComputedValue::Transform(value));
         }
         for (property, css) in effects {
+            self.update_precise_color(property,css);
             self.props.insert(property.clone(), css.clone());
             let typed = values::parse(property, css).unwrap_or(ComputedValue::Unparsed);
             self.typed.insert(property.clone(), typed);
@@ -221,6 +279,8 @@ impl ComputedStyle {
         if let Some(value) = self.props.get(physical).cloned() {
             self.props.insert(logical.to_owned(), value);
         }
+        if let Some(value)=self.precise_colors.get(physical).cloned() {self.precise_colors.insert(logical.into(),value);}
+        if let Some(value)=self.contextual_colors.get(physical).cloned() {self.contextual_colors.insert(logical.into(),value);}
         if let Some(value) = self.typed.get(physical).cloned() {
             self.typed.insert(logical.to_owned(), value);
         }
@@ -342,6 +402,7 @@ impl ComputedStyle {
             // Layout-time synthesis replaces this value, not an author rule.
             self.author_specified.remove(&longhand);
             self.relative_colors.remove(&longhand);
+            self.update_precise_color(&longhand,&expanded);
             self.url_bases.remove(&longhand);
             if longhand == "font-size-adjust" { self.font_size_adjust_inherited = false; }
             self.props.insert(longhand, expanded);
@@ -2553,6 +2614,8 @@ pub(crate) fn resolve_with_root_attrs_environment(
     let mut properties = BTreeMap::new();
     let mut inherited_typed = BTreeMap::new();
     let mut relative_colors = BTreeMap::new();
+    let mut color_sources = BTreeMap::new();
+    let mut precise_colors = BTreeMap::new();
     let mut font_size_adjust_inherited = false;
     for property in PROPERTIES {
         let parent_value = parent.and_then(|style| style.get(property.name));
@@ -2569,6 +2632,24 @@ pub(crate) fn resolve_with_root_attrs_environment(
                 environment,
             ),
         };
+        if property.name == "color" || property.name.ends_with("-color") {
+            if inherits {
+                if let Some(precise)=parent.and_then(|p|p.precise_colors.get(property.name)) {
+                    precise_colors.insert(property.name.into(),precise.clone());
+                }
+                else if parent.is_none() {color_sources.insert(property.name.into(),value.clone());}
+                if property.name!="color" && let Some(source)=parent.and_then(|p|p.contextual_colors.get(property.name)) {
+                    color_sources.insert(property.name.into(),source.clone());
+                }
+            } else {
+                let source=specified.as_deref().and_then(|css|resolver.substitute(&tokenize(css)))
+                    .and_then(|tokens|attr_values::substitute_attributes(&tokens,attrs))
+                    .and_then(|tokens|resolve_deferred_shorthand(property.name,&serialize_computed(&tokens)).ok())
+                    .filter(|css|css_wide_keyword(css).is_none() && values::parse(property.name,css).is_some())
+                    .unwrap_or_else(||value.clone());
+                color_sources.insert(property.name.into(),source);
+            }
+        }
         if property.name == "font-size-adjust" { font_size_adjust_inherited = inherits && parent.is_some(); }
         if relative_color_uses_currentcolor(&value) || color_mix_currentcolor(&value) {
             relative_colors.insert(property.name.to_owned(), value.clone());
@@ -2616,6 +2697,9 @@ pub(crate) fn resolve_with_root_attrs_environment(
         typed: BTreeMap::new(),
         custom: inherited_custom,
         relative_colors,
+        precise_colors,
+        contextual_colors: color_sources,
+        precise_dark_scheme: false,
         root_font_px: f64::from(root_font_px),
         effective_zoom: 1.0,
         author_specified: BTreeSet::new(),
@@ -2636,6 +2720,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
     }
     crate::text_properties::serialize(&mut style.props);
     crate::font_size_adjust::resolve_css_math(&mut style.props, style.root_font_px);
+    style.resolve_precise_colors(parent,environment);
     style.resolve_relative_colors();
     style.resolve_light_dark(environment);
     let local_zoom = style.props.get("zoom").and_then(|value| used_zoom_factor(value)).unwrap_or(1.0);

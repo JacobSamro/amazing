@@ -74,7 +74,7 @@ fn rgba(rgb: [f64; 3], alpha: u8) -> [u8; 4] {
     [byte(rgb[0]), byte(rgb[1]), byte(rgb[2]), alpha]
 }
 
-fn hsl_rgb(hue: f64, saturation: f64, lightness: f64) -> [f64; 3] {
+pub(super) fn hsl_rgb(hue: f64, saturation: f64, lightness: f64) -> [f64; 3] {
     let saturation = saturation.max(0.0) / 100.0;
     let lightness = lightness / 100.0;
     [0.0, 8.0, 4.0].map(|n| {
@@ -923,7 +923,7 @@ fn relative_parts(inner: &str, depth: usize) -> Option<([u8; 4], Vec<&str>, Opti
 
 /// Splits a leading `<color>` from the channel list. Handles hex, the
 /// functional form (matching nested parens) and a bare named color.
-fn split_source(rest: &str) -> Option<(&str, &str)> {
+pub(super) fn split_source(rest: &str) -> Option<(&str, &str)> {
     if rest.starts_with('#') {
         let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
         return Some((&rest[..end], &rest[end..]));
@@ -953,7 +953,7 @@ fn split_source(rest: &str) -> Option<(&str, &str)> {
 }
 
 /// Splits the top-level `/` alpha separator, respecting nested parens.
-fn split_alpha(rest: &str) -> Option<(&str, Option<&str>)> {
+pub(super) fn split_alpha(rest: &str) -> Option<(&str, Option<&str>)> {
     let mut depth = 0usize;
     for (i, ch) in rest.char_indices() {
         match ch {
@@ -971,7 +971,7 @@ fn split_alpha(rest: &str) -> Option<(&str, Option<&str>)> {
 }
 
 /// Whitespace-separated tokens at paren depth zero.
-fn top_level_words(value: &str) -> Vec<&str> {
+pub(super) fn top_level_words(value: &str) -> Vec<&str> {
     let mut out = Vec::new();
     let mut depth = 0usize;
     let mut start = 0usize;
@@ -1032,7 +1032,7 @@ fn source_keywords(function: &str, source: [u8; 4]) -> Option<Vec<(&'static str,
     Some(keywords)
 }
 
-fn channel_value(function: &str, index: usize, token: &str, keywords: &[(&str, f64)]) -> Option<f64> {
+pub(super) fn channel_value(function: &str, index: usize, token: &str, keywords: &[(&str, f64)]) -> Option<f64> {
     let hue_channel = matches!(
         (function, index),
         ("hsl" | "hsla", 0) | ("hwb", 0) | ("lch", 2) | ("oklch", 2)
@@ -1066,7 +1066,7 @@ fn channel_value(function: &str, index: usize, token: &str, keywords: &[(&str, f
     number_channel(token, keywords, percent, plain)
 }
 
-fn number_channel(
+pub(super) fn number_channel(
     token: &str,
     keywords: &[(&str, f64)],
     percent: f64,
@@ -1107,7 +1107,7 @@ fn keyword(token: &str, keywords: &[(&str, f64)]) -> Option<f64> {
         .map(|(_, value)| *value)
 }
 
-fn hwb_rgb(hue: f64, white: f64, black: f64) -> [f64; 3] {
+pub(super) fn hwb_rgb(hue: f64, white: f64, black: f64) -> [f64; 3] {
     if white + black >= 1.0 {
         [white / (white + black); 3]
     } else {
@@ -1219,3 +1219,6 @@ impl<'t, 'k, 'i> ExprEval<'t, 'k, 'i> {
         }
     }
 }
+
+#[path="color_coordinates.rs"]
+pub(super) mod coordinates;

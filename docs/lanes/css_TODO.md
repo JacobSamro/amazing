@@ -2965,3 +2965,21 @@ Existing root_font_size_px getter visibility only pub(crate)→pub; actual unzoo
 CSS Cascade5 latest ED checked2026-10-03 §2: valid top-level prefix imports (statement layer exemption; empty layer blocks close prefix), typed URL/layer/supports/media metadata and actual loaded occurrence projection. Conditions gate layer creation even missing resources; false supports must not fetch, false media may defer fetching, repeated URLs remain independent occurrences. Driver owns fetch/decode/MIME/encoding and canonical finalURL identity; CSS owns grammar/conditions/source order/layer namespace and actual source/scoping-root projection. Explicit errors for128 depth/layer depth,4096 active instances, malformed child graph and identity exhaustion. Fonts retain actual stylesheet base separate from document request origin. Projection IDs are internal and fresh per call, consistent across split segments; caller reprojects on media changes. Current @supports-condition named feature remains unsupported explicitly. Font/keyframes named-resource precedence and existing general scoped incremental invalidation are not fabricated by this transport seam.
 
 CSS53 final corrected58f: workspace3946/17skip+4docs, all prior3939 native named passes retained; CSS431→438 (seven grouped tests). Seventeen parsing4312/5126 across514 files/169skip, every failure multiplicity/directory classification retained. Wholecascade17/21,conditional29/66,fonts24/32,selectors82/91,shadow0/35 all245stable/lost0. Renderer d65a5abaaa8a223e913961a5d2edc40192a55ea9df95c802d983a9edc5f16d6d. Post-first-gate quoted namespace prefix bug corrected as whole URL/prefix/comment family and final2 repeated; earlier proof retained. Actual facade transport adoption separate; typed metadata/source/order/layer projection ready.
+
+### CSS-54 — precise computed color context and background transparency
+
+- Pure lower extraction on closed CSS-53 (267aac24); no paint/generated-image dispatch changes.
+- Owned floating-point Color4 absolute parser/coordinate conversion plus contextual relative colors,
+  two-color mixes, currentColor and selected light-dark branches. Winning substituted declarations
+  are captured before legacy RGBA8 normalization; inherited precision, clone/mutation, animation
+  samples and logical/physical projections retain the same metadata.
+- Additive `ComputedStyle::resolved_color_value(property)` and `has_transparent_background()`.
+  The predicate accepts only an entire list of `none` image layers and exactly zero computed alpha;
+  tiny nonzero alpha remains nontransparent. Missing alpha resolves as zero outside interpolation.
+  Unresolved/system-palette colors and image-bearing/invalid layers conservatively return false.
+- Existing raw specified/computed strings and installed paint behavior remain unchanged. No installed
+  CSSOM/canvas gains claimed until actual consumers adopt the APIs with separate measured gates.
+- Reference: CSS Color4 and Color5 editor draft (10 September 2026), relative-color/mix resolution;
+  CSS Backgrounds3 §2.11 canvas propagation. Algorithms are owned std-only code, no upstream port.
+- Gate pending: fixed closed53 before and precise-context candidate; workspace/doctests, all seventeen
+  literal parsing selections, whole colors/images/fonts/transforms/backgrounds render selections.
