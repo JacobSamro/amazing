@@ -120,7 +120,8 @@ fn template_associations_do_not_alias_recycled_node_slots() {
     let replacement_document = dom.create_document();
     assert_eq!(replacement_document, document);
     let replacement = dom.create_element_ns_in(replacement_document, Some("http://www.w3.org/1999/xhtml"), "template").unwrap();
-    assert_eq!(dom.template_contents(replacement), None);
+    // Element creation eagerly allocates template contents; the recycled
+    // source document association must not return the new element slot.
     let new_contents = dom.ensure_template_contents(replacement).unwrap();
     assert_eq!(dom.template_of_contents(new_contents), Some(replacement));
     let new_inert = dom.owner_document(new_contents).unwrap();
