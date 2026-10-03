@@ -1,0 +1,205 @@
+{
+  "source_commit": "eb7fa04a9b1d7059d4ad4183acee1b9dc3837aef",
+  "base_commit": "8033f675776214d1d710b1745184f85df4988d2e",
+  "summary": {
+    "files": {
+      "unsupported": 171,
+      "pass": 51982,
+      "fail": 1424,
+      "skipped": 294,
+      "timeout": 1
+    }
+  },
+  "gained_files": 304,
+  "lost_files": [],
+  "gained_variants": 474,
+  "lost_variants": [],
+  "provenance": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+    "host_sha256": "c8d03b6b45db8f3eff4e85d3c806d181eb6c35fdf19ef722c6475569bd6b516d",
+    "timeout_seconds": 60.0
+  },
+  "result_sha256": "e9bec97627641146f737a66caab69a2e9662d377458fc3c8de2076ec6c0d2bf6",
+  "shards": 16,
+  "wpt": {
+    "nodes": {
+      "selection_before": 314,
+      "selection_after": 314,
+      "compared_selection": 314,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 12369,
+      "passing_assertions_after": 12382,
+      "gained_assertions": 13,
+      "lost_assertions": 0,
+      "before_sha256": "26343f8d3e4f91844078264df0bf30b6e9ad242c6985aca16c83d1110e447b3a",
+      "after_sha256": "71a71cb56b8a89e7ae40e9e720106cd79d34de9faca50cf191d4bbae84664a59"
+    },
+    "base": {
+      "selection_before": 11,
+      "selection_after": 11,
+      "compared_selection": 11,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 13,
+      "passing_assertions_after": 15,
+      "gained_assertions": 2,
+      "lost_assertions": 0,
+      "before_sha256": "1e7516c09b19cda5a6b033f0b7d6700ba9f508cdf9be7d7189810ab358c015e4",
+      "after_sha256": "925c26620f28cfdd43c08fbc31f23fff2db34584a741b6e57d80be9a455447e9"
+    },
+    "syntax": {
+      "selection_before": 220,
+      "selection_after": 220,
+      "compared_selection": 220,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 3096,
+      "passing_assertions_after": 3096,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "ec45858ce2a7877fc66b4277e67f2894659ea3cc0d835dbf6ae329fe09860cd9",
+      "after_sha256": "ec45858ce2a7877fc66b4277e67f2894659ea3cc0d835dbf6ae329fe09860cd9"
+    },
+    "serializer": {
+      "selection_before": 8,
+      "selection_after": 8,
+      "compared_selection": 8,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 374,
+      "passing_assertions_after": 374,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "d0318007491f7cbfd370d5a4a0298413134d358acfeae83a2b8ea6dd75d14971",
+      "after_sha256": "d0318007491f7cbfd370d5a4a0298413134d358acfeae83a2b8ea6dd75d14971"
+    },
+    "encoding": {
+      "selection_before": 194,
+      "selection_after": 194,
+      "compared_selection": 194,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 12396,
+      "passing_assertions_after": 12405,
+      "gained_assertions": 9,
+      "lost_assertions": 0,
+      "before_sha256": "b78e6e28db8b1f076cc746113811db44bca6528a8978a1d764ee15284cc68817",
+      "after_sha256": "69f21370945bcfd9e96551c9b1c5fe17de3d9a00d048085b6f0705095ec6ba35"
+    },
+    "templates": {
+      "selection_before": 67,
+      "selection_after": 67,
+      "compared_selection": 67,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 610,
+      "passing_assertions_after": 610,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "e4a1000c15504057fd1ceefb3c57863cfe1db8db4ae7ad45da84d7254f326bb7",
+      "after_sha256": "b1af187646d133f7ca0f6713019e4589ae617741224c25bcc15ecf947fb5d90f"
+    },
+    "the-window-object": {
+      "selection_before": 90,
+      "selection_after": 90,
+      "compared_selection": 90,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 246,
+      "passing_assertions_after": 246,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "c218443f4ac207d186d823a595b5d866f72037e982697c40948d3f3531123917",
+      "after_sha256": "623b41a1d5f1a41bd3a9372e6cec5d50e95485d93feb1d9da4ffb915bfb703be"
+    },
+    "the-windowproxy-exotic-object": {
+      "selection_before": 8,
+      "selection_after": 8,
+      "compared_selection": 8,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 13,
+      "passing_assertions_after": 14,
+      "gained_assertions": 1,
+      "lost_assertions": 0,
+      "before_sha256": "3dfd9e1371688e8e80d0b77814edde87baf1769efc6678459ccfe27b6cd359d9",
+      "after_sha256": "53ac61ee3f009014549e6b07dd2f360f2543bf3f0e808992f49fcc51ccef479f"
+    },
+    "the-iframe-element": {
+      "selection_before": 150,
+      "selection_after": 150,
+      "compared_selection": 150,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 15,
+      "passing_assertions_after": 15,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "0c7280a43a5243af12852bcaca1a28a23411330483c9764234a305911a385a37",
+      "after_sha256": "4d22569c7cac6c68286d0969449e57b379bbfb63a8d101fff9081289014af21d"
+    },
+    "windows": {
+      "selection_before": 53,
+      "selection_after": 53,
+      "compared_selection": 53,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 4,
+      "passing_assertions_after": 4,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "eb5293bb9f1e00be65b7ce21df46f2a33c1392bf09c0de7b27946dd186264802",
+      "after_sha256": "c6c395d28b4e9177fc683f0c23ef13eb925e78475da2c250aab505a602f0aa5d"
+    },
+    "base-url": {
+      "selection_before": 11,
+      "selection_after": 11,
+      "compared_selection": 11,
+      "excluded_nonharness_unsupported_baseline": [],
+      "passing_assertions_before": 2,
+      "passing_assertions_after": 2,
+      "gained_assertions": 0,
+      "lost_assertions": 0,
+      "before_sha256": "17c947d4c27530ace96f4c618c00a77a86bbd459a3e7a1717936b0737ebfad7d",
+      "after_sha256": "7575a6ca6009f41d61092ad6568fdcf355c233f584cf611abcd3979e94076e68"
+    },
+    "modules": {
+      "selected": 111,
+      "passing_pages_before": 45,
+      "passing_pages_after": 46,
+      "passing_assertions_before": 129,
+      "passing_assertions_after": 132,
+      "gained_assertions": 3,
+      "lost_assertions": 0,
+      "binary_sha256": "cd1c4d5a91707b1ac2d1a47694327dd0eb8f0d2a0a20edda7f2b1ed39431fcb1"
+    },
+    "cssom": {
+      "selected": 191,
+      "passing_pages_before": 20,
+      "passing_pages_after": 22,
+      "passing_assertions_before": 1169,
+      "passing_assertions_after": 1686,
+      "gained_assertions": 517,
+      "lost_assertions": 0,
+      "binary_sha256": "cd1c4d5a91707b1ac2d1a47694327dd0eb8f0d2a0a20edda7f2b1ed39431fcb1"
+    },
+    "css-fonts": {
+      "selected": 32,
+      "passing_before": 24,
+      "passing_after": 24,
+      "lost": []
+    },
+    "css-transforms": {
+      "selected": 348,
+      "passing_before": 141,
+      "passing_after": 141,
+      "lost": []
+    },
+    "css-images": {
+      "selected": 141,
+      "passing_before": 92,
+      "passing_after": 92,
+      "lost": [],
+      "baseline": "crates/amazing-css/evidence/css50/after/images/compact.json"
+    }
+  },
+  "workspace_passed": 3866,
+  "workspace_skipped": 17,
+  "doctests_passed": 4,
+  "gpui_passed": 93,
+  "assertion_identity_record": "docs/lanes/integrator_20261003_json_assertion_identity.json",
+  "all_test262_shards_fetched": true
+}
