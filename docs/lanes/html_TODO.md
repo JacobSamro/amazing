@@ -3713,3 +3713,4 @@ actual template contents and preserving HTML Range append execution policy.
 
 - HTML61 READY: pure native/gen/live/ancestor guarded actual Document realm accessor, callbacks absent; 673owned/4110workspace/4docs and wholecontexts/modules/syntax/CSSOM/Selection exact0loss. Evidence `html61-document-realm`.
 - HTML60 READY: actual Document/classic MIME and charset use existing Fetch header record extraction/nosniff;675owned/4112workspace/4docs and wholecontexts/modules/syntax/CSSOM/Selection exact0loss, no credited corpus gain. Evidence `html60-response-mime`; quoted duplicate response/BOM groups pass.
+- HTML62 READY: decoder tentative fallback from actual same-origin container (UTF16/sandbox/crossorigin guarded),677owned/4114workspace/4docs; exactwholeCounter0loss,+5 decoder/parser assertions. Evidence `html62-inherited-encoding`. Remaining Python charset fixture handlers are protocol-owner dependency.
