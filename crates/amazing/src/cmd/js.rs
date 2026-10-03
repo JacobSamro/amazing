@@ -156,12 +156,13 @@ pub(crate) fn run_interleaved_parse(
             amazing_html::ParseSignal::Script(node) => {
                 parser.borrow_mut().swap_dom(&mut host.borrow_mut().dom);
                 let script = script_source_from_node(&host.borrow().dom, node);
-                let result = match script {
+                let result = scheduler.refresh_parser_browsing_contexts()
+                    .map_err(|error| error.describe()).and_then(|_| match script {
                     Some(script) => run_script(scheduler, &script),
                     // Slipped past `tree.rs`'s own classic/module MIME check
                     // some other way (defensive; not expected in practice).
                     None => Ok(()),
-                };
+                });
                 parser.borrow_mut().swap_dom(&mut host.borrow_mut().dom);
                 if let Err(error) = result {
                     break Err(error);
@@ -176,6 +177,7 @@ pub(crate) fn run_interleaved_parse(
     parser.borrow_mut().swap_dom(&mut host.borrow_mut().dom);
     scheduler.unregister_active_parser(0);
     outcome?;
+    scheduler.refresh_parser_browsing_contexts().map_err(|error| error.describe())?;
     let dom_ref = host.borrow();
     Ok(deferred_events
         .into_iter()

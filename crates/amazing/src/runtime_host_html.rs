@@ -1174,6 +1174,10 @@ impl RuntimeBindings {
                 host_ref.dom.set_document_scripting_enabled(document, can_run_scripts)
                     .map_err(|error| Throw::type_error(format!("iframe scripting context: {error:?}")))?;
             }
+            // Connected parser-created frames need genuine child contexts
+            // before this document's scripts can observe contentWindow.
+            // Navigation only queues loads; their dispatch remains deferred.
+            self.navigate_iframes(js);
             match signal {
                 amazing_html::ParseSignal::Eof => break Ok(()),
                 amazing_html::ParseSignal::Script(source_node) => {
@@ -3265,6 +3269,47 @@ mod tests {
         assert_eq!(seen_before_later_sibling_exists, Some(JsValue::Bool(true)));
         // The full document is there once the interleaved parse returns.
         assert_eq!(scheduler.run_script("document.getElementById('b') !== null").unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn parser_created_frames_have_contexts_before_scripts_and_keep_loads_deferred() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        crate::cmd::js::run_interleaved_parse(&host, &mut scheduler,
+            r#"<!doctype html><body><iframe id=bare></iframe><iframe id=same sandbox="allow-same-origin"></iframe><iframe id=opaque sandbox></iframe><script>
+                var bare=document.getElementById('bare'),same=document.getElementById('same'),opaque=document.getElementById('opaque'),loads=0;
+                bare.addEventListener('load',()=>loads++);
+                if(!bare.contentWindow || bare.contentWindow.Document===Document || bare.contentWindow.Array===Array) throw new Error('missing child realm');
+                if(bare.contentWindow.document!==bare.contentDocument || bare.contentDocument.URL!=='about:blank') throw new Error('blank identity');
+                if(bare.contentWindow.parent!==window || bare.contentWindow.top!==window || same.contentDocument===null) throw new Error('ancestry/origin');
+                if(!opaque.contentWindow || opaque.contentDocument!==null) throw new Error('sandbox context');
+                var dynamic=document.createElement('iframe');document.body.appendChild(dynamic);
+                if(!dynamic.contentWindow.Document) throw new Error('dynamic context');
+                dynamic.remove();if(dynamic.contentWindow!==null || dynamic.contentDocument!==null) throw new Error('removed context');
+                if(loads!==0) throw new Error('early load');
+            </script>"#,
+            |scheduler, script| scheduler.run_script(&script.body).map(|_| ()).map_err(|error| error.describe()),
+        ).unwrap();
+        assert_eq!(scheduler.run_script("loads").unwrap(), JsValue::Number(0.0));
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+    }
+
+    #[test]
+    fn nested_srcdoc_parser_allocates_its_frames_before_child_scripts() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        crate::cmd::js::run_interleaved_parse(&host, &mut scheduler,
+            r#"<!doctype html><body><iframe id=outer srcdoc="&lt;iframe id=inner&gt;&lt;/iframe&gt;&lt;script&gt;var child=document.getElementById('inner').contentWindow;window.probe=!!child.Document &amp;&amp; child.Document!==Document &amp;&amp; child.document===document.getElementById('inner').contentDocument;&lt;/script&gt;"></iframe><script>
+                var outer=document.getElementById('outer');
+                if(!outer.contentWindow.Document || outer.contentDocument.URL!=='about:srcdoc') throw new Error('srcdoc context');
+                if(typeof outer.contentWindow.probe!=='undefined') throw new Error('child ran before pending load');
+            </script>"#,
+            |scheduler, script| scheduler.run_script(&script.body).map(|_| ()).map_err(|error| error.describe()),
+        ).unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script("outer.contentWindow.probe").unwrap(), JsValue::Bool(true));
     }
 
     /// The real per-spec behavior HTML-29 approximated with a DOM splice:
