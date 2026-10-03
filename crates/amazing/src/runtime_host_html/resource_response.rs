@@ -702,23 +702,65 @@ mod tests {
 
     #[test]
     fn canonical_document_errors_and_unknown_mime_do_not_use_pinned_extensions_or_fallback() {
-        for case in 0..4 {
+        for case in 0..12 {
             let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
                 "<!doctype html><body><iframe src='/requested.xml'></iframe>"), native_forwarded: false }));
-            let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
-            scheduler.set_location_url("https://example.test/root.html");
-            scheduler.set_frame_resource_resolver(Rc::new(|_| panic!("canonical failure fell back to pinned transport")));
-            scheduler.set_frame_resource_loader(Rc::new(move |_| {
+            let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+            let calls = Rc::new(RefCell::new(0));
+            let seen = calls.clone(); let callback_host = host.clone();
+            scheduler.set_frame_resource_loader(Rc::new(move |request| {
+                *seen.borrow_mut() += 1;
+                assert_eq!(request.kind, HtmlFrameResourceKind::Document);
+                assert!(callback_host.try_borrow_mut().is_ok());
                 if case == 0 { return Err("actual transport error".into()); }
-                let mut response = response("https://example.test/final.xml", None,
-                    if case == 1 { b"<root/>".to_vec() } else { b"<!doctype html><p>child".to_vec() });
-                if case == 2 { response.headers.append("X-Content-Type-Options", "nosniff".to_owned()).unwrap(); }
-                if case == 3 { response.headers.append("X-Frame-Options", "DENY".to_owned()).unwrap(); }
-                Ok(response)
+                let body = match case {
+                    1 => b"<root/>".to_vec(),
+                    7 => vec![0; 16 * 1024 * 1024 + 1],
+                    8 => b"<?xml version='1.0'?><r>\xff</r>".to_vec(),
+                    9 => b"<r/>".to_vec(),
+                    11 => b" \r\n<?xml-stylesheet type='text/css'?><r>child</r>".to_vec(),
+                    _ => b"<!doctype html><p>child</p>".to_vec(),
+                };
+                let mime = match case {
+                    4 => Some("application/octet-stream"),
+                    8 => Some("application/xml"),
+                    9 => Some("application/xml; charset=unsupported"),
+                    _ => None,
+                };
+                let mut value = response(if case == 6 { "not a URL" } else { "https://example.test/final.xml" }, mime, body);
+                if case == 2 { value.headers.append("X-Content-Type-Options", "nosniff".into()).unwrap(); }
+                if case == 3 { value.headers.append("X-Frame-Options", "DENY".into()).unwrap(); }
+                if case == 5 { value.status = 500; }
+                Ok(value)
             }));
+            scheduler.set_frame_resource_resolver(Rc::new(|_| panic!("canonical failure fell back to pinned transport")));
+            // Configuration precedes the actual initial navigation, so failures
+            // prove this response path rather than a cached legacy-network error.
+            scheduler.set_location_url("https://example.test/root.html");
             scheduler.dispatch_pending_iframe_loads().unwrap();
-            assert_eq!(scheduler.run_script("document.querySelector('iframe').contentDocument").unwrap(), JsValue::Null);
+            let expression = if case == 10 { "document.querySelector('iframe').contentDocument.contentType === 'text/html'" }
+                else if case == 11 { "document.querySelector('iframe').contentDocument.contentType === 'text/xml' && document.querySelector('iframe').contentDocument.documentElement.textContent === 'child'" }
+                else { "document.querySelector('iframe').contentDocument === null" };
+            assert_eq!(scheduler.run_script(expression).unwrap_or_else(|error| panic!("case {case}: {}", error.describe())), JsValue::Bool(true), "case {case}");
+            assert_eq!(*calls.borrow(), 1, "case {case} never reached canonical callback or navigated twice");
         }
+    }
+    #[test]
+    fn unknown_document_html_xml_signatures_follow_actual_byte_rows() {
+        for prefix in [b"<?xml".as_slice(), b" \t\n\r\x0c<?xml", b"<?xml-stylesheet"] {
+            assert!(has_xml_signature(prefix));
+            let value = response("https://example.test/r", None, prefix.to_vec());
+            assert_eq!(content_type(&value, &value.url, false).as_deref(), Some("text/xml"));
+        }
+        for prefix in [b"<?XML".as_slice(), b"x<?xml", b"\0<?xml", b"\xef\xbb\xbf<?xml", b"<?xm"] { assert!(!has_xml_signature(prefix)); }
+        for mime in ["text/html", "text/plain", "application/octet-stream", "application/json"] {
+            let value = response("https://example.test/r.xml", Some(mime), b"<?xml version='1.0'?><r/>".to_vec());
+            let expected = (mime != "application/octet-stream").then_some(mime);
+            assert_eq!(content_type(&value, &value.url, false).as_deref(), expected);
+        }
+        let mut value = response("https://example.test/r.xml", None, b"<?xml version='1.0'?><r/>".to_vec());
+        value.headers.append("X-Content-Type-Options", "nosniff".into()).unwrap();
+        assert_eq!(content_type(&value, &value.url, false), None);
     }
     #[test]
     fn xml_response_bytes_use_xml_authorities_and_fatal_errors() {

@@ -435,8 +435,9 @@ fn content_type(response: &amazing_net::Response, logical_url: &str,
         .map(|mime| mime.essence()).unwrap_or_default();
     let unknown = matches!(mime.as_str(), "" | "unknown/unknown" | "application/unknown" | "*/*");
     let no_sniff = resource_response::response_nosniff(response);
-    if unknown && !no_sniff && has_html_signature(&response.body) {
-        return Some("text/html".into());
+    if unknown && !no_sniff {
+        if has_html_signature(&response.body) { return Some("text/html".into()); }
+        if has_xml_signature(&response.body) { return Some("text/xml".into()); }
     }
     if mime != "application/octet-stream" && !unknown {
         return Some(mime);
@@ -451,6 +452,14 @@ fn content_type(response: &amazing_net::Response, logical_url: &str,
         Some("html") | Some("htm") => Some("text/html".into()),
         _ => None,
     }
+}
+
+/// MIME Sniffing §7.1 XML row is case-sensitive and has no tag terminator.
+fn has_xml_signature(body: &[u8]) -> bool {
+    let header = &body[..body.len().min(1445)];
+    let start = header.iter().position(|byte| !matches!(byte, 9 | 10 | 12 | 13 | 32))
+        .unwrap_or(header.len());
+    header[start..].starts_with(b"<?xml")
 }
 
 /// HTML rows of MIME Sniffing §7.1. Match only the resource header, ignoring
