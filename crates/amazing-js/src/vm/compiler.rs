@@ -22,6 +22,8 @@ mod with;
 mod completions;
 #[path = "compiler_chains.rs"]
 mod chains;
+#[path = "compiler_classes.rs"]
+mod classes;
 use completions::CompletionBoundary;
 
 const MAX_REGISTERS: usize = 65_536;
@@ -259,6 +261,7 @@ impl Compiler {
                 async_iterator_slots: 0,
                 resource_slots: 0,
                 for_in_slots: 0,
+                class_slots: 0,
             },
             depth: 0,
             is_generator: false,
@@ -1138,11 +1141,7 @@ impl Compiler {
                     self.emit(Instruction::TreeEvalNamedClass(dst, Rc::new(expression.clone()), name));
                     return Ok(dst);
                 }
-                let mut code = self.compile_class(class, expression.span)?;
-                code.inferred_name = Some(name);
-                let dst = self.register(expression.span)?;
-                self.emit(Instruction::MakeClass(dst, code));
-                Ok(dst)
+                self.suspended_class(class, expression.span, Some(name))
             }
             _ => self.expression(expression),
         }
@@ -1375,8 +1374,8 @@ impl Compiler {
                 }
             }
             ExprKind::Class(class) => {
-                let code = self.compile_class(class, expression.span)?;
-                self.emit(Instruction::MakeClass(dst, code));
+                let value = self.suspended_class(class, expression.span, None)?;
+                self.emit(Instruction::Move(dst, value));
             }
             ExprKind::Arrow(arrow) => {
                 let code = self.compile_arrow(arrow, expression.span)?;

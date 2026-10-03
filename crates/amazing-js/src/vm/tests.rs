@@ -695,13 +695,8 @@ fn jsvm10_lexical_for_heads_match() {
 #[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
-        "changed = 1; function* g(){class A extends (yield 1) {x=7}}",
-        "changed = 1; function* g(){class A {[yield 1]=7; static {1;}}}",
-        // for/while/for-of/for-await-of/labeled break/continue are all VM-
-        // compilable as of JSVM-10; ordinary class fields/static blocks
-        // compile as of JSVM-14. These three cover constructs the
-        // compiler still declines, keeping this test's actual point (atomic
-        // whole-program rejection before hoisting or side effects) real.
+        // Suspended class keys/heritage now lower in callable frames. A
+        // top-level With remains an explicit atomic program rejection.
         "changed = 1; with ({}) { 1; }",
     ] {
         let mut interpreter = Interpreter::new();

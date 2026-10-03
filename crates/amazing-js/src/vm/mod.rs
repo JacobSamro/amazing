@@ -11,6 +11,7 @@ pub(crate) use async_delegate::{
 };
 mod async_from_sync;
 mod compiler;
+mod classes;
 pub(crate) use compiler::global_annex_candidates;
 mod fast_path;
 mod resources;
@@ -23,6 +24,8 @@ mod tests_with;
 mod tests_import;
 #[cfg(test)]
 mod tests_return;
+#[cfg(test)]
+mod tests_classes;
 #[cfg(test)]
 mod tests_chains;
 
@@ -253,6 +256,12 @@ enum Instruction {
     MakeFunction(Register, FunctionCode),
     MakeNamedFunction(Register, FunctionCode, String),
     MakeClass(Register, ClassCode),
+    ClassBegin(usize, Rc<crate::ast::ClassItem>, Option<KeyOperand>),
+    ClassDecorator(usize, Option<usize>, Register, Register),
+    ClassEnterHeritage(usize, Option<usize>),
+    ClassPrepareElements(usize, Option<ClassHeritageCode>),
+    ClassAppendElement(usize, usize, Option<KeyOperand>),
+    ClassFinish(Register, usize),
     Call(Register, Register, Register, Vec<CallArgument>),
     Construct(Register, Register, Vec<CallArgument>),
     Throw(Register),
@@ -342,6 +351,13 @@ enum Instruction {
 #[derive(Debug, Clone)]
 pub struct FunctionCode(Rc<CompiledFunction>);
 
+#[derive(Debug, Clone)]
+enum ClassHeritageCode {
+    Value(Register),
+    Reference(usize, Register),
+    Super(Register, KeyOperand, Register),
+}
+
 #[derive(Debug)]
 struct CompiledFunction {
     name: String,
@@ -377,6 +393,7 @@ pub struct Program {
     async_iterator_slots: usize,
     resource_slots: usize,
     for_in_slots: usize,
+    class_slots: usize,
 }
 
 /// Mutable execution state owned by a heap allocation. The try stack is empty
@@ -388,11 +405,13 @@ struct VmFrame {
     // the original method/arrow call context, not the resumer's context.
     call_context: Option<super::CallFrame>,
     strict_context: bool,
+    strict_stack: Vec<bool>,
     registers: Vec<JsValue>,
     caches: Vec<Option<fast_path::InlineCache>>,
     references: Vec<Option<Reference>>,
     spreads: Vec<Option<Vec<JsValue>>>,
-    scopes: Vec<EnvHandle>,
+    scopes: Vec<classes::ScopeSnapshot>,
+    classes: Vec<Option<classes::ClassState>>,
     env: EnvHandle,
     pc: usize,
     fuel: usize,
@@ -529,6 +548,8 @@ struct TryHandler {
     end: usize,
     scope_depth: usize,
     env: EnvHandle,
+    strict_context: bool,
+    strict_depth: usize,
     phase: TryPhase,
     caught: Option<JsValue>,
     pending: Option<Abrupt>,
@@ -573,11 +594,13 @@ impl Program {
             global_annex_allowed: None,
             call_context: i.frames.last().cloned(),
             strict_context: i.strict_eval_context,
+            strict_stack: Vec::new(),
             registers: take_registers(self.registers),
             caches: (0..self.code.len()).map(|_| None).collect(),
             references: (0..self.references).map(|_| None).collect(),
             spreads: (0..self.spread_slots).map(|_| None).collect(),
             scopes: Vec::new(),
+            classes: (0..self.class_slots).map(|_| None).collect(),
             env,
             pc: 0,
             fuel,
@@ -639,7 +662,8 @@ impl Program {
         if let Some(abrupt) = frame.pending_resume.take() {
             if let Some(value) = route_abrupt(
                 &mut frame.try_stack, &mut frame.scopes, &mut frame.env,
-                &mut frame.pc, i, abrupt,
+                &mut frame.pc, &mut frame.strict_context, &mut frame.strict_stack,
+                &mut frame.classes, i, abrupt,
             )? {
                 frame.completed = Some(value.clone());
                 return Ok(FrameOutcome::Completed(value));
@@ -648,12 +672,14 @@ impl Program {
         let VmFrame {
             global_annex_allowed,
             call_context: _,
-            strict_context: _,
+            strict_context,
+            strict_stack,
             registers,
             caches,
             references,
             spreads,
             scopes,
+            classes,
             env,
             pc,
             fuel,
@@ -707,12 +733,13 @@ impl Program {
                         }
                     }
                     Instruction::EnterStrict => {
-                        i.vm_strict_stack.push(i.strict_eval_context);
+                        strict_stack.push(*strict_context);
+                        *strict_context = true;
                         i.strict_eval_context = true;
                     }
                     Instruction::ExitStrict => {
-                        i.strict_eval_context = i.vm_strict_stack.pop()
-                            .unwrap_or(i.strict_eval_context);
+                        *strict_context = strict_stack.pop().unwrap_or(*strict_context);
+                        i.strict_eval_context = *strict_context;
                     }
                     Instruction::ToKey(register) => {
                         registers[*register] = match i.to_property_key(&registers[*register])? {
@@ -836,6 +863,47 @@ impl Program {
                     Instruction::TreeEvalNamedClass(dst, expression, key) => {
                         let name = Interpreter::property_function_name(&key.resolve(&registers)?);
                         registers[*dst] = i.eval_named_class_expr(expression, env, &name)?;
+                    }
+                    Instruction::ClassBegin(slot, class, name) => {
+                        let name = name.as_ref().map(|key| key.resolve(registers)
+                            .map(|key| Interpreter::property_function_name(&key))).transpose()?;
+                        scopes.push(classes::snapshot(env, *strict_context, strict_stack));
+                        *strict_context = true;
+                        i.strict_eval_context = true;
+                        let evaluation = i.begin_class_evaluation(class.clone(), env, name)?;
+                        classes[*slot] = Some(classes::ClassState { evaluation, scope_depth: scopes.len() });
+                    }
+                    Instruction::ClassDecorator(slot, member, value, receiver) => {
+                        let state = classes::state(classes, *slot)?;
+                        i.append_class_decorator(&mut state.evaluation, *member,
+                            registers[*value].clone(), registers[*receiver].clone())?;
+                    }
+                    Instruction::ClassEnterHeritage(slot, reference) => {
+                        if let Some(reference) = reference { references[*reference] = None; }
+                        let state = classes::state(classes, *slot)?;
+                        *env = i.enter_class_heritage(&mut state.evaluation)?;
+                    }
+                    Instruction::ClassPrepareElements(slot, operand) => {
+                        let state = classes::state(classes, *slot)?;
+                        // ClassDefinitionEvaluation restores the outer lexical
+                        // environment before GetValue of the heritage Reference.
+                        *env = state.evaluation.outer_env.clone();
+                        let operand = operand.as_ref().map(|code|
+                            classes::heritage(i, code, registers, references)).transpose()?;
+                        *env = i.prepare_class_elements(&mut state.evaluation, operand)?;
+                    }
+                    Instruction::ClassAppendElement(slot, index, key) => {
+                        let key = key.as_ref().map(|key| key.resolve(registers)).transpose()?;
+                        let state = classes::state(classes, *slot)?;
+                        i.append_class_element(&mut state.evaluation, *index, key)?;
+                    }
+                    Instruction::ClassFinish(dst, slot) => {
+                        let state = classes[*slot].take()
+                            .ok_or_else(|| Throw::type_error("invalid VM class evaluation lifetime"))?;
+                        registers[*dst] = i.finish_class_evaluation(state.evaluation)?;
+                        let snapshot = scopes.pop()
+                            .ok_or_else(|| Throw::type_error("invalid VM class scope"))?;
+                        classes::restore(snapshot, env, strict_context, strict_stack, i);
                     }
                     Instruction::HasPrivateField(dst, base, name) => {
                         let private = env.resolve_private(name).ok_or_else(|| {
@@ -1033,7 +1101,7 @@ impl Program {
                         }
                     }
                     Instruction::EnterScope => {
-                        scopes.push(env.clone());
+                        scopes.push(classes::snapshot(env, *strict_context, strict_stack));
                         *env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
                     }
                     Instruction::EnterObjectScope(source) => {
@@ -1041,11 +1109,11 @@ impl Program {
                         let JsValue::Object(bound) = bound else {
                             return Err(Throw::type_error("with statement requires an object"));
                         };
-                        scopes.push(env.clone());
+                        scopes.push(classes::snapshot(env, *strict_context, strict_stack));
                         *env = EnvHandle::new_object(bound, env.clone());
                     }
                     Instruction::CopyScope(names) => {
-                        let outer = scopes.last().cloned()
+                        let outer = scopes.last().map(|scope| scope.env.clone())
                             .ok_or_else(|| Throw::type_error("invalid VM scope"))?;
                         let next = EnvHandle::new(EnvKind::Block, Some(outer));
                         for name in names {
@@ -1054,9 +1122,9 @@ impl Program {
                         *env = next;
                     }
                     Instruction::LeaveScope => {
-                        *env = scopes
-                            .pop()
-                            .ok_or_else(|| Throw::type_error("invalid VM scope"))?;
+                        let snapshot = scopes.pop().ok_or_else(|| Throw::type_error("invalid VM scope"))?;
+                        classes::restore(snapshot, env, strict_context, strict_stack, i);
+                        classes::discard_exited(classes, scopes.len());
                     }
                     Instruction::PushTry {
                         catch,
@@ -1069,6 +1137,8 @@ impl Program {
                         end: *end,
                         scope_depth: scopes.len(),
                         env: env.clone(),
+                        strict_context: *strict_context,
+                        strict_depth: strict_stack.len(),
                         phase: TryPhase::Body,
                         caught: None,
                         pending: None,
@@ -1083,7 +1153,7 @@ impl Program {
                             .caught
                             .take()
                             .ok_or_else(|| Throw::type_error("missing VM catch value"))?;
-                        scopes.push(env.clone());
+                        scopes.push(classes::snapshot(env, *strict_context, strict_stack));
                         *env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
                         if let Some(name) = name {
                             env.declare_lexical(name, thrown, true)?;
@@ -1512,7 +1582,7 @@ impl Program {
                         let previous = env.clone();
                         let iteration = for_iteration_env(left, env);
                         i.bind_for(left, registers[*source].clone(), &iteration)?;
-                        scopes.push(previous);
+                        scopes.push(classes::snapshot(&previous, *strict_context, strict_stack));
                         *env = iteration;
                     }
                     Instruction::PatternStart(slot, source) => {
@@ -1602,7 +1672,7 @@ impl Program {
                     Instruction::EnterCatchValue(dst) => {
                         let handler = try_stack.last_mut().ok_or_else(|| Throw::type_error("invalid resource catch"))?;
                         registers[*dst] = handler.caught.take().ok_or_else(|| Throw::type_error("missing disposal error"))?;
-                        scopes.push(env.clone());
+                        scopes.push(classes::snapshot(env, *strict_context, strict_stack));
                         *env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
                     }
                 }
@@ -1613,7 +1683,7 @@ impl Program {
                 Err(error) => Some(Abrupt::Throw(error)),
             };
             if let Some(abrupt) = abrupt {
-                if let Some(value) = route_abrupt(try_stack, scopes, env, pc, i, abrupt)? {
+                if let Some(value) = route_abrupt(try_stack, scopes, env, pc, strict_context, strict_stack, classes, i, abrupt)? {
                     *completed = Some(value.clone());
                     return Ok(FrameOutcome::Completed(value));
                 }
@@ -1646,10 +1716,15 @@ impl Program {
 
 /// Pop `scopes` back to `depth`, restoring the environment that was current
 /// there -- `LeaveScope` repeated for every scope a `break`/`continue` leaves.
-fn leave_scopes_to(scopes: &mut Vec<EnvHandle>, env: &mut EnvHandle, depth: usize) {
+fn leave_scopes_to(
+    scopes: &mut Vec<classes::ScopeSnapshot>, env: &mut EnvHandle, depth: usize,
+    strict: &mut bool, strict_stack: &mut Vec<bool>, classes: &mut [Option<classes::ClassState>], i: &mut Interpreter,
+) {
     if scopes.len() > depth {
-        *env = scopes[depth].clone();
+        let snapshot = scopes[depth].clone();
+        classes::restore(snapshot, env, strict, strict_stack, i);
         scopes.truncate(depth);
+        classes::discard_exited(classes, depth);
     }
 }
 
@@ -1665,19 +1740,28 @@ fn resource_error(i: &mut Interpreter, pending: &mut Option<Throw>, error: Throw
 /// failure is handled outside this path so a catch cannot reset the VM budget.
 fn route_abrupt(
     try_stack: &mut Vec<TryHandler>,
-    scopes: &mut Vec<EnvHandle>,
+    scopes: &mut Vec<classes::ScopeSnapshot>,
     env: &mut EnvHandle,
     pc: &mut usize,
-    i: &Interpreter,
+    strict: &mut bool,
+    strict_stack: &mut Vec<bool>,
+    classes: &mut [Option<classes::ClassState>],
+    i: &mut Interpreter,
     mut abrupt: Abrupt,
 ) -> Result<Option<JsValue>, Throw> {
     loop {
         let Some(handler) = try_stack.last_mut() else {
             return match abrupt {
-                Abrupt::Return(value) => Ok(Some(value)),
-                Abrupt::Throw(error) => Err(error),
+                Abrupt::Return(value) => {
+                    leave_scopes_to(scopes, env, 0, strict, strict_stack, classes, i);
+                    Ok(Some(value))
+                }
+                Abrupt::Throw(error) => {
+                    leave_scopes_to(scopes, env, 0, strict, strict_stack, classes, i);
+                    Err(error)
+                }
                 Abrupt::Goto(target, depth) => {
-                    leave_scopes_to(scopes, env, depth);
+                    leave_scopes_to(scopes, env, depth, strict, strict_stack, classes, i);
                     *pc = target;
                     Ok(None)
                 }
@@ -1695,13 +1779,17 @@ fn route_abrupt(
             // (continue jumping past a `try` nested in the loop body, back
             // to the for-of's own loop top) -- `>= start` excludes that.
             if *target >= handler.start && *target < handler.end {
-                leave_scopes_to(scopes, env, *depth);
+                leave_scopes_to(scopes, env, *depth, strict, strict_stack, classes, i);
                 *pc = *target;
                 return Ok(None);
             }
         }
         scopes.truncate(handler.scope_depth);
+        classes::discard_exited(classes, handler.scope_depth);
         *env = handler.env.clone();
+        *strict = handler.strict_context;
+        strict_stack.truncate(handler.strict_depth);
+        i.strict_eval_context = *strict;
         if handler.phase == TryPhase::Body {
             if let (Abrupt::Throw(error), Some(catch)) = (&abrupt, handler.catch) {
                 handler.phase = TryPhase::Catch;

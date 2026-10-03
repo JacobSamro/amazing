@@ -24,15 +24,23 @@ impl Compiler {
     // A pair retains the Reference receiver across a ParenthesizedExpression.
     // Each grouped expression has its own jump list: grouping ends propagation
     // of the short circuit, but does not turn a property Reference into a value.
-    fn chain_reference(&mut self, expression: &Expr, delete: bool) -> Result<(Register, Register), CompileError> {
+    pub(super) fn chain_reference(&mut self, expression: &Expr, delete: bool) -> Result<(Register, Register), CompileError> {
         self.enter(expression.span)?;
-        let result = self.chain_reference_inner(expression, delete);
+        let result = self.chain_reference_inner(expression, delete, None);
         self.depth -= 1;
         result
     }
 
-    fn chain_reference_inner(&mut self, expression: &Expr, delete: bool) -> Result<(Register, Register), CompileError> {
+    pub(super) fn heritage_reference(&mut self, expression: &Expr, slot: usize) -> Result<Register, CompileError> {
+        self.enter(expression.span)?;
+        let result = self.chain_reference_inner(expression, false, Some(slot)).map(|pair| pair.0);
+        self.depth -= 1;
+        result
+    }
+
+    fn chain_reference_inner(&mut self, expression: &Expr, delete: bool, capture: Option<usize>) -> Result<(Register, Register), CompileError> {
         if let ExprKind::Paren(inner) = &expression.kind {
+            if let Some(slot) = capture { return self.heritage_reference(inner, slot).map(|value| (value, 0)); }
             return self.chain_reference(inner, delete);
         }
         let mut links = Vec::new();
@@ -91,6 +99,15 @@ impl Compiler {
                         let key = self.member_key(object, prop, true)?;
                         self.emit(Instruction::DeleteMember(value, object, key));
                         deleted = true;
+                    } else if let Some(slot) = capture.filter(|_| index + 1 == links.len()) {
+                        if super_base { return Err(self.error(expression.span, "class heritage super reference")); }
+                        if let ast::MemberProp::Private(name) = prop {
+                            self.emit(Instruction::ResolvePrivateWrite(slot, object, name.name.clone()));
+                        } else {
+                            let key = self.member_key(object, prop, true)?;
+                            self.emit(Instruction::ResolveMemberWrite(slot, object, key));
+                        }
+                        self.emit(Instruction::Move(value, 0));
                     } else if let ast::MemberProp::Private(name) = prop {
                         self.emit(Instruction::GetPrivateField(value, object, name.name.clone()));
                     } else {
