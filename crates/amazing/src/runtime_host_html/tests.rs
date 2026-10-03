@@ -16,7 +16,7 @@ fn document_policy_snapshot_uses_actual_origins_ancestry_and_generations() {
     let borrowed = host.borrow();
     let root = state.frames.document_context(&borrowed.dom, NodeIdx(0)).unwrap();
     assert!(state.frames.document_realm(&borrowed.dom, NodeIdx(0)).is_some());
-    assert!(state.frames.document_realm(&borrowed.dom, NodeIdx(usize::MAX)).is_none());
+    assert!(state.frames.document_realm(&borrowed.dom, NodeIdx(u32::MAX)).is_none());
     assert_eq!(root.document, NodeIdx(0));
     assert_eq!(Some(root.document_generation), borrowed.dom.node_generation(root.document));
     assert_eq!(root.document_url, "https://example.test/committed/page");
