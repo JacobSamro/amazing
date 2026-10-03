@@ -1158,9 +1158,10 @@ impl Compiler {
             self.depth -= 1;
             return result;
         }
-        // The VM has no optional chains: hand the whole chain, from its
-        // outermost link, to the tree walker so short-circuiting covers
-        // every link (`o?.b[f()]` must not call `f`). Super reference operations
+        // Non-suspending chains retain the whole-expression adapter so
+        // short-circuiting covers every link (`o?.b[f()]` must not call `f`).
+        // Suspended chains use the reference-preserving lowering above.
+        // Super reference operations
         // also need the home object's prototype and the actual this receiver.
         // The class adapter owns immutable inner names, descriptor validation,
         // fields/private elements and method metadata. Delegate the complete

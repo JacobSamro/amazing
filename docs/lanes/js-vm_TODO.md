@@ -1370,3 +1370,24 @@ default mode and **487953/487941** in opt-in VM program mode; both retain
 12 fallbacks (class initialization8, member4). This is a correctness change,
 with unchanged Test262 pass counts and callable eligibility.
 Evidence: [js-vm25r_evidence.json](js-vm25r_evidence.json).
+
+## JSVM26 — suspended optional-chain lowering (in progress)
+
+Fixed before `56f620f8` contains ready JSVM25R on the shared `175107c0`
+dependency. Adapt the whole optional-chain reference/short-circuit/delete
+algorithm from `boa-dev/boa`, `core/engine/src/bytecompiler/mod.rs`, MIT,
+commit `39cd11214ecb366200157dab96b3919e61e9a391`. The upstream license at
+that commit was checked (Copyright (c) 2019 Jason Williams).
+
+`compiler_chains.rs` retains value/receiver registers across suspension;
+parentheses close a jump list while preserving the property receiver.
+Optional guards precede computed keys, argument evaluation and spread
+iteration. Final member deletion uses the existing descriptor/Proxy/strict
+semantic gateway without reading the property. Super reads retain actual
+this, private reads retain their existing brand gateway, and grouped normal
+continuations still throw on nullish values. Non-suspending chains retain
+their whole AST adapter; class initialization remains an atomic fallback.
+
+The matched gate covers workspace nextest, doctests, eleven whole Test262
+selections in default and opt-in VM-program modes, and native/forced-AST
+matrices for grouping, receiver roots, private/super access and strict delete.
