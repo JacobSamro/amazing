@@ -88,6 +88,8 @@ pub(super) struct FrameRuntime {
     documents: HashMap<NodeIdx, FrameDocument>,
     contexts: HashMap<RealmHandle, WindowContext>,
     cross_origin_descriptors: HashMap<(RealmHandle, RealmHandle, String), Property>,
+    /// Captured creation/navigation base, retained for old documents too.
+    about_base_urls: HashMap<NodeIdx, (u64, String)>,
     parser_imports: HashMap<NodeIdx, IncrementalImportRef>,
     /// `(frame, document, fire_load_events)`. `fire_load_events` is false
     /// only for an iframe with neither `src` nor `srcdoc`: its initial
@@ -176,6 +178,11 @@ fn context_origin(js: &mut Interpreter, context: &WindowContext, realm: RealmHan
     if context.frame.is_some() { return Ok(context.origin.clone()); }
     js.binding_with_realm(realm, |js| Ok(ParsedUrl::parse(js.binding_location_href())
         .map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into())))
+}
+
+fn matches_about_url(url: &ParsedUrl, name: &str) -> bool {
+    url.scheme() == "about" && url.pathname() == name && url.host().is_none()
+        && url.username().is_empty() && url.password().is_empty()
 }
 
 /// Runnable script elements in tree order for the non-interleaved fallback.
@@ -1337,6 +1344,20 @@ impl RuntimeBindingHost<'_> {
 }
 
 impl RuntimeBindingHost<'_> {
+    /// HTML's immutable about base URL, only when applicable to this Document.
+    /// URL/base element changes in the creator cannot change the saved value.
+    pub(super) fn html_document_fallback_base_url(&self, document: NodeIdx) -> Option<String> {
+        let state = self.state.borrow();
+        let (generation, base) = state.frames.about_base_urls.get(&document)?;
+        let host = state.host.borrow();
+        if host.dom.node_generation(document) != Some(*generation) { return None; }
+        let metadata = host.dom.document_metadata(document).ok()??;
+        let url = ParsedUrl::parse(&metadata.url).ok()?;
+        if matches_about_url(&url, "blank") || (matches_about_url(&url, "srcdoc") && url.query().is_none()) {
+            Some(base.clone())
+        } else { None }
+    }
+
     /// `document.write`/`writeln`/`open`/`close` (HTML-29). While a
     /// document's parser is "active" -- its own top-level scripts are still
     /// running, or it is inside an explicit `open()`/`write()` session --
