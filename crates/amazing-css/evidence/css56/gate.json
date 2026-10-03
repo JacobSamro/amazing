@@ -1,0 +1,145 @@
+{
+  "source": "615a02b89d3c8b9575fa0fbd9a1f3a2a0089991d",
+  "source_commit": "485ca692d707f66ebd75b76bfaf1326a3facac36",
+  "baseline_sources": [
+    "6e8b24fcc6a208498c965156c9cf351a20e321c8"
+  ],
+  "platform": "Linux Boat bx_shgjh66q native ext4 source/target",
+  "workspace_before": 3955,
+  "workspace_after": 3957,
+  "workspace_skip": 17,
+  "native_gained": [
+    "amazing-css cascade::tests::root_author_background_and_body_noninheritance_preserve_canvas_selection_inputs",
+    "amazing-css cascade::tests::ua_root_and_body_backgrounds_are_initial_transparent_not_canvas_white"
+  ],
+  "all_prior_named_native_tests_retained": true,
+  "doctests": 4,
+  "parsing_passed": 4312,
+  "parsing_total": 5126,
+  "parsing_files": 514,
+  "parsing_nonliteral_skipped": 169,
+  "parsing_all_failure_multiplicities_and_directory_counts_retained": true,
+  "render": {
+    "css-color": {
+      "counts": {
+        "pass": 226,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 236,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-images": {
+      "counts": {
+        "pass": 92,
+        "mismatch": 49,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 141,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-fonts": {
+      "counts": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 32,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-transforms": {
+      "counts": {
+        "pass": 141,
+        "mismatch": 207,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 348,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-backgrounds": {
+      "counts": {
+        "pass": 77,
+        "mismatch": 57,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 134,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-cascade": {
+      "counts": {
+        "pass": 17,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 21,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-conditional": {
+      "counts": {
+        "pass": 29,
+        "mismatch": 37,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 66,
+      "gained": 0,
+      "lost": 0
+    },
+    "selectors": {
+      "counts": {
+        "pass": 82,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 91,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-shadow": {
+      "counts": {
+        "pass": 0,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 35,
+      "gained": 0,
+      "lost": 0
+    }
+  },
+  "scope_note": "First native iteration retained everyold3955pass but newUAauthorURL shorthand fixture exposed parked51 knownimage-onlyshorthand gap. IsolatedUA correction keeps sameauthorURL/roottransparencyexpectation through explicitimage longhand. Finalfullsource615a; nooldexpectation removed orweakened.",
+  "renderer_sha256": "4487df92c5cb46b8cf50247a86625de64c5f5585b61b2d44e76457d6b37c6ac1",
+  "render_cases": 1104,
+  "render_passed": 688
+}

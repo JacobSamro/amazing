@@ -3008,3 +3008,20 @@ CSS53 final corrected58f: workspace3946/17skip+4docs, all prior3939 native named
   selections688/1104, all1104 classifications unchanged/lost0. Same-source baseline-path correction
   reran whole last four selections with byte-identical renderer; evidence `evidence/css55`.
   Actual fetched/decoded driver pipeline is separately gated.
+
+
+### CSS56 — HTML initial background versus canvas surface — READY
+
+- CSS Backgrounds3 §2.1 initial background-color is transparent; HTML Rendering UA rules do not
+  require an opaque HTML background. Remove the invented UA `background-color:white` from HTML.
+  The browser canvas surface default remains paint-owned white, separate from computed root style.
+- Two grouped regression areas retain normal block/margin UA defaults, test initial HTML/BODY/DIV
+  transparency, author root color/image, body noninheritance, initial/revert and explicit inheritance.
+  The image override uses the explicit longhand: parked CSS51 owns image-only shorthand correction.
+- Exact source485ca692→615a02b8 on closed CSS55. Boat workspace3955→3957 (+2 groups), four doctests;
+  all17 literal parsing4312/5126 retains everyfailuremultiplicity. Nine full render selections688/1104,
+  every1104classification unchanged/lost0. Durable maps/hash summary under `evidence/css56`.
+- Layout49 adopts the same lower source dependency on both fixed refs and separately proves actual
+  root/BODY canvas geometry/propagation; this lower change does not claim those browser gains.
+- References checked2026-10-03: https://drafts.csswg.org/css-backgrounds-3/#the-background-color
+  and https://html.spec.whatwg.org/multipage/rendering.html#flow-content-3 .
