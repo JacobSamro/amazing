@@ -22,7 +22,7 @@
 // `Interp::drive_async`, crates/lumen/src/interpreter.rs, same commit): a plain async function
 // the VM does not compile runs here too, parking at each `await` and resumed from the awaited
 // value's reaction (`start_thread_async_function`/`thread_async_function_step`). Async
-// generator bodies on this path still use the synchronous `await_value` degrade.
+// generator bodies retain the legacy `await_value` policy outside Return-specific Await.
 //
 // `yield`'s "inject a `.return(v)`/`.throw(e)` completion at the suspended point" is not
 // representable in `eval_expr`'s `Result<JsValue, Throw>` return type (only `exec_stmt`'s
@@ -548,8 +548,8 @@ fn thread_generator_state(this: &JsValue) -> Result<Rc<RefCell<ThreadGeneratorSt
     Err(Throw::type_error("method called on an incompatible receiver"))
 }
 
-/// Shared `next`/`return`/`throw` driver for a coroutine-backed generator (sync or async --
-/// callers wrap the `{value, done}` object in a settled Promise for the async prototype methods).
+/// Shared `next`/`return`/`throw` driver for a synchronous coroutine-backed generator.
+/// Async generator requests use the private queued continuation adapter instead.
 /// Handles the suspendedStart/completed short-circuits itself (matching GeneratorResume /
 /// GeneratorResumeAbrupt, spec 27.5.3.3/27.5.3.4), so a `.return(v)`/`.throw(e)` before the body
 /// ever ran, or after it already completed, never touches the coroutine and never loses `v`.
@@ -601,16 +601,6 @@ fn thread_generator_resume(
         Suspend::Throw(e) => Err(Throw(e)),
         // Generator bodies never park at an await (`Segment::awaits` is false for them).
         Suspend::Await(_) => Err(Throw::type_error("await in a generator coroutine")),
-    }
-}
-
-fn thread_async_settle(i: &Interpreter, result: Result<JsValue, Throw>) -> JsValue {
-    match result {
-        Ok(v) => new_promise(i, PromiseFate::Fulfilled(v)),
-        Err(thrown) => {
-            let error = i.normalize_throw(thrown).0;
-            new_promise(i, PromiseFate::Rejected(error))
-        }
     }
 }
 
