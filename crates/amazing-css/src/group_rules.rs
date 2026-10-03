@@ -54,10 +54,19 @@ pub(super) fn parse(
                 };
                 // Only valid top-level prefix imports are retained. Unsupported
                 // at-rules are invalid and do not close the prefix.
-                if matches!(name.as_str(), "media" | "supports" | "scope" | "keyframes" | "font-face" | "counter-style" | "namespace")
-                    || (name == "layer" && block && layer_names(prelude).is_some()) {
-                    import_prefix = false;
-                }
+                let valid_block = block && match name.as_str() {
+                    "media" => true, // Invalid media queries become never-matching.
+                    "supports" => crate::imports::SupportsCondition::parse_tokens(prelude, false).is_some(),
+                    "scope" => scope_prelude(prelude, !scopes.is_empty()).is_some(),
+                    "keyframes" => crate::animation::parse_keyframes(prelude, body).is_some(),
+                    "font-face" => trim_ws(prelude).is_empty(),
+                    "counter-style" => matches!(trim_ws(prelude), [Token::Ident(_)]),
+                    "layer" => layer_names(prelude).is_some_and(|paths| paths.len() <= 1),
+                    _ => false,
+                };
+                let valid_namespace = !block && name == "namespace" && matches!(trim_ws(prelude),
+                    [Token::Str(_) | Token::Url { .. }] | [Token::Ident(_), Token::Whitespace, Token::Str(_) | Token::Url { .. }]);
+                if valid_block || valid_namespace { import_prefix = false; }
                 match name.as_str() {
                     "import" if import_prefix && !block => {
                         if let Some(rule) = crate::imports::parse_import(prelude, sheet.rules.len()) {
@@ -100,8 +109,8 @@ pub(super) fn parse(
                                 let inner = parse(body, &full, scopes, media, anonymous, depth + 1);
                                 sheet.rules.extend(inner.rules);
                                 sheet.keyframes.extend(inner.keyframes);
-                                sheet.keyframe_media.extend(inner.keyframe_media);
-                                sheet.font_faces.extend(inner.font_faces);
+                        sheet.keyframe_media.extend(inner.keyframe_media);
+                        sheet.font_faces.extend(inner.font_faces);
                                 sheet.counter_styles.extend(inner.counter_styles);
                             }
                         }
@@ -122,8 +131,8 @@ pub(super) fn parse(
                         let inner = parse(body, layer, scopes, media, anonymous, depth + 1);
                         sheet.rules.extend(inner.rules);
                         sheet.keyframes.extend(inner.keyframes);
-                                sheet.keyframe_media.extend(inner.keyframe_media);
-                                sheet.font_faces.extend(inner.font_faces);
+                        sheet.keyframe_media.extend(inner.keyframe_media);
+                        sheet.font_faces.extend(inner.font_faces);
                         sheet.counter_styles.extend(inner.counter_styles);
                     }
                     "media" if block => {
@@ -132,8 +141,8 @@ pub(super) fn parse(
                         let inner = parse(body, layer, scopes, &conditions, anonymous, depth + 1);
                         sheet.rules.extend(inner.rules);
                         sheet.keyframes.extend(inner.keyframes);
-                                sheet.keyframe_media.extend(inner.keyframe_media);
-                                sheet.font_faces.extend(inner.font_faces);
+                        sheet.keyframe_media.extend(inner.keyframe_media);
+                        sheet.font_faces.extend(inner.font_faces);
                         sheet.counter_styles.extend(inner.counter_styles);
                     }
                     "counter-style" if block => {

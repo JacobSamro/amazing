@@ -36,7 +36,7 @@ fn import_prefix_ignores_statements_and_invalid_rules_but_not_empty_blocks() {
         assert!(parse_stylesheet(css).imports().is_empty(),"{css}");
     }
     for css in ["@layer x,y; @import 'ok';","@unknown whatever{} @import 'ok';",
-        "???{} @import 'ok';","@import bad; @import 'ok';"] {
+        "???{} @import 'ok';","@import bad; @import 'ok';", "@supports not{} @import 'ok';", "@layer a,b{} @import 'ok';", "@scope invalid{} @import 'ok';"] {
         assert_eq!(parse_stylesheet(css).imports().len(),1,"{css}");
     }
 }
