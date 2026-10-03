@@ -76,6 +76,27 @@ mod realm_tests {
     }
 
     #[test]
+    fn binding_function_realm_resolves_native_bound_and_proxy_targets() {
+        let mut i = Interpreter::new();
+        let parent = i.binding_current_realm();
+        let child = i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
+        let native = i.binding_eval_in_realm(child, "Object").unwrap();
+        i.global_env.declare_var("foreign", native.clone()).unwrap();
+        let bound = i.run_script("foreign.bind(null)").unwrap();
+        let proxy = i.run_script("new Proxy(foreign,{})").unwrap();
+        let nested = i.run_script("new Proxy(foreign.bind(null),{}).bind(null)").unwrap();
+        for function in [native, bound, proxy, nested] {
+            assert_eq!(i.binding_function_realm(&function).unwrap(), child);
+        }
+        let revoked = i.run_script("var r=Proxy.revocable(foreign,{});r.revoke();r.proxy").unwrap();
+        let error = i.binding_function_realm(&revoked).unwrap_err();
+        assert!(error.describe().contains("revoked"));
+        let local = i.run_script("Object").unwrap();
+        assert_eq!(i.binding_function_realm(&local).unwrap(), parent);
+        assert_eq!(i.binding_current_realm(), parent);
+    }
+
+    #[test]
     fn realms_share_one_external_job_queue() {
         let mut i = Interpreter::new_with_external_scheduler(32).unwrap();
         let child = i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();

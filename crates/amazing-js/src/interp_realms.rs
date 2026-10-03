@@ -350,6 +350,12 @@ impl Interpreter {
             .then_some(RealmHandle { agent: self.agent_id, realm })
     }
 
+    /// Resolve a callable's creation realm through bound and Proxy wrappers.
+    /// A revoked Proxy is an abrupt completion, as in GetFunctionRealm.
+    pub fn binding_function_realm(&self, function: &JsValue) -> Result<RealmHandle, Throw> {
+        self.get_function_realm(function)
+    }
+
     fn get_function_realm(&self, function: &JsValue) -> Result<RealmHandle, Throw> {
         let mut current = function.clone();
         let mut seen = HashSet::new();
