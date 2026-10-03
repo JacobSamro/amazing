@@ -17,6 +17,8 @@ mod tests;
 mod tests_with;
 #[cfg(test)]
 mod tests_import;
+#[cfg(test)]
+mod tests_return;
 
 use super::{callable_function, for_iteration_env, new_promise, perform_promise_then, promise_resolving_functions, reference_name, settle_promise, Interpreter, Reference};
 use crate::ast::{BinOp, ForLeft, UnOp, VarKind};
@@ -444,6 +446,10 @@ enum FrameOutcome {
 pub struct GeneratorState {
     code: FunctionCode,
     env: EnvHandle,
+    // The execution realm survives completion of the resumable frame.
+    // Borrowing another realm's generator methods changes the request
+    // promise's realm, never the suspended body's realm.
+    body_realm: super::RealmHandle,
     frame: Option<Box<VmFrame>>,
     started: bool,
     executing: bool,
@@ -613,21 +619,8 @@ impl Program {
         frame: &mut Box<VmFrame>,
         quantum: usize,
     ) -> Result<FrameOutcome, Throw> {
-        let frame_depth = i.frames.len();
-        let previous_strict = i.strict_eval_context;
-        if let Some(context) = &frame.call_context {
-            // The initial synchronous resume still has its invocation on
-            // the stack. Install a saved context only after it has left;
-            // recursive invocations of the same function are distinct.
-            if !i.frames.last().is_some_and(|active| active.context_id == context.context_id) {
-                i.frames.push(context.clone());
-            }
-        }
-        i.strict_eval_context = frame.strict_context;
-        let result = self.resume_frame_inner(i, frame, quantum);
-        i.frames.truncate(frame_depth);
-        i.strict_eval_context = previous_strict;
-        result
+        with_vm_call_context(i, frame.call_context.clone(), frame.strict_context,
+            |i| self.resume_frame_inner(i, frame, quantum))
     }
 
     fn resume_frame_inner(
@@ -1972,6 +1965,7 @@ impl FunctionCode {
         object.exotic = Exotic::Generator(Rc::new(RefCell::new(GeneratorState {
             code: self.clone(),
             env,
+            body_realm: i.binding_current_realm(),
             frame,
             started: false,
             executing: false,
@@ -1996,6 +1990,7 @@ impl FunctionCode {
         let state = Rc::new(RefCell::new(GeneratorState {
             code: self.clone(),
             env,
+            body_realm: i.binding_current_realm(),
             frame,
             started: true,
             executing: false,
@@ -2061,6 +2056,38 @@ fn async_rejected(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
 /// so a continuation that starts from a promise reaction or a native `next`
 /// call would otherwise run the post-suspension body in sloppy mode. The
 /// branch's strictness is fixed at compile time (`CompiledFunction::strict`).
+fn with_vm_call_context<T>(
+    i: &mut Interpreter,
+    context: Option<super::CallFrame>,
+    strict: bool,
+    operation: impl FnOnce(&mut Interpreter) -> Result<T, Throw>,
+) -> Result<T, Throw> {
+    let frame_depth = i.frames.len();
+    let previous_strict = i.strict_eval_context;
+    if let Some(context) = context {
+        // Initial execution already has this invocation on the stack;
+        // recursive invocations of the same function have distinct IDs.
+        if !i.frames.last().is_some_and(|active| active.context_id == context.context_id) {
+            i.frames.push(context);
+        }
+    }
+    i.strict_eval_context = strict;
+    let result = operation(i);
+    i.frames.truncate(frame_depth);
+    i.strict_eval_context = previous_strict;
+    result
+}
+
+fn async_generator_in_context<T>(
+    i: &mut Interpreter,
+    realm: super::RealmHandle,
+    context: Option<super::CallFrame>,
+    strict: bool,
+    operation: impl FnOnce(&mut Interpreter) -> Result<T, Throw>,
+) -> Result<T, Throw> {
+    i.binding_with_realm(realm, |i| with_vm_call_context(i, context, strict, operation))
+}
+
 fn resume_frame_with_strictness(
     i: &mut Interpreter,
     code: &FunctionCode,
@@ -2441,15 +2468,17 @@ fn async_generator_run(
     state: Rc<RefCell<GeneratorState>>,
     target: Obj,
     mut kind: u8,
-    value: JsValue,
+    mut value: JsValue,
 ) -> Result<(), Throw> {
-    let (code, mut frame, completion) = {
+    let (code, mut frame, completion, body_realm) = {
         let mut s = state.borrow_mut();
         let frame = s.frame.take().expect("async generator frame missing at resume");
         s.executing = true;
         s.awaiting = false;
-        (s.code.clone(), frame, s.completion.clone())
+        (s.code.clone(), frame, s.completion.clone(), s.body_realm)
     };
+    let context = frame.call_context.clone();
+    let strict = frame.strict_context;
     if frame.await_return {
         // The awaited `return(v)` resumption settled: deliver it as a return
         // of the awaited value, or as a throw of the rejection reason.
@@ -2459,18 +2488,31 @@ fn async_generator_run(
         // AsyncGeneratorUnwrapYieldResumption: a `return(v)` delivered at a
         // yield first awaits `v`; the frame stays suspended at its yield and
         // is resumed from that await's reaction instead.
-        frame.await_return = true;
+        match async_generator_in_context(i, body_realm, context.clone(), strict,
+            |i| async_resolve_value_checked(i, value.clone()))
         {
-            let mut s = state.borrow_mut();
-            s.executing = false;
-            s.awaiting = true;
-            s.frame = Some(frame);
+            Ok(awaited) => {
+                frame.await_return = true;
+                {
+                    let mut s = state.borrow_mut();
+                    s.executing = false;
+                    s.awaiting = true;
+                    s.frame = Some(frame);
+                }
+                return async_generator_in_context(i, body_realm, context, strict, |i| {
+                    let fulfilled = async_generator_step_handler(i, state.clone(), target.clone(), false);
+                    let rejected = async_generator_step_handler(i, state, target, true);
+                    async_attach_reactions(i, awaited, fulfilled, rejected)
+                });
+            }
+            Err(Throw(error)) => {
+                // PromiseResolve's constructor Get failed before Await
+                // installed reactions. Inject Throw at the retained yield
+                // now, inside its original catch/finally boundary.
+                kind = 2;
+                value = error;
+            }
         }
-        let awaited = async_resolve_value(i, value);
-        let fulfilled = async_generator_step_handler(i, state.clone(), target.clone(), false);
-        let rejected = async_generator_step_handler(i, state, target, true);
-        async_attach_reactions(i, awaited, fulfilled, rejected)?;
-        return Ok(());
     }
     if let Some(dst) = frame.yield_dst.take() {
         if frame.delegate.is_some() || frame.async_delegate.is_some() {
@@ -2495,7 +2537,8 @@ fn async_generator_run(
         }
     }
     let previous_completion = std::mem::replace(&mut i.completion, completion);
-    let outcome = resume_frame_with_strictness(i, &code, &mut frame);
+    let outcome = i.binding_with_realm(body_realm,
+        |i| resume_frame_with_strictness(i, &code, &mut frame));
     let completion = std::mem::replace(&mut i.completion, previous_completion);
     {
         let mut s = state.borrow_mut();
@@ -2512,20 +2555,28 @@ fn async_generator_run(
             async_generator_drain(i, state)
         }
         Ok(FrameOutcome::Completed(value)) => {
-            settle_promise(&target, PromiseFate::Fulfilled(generator_result(i, value, true)), i)?;
-            async_generator_drain(i, state)
+            // ReturnStatement's operand was already awaited by bytecode.
+            // CompleteStep and the immediately following queue drain still
+            // execute in the generator context; neither awaits it again.
+            async_generator_in_context(i, body_realm, context, strict, |i| {
+                settle_promise(&target, PromiseFate::Fulfilled(generator_result(i, value, true)), i)?;
+                async_generator_drain(i, state)
+            })
         }
         Ok(FrameOutcome::Awaited(value)) => {
-            let fulfilled = async_generator_step_handler(i, state.clone(), target.clone(), false);
-            let rejected = async_generator_step_handler(i, state, target, true);
-            async_attach_reactions(i, value, fulfilled, rejected)?;
-            Ok(())
+            async_generator_in_context(i, body_realm, context, strict, |i| {
+                let fulfilled = async_generator_step_handler(i, state.clone(), target.clone(), false);
+                let rejected = async_generator_step_handler(i, state, target, true);
+                async_attach_reactions(i, value, fulfilled, rejected)
+            })
         }
         Ok(FrameOutcome::YieldedIteratorResult(_)) => unreachable!("async generator emitted a sync iterator result"),
         Ok(FrameOutcome::Suspended) => unreachable!("unbounded async generator slice suspended"),
         Err(Throw(error)) => {
-            settle_promise(&target, rejection(i, error), i)?;
-            async_generator_drain(i, state)
+            async_generator_in_context(i, body_realm, context, strict, |i| {
+                settle_promise(&target, rejection(i, error), i)?;
+                async_generator_drain(i, state)
+            })
         }
     }
 }
@@ -2554,7 +2605,16 @@ fn async_generator_await_return(
     request: AsyncGeneratorRequest,
 ) -> Result<(), Throw> {
     state.borrow_mut().awaiting = true;
-    let awaited = async_resolve_value(i, request.value);
+    // Suspended-start/completed Return uses the active caller or drain
+    // context's intrinsic Promise, unlike Return delivered at a yield.
+    let awaited = match async_resolve_value_checked(i, request.value) {
+        Ok(awaited) => awaited,
+        Err(Throw(error)) => {
+            state.borrow_mut().awaiting = false;
+            settle_promise(&request.target, rejection(i, error), i)?;
+            return async_generator_drain(i, state);
+        }
+    };
     let fulfilled = async_generator_callback(i, state.clone(), request.target.clone(),
         "asyncGeneratorAwaitReturnFulfilled", async_generator_return_fulfilled);
     let rejected = async_generator_callback(i, state.clone(), request.target.clone(),
