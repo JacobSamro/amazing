@@ -1551,3 +1551,43 @@ or variants and zero timeouts. Evidence: `js-runtime_jsrt40_evidence.json`.
 The remaining Proxy enumerate fixture fails its for-of stage because this
 frozen base lacks the root-owned ArrayIterator LengthOfArrayLike fix; the
 for-in stage already passes. No duplicate iterator change was included.
+
+## JSRT-41 Whole JSON internalization and serialization (2026-10-03)
+
+Frozen base `4531bb3b40f89816396cb41e4edb65849f18c78c`. Raw JSON,
+InternalizeJSONProperty and JSON serializer algorithms are ported from Boa
+`core/engine/src/builtins/json/mod.rs` at
+`39cd11214ecb366200157dab96b3919e61e9a391` (MIT, license verified at that
+commit). The existing std-only UTF-16 parser replaces Boa parser/serde_json
+dependencies; runtime gateways replace upstream object/GC dependencies.
+The header and an appended third-party notice record the exact provenance.
+
+JSON.rawJSON validates one primitive JSON value with no empty text or edge
+JSON whitespace, creates a frozen null-prototype object with readonly
+enumerable rawJSON property and private raw_json brand. isRawJSON only
+checks that brand, without invoking Proxy traps or accepting inherited or
+forged properties. Serializer raw insertion occurs after toJSON/replacer
+and boxed conversion; only genuine validated text is inserted unquoted.
+
+Reviver traversal uses fallible Proxy-aware IsArray, observable Get/ToLength,
+enumerable semantic own keys, Delete and CreateDataProperty. False delete
+or define results are ignored; abrupt completions propagate. Replacement
+data properties are enumerable (previous raw symbol_data use incorrectly
+made them hidden). Source text is supplied only when the current primitive
+SameValue-matches its original parse record, preserving duplicate-key last
+values and forward mutation semantics.
+
+Serializer now retains UTF-16 units through quotes, raw text, indentation
+and output. ASCII short escapes include backspace/formfeed, lone surrogates
+are escaped in quoted strings, and gap/raw text preserve literal units.
+Proxy arrays/replacer lists use semantic IsArray and live length conversion,
+while existing boxed primitive observable conversion remains intact.
+Three grouped regressions cover both backends across raw grammar/brands,
+Proxy reviver operations/source mutation and serializer sequencing/UTF-16.
+
+Final Boat workspace **3772 passed/17 skipped, 74.638 seconds**, **4 doctests**.
+Matched whole JSON **131 → 165/165** (+34, all passing). Whole language
+**24029/24590**, Object **3357/3414**, Proxy **310/311**, Reflect **152/154**,
+String **1331/1341** unchanged. Unique union **29975 cases**,
+**29310 → 29344 passing** (+34), **68 gained variants**, zero lost files
+or variants and zero timeouts. Evidence: `js-runtime_jsrt41_evidence.json`.

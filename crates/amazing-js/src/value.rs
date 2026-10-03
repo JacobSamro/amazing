@@ -974,6 +974,8 @@ pub struct JsObject {
     pub(crate) arguments_object: bool,
     /// Engine-private primitive wrapper data; never a JavaScript property key.
     pub(crate) boxed_primitive: Option<JsValue>,
+    /// Validated primitive JSON text; only JSON.rawJSON creates this brand.
+    pub(crate) raw_json: Option<JsString>,
     /// Whether new own properties may be created.
     pub extensible: bool,
     /// Callable payload; `Some` iff this object is a function.
@@ -1031,6 +1033,7 @@ impl JsObject {
             exotic: Exotic::Ordinary,
             arguments_object: false,
             boxed_primitive: None,
+            raw_json: None,
             extensible: true,
             func: None,
             constructed: false,

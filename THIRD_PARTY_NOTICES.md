@@ -70,3 +70,5 @@ reproduced in the table row for that upstream.
 | boa-dev/boa @ `39cd11214ecb366200157dab96b3919e61e9a391` (`core/engine/src/builtins/function/arguments.rs`) | MIT | Copyright (c) 2019 Jason Williams | `crates/amazing-js/src/interp_arguments.rs`, `crates/amazing-js/src/builtins_std_object_model.rs`: mapped/unmapped arguments creation and exotic descriptor algorithms adapted to BindingCell aliases. |
 
 | boa-dev/boa @ `39cd11214ecb366200157dab96b3919e61e9a391` (`core/engine/src/builtins/proxy/mod.rs`) | MIT | Copyright (c) 2019 Jason Williams | `crates/amazing-js/src/interp_proxy.rs`: Proxy internal-method descriptor compatibility, extensibility and own-key invariants adapted to Amazing. |
+
+| boa-dev/boa @ `39cd11214ecb366200157dab96b3919e61e9a391` (`core/engine/src/builtins/json/mod.rs`) | MIT | Copyright (c) 2019 Jason Williams | `crates/amazing-js/src/builtins_std_json_global.rs`: raw JSON creation/brand, reviver internalization and UTF-16 serialization algorithms adapted to semantic Amazing object operations. |

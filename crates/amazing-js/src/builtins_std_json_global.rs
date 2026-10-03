@@ -1,10 +1,14 @@
-// JSON and global functions with observable coercion and UTF-16 strings.
+// Portions ported from boa-dev/boa (core/engine/src/builtins/json/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// Raw JSON, internalization and serialization adapted to semantic runtime gateways.
 
 impl Interpreter {
     fn install_std_json_global(&mut self) {
         if let Some(JsValue::Object(json)) = self.global_env.resolve("JSON") {
             std_core_define(self, &json, "parse", 2, std_json_parse);
             std_core_define(self, &json, "stringify", 3, std_json_stringify);
+            std_core_define(self, &json, "rawJSON", 1, std_json_raw);
+            std_core_define(self, &json, "isRawJSON", 1, std_json_is_raw);
             json.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
                 symbol_data(JsValue::str("JSON"), false, true)).unwrap();
         }
@@ -46,12 +50,87 @@ fn std_uri_error(i: &mut Interpreter, message: &str) -> Throw {
     Throw::error("URIError", message)
 }
 
+#[cfg(test)]
+mod json_semantic_tests {
+    use super::*;
+    fn check(source: &str) {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script_with_backend(source, backend).unwrap(), JsValue::Bool(true), "{backend:?}");
+        }
+    }
+    #[test]
+    fn raw_json_validates_grammar_and_exposes_only_frozen_genuine_brand() {
+        check(r#"
+            var texts=['null','true','false','-0','1e400','123456789012345678901234567890','"x"'];
+            var ok=true;
+            for(var text of texts) {
+                var raw=JSON.rawJSON(text),d=Object.getOwnPropertyDescriptor(raw,'rawJSON');
+                ok=ok && JSON.isRawJSON(raw) && Object.getPrototypeOf(raw)===null && Object.isFrozen(raw) &&
+                    d.value===text && d.enumerable && !d.writable && !d.configurable &&
+                    Reflect.ownKeys(raw).join(',')==='rawJSON' && JSON.stringify(raw)===text &&
+                    !JSON.isRawJSON(new Proxy(raw,{})) && !JSON.isRawJSON(Object.create(raw));
+            }
+            for(var bad of ['', ' 1','1\n','[]','{}','01','1.','NaN','undefined','true false','"unterminated']) {
+                var rejected=false;try{JSON.rawJSON(bad);}catch(e){rejected=e instanceof SyntaxError;}ok=ok&&rejected;
+            }
+            var r=Proxy.revocable({},{});r.revoke();
+            ok && !JSON.isRawJSON(r.proxy) && !JSON.isRawJSON({rawJSON:'1'}) &&
+                JSON.stringify({rawJSON:'1'})==='{"rawJSON":"1"}' &&
+                JSON.stringify({n:JSON.rawJSON('12345678901234567890')})==='{"n":12345678901234567890}';
+        "#);
+    }
+    #[test]
+    fn reviver_uses_proxy_internal_methods_and_source_only_for_unchanged_primitives() {
+        check(r#"
+            var log='',source;
+            var out=JSON.parse('{"a":0,"b":[1]}',function(k,v,c){
+                if(k==='a') this.b=new Proxy([2],{
+                    get(t,k,r){if(k==='length')log+='length;';return Reflect.get(t,k,r);},
+                    defineProperty(t,k,d){log+='define;';return Reflect.defineProperty(t,k,d);}
+                });
+                if(k==='0') source=c.source;
+                return v;
+            });
+            var ok=out.b[0]===2 && source===undefined && log==='length;define;';
+            var threw=false;
+            try { JSON.parse('{"a":0,"b":{"x":1}}',function(k,v){
+                if(k==='a') this.b=new Proxy({x:1},{deleteProperty(){throw 'delete';}});
+                if(k==='x') return undefined; return v;
+            }); } catch(e){threw=e==='delete';}
+            var seen=[];
+            JSON.parse('{"a":1,"b":2}',function(k,v,c){
+                if(k==='a')this.b=7;
+                if(k==='b')seen.push(c.source);return v;
+            });
+            ok && threw && seen[0]===undefined && JSON.stringify(out)==='{"a":0,"b":[2]}';
+        "#);
+    }
+    #[test]
+    fn stringify_observes_array_proxies_order_and_utf16_text() {
+        check(r#"
+            var log='';
+            var a=new Proxy([1,2],{get(t,k,r){if(k==='length')log+='length;';return Reflect.get(t,k,r);}});
+            var ok=JSON.stringify(a)==='[1,2]' && log==='length;';
+            var keys=new Proxy(['b'],{});
+            ok=ok && JSON.stringify({a:1,b:2},keys)==='{"b":2}';
+            var output=JSON.stringify({a:1},null,'\ud800');
+            ok=ok && output.charCodeAt(2)===0xd800 && JSON.stringify('\b\f')==='"\\b\\f"';
+            var x={toJSON(k){log+='toJSON;';return 2;}};log='';
+            ok=ok && JSON.stringify(x,function(k,v){log+='replacer;';return v;})==='2' && log==='toJSON;replacer;';
+            var cyclic={};cyclic.self=cyclic;var rejected=false;
+            try{JSON.stringify(cyclic);}catch(e){rejected=e instanceof TypeError;}
+            ok && rejected && JSON.stringify([JSON.rawJSON('1e400')])==='[1e400]';
+        "#);
+    }
+}
+
 struct StdJsonParser<'a> {
     units: &'a [u16],
     position: usize,
     depth: usize,
     last_span: (usize, usize),
-    sources: HashMap<(usize, crate::value::JsString), crate::value::JsString>,
+    sources: HashMap<(usize, crate::value::JsString), (crate::value::JsString, JsValue)>,
 }
 impl<'a> StdJsonParser<'a> {
     fn whitespace(&mut self) {
@@ -151,7 +230,8 @@ impl<'a> StdJsonParser<'a> {
                 if let JsValue::Object(object) = &array {
                     for (index, (begin, end)) in spans.into_iter().enumerate() {
                         self.sources.insert((std_weak_id(object), crate::value::JsString::from(index.to_string())),
-                            crate::value::JsString::from_units(self.units[begin..end].to_vec()));
+                            (crate::value::JsString::from_units(self.units[begin..end].to_vec()),
+                             object.borrow().get_own(index.to_string()).unwrap_or(JsValue::Undefined)));
                     }
                 }
                 Ok(array)
@@ -167,9 +247,9 @@ impl<'a> StdJsonParser<'a> {
                         let value = self.value(i)?;
                         let (begin, end) = self.last_span;
                         if let JsValue::Object(handle) = &object {
-                            handle.borrow_mut().set_own(key.clone(), value);
+                            handle.borrow_mut().set_own(key.clone(), value.clone());
                             self.sources.insert((std_weak_id(handle), key),
-                                crate::value::JsString::from_units(self.units[begin..end].to_vec()));
+                                (crate::value::JsString::from_units(self.units[begin..end].to_vec()), value));
                         }
                         self.whitespace();
                         if self.take(b'}' as u16) { break; }
@@ -188,34 +268,34 @@ impl<'a> StdJsonParser<'a> {
 }
 
 fn std_json_revive(i: &mut Interpreter, holder: JsValue, key: crate::value::JsString,
-    reviver: &JsValue, sources: &HashMap<(usize, crate::value::JsString), crate::value::JsString>,
+    reviver: &JsValue, sources: &HashMap<(usize, crate::value::JsString), (crate::value::JsString, JsValue)>,
     depth: usize) -> Result<JsValue, Throw> {
     if depth > 512 { return Err(Throw::range_error("JSON reviver recursion limit")); }
     let value = i.get_prop(&holder, key.clone())?;
     if let JsValue::Object(object) = &value {
-        let keys = if matches!(object.borrow().exotic, Exotic::Array) {
-            (0..i.array_length(&value)).map(|index| crate::value::JsString::from(index.to_string())).collect::<Vec<_>>()
-        } else { object.borrow().own_keys_enumerable() };
+        let keys = if std_json_is_array(i, &value)? {
+            (0..std_json_length(i, &value)?).map(|index| crate::value::JsString::from(index.to_string())).collect::<Vec<_>>()
+        } else { i.enumerable_keys(&value)? };
         for child in keys {
             let replaced = std_json_revive(i, value.clone(), child.clone(), reviver, sources, depth + 1)?;
-            if replaced.is_undefined() { object.borrow_mut().delete_own(child); }
+            if replaced.is_undefined() { i.default_delete_property(object, &PropertyKey::String(child))?; }
             else {
-                // CreateDataProperty returns false when an existing descriptor
-                // cannot be replaced; InternalizeJSONProperty ignores that result.
-                let can_create = object.borrow().own_prop(child.clone())
-                    .is_none_or(|property| property.configurable);
-                if can_create {
-                    let _ = object.borrow_mut().define(child, symbol_data(replaced, true, true));
-                }
+                let descriptor = i.descriptor_fields_to_value(&StdDescriptorFields {
+                    value: Some(replaced), writable: Some(true), enumerable: Some(true),
+                    configurable: Some(true), ..Default::default()
+                });
+                i.define_own_property(object, &PropertyKey::String(child), &descriptor)?;
             }
         }
     }
     let context = i.object_value();
     if !value.is_object() {
         if let JsValue::Object(object) = &holder {
-            if let Some(source) = sources.get(&(std_weak_id(object), key.clone())) {
+            if let Some((source, original)) = sources.get(&(std_weak_id(object), key.clone())) {
+                if std_same_value(&value, original) {
                 if let JsValue::Object(context_object) = &context {
                     context_object.borrow_mut().set_own("source", JsValue::str(source.clone()));
+                }
                 }
             }
         }
@@ -233,23 +313,64 @@ fn std_json_parse(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
     if callable_function(&reviver).is_none() { return Ok(value); }
     let root = i.object_value();
     if let JsValue::Object(object) = &root {
-        object.borrow_mut().set_own("", value);
+        object.borrow_mut().set_own("", value.clone());
         let (begin, end) = parser.last_span;
         parser.sources.insert((std_weak_id(object), crate::value::JsString::from("")),
-            crate::value::JsString::from_units(source.units()[begin..end].to_vec()));
+            (crate::value::JsString::from_units(source.units()[begin..end].to_vec()), value));
     }
     std_json_revive(i, root, crate::value::JsString::from(""), &reviver, &parser.sources, 0)
+}
+
+fn std_json_is_array(i: &Interpreter, value: &JsValue) -> Result<bool, Throw> {
+    let mut current = value.clone();
+    loop {
+        let JsValue::Object(object) = &current else { return Ok(false); };
+        if let Some(parts) = i.proxy_parts(object) { current = parts?.0; }
+        else { return Ok(matches!(object.borrow().exotic, Exotic::Array)); }
+    }
+}
+
+fn std_json_length(i: &mut Interpreter, value: &JsValue) -> Result<usize, Throw> {
+    let length = i.get_prop(value, "length")?;
+    let number = i.to_number(&length)?;
+    Ok(if number.is_nan() || number <= 0.0 { 0 }
+        else { number.floor().min(9_007_199_254_740_991.0) as usize })
+}
+
+fn std_json_raw(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let source = i.to_js_string(&std_reflect_arg(&args, 0))?;
+    let whitespace = |unit: &u16| matches!(unit, 0x09 | 0x0a | 0x0d | 0x20);
+    if source.is_empty() || source.units().first().is_some_and(whitespace)
+        || source.units().last().is_some_and(whitespace) {
+        return Err(Throw::syntax_error("raw JSON cannot have empty text or edge whitespace"));
+    }
+    let mut parser = StdJsonParser { units: source.units(), position: 0, depth: 0,
+        last_span: (0, 0), sources: HashMap::new() };
+    let parsed = parser.value(i)?;
+    if parsed.is_object() || parser.position != source.len() {
+        return Err(Throw::syntax_error("raw JSON must be exactly one primitive JSON value"));
+    }
+    let mut object = JsObject::ordinary();
+    object.raw_json = Some(source.clone());
+    object.define("rawJSON", Property { value: JsValue::Str(source), writable: false,
+        enumerable: true, configurable: false, getter: None, setter: None }).unwrap();
+    object.extensible = false;
+    Ok(JsValue::object(object))
+}
+
+fn std_json_is_raw(_: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    Ok(JsValue::Bool(matches!(args.first(), Some(JsValue::Object(object)) if object.borrow().raw_json.is_some())))
 }
 
 struct StdJsonWriter {
     replacer: Option<JsValue>,
     keys: Option<Vec<crate::value::JsString>>,
-    gap: String,
+    gap: Vec<u16>,
     stack: Vec<usize>,
 }
 impl StdJsonWriter {
     fn property(&mut self, i: &mut Interpreter, holder: &JsValue,
-        key: crate::value::JsString, depth: usize) -> Result<Option<String>, Throw> {
+        key: crate::value::JsString, depth: usize) -> Result<Option<Vec<u16>>, Throw> {
         if depth > 512 { return Err(Throw::range_error("JSON nesting limit")); }
         let mut value = i.get_prop(holder, key.clone())?;
         if value.is_object() || matches!(value, JsValue::BigInt(_)) {
@@ -271,13 +392,16 @@ impl StdJsonWriter {
                 primitive => primitive,
             };
         }
+        if let JsValue::Object(object) = &value {
+            if let Some(raw) = &object.borrow().raw_json { return Ok(Some(raw.units().to_vec())); }
+        }
         match &value {
             JsValue::Undefined | JsValue::Symbol(_) => return Ok(None),
-            JsValue::Null => return Ok(Some("null".to_string())),
-            JsValue::Bool(v) => return Ok(Some(v.to_string())),
+            JsValue::Null => return Ok(Some("null".encode_utf16().collect())),
+            JsValue::Bool(v) => return Ok(Some(v.to_string().encode_utf16().collect())),
             JsValue::Num(v) => return Ok(Some(if v.is_finite() { crate::value::number_to_string(*v) }
-                else { "null".to_string() })),
-            JsValue::Str(v) => return Ok(Some(json_escape(v))),
+                else { "null".to_string() }.encode_utf16().collect())),
+            JsValue::Str(v) => return Ok(Some(std_json_quote(v))),
             JsValue::BigInt(_) => return Err(Throw::type_error("BigInt is not JSON serializable")),
             JsValue::Object(object) if object.borrow().func.is_some() => return Ok(None),
             JsValue::Object(_) => {}
@@ -288,26 +412,41 @@ impl StdJsonWriter {
         self.stack.push(id);
         let indent = self.gap.repeat(depth + 1);
         let outer = self.gap.repeat(depth);
-        let array = matches!(object.borrow().exotic, Exotic::Array);
+        let array = std_json_is_array(i, &value)?;
         let mut parts = Vec::new();
         if array {
-            for index in 0..i.array_length(&value) {
+            for index in 0..std_json_length(i, &value)? {
                 parts.push(self.property(i, &value, crate::value::JsString::from(index.to_string()), depth + 1)?
-                    .unwrap_or_else(|| "null".to_string()));
+                    .unwrap_or_else(|| "null".encode_utf16().collect()));
             }
         } else {
             let keys = if let Some(keys) = &self.keys { keys.clone() } else { i.enumerable_keys(&value)? };
             for child in keys {
                 if let Some(serialized) = self.property(i, &value, child.clone(), depth + 1)? {
-                    parts.push(format!("{}:{}{}", json_escape(&child), if self.gap.is_empty() { "" } else { " " }, serialized));
+                    let mut member = std_json_quote(&child);
+                    member.push(b':' as u16);
+                    if !self.gap.is_empty() { member.push(b' ' as u16); }
+                    member.extend(serialized);
+                    parts.push(member);
                 }
             }
         }
         self.stack.pop();
-        let (open, close) = if array { ('[', ']') } else { ('{', '}') };
-        if parts.is_empty() { return Ok(Some(format!("{open}{close}"))); }
-        if self.gap.is_empty() { Ok(Some(format!("{open}{}{close}", parts.join(",")))) }
-        else { Ok(Some(format!("{open}\n{indent}{}\n{outer}{close}", parts.join(&format!(",\n{indent}"))))) }
+        let (open, close) = if array { (b'[', b']') } else { (b'{', b'}') };
+        let mut output = vec![open as u16];
+        if !parts.is_empty() {
+            if !self.gap.is_empty() { output.push(b'\n' as u16); output.extend_from_slice(&indent); }
+            for (index, part) in parts.into_iter().enumerate() {
+                if index > 0 {
+                    output.push(b',' as u16);
+                    if !self.gap.is_empty() { output.push(b'\n' as u16); output.extend_from_slice(&indent); }
+                }
+                output.extend(part);
+            }
+            if !self.gap.is_empty() { output.push(b'\n' as u16); output.extend(outer); }
+        }
+        output.push(close as u16);
+        Ok(Some(output))
     }
 }
 fn std_json_stringify(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -315,9 +454,9 @@ fn std_json_stringify(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Re
     let replacer_value = std_reflect_arg(&args, 1);
     let replacer = if callable_function(&replacer_value).is_some() { Some(replacer_value.clone()) } else { None };
     let keys = if let JsValue::Object(object) = &replacer_value {
-        if matches!(object.borrow().exotic, Exotic::Array) {
+        if replacer.is_none() && std_json_is_array(i, &replacer_value)? {
             let mut list = Vec::new();
-            for index in 0..i.array_length(&replacer_value) {
+            for index in 0..std_json_length(i, &replacer_value)? {
                 let entry = i.get_prop(&replacer_value, &index.to_string())?;
                 let key = match entry {
                     JsValue::Str(key) => Some(key),
@@ -345,15 +484,36 @@ fn std_json_stringify(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Re
         }
     }
     let gap = match space {
-        JsValue::Num(number) => " ".repeat(if number.is_nan() { 0 } else { number.max(0.0).min(10.0) as usize }),
-        JsValue::Str(text) => crate::value::JsString::from_units(text.units().iter().take(10).copied().collect::<Vec<_>>()).to_utf8_lossy(),
-        _ => String::new(),
+        JsValue::Num(number) => vec![b' ' as u16; if number.is_nan() { 0 } else { number.max(0.0).min(10.0) as usize }],
+        JsValue::Str(text) => text.units().iter().take(10).copied().collect::<Vec<_>>(),
+        _ => Vec::new(),
     };
     let root = i.object_value();
     if let JsValue::Object(object) = &root { object.borrow_mut().set_own("", value); }
     let mut writer = StdJsonWriter { replacer, keys, gap, stack: Vec::new() };
     Ok(writer.property(i, &root, crate::value::JsString::from(""), 0)?
-        .map(JsValue::str).unwrap_or(JsValue::Undefined))
+        .map(JsValue::str_units).unwrap_or(JsValue::Undefined))
+}
+
+fn std_json_quote(value: &crate::value::JsString) -> Vec<u16> {
+    let mut output = vec![b'"' as u16];
+    let mut units = value.units().iter().copied().peekable();
+    while let Some(unit) = units.next() {
+        let escape = match unit {
+            0x08 => Some('b'), 0x09 => Some('t'), 0x0a => Some('n'),
+            0x0c => Some('f'), 0x0d => Some('r'), 0x22 => Some('"'), 0x5c => Some('\\'),
+            _ => None,
+        };
+        if let Some(escape) = escape { output.extend([b'\\' as u16, escape as u16]); }
+        else if (0xd800..=0xdbff).contains(&unit)
+            && units.peek().is_some_and(|low| (0xdc00..=0xdfff).contains(low)) {
+            output.extend([unit, units.next().unwrap()]);
+        } else if unit < 0x20 || (0xd800..=0xdfff).contains(&unit) {
+            output.extend(format!("\\u{unit:04x}").encode_utf16());
+        } else { output.push(unit); }
+    }
+    output.push(b'"' as u16);
+    output
 }
 
 fn std_global_parse_int(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {

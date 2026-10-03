@@ -1,0 +1,558 @@
+{
+  "ticket": "JSRT-41",
+  "base_sha": "4531bb3b40f89816396cb41e4edb65849f18c78c",
+  "workspace": {
+    "passed": 3772,
+    "skipped": 17,
+    "elapsed_seconds": 74.638
+  },
+  "doctests": 4,
+  "selections": {
+    "language": {
+      "selected": 24590,
+      "before": {
+        "pass": 24029,
+        "fail": 535,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "after": {
+        "pass": 24029,
+        "fail": 535,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 55.496,
+      "elapsed_after": 53.342,
+      "before_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "after_host_sha256": "12ea6a52280104d32caf0cfed8cd06a02d955a816a683504c8f89c1390c3342f",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-JSON": {
+      "selected": 165,
+      "before": {
+        "pass": 131,
+        "fail": 34,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53707
+      },
+      "after": {
+        "pass": 165,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53707
+      },
+      "gained": [
+        "built-ins/JSON/isRawJSON/basic.js",
+        "built-ins/JSON/isRawJSON/builtin.js",
+        "built-ins/JSON/isRawJSON/length.js",
+        "built-ins/JSON/isRawJSON/name.js",
+        "built-ins/JSON/isRawJSON/not-a-constructor.js",
+        "built-ins/JSON/isRawJSON/prop-desc.js",
+        "built-ins/JSON/parse/revived-proxy-revoked.js",
+        "built-ins/JSON/parse/revived-proxy.js",
+        "built-ins/JSON/parse/reviver-array-define-prop-err.js",
+        "built-ins/JSON/parse/reviver-array-delete-err.js",
+        "built-ins/JSON/parse/reviver-array-length-coerce-err.js",
+        "built-ins/JSON/parse/reviver-array-length-get-err.js",
+        "built-ins/JSON/parse/reviver-call-args-after-forward-modification.js",
+        "built-ins/JSON/parse/reviver-forward-modifies-object.js",
+        "built-ins/JSON/parse/reviver-object-define-prop-err.js",
+        "built-ins/JSON/parse/reviver-object-delete-err.js",
+        "built-ins/JSON/parse/reviver-object-own-keys-err.js",
+        "built-ins/JSON/rawJSON/basic.js",
+        "built-ins/JSON/rawJSON/bigint-raw-json-can-be-stringified.js",
+        "built-ins/JSON/rawJSON/builtin.js",
+        "built-ins/JSON/rawJSON/illegal-empty-and-start-end-chars.js",
+        "built-ins/JSON/rawJSON/invalid-JSON-text.js",
+        "built-ins/JSON/rawJSON/length.js",
+        "built-ins/JSON/rawJSON/name.js",
+        "built-ins/JSON/rawJSON/not-a-constructor.js",
+        "built-ins/JSON/rawJSON/prop-desc.js",
+        "built-ins/JSON/rawJSON/returns-expected-object.js",
+        "built-ins/JSON/stringify/replacer-array-abrupt.js",
+        "built-ins/JSON/stringify/replacer-array-proxy-revoked-realm.js",
+        "built-ins/JSON/stringify/replacer-array-proxy-revoked.js",
+        "built-ins/JSON/stringify/replacer-array-proxy.js",
+        "built-ins/JSON/stringify/value-array-abrupt.js",
+        "built-ins/JSON/stringify/value-array-proxy.js",
+        "built-ins/JSON/stringify/value-string-escape-ascii.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.534,
+      "elapsed_after": 3.092,
+      "before_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "after_host_sha256": "12ea6a52280104d32caf0cfed8cd06a02d955a816a683504c8f89c1390c3342f",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before": {
+        "pass": 3357,
+        "fail": 56,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "after": {
+        "pass": 3357,
+        "fail": 56,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 10.487,
+      "elapsed_after": 11.353,
+      "before_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "after_host_sha256": "12ea6a52280104d32caf0cfed8cd06a02d955a816a683504c8f89c1390c3342f",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Proxy": {
+      "selected": 311,
+      "before": {
+        "pass": 310,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "after": {
+        "pass": 310,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.186,
+      "elapsed_after": 3.517,
+      "before_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "after_host_sha256": "12ea6a52280104d32caf0cfed8cd06a02d955a816a683504c8f89c1390c3342f",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Reflect": {
+      "selected": 154,
+      "before": {
+        "pass": 152,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "after": {
+        "pass": 152,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.945,
+      "elapsed_after": 2.929,
+      "before_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "after_host_sha256": "12ea6a52280104d32caf0cfed8cd06a02d955a816a683504c8f89c1390c3342f",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-String": {
+      "selected": 1341,
+      "before": {
+        "pass": 1331,
+        "fail": 4,
+        "timeout": 0,
+        "unsupported": 6,
+        "skipped": 52531
+      },
+      "after": {
+        "pass": 1331,
+        "fail": 4,
+        "timeout": 0,
+        "unsupported": 6,
+        "skipped": 52531
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 5.784,
+      "elapsed_after": 5.97,
+      "before_host_sha256": "b0b9b0cd6f1fd3efdf7e45fb860e5f1498997fbe801d29c706e5bb9d841607f4",
+      "after_host_sha256": "12ea6a52280104d32caf0cfed8cd06a02d955a816a683504c8f89c1390c3342f",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    }
+  },
+  "unique": {
+    "selected": 29975,
+    "before_pass": 29310,
+    "after_pass": 29344,
+    "gained_files": [
+      "built-ins/JSON/isRawJSON/basic.js",
+      "built-ins/JSON/isRawJSON/builtin.js",
+      "built-ins/JSON/isRawJSON/length.js",
+      "built-ins/JSON/isRawJSON/name.js",
+      "built-ins/JSON/isRawJSON/not-a-constructor.js",
+      "built-ins/JSON/isRawJSON/prop-desc.js",
+      "built-ins/JSON/parse/revived-proxy-revoked.js",
+      "built-ins/JSON/parse/revived-proxy.js",
+      "built-ins/JSON/parse/reviver-array-define-prop-err.js",
+      "built-ins/JSON/parse/reviver-array-delete-err.js",
+      "built-ins/JSON/parse/reviver-array-length-coerce-err.js",
+      "built-ins/JSON/parse/reviver-array-length-get-err.js",
+      "built-ins/JSON/parse/reviver-call-args-after-forward-modification.js",
+      "built-ins/JSON/parse/reviver-forward-modifies-object.js",
+      "built-ins/JSON/parse/reviver-object-define-prop-err.js",
+      "built-ins/JSON/parse/reviver-object-delete-err.js",
+      "built-ins/JSON/parse/reviver-object-own-keys-err.js",
+      "built-ins/JSON/rawJSON/basic.js",
+      "built-ins/JSON/rawJSON/bigint-raw-json-can-be-stringified.js",
+      "built-ins/JSON/rawJSON/builtin.js",
+      "built-ins/JSON/rawJSON/illegal-empty-and-start-end-chars.js",
+      "built-ins/JSON/rawJSON/invalid-JSON-text.js",
+      "built-ins/JSON/rawJSON/length.js",
+      "built-ins/JSON/rawJSON/name.js",
+      "built-ins/JSON/rawJSON/not-a-constructor.js",
+      "built-ins/JSON/rawJSON/prop-desc.js",
+      "built-ins/JSON/rawJSON/returns-expected-object.js",
+      "built-ins/JSON/stringify/replacer-array-abrupt.js",
+      "built-ins/JSON/stringify/replacer-array-proxy-revoked-realm.js",
+      "built-ins/JSON/stringify/replacer-array-proxy-revoked.js",
+      "built-ins/JSON/stringify/replacer-array-proxy.js",
+      "built-ins/JSON/stringify/value-array-abrupt.js",
+      "built-ins/JSON/stringify/value-array-proxy.js",
+      "built-ins/JSON/stringify/value-string-escape-ascii.js"
+    ],
+    "lost_files": [
+
+    ],
+    "gained_variants": [
+      [
+        "built-ins/JSON/isRawJSON/basic.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/isRawJSON/basic.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/isRawJSON/builtin.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/isRawJSON/builtin.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/isRawJSON/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/isRawJSON/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/isRawJSON/name.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/isRawJSON/name.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/isRawJSON/not-a-constructor.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/isRawJSON/not-a-constructor.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/isRawJSON/prop-desc.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/isRawJSON/prop-desc.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/parse/revived-proxy-revoked.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/parse/revived-proxy-revoked.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/parse/revived-proxy.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/parse/revived-proxy.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-array-define-prop-err.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-array-define-prop-err.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-array-delete-err.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-array-delete-err.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-array-length-coerce-err.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-array-length-coerce-err.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-array-length-get-err.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-array-length-get-err.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-call-args-after-forward-modification.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-call-args-after-forward-modification.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-forward-modifies-object.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-forward-modifies-object.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-object-define-prop-err.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-object-define-prop-err.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-object-delete-err.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-object-delete-err.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-object-own-keys-err.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/parse/reviver-object-own-keys-err.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/basic.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/basic.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/bigint-raw-json-can-be-stringified.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/bigint-raw-json-can-be-stringified.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/builtin.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/builtin.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/illegal-empty-and-start-end-chars.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/illegal-empty-and-start-end-chars.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/invalid-JSON-text.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/invalid-JSON-text.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/name.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/name.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/not-a-constructor.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/not-a-constructor.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/prop-desc.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/prop-desc.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/returns-expected-object.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/rawJSON/returns-expected-object.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/replacer-array-abrupt.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/replacer-array-abrupt.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/replacer-array-proxy-revoked-realm.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/replacer-array-proxy-revoked-realm.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/replacer-array-proxy-revoked.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/replacer-array-proxy-revoked.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/replacer-array-proxy.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/replacer-array-proxy.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/value-array-abrupt.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/value-array-abrupt.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/value-array-proxy.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/value-array-proxy.js",
+        "strict"
+      ],
+      [
+        "built-ins/JSON/stringify/value-string-escape-ascii.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/JSON/stringify/value-string-escape-ascii.js",
+        "strict"
+      ]
+    ],
+    "lost_variants": [
+
+    ]
+  }
+}
