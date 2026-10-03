@@ -149,6 +149,15 @@ impl FrameRuntime {
         self.documents.iter().find_map(|(node, frame)| (frame.document == Some(document)).then_some(*node))
     }
 
+    /// Genuine Window identity without entering a realm or invoking script.
+    pub(super) fn document_for_window(&self, window: &JsValue) -> Option<NodeIdx> {
+        let global = self.contexts.iter().find(|(_, context)| *window == context.global);
+        let live = self.contexts.iter().find(|(realm, context)| *window == context.window
+            && self.live_context(context, **realm));
+        let retired = self.contexts.iter().find(|(_, context)| *window == context.window);
+        global.or(live).or(retired).map(|(_, context)| context.document)
+    }
+
     fn live_context(&self, context: &WindowContext, realm: RealmHandle) -> bool {
         context.frame.is_none() || context.frame.is_some_and(|frame|
             self.windows.get(&frame).is_some_and(|(current, _)| *current == realm)
