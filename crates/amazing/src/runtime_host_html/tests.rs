@@ -1423,6 +1423,7 @@ fn selection_context_helpers_preserve_actual_associations_and_receiver_policy() 
     for fake in [JsValue::Undefined, JsValue::Null, JsValue::num(1.0)] {
         assert!(adapter.html_window_document_for_selection(&fake).is_err());
     }
+    adapter.js.run_script("Object.defineProperty(window,'DOMException',{configurable:true,get(){throw new Error('author constructor getter entered')}})").unwrap();
     let error = adapter.html_window_document_for_selection(&opaque.window).unwrap_err();
     assert_eq!(adapter.js.binding_get_property(&error.0, "name").unwrap(), JsValue::str("SecurityError"));
     assert_eq!(adapter.js.binding_get_property(&error.0, "code").unwrap(), JsValue::num(18.0));
@@ -1434,6 +1435,15 @@ fn selection_context_helpers_preserve_actual_associations_and_receiver_policy() 
     assert!(adapter.html_window_document_for_selection(&same.window).is_err());
     adapter.state.borrow_mut().frames.contexts.get_mut(&realm).unwrap().document_generation -= 1;
     drop(adapter);
+    // A root caller executing a borrowed child-realm operation gets the callee's exception prototype.
+    let denied = js.binding_with_realm(realm, |js| {
+        let mut adapter = RuntimeBindingHost { js, state: bindings.state.clone() };
+        Ok(adapter.html_window_document_for_selection(&opaque.window).unwrap_err().0)
+    }).unwrap();
+    let expected = bindings.state.borrow().interfaces[&realm].iter()
+        .find(|(interface, _, _)| *interface == Interface::DOMException).unwrap().1.clone();
+    let (JsValue::Object(denied), JsValue::Object(expected)) = (denied, expected) else { panic!("native DOMException objects"); };
+    assert!(denied.borrow().proto.as_ref().is_some_and(|prototype| Rc::ptr_eq(&prototype.0, &expected.0)));
     js.run_script("document.getElementById('same').remove()").unwrap();
     bindings.navigate_iframes(&mut js);
     let mut adapter = RuntimeBindingHost { js: &mut js, state: bindings.state.clone() };
