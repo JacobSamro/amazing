@@ -28,9 +28,9 @@ impl RuntimeBindings {
         self.state.borrow_mut().frames.resource_loader = Some(loader);
     }
 
-    pub(super) fn fetch_document_classic_script(&self, document: NodeIdx, script: NodeIdx, src: &str,
+    pub(super) fn fetch_document_classic_script(&self, js: &mut Interpreter,
+        document: NodeIdx, script: NodeIdx, src: &str,
         base: &str, resolver: Option<&FrameResourceResolver>) -> Option<(String, String)> {
-        let url = ParsedUrl::parse(base).ok()?.resolve(src).ok()?.serialize();
         let snapshot = {
             let state = self.state.borrow();
             let loader = state.frames.resource_loader.clone();
@@ -48,7 +48,13 @@ impl RuntimeBindings {
             (loader, context, encoding, mode, credentials, referrer_policy)
         };
         let Some(loader) = snapshot.0 else {
+            let url = ParsedUrl::parse(base).ok()?.resolve(src).ok()?.serialize();
             return fetch_child_script(src, base, resolver).map(|text| (text, url));
+        };
+        let url = {
+            let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
+            let units = src.encode_utf16().collect::<Vec<_>>();
+            String::from_utf16_lossy(&adapter.dom_resolve_element_url(script, &units).ok()?)
         };
         let initiator = snapshot.1?;
         let request = HtmlFrameResourceRequest { requested_url: url,
@@ -214,7 +220,7 @@ mod tests {
             Ok(match request.kind {
                 HtmlFrameResourceKind::Document => response("https://example.test/final/child.html",
                     Some("text/html; charset=windows-1252"),
-                    b"<!doctype html><body><script src='script.js'></script><p id=p>\xe9</p>".to_vec()),
+                    b"<!doctype html><base href='/assets/'><body><script src='script.js?q=\xe9'></script><p id=p>\xe9</p>".to_vec()),
                 HtmlFrameResourceKind::ClassicScript => response("https://example.test/scripts/final.js",
                     Some("text/javascript; charset=windows-1252"), b"window.classicValue='\xe9';".to_vec()),
             })
@@ -227,7 +233,7 @@ mod tests {
         assert_eq!(requests[0].requested_url, "https://example.test/requested.xml");
         assert_eq!(requests[0].initiator.document_url, "https://example.test/root/main.html");
         assert!(requests[0].embedding.is_some());
-        assert_eq!(requests[1].requested_url, "https://example.test/final/script.js");
+        assert_eq!(requests[1].requested_url, "https://example.test/assets/script.js?q=%E9");
         assert_eq!(requests[1].initiator.document_url, "https://example.test/final/child.html");
         assert_eq!(requests[1].referrer, requests[1].initiator.document_url);
         assert_eq!(requests[1].request_mode, amazing_fetch::RequestMode::NoCors);

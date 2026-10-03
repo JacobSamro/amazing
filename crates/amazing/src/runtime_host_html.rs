@@ -1139,7 +1139,7 @@ impl RuntimeBindings {
                                 let url = crate::cmd::js::resolve_script_url(&child_url, src);
                                 let text = if script.kind == crate::cmd::js::ScriptKind::Module {
                                     self.load_module_source(i, &url).ok().map(|text| (text, url))
-                                } else { self.fetch_document_classic_script(document, script.node, src, &child_url, resolver.as_ref()) };
+                                } else { self.fetch_document_classic_script(i, document, script.node, src, &child_url, resolver.as_ref()) };
                                 if let Some((text, final_url)) = text {
                                     self.execute_document_script(i, script, &text, &final_url)?;
                                 }
@@ -1216,7 +1216,7 @@ impl RuntimeBindings {
                     let text = if script.kind == crate::cmd::js::ScriptKind::Module {
                         js.binding_with_realm(realm, |i| self.load_module_source(i, &url).map_err(Throw::type_error)).ok()
                             .map(|text| (text, url.clone()))
-                    } else { self.fetch_document_classic_script(document, script.node, src, child_url, resolver) };
+                    } else { self.fetch_document_classic_script(js, document, script.node, src, child_url, resolver) };
                     if let Some((text, final_url)) = text {
                         js.binding_with_realm(realm, |i| self.execute_document_script(i, &script, &text, &final_url))
                     } else if script.kind == crate::cmd::js::ScriptKind::Module {
@@ -1509,7 +1509,7 @@ impl RuntimeBindings {
                         Some(realm) => js.binding_with_realm(realm, |i| self.load_module_source(i, &script_url).map_err(Throw::type_error)).ok(),
                         None => self.load_module_source(js, &script_url).ok(),
                     }.map(|text| (text, script_url.clone()))
-                } else { self.fetch_document_classic_script(root, script.node, src, &base, resolver.as_ref()) } {
+                } else { self.fetch_document_classic_script(js, root, script.node, src, &base, resolver.as_ref()) } {
                     Some((text, final_url)) => {
                         run_body(js, &text, &final_url);
                         if script.kind == crate::cmd::js::ScriptKind::Classic { let _ = self.dispatch_script_event(js, node, "load"); }
