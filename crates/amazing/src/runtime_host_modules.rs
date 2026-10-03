@@ -266,7 +266,7 @@ impl RuntimeBindings {
     fn module_script_options(&self, script: &crate::cmd::js::PageScript) -> ModuleFetchOptions {
         let state = self.state.borrow();
         let host = state.host.borrow();
-        if (script.node.0 as usize) >= host.dom.node_count() { return ModuleFetchOptions::default(); }
+        if host.dom.node_generation(script.node).is_none() { return ModuleFetchOptions::default(); }
         let attrs = host.dom.attrs_of(script.node).unwrap_or(&[]);
         let attr = |name: &str| attrs.iter().find(|(key, _)| key.eq_ignore_ascii_case(name))
             .map(|(_, value)| value.clone()).unwrap_or_default();
@@ -277,7 +277,19 @@ impl RuntimeBindings {
             referrer_policy: {
                 let value = attr("referrerpolicy").to_ascii_lowercase();
                 let parsed = module_referrer_policy(&value);
-                if parsed == value { parsed } else { String::new() }
+                if !value.is_empty() && parsed == value { parsed } else {
+                    host.dom.owner_document(script.node)
+                        .and_then(|document| state.frames.document_referrer_policy(&host.dom, document))
+                        .map(|policy| {
+                            use amazing_fetch::ReferrerPolicy::*;
+                            match policy {
+                                NoReferrer => "no-referrer", NoReferrerWhenDowngrade => "no-referrer-when-downgrade",
+                                SameOrigin => "same-origin", Origin => "origin", StrictOrigin => "strict-origin",
+                                OriginWhenCrossOrigin => "origin-when-cross-origin",
+                                StrictOriginWhenCrossOrigin => "strict-origin-when-cross-origin", UnsafeUrl => "unsafe-url",
+                            }.to_owned()
+                        }).unwrap_or_default()
+                }
             },
             nonce: attr("nonce"), integrity: attr("integrity"),
         }
@@ -461,6 +473,84 @@ mod tests {
         let node_generation = driver.test_bindings().state.borrow().host.borrow().dom.node_generation(NodeIdx(node));
         PageScript { kind, node: NodeIdx(node), node_generation, src: external.then(|| "root.js".into()), body: String::new() }
     }
+    #[test]
+    fn first_external_and_inline_module_graphs_capture_actual_document_response_policy() {
+        for external in [true, false] {
+            let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+                "<!doctype html><script type=module></script>"), native_forwarded: false }));
+            let node = host.borrow_mut().query_selector("script").unwrap();
+            let mut js = Interpreter::new_with_external_scheduler(crate::js_scheduler::JS_CAPACITY).unwrap();
+            js.set_dom_host(host.clone());
+            let bindings = super::super::install(&mut js, host).unwrap();
+            bindings.set_document_url(&mut js, "https://example.test/page.html");
+            let mut headers = amazing_net::Headers::new();
+            headers.append("Referrer-Policy", "origin".into()).unwrap();
+            headers.append("Referrer-Policy", "invalid, same-origin".into()).unwrap();
+            headers.append("Referrer-Policy", "unknown".into()).unwrap();
+            bindings.set_document_response_referrer_policy(NodeIdx(0), &headers).unwrap();
+            let requests = Rc::new(RefCell::new(Vec::new()));
+            let recorded = requests.clone();
+            bindings.set_module_resource_loader(Rc::new(move |request| {
+                let root = request.requested_url.ends_with("/root.js");
+                recorded.borrow_mut().push(request.clone());
+                let mut headers = amazing_net::Headers::new();
+                headers.append("Content-Type", "text/javascript".into()).unwrap();
+                if root { headers.append("Referrer-Policy", "no-referrer".into()).unwrap(); }
+                Ok(amazing_net::Response { url: request.requested_url, status: 200, reason: "OK".into(), headers,
+                    body: if root { b"import './dep.js';window.modulePolicyRoot=true;".to_vec() }
+                          else { b"window.modulePolicyDependency=true;".to_vec() } })
+            }));
+            let mut script = script(ScriptKind::Module, node, external);
+            script.body = "import './inline-dep.js';window.modulePolicyRoot=true;".into();
+            let url = bindings.page_script_url(&js, &script, "https://example.test/page.html");
+            let source = if external { bindings.load_module_source(&js, &url).unwrap() } else { script.body.clone() };
+            bindings.execute_page_script(&mut js, &script, &source, &url).unwrap();
+            assert_eq!(js.run_script("modulePolicyRoot && modulePolicyDependency").unwrap(), JsValue::Bool(true));
+            let requests = requests.borrow();
+            assert_eq!(requests.len(), if external { 2 } else { 1 });
+            assert_eq!(requests[0].options.referrer_policy, "same-origin");
+            assert_eq!(requests[0].initiator.document, NodeIdx(0));
+            if external { assert_eq!(requests[1].options.referrer_policy, "no-referrer"); }
+        }
+    }
+
+    #[test]
+    fn module_attribute_policy_uses_actual_owner_document_even_after_frame_retirement() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+            "<!doctype html><body><iframe id=blank></iframe><iframe id=srcdoc srcdoc='<p>child'></iframe>"), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(crate::js_scheduler::JS_CAPACITY).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = super::super::install(&mut js, host.clone()).unwrap();
+        let mut headers = amazing_net::Headers::new();
+        headers.append("Referrer-Policy", "no-referrer".into()).unwrap();
+        bindings.set_document_response_referrer_policy(NodeIdx(0), &headers).unwrap();
+        bindings.set_document_url(&mut js, "https://example.test/page.html");
+        let documents = bindings.state.borrow().frames.contexts.values()
+            .filter(|context| context.frame.is_some()).map(|context| context.document).collect::<Vec<_>>();
+        assert_eq!(documents.len(), 2);
+        let nodes = documents.iter().map(|document| host.borrow_mut().dom.create_element(*document, "script")).collect::<Vec<_>>();
+        for node in &nodes {
+            let script = script(ScriptKind::Module, node.0, false);
+            for (value, expected) in [(None, "no-referrer"), (Some(""), "no-referrer"),
+                (Some("bogus"), "no-referrer"), (Some(" origin "), "no-referrer"),
+                (Some("origin,no-referrer"), "no-referrer"), (Some("ORIGIN"), "origin"), (Some("same-origin"), "same-origin")] {
+                if let Some(value) = value { host.borrow_mut().dom.set_attribute(*node, "referrerpolicy", value).unwrap(); }
+                else { host.borrow_mut().dom.remove_attribute(*node, "referrerpolicy").unwrap(); }
+                assert_eq!(bindings.module_script_options(&script).referrer_policy, expected);
+            }
+            host.borrow_mut().dom.remove_attribute(*node, "referrerpolicy").unwrap();
+        }
+        headers = amazing_net::Headers::new();
+        headers.append("Referrer-Policy", "unsafe-url".into()).unwrap();
+        bindings.set_document_response_referrer_policy(NodeIdx(0), &headers).unwrap();
+        for node in &nodes { assert_eq!(bindings.module_script_options(&script(ScriptKind::Module, node.0, false)).referrer_policy, "no-referrer"); }
+        js.run_script("document.getElementById('srcdoc').remove()").unwrap();
+        bindings.navigate_iframes(&mut js);
+        for node in &nodes { assert_eq!(bindings.module_script_options(&script(ScriptKind::Module, node.0, false)).referrer_policy, "no-referrer"); }
+        let invalid = script(ScriptKind::Module, u32::MAX, false);
+        assert!(bindings.module_script_options(&invalid).referrer_policy.is_empty());
+    }
+
     #[test]
     fn module_resources_keep_actual_context_options_and_redirected_bases() {
         let host = Rc::new(RefCell::new(BrowserDomHost {
