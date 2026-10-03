@@ -311,7 +311,6 @@ mod tests {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
             "<!doctype html><body><iframe src='/requested.xml'></iframe>"), native_forwarded: false }));
         let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
-        scheduler.set_location_url("https://example.test/root/main.html");
         let requests = Rc::new(RefCell::new(Vec::new()));
         let observed = requests.clone();
         let callback_host = host.clone();
@@ -326,6 +325,7 @@ mod tests {
                     Some("text/javascript; charset=windows-1252"), b"window.classicValue='\xe9';".to_vec()),
             })
         }));
+        scheduler.set_location_url("https://example.test/root/main.html");
         scheduler.dispatch_pending_iframe_loads().unwrap();
         assert_eq!(scheduler.run_script("var f=document.querySelector('iframe');[f.contentDocument.URL,f.contentDocument.characterSet,f.contentDocument.getElementById('p').textContent,f.contentWindow.classicValue].join('|')").unwrap(),
             JsValue::str("https://example.test/final/child.html|windows-1252|é|é"));
