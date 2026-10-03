@@ -16,6 +16,8 @@ use patterns::pattern_target;
 mod resources;
 #[path = "compiler_declarations.rs"]
 mod declarations;
+#[path = "compiler_with.rs"]
+mod with;
 
 const MAX_REGISTERS: usize = 65_536;
 const MAX_INSTRUCTIONS: usize = 262_144;
@@ -200,6 +202,7 @@ struct Compiler {
     scope_depth: usize,
     /// The innermost disposal scope captures each using declaration.
     resource_stack: Vec<usize>,
+    with_depth: usize,
 }
 
 /// One entry per enclosing loop, `switch`, or plain labeled statement a
@@ -245,6 +248,7 @@ impl Compiler {
             pending_labels: Vec::new(),
             scope_depth: 0,
             resource_stack: Vec::new(),
+            with_depth: 0,
         }
     }
 
@@ -580,7 +584,7 @@ impl Compiler {
     fn emit(&mut self, op: Instruction) -> usize {
         let index = self.program.code.len();
         match &op {
-            Instruction::EnterScope | Instruction::EnterCatch(_) | Instruction::EnterCatchValue(_) | Instruction::BindFor(..) => self.scope_depth += 1,
+            Instruction::EnterScope | Instruction::EnterObjectScope(_) | Instruction::EnterCatch(_) | Instruction::EnterCatchValue(_) | Instruction::BindFor(..) => self.scope_depth += 1,
             Instruction::LeaveScope => self.scope_depth -= 1,
             _ => {}
         }
@@ -659,6 +663,9 @@ impl Compiler {
                     if declaration.kind != VarKind::Var && (!self.native_declarations || self.scope_depth == 0) && (declaration.resource_kind.is_some() || !matches!(binding.binding, Binding::Ident(_))) {
                         self.reserve_pattern(&binding.binding, declaration.kind == VarKind::Let);
                     }
+                    let reference = if declaration.kind == VarKind::Var && self.with_depth != 0 {
+                        self.with_binding_reference(&binding.binding)
+                    } else { None };
                     let value = match &binding.init {
                         Some(expression) => match &binding.binding {
                             Binding::Ident(name) => self.named_class_expression(expression, KeyOperand::Static(super::Interpreter::class_binding_name(&name.name)))?,
@@ -673,7 +680,9 @@ impl Compiler {
                         let slot = *self.resource_stack.last().ok_or_else(|| self.error(binding.span, "unscoped using declaration"))?;
                         self.emit(Instruction::ResourceCapture(slot, value, resource_kind == ast::ResourceKind::AwaitUsing));
                     }
-                    self.binding_pattern(&binding.binding, value, declaration.kind, binding.span)?;
+                    if declaration.kind == VarKind::Var && self.with_depth != 0 {
+                        self.with_binding_prepared(&binding.binding, value, reference, binding.span)?;
+                    } else { self.binding_pattern(&binding.binding, value, declaration.kind, binding.span)?; }
                 }
             }
             StmtKind::Class(class) => {
@@ -691,6 +700,16 @@ impl Compiler {
                 self.emit(Instruction::EnterScope);
                 self.instantiate_block(&block.body);
                 self.statements(&block.body, block.span)?;
+                self.emit(Instruction::LeaveScope);
+            }
+            StmtKind::With { object, body } if self.program.is_function && !self.is_async && !self.is_generator => {
+                let object = self.expression(object)?;
+                self.emit(Instruction::RequireObjectCoercible(object));
+                self.emit(Instruction::EnterObjectScope(object));
+                self.with_depth += 1;
+                let result = self.statement(body);
+                self.with_depth -= 1;
+                result?;
                 self.emit(Instruction::LeaveScope);
             }
             StmtKind::If { cond, then, els } => {

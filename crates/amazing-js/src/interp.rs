@@ -1719,6 +1719,7 @@ impl Interpreter {
 }
 
 include!("interp_helpers.rs");
+include!("interp_with.rs");
 include!("interp_async.rs");
 include!("interp_realms.rs");
 include!("interp_eval_declarations.rs");

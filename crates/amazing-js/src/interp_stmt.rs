@@ -129,6 +129,12 @@ impl Interpreter {
                     if d.kind == ast::VarKind::Var && x.init.is_none() {
                         continue;
                     }
+                    let reference = if d.kind == ast::VarKind::Var && has_local_object_environment(env) {
+                        match &x.binding {
+                            Binding::Ident(name) => Some(self.capture_reference(&ast::Expr::new(ExprKind::Ident(name.clone()), name.span), env)?),
+                            _ => None,
+                        }
+                    } else { None };
                     let mut v = x
                         .init
                         .as_ref()
@@ -153,7 +159,8 @@ impl Interpreter {
                     if let Some(kind) = d.resource_kind {
                         self.add_disposable(&v, kind == ast::ResourceKind::AwaitUsing)?;
                     }
-                    self.bind_pattern(&x.binding, v, d.kind, env)?;
+                    if let Some(reference) = reference { self.put_reference(reference, v, env)?; }
+                    else { self.bind_pattern(&x.binding, v, d.kind, env)?; }
                 }
                 Ok(Flow::Normal)
             }

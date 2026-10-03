@@ -33,7 +33,7 @@ impl Compiler {
         }
     }
 
-    fn pattern_start(&mut self, value: Register) -> (usize, usize) {
+    pub(super) fn pattern_start(&mut self, value: Register) -> (usize, usize) {
         let slot = self.program.async_iterator_slots;
         self.program.async_iterator_slots += 1;
         self.emit(Instruction::PatternStart(slot, value));
@@ -41,7 +41,7 @@ impl Compiler {
         (slot, handler)
     }
 
-    fn pattern_end(&mut self, slot: usize, handler: usize) {
+    pub(super) fn pattern_end(&mut self, slot: usize, handler: usize) {
         self.emit(Instruction::TryNormal);
         let finally = self.program.code.len();
         self.emit(Instruction::PatternClose(slot));
@@ -50,7 +50,7 @@ impl Compiler {
         self.program.code[handler] = Instruction::PushTry { catch: None, finally: Some(finally), end };
     }
 
-    fn pattern_default(&mut self, source: Register, expression: &Expr, name: Option<&str>) -> Result<Register, CompileError> {
+    pub(super) fn pattern_default(&mut self, source: Register, expression: &Expr, name: Option<&str>) -> Result<Register, CompileError> {
         let value = self.register(expression.span)?;
         self.emit(Instruction::Move(value, source));
         let branch = self.emit(Instruction::Branch(source, Condition::Undefined, 0));
@@ -134,6 +134,13 @@ impl Compiler {
         // Plain identifiers can reuse the existing single-step binder. Every
         // pattern uses the same native lowering, whether or not it suspends.
         match left {
+            ast::ForLeft::Decl(declaration) if declaration.kind == VarKind::Var && self.with_depth != 0 => {
+                self.emit(Instruction::EnterScope);
+                for item in &declaration.decls {
+                    let reference = self.with_binding_reference(&item.binding);
+                    self.with_binding_prepared(&item.binding, value, reference, span)?;
+                }
+            }
             ast::ForLeft::Decl(declaration) if declaration.resource_kind.is_some() || declaration.decls.iter().any(|d| !matches!(d.binding, Binding::Ident(_))) => {
                 self.emit(Instruction::EnterScope);
                 if declaration.kind != VarKind::Var {

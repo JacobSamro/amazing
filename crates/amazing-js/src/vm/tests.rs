@@ -2,6 +2,80 @@ use super::*;
 use crate::interp::ExecutionBackend;
 use crate::parse_script;
 
+#[test]
+fn jsvm22_ordinary_with_binding_and_abrupt_scope_matrix() {
+    let bodies = [
+        "var x=1,o={x:7};with(o){if(x!==7)return false;x=8}return x===1&&o.x===8",
+        "var x=1,o={x:7};with(o){var x=8}return x===1&&o.x===8",
+        "var x=1,o={x:7};with(o){var x=(delete o.x,8)}return x===1&&o.x===8",
+        "var x=1,o={};with(o){var x=(o.x=7,8)}return x===8&&o.x===7",
+        "var x=1,o={x:7};with(o){let x=8;if(x!==8)return false}return x===1&&o.x===7",
+        "var x=1,o={x:7,[Symbol.unscopables]:{x:true}};with(o){var x=8}return x===8&&o.x===7",
+        "var x=1,o={x:7},p={x:9};with(o){with(p){x=11}if(x!==7)return false}return x===1&&p.x===11",
+        "var o={m(){return this}};with(o){if(m()!==o)return false}return true",
+        "var o={x:7};with(o){if(!delete x)return false}return !('x' in o)",
+        "with('abc'){if(length!==3||toString()!=='abc')return false}return true",
+        "var ok=false;try{with(null){return false}}catch(e){ok=e instanceof TypeError}return ok",
+        "var x=1,o={x:7};try{with(o){throw 9}}catch(e){if(e!==9||x!==1)return false}return x===1",
+        "var x=1,o={x:7},n=0;for(var i=0;i<3;i++){with(o){if(x!==7)return false;n++;continue}}return n===3&&x===1",
+        "var x=1,o={x:7};label:{with(o){break label}}return x===1",
+        "var o={x:7},f;with(o){f=()=>x}o.x=11;return f()===11",
+        "var x=1,o={x:7};with(o){var [x]=[8]}return x===1&&o.x===8",
+        "var x=1,o={x:7};with(o){var {a:x}={a:8}}return x===1&&o.x===8",
+        "var x=1,o={x:7};with(o){var {a:x}={get a(){delete o.x;return 8}}}return x===1&&o.x===8",
+        "var x=1,o={};with(o){var {a:x}={get a(){o.x=7;return 8}}}return x===8&&o.x===7",
+        "var x=1,o={x:7};with(o){var {a:x=(delete o.x,8)}={}}return x===1&&o.x===8",
+        "var x=1,o={x:7};with(o){var [...x]=[8,9]}return x===1&&o.x.join(',')==='8,9'",
+        "var x=1,o={x:7};with(o){var {...x}={a:8}}return x===1&&o.x.a===8",
+        "var x=1,o={x:7};with(o){for(var x of [8,9]){if(o.x!==x)return false}}return x===1&&o.x===9",
+        "var x=1,o={x:7};with(o){for(var [x] of [[8],[9]]){if(o.x!==x)return false}}return x===1&&o.x===9",
+        "var x=1,o={x:7};with(o){for(var x in {a:1,b:2}){if(o.x!==x)return false}}return x===1&&o.x==='b'",
+        "var x=1,o={x:7};with(o){for(var x=8;x<10;x++){} }return x===1&&o.x===10",
+        "var o={},result;with(o){{function g(){return 7}result=g()}}return result===7&&g()===7",
+        "var x=1,o={x:7};try{with(o){return x===7}}finally{if(x!==1)throw 9}",
+        "var x=1,o=Object.create({x:7});with(o){var x=8}return x===1&&o.x===8&&Object.hasOwn(o,'x')",
+        "var x=1,o={get x(){throw 9},set x(v){this.y=v}};with(o){var x=8}return x===1&&o.y===8",
+        "var x=1,o={x:7},p=new Proxy(o,{has(t,k){return Reflect.has(t,k)},set(t,k,v,r){return Reflect.set(t,k,v,r)}});with(p){var x=8}return x===1&&o.x===8",
+        "var x=1,o={x:7,get [Symbol.unscopables](){throw 9}};try{with(o){var x=8}}catch(e){return e===9&&x===1&&o.x===7}return false",
+        "var x=1,o={x:7},iter={[Symbol.iterator](){return this},next(){delete o.x;return {value:8,done:false}},return(){return {}}};with(o){var [x]=iter}return x===1&&o.x===8",
+        "var x=1,o={x:7},f;with(o){var f=function(){return x}}o.x=11;return f.name==='f'&&f()===11",
+    ];
+    let mut failures = Vec::new();
+    for body in bodies {
+        for force_ast in [false, true] {
+            let source = format!("function outer(){{{body}}}");
+            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let mut i = Interpreter::new();
+                i.run_script(&source).unwrap();
+                let function = i.global_env.resolve("outer").unwrap();
+                let JsValue::Object(object) = &function else { unreachable!() };
+                assert!(matches!(object.borrow().func.as_ref().unwrap().body, FunctionBody::Bytecode(_)));
+                if force_ast {
+                    let program = parse_script(&source).unwrap();
+                    let crate::ast::StmtKind::Function(function) = &program.body[0].kind else { unreachable!() };
+                    object.borrow_mut().func.as_mut().unwrap().body = FunctionBody::Block(function.body.clone());
+                }
+                let result = i.call_value(&function, JsValue::Undefined, Vec::new()).unwrap();
+                assert_eq!(result, JsValue::Bool(true));
+                assert!(i.frames.is_empty());
+            }));
+            if outcome.is_err() { failures.push(format!("AST={force_ast}: {body}")); }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn jsvm22_with_keeps_suspended_callables_and_script_entry_fallback() {
+    for source in ["async function outer(){with({}){}await 0}", "function* outer(){with({}){}yield 0}", "async function* outer(){with({}){}yield 0}"] {
+        let mut i = Interpreter::new();
+        i.run_script(source).unwrap();
+        let Some(JsValue::Object(function)) = i.global_env.resolve("outer") else { unreachable!() };
+        assert!(matches!(function.borrow().func.as_ref().unwrap().body, FunctionBody::Block(_)));
+    }
+    assert!(compile(&parse_script("with({}){} ").unwrap(), false).is_err());
+}
+
 fn same_value(left: &JsValue, right: &JsValue) -> bool {
     match (left, right) {
         (JsValue::Num(a), JsValue::Num(b)) => {

@@ -1187,3 +1187,46 @@ Compact evidence: [js-vm21_evidence.json](js-vm21_evidence.json).
 Async entry error normalization is a disjoint runtime-owned follow-up;
 this ticket makes no change to parameter
 binding, invocation context, callable factory policy or module observers.
+
+## JSVM-22: ordinary With object environments
+
+On fixed JSVM21 `dc8d52f6867f1ed29caf86ceff814d4a325857ed`, lower With
+inside ordinary callables through EnterObjectScope and the existing abrupt
+scope routing. Box the head once through the shared ToObject helper after
+RequireObjectCoercible. Name reads, calls, writes and deletion use the existing
+object-environment/reference gateways, including unscopables and Proxy hooks.
+Keep suspended-callable With and top-level script With fallback unchanged.
+The lowering follows [With evaluation](https://tc39.es/ecma262/multipage/ecmascript-language-statements-and-declarations.html#sec-with-statement-runtime-semantics-evaluation)
+and reuses Amazing's existing reference and assignment-pattern algorithms.
+
+Var initialization captures its reference before the initializer. Within a
+destructuring declaration, capture each identifier before iterator stepping,
+property access or default evaluation; retain it through the eventual write.
+For-in/of var heads use that same binder. Lexical initialization and Annex B
+variable-environment copies retain their existing paths.
+
+The first bulk matrix passed all native cases but exposed twelve existing AST
+With var failures. The parent granted a With-only adapter: detect an object
+environment before the local var/function boundary, translate Binding into
+the equivalent assignment-pattern syntax, and reuse the existing shared
+assignment-pattern algorithm. Simple AST var initializers capture before the
+RHS. No new reference algorithm, environment type or callable policy is added.
+The expanded native/forced-AST matrix covers 68 cases, including getter and
+iterator mutation, unscopables, inherited properties, setters, proxies,
+closures, nested scopes and abrupt exits. The final whole corpus gate passed:
+**3801 workspace tests passed**,17 skipped,
+**four doctests passed**,568 crate tests passed. Eight selections cover
+**30468 unique files**, passing **29738→29766** (+28), and variants
+**55843→55871** (+28), zero lost files or variants. All 28 classification
+changes are gains in the With scope/var and binding-resolution cluster.
+The measured runtime log contains 1067877 compile attempts,1067823 accepted
+and 54 fallbacks for this selection (statement14,yield10,class8,expression18,
+member4); these are selection-specific counts, not a matched delta against
+older logs. Compact evidence: [js-vm22_evidence.json](js-vm22_evidence.json).
+
+Global/script declaration instantiation remains a separate read-only proposal:
+track actual Global VarNames separately from builtin mirror cells, reserve
+lexical TDZ bindings before evaluation, validate global descriptors before
+mutation, and maintain actual Window/global-object var linkage. Do not patch
+only the eight reported destructuring TDZ cases. Runtime owns the concurrent
+Array exotic area; no GDI edits are included here.

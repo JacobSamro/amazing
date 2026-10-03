@@ -1,0 +1,37 @@
+{
+  "ticket":"JSVM-22",
+  "base":"dc8d52f6867f1ed29caf86ceff814d4a325857ed",
+  "platform":"Linux Boat native /tmp source and target",
+  "algorithm":"Existing Amazing object-environment/reference and assignment-pattern gateways; With evaluation ECMA-262 14.11.2",
+  "test262_revision":"3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256":"91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "before_host_sha256":"c3f7e2be1e08f4cadafcc4c67ef30d17b2c2975da50ec9fafe8e2ea355ea9e09",
+  "after_host_sha256":"c254fae56ac16e508b2d910fffbacbc7d9e18aa6508f6f945eb9e8ba28aca8d1",
+  "before_provenance":"Exact JSVM21 language/Promise/Iterator after reports and exact dc8d52f6 supplemental Object/Reflect/Symbol/Proxy/Function before reports, identical host hash.",
+  "workspace":{"passed":3801,"skipped":17,"doctests_passed":4},
+  "crate":{"passed":568,"skipped":1},
+  "corpus":{
+    "selection":["language","built-ins/Promise","built-ins/Iterator/","built-ins/Object/","built-ins/Reflect/","built-ins/Symbol/","built-ins/Proxy/","built-ins/Function/"],
+    "unique_selected_files":30468,
+    "before_passed_files":29738,"after_passed_files":29766,"gained_files":28,"lost_files":0,
+    "before_passed_variants":55843,"after_passed_variants":55871,"gained_variants":28,"lost_variants":0,
+    "classification_changes":28
+  },
+  "runtime_compile_log":{
+    "scope":"The eight after corpus selections above; selection-specific counts, not a matched delta against older lane logs",
+    "attempts":1067877,"accepted":1067823,"fallbacks":54,
+    "reasons":{"statement kind":14,"yield":10,"class field or static block":8,"expression kind":18,"member access":4}
+  },
+  "after_classification_sha256":{
+    "language":"a7616735ca2285cbb3d30151949f571d969fd107d838500ab954a7cd49883ada",
+    "built-ins/Promise":"9eda4303668d8fe76be297362b634878ec1a03014c83949bd7fbb78ca3081d0b",
+    "built-ins/Iterator/":"d5ae4f2b597d937870650f9ff15774489a4288a46a70b9a7b8b70295c9ab068f",
+    "built-ins/Object/":"e8e2114e545ee1439f137fa7a2299a798a3fc610bec1bb77205b4a1d5b58ab8f",
+    "built-ins/Reflect/":"1303153f6cec560e7c38755b8c4f17605fcfb1ee9f33466c998656ca7ce7d825",
+    "built-ins/Symbol/":"545e1c6a85e9c70a75ce1aed6992688bfe92e827534ed8e0c22e4e7fa871cf1c",
+    "built-ins/Proxy/":"ecb1704deb97478feefc2f838bac33a45d751c5fa33cfe655db47e58903201c5",
+    "built-ins/Function/":"894f3213672245258e9b7cbcdeadf23887365093e9e482c0ded913a1ee3b9d7c"
+  },
+  "regressions":{"native_and_forced_ast_with_scenarios":68,"existing_ast_failures_restored":12,"suspended_and_top_level_with_fallback":"preserved"},
+  "limitations":["Suspended-callable With remains an atomic fallback", "Top-level script compilation policy is unchanged", "Global/script declaration instantiation and embedding Window linkage remain a separate owner-coordinated proposal"]
+}

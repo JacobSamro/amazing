@@ -218,6 +218,7 @@ enum Instruction {
     /// never runs that block's `LeaveScope`).
     ExitTo(usize, usize),
     EnterScope,
+    EnterObjectScope(Register),
     LeaveScope,
     PushTry {
         catch: Option<usize>,
@@ -1005,6 +1006,14 @@ impl Program {
                     Instruction::EnterScope => {
                         scopes.push(env.clone());
                         *env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+                    }
+                    Instruction::EnterObjectScope(source) => {
+                        let bound = super::native_object(i, JsValue::Undefined, vec![registers[*source].clone()])?;
+                        let JsValue::Object(bound) = bound else {
+                            return Err(Throw::type_error("with statement requires an object"));
+                        };
+                        scopes.push(env.clone());
+                        *env = EnvHandle::new_object(bound, env.clone());
                     }
                     Instruction::CopyScope(names) => {
                         let outer = scopes.last().cloned()
