@@ -1422,14 +1422,14 @@ impl RuntimeBindingHost<'_> {
                 return Ok(WindowProxyProperty::Descriptor(Some(descriptor)));
             }
             let bound = match name.as_str() {
-                "window" | "self" | "frames" => Some(("get frames", HtmlWindowProperty::BoundFrames(access.target))),
-                "length" => Some(("get length", HtmlWindowProperty::BoundLength(access.target))),
-                "parent" => Some(("get parent", HtmlWindowProperty::BoundParent(access.target))),
-                "top" => Some(("get top", HtmlWindowProperty::BoundTop(access.target))),
+                "window" | "self" | "frames" => Some(HtmlWindowProperty::BoundFrames(access.target)),
+                "length" => Some(HtmlWindowProperty::BoundLength(access.target)),
+                "parent" => Some(HtmlWindowProperty::BoundParent(access.target)),
+                "top" => Some(HtmlWindowProperty::BoundTop(access.target)),
                 _ => None,
             };
-            let descriptor = if let Some((getter_name, property)) = bound {
-                let getter = RuntimeBindingHost { js, state: state.clone() }.native(getter_name, 0,
+            let descriptor = if let Some(property) = bound {
+                let getter = RuntimeBindingHost { js, state: state.clone() }.native("", 0,
                     NativeEntry::HtmlWindowGet(property), HostCallPolicy::CallOnly);
                 Property { value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
                     getter: Some(getter), setter: None }
