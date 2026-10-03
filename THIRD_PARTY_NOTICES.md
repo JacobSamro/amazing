@@ -102,3 +102,5 @@ reproduced in the table row for that upstream.
 - boa-dev/boa, MIT, Copyright (c) 2019 Jason Williams and contributors; core/engine/src/builtins/promise/mod.rs @ 39cd11214ecb366200157dab96b3919e61e9a391: classic Promise combinator algorithms adapted in crates/amazing-js/src/interp_promise_combinators.rs.
 
 - boa-dev/boa, MIT, Copyright (c) 2019 Jason Williams and contributors; core/engine/src/builtins/promise/mod.rs @ 39cd11214ecb366200157dab96b3919e61e9a391: intrinsic Promise constructor allocation/order adapted in crates/amazing-js/src/interp_builtins.rs.
+
+- boa-dev/boa, MIT, Copyright (c) 2019 Jason Williams and contributors; core/engine/src/object/operations.rs @ 39cd11214ecb366200157dab96b3919e61e9a391: OrdinaryHasInstance algorithm bound-target delegation adapted in crates/amazing-js/src/interp.rs.

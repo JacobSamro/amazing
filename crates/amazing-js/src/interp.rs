@@ -1,3 +1,6 @@
+// Portions ported from boa-dev/boa (core/engine/src/object/operations.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// OrdinaryHasInstance bound-target delegation adapted to native home records.
 //! A small, panic-free tree-walking ECMAScript runtime.
 //!
 //! This is the Phase 6 execution milestone. It implements ordinary values,
@@ -1661,6 +1664,15 @@ impl Interpreter {
     fn ordinary_has_instance(&mut self, a: &JsValue, b: &JsValue) -> Result<JsValue, Throw> {
         let JsValue::Object(r) = b else { return Ok(JsValue::Bool(false)); };
         if r.borrow().func.is_none() { return Ok(JsValue::Bool(false)); }
+        // BoundTargetFunction precedes the primitive-left check. In particular,
+        // the target's observable @@hasInstance can accept primitive values.
+        if Self::is_bound_function(b) {
+            let data = r.borrow().func.as_ref().and_then(|function| function.home.clone())
+                .ok_or_else(|| Throw::type_error("missing bound function data"))?;
+            let target = data.borrow().get_own("target")
+                .ok_or_else(|| Throw::type_error("missing bound target"))?;
+            return self.instanceof(a, &target);
+        }
         if !a.is_object() { return Ok(JsValue::Bool(false)); }
         let p = match self.get_prop(b, "prototype")? {
             JsValue::Object(p) => p,

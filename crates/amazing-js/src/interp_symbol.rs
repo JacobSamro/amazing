@@ -378,3 +378,90 @@ mod symbol_tests {
         assert_eq!(i.run_script("let m=new Map(); m.set('a',3); let pair=m[Symbol.iterator]().next().value; let s=new Set(); s.add(8); pair[0]==='a' && pair[1]===3 && s[Symbol.iterator]().next().value===8").unwrap(), JsValue::Bool(true));
     }
 }
+
+#[cfg(test)]
+mod instance_protocol_tests {
+    use super::*;
+    fn check(source: &str) {
+        for backend in [ExecutionBackend::TreeWalk,ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();
+            assert_eq!(i.run_script_with_backend(source,backend).unwrap(),JsValue::Bool(true),"{backend:?}");
+        }
+    }
+    #[test]
+    fn bound_targets_delegate_before_primitive_checks_with_original_receiver() {
+        check(r#"
+          var valid=true,has=Function.prototype[Symbol.hasInstance],seen=[],C=function(){};
+          Object.defineProperty(C,Symbol.hasInstance,{get(){seen.push('get');return function(v){valid=valid && this===C;seen.push(v);return v===7?'yes':0;};},configurable:true});
+          var B=C.bind({}),BB=B.bind({});
+          Object.defineProperty(B,'prototype',{get(){throw 'bound prototype must not be read';}});
+          valid=valid && has.call(B,7)===true && (7 instanceof B) && has.call(BB,7)===true && !(8 instanceof BB);
+          valid=valid && seen.join(',')==='get,7,get,7,get,7,get,8';
+          Object.defineProperty(C,Symbol.hasInstance,{value:function(v){return v===undefined;},configurable:true});
+          valid=valid && has.call(B)===true;
+          Object.defineProperty(C,Symbol.hasInstance,{value:null,configurable:true});
+          valid=valid && has.call(B,7)===false;
+          Object.defineProperty(C,Symbol.hasInstance,{value:undefined,configurable:true});
+          valid=valid && has.call(B,Object.create(C.prototype))===true;valid;
+        "#);
+    }
+    #[test]
+    fn bound_and_ordinary_prototype_walks_observe_proxy_order_and_original_errors() {
+        check(r#"
+          var valid=true,error={},has=Function.prototype[Symbol.hasInstance],C=function(){},proto=C.prototype,log=[];
+          var P=new Proxy(C,{get(t,k,r){log.push(k===Symbol.hasInstance?'has':'prototype');return Reflect.get(t,k,r);}}),B=P.bind(null);
+          log=[];var mid=new Proxy({}, {getPrototypeOf(t){log.push('mid');return proto;}}),obj=new Proxy({}, {getPrototypeOf(t){log.push('obj');return mid;}});
+          valid=valid && has.call(B,obj) && log.join(',')==='has,prototype,obj,mid';
+          log=[];valid=valid && !has.call(B,1) && log.join(',')==='has';
+          var R=Proxy.revocable(C,{}),bound=R.proxy.bind(null);R.revoke();
+          for(var v of [1,{}]){try{has.call(bound,v);valid=false;}catch(e){valid=valid && e instanceof TypeError;}}
+          Object.defineProperty(C,Symbol.hasInstance,{get(){throw error;},configurable:true});
+          try{has.call(C.bind(null),1);valid=false;}catch(e){valid=valid && e===error;}
+          Object.defineProperty(C,Symbol.hasInstance,{value:3,configurable:true});
+          try{has.call(C.bind(null),1);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+          var plain=function(){};plain.prototype=1;
+          valid=valid && !has.call(plain,1);try{has.call(plain,{});valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+          var throwing=new Proxy(function(){},{get(t,k,r){if(k==='prototype')throw error;return Reflect.get(t,k,r);}});
+          try{has.call(throwing,{});valid=false;}catch(e){valid=valid && e===error;}
+          valid;
+        "#);
+    }
+    #[test]
+    fn operator_and_borrowed_builtin_preserve_their_distinct_callable_contracts() {
+        check(r#"
+          var valid=true,has=Function.prototype[Symbol.hasInstance],d=Object.getOwnPropertyDescriptor(Function.prototype,Symbol.hasInstance);
+          valid=valid && has.length===1 && has.name==='[Symbol.hasInstance]' && !Object.hasOwn(has,'prototype') && !d.writable && !d.enumerable && !d.configurable;
+          for(var c of [undefined,null,1,'x',true,2n,Symbol(),{}, { [Symbol.hasInstance](){throw 'unused';} }])valid=valid && has.call(c,{})===false;
+          var handler={[Symbol.hasInstance](v){valid=valid && this===handler;return 'truthy';}};
+          valid=valid && (1 instanceof handler);
+          for(var c of [undefined,null,1,'x',{}, {[Symbol.hasInstance]:3}]){try{1 instanceof c;valid=false;}catch(e){valid=valid && e instanceof TypeError;}}
+          var C=function(){},B=C.bind(null),value=new C;
+          valid=valid && has.call(B,value) && (value instanceof B) && !(Object.create(null) instanceof B);
+          var arrow=()=>{};valid=valid && !has.call(arrow,1);try{has.call(arrow,{});valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+          valid;
+        "#);
+    }
+    #[test]
+    fn foreign_builtin_errors_and_window_proxy_prototypes_keep_semantic_realms() {
+        for backend in [ExecutionBackend::TreeWalk,ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();let prototype=i.binding_create_object(None).unwrap();
+            let global=i.binding_create_object(Some(&prototype)).unwrap();let child=i.binding_create_realm(global).unwrap();
+            let window=i.binding_create_window_proxy(child).unwrap();
+            i.global_env.declare_var("windowProxy",window).unwrap();i.global_env.declare_var("windowPrototype",prototype).unwrap();
+            for(name,source) in [("foreignHas","Function.prototype[Symbol.hasInstance]"),("foreignTypeError","TypeError.prototype"),
+                ("foreignC","function C(){};C"),("foreignProto","C.prototype")] {
+                let value=i.binding_eval_in_realm(child,source).unwrap();i.global_env.declare_var(name,value).unwrap();
+            }
+            assert_eq!(i.run_script_with_backend(r#"
+              var valid=true,C=function(){};C.prototype=1;
+              try{foreignHas.call(C,{});valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===foreignTypeError;}
+              var value=Object.create(foreignProto);valid=valid && foreignHas.call(foreignC.bind(null),value) && (value instanceof foreignC.bind(null));
+              var W=function(){};W.prototype=windowPrototype;
+              valid=valid && (windowProxy instanceof W.bind(null)) && foreignHas.call(W.bind(null),windowProxy);
+              var error={};Object.defineProperty(W,Symbol.hasInstance,{get(){throw error;}});
+              try{foreignHas.call(W.bind(null),windowProxy);valid=false;}catch(e){valid=valid && e===error;}
+              valid;
+            "#,backend).unwrap(),JsValue::Bool(true),"{backend:?}");
+        }
+    }
+}

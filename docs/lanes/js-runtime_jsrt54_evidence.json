@@ -1,0 +1,196 @@
+{
+  "ticket": "JSRT-54",
+  "base_sha": "07c2245f72fe79441f343583a6b1faca299c672d",
+  "workspace": {
+    "passed": 3994,
+    "skipped": 17,
+    "elapsed_seconds": 75.369
+  },
+  "doctests": 4,
+  "selections": {
+    "built-ins-Function": {
+      "selected": 515,
+      "before": {
+        "pass": 506,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "after": {
+        "pass": 507,
+        "fail": 8,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "gained": [
+        "built-ins/Function/prototype/Symbol.hasInstance/this-val-bound-target.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 4.648,
+      "elapsed_after": 4.414,
+      "before_host_sha256": "abc99dc455fb9ce671167bb662e959d0ba887a9a74828e904333244d2c11a10b",
+      "after_host_sha256": "b10c07983321b4a9414af8c93f61ca5ba7fd06cfcaf2e3e57027faf2756fea92",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before": {
+        "pass": 3411,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "after": {
+        "pass": 3411,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 10.527,
+      "elapsed_after": 10.481,
+      "before_host_sha256": "abc99dc455fb9ce671167bb662e959d0ba887a9a74828e904333244d2c11a10b",
+      "after_host_sha256": "b10c07983321b4a9414af8c93f61ca5ba7fd06cfcaf2e3e57027faf2756fea92",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Reflect": {
+      "selected": 154,
+      "before": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "after": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.963,
+      "elapsed_after": 3.099,
+      "before_host_sha256": "abc99dc455fb9ce671167bb662e959d0ba887a9a74828e904333244d2c11a10b",
+      "after_host_sha256": "b10c07983321b4a9414af8c93f61ca5ba7fd06cfcaf2e3e57027faf2756fea92",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Proxy": {
+      "selected": 311,
+      "before": {
+        "pass": 311,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "after": {
+        "pass": 311,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.117,
+      "elapsed_after": 3.227,
+      "before_host_sha256": "abc99dc455fb9ce671167bb662e959d0ba887a9a74828e904333244d2c11a10b",
+      "after_host_sha256": "b10c07983321b4a9414af8c93f61ca5ba7fd06cfcaf2e3e57027faf2756fea92",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "language": {
+      "selected": 24590,
+      "before": {
+        "pass": 24395,
+        "fail": 169,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "after": {
+        "pass": 24395,
+        "fail": 169,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 55.151,
+      "elapsed_after": 53.802,
+      "before_host_sha256": "abc99dc455fb9ce671167bb662e959d0ba887a9a74828e904333244d2c11a10b",
+      "after_host_sha256": "b10c07983321b4a9414af8c93f61ca5ba7fd06cfcaf2e3e57027faf2756fea92",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    }
+  },
+  "unique": {
+    "selected": 28984,
+    "before_pass": 28776,
+    "after_pass": 28777,
+    "gained_files": [
+      "built-ins/Function/prototype/Symbol.hasInstance/this-val-bound-target.js"
+    ],
+    "lost_files": [
+
+    ],
+    "gained_variants": [
+      [
+        "built-ins/Function/prototype/Symbol.hasInstance/this-val-bound-target.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Function/prototype/Symbol.hasInstance/this-val-bound-target.js",
+        "strict"
+      ]
+    ],
+    "lost_variants": [
+
+    ]
+  }
+}
