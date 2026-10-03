@@ -1411,3 +1411,34 @@ opt-in VM programs: **579397/579385→579395/579387**. The remaining eight
 class-initialization fallbacks are unchanged and require a separate staged
 ClassDefinitionEvaluation design.
 Evidence: [js-vm26_evidence.json](js-vm26_evidence.json).
+
+## JSVM27 — suspended ClassDefinitionEvaluation (done)
+
+Fixed before `35217ac3`; final source `3832dbd2`. Six ordered phase instructions
+retain the partially evaluated class in its VM frame. Heritage References
+survive until GetValue after restoring the outer environment. Decorator
+receivers, canonical keys, immutable inner names and newly minted private
+identities retain their source order. Field/static/decorator installation uses
+the shared whole-class evaluator; frame scope snapshots restore environment
+and dynamic strictness across suspension, abrupt completion and quantum stops.
+The separately reviewed coroutine strictness companion captures actual strict
+mode at park, preserving the class wrapper's outer restoration.
+
+Workspace **4208→4217 passed**, 17 skipped; **four doctests** on both sources.
+Twenty-six matched release reports cover **30442 unique files / 56960 variants**
+in default and opt-in VM-program modes. Both retain **30305 passing files /
+56764 passing variants**, with zero lost passes, classification/reason changes
+or new host crashes. Aggregate callable compilation fallbacks are **16→0**;
+whole language and explicit class selections overlap. Default attempts/accepted
+are **1428309/1428293→1428421/1428421**; opt-in VM programs
+**802824/802808→802936/802936**. This proves callable compilation coverage,
+not elimination of explicit nonsuspending AST adapters or a program policy flip.
+
+Eight class matrix groups include 198 native/forced-AST callable cases, TDZ and
+private heritage/brands, decorator receiver/key conversion, With/try/disposal,
+foreign async realms and every-instruction quantum stops. An additional
+sync/async generator group proves strict class keys after Yield and subsequent
+sloppy assignment. Strong Rc ownership is explicit; no cycle-reclamation claim.
+The separately granted synchronous-generator realm companion is excluded from
+this source and evidence.
+Evidence: [js-vm27_evidence.json](js-vm27_evidence.json).
