@@ -520,6 +520,12 @@ impl Interpreter {
     /// parameter-collision exception above; a destructuring parameter's own
     /// nested names count too, via `binding_names`.
     fn current_function_param_names(&self) -> Vec<String> {
+        // Eval's Script body has no formal parameters. Its native frame is
+        // temporarily removed, so do not mistake the lexical caller for FDI.
+        // A function called by eval adds its own frame and keeps the FDI rule.
+        if self.eval_grammar_override.is_some_and(|(depth, _)| self.frames.len() <= depth) {
+            return Vec::new();
+        }
         self.frames
             .last()
             .and_then(|frame| frame.own_function.as_ref())
@@ -2588,12 +2594,15 @@ impl Interpreter {
             self.function_proto.clone()
         });
         o.strict_function = self.strict_eval_context || matches!(&a.body, ast::ArrowBody::Block(block) if has_use_strict_directive(&block.body));
+        let grammar = self.lexical_eval_grammar();
+        o.lexical_new_target_allowed = grammar.allow_new_target;
+        o.lexical_class_initializer = grammar.class_initializer;
         let handle = Obj(Rc::new(RefCell::new(o)));
         if let Some(frame) = self.frames.last() {
             let mut arrow = handle.borrow_mut();
-            arrow.func.as_mut().unwrap().home = frame.home.clone();
-            arrow.lexical_super_constructor = frame.super_constructor.clone();
-            arrow.lexical_new_target = frame.new_target.clone();
+            arrow.func.as_mut().unwrap().home = grammar.allow_super_property.then(||frame.home.clone()).flatten();
+            arrow.lexical_super_constructor = grammar.allow_super_call.then(||frame.super_constructor.clone()).flatten();
+            arrow.lexical_new_target = grammar.allow_new_target.then(||frame.new_target.clone()).flatten();
         }
         JsValue::Object(handle)
     }

@@ -1,0 +1,99 @@
+{
+  "ticket": "JSRT-35",
+  "base_sha": "0d5963fe7abda88ec6ea8100efd6e853f278bf4b",
+  "linux_host": "Boat pool-js-a, native /tmp source and target",
+  "workspace_nextest": {
+    "passed": 3755,
+    "skipped": 17,
+    "elapsed_seconds": 75.423
+  },
+  "workspace_doctests_passed": 4,
+  "crate_nextest_passed_in_workspace": 542,
+  "grouped_regressions": 4,
+  "upstream": {
+    "repo": "boa-dev/boa",
+    "path": "core/engine/src/builtins/eval/mod.rs",
+    "sha": "39cd11214ecb366200157dab96b3919e61e9a391",
+    "license": "MIT"
+  },
+  "selections": {
+    "language": {
+      "selected": 24590,
+      "before_files": {
+        "pass": 23882,
+        "fail": 682,
+        "unsupported": 26
+      },
+      "after_files": {
+        "pass": 23977,
+        "fail": 587,
+        "unsupported": 26
+      },
+      "gained": 95,
+      "lost": 0,
+      "classification_sha256": "228e10b5752dafbd5247a9e2573b3520d353906e83da4a354681d81367883641",
+      "elapsed_seconds": 53.539
+    },
+    "Function": {
+      "selected": 653,
+      "before_files": {
+        "pass": 620,
+        "fail": 33
+      },
+      "after_files": {
+        "pass": 620,
+        "fail": 33
+      },
+      "gained": 0,
+      "lost": 0,
+      "classification_sha256": "027cbd26b793e18036978fce291ea62bfeb3acf0d17c0219e17b2d740596664b",
+      "elapsed_seconds": 4.736
+    },
+    "Promise": {
+      "selected": 732,
+      "before_files": {
+        "pass": 627,
+        "fail": 105
+      },
+      "after_files": {
+        "pass": 627,
+        "fail": 105
+      },
+      "gained": 0,
+      "lost": 0,
+      "classification_sha256": "9eda4303668d8fe76be297362b634878ec1a03014c83949bd7fbb78ca3081d0b",
+      "elapsed_seconds": 6.23
+    }
+  },
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+  "timeout_seconds": 15.0,
+  "jobs": 4,
+  "host_sha256": "ddb9c95ab0c05dafd3044b8bef798a0c72403ea8570847082a61b8577301f887",
+  "before_host_sha256": "fdf0e8964491079d31dfd877ea2da794b1fe98e8b618f52562966966b4a9900f",
+  "unique_union": {
+    "selected": 25963,
+    "before_pass": 25117,
+    "after_pass": 25212,
+    "gained": 95,
+    "lost": 0
+  },
+  "gain_clusters": {
+    "annexB/language/eval-code": 16,
+    "language/eval-code/direct": 8,
+    "language/eval-code/indirect": 6,
+    "language/expressions/class": 24,
+    "language/expressions/super": 4,
+    "language/statements/class": 37
+  },
+  "initial_iteration": {
+    "crate_passed": 542,
+    "crate_doctests_passed": 1,
+    "language_gained": 80,
+    "language_lost": 195,
+    "all_losses_cluster": "AnnexB eval-code",
+    "restored": 195,
+    "correction": "AnnexB eval variable hoists use eval variable scope and configurable global binding creation; top-level eval does not inherit caller formal names for FDI exclusions."
+  }
+}

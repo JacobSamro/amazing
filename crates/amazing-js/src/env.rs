@@ -321,6 +321,21 @@ impl EnvHandle {
         self.0.borrow_mut().class_private = Some(Rc::new(names));
     }
 
+    /// Textual names visible to eval's early-error pass; runtime identity lookup
+    /// still uses resolve_private and its nearest-environment shadowing.
+    pub(crate) fn visible_private_names(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        let mut cursor = Some(self.clone());
+        while let Some(env) = cursor {
+            let frame = env.0.borrow();
+            if let Some(private) = &frame.class_private { names.extend(private.keys().cloned()); }
+            cursor = frame.parent.clone();
+        }
+        names.sort();
+        names.dedup();
+        names
+    }
+
     /// Resolves a `#name` textual reference to its `PrivateName` identity by
     /// walking outward through enclosing class private environments, nearest
     /// first, so a nested class's own name shadows an outer one. `None`

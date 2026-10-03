@@ -988,6 +988,9 @@ pub struct JsObject {
     pub(crate) private_elements: Vec<PrivateElement>,
     pub(crate) lexical_super_constructor: Option<JsValue>,
     pub(crate) lexical_new_target: Option<JsValue>,
+    /// Syntactic permissions inherited by an arrow, independent of actual new.target.
+    pub(crate) lexical_new_target_allowed: bool,
+    pub(crate) lexical_class_initializer: bool,
     /// Engine-private brand and identity; never reflected as a JS property.
     pub(crate) host_identity: Option<HostIdentity>,
     /// Annex B [[IsHTMLDDA]] internal slot, used by IsLooselyEqual.
@@ -1030,6 +1033,8 @@ impl JsObject {
             private_elements: Vec::new(),
             lexical_super_constructor: None,
             lexical_new_target: None,
+            lexical_new_target_allowed: false,
+            lexical_class_initializer: false,
             host_identity: None,
             is_html_dda: false,
             strict_function: false,

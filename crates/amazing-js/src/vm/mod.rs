@@ -1669,6 +1669,12 @@ impl FunctionCode {
             handle.borrow_mut().constructible = false;
         }
         if self.0.is_arrow {
+            let grammar = i.lexical_eval_grammar();
+            {
+                let mut arrow = handle.borrow_mut();
+                arrow.lexical_new_target_allowed = grammar.allow_new_target;
+                arrow.lexical_class_initializer = grammar.class_initializer;
+            }
             // An arrow inherits `new.target` and the super constructor
             // lexically from the frame that creates it, matching the tree
             // walker's `make_arrow` (interp.rs). Without this, a VM-compiled
@@ -1676,9 +1682,9 @@ impl FunctionCode {
             // of the enclosing (derived) constructor's.
             if let Some(frame) = i.frames.last() {
                 let mut arrow = handle.borrow_mut();
-                arrow.func.as_mut().unwrap().home = frame.home.clone();
-                arrow.lexical_super_constructor = frame.super_constructor.clone();
-                arrow.lexical_new_target = frame.new_target.clone();
+                arrow.func.as_mut().unwrap().home = grammar.allow_super_property.then(||frame.home.clone()).flatten();
+                arrow.lexical_super_constructor = grammar.allow_super_call.then(||frame.super_constructor.clone()).flatten();
+                arrow.lexical_new_target = grammar.allow_new_target.then(||frame.new_target.clone()).flatten();
             }
         }
         // `JsObject::function` already defines `name` and `length` with the

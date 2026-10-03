@@ -1356,3 +1356,46 @@ prototype traps, non-extensible target invariants and abrupt prototype lookup
 through Function.prototype's hasInstance. Evidence:
 `js-runtime_jsrt36_evidence.json`. HTML owns driver and WPT validation of this
 standalone dependency; contextual eval remains the next coordinated area.
+
+## JSRT-35 Contextual PerformEval (2026-10-03)
+
+Frozen coherent dependency `0d5963fe7abda88ec6ea8100efd6e853f278bf4b` includes
+parser25, decorators26 and VM17. PerformEval context flags, lexical scope and
+restoration are ported from Boa's eval implementation at
+`39cd11214ecb366200157dab96b3919e61e9a391` (MIT), adapted to our EnvHandle,
+parser API and native frames; the header and appended notices row record it.
+Normative reference: [PerformEval](https://tc39.es/ecma262/multipage/global-object.html#sec-performeval).
+
+Direct eval receives syntactic new.target, super property/call, initializer and
+visible-private-name permissions from its lexical caller. Arrows retain scalar
+permissions independently of actual new.target values. Indirect eval resets
+these permissions and masks ambient method metadata when creating arrows;
+ordinary functions invoked inside eval establish their own contexts. Eval
+uses a fresh lexical scope with TDZ cells for let/const/destructuring/class
+declarations; sloppy vars retain the caller's variable scope, and strict vars
+stay local in a transparent variable frame. Captured private identities and
+source locations retain the existing environment chain.
+
+The native eval CallFrame is popped and restored whole, preserving VM17's
+context_id while super operations and caller introspection see the lexical
+caller. VM changes are confined to the agreed arrow metadata capture block;
+factory policy and invocation tokens are unchanged. Four grouped regressions
+cover both execution modes, including deliberately seeded AST callable
+fallbacks, indirect eval isolation, initializer arrows, constructors, private
+names, super, TDZ, closures, caller restoration and Annex B promotion.
+
+The first bulk owned gate passed **542 tests/1 skipped and 1 doctest**, but the
+wide comparison found **80 gains/195 losses**, all losses in Annex B eval.
+Fresh lexical scopes exposed raw variable hoists targeting the lexical frame;
+removing native eval also exposed caller formals to an FDI-only exclusion.
+Promotion now creates eval variable bindings in the variable scope, including
+configurable global properties; eval's Script body has no formal parameters.
+The final run explicitly restores **all 195** former passes.
+
+Final Boat workspace **3755 passed/17 skipped, 75.423 seconds**, **4 doctests**,
+including **542 amazing-js tests**. Matched 15-second/4-job language substring
+selection **23882 → 23977/24590**, **95 gained, zero lost**; Function
+**620/653** and Promise **627/732** unchanged. Unique union **25963 cases**,
+**25117 → 25212 passing**, **95 gained, zero lost**, no timeouts. Gains cover
+Annex B eval16, direct eval8, indirect eval6, class expressions24, super4 and
+class statements37. Evidence: `js-runtime_jsrt35_evidence.json`.

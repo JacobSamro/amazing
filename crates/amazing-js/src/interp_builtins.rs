@@ -1134,34 +1134,7 @@ fn native_date_to_string(
 }
 
 fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    // PerformEval returns non-String inputs unchanged, without coercion.
-    let input = args.first().cloned().unwrap_or(JsValue::Undefined);
-    let JsValue::Str(source) = input else { return Ok(input); };
-    let source = source.to_utf8_lossy();
-    let direct = i.direct_eval_call;
-    let program = if i.strict_eval_context && direct {
-        crate::parser::parse_script_strict(&source)
-    } else {
-        crate::parse_script(&source)
-    }.map_err(|error| Throw::syntax_error(error.to_string()))?;
-    let global = i.global_with_active_source_context();
-    let caller = if direct { i.direct_eval_env.take().unwrap_or_else(|| global.clone()) }
-        else { global.clone() };
-    let strict = (direct && i.strict_eval_context) || has_use_strict_directive(&program.body);
-    i.direct_eval_env = Some(if strict {
-        EnvHandle::new(EnvKind::Function, Some(caller))
-    } else if direct { caller } else { global });
-    let previous = i.in_eval;
-    let previous_strict = i.strict_eval_context;
-    let previous_direct = i.direct_eval_call;
-    if !direct { i.strict_eval_context = false; }
-    i.direct_eval_call = false;
-    i.in_eval = true;
-    let result = i.run_program(&program);
-    i.in_eval = previous;
-    i.strict_eval_context = previous_strict;
-    i.direct_eval_call = previous_direct;
-    result
+    i.perform_eval(args.first().cloned().unwrap_or(JsValue::Undefined))
 }
 
 fn native_error_value(i: &mut Interpreter, args: Vec<JsValue>) -> Result<JsValue, Throw> {

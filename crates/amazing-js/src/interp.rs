@@ -345,6 +345,9 @@ pub struct Interpreter {
     vm_strict_stack: Vec<bool>,
     direct_eval_call: bool,
     direct_eval_env: Option<EnvHandle>,
+    /// Eval's Script grammar applies through its lexical caller frame, while
+    /// functions invoked by eval establish their own context.
+    eval_grammar_override: Option<(usize, EvalGrammar)>,
     /// Active script captured across realm switches or builtin job callbacks.
     /// Some(None) masks an unrelated script running the microtask checkpoint.
     active_source_override: Option<Option<Rc<str>>>,
@@ -550,6 +553,7 @@ impl Interpreter {
             vm_strict_stack: Vec::new(),
             direct_eval_call: false,
             direct_eval_env: None,
+            eval_grammar_override: None,
             active_source_override: None,
             in_eval: false,
             dom_host: None,
@@ -1389,7 +1393,8 @@ impl Interpreter {
                                 annex_b_eligible_set(|set| { set.remove(&key); });
                             } else {
                                 annex_b_eligible_set(|set| { set.insert(key); });
-                                env.hoist_var(&n.name)?;
+                                if self.in_eval { self.create_eval_binding(env, &n.name, None)?; }
+                                else { env.var_scope().hoist_var(&n.name)?; }
                             }
                         }
                     }
@@ -1698,6 +1703,7 @@ include!("interp_helpers.rs");
 include!("interp_async.rs");
 include!("interp_realms.rs");
 include!("interp_eval_declarations.rs");
+include!("interp_eval_context.rs");
 include!("interp_window_proxy.rs");
 include!("interp_module_host.rs");
 include!("interp_source_context.rs");
