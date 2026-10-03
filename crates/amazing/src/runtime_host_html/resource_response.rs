@@ -410,6 +410,29 @@ mod tests {
     }
 
     #[test]
+    fn reopened_document_external_classic_script_uses_real_response_and_owner_context() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse("<!doctype html><body>"), native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/active/index.html");
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let observed = seen.clone();
+        scheduler.set_frame_resource_loader(Rc::new(move |request| {
+            observed.borrow_mut().push(request.clone());
+            assert_eq!(request.kind, HtmlFrameResourceKind::ClassicScript);
+            assert_eq!(request.initiator.document_url, "https://example.test/active/index.html");
+            assert_eq!(request.requested_url, "https://example.test/active/stream.js");
+            Ok(response("https://example.test/redirect/stream.js", Some("text/javascript; charset=windows-1252"),
+                b"window.stream_loaded=(window.stream_loaded||0)+1;window.stream_text='\xe9';".to_vec()))
+        }));
+        scheduler.set_frame_resource_resolver(Rc::new(|_| panic!("canonical written script used pinned resolver")));
+        scheduler.run_script(r#"document.open();document.write('<script src="stream.js"><\/script>');document.close();"#)
+            .unwrap_or_else(|error| panic!("canonical written script: {}", error.describe()));
+        assert_eq!(scheduler.run_script("stream_loaded===1 && stream_text==='é'").unwrap(), JsValue::Bool(true));
+        assert_eq!(seen.borrow().len(), 1);
+        assert!(host.try_borrow_mut().is_ok());
+    }
+
+    #[test]
     fn canonical_document_errors_and_unknown_mime_do_not_use_pinned_extensions_or_fallback() {
         for case in 0..4 {
             let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
