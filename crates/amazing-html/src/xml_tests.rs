@@ -594,7 +594,7 @@ fn canonical_xhtml_public_identifiers_select_complete_character_entity_subset() 
 #[test]
 fn canonical_subset_preserves_every_standard_name_and_scalar_sequence() {
     for (name, expected) in crate::entities::NAMED {
-        let source = format!("<!DOCTYPE r PUBLIC '-//W3C//DTD XHTML 1.0 Strict//EN' 'unloaded.dtd'><r>&{name};</r>");
+        let source = format!("<!DOCTYPE r PUBLIC '-//W3C//DTD XHTML 1.0 Strict//EN' 'unloaded.dtd'><r>{name}</r>");
         let dom = parse_xml(&source).unwrap_or_else(|error| panic!("{name}: {error}"));
         assert_eq!(text(&dom), *expected, "{name}");
     }

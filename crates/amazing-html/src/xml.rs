@@ -587,7 +587,7 @@ impl<'a> Parser<'a> {
                                 return Err(self.error("invalid entity reference name"));
                             }
                             if self.canonical_xhtml_subset && !self.standalone {
-                                if let Some(value) = crate::entities::named_lookup(entity) {
+                                if let Some(value) = crate::entities::named_lookup(&tail[..=end]) {
                                     // Canonical DTD definitions are character references.
                                     // Tab/NewLine become literal replacement whitespace;
                                     // XML attribute normalization therefore maps them to SP.
