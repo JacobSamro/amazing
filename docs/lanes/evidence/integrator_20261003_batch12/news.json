@@ -1,0 +1,22 @@
+{
+  "exe": "/tmp/amazing-shell-target-integrator-primary/debug/amazing-shell",
+  "sha256": "604e7f94dc991dcfd9edf79d906ed9d925c3e286077014c81b52acbcf912570a",
+  "commit_tree": "/tmp/amazing-native-src-integrator-primary",
+  "args": "--url file:///tmp/amazing-native-src-integrator-primary/tests/real-pages/pages/news-home.html",
+  "display": "1280x800",
+  "window": "2097153",
+  "captured": "2026-10-03T06:39:31Z",
+  "source_commit": "fde14108684f14c010e5927c13a3fb2d3a0a940b",
+  "platform": "Linux, Boat, Xvfb/Mesa software Vulkan",
+  "window_pixels": [
+    1080,
+    760
+  ],
+  "document_viewport": [
+    960,
+    570
+  ],
+  "png_sha256": "1513970d3a43a6c7adbb8c8303850fef79c4543fd167b418b83a467e2e7fdb88",
+  "fixture": "tests/real-pages/pages/news-home.html",
+  "source_evidence": "batch12-gpui-primary-controller.log and batch12-capture-primary-controller.log exact --ref"
+}
