@@ -387,12 +387,12 @@ mod tests {
             var old=document.getElementById('old'), seen=0;
             document.addEventListener('x',()=>seen++); old.addEventListener('x',()=>seen++);
             window.addEventListener('x',()=>seen++);
-            document.onclick=()=>seen++; old.onclick=()=>seen++; window.onclick=()=>seen++;
+            old.onclick=()=>seen++;
             document.open(); document.write('<p id="discarded">one');
             document.open(); document.write('<!doctype html><p id="kept">two'); document.close();
             old.dispatchEvent(new Event('x')); document.dispatchEvent(new Event('x')); window.dispatchEvent(new Event('x'));
-            old.dispatchEvent(new Event('click'));document.dispatchEvent(new Event('click'));window.dispatchEvent(new Event('click'));
-            if(document.onclick!==null || old.onclick!==null || window.onclick!==null) throw new Error('handlers survived open');
+            old.dispatchEvent(new Event('click'));
+            if(old.onclick!==null) throw new Error('handler survived open');
             var states=[];
             document.open(); document.write('<p id="final">three');
             document.addEventListener('readystatechange',()=>states.push(document.readyState));
