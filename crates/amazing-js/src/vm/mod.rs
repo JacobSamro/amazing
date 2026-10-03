@@ -385,7 +385,7 @@ struct VmFrame {
     completed: Option<JsValue>,
     yield_dst: Option<Register>,
     pending_resume: Option<Abrupt>,
-    delegate: Option<DelegateState>,
+    delegate: Option<crate::interp::SyncYieldDelegate>,
     delegate_input: Option<(u8, JsValue)>,
     async_delegate: Option<async_delegate::AsyncDelegate>,
     await_dst: Option<Register>,
@@ -424,14 +424,10 @@ impl Drop for VmFrame {
     }
 }
 
-struct DelegateState {
-    iterator: JsValue,
-    array_index: Option<usize>,
-}
-
 enum FrameOutcome {
     Suspended,
     Yielded(JsValue),
+    YieldedIteratorResult(JsValue),
     Awaited(JsValue),
     Completed(JsValue),
 }
@@ -543,7 +539,7 @@ impl Program {
         match self.resume_frame(i, &mut frame, usize::MAX)? {
             FrameOutcome::Completed(value) => Ok(value),
             FrameOutcome::Suspended => unreachable!("unbounded VM slice suspended"),
-            FrameOutcome::Yielded(_) => unreachable!("non-generator program yielded"),
+            FrameOutcome::Yielded(_) | FrameOutcome::YieldedIteratorResult(_) => unreachable!("non-generator program yielded"),
             FrameOutcome::Awaited(_) => unreachable!("non-async program awaited"),
         }
     }
@@ -1236,65 +1232,25 @@ impl Program {
                     }
                     Instruction::YieldDelegate(dst, src) => {
                         if delegate.is_none() {
-                            let iterable = registers[*src].clone();
-                            let array_index = match &iterable {
-                                JsValue::Object(object) if matches!(object.borrow().exotic, crate::value::Exotic::Array) => Some(0),
-                                _ => None,
-                            };
-                            let iterator = if array_index.is_some() {
-                                iterable
-                            } else {
-                                i.custom_iterator(&iterable)?.ok_or_else(|| Throw::type_error("yield* value is not iterable"))?
-                            };
-                            *delegate = Some(DelegateState { iterator, array_index });
+                            *delegate = Some(i.start_sync_yield_delegate(&registers[*src])?);
                         }
-                        let state = delegate.as_mut().unwrap();
                         let (kind, input) = delegate_input.take().unwrap_or((0, JsValue::Undefined));
-                        if state.array_index.is_some() && kind != 0 {
-                            *delegate = None;
-                            return Ok(Some(if kind == 1 {
-                                Abrupt::Return(input)
-                            } else {
-                                Abrupt::Throw(Throw::type_error("iterator has no throw method"))
-                            }));
-                        }
-                        let result = if let Some(index) = state.array_index.as_mut() {
-                            let length_value = i.get_prop(&state.iterator, "length")?;
-                            let length = i.to_number(&length_value)? as usize;
-                            if *index >= length {
-                                generator_result(i, JsValue::Undefined, true)
-                            } else {
-                                let value = i.get_prop(&state.iterator, index.to_string())?;
-                                *index += 1;
-                                generator_result(i, value, false)
+                        let result = i.step_sync_yield_delegate(delegate.as_ref().unwrap(), kind, input);
+                        match result {
+                            Ok(crate::interp::YieldDelegateStep::YieldResult(result)) => {
+                                registers[*dst] = result;
+                                *yield_dst = Some(*dst);
+                                *pc -= 1;
                             }
-                        } else {
-                            let method = i.get_prop(&state.iterator, match kind { 1 => "return", 2 => "throw", _ => "next" })?;
-                            if method.is_undefined() {
+                            Ok(crate::interp::YieldDelegateStep::Complete(value)) => {
                                 *delegate = None;
-                                return Ok(Some(if kind == 1 {
-                                    Abrupt::Return(input)
-                                } else {
-                                    Abrupt::Throw(Throw::type_error(if kind == 2 { "iterator has no throw method" } else { "iterator has no next method" }))
-                                }));
+                                registers[*dst] = value;
                             }
-                            i.call_value(&method, state.iterator.clone(), vec![input])?
-                        };
-                        if !result.is_object() {
-                            return Err(Throw::type_error("iterator result is not an object"));
-                        }
-                        let done = i.get_prop(&result, "done")?.to_boolean();
-                        let value = i.get_prop(&result, "value")?;
-                        if done {
-                            *delegate = None;
-                            if kind == 1 {
+                            Ok(crate::interp::YieldDelegateStep::Return(value)) => {
+                                *delegate = None;
                                 return Ok(Some(Abrupt::Return(value)));
                             }
-                            registers[*dst] = value;
-                        } else {
-                            registers[*dst] = value;
-                            *yield_dst = Some(*dst);
-                            *pc -= 1;
+                            Err(error) => { *delegate = None; return Err(error); }
                         }
                     }
                     Instruction::YieldDelegateAsync(dst, src) => {
@@ -1617,7 +1573,8 @@ impl Program {
             if yield_dst.is_some() {
                 let value = match op {
                     Instruction::Yield(_, src) => registers[*src].clone(),
-                    Instruction::YieldDelegate(dst, _) | Instruction::YieldDelegateAsync(dst, _) => registers[*dst].clone(),
+                    Instruction::YieldDelegate(dst, _) => return Ok(FrameOutcome::YieldedIteratorResult(registers[*dst].clone())),
+                    Instruction::YieldDelegateAsync(dst, _) => registers[*dst].clone(),
                     _ => unreachable!(),
                 };
                 return Ok(FrameOutcome::Yielded(value));
@@ -2128,7 +2085,7 @@ fn async_continue(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>, kind:
         Ok(FrameOutcome::Completed(value)) => {
             async_complete(i, &target, value)?;
         }
-        Ok(FrameOutcome::Yielded(_)) => unreachable!("async function yielded"),
+        Ok(FrameOutcome::Yielded(_)) | Ok(FrameOutcome::YieldedIteratorResult(_)) => unreachable!("async function yielded"),
         Ok(FrameOutcome::Suspended) => unreachable!("unbounded async slice suspended"),
         Err(Throw(error)) => settle_promise(&target, rejection(i, error), i)?,
     }
@@ -2318,6 +2275,11 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
         state.completion = completion;
     }
     match outcome {
+        Ok(FrameOutcome::YieldedIteratorResult(result)) => {
+            if code.0.is_async { return Err(Throw::type_error("sync iterator result in an async generator")); }
+            state.borrow_mut().frame = Some(frame);
+            Ok(result)
+        }
         Ok(FrameOutcome::Yielded(value)) => {
             state.borrow_mut().frame = Some(frame);
             let value = if code.0.is_async { i.await_iteration_value(value)? } else { value };
@@ -2534,6 +2496,7 @@ fn async_generator_run(
             async_attach_reactions(i, value, fulfilled, rejected)?;
             Ok(())
         }
+        Ok(FrameOutcome::YieldedIteratorResult(_)) => unreachable!("async generator emitted a sync iterator result"),
         Ok(FrameOutcome::Suspended) => unreachable!("unbounded async generator slice suspended"),
         Err(Throw(error)) => {
             settle_promise(&target, rejection(i, error), i)?;

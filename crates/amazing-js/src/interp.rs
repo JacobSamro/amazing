@@ -1745,6 +1745,7 @@ include!("interp_disposable.rs");
 include!("interp_coroutine.rs");
 include!("interp_stmt.rs");
 include!("interp_references.rs");
+include!("interp_yield_delegate.rs");
 include!("interp_optional_chain.rs");
 include!("interp_object_methods.rs");
 include!("builtins_std_object_model.rs");

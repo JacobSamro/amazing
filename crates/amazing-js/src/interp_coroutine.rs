@@ -1,3 +1,5 @@
+// Synchronous delegated-yield raw-result adapter portions ported from lucid-softworks/lumen
+// (crates/lumen/src/eval.rs, yield_delegate) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Generators and async generators for the *default* (tree-walking) execution path.
 //
 // The tree walker has no CPS/bytecode representation to suspend mid-body (that machinery lives
@@ -51,6 +53,8 @@ unsafe impl Send for Suspend {}
 enum Suspend {
     /// `yield v` -- parked, produced `v`.
     Yield(JsValue),
+    /// Sync delegated yield forwards the original inner result object.
+    YieldIteratorResult(JsValue),
     /// The body ran to completion / `return v`.
     Done(JsValue),
     /// The body threw `e` and it escaped.
@@ -310,16 +314,6 @@ fn coroutine_yield_to_expr(i: &mut Interpreter, value: JsValue) -> Result<JsValu
     }
 }
 
-/// `done`/`value` via ordinary property gets, matching IteratorComplete/IteratorValue (7.4.1).
-fn iterator_result_parts(i: &mut Interpreter, result: &JsValue) -> Result<(bool, JsValue), Throw> {
-    if !matches!(result, JsValue::Object(_)) {
-        return Err(Throw::type_error("iterator result is not an object"));
-    }
-    let done = i.get_prop(result, "done")?.to_boolean();
-    let value = i.get_prop(result, "value")?;
-    Ok((done, value))
-}
-
 /// `yield* iterable` (spec 15.5.5, sync delegation). Forwards `next`/`throw`/`return` resumptions
 /// to the inner iterator, yielding each of its non-done results in turn, and completes the outer
 /// `yield*` expression with the inner iterator's own final `value` once it reports `done`.
@@ -327,49 +321,31 @@ fn iterator_result_parts(i: &mut Interpreter, result: &JsValue) -> Result<(bool,
 /// async generator delegating via its own `@@asyncIterator`, and truly awaiting each delegated
 /// value, is out of scope here for the same reason plain `await` is -- see the module doc).
 fn yield_delegate(i: &mut Interpreter, iterable: JsValue) -> Result<JsValue, Throw> {
-    let method = i.get_prop(&iterable, WellKnownSymbol::Iterator.symbol())?;
-    let iterator = i.call_value(&method, iterable.clone(), Vec::new())?;
+    let state = i.start_sync_yield_delegate(&iterable)?;
+    // The legacy async coroutine driver still wraps values synchronously. Preserve that policy;
+    // genuine asynchronous delegation remains the VM async_delegate implementation.
+    let legacy_async = SEGMENT.with(|segment| segment.borrow().as_ref()
+        .and_then(|segment| segment.own_function.as_ref())
+        .is_some_and(|function| function.borrow().func.as_ref().is_some_and(|function| function.is_async)));
     let mut resume = Resume::Next(JsValue::Undefined);
     loop {
-        resume = match resume {
-            Resume::Next(sent) => {
-                let next = i.get_prop(&iterator, "next")?;
-                let result = i.call_value(&next, iterator.clone(), vec![sent])?;
-                let (done, value) = iterator_result_parts(i, &result)?;
-                if done {
-                    return Ok(value);
-                }
-                park_segment(i, Suspend::Yield(value))
-            }
-            Resume::Throw(e) => {
-                let throw_method = i.get_prop(&iterator, "throw")?;
-                if !i.binding_is_callable(&throw_method) {
-                    return Err(Throw::type_error(
-                        "delegated iterator does not have a throw method",
-                    ));
-                }
-                let result = i.call_value(&throw_method, iterator.clone(), vec![e])?;
-                let (done, value) = iterator_result_parts(i, &result)?;
-                if done {
-                    return Ok(value);
-                }
-                park_segment(i, Suspend::Yield(value))
-            }
-            Resume::Return(v) => {
-                let return_method = i.get_prop(&iterator, "return")?;
-                if !i.binding_is_callable(&return_method) {
-                    set_pending_return(v);
-                    return Err(Throw(JsValue::Undefined));
-                }
-                let result = i.call_value(&return_method, iterator.clone(), vec![v])?;
-                let (done, value) = iterator_result_parts(i, &result)?;
-                if done {
-                    set_pending_return(value);
-                    return Err(Throw(JsValue::Undefined));
-                }
-                park_segment(i, Suspend::Yield(value))
-            }
+        let (kind, input) = match resume {
+            Resume::Next(value) => (0, value),
+            Resume::Return(value) => (1, value),
+            Resume::Throw(value) => (2, value),
         };
+        match i.step_sync_yield_delegate(&state, kind, input)? {
+            crate::interp::YieldDelegateStep::Complete(value) => return Ok(value),
+            crate::interp::YieldDelegateStep::Return(value) => {
+                set_pending_return(value);
+                return Err(Throw(JsValue::Undefined));
+            }
+            crate::interp::YieldDelegateStep::YieldResult(result) => {
+                let suspend = if legacy_async { Suspend::Yield(i.get_prop(&result, "value")?) }
+                    else { Suspend::YieldIteratorResult(result) };
+                resume = park_segment(i, suspend);
+            }
+        }
     }
 }
 
@@ -590,6 +566,7 @@ fn thread_generator_resume(
     let suspend = coro.resume(signal);
     match suspend {
         Suspend::Yield(v) => Ok(create_iter_result(i, v, false)),
+        Suspend::YieldIteratorResult(result) => Ok(result),
         Suspend::Done(v) => Ok(create_iter_result(i, v, true)),
         Suspend::Throw(e) => Err(Throw(e)),
         // Generator bodies never park at an await (`Segment::awaits` is false for them).
@@ -885,7 +862,7 @@ fn thread_async_function_step(
             let error = i.normalize_throw(Throw(error)).0;
             settle_promise(&target, PromiseFate::Rejected(error), i)
         }
-        Suspend::Yield(_) => {
+        Suspend::Yield(_) | Suspend::YieldIteratorResult(_) => {
             let error = i.normalize_throw(Throw::type_error("yield in an async function")).0;
             settle_promise(&target, PromiseFate::Rejected(error), i)
         }
