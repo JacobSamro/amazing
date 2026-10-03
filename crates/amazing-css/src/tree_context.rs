@@ -127,7 +127,7 @@ mod tests {
     #[test]
     fn actual_dom_order_counts_only_elements_and_precedes_inheritance() {
         let mut dom=Dom::new();let html=dom.create_element(NodeIdx(0),"html");
-        dom.create_element(html,"head");dom.append_child(html,amazing_dom::NodeKind::Text("gap".into()));
+        dom.create_element(html,"head");dom.create_text(html,"gap");
         let body=dom.create_element(html,"body");let first=dom.create_element(body,"i");let second=dom.create_element(body,"b");
         let css=parse_stylesheet("body{font-size:calc(10px * sibling-index());font-weight:calc(100 * sibling-count());background-image:linear-gradient(red calc(20px * sibling-index()),blue);--step:sibling-index()}i{font-size:inherit;width:calc(10px * var(--step))}b{font-size:inherit;width:calc(10px * var(--step));height:calc(10px * sibling-count())}body::before{content:'x';width:calc(10px * sibling-index());background-image:linear-gradient(red calc(20px * sibling-index()),blue)}");
         let result=compute(&dom,&[css]);let style=result.get(body).unwrap();
