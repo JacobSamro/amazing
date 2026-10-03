@@ -205,7 +205,7 @@ fn visit(_dom: &Dom, layout: &LayoutBox, map: &mut BoundsMap) {
                     InlineNode::PaddingEdge { .. }
                     | InlineNode::BidiStart { .. }
                     | InlineNode::BidiEnd
-                    | InlineNode::Break => {}
+                    | InlineNode::Break { .. } => {}
                 }
             }
         }

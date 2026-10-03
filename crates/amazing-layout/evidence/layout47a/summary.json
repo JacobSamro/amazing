@@ -1,0 +1,457 @@
+{
+  "ticket": "LAYOUT47A",
+  "fixed_base": "3f374b946a35aaa25b7d1235a4b409b5c23434a1",
+  "host": "pool-layout/native-ext4/Linux",
+  "final_session": 17338,
+  "exit": 0,
+  "workspace": {
+    "passed": 3644,
+    "skipped": 17
+  },
+  "doctests": 4,
+  "harness": 7,
+  "layout_tests": 455,
+  "directories": [
+    {
+      "slug": "css-CSS2-floats",
+      "before": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 39,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-CSS2-normal-flow",
+      "before": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 29,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-CSS2-positioning",
+      "before": {
+        "pass": 4,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 5,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 1,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 6,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-css-backgrounds",
+      "before": {
+        "pass": 77,
+        "mismatch": 57,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 77,
+        "mismatch": 57,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 134,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-css-contain",
+      "before": {
+        "pass": 153,
+        "mismatch": 76,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 153,
+        "mismatch": 76,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 229,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-css-display",
+      "before": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 35,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-css-fonts",
+      "before": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 32,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-css-images",
+      "before": {
+        "pass": 92,
+        "mismatch": 49,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 92,
+        "mismatch": 49,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 141,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-css-overflow",
+      "before": {
+        "pass": 81,
+        "mismatch": 262,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 81,
+        "mismatch": 262,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 343,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-css-position",
+      "before": {
+        "pass": 45,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 45,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 54,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-css-ruby",
+      "before": {
+        "pass": 52,
+        "mismatch": 15,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 52,
+        "mismatch": 15,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 67,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-css-sizing",
+      "before": {
+        "pass": 99,
+        "mismatch": 39,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 99,
+        "mismatch": 39,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 138,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-css-tables",
+      "before": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 82,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-css-transforms",
+      "before": {
+        "pass": 141,
+        "mismatch": 207,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 141,
+        "mismatch": 207,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 348,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "slug": "css-css-viewport",
+      "before": {
+        "pass": 52,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 52,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 87,
+        "new": 0,
+        "removed": 0
+      }
+    }
+  ],
+  "totals": {
+    "eligible": 1765,
+    "before": 959,
+    "after": 960,
+    "gained": 1,
+    "lost": 0
+  },
+  "pixels": {
+    "before": {
+      "pass": 0,
+      "mismatch": 1,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after": {
+      "pass": 1,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "compare": {
+      "baseline": "/home/user/amazing/out/layout/layout47a/final/before-static-pixels/compact.json",
+      "gained": [
+        "fixtures__static-inline-gradient.html"
+      ],
+      "lost": [],
+      "changed": [],
+      "unchanged": [],
+      "new": [],
+      "removed": []
+    }
+  }
+}

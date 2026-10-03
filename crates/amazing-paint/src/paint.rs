@@ -829,6 +829,7 @@ pub(crate) fn raster_raw_item(
                     decoration.y -= oy;
                 }
                 amazing_layout::LineBox {
+                    source_edges: line.source_edges.clone(),
                     y_top: line.y_top - oy,
                     height: line.height,
                     baseline: line.baseline - oy,
@@ -2384,11 +2385,13 @@ mod tests {
     fn shaped_painter_rasterizes_glyph_ids_without_legacy_words() {
         let mut root = block(&[], 0.0, 0.0, 20.0, 20.0);
         root.lines.push(amazing_layout::LineBox {
+            source_edges: Vec::new(),
             y_top: 0.0,
             height: 12.0,
             baseline: 10.0,
             words: Vec::new(),
             glyphs: vec![amazing_layout::GlyphFrag {
+                source_order: None,
                 node: amazing_dom::NodeIdx(1),
                 font: amazing_text::FontKey(0),
                 glyph: amazing_text::GlyphId('A' as u32),
@@ -2438,11 +2441,13 @@ mod tests {
     fn emphasis_glyph_root() -> LayoutBox {
         let mut root = block(&[], 0.0, 0.0, 40.0, 60.0);
         root.lines.push(amazing_layout::LineBox {
+            source_edges: Vec::new(),
             y_top: 30.0,
             height: 24.0,
             baseline: 40.0,
             words: Vec::new(),
             glyphs: vec![amazing_layout::GlyphFrag {
+                source_order: None,
                 node: amazing_dom::NodeIdx(1),
                 font: amazing_text::FontKey(0),
                 glyph: amazing_text::GlyphId('A' as u32),
@@ -2618,6 +2623,7 @@ mod tests {
     fn shaped_painter_fills_inline_decorations_before_glyphs() {
         let mut root = block(&[], 0.0, 0.0, 20.0, 20.0);
         root.lines.push(amazing_layout::LineBox {
+            source_edges: Vec::new(),
             y_top: 0.0,
             height: 12.0,
             baseline: 10.0,
@@ -2782,6 +2788,7 @@ mod tests {
         let node = amazing_dom::NodeIdx(7);
         let mut root = block(&[], 0.0, 0.0, 4.0, 2.0);
         root.lines.push(amazing_layout::LineBox {
+            source_edges: Vec::new(),
             y_top: 0.0,
             height: 1.0,
             baseline: 1.0,
@@ -3021,6 +3028,7 @@ mod tests {
         let node = amazing_dom::NodeIdx(7);
         let mut root = block(&[], 0.0, 0.0, 4.0, 2.0);
         root.lines.push(amazing_layout::LineBox {
+            source_edges: Vec::new(),
             y_top: 0.0,
             height: 1.0,
             baseline: 1.0,

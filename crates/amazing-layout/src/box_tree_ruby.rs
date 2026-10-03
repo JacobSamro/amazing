@@ -109,6 +109,7 @@ fn ruby_text(
     }
     *mapping_budget = mapping_budget.saturating_sub(source_mappings.len());
     RubyText {
+        source_orders: Vec::new(),
         node: owner,
         raw_text,
         format: ruby_format(&style, font_size),
@@ -131,6 +132,7 @@ fn empty_ruby_text(
     let style = styled.get(owner).cloned().unwrap_or_default();
     let font_size = values::resolve_used_font_size(&style, parent_font_size);
     RubyText {
+        source_orders: Vec::new(),
         node: owner,
         raw_text: String::new(),
         format: ruby_format(&style, font_size),

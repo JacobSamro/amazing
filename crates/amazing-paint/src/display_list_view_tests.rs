@@ -323,6 +323,7 @@ fn raw_tile_rasterizes_inline_replaced_content_and_retains_it() {
     root.border_box = amazing_layout::Rect { x: 0.0, y: 0.0, w: 4.0, h: 2.0 };
     root.content_box = root.border_box;
     root.lines.push(amazing_layout::LineBox {
+        source_edges: Vec::new(),
         y_top: 0.0,
         height: 1.0,
         baseline: 1.0,

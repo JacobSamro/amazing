@@ -1101,6 +1101,7 @@ mod tests {
         let mut parent = LayoutBox::new(None, crate::Display::Block, ComputedStyle::default(), 16.0, 20.0);
         let mut horizontal = LayoutBox::new(None, crate::Display::Block, ComputedStyle::default(), 16.0, 20.0);
         horizontal.lines.push(crate::LineBox {
+            source_edges: Vec::new(),
             y_top: 0.0, height: 20.0, baseline: 15.0,
             words: Vec::new(), glyphs: Vec::new(), decorations: Vec::new(), replaced: Vec::new(),
         });
@@ -1108,6 +1109,7 @@ mod tests {
         vertical_style.set("writing-mode", "vertical-rl");
         let mut vertical = LayoutBox::new(None, crate::Display::Block, vertical_style, 16.0, 20.0);
         vertical.lines.push(crate::LineBox {
+            source_edges: Vec::new(),
             y_top: 20.0, height: 20.0, baseline: 35.0,
             words: Vec::new(), glyphs: Vec::new(), decorations: Vec::new(), replaced: Vec::new(),
         });

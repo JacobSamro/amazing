@@ -374,6 +374,7 @@ pub struct RubyAnnotation {
 #[derive(Debug, Clone)]
 pub struct RubyText {
     pub node: NodeIdx,
+    pub source_orders: Vec<(Range<usize>, u64)>,
     /// Raw content is retained for auto-hiding before whitespace processing.
     pub raw_text: String,
     pub format: RubyFormat,
@@ -451,7 +452,7 @@ pub enum InlineNode {
         overhang_spaces: bool,
     },
     /// `<br>` — force a line break.
-    Break,
+    Break { node: Option<NodeIdx>, source_order: Option<u64> },
     /// Atomic inline content. `size` is the resolved outer size for fitting.
     Replaced {
         node: NodeIdx,
@@ -459,12 +460,14 @@ pub enum InlineNode {
         replaced: Box<replaced::InlineReplaced>,
     },
     /// An inline formatting-context placeholder for a flex/grid subtree.
-    Atomic { node: NodeIdx, size: IntrinsicSize, baseline_offset: f32, vertical_align: String },
+    Atomic { node: NodeIdx, source_order: Option<u64>, size: IntrinsicSize, baseline_offset: f32, vertical_align: String },
 }
 
 /// One laid-out line of an inline formatting context.
 #[derive(Debug)]
 pub struct LineBox {
+    /// Actual forced-break slots, including lines with no glyph content.
+    pub source_edges: Vec<u64>,
     /// Top edge of the line box (absolute px).
     pub y_top: f32,
     /// Line box height (the strut: block font + line-height).
@@ -492,6 +495,8 @@ pub struct InlineDecorationFrag {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GlyphFrag {
     pub node: NodeIdx,
+    /// Actual generated-tree traversal slot, retained through shaping.
+    pub source_order: Option<u64>,
     pub font: FontKey,
     pub glyph: GlyphId,
     pub cluster: Range<usize>,
@@ -534,6 +539,7 @@ pub struct ReplacedFrag {
 #[derive(Debug)]
 pub struct WordFrag {
     pub node: NodeIdx,
+    pub source_order: Option<u64>,
     pub text: String,
     pub x: f32,
     /// Width from the font source at this fragment's font size.
@@ -652,7 +658,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
             InlineNode::PaddingEdge { .. }
             | InlineNode::BidiStart { .. }
             | InlineNode::BidiEnd
-            | InlineNode::Break
+            | InlineNode::Break { .. }
             | InlineNode::Replaced { .. }
             | InlineNode::Atomic { .. } => None,
         }));

@@ -197,6 +197,7 @@ fn positioned_control_labels_use_existing_glyph_ids_and_content_clip() {
         "button{appearance:none;background:white;border:2px solid red}",
     );
     let glyph = amazing_layout::GlyphFrag {
+        source_order: None,
         node: amazing_dom::NodeIdx(1),
         font: amazing_text::FontKey(0),
         glyph: amazing_text::GlyphId('Z' as u32),
@@ -224,6 +225,7 @@ fn positioned_control_labels_use_existing_glyph_ids_and_content_clip() {
         checked: false,
         disabled: false,
         lines: vec![LineBox {
+            source_edges: Vec::new(),
             y_top: inner.y,
             height: 12.0,
             baseline: inner.y + 10.0,

@@ -705,9 +705,40 @@ fn static_anchor(parent: &LayoutBox, positioned: &LayoutBox) -> StaticAnchor {
             .max_by_key(|child| child.source_order.unwrap_or(0)),
         Flow::Inlines(_) | Flow::Empty => None,
     };
-    let y = preceding.map_or(parent.content_box.y, |sibling| {
+    let mut anchor_rank = preceding.and_then(|sibling| sibling.source_end_order.or(sibling.source_order));
+    let mut y = preceding.map_or(parent.content_box.y, |sibling| {
         sibling.border_box.y + sibling.border_box.h + sibling.margin.bottom.unwrap_or(0.0)
     });
+    // CSS2 §10.6.4: a hypothetical block follows preceding inline content.
+    // An anonymous run may straddle the removed positioned slot, so its end
+    // rank cannot decide which of its lines contributes. Retained lexical
+    // traversal ranks survive visual bidi order and final line reshaping.
+    if !positioned.originally_inline_level {
+        let mut visit_lines = |box_: &LayoutBox| {
+            for line in &box_.lines {
+                let rank = line.glyphs.iter().filter_map(|g| g.source_order)
+                    .chain(line.words.iter().filter(|w| !w.text.is_empty()).filter_map(|w| w.source_order))
+                    .chain(line.replaced.iter().filter_map(|r| r.source_order))
+                    .chain(line.source_edges.iter().copied())
+                    .filter(|rank| *rank < target).max();
+                if let Some(rank) = rank && anchor_rank.is_none_or(|old| rank >= old) {
+                    anchor_rank = Some(rank);
+                    y = line.y_top + line.height;
+                }
+            }
+        };
+        match &parent.flow {
+            Flow::Inlines(_) => visit_lines(parent),
+            Flow::Blocks(children) => {
+                for child in children {
+                    if child.node.is_none() && crate::floats::side(&child.style).is_none() {
+                        visit_lines(child);
+                    }
+                }
+            }
+            Flow::Flex(_) | Flow::Grid(_) | Flow::Empty => {},
+        }
+    }
     let vertical_parent = parent
         .font_metric_style
         .as_ref()
@@ -1107,6 +1138,108 @@ mod tests {
             (actual - expected).abs() < 0.01,
             "got {actual}, want {expected}"
         );
+    }
+
+    #[test]
+    fn block_static_anchors_follow_only_preceding_inline_lines() {
+        for shaped in [false,true] {
+            for position in ["absolute","fixed"] {
+                for direction in ["ltr","rtl"] {
+                    for (prefix,expected) in [("",0.0),("abc",20.0),("abc<br>def",40.0),("<br><br>",40.0)] {
+                        let dom=amazing_html::parse(&format!("<body><div id=parent>{prefix}<div id=target></div><br>later<br>later</div></body>"));
+                        let css=format!("body{{margin:0;font:16px/20px serif}}#parent{{position:relative;width:200px;direction:{direction}}}#target{{position:{position};width:10px;height:10px}}");
+                        let root=if shaped { crate::layout_dom_document_with_text_and_replaced_in_viewport(
+                            &dom,&css,400.0,Some(300.0),&amazing_text::FallbackTextSystem::new(),&crate::NoReplacedElements)
+                        } else { crate::layout_dom_document_in_viewport(&dom,&css,400.0,Some(300.0),&FontSource::fallback()) };
+                        let target=find_id(&root,&dom,"target").unwrap();
+                        assert!((target.border_box.y-expected).abs()<0.01,
+                            "{prefix:?}/{position}/{direction}/shaped={shaped}: {:?}",target.border_box);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn generated_before_after_keep_separate_static_source_slots() {
+        for position in ["absolute","fixed"] {
+            let dom=amazing_html::parse("<body><div id=parent><div id=target></div></div></body>");
+            let css=format!("body{{margin:0;font:16px/20px serif}}#parent{{position:relative;width:100px}}#parent::before{{content:'before'}}#parent::after{{content:'after after after after after after'}}#target{{position:{position};width:10px;height:10px}}");
+            let root=crate::layout_dom_document_with_text_and_replaced_in_viewport(&dom,&css,400.0,Some(300.0),&amazing_text::FallbackTextSystem::new(),&crate::NoReplacedElements);
+            let parent=find_id(&root,&dom,"parent").unwrap();
+            let target=find_id(&root,&dom,"target").unwrap();
+            close(target.border_box.y,20.0);
+            let ranks=parent.lines.iter().flat_map(|line| &line.glyphs).filter_map(|g|g.source_order).collect::<std::collections::BTreeSet<_>>();
+            assert!(ranks.len()>=2,"generated owner must retain distinct before/after slots: {ranks:?}");
+            assert!(ranks.iter().any(|rank|Some(*rank)<target.source_order));
+            assert!(ranks.iter().any(|rank|Some(*rank)>target.source_order));
+        }
+    }
+
+    #[test]
+    fn static_source_order_uses_child_links_after_late_text_insertion() {
+        for shaped in [false,true] {
+            let mut dom=Dom::new();
+            let html=dom.create_element(amazing_dom::NodeIdx(0),"html");
+            let body=dom.create_element(html,"body");
+            let parent=dom.create_element(body,"div");
+            dom.set_attrs(parent,vec![("id".into(),"parent".into())]);
+            let target=dom.create_element(parent,"div");
+            dom.set_attrs(target,vec![("id".into(),"target".into())]);
+            let prefix=dom.alloc_unattached(amazing_dom::NodeKind::Text{data:"inserted earlier".into()});
+            assert!(prefix.0>target.0);
+            dom.attach_before(parent,Some(target),prefix);
+            dom.create_text(parent," later later later later later later");
+            let css="body{margin:0;font:16px/20px serif}#parent{position:relative;width:200px}#target{position:absolute;width:10px;height:10px}";
+            let root=if shaped {crate::layout_dom_document_with_text_and_replaced_in_viewport(&dom,css,400.0,Some(300.0),&amazing_text::FallbackTextSystem::new(),&crate::NoReplacedElements)}
+                else {crate::layout_dom_document_in_viewport(&dom,css,400.0,Some(300.0),&FontSource::fallback())};
+            close(find_id(&root,&dom,"target").unwrap().border_box.y,20.0);
+        }
+    }
+
+    #[test]
+    fn atomic_and_ruby_prefixes_retain_actual_static_line_slots() {
+        for prefix in ["<span style='display:inline-flex;width:30px;height:30px'></span>",
+            "<ruby>base<rt>note</rt></ruby>","<ruby><ruby>base<rt>inner</rt></ruby><rt>outer</rt></ruby>"] {
+            for direction in ["ltr","rtl"] {
+                let dom=amazing_html::parse(&format!("<body><div id=parent>{prefix}<div id=target></div><br>later<br>later</div></body>"));
+                let css=format!("body{{margin:0;font:16px/20px serif}}#parent{{position:relative;width:200px;direction:{direction}}}#target{{position:absolute;width:10px;height:10px}}");
+                let root=crate::layout_dom_document_with_text_and_replaced_in_viewport(&dom,&css,400.0,Some(300.0),&amazing_text::FallbackTextSystem::new(),&crate::NoReplacedElements);
+                let parent=find_id(&root,&dom,"parent").unwrap();
+                let target=find_id(&root,&dom,"target").unwrap();
+                close(target.border_box.y,parent.lines[0].y_top+parent.lines[0].height);
+                assert!(parent.lines[0].words.iter().filter_map(|word|word.source_order)
+                    .chain(parent.lines[0].replaced.iter().filter_map(|item|item.source_order))
+                    .any(|rank|Some(rank)<target.source_order));
+            }
+        }
+    }
+
+    #[test]
+    fn bidi_final_reshape_preserves_lexical_static_slot_identity() {
+        for wrapping in ["normal","nowrap"] {
+            let dom=amazing_html::parse("<body><div id=parent><span id=prefix>abc אבג abc אבג abc</span><div id=target></div><br><span id=suffix>late late late late late</span></div></body>");
+            let css=format!("body{{margin:0;font:16px/20px serif}}#parent{{position:relative;width:80px;direction:rtl;white-space:{wrapping}}}#target{{position:absolute;width:10px;height:10px}}");
+            let root=crate::layout_dom_document_with_text_and_replaced_in_viewport(&dom,&css,400.0,Some(300.0),&amazing_text::FallbackTextSystem::new(),&crate::NoReplacedElements);
+            let parent=find_id(&root,&dom,"parent").unwrap();
+            let target=find_id(&root,&dom,"target").unwrap();
+            let prefix_lines=parent.lines.iter().filter(|line|line.glyphs.iter().any(|glyph|
+                glyph.source_order.is_some_and(|rank|Some(rank)<target.source_order))).collect::<Vec<_>>();
+            let last=prefix_lines.last().unwrap();
+            close(target.border_box.y,last.y_top+last.height);
+            assert!(parent.lines.iter().flat_map(|line|&line.glyphs).all(|glyph|glyph.source_order.is_some()));
+            assert!(parent.lines.iter().flat_map(|line|&line.glyphs).any(|glyph|glyph.source_order>target.source_order));
+        }
+    }
+
+    #[test]
+    fn explicit_block_insets_override_inline_static_anchor_geometry() {
+        for position in ["absolute","fixed"] {
+            let (dom,root)=layout("<body><div id=parent>prefix<br>prefix<div id=target></div>later</div></body>",
+                &format!("body{{margin:0;font:16px/20px serif}}#parent{{position:relative;width:200px}}#target{{position:{position};left:7px;top:9px;width:10px;height:10px}}"),400.0,300.0);
+            let target=find_id(&root,&dom,"target").unwrap();
+            close(target.border_box.x,7.0);close(target.border_box.y,9.0);
+        }
     }
 
     #[test]

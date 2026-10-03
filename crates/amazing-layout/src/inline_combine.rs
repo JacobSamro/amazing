@@ -77,6 +77,7 @@ pub(super) fn shape_combined_text(
     inner_style.writing_mode = amazing_text::WritingMode::HorizontalTb;
     inner_style.text_combine = amazing_text::TextCombine::None;
     let mut combined = crate::RubyText {
+        source_orders: Vec::new(),
         node,
         raw_text: text.to_owned(),
         format: Default::default(),
@@ -150,6 +151,7 @@ pub(super) fn shape_combined_text(
         glyph.scale_x = scale;
     }
     Some(ShapedRuby {
+        source_order: None,
         paragraph_offset: 0,
         node,
         text: text.to_owned(),

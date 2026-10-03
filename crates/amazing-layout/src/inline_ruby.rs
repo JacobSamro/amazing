@@ -71,6 +71,7 @@ fn shape_ruby_leaf(
             }
             fragments.push(GlyphFrag {
                 node: text.node,
+                source_order: source_order_for_range(&text.source_orders,glyph.cluster.clone()),
                 font: run.font,
                 glyph: glyph.id,
                 cluster: glyph.cluster.clone(),
@@ -537,6 +538,7 @@ fn shape_ruby(
         glyphs.extend(note.run.glyphs);
     }
     Some(ShapedRuby {
+        source_order: columns.iter().flat_map(|column|&column.base.source_orders).map(|(_,rank)|*rank).min(),
         paragraph_offset: 0,
         node,
         text,

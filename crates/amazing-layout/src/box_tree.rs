@@ -404,11 +404,40 @@ fn assign_source_order(box_: &mut LayoutBox, order: &std::collections::HashMap<N
         Flow::Inlines(items) => {
             for item in items {
                 match item {
-                    InlineNode::Text { node, source_order: Some(value), .. } => {
-                        *value = decode(*value, *node).unwrap_or(0);
+                    InlineNode::Text { node, source_order, .. } => {
+                        *source_order = source_order.and_then(|value| decode(value, *node))
+                            .or_else(|| slot(*node, None).map(|rank| rank << 32));
                     }
-                    InlineNode::Replaced { node, replaced, .. } if replaced.generated_url.is_some() => {
-                        replaced.source_order = replaced.source_order.and_then(|value| decode(value, *node));
+                    InlineNode::Break { node, source_order } => {
+                        *source_order = node.and_then(|node|slot(node,None)).map(|rank|rank<<32);
+                    }
+                    InlineNode::Atomic { node, source_order, .. } => {
+                        *source_order = slot(*node, None).map(|rank| rank << 32);
+                    }
+                    InlineNode::Ruby { columns, .. } => {
+                        fn assign(text: &mut RubyText, order: &std::collections::HashMap<NodeIdx,[u64;4]>) {
+                            text.source_orders = text.source_mappings.iter().filter_map(|mapping|
+                                Some((mapping.text_range.clone(), order.get(&mapping.source)?[2] << 32))).collect();
+                            if text.source_orders.is_empty() {
+                                if let Some(rank) = order.get(&text.node) {
+                                    text.source_orders.push((0..text.text.len(), rank[2] << 32));
+                                }
+                            }
+                            for nested in &mut text.nested { columns_assign(&mut nested.columns, order); }
+                        }
+                        fn columns_assign(columns: &mut [crate::RubyColumn], order: &std::collections::HashMap<NodeIdx,[u64;4]>) {
+                            for column in columns {
+                                assign(&mut column.base,order);
+                                if let Some(annotation)=&mut column.annotation { assign(annotation,order); }
+                                for annotation in &mut column.additional_annotations { assign(&mut annotation.text,order); }
+                            }
+                        }
+                        columns_assign(columns,order);
+                    }
+                    InlineNode::Replaced { node, replaced, .. } => {
+                        replaced.source_order = if replaced.generated_url.is_some() {
+                            replaced.source_order.and_then(|value| decode(value, *node))
+                        } else { slot(*node,None).map(|rank| rank << 32) };
                     }
                     _ => {}
                 }
@@ -425,6 +454,7 @@ fn assign_source_order(box_: &mut LayoutBox, order: &std::collections::HashMap<N
             Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) =>
                 children.iter().filter_map(|child| child.source_order).min(),
             Flow::Inlines(items) => items.iter().filter_map(|item| match item {
+                InlineNode::Break { source_order, .. } => *source_order,
                 InlineNode::Text { node, source_order, .. } =>
                     (*source_order).or_else(|| slot(*node, None).map(|rank| rank << 32)),
                 InlineNode::Replaced { node, replaced, .. } =>
@@ -443,6 +473,7 @@ fn assign_source_order(box_: &mut LayoutBox, order: &std::collections::HashMap<N
             Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) =>
                 children.iter().filter_map(|child| child.source_end_order).max(),
             Flow::Inlines(items) => items.iter().filter_map(|item| match item {
+                InlineNode::Break { source_order, .. } => *source_order,
                 InlineNode::Text { node, source_order, .. } =>
                     (*source_order).or_else(|| slot(*node, None).map(|rank| rank << 32)),
                 InlineNode::Replaced { node, replaced, .. } =>
@@ -775,6 +806,7 @@ fn push_atomic_box(
     positioned.push(box_);
     inlines.push(InlineNode::Atomic {
         node: child,
+        source_order: None,
         size: crate::IntrinsicSize { width: 0.0, height: 0.0 },
         baseline_offset: 0.0,
         vertical_align,
@@ -1405,7 +1437,7 @@ fn classify_children(
                 match dom.name(child) {
                     // Void line-break element: emits a marker itself (it has
                     // no children, so flatten_inline would see nothing).
-                    Some("br") => inlines.push(InlineNode::Break),
+                    Some("br") => inlines.push(InlineNode::Break {node:Some(child),source_order:None}),
                     _ if is_ruby_container(dom, styled, child) => {
                         inlines.push(ruby_inline(dom, styled, child, entry.parent_font));
                     },
@@ -1608,7 +1640,7 @@ fn has_renderable_inline_content(inlines: &[InlineNode]) -> bool {
                         | amazing_text::WhiteSpace::BreakSpaces
                 )
         }
-        InlineNode::Break | InlineNode::Replaced { .. } | InlineNode::Atomic { .. }
+        InlineNode::Break { .. } | InlineNode::Replaced { .. } | InlineNode::Atomic { .. }
         | InlineNode::Ruby { .. } => true,
         InlineNode::PaddingEdge { .. } | InlineNode::BidiStart { .. } | InlineNode::BidiEnd => false,
     })
@@ -1731,7 +1763,7 @@ fn flatten_inline(
                     continue;
                 }
                 match dom.name(child) {
-                    Some("br") => inlines.push(InlineNode::Break),
+                    Some("br") => inlines.push(InlineNode::Break {node:Some(child),source_order:None}),
                     _ if is_ruby_container(dom, styled, child) => {
                         inlines.push(ruby_inline(dom, styled, child, entry.parent_font));
                     },
@@ -2478,7 +2510,7 @@ mod tests {
                 InlineNode::BidiStart { .. } => ("<bidi-start>", 0.0),
                 InlineNode::BidiEnd => ("<bidi-end>", 0.0),
                 InlineNode::PaddingEdge { .. } => ("<padding-edge>", 0.0),
-                InlineNode::Break => ("<br>", 0.0),
+                InlineNode::Break { .. } => ("<br>", 0.0),
                 InlineNode::Replaced { .. } => ("<replaced>", 0.0),
                 InlineNode::Atomic { .. } => ("<atomic>", 0.0),
                 InlineNode::Ruby { .. } => ("<ruby>", 0.0),
@@ -2523,7 +2555,7 @@ mod tests {
         let Flow::Inlines(items) = &kids[0].flow else {
             panic!("p wants inlines")
         };
-        assert!(matches!(items[1], InlineNode::Break));
+        assert!(matches!(items[1], InlineNode::Break { .. }));
     }
 
     #[test]

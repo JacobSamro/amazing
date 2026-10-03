@@ -52,10 +52,11 @@ pub(crate) enum Token {
     Word {
         text: String,
         node: NodeIdx,
+        source_order: Option<u64>,
         font_size: f32,
         space_before: bool,
     },
-    Break,
+    Break { source_order: Option<u64> },
     Replaced {
         node: NodeIdx,
         source_order: Option<u64>,
@@ -95,14 +96,15 @@ fn tokenize_with_basis(items: &[InlineNode], basis: Option<f32>, fonts: Option<&
                 }
             }
             InlineNode::BidiStart { .. } | InlineNode::BidiEnd | InlineNode::Ruby { .. } => {},
-            InlineNode::Break => {
-                tokens.push(Token::Break);
+            InlineNode::Break { source_order, .. } => {
+                tokens.push(Token::Break {source_order:*source_order});
                 lexical_content = false;
                 // Whitespace following a <br> starts the new line stripped,
                 // so the pending flag survives the break.
             }
             InlineNode::Text {
                 node,
+                source_order,
                 text,
                 font_size,
                 ..
@@ -120,6 +122,7 @@ fn tokenize_with_basis(items: &[InlineNode], basis: Option<f32>, fonts: Option<&
                     tokens.push(Token::Word {
                         text: word.to_owned(),
                         node: *node,
+                        source_order: *source_order,
                         font_size: *font_size,
                         space_before: pending_space && lexical_content,
                     });
@@ -133,6 +136,7 @@ fn tokenize_with_basis(items: &[InlineNode], basis: Option<f32>, fonts: Option<&
             InlineNode::Replaced { node, size, .. } | InlineNode::Atomic { node, size, .. } => {
                 let source_order = match item {
                     InlineNode::Replaced { replaced, .. } => replaced.source_order,
+                    InlineNode::Atomic { source_order, .. } => *source_order,
                     _ => None,
                 };
                 tokens.push(Token::Replaced {
@@ -275,11 +279,13 @@ pub(crate) fn layout_lines_with_floats(
     let mut replaced: Vec<ReplacedFrag> = Vec::new();
     let mut cx = content_x;
 
+    let source_edges = std::cell::RefCell::new(Vec::new());
+    let forced_break = std::cell::Cell::new(false);
     let flush = |lines: &mut Vec<LineBox>,
                  words: &mut Vec<WordFrag>,
                  replaced: &mut Vec<ReplacedFrag>,
                  cx: &mut f32| {
-        if words.is_empty() && replaced.is_empty() {
+        if words.is_empty() && replaced.is_empty() && !forced_break.get() {
             return;
         }
         let (height, baseline_offset) = line_metrics(replaced, &atomic_baselines, strut, 0.0);
@@ -288,7 +294,9 @@ pub(crate) fn layout_lines_with_floats(
         for image in replaced.iter_mut() {
             image.y = atomic_fragment_y(image, &atomic_baselines, strut, y_top, height, baseline);
         }
+        forced_break.set(false);
         lines.push(LineBox {
+            source_edges: std::mem::take(&mut *source_edges.borrow_mut()),
             y_top,
             height,
             baseline,
@@ -316,14 +324,19 @@ pub(crate) fn layout_lines_with_floats(
         match token {
             Token::Padding { node, advance } => {
                 if !has_content { prepare(&mut cx, advance, strut.line_height); }
-                words.push(WordFrag { node, text:String::new(), x:cx,
+                words.push(WordFrag { node, source_order: None, text:String::new(), x:cx,
                     width:advance, font_size:0.0 });
                 cx += advance;
             }
-            Token::Break => flush(&mut lines, &mut words, &mut replaced, &mut cx),
+            Token::Break { source_order } => {
+                forced_break.set(true);
+                if let Some(rank)=source_order { source_edges.borrow_mut().push(rank); }
+                flush(&mut lines, &mut words, &mut replaced, &mut cx);
+            },
             Token::Word {
                 text,
                 node,
+                source_order,
                 font_size,
                 space_before,
             } => {
@@ -343,6 +356,7 @@ pub(crate) fn layout_lines_with_floats(
                 let wx = cx + if cx > line_left.get() { space_w } else { 0.0 };
                 words.push(WordFrag {
                     node,
+                    source_order,
                     text,
                     x: wx,
                     width: word_w,
@@ -417,6 +431,7 @@ struct ShapedDecoration {
 
 #[derive(Debug, Clone)]
 struct ShapedRuby {
+    source_order: Option<u64>,
     paragraph_offset: usize,
     node: NodeIdx,
     text: String,
@@ -453,6 +468,7 @@ struct ShapedContext {
     spans: Vec<TextSpan>,
     spacing: Vec<SpacingSpan>,
     sources: Vec<SourceMapping>,
+    source_orders: Vec<(Range<usize>, u64)>,
     bidi_scopes: Vec<amazing_text::BidiScope>,
     colors: HashMap<u32, String>,
     paint_info: HashMap<u32, InlinePaintInfo>,
@@ -468,6 +484,11 @@ struct SpacingSpan {
     letter: f32,
     word: crate::values::LengthPercentage,
     font_size: f32,
+}
+
+pub(crate) fn source_order_for_range(orders: &[(Range<usize>,u64)], range: Range<usize>) -> Option<u64> {
+    orders.iter().filter(|(span,_)| span.start < range.end && range.start < span.end)
+        .map(|(_,rank)|*rank).min()
 }
 
 fn spacing_at(spans: &[SpacingSpan], offset: usize) -> (f32, crate::values::LengthPercentage, f32) {
@@ -504,7 +525,7 @@ enum ShapedUnit {
         space_before:f32, preserved_space_before:f32,
         range: Range<usize>, context: Rc<ShapedContext> },
     Word(ShapedWord),
-    Break,
+    Break { source_order: Option<u64> },
     Replaced {
         node: NodeIdx,
         source_order: Option<u64>,
@@ -536,7 +557,7 @@ fn unbreakable_run_widths(units: &[ShapedUnit], vertical: bool) -> Vec<f32> {
             ShapedUnit::Replaced { size, break_after, .. } => (if vertical { size.height } else { size.width }, *break_after),
             ShapedUnit::Ruby(ruby) => (ruby.width, ruby.break_after),
             ShapedUnit::Combined { shaped, break_after, .. } => (shaped.width, *break_after),
-            ShapedUnit::Break => continue,
+            ShapedUnit::Break { .. } => continue,
         };
         let continuation = if break_after { 0.0 } else {
             match units.get(index + 1) {
@@ -545,7 +566,7 @@ fn unbreakable_run_widths(units: &[ShapedUnit], vertical: bool) -> Vec<f32> {
                 Some(ShapedUnit::Word(next)) => next.space_before + needed[index + 1],
                 Some(ShapedUnit::Ruby(next)) => next.space_before + needed[index + 1],
                 Some(ShapedUnit::Replaced { space_before, .. }) => space_before + needed[index + 1],
-                Some(ShapedUnit::Break) | None => 0.0,
+                Some(ShapedUnit::Break { .. }) | None => 0.0,
                 Some(_) => needed[index + 1],
             }
         };
@@ -620,6 +641,7 @@ pub(crate) fn layout_lines_shaped(
     let mut placed_text = Vec::new();
     let mut cursor = inline_start;
     let mut may_break_after = true;
+    let source_edges = std::cell::RefCell::new(Vec::new());
     let flush = |lines: &mut Vec<LineBox>,
                  words: &mut Vec<WordFrag>,
                  glyphs: &mut Vec<GlyphFrag>,
@@ -749,6 +771,7 @@ pub(crate) fn layout_lines_shaped(
             }
         }
         lines.push(LineBox {
+            source_edges: std::mem::take(&mut *source_edges.borrow_mut()),
             y_top,
             height,
             baseline,
@@ -797,7 +820,8 @@ pub(crate) fn layout_lines_shaped(
     for (unit_index, unit) in units.into_iter().enumerate() {
         let has_content = !words.is_empty() || !replaced.is_empty();
         match unit {
-            ShapedUnit::Break => {
+            ShapedUnit::Break { source_order } => {
+                if let Some(rank)=source_order { source_edges.borrow_mut().push(rank); }
                 flush(
                     &mut lines,
                     &mut words,
@@ -876,6 +900,7 @@ pub(crate) fn layout_lines_shaped(
                 }
                 words.push(WordFrag {
                     node: word.node,
+                    source_order: source_order_for_range(&word.context.source_orders, word.range.clone()),
                     text: word.text,
                     x,
                     width: word.width,
@@ -902,7 +927,7 @@ pub(crate) fn layout_lines_shaped(
                     hyphen_after:false, requires_reshape:false });
                 // A scope edge contributes content even when the box is empty.
                 // No glyph, replaced-element identity or principal rectangle is invented.
-                words.push(WordFrag { node, text:String::new(), x:cursor,
+                words.push(WordFrag { node, source_order: None, text:String::new(), x:cursor,
                     width:advance, font_size:0.0 });
                 cursor += advance;
                 may_break_after = break_after;
@@ -999,6 +1024,7 @@ pub(crate) fn layout_lines_shaped(
                         glyph.x += cursor;
                     }
                 }
+                let ruby_source_order = ruby.source_order;
                 ruby_glyphs.extend(ruby.glyphs);
                 let total = ruby.line_over + ruby.line_under;
                 let leading = (strut.line_height - strut.ascent - strut.descent).max(0.0);
@@ -1007,6 +1033,7 @@ pub(crate) fn layout_lines_shaped(
                 ruby_line_under.set(ruby_line_under.get().max(ruby.line_under * extra));
                 words.push(WordFrag {
                     node: ruby.node,
+                    source_order: ruby_source_order,
                     text: ruby.text,
                     x: cursor,
                     width: ruby.width,
@@ -1044,6 +1071,7 @@ pub(crate) fn layout_lines_shaped(
                     );
                     prepare(&mut cursor, combined.width, strut.line_height);
                 }
+                let combined_source_order = combined.source_order;
                 placed_text.push(PlacedText {
                     context,
                     range,
@@ -1053,6 +1081,7 @@ pub(crate) fn layout_lines_shaped(
                 });
                 words.push(WordFrag {
                     node: combined.node,
+                    source_order: combined_source_order,
                     text: combined.text,
                     x: cursor,
                     width: combined.width,
@@ -1298,6 +1327,7 @@ fn reshape_visual_line(
             }
             glyphs.push(GlyphFrag {
                 node: NodeIdx(run.source),
+                source_order: source_order_for_range(&context.source_orders, glyph.cluster.clone()),
                 font: run.font,
                 glyph: glyph.id,
                 cluster: glyph.cluster.clone(),
@@ -1479,6 +1509,7 @@ fn append_discretionary_hyphen(
         for glyph in run.glyphs {
             inserted.push(GlyphFrag {
                 node: NodeIdx(source),
+                source_order: source_order_for_range(&context.source_orders, cluster.clone()),
                 font: run.font,
                 glyph: glyph.id,
                 cluster: cluster.clone(),
@@ -1604,6 +1635,7 @@ fn shape_chunk_in_mode(
     let mut spans = Vec::new();
     let mut spacing = Vec::new();
     let mut sources = Vec::new();
+    let mut source_orders = Vec::new();
     let mut bidi_scopes = Vec::new();
     let mut bidi_scope_stack = Vec::new();
     let mut atomics = HashMap::new();
@@ -1681,13 +1713,14 @@ fn shape_chunk_in_mode(
                 }
                 continue;
             }
-            InlineNode::Break => {
+            InlineNode::Break { source_order, .. } => {
                 let (source, style) = previous_style
                     .clone()
                     .or_else(|| following_styles[item_index].clone())
                     .unwrap_or_else(|| (0, default_style.clone()));
                 let start = paragraph_text.len();
                 paragraph_text.push('\n');
+                if let Some(rank)=source_order {source_orders.push((start..paragraph_text.len(),*rank));}
                 spans.push(TextSpan {
                     range: start..paragraph_text.len(),
                     source,
@@ -1718,6 +1751,7 @@ fn shape_chunk_in_mode(
                 });
                 let source_order = match item {
                     InlineNode::Replaced { replaced, .. } => replaced.source_order,
+                    InlineNode::Atomic { source_order, .. } => *source_order,
                     _ => None,
                 };
                 atomics.insert(start, AtomicInline::Replaced(*node, *size, source_order));
@@ -1732,6 +1766,7 @@ fn shape_chunk_in_mode(
                 style,
                 font_size_adjust,
                 color,
+                source_order,
                 ..
             } if style.text_combine == amazing_text::TextCombine::All
                 && style.writing_mode.uses_vertical_metrics() =>
@@ -1758,9 +1793,7 @@ fn shape_chunk_in_mode(
                     source: node.0,
                     source_range: mapping.source_range.clone(),
                 }));
-                atomics.insert(
-                    start,
-                    AtomicInline::Combined(shape_combined_text(
+                let mut combined = shape_combined_text(
                         *node,
                         combined_text,
                         &combined_mappings,
@@ -1768,8 +1801,11 @@ fn shape_chunk_in_mode(
                         style,
                         color,
                         text_system,
-                    )?),
-                );
+                    )?;
+                combined.source_order = *source_order;
+                for glyph in &mut combined.glyphs { glyph.source_order = *source_order; }
+                if let Some(rank)=source_order { source_orders.push((start..end,*rank)); }
+                atomics.insert(start, AtomicInline::Combined(combined));
                 previous_style = Some((node.0, style.clone()));
                 previous_after = ShapingBoundary::Hard;
                 continue;
@@ -1800,6 +1836,7 @@ fn shape_chunk_in_mode(
         }
         let InlineNode::Text {
             node,
+            source_order,
             text,
             source_mappings,
             font_size,
@@ -1866,6 +1903,7 @@ fn shape_chunk_in_mode(
         }
         paragraph_text.push_str(&text[skip..limit]);
         let end = paragraph_text.len();
+        if let Some(rank) = source_order { source_orders.push((start..end,*rank)); }
         sources.extend(
             source_mappings
                 .iter()
@@ -1962,6 +2000,7 @@ fn shape_chunk_in_mode(
         spans: spans.clone(),
         spacing: spacing.clone(),
         sources: sources.clone(),
+        source_orders: source_orders.clone(),
         bidi_scopes: bidi_scopes.clone(),
         colors: colors.clone(),
         paint_info: paint_info.clone(),
@@ -2033,7 +2072,7 @@ fn shape_chunk_in_mode(
                 continue;
             }
             TextUnit::Break(offset) => {
-                units.push(ShapedUnit::Break);
+                units.push(ShapedUnit::Break {source_order:source_order_for_range(&source_orders,offset.saturating_sub(1)..offset)});
                 logical_pen = 0.0;
                 previous_end = offset;
                 continue;
@@ -2115,6 +2154,7 @@ fn shape_chunk_in_mode(
                 } else { inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y) };
                 glyphs.push(GlyphFrag {
                         node: NodeIdx(run.source),
+                        source_order: source_order_for_range(&source_orders, glyph.cluster.clone()),
                         font: run.font,
                         glyph: glyph.id,
                         cluster: glyph.cluster.clone(),
@@ -2754,6 +2794,7 @@ mod tests {
     #[test]
     fn atomic_only_vertical_line_uses_containing_block_writing_mode() {
         let item = InlineNode::Atomic {
+            source_order: None,
             node: NodeIdx(1),
             size: IntrinsicSize { width: 20.0, height: 20.0 },
             baseline_offset: 20.0,
@@ -2814,7 +2855,7 @@ mod tests {
     fn br_forces_break_and_strips_leading_space() {
         let fonts = FontSource::fallback();
         let lines = layout_lines(
-            &[text("a "), InlineNode::Break, text(" b")],
+            &[text("a "), InlineNode::Break {node:None,source_order:None}, text(" b")],
             0.0,
             0.0,
             500.0,
@@ -2922,7 +2963,7 @@ fn intrinsic_unit_widths(units: Vec<ShapedUnit>) -> (f32,f32) {
                 line += advance + if line>0.0 {space_before} else {preserved_space_before};
                 minimum = minimum.max(advance);
             },
-            ShapedUnit::Break => { maximum = maximum.max(line); line = 0.0; ruby_run = 0.0; }
+            ShapedUnit::Break { .. } => { maximum = maximum.max(line); line = 0.0; ruby_run = 0.0; }
             ShapedUnit::Word(word) => {
                 minimum = minimum.max(word.width + word.hyphen_advance);
                 line += word.width + if line > 0.0 {word.space_before} else {word.preserved_space_before};

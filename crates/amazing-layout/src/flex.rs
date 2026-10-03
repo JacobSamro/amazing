@@ -1551,7 +1551,7 @@ fn inline_min_content_width(items: &[crate::InlineNode], fonts: &FontSource) -> 
             inline::Token::Word { text, font_size, .. } => fonts.measure(&text, font_size),
             inline::Token::Replaced { size, .. } => size.width,
             inline::Token::Padding { advance, .. } => advance,
-            inline::Token::Break => 0.0,
+            inline::Token::Break { .. } => 0.0,
         })
         .fold(0.0f32, f32::max)
 }
@@ -1565,7 +1565,7 @@ fn inline_run_width(items: &[crate::InlineNode], fonts: &FontSource) -> f32 {
     for token in tokens {
         match token {
             inline::Token::Padding { advance, .. } => { line_width += advance; },
-            inline::Token::Break => {
+            inline::Token::Break { .. } => {
                 max_width = max_width.max(line_width);
                 line_width = 0.0;
             },
