@@ -43,7 +43,7 @@ impl Interpreter {
         let mut current = Some(env.clone());
         while let Some(frame) = current {
             if frame.local_cell(name).is_some() {
-                return Ok(Some(Reference::Binding(name.to_owned())));
+                return Ok(Some(Reference::Binding(name.to_owned(), frame.clone())));
             }
             let (object, parent) = {
                 let frame = frame.0.borrow();
@@ -55,67 +55,39 @@ impl Interpreter {
                     let unscopables = self.get_prop(&value,
                         &PropertyKey::Symbol(WellKnownSymbol::Unscopables.symbol()))?;
                     if !unscopables.is_object() || !self.get_prop(&unscopables, name)?.to_boolean() {
-                        return Ok(Some(Reference::Property(value, name.into())));
+                        return Ok(Some(Reference::ObjectBinding(match value { JsValue::Object(object) => object, _ => unreachable!() }, name.to_owned(), true)));
                     }
                 }
             }
             current = parent;
         }
         let global = env.realm_global_object().unwrap_or_else(|| self.global_obj.clone());
-        if global.borrow().has_property(name) {
-            Ok(Some(Reference::Property(JsValue::Object(global.clone()), name.into())))
+        if self.default_has_property(&global, &PropertyKey::from(name))? {
+            Ok(Some(Reference::ObjectBinding(global, name.to_owned(), false)))
         } else { Ok(None) }
     }
 
     pub(super) fn name_reference(&mut self, env: &EnvHandle, name: &str) -> Result<Reference, Throw> {
-        Ok(self.scoped_reference(env, name)?
-            .unwrap_or_else(|| Reference::Binding(name.to_owned())))
+        Ok(self.scoped_reference(env, name)?.unwrap_or_else(||
+            Reference::Unresolvable(name.to_owned(), env.realm_global_object().unwrap_or_else(|| self.global_obj.clone()))))
     }
 
     pub(super) fn name_reference_value(&mut self, env: &EnvHandle, name: &str) -> Result<(Reference, JsValue), Throw> {
-        let reference = self.name_reference(env, name)?;
-        // A global binding backed by the realm's global object may be an
-        // accessor; go through get_prop/set_prop rather than the raw cell so
-        // getters/setters on window-mirrored bindings run (§9.1.1.4.15).
-        if let Reference::Binding(name) = &reference {
-            if env.is_uninitialized(name) {
-                return Err(Throw::reference_error(format!("{name} is uninitialized")));
-            }
-            if let Some(global) = env.global_binding_object(name) {
-                let global = JsValue::Object(global);
-                let value = self.get_prop(&global, name)?;
-                return Ok((Reference::Property(global, name.clone().into()), value));
-            }
-        }
-        let value = match &reference {
-            Reference::Binding(name) => env.resolve(name).unwrap_or(JsValue::Undefined),
-            Reference::Property(base, key) => self.get_prop(base, key)?,
-            Reference::Private(_, _) | Reference::SuperProperty(_, _, _) => unreachable!("identifier reference"),
-        };
+        let mut reference = self.name_reference(env, name)?;
+        let value = self.reference_value(&mut reference)?;
         Ok((reference, value))
     }
 
     pub(super) fn scoped_call(&mut self, env: &EnvHandle, name: &str) -> Result<(JsValue, JsValue), Throw> {
-        let reference = self.scoped_reference(env, name)?
-            .ok_or_else(|| Throw::reference_error(format!("{name} is not defined")))?;
-        match reference {
-            Reference::Property(base, key) => {
-                let value = self.get_prop(&base, &key)?;
-                // Only object environments supply WithBaseObject. The global
-                // object record leaves the receiver undefined for identifier calls.
-                let receiver = if base == JsValue::Object(self.global_obj.clone()) {
-                    JsValue::Undefined
-                } else { base };
-                Ok((value, receiver))
-            }
-            _ => {
-                if env.is_uninitialized(name) {
-                    return Err(Throw::reference_error(format!("{name} is uninitialized")));
-                }
-                Ok((env.resolve(name).unwrap_or(JsValue::Undefined), JsValue::Undefined))
-            },
-        }
+        let mut reference = self.name_reference(env, name)?;
+        let receiver = match &reference {
+            Reference::ObjectBinding(object, _, true) => JsValue::Object(object.clone()),
+            _ => JsValue::Undefined,
+        };
+        let value = self.reference_value(&mut reference)?;
+        Ok((value, receiver))
     }
+
 }
 
 pub(super) fn identifier_name(expression: &ast::Expr) -> Option<&str> {
@@ -130,11 +102,11 @@ impl Interpreter {
     pub(super) fn delete_scoped_name(&mut self, env: &EnvHandle, name: &str) -> Result<JsValue, Throw> {
         let deleted = match self.scoped_reference(env, name)? {
             None => true,
-            Some(Reference::Property(JsValue::Object(object), key)) => {
+            Some(Reference::ObjectBinding(object, key, _)) => {
                 if let Some(result) = self.legacy_delete(&object, name)? { result }
                 else { object.borrow_mut().delete_own(&key) }
             }
-            Some(Reference::Binding(binding))
+            Some(Reference::Binding(binding, _))
                 if env.shares_binding_frame(&self.global_env, &binding) => {
                 // Builtins have a mirrored global environment entry. Their
                 // object descriptor, not a lexical-var rule, controls deletion.

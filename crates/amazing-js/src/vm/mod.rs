@@ -168,6 +168,7 @@ enum Instruction {
     StoreReference(usize, Register),
     StorePatternReference(usize, Register),
     ResolveMemberWrite(usize, Register, KeyOperand),
+    ResolveRawMemberWrite(usize, Register, Register),
     NewObject(Register),
     SetObjectProperty(Register, KeyOperand, Register),
     /// A non-computed literal `__proto__: value` property definition sets
@@ -745,54 +746,7 @@ impl Program {
                         registers[*dst] = result;
                     }
                     Instruction::ResolveName(slot, dst, name) => {
-                        // Matches the tree walker's `resolve_reference` Ident
-                        // arm exactly: `scoped_reference` first, so an
-                        // enclosing object-environment scope (a `with`
-                        // statement, or the live document/form/element
-                        // scope chain `compile_event_handler` builds) and its
-                        // `Symbol.unscopables` are honored, not just the
-                        // lexical binding chain. A non-lexical global binding
-                        // (e.g. `NaN`, `undefined`, a `var`-declared global)
-                        // is fetched and stored back through the global
-                        // *object*'s property, not the env binding cell
-                        // directly, so a non-writable property throws in
-                        // strict mode (`set_with_receiver`/`put_reference`'s
-                        // `Reference::Property` arm) instead of silently
-                        // no-oping through `env.assign`. The final fallback
-                        // goes through the full `[[HasProperty]]` algorithm
-                        // (`default_has_property`) rather than a raw check,
-                        // so a Proxy-observable global still resolves.
-                        let (reference, value) = match i.scoped_reference(&env, name)? {
-                            Some(Reference::Property(base, key)) => {
-                                let value = i.get_prop(&base, &key)?;
-                                (Reference::Property(base, key), value)
-                            }
-                            Some(reference) => {
-                                if env.is_uninitialized(name) {
-                                    return Err(Throw::reference_error(format!("{name} is uninitialized")));
-                                }
-                                if let Some(global) = env.global_binding_object(name) {
-                                    let global = JsValue::Object(global);
-                                    let value = i.get_prop(&global, name)?;
-                                    (Reference::Property(global, name.clone().into()), value)
-                                } else {
-                                    let value = env.resolve(name).unwrap_or(JsValue::Undefined);
-                                    (reference, value)
-                                }
-                            }
-                            None => {
-                                let exists = i.default_has_property(
-                                    &i.global_obj.clone(), &PropertyKey::from(name.as_str()),
-                                )?;
-                                if exists {
-                                    let global = JsValue::Object(i.global_obj.clone());
-                                    let value = i.get_prop(&global, name)?;
-                                    (Reference::Property(global, name.clone().into()), value)
-                                } else {
-                                    (Reference::Binding(name.clone()), JsValue::Undefined)
-                                }
-                            }
-                        };
+                        let (reference, value) = i.name_reference_value(&env, name)?;
                         references[*slot] = Some(reference);
                         registers[*dst] = value;
                     }
@@ -800,7 +754,7 @@ impl Program {
                         references[*slot] = Some(i.name_reference(&env, name)?);
                     }
                     Instruction::RequireResolved(slot) => match &references[*slot] {
-                        Some(Reference::Binding(name)) if !env.has(name) => {
+                        Some(Reference::Unresolvable(_, _)) => {
                             return Err(Throw::reference_error(
                                 "assignment to an unresolved binding",
                             ));
@@ -852,11 +806,12 @@ impl Program {
                         registers[*dst] = JsValue::Bool(super::private_field_has(&registers[*base], &private)?);
                     }
                     Instruction::StoreReference(slot, src) | Instruction::StorePatternReference(slot, src) => {
-                        let reference = references[*slot]
+                        let mut reference = references[*slot]
                             .take()
                             .ok_or_else(|| Throw::type_error("invalid VM reference lifetime"))?;
                         let mut value = registers[*src].clone();
                         if matches!(op, Instruction::StoreReference(..)) {
+                            i.coerce_reference_key(&mut reference)?;
                             if let Some(name) = reference_name(&reference) { i.infer_function_name(&mut value, &name); }
                         }
                         match reference {
@@ -869,11 +824,14 @@ impl Program {
                     Instruction::ResolveMemberWrite(slot, base, key) => {
                         references[*slot] = Some(Reference::Property(registers[*base].clone(), key.resolve(registers)?));
                     }
+                    Instruction::ResolveRawMemberWrite(slot, base, key) => {
+                        references[*slot] = Some(Reference::RawProperty(registers[*base].clone(), registers[*key].clone()));
+                    }
                     Instruction::Update(dst, slot, old, op, prefix) => {
                         let reference = references[*slot]
                             .take()
                             .ok_or_else(|| Throw::type_error("invalid VM update reference"))?;
-                        let previous = registers[*old].clone();
+                        let previous = i.to_numeric_value(registers[*old].clone())?;
                         let next = i.update_value(*op, previous.clone())?;
                         i.put_reference(reference, next.clone(), &env)?;
                         registers[*dst] = if *prefix { next } else { previous };

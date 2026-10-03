@@ -13,7 +13,10 @@ fn has_use_strict_directive(statements: &[ast::Stmt]) -> bool {
 
 fn reference_name(reference: &Reference) -> Option<String> {
     match reference {
-        Reference::Binding(name) => Some(name.clone()),
+        Reference::Binding(name, _) | Reference::ObjectBinding(_, name, _) | Reference::Unresolvable(name, _) => Some(name.clone()),
+        Reference::RawProperty(_, key) | Reference::RawSuperProperty(_, key, _) => match key {
+            JsValue::Str(name) => Some(name.to_utf8_lossy()), _ => None,
+        },
         Reference::Property(_, key) | Reference::SuperProperty(_, key, _) => key.as_string().map(|name| name.to_utf8_lossy()),
         Reference::Private(_, name) => Some(format!("#{}", name.text())),
     }

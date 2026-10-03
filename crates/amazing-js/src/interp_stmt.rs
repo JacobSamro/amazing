@@ -1,3 +1,5 @@
+// Assignment-pattern reference ordering portions adapted from lucid-softworks/lumen
+// (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Statement evaluation: exec_stmt/exec_stmts and everything they call for control flow --
 // loops (while/do-while/for/for-in/for-of), try/catch/finally, switch, and job-queue draining --
 // plus explicit resource management's using/await-using disposal machinery (using_stack,
@@ -1387,7 +1389,7 @@ impl Interpreter {
         // custom valueOf/@@toPrimitive. Convert once here; update_value() re-deriving
         // it from an already-primitive value is a no-op re-entry, not a second
         // ToPrimitive call, so this does not double the conversion's side effects.
-        let old_numeric = self.primitive_number_hint(old)?;
+        let old_numeric = self.to_numeric_value(old)?;
         let next = self.update_value(op, old_numeric.clone())?;
         self.put_reference(reference, next.clone(), env)?;
         Ok(if prefix { next } else { old_numeric })
@@ -1415,8 +1417,8 @@ impl Interpreter {
                 // Every numeric/bitwise operator other than `+` is
                 // ApplyStringOrNumericBinaryOperator's ToNumeric(lval)/ToNumeric(rval)
                 // (13.15.3) -- ToPrimitive with the number hint, not default.
-                let x = self.primitive_number_hint(a)?;
-                let y = self.primitive_number_hint(b)?;
+                let x = self.to_numeric_value(a)?;
+                let y = self.to_numeric_value(b)?;
                 if matches!(x, JsValue::BigInt(_)) || matches!(y, JsValue::BigInt(_)) {
                     return self.bigint_operator(op, x, y);
                 }
@@ -1512,12 +1514,10 @@ impl Interpreter {
             self.assign_pattern_expr(t, &value, e)?;
             return Ok(value);
         }
-        let (reference, old) = if op == ast::AssignOp::Assign {
+        let (mut reference, old) = if op == ast::AssignOp::Assign {
             if let Some(name) = event_handler::identifier_name(t) {
                 (self.name_reference(e, name)?, JsValue::Undefined)
-            } else if let Some(reference) = self.resolve_member_target(t, e)? {
-                (reference, JsValue::Undefined)
-            } else { self.resolve_reference(t, e)? }
+            } else { (self.capture_reference(t, e)?, JsValue::Undefined) }
         } else { self.resolve_reference(t, e)? };
         if op == ast::AssignOp::Assign {
             // A named class expression's own self-reference binding needs the name available
@@ -1549,13 +1549,14 @@ impl Interpreter {
             // (A no-op for a value `eval_named_class_expr` already named above, since
             // `infer_function_name` only renames a still-nameless function/class -- and classes
             // never reach this heuristic for a non-identifier target anyway, matching spec.)
+            self.coerce_reference_key(&mut reference)?;
             if let Some(name) = reference_name(&reference) {
                 self.infer_function_name(&mut v, &name);
             }
             self.put_reference(reference, v.clone(), e)?;
             return Ok(v);
         }
-        if matches!(&reference, Reference::Binding(name) if !e.has(name)) {
+        if matches!(&reference, Reference::Unresolvable(_, _)) {
             return Err(Throw::reference_error(
                 "assignment to an unresolved binding",
             ));
@@ -1650,119 +1651,14 @@ impl Interpreter {
     // testharness.js exports its API by assigning properties of global_scope.
     // Unresolved lexical names must therefore consult the global object record.
     fn identifier_value(&mut self, env: &EnvHandle, name: &str) -> Result<Option<JsValue>, Throw> {
-        match self.scoped_reference(env, name)? {
-            None => {
-                // Nothing lexical, no object-environment binding, and the raw
-                // check in `scoped_reference`'s own global fallback missed it
-                // either -- but that raw check doesn't dispatch Proxy `has`
-                // traps. Give the real global object one more look through
-                // the full `[[HasProperty]]` algorithm before giving up.
-                let exists = self.default_has_property(&self.global_obj.clone(), &PropertyKey::from(name))?;
-                if exists {
-                    let global = JsValue::Object(self.global_obj.clone());
-                    self.get_prop(&global, name).map(Some)
-                } else {
-                    Ok(None)
-                }
-            }
-            Some(Reference::Property(base, key)) => self.get_prop(&base, &key).map(Some),
-            Some(_) => {
-                if env.is_uninitialized(name) {
-                    return Err(Throw::reference_error(format!("{name} is uninitialized")));
-                }
-                if let Some(global) = env.global_binding_object(name) {
-                    return self.get_prop(&JsValue::Object(global), name).map(Some);
-                }
-                Ok(env.resolve(name))
-            }
-        }
+        let Some(mut reference) = self.scoped_reference(env, name)? else { return Ok(None); };
+        self.reference_value(&mut reference).map(Some)
     }
 
-    fn resolve_reference(
-        &mut self,
-        target: &ast::Expr,
-        env: &EnvHandle,
-    ) -> Result<(Reference, JsValue), Throw> {
-        if let Some(reference) = self.resolve_member_target(target, env)? {
-            let value = match &reference {
-                Reference::SuperProperty(base, key, receiver) => self.get_prop_receiver(base, key, receiver.clone())?,
-                Reference::Property(base, key) => self.get_prop(base, key)?,
-                Reference::Private(base, name) => private_field_get(self, base, name)?,
-                Reference::Binding(_) => unreachable!(),
-            };
-            return Ok((reference, value));
-        }
-        match &target.kind {
-            ExprKind::Ident(identifier) => {
-                let name = &identifier.name;
-                match self.scoped_reference(env, name)? {
-                    Some(Reference::Property(base, key)) => {
-                        let value = self.get_prop(&base, &key)?;
-                        Ok((Reference::Property(base, key), value))
-                    }
-                    Some(reference) => {
-                        if env.is_uninitialized(name) {
-                            return Err(Throw::reference_error(format!("{name} is uninitialized")));
-                        }
-                        if let Some(global) = env.global_binding_object(name) {
-                            let global = JsValue::Object(global);
-                            let value = self.get_prop(&global, name)?;
-                            return Ok((Reference::Property(global, name.clone().into()), value));
-                        }
-                        let value = env.resolve(name).unwrap_or(JsValue::Undefined);
-                        Ok((reference, value))
-                    }
-                    None => {
-                        // Same Proxy-aware global fallback as `identifier_value`:
-                        // a raw has-property miss everywhere else doesn't mean
-                        // the real global object's `[[HasProperty]]` (which may
-                        // dispatch through a Proxy) would also miss.
-                        let exists = self.default_has_property(
-                            &self.global_obj.clone(), &PropertyKey::from(name.as_str()),
-                        )?;
-                        if exists {
-                            let global = JsValue::Object(self.global_obj.clone());
-                            let value = self.get_prop(&global, name)?;
-                            Ok((Reference::Property(global, name.clone().into()), value))
-                        } else {
-                            Ok((Reference::Binding(name.clone()), JsValue::Undefined))
-                        }
-                    }
-                }
-            }
-            ExprKind::Member { obj, prop, .. } => {
-                let base = self.eval_expr(obj, env)?;
-                if let MemberProp::Private(identifier) = prop {
-                    let name = env.resolve_private(&identifier.name).ok_or_else(|| {
-                        Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
-                    })?;
-                    let value = private_field_get(self, &base, &name)?;
-                    return Ok((Reference::Private(base, name), value));
-                }
-                let key = match prop {
-                    MemberProp::Ident(identifier) => identifier.name.clone().into(),
-                    MemberProp::Private(_) => unreachable!("handled above"),
-                    MemberProp::Computed(expression) => {
-                        let property_value = self.eval_expr(expression, env)?;
-                        if base.is_null() || base.is_undefined() {
-                            return Err(Throw::type_error(
-                                "cannot access a property on nullish value",
-                            ));
-                        }
-                        self.to_property_key(&property_value)?
-                    }
-                };
-                if base.is_null() || base.is_undefined() {
-                    return Err(Throw::type_error(
-                        "cannot access a property on nullish value",
-                    ));
-                }
-                let value = self.get_prop(&base, &key)?;
-                Ok((Reference::Property(base, key), value))
-            }
-            ExprKind::Paren(inner) => self.resolve_reference(inner, env),
-            _ => Err(Throw::reference_error("invalid assignment target")),
-        }
+    fn resolve_reference(&mut self, target: &ast::Expr, env: &EnvHandle) -> Result<(Reference, JsValue), Throw> {
+        let mut reference = self.capture_reference(target, env)?;
+        let value = self.reference_value(&mut reference)?;
+        Ok((reference, value))
     }
 
     fn put_reference(
@@ -1772,7 +1668,8 @@ impl Interpreter {
         env: &EnvHandle,
     ) -> Result<(), Throw> {
         match reference {
-            Reference::Binding(name) => {
+            Reference::Binding(name, binding_env) => {
+                let env = &binding_env;
                 if name == "location" && env.shares_binding_frame(&self.global_env, &name) {
                     let window = JsValue::Object(self.global_obj.clone());
                     return self.set_prop(&window, "location", value);
@@ -1811,10 +1708,33 @@ impl Interpreter {
                 }
                 Ok(())
             }
+            Reference::Unresolvable(name, global) => {
+                if self.strict_eval_context { return Err(Throw::reference_error(format!("{name} is not defined"))); }
+                self.put_reference(Reference::Property(JsValue::Object(global), name.into()), value, env)
+            }
+            Reference::ObjectBinding(object, name, _) => {
+                let key = PropertyKey::from(name.as_str());
+                let exists = self.default_has_property(&object, &key)?;
+                if self.strict_eval_context && !exists {
+                    return Err(Throw::reference_error(format!("{name} is not defined")));
+                }
+                self.put_reference(Reference::Property(JsValue::Object(object), key), value, env)
+            }
+            Reference::RawProperty(base, raw) => {
+                self.require_reference_base(&base)?;
+                let key = self.to_property_key(&raw)?;
+                self.put_reference(Reference::Property(base, key), value, env)
+            }
+            Reference::RawSuperProperty(base, raw, receiver) => {
+                self.require_reference_base(&base)?;
+                let key = self.to_property_key(&raw)?;
+                self.put_reference(Reference::SuperProperty(base, key, receiver), value, env)
+            }
             Reference::Property(base, key) => {
-                let JsValue::Object(object) = &base else {
-                    return self.set_prop(&base, &key, value);
-                };
+                self.require_reference_base(&base)?;
+                let boxed = if base.is_object() { base.clone() }
+                    else { native_object(self, JsValue::Undefined, vec![base.clone()])? };
+                let JsValue::Object(object) = &boxed else { unreachable!() };
                 if self.set_with_receiver(object, &key, value, base.clone())? {
                     Ok(())
                 } else if !self.strict_eval_context {
@@ -1833,10 +1753,7 @@ impl Interpreter {
         }
     }
     fn assign_target(&mut self, t: &ast::Expr, v: JsValue, e: &EnvHandle) -> Result<(), Throw> {
-        let reference = if let Some(name) = event_handler::identifier_name(t) {
-            self.name_reference(e, name)?
-        } else if let Some(reference) = self.resolve_member_target(t, e)? { reference }
-        else { self.resolve_reference(t, e)?.0 };
+        let reference = self.capture_reference(t, e)?;
         self.put_reference(reference, v, e)
     }
 
@@ -1848,24 +1765,9 @@ impl Interpreter {
     ) -> Result<(), Throw> {
         match &target.kind {
             ExprKind::Paren(inner) => self.assign_pattern_expr(inner, value, env),
-            ExprKind::Assign {
-                op: ast::AssignOp::Assign,
-                target,
-                value: default,
-            } => {
-                if value.is_undefined() {
-                    let mut fallback = match &target.kind {
-                        ExprKind::Ident(identifier) =>
-                            self.eval_named_class_expr(default, env, &identifier.name.clone().into())?,
-                        _ => self.eval_expr(default, env)?,
-                    };
-                    if let ExprKind::Ident(identifier) = &target.kind {
-                        self.named_evaluation(default, &mut fallback, &identifier.name);
-                    }
-                    self.assign_pattern_expr(target, &fallback, env)
-                } else {
-                    self.assign_pattern_expr(target, value, env)
-                }
+            ExprKind::Assign { op: ast::AssignOp::Assign, .. } => {
+                let reference = self.prepare_assignment_pattern(target, env)?;
+                self.assign_prepared_pattern(target, value, reference, env)
             }
             ExprKind::Array(elements) => {
                 // ArrayAssignmentPattern (8.6.3 DestructuringAssignmentEvaluation): pull only as
@@ -1884,13 +1786,15 @@ impl Interpreter {
                         match element {
                             Some(element) if matches!(&element.kind, ExprKind::Spread(_)) => {
                                 let ExprKind::Spread(inner) = &element.kind else { unreachable!() };
+                                let reference = self.prepare_assignment_pattern(inner, env)?;
                                 let items = iter.collect_rest(self)?;
                                 let rest = array_values(self, items)?;
-                                self.assign_pattern_expr(inner, &rest, env)?;
+                                self.assign_prepared_pattern(inner, &rest, reference, env)?;
                             }
                             Some(element) => {
+                                let reference = self.prepare_assignment_pattern(element, env)?;
                                 let item = iter.step(self)?.unwrap_or(JsValue::Undefined);
-                                self.assign_pattern_expr(element, &item, env)?;
+                                self.assign_prepared_pattern(element, &item, reference, env)?;
                             }
                             None => {
                                 iter.step(self)?;
@@ -1911,7 +1815,7 @@ impl Interpreter {
                 for element in elements {
                     match element {
                         ast::ObjElem::Spread(inner) => {
-                            let rest = self.object_rest(value, &used)?;
+
                             // `parse_object_element` wraps a `{...x}` rest target as
                             // `ObjElem::Spread(Expr::Spread(x))` (its own generic spread-parsing
                             // path, shared with array/call-argument spreads), not as the bare
@@ -1923,42 +1827,25 @@ impl Interpreter {
                                 ExprKind::Spread(t) => t.as_ref(),
                                 _ => inner.as_ref(),
                             };
-                            self.assign_pattern_expr(target, &rest, env)?;
+                            let reference = self.prepare_assignment_pattern(target, env)?;
+                            let rest = self.object_rest(value, &used)?;
+                            self.assign_prepared_pattern(target, &rest, reference, env)?;
                         }
                         ast::ObjElem::Prop(property) => {
-                            let key = self.prop_key(&property.key, env)?;
+                            let key = match &property.key_utf16 { Some(units) => PropertyKey::from(crate::value::JsString::from_units(units.clone())), None => self.prop_key(&property.key, env)? };
                             used.push(key.clone());
+                            let target = match &property.value {
+                                ast::PropValue::Shorthand(identifier) => ast::Expr::new(ExprKind::Ident(identifier.clone()), identifier.span),
+                                ast::PropValue::Init(expression) => expression.clone(),
+                                ast::PropValue::CoverInitializedName { binding, default } => ast::Expr::new(
+                                    ExprKind::Assign { op: ast::AssignOp::Assign,
+                                        target: Box::new(ast::Expr::new(ExprKind::Ident(binding.clone()), binding.span)),
+                                        value: Box::new(default.clone()) }, binding.span),
+                                ast::PropValue::Method(_) => return Err(Throw::reference_error("method is not an assignment target")),
+                            };
+                            let reference = self.prepare_assignment_pattern(&target, env)?;
                             let item = self.get_prop(value, &key)?;
-                            match &property.value {
-                                ast::PropValue::Shorthand(identifier) => {
-                                    let reference = ast::Expr::new(
-                                        ExprKind::Ident(identifier.clone()),
-                                        identifier.span,
-                                    );
-                                    self.assign_pattern_expr(&reference, &item, env)?;
-                                }
-                                ast::PropValue::Init(expression) => {
-                                    self.assign_pattern_expr(expression, &item, env)?;
-                                }
-                                ast::PropValue::CoverInitializedName { binding, default } => {
-                                    let assigned = if matches!(&item, JsValue::Undefined) {
-                                        let mut v = self.eval_named_class_expr(default, env, &binding.name.clone().into())?;
-                                        self.named_evaluation(default, &mut v, &binding.name);
-                                        v
-                                    } else {
-                                        item
-                                    };
-                                    let reference = ast::Expr::new(
-                                        ExprKind::Ident(binding.clone()), binding.span,
-                                    );
-                                    self.assign_pattern_expr(&reference, &assigned, env)?;
-                                }
-                                ast::PropValue::Method(_) => {
-                                    return Err(Throw::reference_error(
-                                        "method is not an assignment target",
-                                    ));
-                                }
-                            }
+                            self.assign_prepared_pattern(&target, &item, reference, env)?;
                         }
                     }
                 }

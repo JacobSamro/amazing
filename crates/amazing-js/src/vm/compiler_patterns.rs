@@ -181,8 +181,7 @@ impl Compiler {
                     Ok(Some(slot))
                 } else if let ExprKind::Member { obj, prop, optional: false } = &target.kind {
                     let object = self.expression(obj)?;
-                    let key = self.member_key(object, prop, true)?;
-                    self.emit(Instruction::ResolveMemberWrite(slot, object, key));
+                    self.write_member_reference(slot, object, prop)?;
                     Ok(Some(slot))
                 } else { Err(self.error(target.span, "assignment target")) }
             }

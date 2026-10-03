@@ -5,36 +5,6 @@
 // onto Amazing's existing method factory and property/function representation.
 
 impl Interpreter {
-    fn resolve_member_target(
-        &mut self,
-        target: &ast::Expr,
-        env: &EnvHandle,
-    ) -> Result<Option<Reference>, Throw> {
-        let mut target = target;
-        while let ExprKind::Paren(inner) = &target.kind {
-            target = inner;
-        }
-        if !matches!(&target.kind, ExprKind::Member { .. }) {
-            return Ok(None);
-        }
-        match self.eval_chain_reference(target, env)? {
-            ChainEvaluation::Property {
-                base,
-                receiver,
-                key,
-                super_reference,
-            } => Ok(Some(if super_reference {
-                Reference::SuperProperty(base, key, receiver)
-            } else {
-                Reference::Property(base, key)
-            })),
-            ChainEvaluation::Private { receiver, name } => {
-                Ok(Some(Reference::Private(receiver, name)))
-            }
-            _ => unreachable!("member reference"),
-        }
-    }
-
     fn object_method_value(
         &self,
         method: &ast::ClassMethod,

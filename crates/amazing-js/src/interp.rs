@@ -191,7 +191,11 @@ struct DomListener {
 }
 
 enum Reference {
-    Binding(String),
+    Binding(String, EnvHandle),
+    ObjectBinding(Obj, String, bool),
+    Unresolvable(String, Obj),
+    RawProperty(JsValue, JsValue),
+    RawSuperProperty(JsValue, JsValue, JsValue),
     Property(JsValue, PropertyKey),
     SuperProperty(JsValue, PropertyKey, JsValue),
     Private(JsValue, PrivateName),
@@ -1721,6 +1725,7 @@ include!("interp_bound.rs");
 include!("interp_disposable.rs");
 include!("interp_coroutine.rs");
 include!("interp_stmt.rs");
+include!("interp_references.rs");
 include!("interp_optional_chain.rs");
 include!("interp_object_methods.rs");
 include!("builtins_std_object_model.rs");

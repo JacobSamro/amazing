@@ -1506,10 +1506,9 @@ impl Compiler {
                     slot
                 } else if let Some((obj, prop)) = public_member_target(target) {
                     let object = self.expression(obj)?;
-                    let key = self.member_key(object, prop, true)?;
                     let slot = self.program.references;
                     self.program.references += 1;
-                    self.emit(Instruction::ResolveMemberWrite(slot, object, key));
+                    self.write_member_reference(slot, object, prop)?;
                     slot
                 } else { self.reference(target)?.0 };
                 let value = if let Some(name) = super::super::event_handler::identifier_name(target) {
@@ -1619,18 +1618,22 @@ impl Compiler {
         Ok((slot, old))
     }
 
-    /// `object` is the already-evaluated base of the member access.
-    /// `require_coercible` matches an asymmetry that already exists in the
-    /// tree walker: a plain read or a call target's property lookup
-    /// (`eval_expr`'s `ExprKind::Member`, and the call-target arm of
-    /// `call_expr`) calls `get_prop` directly, which is lenient -- a
-    /// null/undefined base yields `undefined` rather than throwing -- while
-    /// an assignment target (`resolve_reference`) throws TypeError instead.
-    /// When strict, the check runs _after_ a computed key expression is
-    /// evaluated for its own side effects (e.g. a call) but _before_ the raw
-    /// value is converted with `ToPropertyKey` (which can itself run user
-    /// code via `toString`/`valueOf`) -- the part the VM previously got
-    /// backwards for compound assignment.
+    fn write_member_reference(&mut self, slot: usize, object: Register, prop: &ast::MemberProp) -> Result<(), CompileError> {
+        match prop {
+            ast::MemberProp::Computed(expression) => {
+                let key = self.expression(expression)?;
+                self.emit(Instruction::ResolveRawMemberWrite(slot, object, key));
+            }
+            ast::MemberProp::Ident(name) => {
+                self.emit(Instruction::ResolveMemberWrite(slot, object, KeyOperand::Static(name.name.as_str().into())));
+            }
+            ast::MemberProp::Private(name) => return Err(self.error(name.span, "private member")),
+        }
+        Ok(())
+    }
+
+    /// Keys for immediate reads and compound targets. Capture-only writes use
+    /// write_member_reference so RHS/default evaluation precedes coercion.
     fn member_key(
         &mut self,
         object: Register,
