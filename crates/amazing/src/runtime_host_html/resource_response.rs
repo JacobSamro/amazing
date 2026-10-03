@@ -749,16 +749,16 @@ mod tests {
             let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
                 "<!doctype html><body><iframe src='/entity.xml'></iframe>"), native_forwarded: false }));
             let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
-            scheduler.set_location_url("https://example.test/root.html");
-            scheduler.set_frame_resource_resolver(Rc::new(|_| panic!("XML entity used legacy transport")));
             scheduler.set_frame_resource_loader(Rc::new(move |_| Ok(response(
                 "https://example.test/final.xml", Some("application/xml"), bytes.clone()))));
+            scheduler.set_frame_resource_resolver(Rc::new(|_| panic!("XML entity used legacy transport")));
+            scheduler.set_location_url("https://example.test/root.html");
             scheduler.dispatch_pending_iframe_loads().unwrap();
             let expression = match charset {
                 Some(label) => format!("document.querySelector('iframe').contentDocument.characterSet === '{label}'"),
                 None => "document.querySelector('iframe').contentDocument === null".into(),
             };
-            assert_eq!(scheduler.run_script(&expression).unwrap(), JsValue::Bool(true));
+            assert_eq!(scheduler.run_script(&expression).unwrap_or_else(|error| panic!("{expression}: {}", error.describe())), JsValue::Bool(true));
             assert!(host.try_borrow_mut().is_ok());
         }
     }
