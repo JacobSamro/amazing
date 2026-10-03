@@ -840,6 +840,7 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         }
         p if crate::border_image::supported(p) => return crate::border_image::canonical(p, css).map(|_| V::Unparsed),
         "background-image" => return crate::image_values::valid_background_image(css).then_some(V::Unparsed),
+        "list-style-image" => return crate::image_values::valid_image_source(css).then_some(V::Unparsed),
         "background-clip" => {
             return crate::computed::valid_background_clip(css).then_some(V::Unparsed);
         }

@@ -24,7 +24,7 @@ fn gradient_list_style_image_generates_an_image_marker() {
         panic!("missing gradient marker")
     };
     assert!(gradient.starts_with("linear-gradient("), "{gradient}");
-    assert!(gradient.contains("red") && gradient.contains("blue"));
+    assert!(gradient.contains("rgb(255, 0, 0)") && gradient.contains("rgb(0, 0, 255)"));
     let [ContentRun::Image(gradient)] = styled
         .generated_content(shorthand, PseudoElement::Marker)
         .unwrap()

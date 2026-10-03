@@ -44,6 +44,7 @@ mod counter_styles;
 mod change_classification;
 mod computed;
 mod image_values;
+mod gradient_values;
 pub mod effects;
 mod display;
 pub use display::{blockified_display, is_list_item_display};

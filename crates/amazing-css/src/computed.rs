@@ -1726,7 +1726,7 @@ fn expand_list_style(value: &str) -> Option<Vec<(String, String)>> {
             }
             [Token::Function(name), Token::OpenParen, .., Token::CloseParen]
                 if name.eq_ignore_ascii_case("url") || crate::generated::image_function_name(name) => {
-                if image.replace(css).is_some() { return None; }
+                if !crate::image_values::valid_image_source(&css) || image.replace(css).is_some() { return None; }
             }
             _ => return None,
         }
@@ -2619,6 +2619,12 @@ pub(crate) fn resolve_with_root_attrs_environment(
     let border_image_root = if parent.is_none() { style.props.get("font-size").and_then(|css|css.strip_suffix("px")).and_then(|n|n.parse().ok()).unwrap_or(style.root_font_px) } else { style.root_font_px };
     crate::border_image::resolve_properties(&mut style.props, border_image_root);
     position_values::resolve(&mut style.props, border_image_root);
+    let image_font=style.props.get("font-size").and_then(|s|s.strip_suffix("px")).and_then(|s|s.parse().ok()).unwrap_or(16.0);
+    for property in ["background-image", "list-style-image", "border-image-source"] {
+        if let Some(css)=style.props.get_mut(property) {
+            *css=crate::gradient_values::computed(css,image_font,border_image_root);
+        }
+    }
     crate::text_properties::serialize(&mut style.props);
     crate::font_size_adjust::resolve_css_math(&mut style.props, style.root_font_px);
     style.resolve_relative_colors();
@@ -2967,6 +2973,7 @@ fn valid_new_paint_property(property: &str, value: &str) -> bool {
         property if crate::border_image::supported(property) => crate::border_image::canonical(property, value).is_some(),
         property if contain_intrinsic::is_longhand(property) => contain_intrinsic::valid(property, value),
         "background-image" => crate::image_values::valid_background_image(value),
+        "list-style-image" => crate::image_values::valid_image_source(value),
         "background-clip" => valid_background_clip(value),
         "background-origin" => valid_background_origin(value),
         "background-attachment" => valid_background_attachment(value),

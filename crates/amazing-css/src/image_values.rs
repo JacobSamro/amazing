@@ -3,7 +3,7 @@
 use crate::computed::{top_level_components, trim_tokens, function_inner};
 use crate::syntax::{Token, tokenize, serialize};
 
-fn groups(tokens: &[Token]) -> Option<Vec<&[Token]>> {
+pub(crate) fn groups(tokens: &[Token]) -> Option<Vec<&[Token]>> {
     let mut depth = Vec::new();
     let mut start = 0;
     let mut out = Vec::new();
@@ -37,7 +37,7 @@ pub(crate) fn valid_background_image(value: &str) -> bool {
     }))
 }
 
-fn color(tokens: &[Token]) -> bool {
+pub(crate) fn color(tokens: &[Token]) -> bool {
     if let Some(Token::Function(name)) = trim_tokens(tokens).first() {
         if !matches!(name.to_ascii_lowercase().as_str(), "rgb" | "rgba" | "hsl" | "hsla"
             | "hwb" | "lab" | "lch" | "oklab" | "oklch" | "color" | "color-mix"
@@ -57,11 +57,10 @@ fn image(tokens: &[Token], depth: usize) -> bool {
         "light-dark" => groups(inner).is_some_and(|items| items.len() == 2
             && items.into_iter().all(|item| image(item, depth + 1))),
         "cross-fade" => cross_fade(inner, depth + 1),
-        "radial-gradient" | "repeating-radial-gradient" => radial(inner),
+        "radial-gradient" | "repeating-radial-gradient" | "linear-gradient" | "repeating-linear-gradient" | "conic-gradient" | "repeating-conic-gradient" => crate::gradient_values::canonical(tokens, name).is_some(),
         // These functions have distinct grammars outside this parameter area.
         // Preserve their balanced representation for the existing paint parser.
-        "linear-gradient" | "repeating-linear-gradient" | "conic-gradient"
-        | "repeating-conic-gradient" | "image" | "image-set" | "-webkit-image-set"
+        "image" | "image-set" | "-webkit-image-set"
         | "element" | "paint" | "url" | "-webkit-gradient" => true,
         _ => false,
     }
@@ -92,7 +91,7 @@ fn cross_fade(tokens: &[Token], depth: usize) -> bool {
     })
 }
 
-fn radial(tokens: &[Token]) -> bool {
+pub(crate) fn radial(tokens: &[Token]) -> bool {
     let Some(items) = groups(tokens) else { return false };
     let Some(parts) = top_level_components(items[0]) else { return false };
     // Only the first comma item may be the shape/size/position prelude.
