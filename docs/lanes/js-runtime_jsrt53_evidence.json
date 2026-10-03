@@ -1,0 +1,228 @@
+{
+  "ticket": "JSRT-53",
+  "base_sha": "d81ba8b63e3dfaaee4df5f91fc92a96fd8f7d904",
+  "workspace": {
+    "passed": 3990,
+    "skipped": 17,
+    "elapsed_seconds": 75.44
+  },
+  "doctests": 4,
+  "selections": {
+    "built-ins-Promise": {
+      "selected": 732,
+      "before": {
+        "pass": 731,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53140
+      },
+      "after": {
+        "pass": 732,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53140
+      },
+      "gained": [
+        "built-ins/Promise/get-prototype-abrupt-executor-not-callable.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 4.266,
+      "elapsed_after": 4.163,
+      "before_host_sha256": "46c1dc85a250858aa934547013d54dff1fe35890a5bd39788931ae04cd9aa952",
+      "after_host_sha256": "abc99dc455fb9ce671167bb662e959d0ba887a9a74828e904333244d2c11a10b",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Function": {
+      "selected": 515,
+      "before": {
+        "pass": 506,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "after": {
+        "pass": 506,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 4.328,
+      "elapsed_after": 4.648,
+      "before_host_sha256": "46c1dc85a250858aa934547013d54dff1fe35890a5bd39788931ae04cd9aa952",
+      "after_host_sha256": "abc99dc455fb9ce671167bb662e959d0ba887a9a74828e904333244d2c11a10b",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before": {
+        "pass": 3411,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "after": {
+        "pass": 3411,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 10.469,
+      "elapsed_after": 10.527,
+      "before_host_sha256": "46c1dc85a250858aa934547013d54dff1fe35890a5bd39788931ae04cd9aa952",
+      "after_host_sha256": "abc99dc455fb9ce671167bb662e959d0ba887a9a74828e904333244d2c11a10b",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Reflect": {
+      "selected": 154,
+      "before": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "after": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.952,
+      "elapsed_after": 2.963,
+      "before_host_sha256": "46c1dc85a250858aa934547013d54dff1fe35890a5bd39788931ae04cd9aa952",
+      "after_host_sha256": "abc99dc455fb9ce671167bb662e959d0ba887a9a74828e904333244d2c11a10b",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Proxy": {
+      "selected": 311,
+      "before": {
+        "pass": 311,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "after": {
+        "pass": 311,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.157,
+      "elapsed_after": 3.117,
+      "before_host_sha256": "46c1dc85a250858aa934547013d54dff1fe35890a5bd39788931ae04cd9aa952",
+      "after_host_sha256": "abc99dc455fb9ce671167bb662e959d0ba887a9a74828e904333244d2c11a10b",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "language": {
+      "selected": 24590,
+      "before": {
+        "pass": 24395,
+        "fail": 169,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "after": {
+        "pass": 24395,
+        "fail": 169,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 55.464,
+      "elapsed_after": 55.151,
+      "before_host_sha256": "46c1dc85a250858aa934547013d54dff1fe35890a5bd39788931ae04cd9aa952",
+      "after_host_sha256": "abc99dc455fb9ce671167bb662e959d0ba887a9a74828e904333244d2c11a10b",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    }
+  },
+  "unique": {
+    "selected": 29716,
+    "before_pass": 29507,
+    "after_pass": 29508,
+    "gained_files": [
+      "built-ins/Promise/get-prototype-abrupt-executor-not-callable.js"
+    ],
+    "lost_files": [
+
+    ],
+    "gained_variants": [
+      [
+        "built-ins/Promise/get-prototype-abrupt-executor-not-callable.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/get-prototype-abrupt-executor-not-callable.js",
+        "strict"
+      ]
+    ],
+    "lost_variants": [
+
+    ]
+  }
+}

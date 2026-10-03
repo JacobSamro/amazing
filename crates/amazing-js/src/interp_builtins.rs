@@ -1,6 +1,7 @@
 // Portions ported from boa-dev/boa (core/engine/src/builtins/promise/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT:
-// JSRT-30 optional result-capability completion in Promise reaction jobs.
+// JSRT-30 optional result-capability completion in Promise reaction jobs;
+// JSRT-53 complete intrinsic Promise constructor allocation/order algorithm.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/object/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: prototype tags, own-property order and static primitive boundaries.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/array/mod.rs)
@@ -1375,18 +1376,25 @@ fn promise_callback(
     value
 }
 
-fn native_promise(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    if i.current_new_target().is_none() {
-        return Err(Throw::type_error("Promise requires new"));
-    }
+fn native_promise(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let new_target = i.current_new_target().ok_or_else(|| Throw::type_error("Promise requires new"))?;
     let executor = args.first().cloned().unwrap_or(JsValue::Undefined);
     if callable_function(&executor).is_none() {
         return Err(Throw::type_error("Promise resolver is not a function"));
     }
+    // OrdinaryCreateFromConstructor follows executor validation, and gets
+    // prototype exactly once. Only a non-object prototype asks GetFunctionRealm
+    // for the newTarget realm's immutable intrinsic fallback.
+    let prototype = match i.get_prop(&new_target, "prototype")? {
+        JsValue::Object(prototype) => prototype,
+        _ => {
+            let constructor = JsValue::Object(i.native_stack.last().cloned()
+                .ok_or_else(|| Throw::type_error("missing Promise constructor context"))?);
+            i.constructor_fallback_prototype(&constructor, &new_target)?
+        }
+    };
     let promise = promise_object(&new_promise(i, PromiseFate::Pending))?;
-    if let JsValue::Object(instance) = this {
-        promise.borrow_mut().proto = instance.borrow().proto.clone();
-    }
+    promise.borrow_mut().proto = Some(prototype);
     let (resolve, reject) = promise_resolving_functions(i, &promise);
     if let Err(Throw(value)) = i.call_value(&executor, JsValue::Undefined, vec![resolve, reject.clone()]) {
         i.call_value(&reject, JsValue::Undefined, vec![value])?;
@@ -3063,4 +3071,107 @@ fn native_property_is_enumerable(
     let key = i.to_property_key(args.first().unwrap_or(&JsValue::Undefined))?;
     let JsValue::Object(object) = std_legacy_to_object(i, this)? else { unreachable!() };
     Ok(JsValue::Bool(i.default_get_own_property(&object, &key)?.is_some_and(|property| property.enumerable)))
+}
+
+#[cfg(test)]
+mod promise_constructor_allocation_tests {
+    use super::*;
+    fn check(source: &str) {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();
+            assert_eq!(i.run_script_with_backend(source,backend).unwrap(),JsValue::Bool(true),"{backend:?}; {:?}",i.output.borrow());
+        }
+    }
+    #[test]
+    fn executor_validation_precedes_prototype_get_and_getter_is_called_once() {
+        check(r#"
+          var valid=true,count=0,called=0,error={},proto={};
+          var NT=new Proxy(function(){},{get(t,k,r){if(k==='prototype'){count++;throw error;}return Reflect.get(t,k,r);}});
+          for(var executor of [undefined,null,1,'x',{},Symbol(),2n]){
+            try{Reflect.construct(Promise,[executor],NT);valid=false;}catch(e){valid=valid && e instanceof TypeError && count===0;}
+          }
+          try{Reflect.construct(Promise,[()=>called++],NT);valid=false;}catch(e){valid=valid && e===error && count===1 && called===0;}
+          count=0;NT=new Proxy(function(){},{get(t,k,r){if(k==='prototype'){count++;return proto;}return Reflect.get(t,k,r);}});
+          var resolve,p=Reflect.construct(Promise,[r=>{called++;resolve=r;}],NT);
+          valid=valid && count===1 && called===1 && Object.getPrototypeOf(p)===proto;
+          valid=valid && typeof resolve==='function';resolve(7);
+          var fake={};fake.prototype=proto;try{Reflect.construct(Promise,[()=>{}],fake);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+          valid;
+        "#);
+    }
+    #[test]
+    fn callable_revocation_and_prototype_revocation_have_distinct_boundaries() {
+        check(r#"
+          var valid=true,count=0,executed=0,proto={};
+          var r=Proxy.revocable(function(){},{});r.revoke();
+          var nt=new Proxy(function(){},{get(t,k,r){if(k==='prototype'){count++;return proto;}return Reflect.get(t,k,r);}});
+          var p=Reflect.construct(Promise,[r.proxy],nt);
+          valid=valid && count===1 && Object.getPrototypeOf(p)===proto;
+          var revokeTarget=Proxy.revocable(function(){},{get(t,k,r){if(k==='prototype'){revokeTarget.revoke();return proto;}return Reflect.get(t,k,r);}});
+          var q=Reflect.construct(Promise,[()=>executed++],revokeTarget.proxy);
+          valid=valid && Object.getPrototypeOf(q)===proto && executed===1;
+          var revokePrimitive=Proxy.revocable(function(){},{get(t,k,r){if(k==='prototype'){revokePrimitive.revoke();return null;}return Reflect.get(t,k,r);}});
+          try{Reflect.construct(Promise,[()=>executed++],revokePrimitive.proxy);valid=false;}catch(e){valid=valid && e instanceof TypeError && executed===1;}
+          for(var executor of [undefined,()=>{}]){try{Reflect.construct(Promise,[executor],r.proxy);valid=false;}catch(e){valid=valid && e instanceof TypeError;}}
+          valid;
+        "#);
+    }
+    #[test]
+    fn subclass_bound_proxy_and_saved_intrinsic_allocations_preserve_native_semantics() {
+        check(r#"
+          var valid=true,original=Promise;
+          class Sub extends Promise {constructor(e){super(e);this.marker=1;}}
+          var s=new Sub(r=>r(3));valid=valid && s instanceof Sub && s instanceof Promise && s.marker===1;
+          var bound=Promise.bind(null),b=new bound(()=>{});valid=valid && Object.getPrototypeOf(b)===Promise.prototype;
+          var proxy=new Proxy(Promise,{}),p=new proxy(()=>{});valid=valid && Object.getPrototypeOf(p)===Promise.prototype;
+          var NT=function(){};NT.prototype=null;var q=Reflect.construct(Promise,[()=>{}],NT);
+          valid=valid && Object.getPrototypeOf(q)===Promise.prototype;
+          Promise=function(){throw 'replacement';};var saved=new original(()=>{});valid=valid && Object.getPrototypeOf(saved)===original.prototype;
+          for(var fn of [original,bound,proxy]){try{fn(()=>{});valid=false;}catch(e){valid=valid && e instanceof TypeError;}}
+          var fake=function Promise(){};fake.prototype={fake:true};var ordinary=new fake;
+          valid=valid && ordinary.fake===true && Object.getPrototypeOf(ordinary)===fake.prototype;valid;
+        "#);
+    }
+    #[test]
+    fn executor_errors_reject_and_post_resolve_throws_preserve_original_identity() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();
+            i.run_script_with_backend(r#"
+              var error={},resolve,reject;
+              new Promise(()=>{throw error;}).catch(e=>console.log('identity',e===error));
+              new Promise(r=>{r(7);throw error;}).then(v=>console.log('fulfilled',v));
+              new Promise((r,j)=>{j(error);r(8);throw 9;}).catch(e=>console.log('first',e===error));
+              var revoked=Proxy.revocable(function(){},{});revoked.revoke();
+              new Promise(revoked.proxy).catch(e=>console.log('revoked',e instanceof TypeError));
+              var p=new Promise((r,j)=>{resolve=r;reject=j;});resolve(11);reject(error);
+              p.then(v=>console.log('escaped',v));
+              console.log('metadata',resolve.name==='',reject.name==='',resolve.length,reject.length,!Object.hasOwn(resolve,'prototype'));
+            "#,backend).unwrap();
+            let mut out=i.output.borrow().clone();out.sort();
+            assert_eq!(out,["escaped 11","first true","fulfilled 7","identity true","metadata true true 1 1 true","revoked true"],"{backend:?}");
+        }
+    }
+    #[test]
+    fn fallback_uses_new_target_realm_and_errors_use_actual_callee_realm() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();let child=i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
+            for(name,source) in [("foreignPromise","Promise"),("foreignProto","Promise.prototype"),("foreignTypeError","TypeError.prototype"),
+                ("foreignNT","(()=>{var NT=function(){};NT.prototype=null;return NT;})()"),("foreignBoundNT","(function(){}).bind(null)")] {
+                let value=i.binding_eval_in_realm(child,source).unwrap();i.global_env.declare_var(name,value).unwrap();
+            }
+            assert_eq!(i.run_script_with_backend(r#"
+              var valid=true,NT=function(){};NT.prototype=null;
+              var a=Reflect.construct(foreignPromise,[()=>{}],NT);valid=valid && Object.getPrototypeOf(a)===Promise.prototype;
+              for(var nt of [foreignNT,foreignBoundNT,new Proxy(foreignNT,{})]){
+                var b=Reflect.construct(Promise,[()=>{}],nt);valid=valid && Object.getPrototypeOf(b)===foreignProto;
+              }
+              var count=0,trap=new Proxy(foreignNT,{get(t,k,r){if(k==='prototype'){count++;return null;}return Reflect.get(t,k,r);}});
+              var c=Reflect.construct(Promise,[()=>{}],trap);valid=valid && Object.getPrototypeOf(c)===foreignProto && count===1;
+              try{Reflect.construct(foreignPromise,[null],trap);valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===foreignTypeError && count===1;}
+              var own={},objectNT=new Proxy(foreignNT,{get(t,k,r){if(k==='prototype')return own;return Reflect.get(t,k,r);}});
+              valid=valid && Object.getPrototypeOf(Reflect.construct(foreignPromise,[()=>{}],objectNT))===own;
+              valid;
+            "#,backend).unwrap(),JsValue::Bool(true),"{backend:?}");
+        }
+    }
 }

@@ -2425,6 +2425,13 @@ impl Interpreter {
             };
         }
         if !new_target.is_object() { return Err(Throw::type_error("newTarget is not an object")); }
+        // The intrinsic Promise algorithm owns allocation: its IsCallable
+        // executor check precedes GetPrototypeFromConstructor. Dispatch by
+        // native identity, never the mutable global binding or function name.
+        if matches!(&fun.body, FunctionBody::Native(native)
+            if std::ptr::fn_addr_eq(*native, native_promise as crate::value::NativeFn)) {
+            return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
+        }
         if matches!(fun.body, FunctionBody::HostNative(_, HostCallPolicy::ConstructOnlyAllocates, _)) {
             let result = self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target))?;
             return if result.is_object() { Ok(result) }
