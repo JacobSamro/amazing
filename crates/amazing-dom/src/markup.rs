@@ -380,7 +380,7 @@ impl IncrementalDocumentImport {
                 let target = self.ensure_source_node(dest, source, parent)?;
                 let before = source.get(s).next_sibling.and_then(|n| self.map.get(&n).copied())
                     .filter(|&n| dest.get(n).parent == Some(target));
-                if dest.get(d).parent == Some(target) && dest.get(d).next_sibling == before { continue; }
+                if dest.get(d).parent == Some(target) { continue; }
                 match dest.pre_insert(d, target, before) {
                     Ok(_) => progressed = true,
                     Err(DomError::HierarchyRequestError | DomError::NotFoundError) => deferred.push((s, d)),
@@ -389,6 +389,26 @@ impl IncrementalDocumentImport {
             }
             if deferred.is_empty() || !progressed { break; }
             remaining = deferred;
+        }
+        // Once parent moves have settled, order each sibling list backwards.
+        // Sorting arbitrary map entries can disturb an adjacency established
+        // earlier in that same pass. Reverse tree order gives a fixed suffix.
+        let parents: Vec<_> = self.map.iter().map(|(&s, &d)| (s, d)).collect();
+        for (s, d) in parents {
+            let children: Vec<_> = source.children(s).collect();
+            let mut before = None;
+            for child in children.into_iter().rev() {
+                let Some(&mapped) = self.map.get(&child) else { continue; };
+                if dest.get(mapped).parent != Some(d) { continue; }
+                if dest.get(mapped).next_sibling != before {
+                    match dest.pre_insert(mapped, d, before) {
+                        Ok(_) => (),
+                        Err(DomError::HierarchyRequestError | DomError::NotFoundError) => continue,
+                        Err(error) => return Err(error),
+                    }
+                }
+                before = Some(mapped);
+            }
         }
         Ok(())
     }
