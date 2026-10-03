@@ -44,6 +44,7 @@ struct FrameDocument {
     /// `ResumableParser` is HTML-only) or once this document's interleaved
     /// parse has already consumed it.
     html: Option<String>,
+    source: Option<NavigationSource>,
 }
 
 #[derive(Clone)]
@@ -62,6 +63,7 @@ struct HtmlNavigation {
     generation: u64,
     url: String,
     replace: bool,
+    reload: bool,
     source: NavigationSource,
 }
 
@@ -665,7 +667,7 @@ impl RuntimeBindings {
             let state = self.state.borrow();
             (state.host.clone(), state.document_url.clone(), state.frames.resolver.clone())
         };
-        let Some(base) = base else { return };
+        if base.is_none() { return; }
         let candidates = {
             let host = host.borrow();
             let state = self.state.borrow();
@@ -760,7 +762,10 @@ impl RuntimeBindings {
                 // `srcdoc` takes priority over `src` per spec: its content is
                 // used verbatim and the navigable's URL becomes "about:srcdoc"
                 // rather than being resolved/fetched.
-                if let Some(html) = srcdoc.as_deref().filter(|_| pending.is_none()) {
+                let reload_srcdoc = pending.as_ref().filter(|navigation| navigation.reload
+                    && ParsedUrl::parse(&navigation.url).is_ok_and(|url| matches_about_url(&url, "srcdoc") && url.query().is_none()))
+                    .and_then(|_| self.state.borrow().frames.documents.get(&node).and_then(|entry| entry.srcdoc.clone()));
+                if let Some(html) = reload_srcdoc.as_deref().or_else(|| srcdoc.as_deref().filter(|_| pending.is_none())) {
                     return Ok(LoadedChildDocument::Deferred { source: html.to_owned(),
                         url: "about:srcdoc".into(), mime: "text/html".into(), encoding: "UTF-8" });
                 }
@@ -859,7 +864,7 @@ impl RuntimeBindings {
             let mut state = self.state.borrow_mut();
             let navigation = ChildNavigation { frame: node, requested_src: src.clone(),
                 committed_url: url.clone(), document };
-            state.frames.documents.insert(node, FrameDocument { src, srcdoc, document, url, sandbox, html });
+            state.frames.documents.insert(node, FrameDocument { src, srcdoc, document, url, sandbox, html, source: Some(source) });
             state.frames.pending_loads.push_back((node, document, fire_load_events));
             let hook = state.frames.navigation_hook.clone();
             drop(state);
@@ -1394,7 +1399,7 @@ impl RuntimeBindingHost<'_> {
             return Err(Throw::type_error("Stale navigation document"));
         };
         Ok(HtmlNavigation { document: target_context.document, generation: target_generation,
-            url: url.into(), replace, source: NavigationSource { document: source_context.document,
+            url: url.into(), replace, reload: false, source: NavigationSource { document: source_context.document,
                 generation: source_generation, base_url, document_url: source_context.document_url,
                 origin, fetch_origin: source_context.fetch_origin } })
     }
@@ -1413,15 +1418,24 @@ impl RuntimeBindingHost<'_> {
     }
 
     pub(super) fn html_location_reload(&mut self) -> Result<(), Throw> {
-        let url = self.js.binding_location_href().to_owned();
-        let navigation = self.html_navigation_source(&url, false)?;
         let target = self.js.binding_current_realm();
+        let context = self.state.borrow().frames.contexts.get(&target).cloned()
+            .ok_or_else(|| Throw::type_error("Missing reload document"))?;
+        let url = context.document_url;
+        let mut navigation = self.html_navigation_source(&url, false)?;
+        navigation.reload = true;
+        if let Some(frame) = context.frame {
+            if let Some(source) = self.state.borrow().frames.documents.get(&frame).and_then(|entry| entry.source.clone()) {
+                navigation.source = source;
+            }
+        }
         let frame = self.state.borrow().frames.contexts.get(&target).and_then(|context| context.frame);
         let document = navigation.document;
         let mut state = self.state.borrow_mut();
         state.frames.pending_navigations.insert(target, navigation);
         if let Some(frame) = frame { state.frames.pending_loads.push_back((frame, Some(document), false)); }
         drop(state);
+        self.js.binding_location_navigate(&url, false);
         self.js.binding_location_reload();
         Ok(())
     }
@@ -2321,6 +2335,8 @@ mod tests {
             b.contentWindow.eval("parent.frames[0].location.replace('about:blank?two#last')");
             base.href='https://example.test/changed/';
         "#).unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        scheduler.run_script("a.contentWindow.location.reload()").unwrap();
         scheduler.dispatch_pending_iframe_loads().unwrap();
         assert_eq!(scheduler.run_script(r#"
             if(a.contentWindow!==w || a.contentDocument===old) throw new Error('proxy or target identity');
