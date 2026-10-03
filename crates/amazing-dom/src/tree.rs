@@ -417,6 +417,9 @@ impl Dom {
             || matches!(self.get(node).kind, NodeKind::Document) {
             return Err(DomError::NotSupportedError);
         }
+        if let NodeKind::Attr { owner_element: Some(owner), .. } = self.get(node).kind {
+            self.remove_attribute_node(owner, node)?;
+        }
         self.adopt_internal(node, document);
         Ok(node)
     }
@@ -435,6 +438,12 @@ impl Dom {
         let descendants = self.shadow_including_tree_order(node);
         let owners: std::collections::HashSet<_> = descendants.iter().copied().collect();
         for id in descendants {
+            // Content attributes are native nodes even before their first JS
+            // access. Realize them in their original document before adoption
+            // changes node documents; later attributes use the new document.
+            if matches!(self.get(id).kind, NodeKind::Element { .. }) {
+                self.attribute_nodes(id).expect("validated adopted element attributes");
+            }
             self.nodes[id.0 as usize].owner_document = document;
             self.adopt_template_contents(id, document);
         }

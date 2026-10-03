@@ -487,3 +487,42 @@ fn retired_document_slot_reuse_cannot_alias_existing_node_creation_identity() {
     let new_node = dom.create_node_in(replacement, NodeKind::Text { data: "new".into() }).unwrap();
     assert_ne!(dom.node_creation_document(new_node).unwrap(), old);
 }
+
+#[test]
+fn lazy_original_later_attached_and_adopted_attributes_keep_creation_identity() {
+    let mut dom=Dom::new();
+    let source=dom.create_document();
+    let source_anchor=dom.node_creation_document(source).unwrap();
+    let root_anchor=dom.node_creation_document(NodeIdx(0)).unwrap();
+    let element=dom.create_node_in(source,NodeKind::Element {
+        name:"div".into(),namespace:Namespace::Html,attrs:vec![("initial".into(),"one".into())],
+    }).unwrap();
+    // No Attr getter runs before the first adoption.
+    dom.adopt(element,NodeIdx(0)).unwrap();
+    let initial=dom.get_attribute_node(element,None,"initial").unwrap();
+    assert_eq!(dom.node_creation_document(initial).unwrap(),source_anchor);
+    assert_eq!(dom.owner_document(initial),Some(NodeIdx(0)));
+    dom.set_attribute_expanded(element,Some("urn:attrs"),Some("a"),"later","two").unwrap();
+    dom.adopt(element,source).unwrap();
+    let later=dom.get_attribute_node(element,Some("urn:attrs"),"later").unwrap();
+    assert_eq!(dom.node_creation_document(later).unwrap(),root_anchor);
+    assert_eq!(dom.owner_document(later),Some(source));
+    assert_eq!(dom.node_creation_document(initial).unwrap(),source_anchor);
+    assert_eq!(dom.get_attribute_node(element,None,"initial"),Some(initial));
+    dom.adopt(later,NodeIdx(0)).unwrap();
+    assert!(dom.attribute_ns(element,Some("urn:attrs"),"later").is_none());
+    assert_eq!(dom.attr_snapshot(later).unwrap().owner_element,None);
+    assert_eq!(dom.owner_document(later),Some(NodeIdx(0)));
+    assert_eq!(dom.node_creation_document(later).unwrap(),root_anchor);
+    let target=dom.create_node_in(source,NodeKind::Element {
+        name:"span".into(),namespace:Namespace::Html,attrs:vec![],
+    }).unwrap();
+    dom.set_attribute_node(target,later).unwrap();
+    assert_eq!(dom.owner_document(later),Some(source));
+    assert_eq!(dom.node_creation_document(later).unwrap(),root_anchor);
+    assert_eq!(dom.attr_snapshot(later).unwrap().owner_element,Some(target));
+    let clone=dom.clone_node(target,false).unwrap();
+    let cloned_attr=dom.get_attribute_node(clone,Some("urn:attrs"),"later").unwrap();
+    assert_eq!(dom.node_creation_document(cloned_attr).unwrap(),source_anchor);
+    assert_ne!(cloned_attr,later);
+}

@@ -32,7 +32,7 @@ fn document<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result<NodeIdx
 fn implementation_document<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result<NodeIdx, H::Error> {
     let key = host.platform_object(receiver, InterfaceBrand::DOM_IMPLEMENTATION)
         .ok_or_else(|| host.type_error("Expected a DOMImplementation"))?;
-    let node = host.node_from_platform_key(key)
+    let node = host.node_from_object_key(key)
         .ok_or_else(|| host.type_error("Invalid DOMImplementation"))?;
     host.with_dom(|dom| if matches!(dom.get(node).kind, NodeKind::Document) {
         Ok(())
@@ -46,7 +46,7 @@ pub(crate) fn invoke<H: BindingHost>(
     host.current_document_for_nodes()?;
     if op == O::DocumentImplementation {
         let node = document(host, &receiver)?;
-        return host.wrap_platform_object(host.node_platform_key(node), InterfaceBrand::DOM_IMPLEMENTATION);
+        return host.wrap_platform_object(host.node_object_key(node), InterfaceBrand::DOM_IMPLEMENTATION);
     }
     if op == O::ImplementationHasFeature {
         implementation_document(host, &receiver)?;

@@ -1878,6 +1878,8 @@ mod tests {
             function check(v){step++;if(!v)throw 'factory '+step;}
             check(window.namedBeforeSetup===document.getElementById('namedBeforeSetup'));
             const inner=frame.contentWindow;
+            const borrowedImplementation=Object.getOwnPropertyDescriptor(inner.Document.prototype,'implementation').get.call(document);
+            check(borrowedImplementation===document.implementation && Object.getPrototypeOf(borrowedImplementation)===DOMImplementation.prototype);
             for(const [method,iface,args] of [['createTextNode','Text',['x']],['createComment','Comment',['x']],
                 ['createProcessingInstruction','ProcessingInstruction',['t','d']],['createDocumentFragment','DocumentFragment',[]],
                 ['createAttribute','Attr',['a']]]){
@@ -1923,6 +1925,17 @@ mod tests {
             check(Object.getPrototypeOf(foreign.firstChild)===inner.Text.prototype);
             check(Object.getPrototypeOf(foreign.childNodes[1])===inner.Comment.prototype);
             check(foreign.firstChild===foreign.childNodes[0]);
+            const originalAttribute=foreign.lastChild.getAttributeNode('a');
+            check(originalAttribute.ownerDocument===document && Object.getPrototypeOf(originalAttribute)===inner.Attr.prototype);
+            foreign.setAttribute('later','root');
+            inner.document.adoptNode(foreign);
+            check(Object.getPrototypeOf(foreign.getAttributeNode('later'))===Attr.prototype);
+            document.adoptNode(foreign);
+            const attached=inner.document.createAttribute('attached');
+            foreign.setAttributeNode(attached);
+            check(attached.ownerDocument===document && Object.getPrototypeOf(attached)===inner.Attr.prototype);
+            inner.document.adoptNode(attached);
+            check(attached.ownerElement===null && !foreign.hasAttribute('attached'));
             const clone=inner.Node.prototype.cloneNode.call(foreign,true);
             check(Object.getPrototypeOf(clone)===HTMLDivElement.prototype);
             check(Object.getPrototypeOf(clone.firstChild)===Text.prototype);
@@ -2009,6 +2022,12 @@ mod tests {
         let prototype=adapter.prototype(Interface::Document).unwrap();
         let stale=adapter.js.binding_wrap_host(amazing_js::HostHandle { arena:key.arena,slot:key.slot,generation:key.generation,brand:InterfaceBrand::NODE.0 },&prototype).unwrap();
         assert!(adapter.node_brand(&stale).is_none());
+        let implementation_prototype=adapter.prototype(Interface::DOMImplementation).unwrap();
+        let stale_implementation=adapter.js.binding_wrap_host(amazing_js::HostHandle {
+            arena:key.arena,slot:key.slot,generation:key.generation,brand:InterfaceBrand::DOM_IMPLEMENTATION.0 },&implementation_prototype).unwrap();
+        assert!(adapter.platform_object(&stale_implementation,InterfaceBrand::DOM_IMPLEMENTATION).is_none());
+        adapter.js.global_obj.borrow_mut().set_own("staleImplementation",stale_implementation);
+        assert_eq!(adapter.js.run_script("(function(){try{DOMImplementation.prototype.createDocument.call(staleImplementation,null,'r',null)}catch(e){return e instanceof TypeError;}return false;})()").unwrap(),JsValue::Bool(true));
         adapter.js.global_obj.borrow_mut().set_own("staleNode",stale);
         assert_eq!(adapter.js.run_script("(function(){try{Node.prototype.appendChild.call(staleNode,document.createComment('x'));}catch(e){return e instanceof TypeError;}return false;})()").unwrap(),JsValue::Bool(true));
     }

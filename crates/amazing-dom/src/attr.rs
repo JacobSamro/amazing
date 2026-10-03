@@ -94,6 +94,7 @@ impl Dom {
         if snapshot.owner_element.is_some_and(|owner| owner != element) { return Err(DomError::InUseAttributeError); }
         let old = self.get_attribute_node(element, snapshot.namespace_uri.as_deref(), &snapshot.local_name);
         if old == Some(attr) { return Ok(old); }
+        self.set_subtree_document(attr, self.get(element).owner_document);
         let display = String::from_utf16_lossy(&snapshot.value);
         self.set_attribute_expanded(element, snapshot.namespace_uri.as_deref(), snapshot.prefix.as_deref(),
             &snapshot.local_name, &display)?;

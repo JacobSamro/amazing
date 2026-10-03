@@ -1151,7 +1151,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
         key: PlatformKey,
         brand: InterfaceBrand,
     ) -> Result<JsValue, Throw> {
-        if brand == InterfaceBrand::NODE {
+        if matches!(brand, InterfaceBrand::NODE | InterfaceBrand::DOM_IMPLEMENTATION) {
             let node = self.node_from_object_key(key)
                 .ok_or_else(|| Throw::type_error("Invalid node wrapper"))?;
             let realm = self.dom_node_realm(node)?;
@@ -1201,7 +1201,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
             slot: handle.slot,
             generation: handle.generation,
         };
-        if brand == InterfaceBrand::NODE {
+        if matches!(brand, InterfaceBrand::NODE | InterfaceBrand::DOM_IMPLEMENTATION) {
             self.node_from_object_key(key).map(|_| key)
         } else {
             (key.arena == self.state.borrow().arena && key.generation == 1).then_some(key)
