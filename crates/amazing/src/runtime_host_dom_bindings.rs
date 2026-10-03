@@ -2161,6 +2161,9 @@ mod tests {
             return true;
         })()"#).unwrap();
         assert_eq!(result, JsValue::Bool(true));
+        assert_eq!(scheduler.test_bindings().state.borrow().selection_range_roots.len(), 1);
+        scheduler.run_script("getSelection().removeAllRanges()").unwrap();
+        assert!(scheduler.test_bindings().state.borrow().selection_range_roots.is_empty());
     }
 
     #[test]
