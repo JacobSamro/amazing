@@ -485,7 +485,9 @@ impl RuntimeBindings {
     pub(super) fn html_set_document_origin(&self, url: &str) {
         let origin = ParsedUrl::parse(url).map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into());
         let fetch_origin = HttpUrl::parse(url).map(|url| url.origin().clone()).unwrap_or_else(|_| amazing_fetch::Origin::opaque());
+        let generation = self.state.borrow().host.borrow().dom.node_generation(NodeIdx(0));
         for context in self.state.borrow_mut().frames.contexts.values_mut().filter(|context| context.frame.is_none()) {
+            if let Some(generation) = generation { context.document_generation = generation; }
             context.origin = origin.clone();
             context.fetch_origin = fetch_origin.clone();
             context.document_url = url.to_owned();
