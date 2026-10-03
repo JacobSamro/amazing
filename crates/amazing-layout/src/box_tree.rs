@@ -235,7 +235,7 @@ fn generated_box(
         match run {
             ContentRun::Text(text) if !text.is_empty() => {
                 let mut item =
-                    inline_text(dom, origin, origin, text.clone(), &style, font_size, true);
+                    inline_text(dom, origin, origin, text.clone(), &style, font_size, display == Display::Inline);
                 if let InlineNode::Text {
                     source_mappings, source_order, ..
                 } = &mut item
@@ -295,8 +295,23 @@ fn append_generated(
     if generated.outside_marker || is_out_of_flow(&generated.style) {
         positioned.push(generated);
     } else if generated.display == Display::Inline {
+        if matches!(generated.flow,Flow::Empty) {
+            generated.flow=Flow::Inlines(Vec::new());
+        }
         if let Flow::Inlines(items) = &mut generated.flow {
+            let padding_scope = ["padding-top", "padding-right", "padding-bottom", "padding-left"]
+                .into_iter().any(|property| nonzero_length(generated.style.get(property)));
+            let font_style = generated.font_metric_style.clone()
+                .unwrap_or_else(|| text_style(dom, origin, &generated.style, generated.font_size, false));
+            if padding_scope {
+                inlines.push(InlineNode::PaddingEdge { node:origin,
+                    padding_style:Box::new(generated.style.clone()),font_style:Box::new(font_style.clone()),start:true });
+            }
             inlines.append(items);
+            if padding_scope {
+                inlines.push(InlineNode::PaddingEdge { node:origin,
+                    padding_style:Box::new(generated.style.clone()),font_style:Box::new(font_style),start:false });
+            }
         }
     } else {
         flush_anonymous_into(blocks, inlines, positioned, font_size, fonts, &mut Vec::new());
@@ -414,8 +429,8 @@ fn assign_source_order(box_: &mut LayoutBox, order: &std::collections::HashMap<N
                     (*source_order).or_else(|| slot(*node, None).map(|rank| rank << 32)),
                 InlineNode::Replaced { node, replaced, .. } =>
                     replaced.source_order.or_else(|| slot(*node, None).map(|rank| rank << 32)),
-                InlineNode::Atomic { node, .. } | InlineNode::Ruby { node, .. } =>
-                    slot(*node, None).map(|rank| rank << 32),
+                InlineNode::PaddingEdge { node, .. } | InlineNode::Atomic { node, .. }
+                    | InlineNode::Ruby { node, .. } => slot(*node, None).map(|rank| rank << 32),
                 _ => None,
             }).min(),
             Flow::Empty => None,
@@ -432,8 +447,8 @@ fn assign_source_order(box_: &mut LayoutBox, order: &std::collections::HashMap<N
                     (*source_order).or_else(|| slot(*node, None).map(|rank| rank << 32)),
                 InlineNode::Replaced { node, replaced, .. } =>
                     replaced.source_order.or_else(|| slot(*node, None).map(|rank| rank << 32)),
-                InlineNode::Atomic { node, .. } | InlineNode::Ruby { node, .. } =>
-                    slot(*node, None).map(|rank| rank << 32),
+                InlineNode::PaddingEdge { node, .. } | InlineNode::Atomic { node, .. }
+                    | InlineNode::Ruby { node, .. } => slot(*node, None).map(|rank| rank << 32),
                 _ => None,
             }).max(),
             Flow::Empty => box_.source_order,
@@ -1095,14 +1110,6 @@ fn inline_text(
     inline_box: bool,
 ) -> InlineNode {
     let (text, source_mappings) = text_for_white_space(&source_text, style, node, usize::MAX);
-    let padding = |property: &str| {
-        style
-            .get(property)
-            .and_then(|value| values::used_length_percentage(style, value, font_size, font_size * 0.6))
-            .and_then(|length| length.resolve(Some(font_size)))
-            .unwrap_or(0.0)
-            .max(0.0)
-    };
     InlineNode::Text {
         node,
         source_order: None,
@@ -1125,16 +1132,9 @@ fn inline_text(
         } else {
             "transparent".into()
         },
-        inline_padding: if inline_box {
-            values::Sides {
-                top: padding("padding-top"),
-                right: padding("padding-right"),
-                bottom: padding("padding-bottom"),
-                left: padding("padding-left"),
-            }
-        } else {
-            values::Sides::default()
-        },
+        inline_padding: values::Sides::default(),
+        inline_padding_style: inline_box.then(|| Box::new(style.clone())),
+        inline_owner: inline_box.then_some(owner),
         boundary_before: ShapingBoundary::Continue,
         boundary_after: ShapingBoundary::Continue,
     }
@@ -1532,7 +1532,7 @@ fn classify_children(
     if (!inlines.is_empty() && !blocks.is_empty()) || !deferred_floats.is_empty() {
         flush_anonymous_into(&mut blocks, &mut inlines, &mut positioned, font_size, fonts, &mut deferred_floats);
     }
-    if blocks.is_empty() && !has_renderable_inline_content(&inlines) {
+    if blocks.is_empty() && !has_inline_box_content(&inlines) {
         inlines.clear();
     }
     let flow = match (blocks.is_empty(), inlines.is_empty()) {
@@ -1553,7 +1553,7 @@ fn flush_anonymous_into(
     fonts: &FontSource,
     deferred_floats: &mut Vec<LayoutBox>,
 ) {
-    if inlines.is_empty() || !has_renderable_inline_content(inlines) {
+    if inlines.is_empty() || !has_inline_box_content(inlines) {
         inlines.clear();
     } else {
         let taken = std::mem::take(inlines);
@@ -1610,8 +1610,13 @@ fn has_renderable_inline_content(inlines: &[InlineNode]) -> bool {
         }
         InlineNode::Break | InlineNode::Replaced { .. } | InlineNode::Atomic { .. }
         | InlineNode::Ruby { .. } => true,
-        InlineNode::BidiStart { .. } | InlineNode::BidiEnd => false,
+        InlineNode::PaddingEdge { .. } | InlineNode::BidiStart { .. } | InlineNode::BidiEnd => false,
     })
+}
+
+fn has_inline_box_content(inlines: &[InlineNode]) -> bool {
+    has_renderable_inline_content(inlines)
+        || inlines.iter().any(|item| matches!(item,InlineNode::PaddingEdge { .. }))
 }
 
 /// Flattens an inline element subtree into `inlines`. A block descendant
@@ -1639,6 +1644,14 @@ fn flatten_inline(
     let bidi_style = text_style(dom, idx, &style, font_size, true);
     let mut inline_start = inlines.len();
     let mut nowrap_prefix = no_wrap_here(&style) && ancestor_nowrap_content;
+    let padding_scope = ["padding-top", "padding-right", "padding-bottom", "padding-left"]
+        .into_iter().any(|property| nonzero_length(style.get(property)));
+    if padding_scope {
+        inlines.push(InlineNode::PaddingEdge {
+            node: idx, padding_style: Box::new(style.clone()),
+            font_style: Box::new(bidi_style.clone()), start: true,
+        });
+    }
 
     for pseudo in [PseudoElement::Marker, PseudoElement::Before] {
         append_generated(
@@ -1743,8 +1756,10 @@ fn flatten_inline(
                             && !has_renderable_inline_content(&inlines[inline_start.min(inlines.len())..])
                             && deferred_floats.is_empty()
                         {
-                            flush_anonymous_into(blocks_out, inlines, positioned_out, parent_font_px, fonts, deferred_floats);
-                            inline_start = 0;
+                            if has_renderable_inline_content(inlines) {
+                                flush_anonymous_into(blocks_out, inlines, positioned_out, parent_font_px, fonts, deferred_floats);
+                                inline_start = 0;
+                            }
                             blocks_out.push(build_element(
                                 dom,
                                 styled,
@@ -1763,6 +1778,14 @@ fn flatten_inline(
                                 replaced,
                             ));
                         }
+                    }
+                    _ if crate::floats::side(&cs).is_some()
+                        && !has_renderable_inline_content(inlines) => {
+                        // Inline scope padding does not move a descendant
+                        // float down by an otherwise empty strut line. Keep
+                        // those edges in the pending inline run (CSS2 9.5).
+                        blocks_out.push(build_element(dom,styled,child,
+                            entry.parent_font,fonts,replaced));
                     }
                     _ if matches!(
                         parse_display(&cs),
@@ -1824,6 +1847,12 @@ fn flatten_inline(
         inlines,
         positioned_out,
     );
+    if padding_scope {
+        inlines.push(InlineNode::PaddingEdge {
+            node: idx, padding_style: Box::new(style.clone()),
+            font_style: Box::new(bidi_style.clone()), start: false,
+        });
+    }
     if inline_start <= inlines.len() {
         mark_inline_edges(&mut inlines[inline_start..], edge_boundary);
         if bidi_style.unicode_bidi != UnicodeBidi::Normal {
@@ -2448,6 +2477,7 @@ mod tests {
                 } => (text.as_str(), *font_size),
                 InlineNode::BidiStart { .. } => ("<bidi-start>", 0.0),
                 InlineNode::BidiEnd => ("<bidi-end>", 0.0),
+                InlineNode::PaddingEdge { .. } => ("<padding-edge>", 0.0),
                 InlineNode::Break => ("<br>", 0.0),
                 InlineNode::Replaced { .. } => ("<replaced>", 0.0),
                 InlineNode::Atomic { .. } => ("<atomic>", 0.0),

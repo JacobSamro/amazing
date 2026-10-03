@@ -103,6 +103,7 @@ mod position_constraints;
 pub mod replaced;
 pub mod retained;
 mod svg;
+mod inline_padding;
 pub mod values;
 
 use amazing_css::ComputedStyle;
@@ -418,9 +419,22 @@ pub enum InlineNode {
         tab_size: TabSize,
         color: String,
         background_color: String,
+        /// Legacy already-used sides for callers constructing inline runs.
         inline_padding: values::Sides,
+        /// Computed padding retained until the containing inline size is known.
+        inline_padding_style: Option<Box<ComputedStyle>>,
+        /// Generated inline box identity, independent of the DOM text source.
+        inline_owner: Option<NodeIdx>,
         boundary_before: amazing_text::ShapingBoundary,
         boundary_after: amazing_text::ShapingBoundary,
+    },
+    /// A genuine non-atomic inline scope edge, independent of its descendants.
+    /// Retaining computed padding here also represents empty inline scopes.
+    PaddingEdge {
+        node: NodeIdx,
+        padding_style: Box<ComputedStyle>,
+        font_style: Box<amazing_text::TextStyle>,
+        start: bool,
     },
     /// Paired CSS/HTML bidi scope markers retained through nested inline
     /// flattening, including around `<br>` and atomic content.
@@ -635,7 +649,8 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
         let first_style = layout.font_metric_style.as_ref().or_else(|| items.iter().find_map(|item| match item {
             InlineNode::Text { style, .. } => Some(style.as_ref()),
             InlineNode::Ruby { columns, .. } => columns.first().map(|column| column.base.style.as_ref()),
-            InlineNode::BidiStart { .. }
+            InlineNode::PaddingEdge { .. }
+            | InlineNode::BidiStart { .. }
             | InlineNode::BidiEnd
             | InlineNode::Break
             | InlineNode::Replaced { .. }
@@ -695,6 +710,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 layout.style.get("text-align-last").unwrap_or("auto"),
                 layout.style.get("text-justify").unwrap_or("auto"),
                 layout.style.get("unicode-bidi") == Some("plaintext"),
+                layout.root_font_metric_style.as_ref(), layout.root_line_height,
             ) {
                 let old_height = if style.writing_mode.is_vertical_flow() {
                     layout.lines.iter().map(|line| line.height).fold(0.0, f32::max)
@@ -1842,3 +1858,6 @@ mod contents_tests;
 
 #[cfg(test)]
 mod ruby_tests;
+
+#[cfg(test)]
+mod inline_padding_tests;

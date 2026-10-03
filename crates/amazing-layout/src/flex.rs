@@ -1502,6 +1502,11 @@ pub(crate) fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 
 pub(crate) fn min_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
     if let Some(width) = crate::containment::intrinsic_width(b) { return width; }
     match &b.flow {
+        Flow::Inlines(items) if items.iter().any(|item| matches!(item, crate::InlineNode::PaddingEdge { .. })) => {
+            let measured=contained_atomic_items(b,items,fonts,true);
+            inline::intrinsic_padding_widths_legacy(&measured,fonts)
+                .map(|pair|pair.0).unwrap_or_else(||inline_min_content_width(&measured,fonts))
+        },
         Flow::Inlines(items) => inline_min_content_width(&contained_atomic_items(b, items, fonts, true), fonts),
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children
             .iter()
@@ -1545,6 +1550,7 @@ fn inline_min_content_width(items: &[crate::InlineNode], fonts: &FontSource) -> 
         .map(|token| match token {
             inline::Token::Word { text, font_size, .. } => fonts.measure(&text, font_size),
             inline::Token::Replaced { size, .. } => size.width,
+            inline::Token::Padding { advance, .. } => advance,
             inline::Token::Break => 0.0,
         })
         .fold(0.0f32, f32::max)
@@ -1558,6 +1564,7 @@ fn inline_run_width(items: &[crate::InlineNode], fonts: &FontSource) -> f32 {
     let mut max_width = 0.0f32;
     for token in tokens {
         match token {
+            inline::Token::Padding { advance, .. } => { line_width += advance; },
             inline::Token::Break => {
                 max_width = max_width.max(line_width);
                 line_width = 0.0;

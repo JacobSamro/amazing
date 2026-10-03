@@ -28,7 +28,12 @@ impl AxRect {
 
 impl From<Rect> for AxRect {
     fn from(rect: Rect) -> Self {
-        Self { x: rect.x, y: rect.y, width: rect.w, height: rect.h }
+        Self {
+            x: rect.x,
+            y: rect.y,
+            width: rect.w,
+            height: rect.h,
+        }
     }
 }
 
@@ -76,7 +81,12 @@ fn union(a: AxRect, b: AxRect) -> AxRect {
     let y = a.y.min(b.y);
     let right = (a.x + a.width).max(b.x + b.width);
     let bottom = (a.y + a.height).max(b.y + b.height);
-    AxRect { x, y, width: right - x, height: bottom - y }
+    AxRect {
+        x,
+        y,
+        width: right - x,
+        height: bottom - y,
+    }
 }
 
 /// Collects geometry for every node reachable from `layout`.
@@ -121,9 +131,19 @@ fn visit(_dom: &Dom, layout: &LayoutBox, map: &mut BoundsMap) {
     }
     for line in &layout.lines {
         for word in &line.words {
+            // A padding edge carries logical spacing only. It is neither a
+            // word nor a physical accessible rectangle (especially vertically).
+            if word.text.is_empty() && word.font_size == 0.0 {
+                continue;
+            }
             map.union(
                 word.node,
-                AxRect { x: word.x, y: line.y_top, width: word.width, height: line.height },
+                AxRect {
+                    x: word.x,
+                    y: line.y_top,
+                    width: word.width,
+                    height: line.height,
+                },
             );
         }
         for replaced in &line.replaced {
@@ -182,7 +202,10 @@ fn visit(_dom: &Dom, layout: &LayoutBox, map: &mut BoundsMap) {
                             }
                         }
                     }
-                    InlineNode::BidiStart { .. } | InlineNode::BidiEnd | InlineNode::Break => {}
+                    InlineNode::PaddingEdge { .. }
+                    | InlineNode::BidiStart { .. }
+                    | InlineNode::BidiEnd
+                    | InlineNode::Break => {}
                 }
             }
         }
@@ -190,5 +213,53 @@ fn visit(_dom: &Dom, layout: &LayoutBox, map: &mut BoundsMap) {
     }
     for child in &layout.positioned {
         visit(_dom, child, map);
+    }
+}
+
+#[cfg(test)]
+mod padding_tests {
+    use super::*;
+
+    #[test]
+    fn vertical_padding_metadata_does_not_invent_accessible_word_bounds() {
+        for mode in ["vertical-rl", "vertical-lr", "sideways-rl", "sideways-lr"] {
+            let dom = amazing_html::parse("<body><p><span id=scope>A</span><i id=empty></i></p>");
+            let find = |id: &str| {
+                (0..dom.node_count())
+                    .map(|index| NodeIdx(index as u32))
+                    .find(|node| {
+                        dom.attrs_of(*node).is_some_and(|attrs| {
+                            attrs
+                                .iter()
+                                .any(|(name, value)| name == "id" && value == id)
+                        })
+                    })
+                    .unwrap()
+            };
+            let scope = find("scope");
+            let empty = find("empty");
+            let text = dom.children(scope).next().unwrap();
+            let css=format!("body{{margin:0;font:20px/20px serif}}p{{margin:0;writing-mode:{mode};width:100px;height:200px}}span,i{{padding-inline:20%;padding-block:10%}}");
+            let layout = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
+                &dom,
+                &css,
+                500.0,
+                Some(500.0),
+                &amazing_text::FallbackTextSystem::new(),
+                &amazing_layout::NoReplacedElements,
+            );
+            let bounds = collect_bounds(&dom, &layout);
+            let descendant = bounds.get(text).unwrap();
+            assert!(descendant.width > 0.0 && descendant.height > 0.0, "{mode}");
+            assert_eq!(
+                bounds.get(scope),
+                Some(descendant),
+                "{mode}: inline accessible bound must come from actual text"
+            );
+            assert!(
+                bounds.get(empty).is_none(),
+                "{mode}: empty padding must not invent word identity/rectangle"
+            );
+        }
     }
 }

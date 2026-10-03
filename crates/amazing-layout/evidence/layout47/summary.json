@@ -1,0 +1,441 @@
+{
+  "ticket": "LAYOUT47",
+  "fixed_base": "54be285394b9b4a023172ce52a361280588ff115",
+  "host": "pool-layout/native-ext4/Linux",
+  "final_session": 25530,
+  "exit": 0,
+  "workspace": {
+    "passed": 3638,
+    "skipped": 17
+  },
+  "doctests": 4,
+  "harness": 7,
+  "layout_tests": 449,
+  "a11y_added_groups": 1,
+  "directories": [
+    {
+      "subdir": "css/CSS2/floats",
+      "eligible": 39,
+      "before": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 29,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 39,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/CSS2/normal-flow",
+      "eligible": 29,
+      "before": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 29,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/CSS2/positioning",
+      "eligible": 7,
+      "before": {
+        "pass": 4,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 4,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 7,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/css-backgrounds",
+      "eligible": 134,
+      "before": {
+        "pass": 77,
+        "mismatch": 57,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 77,
+        "mismatch": 57,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 134,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/css-contain",
+      "eligible": 229,
+      "before": {
+        "pass": 153,
+        "mismatch": 76,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 153,
+        "mismatch": 76,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 229,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/css-display",
+      "eligible": 35,
+      "before": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 27,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 35,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/css-fonts",
+      "eligible": 32,
+      "before": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 32,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/css-images",
+      "eligible": 141,
+      "before": {
+        "pass": 92,
+        "mismatch": 49,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 92,
+        "mismatch": 49,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 141,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/css-overflow",
+      "eligible": 343,
+      "before": {
+        "pass": 81,
+        "mismatch": 262,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 81,
+        "mismatch": 262,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 343,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/css-position",
+      "eligible": 54,
+      "before": {
+        "pass": 45,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 45,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 54,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/css-ruby",
+      "eligible": 67,
+      "before": {
+        "pass": 52,
+        "mismatch": 15,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 52,
+        "mismatch": 15,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 67,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/css-sizing",
+      "eligible": 138,
+      "before": {
+        "pass": 99,
+        "mismatch": 39,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 99,
+        "mismatch": 39,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 138,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/css-tables",
+      "eligible": 82,
+      "before": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 59,
+        "mismatch": 23,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 82,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/css-transforms",
+      "eligible": 348,
+      "before": {
+        "pass": 141,
+        "mismatch": 207,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 141,
+        "mismatch": 207,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 348,
+        "new": 0,
+        "removed": 0
+      }
+    },
+    {
+      "subdir": "css/css-viewport",
+      "eligible": 87,
+      "before": {
+        "pass": 52,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 52,
+        "mismatch": 35,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "compare": {
+        "gained": 0,
+        "lost": 0,
+        "changed": 0,
+        "unchanged": 87,
+        "new": 0,
+        "removed": 0
+      }
+    }
+  ],
+  "eligible": 1765,
+  "before_passed": 959,
+  "after_passed": 959,
+  "zero_loss": true
+}

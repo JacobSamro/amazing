@@ -740,7 +740,8 @@ fn vertical_inline_measure(b: &LayoutBox, available: f32, text: Option<&dyn amaz
         crate::inline::InlineContainingBlock { x:0.0,y:0.0,width:available,height:inline },
         &strut, style.direction, style.writing_mode, text, &FloatContext::default(),
         !matches!(b.style.get("white-space"), Some("nowrap" | "pre")), None,
-        "start", "auto", "auto", b.style.get("unicode-bidi") == Some("plaintext"))?;
+        "start", "auto", "auto", b.style.get("unicode-bidi") == Some("plaintext"),
+        b.root_font_metric_style.as_ref(), b.root_line_height)?;
     let cross = lines.iter().map(|line| line.replaced.iter().map(|fragment| fragment.width)
         .fold(b.line_height, f32::max)).sum();
     Some((cross, inline))
