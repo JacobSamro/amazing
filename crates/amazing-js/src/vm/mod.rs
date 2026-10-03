@@ -27,6 +27,8 @@ mod tests_return;
 #[cfg(test)]
 mod tests_classes;
 #[cfg(test)]
+mod tests_sync_realms;
+#[cfg(test)]
 mod tests_chains;
 
 use super::{callable_function, for_iteration_env, new_promise, perform_promise_then, promise_resolving_functions, reference_name, settle_promise, Interpreter, Reference};
@@ -2376,7 +2378,7 @@ fn generator_call(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8) 
 
 fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8) -> Result<JsValue, Throw> {
     let state = generator_state(this)?;
-    let (code, mut frame, completion) = {
+    let (code, mut frame, completion, body_realm) = {
         let mut state = state.borrow_mut();
         if state.executing {
             return Err(Throw::type_error("generator is already executing"));
@@ -2401,7 +2403,7 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
             }
         };
         state.executing = true;
-        (state.code.clone(), frame, state.completion.clone())
+        (state.code.clone(), frame, state.completion.clone(), state.body_realm)
     };
     if let Some(dst) = frame.yield_dst.take() {
         if frame.delegate.is_some() || frame.async_delegate.is_some() {
@@ -2415,7 +2417,19 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
         }
     }
     let previous_completion = std::mem::replace(&mut i.completion, completion);
-    let mut outcome = resume_frame_with_strictness(i, &code, &mut frame);
+    let mut outcome = if code.0.is_async {
+        resume_frame_with_strictness(i, &code, &mut frame)
+    } else {
+        // Yield creates its result in the running body context. Completion
+        // instead restores the caller before creating its done result.
+        i.binding_with_realm(body_realm, |i| {
+            match resume_frame_with_strictness(i, &code, &mut frame) {
+                Ok(FrameOutcome::Yielded(value)) => Ok(FrameOutcome::YieldedIteratorResult(generator_result(i, value, false))),
+                Err(error) => Err(i.normalize_throw(error)),
+                other => other,
+            }
+        })
+    };
     if code.0.is_async {
         for _ in 0..1_000 {
             let value = match &outcome {

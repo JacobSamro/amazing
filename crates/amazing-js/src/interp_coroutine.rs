@@ -559,7 +559,7 @@ fn thread_generator_state(this: &JsValue) -> Result<Rc<RefCell<ThreadGeneratorSt
 /// GeneratorResumeAbrupt, spec 27.5.3.3/27.5.3.4), so a `.return(v)`/`.throw(e)` before the body
 /// ever ran, or after it already completed, never touches the coroutine and never loses `v`.
 fn thread_generator_resume(
-    i: &Interpreter,
+    i: &mut Interpreter,
     this: &JsValue,
     signal: Resume,
 ) -> Result<JsValue, Throw> {
@@ -590,6 +590,7 @@ fn thread_generator_resume(
             Resume::Next(_) => unreachable!(),
         };
     }
+    let body_realm = guard.body_realm;
     let coro = guard.coro.as_mut().expect("checked above");
     if coro.done() {
         return match signal {
@@ -598,7 +599,13 @@ fn thread_generator_resume(
             Resume::Throw(e) => Err(Throw(e)),
         };
     }
-    let suspend = coro.resume(signal);
+    let suspend = i.binding_with_realm(body_realm, |i| {
+        match coro.resume(signal) {
+            Suspend::Yield(value) => Suspend::YieldIteratorResult(create_iter_result(i, value, false)),
+            Suspend::Throw(value) => Suspend::Throw(i.normalize_throw(Throw(value)).0),
+            other => other,
+        }
+    });
     match suspend {
         Suspend::Yield(v) => Ok(create_iter_result(i, v, false)),
         Suspend::YieldIteratorResult(result) => Ok(result),

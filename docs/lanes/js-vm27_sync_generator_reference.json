@@ -1,0 +1,20 @@
+{
+  "node": "v24.18.1",
+  "binary_sha256": "5400de0b8036178ec8403ca04989d9c55df63610d12653e37a82a32ef44fb15b",
+  "source": "\nvar results=[];\nvar next=Object.getPrototypeOf(Object.getPrototypeOf((function*(){})())).next;\nfor(var mode=0;mode<2;mode++){\n var realm=$262.createRealm();\n var exports=realm.evalScript(mode===0?\n   \"({g:(function*(){yield [];yield class C {x=1};return []})(),a:Array.prototype,o:Object.prototype,f:Function.prototype})\":\n   \"({g:(function*(){yield [];yield class C {[(yield 'key','x')]=1};return []})(),a:Array.prototype,o:Object.prototype,f:Function.prototype})\");\n var one=next.call(exports.g),middle=next.call(exports.g);\n if(mode===1)middle=next.call(exports.g);\n var last=next.call(exports.g),after=next.call(exports.g);\n results.push({mode:mode,bodyArray:Object.getPrototypeOf(one.value)===exports.a,\n   firstResultParent:Object.getPrototypeOf(one)===Object.prototype,\n   classFunctionChild:Object.getPrototypeOf(middle.value)===exports.f,\n   classPrototypeChild:Object.getPrototypeOf(middle.value.prototype)===exports.o,\n   completedBodyChild:Object.getPrototypeOf(last.value)===exports.a,\n   completedResultParent:Object.getPrototypeOf(last)===Object.prototype,\n   afterResultParent:Object.getPrototypeOf(after)===Object.prototype});\n}\nprint(JSON.stringify(results));\n",
+  "reports": {
+    "node": {
+      "exit": 0,
+      "stdout": "[{\"mode\":0,\"bodyArray\":true,\"firstResultParent\":false,\"classFunctionChild\":true,\"classPrototypeChild\":true,\"completedBodyChild\":true,\"completedResultParent\":true,\"afterResultParent\":true},{\"mode\":1,\"bodyArray\":true,\"firstResultParent\":false,\"classFunctionChild\":true,\"classPrototypeChild\":true,\"completedBodyChild\":true,\"completedResultParent\":true,\"afterResultParent\":true}]\n",
+      "stderr": ""
+    },
+    "amazing": {
+      "exit": 0,
+      "stdout": "TEST262_PRINT \"[{\\\"mode\\\":0,\\\"bodyArray\\\":false,\\\"firstResultParent\\\":true,\\\"classFunctionChild\\\":false,\\\"classPrototypeChild\\\":false,\\\"completedBodyChild\\\":false,\\\"completedResultParent\\\":true,\\\"afterResultParent\\\":true},{\\\"mode\\\":1,\\\"bodyArray\\\":false,\\\"firstResultParent\\\":true,\\\"classFunctionChild\\\":false,\\\"classPrototypeChild\\\":false,\\\"completedBodyChild\\\":false,\\\"completedResultParent\\\":true,\\\"afterResultParent\\\":true}]\"\n\nTEST262_RESULT {\"protocol\":1,\"phase\":\"complete\",\"error_type\":\"\",\"detail\":\"\",\"unsupported\":null}\n",
+      "stderr": ""
+    }
+  },
+  "probe_build_source": "5647102fc43384ae3ad933c1d63182ff7c929507",
+  "wrapper_sync_ref": "35217ac3231228a0c95b8209fd959642dec30bff",
+  "note": "Reference probe did not rebuild: cached release binary was produced by the completed iteration-1 build; wrapper sync ref is not the binary source."
+}
