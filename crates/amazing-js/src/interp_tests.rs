@@ -1062,7 +1062,7 @@ mod tests {
         assert_eq!(p.to_string(&value).unwrap(), "3,7");
         let mut q = Interpreter::new();
         let value = q
-            .run_script("let out=[]; let it={n:0,next:function(){this.n++;return {value:this.n,done:this.n>2};}}; for (const x of it) out.push(x); out.join(',');")
+            .run_script("let out=[]; let it={n:0,[Symbol.iterator](){return this;},next:function(){this.n++;return {value:this.n,done:this.n>2};}}; for (const x of it) out.push(x); out.join(',');")
             .unwrap();
         assert_eq!(q.to_string(&value).unwrap(), "1,2");
         let mut r = Interpreter::new();
@@ -1072,7 +1072,7 @@ mod tests {
         assert_eq!(num(value), 1.0);
         let mut s = Interpreter::new();
         let value = s
-            .run_script("let closed=0; let n=0; let it={next:function(){n++;return {value:n,done:n>3};},return:function(){closed++;}}; try { for (const x of it) { if (x===2) throw 'stop'; } } catch(e) {} closed;")
+            .run_script("let closed=0; let n=0; let it={[Symbol.iterator](){return this;},next:function(){n++;return {value:n,done:n>3};},return:function(){closed++;}}; try { for (const x of it) { if (x===2) throw 'stop'; } } catch(e) {} closed;")
             .unwrap();
         assert_eq!(num(value), 1.0);
         let mut t = Interpreter::new();
