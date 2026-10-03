@@ -22,7 +22,10 @@ DIRECTORIES = ['dom/nodes', 'dom/traversal', 'dom/events', 'dom/collections']
 # `html/dom/usvstring-reflection.https.html` pulls
 # `../../webrtc/RTCPeerConnection-helper.js`. Extend this list if a future
 # `--directory` selection surfaces another one the same way.
-SHARED_RESOURCE_DIRECTORIES = ['resources', 'common', 'html/resources', 'webrtc']
+SHARED_RESOURCE_DIRECTORIES = [
+    'resources', 'common', 'html/resources', 'html/dom',
+    'trusted-types/support', 'webrtc',
+]
 
 def sparse_checkout(root, mode, paths):
     """`git sparse-checkout set/add`, but never on a checkout this script did
