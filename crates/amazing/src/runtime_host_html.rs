@@ -1422,9 +1422,18 @@ impl RuntimeBindingHost<'_> {
 
     pub(super) fn html_window_replaceable_set(&mut self, property: HtmlWindowProperty, receiver: JsValue,
         args: &[JsValue]) -> Result<JsValue, Throw> {
-        let owner = self.html_window_receiver(&receiver).map(|(_, context)| context.global).unwrap_or(receiver);
-        self.js.binding_define_data_property(&owner, property.name(), args.first().cloned().unwrap_or(JsValue::Undefined),
-            amazing_js::interp::BindingPropertyFlags { writable: true, enumerable: true, configurable: true })?;
+        let descriptor = self.js.binding_create_object(None)?;
+        for (name, value) in [
+            ("value", args.first().cloned().unwrap_or(JsValue::Undefined)),
+            ("writable", JsValue::Bool(true)), ("enumerable", JsValue::Bool(true)), ("configurable", JsValue::Bool(true)),
+        ] {
+            self.js.binding_define_data_property(&descriptor, name, value, amazing_js::interp::BindingPropertyFlags::METHOD)?;
+        }
+        // [Replaceable] uses the receiver's actual [[DefineOwnProperty]],
+        // including ordinary Proxy traps and cross-origin Window policy.
+        if !self.js.binding_define_own_property(&receiver, property.name(), &descriptor)? {
+            return Err(Throw::type_error("Cannot replace Window property"));
+        }
         Ok(JsValue::Undefined)
     }
 
@@ -2086,6 +2095,22 @@ mod tests {
             }
             const top=Object.getOwnPropertyDescriptor(window,'top');
             check(top.get.call(child)===window && top.set===undefined && !top.configurable && top.enumerable);
+            const setter=Object.getOwnPropertyDescriptor(window,'frames').set;
+            const target={}; let traps=0;
+            const proxy=new Proxy(target,{defineProperty(object,key,descriptor) {
+                traps++; check(key==='frames' && descriptor.value===789);
+                check(descriptor.writable && descriptor.enumerable && descriptor.configurable);
+                return Reflect.defineProperty(object,key,descriptor);
+            }});
+            setter.call(proxy,789); check(traps===1 && target.frames===789);
+            const sentinel=new Error('trap error');
+            let propagated=false; try { setter.call(new Proxy({}, {defineProperty(){throw sentinel;}}),0); }
+            catch(error) { propagated=error===sentinel; } check(propagated);
+            for(const receiver of [null, 1, Object.preventExtensions({}),
+                new Proxy({}, {defineProperty(){return false;}})]) {
+                let rejected=false; try { setter.call(receiver,0); } catch(error) { rejected=error instanceof TypeError; }
+                check(rejected);
+            }
             true
         "#).unwrap(), JsValue::Bool(true));
     }
@@ -2099,7 +2124,10 @@ mod tests {
             const child=document.querySelector('iframe').contentWindow;
             const valid=child.frames===child && child.parent===window && child.top===window && child.length===0;
             let rejected=false; try { child.document; } catch(e) { rejected=e instanceof DOMException && e.name==='SecurityError'; }
-            valid && rejected
+            const setter=Object.getOwnPropertyDescriptor(window,'frames').set;
+            let setterRejected=false; try { setter.call(child,42); }
+            catch(e) { setterRejected=e instanceof DOMException && e.name==='SecurityError'; }
+            valid && rejected && setterRejected
         "#).unwrap(), JsValue::Bool(true));
     }
 
