@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-36 — try/finally/disposal completion boundaries and Empty/value audit** (scope and representation audit).
+Frontier: **JS-37 — async-generator Return/Await boundary** (actual native/coroutine baseline and approved Return-specific queue/realm adapter).
 JS-25 parser API is ready; Runtime35 owns its native eval consumer. JS-26 is complete.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
@@ -1865,3 +1865,9 @@ Next JS36: whole try/finally/disposal completion boundaries. Parent grants norma
 Source series `08e822f5` through `9095aba5` on fixed ready35 proof `e28b071f`. Internal Option completion preserves Empty versus actual Undefined through StatementList, loops/labels, catch/finally, disposal and suspended generator state. Four VM operations and completion-depth unwind retain saved values with one reusable pair per list. Class initializers preserve caller completion; injected coroutine returns become explicit Flow::Return before finalizers/disposal/IteratorClose, preserving actual throw precedence. Nine grouped tests include actual forced coroutine and VM consumers. Linux workspace **3939/17 skipped +4 docs**, owned **692/1 skipped**; whole language **+6 files/+12 variants** (24354/45083), disposal/Promise/four generator selections unchanged, **zero losses**. [Proof](js-lang_JS36-evidence.json), [design](js-lang_JS36-interface.md). Native suspended With coverage requires combined VM24; explicit eval adapter preserves those cases on this fixed base.
 
 Next JS37: whole synchronous ForOf actual IteratorRecord. Parent direction and VM exact IteratorStart/IteratorStep/compiler seams approved; adopt a fixed coherent root dependency and reclassify current baseline before writes. Preserve live intrinsic iteration, cached next, no close on next/done/value abrupts, close precedence on binding/body break/return/throw. No ForAwait/scheduler expansion.
+
+### JS-37 — async-generator Return/Await (working)
+
+Parent prioritized explicit/injected async-generator Return before synchronous ForOf. Initial coherent88f64b9f native/coroutine matrix: five failing groups exclusively on actor path. Fixed final dependency175107c08d43a9fe746a4ee87fe9dd21aa5b72a0 includes VM25 DynamicImport opcode, with tests-only baseline2895ff5100283b73d7ded14c2ee2764a81b2a492. Return-specific coroutine ownership/queue/body-realm adapter and narrow async disposal Await reuse are authorized; native injection context/checked-normalization companion remains VM-owned. No general async-generator yield/delegation/scheduling claim. Whole language/Promise/disposal/four-generator matched proof required. See [interface](js-lang_JS37-interface.md).
+
+Parked next: whole synchronous ForOf IteratorRecord as previously approved, on later fixed coherent dependency.

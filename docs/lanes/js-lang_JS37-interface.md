@@ -1,7 +1,7 @@
 # JS37 — async-generator Return/Await completion
 
 Fixed initial dependency: 88f64b9f69c6f71037e02e44d7553cda2ed7f7a1 (JS36, VM24, Runtime52/53).
-Initial baseline 44105ced6f05f5bb35950e871177fa514484fb1c: actual bytecode factories and equivalent forced Block bodies, each under both public entry backends. Five grouped tests failed exclusively on the coroutine consumer; ordinary async Return negative cases passed. Initial corpus proof is in progress. Supplemental baseline196f9126 adds bare/fallthrough quantum, checked constructor-get abrupt timing and borrowed-method realm distinctions.
+Initial baseline 44105ced6f05f5bb35950e871177fa514484fb1c: actual bytecode factories and equivalent forced Block bodies, each under both public entry backends. Five grouped tests failed exclusively on the coroutine consumer; ordinary async Return negative cases passed. Initial whole language24450 passing files/45223 variants, Promise732/1458, four generator selections unchanged61/122 +48/96 +23/46 +23/46. This initial diagnostic is not the final matched dependency proof. Supplemental baseline196f9126 adds bare/fallthrough quantum, checked constructor-get abrupt timing and borrowed-method realm distinctions.
 
 Upstream: lucid-softworks/lumen, MIT, f6c9860d44fa52249cfd647122edea184d32c863; crates/lumen/src/eval.rs ReturnStatement and yield_one. Exact MIT copyright/license were verified in the cached upstream source. Copied/adapted Return operand Await and injected-yield Return Await use Amazing's own execution-frame detection, Flow/Throw and pending-return representation. The queue/continuation adapter is implemented on Amazing's existing pooled coroutine and internal Promise observation contracts, without dependencies.
 
@@ -20,3 +20,5 @@ State, request capability, coroutine body environments and reaction callback env
 Native explicit Return already uses checked Await inside its saved context. Existing injected Return normalization happens unchecked before saved context installation; borrowed native methods also lack body-realm capture. Those gaps require separately coordinated VM owner changes, not a coroutine-only parity claim. Initial/completed normalization must retain caller/drain scope, while injected Return normalization uses saved callee context. Constructor-get abrupt must inject Throw immediately rather than enqueue an extra reaction. Completed native settlement must not Await again.
 
 Synchronous ForOf IteratorRecord remains a separate parked ticket.
+
+Final matched dependency: 175107c08d43a9fe746a4ee87fe9dd21aa5b72a0, adding VM25 suspended DynamicImport to the same88 source. Tests-only baseline2895ff5100283b73d7ded14c2ee2764a81b2a492 has identical engine/host/runner. Parent separately granted disposal result Await through the same checked ownership helper only when current own function is async-generator and the segment owns its depth; all other coroutine_await/await_value fallback behavior remains.
