@@ -21,7 +21,10 @@ fn suspended_import_preserves_arguments_rejection_phases_and_source_context() {
                         let pause = if kind == "generator" || kind == "async-generator" { "yield 0" } else { "await 0" };
                         let specifier = if stage == "specifier" { "thrower()" } else { "specifier" };
                         let options = if stage == "options" { "thrower()" } else { "options" };
-                        let body = format!("try{{return {phase}(({pause},{specifier}),({pause},{options}))}}catch(e){{caught=true;return e}}");
+                        // Keep return's implicit async-generator Await outside
+                        // this catch: this matrix isolates ImportCall's own
+                        // synchronous argument-vs-rejected-promise boundary.
+                        let body = format!("var request;try{{request={phase}(({pause},{specifier}),({pause},{options}))}}catch(e){{caught=true;return e}}return request");
                         let expression = match kind {
                             "async" => format!("async function(){{{body}}}"),
                             "generator" => format!("function*(){{{body}}}"),
@@ -53,7 +56,8 @@ fn suspended_import_preserves_arguments_rejection_phases_and_source_context() {
                             "attributes" => ("out===marker&&failed&&!caught", "string,with", 0),
                             _ => ("out===marker&&failed&&!caught", "string,with,type,load", 1),
                         };
-                        assert_eq!(i.run_script(&format!("done&&({expected})&&log.join(',')==='{log}'")).unwrap(), JsValue::Bool(true));
+                        assert_eq!(i.run_script(&format!("done&&({expected})&&log.join(',')==='{log}'")).unwrap(), JsValue::Bool(true),
+                            "AST={force_ast} {kind} {phase} {stage}: {:?}", i.run_script("JSON.stringify([done,caught,failed,out===marker,log])").unwrap());
                         let calls = calls.borrow();
                         assert_eq!(calls.len(), count);
                         if let Some((request, referrer, realm)) = calls.first() {
@@ -96,6 +100,22 @@ fn resumed_import_captures_module_referrer_and_callee_realm() {
         assert_eq!(i.run_script("out===7").unwrap(), JsValue::Bool(true));
         assert_eq!(&*calls.borrow(), &[(crate::module::ImportPhase::Evaluation, "module:A".into(), child)]);
         assert_eq!(i.binding_current_realm(), parent);
+        assert!(i.frames.is_empty());
+    }
+}
+
+#[test]
+fn native_async_generator_return_await_keeps_import_rejection_inside_try() {
+    // ReturnStatement's implicit Await is already correct in native lowering.
+    // The legacy coroutine driver awaits its raw return outside this catch;
+    // that distinct AST boundary is recorded for the completion owner.
+    for phase in ["import", "import.source", "import.defer"] {
+        let mut i = Interpreter::new();
+        i.run_script(&format!("var marker={{}},out;async function* f(){{try{{return {phase}((yield 0,{{toString(){{throw marker}}}}))}}catch(e){{return e===marker}}}}" )).unwrap();
+        let Some(JsValue::Object(function)) = i.global_env.resolve("f") else { unreachable!() };
+        assert!(matches!(function.borrow().func.as_ref().unwrap().body, FunctionBody::Bytecode(_)));
+        i.run_script("var g=f();async function drive(){var r;do{r=await g.next()}while(!r.done);return r.value}drive().then(v=>out=v)").unwrap();
+        assert_eq!(i.run_script("out===true").unwrap(), JsValue::Bool(true));
         assert!(i.frames.is_empty());
     }
 }

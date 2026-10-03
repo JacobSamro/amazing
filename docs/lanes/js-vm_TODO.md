@@ -1303,3 +1303,30 @@ initialization8, expression18 and member4. Both trace replays retain all
 24448 language file passes and 45223 variant passes. These counts describe
 the language trace, not the ten-selection gate or every unsupported syntax.
 Evidence: [js-vm24_evidence.json](js-vm24_evidence.json).
+
+## JSVM25 — suspended dynamic import arguments (in progress)
+
+Fixed dependency `4c234a11`, the ready JSVM24 source/evidence tree. A single
+DynamicImport opcode receives specifier/options registers evaluated in source
+order, plus the request phase. AST and VM share the complete existing
+post-evaluation algorithm through `dynamic_import_values`: conversion and
+attribute errors reject the promise, while argument errors stay synchronous.
+Module graph, scheduling, namespace assimilation and host callbacks remain
+their existing implementations; no class initialization fallback is removed.
+
+The 180-case matrix compares native and forced AST async functions, generators,
+async generators, object methods and arrows for all three phases, both argument
+abrupts, coercion, attributes and host-loading rejection identity/order. A
+foreign-realm group checks module referrer priority and resumed callee realm.
+Whole language/module/Promise and callable corpora, native gate and actual
+runtime compilation counts are pending.
+
+Existing boundary diagnostic: coroutine async-generator `return expression`
+currently returns a raw promise to its driver, which awaits outside the
+original statement's try scope. Native Return lowering correctly awaits
+inside that scope (ECMA-26214.10.1 step3). The ImportCall matrix keeps its
+return outside the ImportCall try to isolate synchronous argument errors
+from rejected conversion/options promises, and retains a separate native
+implicit-return Await regression. This series does not claim or implement
+parity across the unresolved AST ReturnStatement boundary; the parent routes
+the complete return/driver area to the language owner.
