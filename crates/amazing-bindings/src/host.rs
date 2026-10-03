@@ -89,7 +89,7 @@ impl InterfaceBrand {
     pub const ANIMATION: Self = Self(41);
     pub const CLIPBOARD: Self = Self(42);
     pub const CSS_STYLE_DECLARATION: Self = Self(43);
-}
+    pub const XML_SERIALIZER: Self = Self(60);}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Interface {
@@ -231,6 +231,7 @@ pub enum Interface {
     FormData,
     FontFaceSet,
     DOMParser,
+    XMLSerializer,
     Observable,
     Subscriber,
     Animation,
@@ -302,6 +303,7 @@ pub enum Operation {
     FormDataGetAll, FormDataHas, FormDataSet, FormDataForEach,
     DocumentFonts, FontFaceSetStatus, FontFaceSetReady,
     DOMParserConstructor, DOMParserParseFromString,
+    XMLSerializerConstructor, XMLSerializerSerializeToString,
     DocumentLocation, LocationHref, LocationSetHref, LocationOrigin, LocationProtocol, LocationSetProtocol,
     LocationHost, LocationSetHost, LocationHostname, LocationSetHostname,
     LocationPort, LocationSetPort, LocationPathname, LocationSetPathname,
@@ -1368,6 +1370,9 @@ pub trait BindingHost: Sized {
     ) -> Result<(), Self::Error>;
     fn install_static_method(&mut self, interface: Interface, name: &'static str,
         operation: Operation, length: u8) -> Result<(), Self::Error>;
+    fn xml_serializer_new(&mut self) -> Result<Self::Value, Self::Error> {
+        self.with_dom(|_| Err(DomError::NotSupportedError))
+    }
     fn dom_parser_new(&mut self) -> Result<Self::Value, Self::Error> {
         self.with_dom(|_| Err(DomError::NotSupportedError))
     }

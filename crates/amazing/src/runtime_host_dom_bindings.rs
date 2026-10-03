@@ -3,6 +3,10 @@ use super::*;
 use amazing_dom::events::{EventClass, EventId};
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn dom_xml_serializer_new(&mut self) -> Result<JsValue, Throw> {
+        self.web_allocate(WebObject::XmlSerializer, InterfaceBrand::XML_SERIALIZER)
+    }
+
     pub(super) fn dom_document_compat_mode(&mut self, document: NodeIdx) -> Result<Vec<u16>, Throw> {
         let mode = self.with_dom(|dom| dom.document_quirks_mode(document))?;
         Ok(mode.compat_mode().encode_utf16().collect())
@@ -1511,6 +1515,36 @@ mod tests {
             host.borrow_mut().dom.set_attribute(first, "href", invalid).unwrap();
             assert_eq!(adapter.dom_document_base_url(document).unwrap(), "https://child.test/dir/page?x#child");
         }
+    }
+
+    #[test]
+=======
+    fn xml_serializer_installed_brand_nodes_utf16_and_namespace_scope() {
+        let host=Rc::new(RefCell::new(BrowserDomHost { dom:Dom::new(),native_forwarded:false }));
+        let mut js=Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());super::super::install(&mut js,host).unwrap();
+        let result=js.run_script(r#"
+            let step=0;function check(v){step++;if(!v)throw 'XML serialization '+step;}
+            const serializer=new XMLSerializer();check(serializer instanceof XMLSerializer);
+            check(XMLSerializer.length === 0 && XMLSerializer.prototype.serializeToString.length === 1);
+            const root=document.createElementNS('urn:root','p:root');
+            root.setAttributeNS('http://www.w3.org/2000/xmlns/','xmlns:p','urn:other');
+            root.setAttributeNS('urn:other','p:value','a\t\n\r<&>"');
+            check(serializer.serializeToString(root) === '<ns1:root xmlns:ns1="urn:root" xmlns:p="urn:other" p:value="a&#9;&#xA;&#xD;&lt;&amp;&gt;&quot;"/>');
+            const foreign=new DOMParser().parseFromString('<r xmlns="urn:r"><child/></r>','application/xml');
+            check(serializer.serializeToString(foreign) === '<r xmlns="urn:r"><child/></r>');
+            check(serializer.serializeToString(root.getAttributeNodeNS('urn:other','value')) === '');
+            check(serializer.serializeToString(document.createTextNode('\uD800<&>')) === '\uD800&lt;&amp;&gt;');
+            check(serializer.serializeToString(document.createComment('a--b-')) === '<!--a--b--->');
+            let rejected=0;for(const value of [undefined,null,{},'node',1]){
+                try{serializer.serializeToString(value);}catch(e){if(e instanceof TypeError)rejected++;}
+            }check(rejected===5);
+            let missing=false;try{serializer.serializeToString();}catch(e){missing=e instanceof TypeError;}check(missing);
+            let wrong=false;try{XMLSerializer.prototype.serializeToString.call({},root);}catch(e){wrong=e instanceof TypeError;}check(wrong);
+            let construct=false;try{XMLSerializer();}catch(e){construct=e instanceof TypeError;}check(construct);
+            check(new XMLSerializer() !== serializer);true;
+        "#).unwrap();
+        assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
     }
 
 }

@@ -42,6 +42,7 @@ mod observable_bindings;
 mod document_bindings;
 mod legacy_document_bindings;
 mod parser_bindings;
+mod xml_serializer_bindings;
 mod element_reflection;
 mod hyperlink_bindings;
 mod table_bindings;

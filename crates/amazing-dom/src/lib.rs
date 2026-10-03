@@ -26,6 +26,7 @@ pub use document_surface::QuirksMode;
 pub mod legacy_document;
 pub mod render_mutation;
 pub mod markup;
+pub mod xml_serializer;
 #[cfg(test)] mod markup_tests;
 pub mod event_loop;
 pub mod mutation;

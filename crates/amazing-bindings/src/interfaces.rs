@@ -358,6 +358,9 @@ const FORM_DATA: &[Member] = &[
 const FONT_FACE_SET: &[Member] = &[
     getter("status", O::FontFaceSetStatus), getter("ready", O::FontFaceSetReady),
 ];
+const XML_SERIALIZER: &[Member] = &[
+    method("serializeToString", O::XMLSerializerSerializeToString, 1),
+];
 const DOM_PARSER: &[Member] = &[
     method("parseFromString", O::DOMParserParseFromString, 2),
 ];
@@ -1172,6 +1175,8 @@ pub static INTERFACES: &[D] = &[
         constructor: None, members: LOCATION },
     D { interface: I::DOMStringList, name: "DOMStringList", parent: None,
         constructor: None, members: DOM_STRING_LIST },
+    D { interface: I::XMLSerializer, name: "XMLSerializer", parent: None,
+        constructor: Some(O::XMLSerializerConstructor), members: XML_SERIALIZER },
     D { interface: I::DOMParser, name: "DOMParser", parent: None,
         constructor: Some(O::DOMParserConstructor), members: DOM_PARSER },
     D { interface: I::URL, name: "URL", parent: None, constructor: Some(O::URLConstructor), members: URL },

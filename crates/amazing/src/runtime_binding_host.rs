@@ -104,6 +104,7 @@ enum NativeEntry {
 
 enum WebObject {
     DomParser,
+    XmlSerializer,
     Url(UrlWithSearchParams, Option<u64>),
     Params(UrlSearchParams),
     Blob(Blob),
@@ -651,6 +652,7 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::FORM_DATA => Interface::FormData,
             InterfaceBrand::FONT_FACE_SET => Interface::FontFaceSet,
             InterfaceBrand::DOM_PARSER => Interface::DOMParser,
+            InterfaceBrand::XML_SERIALIZER => Interface::XMLSerializer,
             InterfaceBrand::OBSERVABLE => Interface::Observable,
             InterfaceBrand::SUBSCRIBER => Interface::Subscriber,
             _ => return Err(Throw::type_error("Unknown platform brand")),
@@ -887,6 +889,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
     type Value = JsValue;
     type Error = Throw;
 
+    fn xml_serializer_new(&mut self) -> Result<JsValue, Throw> {
+        self.dom_xml_serializer_new()
+    }
     fn dom_parser_new(&mut self) -> Result<JsValue, Throw> {
         self.web_allocate(WebObject::DomParser, InterfaceBrand::DOM_PARSER)
     }

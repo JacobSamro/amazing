@@ -188,6 +188,9 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     if crate::location_bindings::handles(operation) {
         return crate::location_bindings::invoke(host, operation, receiver, args);
     }
+    if crate::xml_serializer_bindings::handles(operation) {
+        return crate::xml_serializer_bindings::invoke(host, operation, receiver, args);
+    }
     if crate::parser_bindings::handles(operation) {
         return crate::parser_bindings::invoke(host, operation, receiver, args);
     }
