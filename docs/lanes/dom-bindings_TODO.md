@@ -3341,3 +3341,23 @@ realm garbage collection. Retained native creation anchors preserve exact realm
 identity even when active frame bookkeeping retires its WindowContext. Missing
 or stale associated documents fail Node allocation before arena mutation instead
 of guessing the current or root document.
+
+Bulk follow-up through 61c6edf6 preserves DOMImplementation's associated-document
+realm/cache and actual generation, without changing collection handles. Lazy
+content attributes materialize before document adoption, so their original realm
+survives even if they had never been read; later attributes use the current
+document. Direct Attr adoption detaches its actual owner, and setAttributeNode
+updates the node document while preserving creation identity.
+
+Document constructor/factory/clone callbacks capture actual typed Origin after
+argument conversion and before allocation, then record it on the fresh native
+document. DOMParser's saved receiver context separately covers frame removal and
+reentrant conversion. These implement [DOM document construction and clone rules](https://dom.spec.whatwg.org/#concept-node-clone)
+and [HTML DOMParser receiver context](https://html.spec.whatwg.org/multipage/dynamic-markup-insertion.html#dom-domparser-parsefromstring).
+
+The dependency-only before branch at 5f5629b2 has the identical HTML origin API,
+root/child origin-registration calls and Option allocation compatibility seam.
+Its registration records real immutable origin metadata only; Node creation-realm
+and checked associated-document maps are the ticket delta. HTML parser-timing
+prerequisite 37c331ad awaits owned proof and will be mirrored into both final refs.
+Initial afa9d348 evidence remains a diagnostic, not the authoritative paired gate.
