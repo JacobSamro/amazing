@@ -3,8 +3,15 @@
 // their existing environment. Compilation either succeeds before body execution
 // or leaves the complete body on the AST path; there is no mid-body fallback.
 impl Interpreter {
+    fn callable_vm_enabled(&self) -> bool {
+        #[cfg(test)]
+        { !self.force_ast_callables }
+        #[cfg(not(test))]
+        { true }
+    }
+
     fn async_body_code(&self, object: &Obj, function: &JsFunction, strict: bool) -> Option<vm::FunctionCode> {
-        if !function.is_async || function.is_generator {
+        if !self.callable_vm_enabled() || !function.is_async || function.is_generator {
             return None;
         }
         if let Some(cached) = &object.borrow().async_body_code {

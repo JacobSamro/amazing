@@ -1147,12 +1147,12 @@ mod thread_generator_tests {
                 "(class {static async m(a=b,b=0){body++;}}).m",
                 "(new (class {async m(a=a){body++;}})).m",
                 "(new (class {async m(a=b,b=0){body++;}})).m",
-                // Unsupported with keeps the AST/coroutine body path distinct
-                // from the independently compiled async body path.
+                // Explicit test control keeps the coroutine body path distinct.
                 "async function f(a=a){with({}){} body++;}",
                 "async function f(a=b,b=0){with({}){} body++;}",
             ] {
                 let mut i = Interpreter::new();
+                i.force_ast_callables = function.contains("with");
                 let source = format!(r#"
                     var body=0, seen=0, synchronous=false, trace=[];
                     var f=({function});
@@ -1319,8 +1319,8 @@ mod thread_generator_tests {
             "var result=0,reads=0;var p=Promise.resolve(7);Object.defineProperty(Promise,Symbol.species,{get(){reads++;throw 99}});async function f(){with({}){} result=await p} f();",
         ] {
             let mut i = Interpreter::new();
-            // Async function bodies are independently compiled even for a
-            // TreeWalk script; with forces the coroutine-owned consumer.
+            i.force_ast_callables = true;
+            // Select the coroutine-owned consumer independently of syntax.
             i.run_script_with_backend(source, ExecutionBackend::TreeWalk).unwrap();
             i.drain_microtasks().unwrap();
             assert_eq!(i.run_script("result===7 && reads===0").unwrap(), JsValue::Bool(true), "{source}");

@@ -72,12 +72,13 @@ mod dynamic_source_context_tests {
                 var resolveLater;
                 new Promise(resolve=>resolveLater=resolve).then(eval);
             "#, "https://example.test/a/origin.js", backend).unwrap();
-            // Keep the fallback fixture on the AST path, then invoke it from
-            // either backend. Explicit Bytecode does not compile `with`.
+            // Keep this fixture on the AST path, then invoke from either backend.
+            i.force_ast_callables = true;
             i.run_script_with_source_context_and_backend(r#"
                 function* createThroughAstResume(){with({}){};yield Function("return import('./ast-resumed.js')")}
                 var astResumedFactory=createThroughAstResume();
             "#, "https://example.test/a/origin.js", ExecutionBackend::TreeWalk).unwrap();
+            i.force_ast_callables = false;
             i.run_script_with_source_context_and_backend(r#"
                 var created=createLater();
                 created[0]();created[1]();created[2]().next();created[3]().next();

@@ -66,12 +66,15 @@ fn jsvm22_ordinary_with_binding_and_abrupt_scope_matrix() {
 }
 
 #[test]
-fn jsvm22_with_keeps_suspended_callables_and_script_entry_fallback() {
+fn jsvm24_with_compiles_suspended_callables_and_keeps_script_entry_fallback() {
+    for force_ast in [false, true] {
     for source in ["async function outer(){with({}){}await 0}", "function* outer(){with({}){}yield 0}", "async function* outer(){with({}){}yield 0}"] {
         let mut i = Interpreter::new();
+        i.force_ast_callables = force_ast;
         i.run_script(source).unwrap();
         let Some(JsValue::Object(function)) = i.global_env.resolve("outer") else { unreachable!() };
-        assert!(matches!(function.borrow().func.as_ref().unwrap().body, FunctionBody::Block(_)));
+        assert_eq!(matches!(function.borrow().func.as_ref().unwrap().body, FunctionBody::Bytecode(_)), !force_ast);
+    }
     }
     assert!(compile(&parse_script("with({}){} ").unwrap(), false).is_err());
 }
@@ -1473,6 +1476,7 @@ fn jsvm20_foreign_iterator_prototypes_survive_embedding_global_replacement() {
     let helper=i.binding_eval_in_realm(child,"Iterator.from([1,2]).map(v=>v+1)").unwrap();
     i.global_env.declare_var("foreignHelper",helper).unwrap();
     assert_eq!(i.run_script("foreignHelper.next().value + foreignHelper.next().value").unwrap(),JsValue::num(5.0));
+    i.force_ast_callables = true;
     let function=i.binding_eval_in_realm(child,r#"
         (async function(){with({}){}
             var ap=Object.getPrototypeOf([1].values()),mp=Object.getPrototypeOf(new Map().values()),
@@ -1514,6 +1518,7 @@ fn jsvm20_iterator_identity_and_live_cursor_state_cross_coroutine_workers() {
                 f().then(function(){{escapeValue=escaped.next().value}});
             "#);
             let mut i=Interpreter::new();
+            i.force_ast_callables = force_thread;
             i.run_script_with_backend(&source,backend).unwrap_or_else(|e|panic!("{backend:?} thread={force_thread}: {e:?}"));
             assert_eq!(i.run_script("identities && mv.join(',')==='a,b,d' && sv.join(',')==='1,2,4' && hv.join(',')==='11,21' && escapeValue===6").unwrap(),
                 JsValue::Bool(true),"{backend:?} thread={force_thread}");
@@ -1584,6 +1589,7 @@ fn jsvm20_sync_iteration_reads_results_before_suspension_and_closes_once() {
                         f();log.push('after');
                     "#);
                     let mut i=Interpreter::new();
+                    i.force_ast_callables = force_thread;
                     i.run_script_with_backend(&source,backend).unwrap_or_else(|e|
                         panic!("{backend:?} thread={force_thread} {stage} done={done}: {e:?}"));
                     let closes = !done && matches!(stage,"constructor"|"rejection");
@@ -1621,6 +1627,7 @@ fn jsvm19_await_constructor_abrupt_completion_stays_in_the_active_context() {
                     var output={invoke};log.push('after');
                 "#);
                 let mut i = Interpreter::new();
+                i.force_ast_callables = force_thread;
                 i.run_script_with_backend(&source, backend).unwrap_or_else(|e|
                     panic!("{backend:?} thread={force_thread} generator={generator}: {e:?}"));
                 assert_eq!(i.run_script("log.join(',')==='get,catch,after,resumed' && gets===1 && observed===error && callerCorrect").unwrap(),
@@ -1648,6 +1655,7 @@ fn jsvm19_sync_iterator_and_generator_return_keep_rejected_wrapper_timing() {
                     f();log.push('after');
                 "#);
                 let mut i = Interpreter::new();
+                i.force_ast_callables = force_thread;
                 i.run_script_with_backend(&source, backend).unwrap_or_else(|e|
                     panic!("{backend:?} thread={force_thread} {iterable}: {e:?}"));
                 assert_eq!(i.run_script("log.join(',')==='get,after,catch' && gets===1 && observed===error").unwrap(),

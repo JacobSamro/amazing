@@ -715,7 +715,7 @@ impl Compiler {
                 self.statements(&block.body, block.span)?;
                 self.emit(Instruction::LeaveScope);
             }
-            StmtKind::With { object, body } if self.program.is_function && !self.is_async && !self.is_generator => {
+            StmtKind::With { object, body } if self.program.is_function => {
                 let object = self.expression(object)?;
                 self.emit(Instruction::RequireObjectCoercible(object));
                 self.emit(Instruction::EnterObjectScope(object));

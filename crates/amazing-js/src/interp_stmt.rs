@@ -2410,7 +2410,7 @@ impl Interpreter {
         }
     }
     fn make_function(&self, f: &ast::FunctionItem, e: &EnvHandle) -> JsValue {
-        if f.is_generator || vm::ordinary_functions_enabled() {
+        if self.callable_vm_enabled() && (f.is_generator || vm::ordinary_functions_enabled()) {
             if let Ok(code) = vm::compile_function_item(f, f.body.span, self.strict_eval_context) {
                 return code.instantiate(self, e);
             }
@@ -2495,7 +2495,7 @@ impl Interpreter {
         JsValue::Object(h)
     }
     fn make_arrow(&self, a: &ast::ArrowFunc, e: &EnvHandle) -> JsValue {
-        if vm::ordinary_functions_enabled() {
+        if self.callable_vm_enabled() && vm::ordinary_functions_enabled() {
             let span = match &a.body {
                 ast::ArrowBody::Expr(expression) => expression.span,
                 ast::ArrowBody::Block(block) => block.span,
@@ -2543,7 +2543,7 @@ impl Interpreter {
         JsValue::Object(handle)
     }
     fn method_value(&self, m: &ast::ClassMethod, e: &EnvHandle, class_method: bool) -> JsValue {
-        if m.kind != ast::MethodKind::Constructor {
+        if self.callable_vm_enabled() && m.kind != ast::MethodKind::Constructor {
             if let Ok(code) = vm::compile_class_method(m, class_method || self.strict_eval_context) {
                 let value = code.instantiate(self, e);
                 if let JsValue::Object(function) = &value {

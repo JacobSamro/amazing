@@ -264,6 +264,7 @@ mod global_declaration_tests {
         assert_eq!(interpreter.run_script("parentCapture()===1").unwrap(), JsValue::Bool(true));
 
         let mut interpreter = Interpreter::new();
+        interpreter.force_ast_callables = true;
         interpreter.run_script("var capture,out;async function f(){with({}){}capture=()=>x;await 0;return capture()}").unwrap();
         interpreter.global_env = interpreter.binding_create_global_environment_overlay();
         interpreter.run_script("let x=7;f().then(v=>out=v)").unwrap();
@@ -276,6 +277,7 @@ mod global_declaration_tests {
             "async function f(){with({}){}let x=1;await 0;try{{function x(){}}}finally{}return x===1}var out;f().then(v=>out=v);out===true",
         ] {
             let mut interpreter = Interpreter::new();
+            interpreter.force_ast_callables = true;
             let result = interpreter.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}"));
             if source.starts_with("async") {
                 assert_eq!(interpreter.run_script("out===true").unwrap(), JsValue::Bool(true));

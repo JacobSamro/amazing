@@ -295,6 +295,10 @@ pub struct Interpreter {
     /// retain the existing AST-address semantics and are refreshed by hoist.
     /// This actor state does not swap with realms.
     annex_b_eligible: RefCell<HashSet<usize>>,
+    // Test-only actor control keeps serialized coroutine coverage explicit
+    // when a previously unsupported statement gains bytecode lowering.
+    #[cfg(test)]
+    force_ast_callables: bool,
     pub string_proto: Obj,
     pub number_proto: Obj,
     pub boolean_proto: Obj,
@@ -525,6 +529,8 @@ impl Interpreter {
             std_collection_iterator_prototypes: None,
             std_iterator_states: RefCell::new(HashMap::new()),
             annex_b_eligible: RefCell::new(HashSet::new()),
+            #[cfg(test)]
+            force_ast_callables: false,
             std_collection_iterator_states: RefCell::new(HashMap::new()),
             string_proto,
             number_proto,
