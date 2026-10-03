@@ -1127,3 +1127,7 @@ mod tests {
 #[cfg(test)]
 #[path = "module_namespace_tests.rs"]
 mod namespace_operation_tests;
+
+#[cfg(test)]
+#[path = "module_declarations_tests.rs"]
+mod declaration_instantiation_tests;
