@@ -919,10 +919,9 @@ pub trait AbortHost: BindingHost {
 pub enum DocumentField { URL, DocumentURI, CharacterSet, ContentType, CompatMode, Referrer }
 
 /// Browsing-context data comes from the driver, not guesses from the DOM tree.
-pub trait DocumentHost: BindingHost {
+pub trait DocumentHost: BindingHost + UrlReflection {
     /// Effective base of this actual document, including embedding fallback.
-    fn document_base_url(&mut self, document: NodeIdx) -> Result<Vec<u16>, Self::Error>
-    where Self: UrlReflection {
+    fn document_base_url(&mut self, document: NodeIdx) -> Result<Vec<u16>, Self::Error> {
         let href = self.with_dom(|dom| dom.document_base_href(document))?;
         match href {
             Some(href) => self.resolve_url(&href),
