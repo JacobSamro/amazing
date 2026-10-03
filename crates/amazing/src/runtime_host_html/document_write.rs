@@ -418,7 +418,7 @@ mod tests {
             var checkpoint="child-open";
             try {
             var child=frame.contentDocument, win=frame.contentWindow;
-            child.open(); child.write('<!doctype html><script>window.childRan=document===parent.frame.contentDocument<\/script><p id=c>child');child.close();
+            child.open(); child.write('<!doctype html><script>window.childRan=document===parent.document.querySelector("iframe").contentDocument<\/script><p id=c>child');child.close();
             checkpoint="inert-open";
             var inert=document.implementation.createHTMLDocument('inert');
             inert.open();inert.write('<script>parent.inertRan=true<\/script><noscript><p id=n>inert</p></noscript>');inert.close();
