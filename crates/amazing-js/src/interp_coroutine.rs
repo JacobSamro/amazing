@@ -600,12 +600,12 @@ fn thread_generator_resume(
         };
     }
     let suspend = i.binding_with_realm(body_realm, |i| {
-        match coro.resume(signal) {
+        Ok(match coro.resume(signal) {
             Suspend::Yield(value) => Suspend::YieldIteratorResult(create_iter_result(i, value, false)),
             Suspend::Throw(value) => Suspend::Throw(i.normalize_throw(Throw(value)).0),
             other => other,
-        }
-    });
+        })
+    })?;
     match suspend {
         Suspend::Yield(v) => Ok(create_iter_result(i, v, false)),
         Suspend::YieldIteratorResult(result) => Ok(result),
