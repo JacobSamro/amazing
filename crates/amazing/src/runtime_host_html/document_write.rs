@@ -126,6 +126,12 @@ impl RuntimeBindingHost<'_> {
             (node, node.and_then(|node| crate::cmd::js::script_source_from_node(&host.dom, node)))
         };
         if let Some(node) = node { self.state.borrow_mut().frames.already_started_scripts.insert(node); }
+        let scripting_enabled = {
+            let state = self.state.borrow();
+            let host = state.host.borrow();
+            host.dom.document_scripting_enabled(document).unwrap_or(false)
+        };
+        if !scripting_enabled { return Ok(()); }
         let Some(script) = script else { return Ok(()); };
         let base = self.dom_document_base_url(document).map_err(|error| throw_dom_error(self, error))?;
         let script_url = match script.src.as_deref() {
