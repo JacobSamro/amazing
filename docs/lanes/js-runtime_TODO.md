@@ -1426,3 +1426,51 @@ Matched 15-second/4-job whole selections: Proxy **280/311**, Object
 **3338/3414**, Reflect **151/154**, Function **502/515**, all unchanged.
 Unique union **4394 cases**, **4271 passing before and after**, zero losses
 and zero timeouts. HTML owns the installed cross-origin descriptor gate.
+
+## JSRT-37 Mapped and unmapped Arguments objects (2026-10-03)
+
+Frozen base `a157bdb407e4899a396e8511a14d7c4bf44671c5`. Arguments creation
+and exotic algorithms are ported from Boa's
+`core/engine/src/builtins/function/arguments.rs` at
+`39cd11214ecb366200157dab96b3919e61e9a391` (MIT), adapted to shared
+`BindingCell` ownership. The mapped object's parameter map retains individual
+cells, not a whole environment. Escaping arguments preserves live aliases;
+successful deletion, accessor conversion and non-writable definitions release
+only the corresponding alias. The current engine uses strong Rc ownership and
+has no tracing collector; this ticket adds no collector or GC contract.
+
+Only sloppy simple parameter lists map indices, and the rightmost duplicate
+formal claims its name even when no corresponding argument was supplied.
+Strict and non-simple lists create ordinary objects carrying the Arguments
+brand. Both variants retain the realm's saved original Array iterator.
+Unmapped callee uses a saved per-realm ThrowTypeError intrinsic, independent of
+later mutation of Function.prototype's configurable restricted properties.
+
+Mapped Get and own descriptors read the live formal cell. Set writes the map
+before ordinary receiver semantics only when the receiver is the same object;
+another receiver shadows without writing the original map. Ordinary descriptor
+validation completes before mapped Define updates or detaches the alias.
+Freezing snapshots the live value before detachment; sealing preserves writable
+aliases. Successful low-level deletion also removes its map entry, covering
+both captured-reference and existing raw deletion consumers. Mapped exotics
+already bypass VM ordinary-object property caches; no VM metadata changes.
+
+Five grouped regressions cover both entry backends plus an AST-fallback
+callable, escaped aliases, duplicate and missing formals, reflective receiver
+semantics, Proxy forwarding, seal/freeze, accessor and non-writable detachment,
+abrupt descriptor conversion, brand and intrinsic mutation. The final gate
+covers workspace/doctests and whole language plus Arguments, Function, Object,
+Reflect and Proxy corpora. Measurements follow after the immutable run.
+
+Final Boat workspace **3762 passed/17 skipped, 74.979 seconds**, **4 doctests**;
+**549 amazing-js tests** include five new grouped regressions. Matched whole
+language **23977 → 24029/24590** (+52), including arguments-object
+**240 → 263/263** (+23). Object **3338 → 3347/3414** (+9); Function
+**502/515**, Reflect **151/154**, Proxy **280/311** unchanged. Unique union
+**28984 cases**, **28248 → 28309 passing** (+61), **82 gained variants**,
+zero lost files or variants, zero timeouts. The empty built-ins/Arguments
+filter is explicitly recorded; actual arguments-object coverage is derived
+from the complete language records. Initial iteration's only failure was
+the explicit Bytecode unsupported-fallback declaration fixture, corrected
+by AST seeding before both-backend calls; all production/native cases pass
+in the final repeat. Evidence: `js-runtime_jsrt37_evidence.json`.

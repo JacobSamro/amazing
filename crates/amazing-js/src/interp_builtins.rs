@@ -2174,10 +2174,10 @@ fn native_object_get_own_property_descriptor(
             return Ok(JsValue::object(descriptor));
         }
     }
-    let property = match &key {
+    let property = if let Some(result) = arguments_own_property(object, &key) { result? } else { match &key {
         PropertyKey::String(name) => i.legacy_own_property(object, name, false)?,
         PropertyKey::Symbol(_) => object.borrow().own_prop(&key).cloned(),
-    };
+    } };
     Ok(property.map(|property| object_descriptor_value(i, property))
         .unwrap_or(JsValue::Undefined))
 }
@@ -2511,6 +2511,7 @@ fn native_object_to_string(
         JsValue::BigInt(_) => "BigInt",
         JsValue::Str(_) => "String",
         JsValue::Symbol(_) => "Symbol",
+        JsValue::Object(o) if o.borrow().arguments_object => "Arguments",
         JsValue::Object(o) => match &o.borrow().exotic {
             Exotic::Array => "Array",
             Exotic::Map(_) => "Map",

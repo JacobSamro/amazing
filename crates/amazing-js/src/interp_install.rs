@@ -475,6 +475,7 @@ impl Interpreter {
             // non-throwing "caller" on plain sloppy functions that shadows this inherited
             // pill, so the two no longer collide.
             let thrower = symbol_method(self, "", native_throw_type_error_intrinsic);
+            self.intrinsic_arguments_thrower = thrower.clone();
             // 10.2.4 %ThrowTypeError% ( ): unlike an ordinary anonymous built-in function
             // (which `symbol_method` otherwise models correctly, with configurable "name"/
             // "length"), this ONE intrinsic is explicitly unforgeable and frozen: [[Extensible]]

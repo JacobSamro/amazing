@@ -282,6 +282,7 @@ pub struct Interpreter {
     /// fast paths that skip the iterator protocol entirely (destructuring, spread, `iterate()`)
     /// silently kept reading array elements by index instead of actually calling the override.
     original_array_iterator: JsValue,
+    intrinsic_arguments_thrower: JsValue,
     pub string_proto: Obj,
     pub number_proto: Obj,
     pub boolean_proto: Obj,
@@ -509,6 +510,7 @@ impl Interpreter {
             async_generator_proto,
             array_proto,
             original_array_iterator: JsValue::Undefined,
+            intrinsic_arguments_thrower: JsValue::Undefined,
             string_proto,
             number_proto,
             boolean_proto,
@@ -1722,6 +1724,7 @@ include!("interp_promise_finally.rs");
 include!("interp_promise_keyed.rs");
 include!("interp_function_environments.rs");
 include!("interp_array.rs");
+include!("interp_arguments.rs");
 include!("interp_array_protocol.rs");
 include!("interp_array_factories.rs");
 include!("interp_class_private.rs");

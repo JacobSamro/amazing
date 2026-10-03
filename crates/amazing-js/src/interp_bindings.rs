@@ -314,6 +314,7 @@ impl Interpreter {
         let owner = Self::binding_owner(object)?;
         if let Some(result) = self.window_proxy_own_property(&owner, &name.into()) { return result; }
         if let Some(result) = self.proxy_get_own_property(&owner, &name.into()) { return result; }
+        if let Some(result) = arguments_own_property(&owner, &name.into()) { return result; }
         self.legacy_own_property(&owner, name, false)
     }
 

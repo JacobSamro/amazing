@@ -1,0 +1,173 @@
+{
+  "ticket": "JSRT-37",
+  "base_sha": "a157bdb407e4899a396e8511a14d7c4bf44671c5",
+  "linux_host": "Boat native /tmp source and target",
+  "workspace_nextest": {
+    "passed": 3762,
+    "skipped": 17,
+    "elapsed_seconds": 74.979
+  },
+  "workspace_doctests_passed": 4,
+  "crate_nextest_passed_in_workspace": 549,
+  "grouped_regressions": 5,
+  "upstream": {
+    "repo": "boa-dev/boa",
+    "path": "core/engine/src/builtins/function/arguments.rs",
+    "sha": "39cd11214ecb366200157dab96b3919e61e9a391",
+    "license": "MIT"
+  },
+  "initial_iteration": {
+    "workspace_passed": 3761,
+    "workspace_failed": 1,
+    "reason": "Explicit Bytecode declaration fixture rejected intentionally unsupported AST fallback callable; corrected by TreeWalk seeding and invocation from either entry backend. Corpus not reached. Final repeat also includes granted mutable var cell identity preservation and function-hoist/eval escaped-alias regressions."
+  },
+  "empty_filter": "built-ins/Arguments has no pinned cases; actual language/arguments-object is covered by whole language selection and separately summarized below.",
+  "selections": {
+    "language": {
+      "selected": 24590,
+      "before_files": {
+        "pass": 23977,
+        "fail": 587,
+        "timeout": 0,
+        "unsupported": 26
+      },
+      "after_files": {
+        "pass": 24029,
+        "fail": 535,
+        "timeout": 0,
+        "unsupported": 26
+      },
+      "gained": 52,
+      "lost": 0,
+      "before_classification_sha256": "228e10b5752dafbd5247a9e2573b3520d353906e83da4a354681d81367883641",
+      "after_classification_sha256": "e7cb39dd50618ca4425df1aefe4f30c40fbc7d684d2fda6f4a02e028b5190be0",
+      "before_host_sha256": "4be8592f6d7852ded9944a6be0c898ddc520f94c0d012a87bd064c764d12b875",
+      "after_host_sha256": "69cbb8c495327453c1efa9a966812b05708fe31e6d38cb94d064b32dc349912d",
+      "after_elapsed_seconds": 54.011,
+      "gained_variants": 70,
+      "lost_variants": 0
+    },
+    "built-ins-Function": {
+      "selected": 515,
+      "before_files": {
+        "pass": 502,
+        "fail": 13,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after_files": {
+        "pass": 502,
+        "fail": 13,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": 0,
+      "lost": 0,
+      "before_classification_sha256": "894f3213672245258e9b7cbcdeadf23887365093e9e482c0ded913a1ee3b9d7c",
+      "after_classification_sha256": "894f3213672245258e9b7cbcdeadf23887365093e9e482c0ded913a1ee3b9d7c",
+      "before_host_sha256": "4be8592f6d7852ded9944a6be0c898ddc520f94c0d012a87bd064c764d12b875",
+      "after_host_sha256": "69cbb8c495327453c1efa9a966812b05708fe31e6d38cb94d064b32dc349912d",
+      "after_elapsed_seconds": 4.306,
+      "gained_variants": 0,
+      "lost_variants": 0
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before_files": {
+        "pass": 3338,
+        "fail": 75,
+        "timeout": 0,
+        "unsupported": 1
+      },
+      "after_files": {
+        "pass": 3347,
+        "fail": 66,
+        "timeout": 0,
+        "unsupported": 1
+      },
+      "gained": 9,
+      "lost": 0,
+      "before_classification_sha256": "e8e2114e545ee1439f137fa7a2299a798a3fc610bec1bb77205b4a1d5b58ab8f",
+      "after_classification_sha256": "4a5fbcba58eedc08c37de476ace69b3c4bc3287a2cd1bafcc32a28f11f897eee",
+      "before_host_sha256": "4be8592f6d7852ded9944a6be0c898ddc520f94c0d012a87bd064c764d12b875",
+      "after_host_sha256": "69cbb8c495327453c1efa9a966812b05708fe31e6d38cb94d064b32dc349912d",
+      "after_elapsed_seconds": 10.237,
+      "gained_variants": 12,
+      "lost_variants": 0
+    },
+    "built-ins-Reflect": {
+      "selected": 154,
+      "before_files": {
+        "pass": 151,
+        "fail": 3,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after_files": {
+        "pass": 151,
+        "fail": 3,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": 0,
+      "lost": 0,
+      "before_classification_sha256": "1303153f6cec560e7c38755b8c4f17605fcfb1ee9f33466c998656ca7ce7d825",
+      "after_classification_sha256": "1303153f6cec560e7c38755b8c4f17605fcfb1ee9f33466c998656ca7ce7d825",
+      "before_host_sha256": "4be8592f6d7852ded9944a6be0c898ddc520f94c0d012a87bd064c764d12b875",
+      "after_host_sha256": "69cbb8c495327453c1efa9a966812b05708fe31e6d38cb94d064b32dc349912d",
+      "after_elapsed_seconds": 3.158,
+      "gained_variants": 0,
+      "lost_variants": 0
+    },
+    "built-ins-Proxy": {
+      "selected": 311,
+      "before_files": {
+        "pass": 280,
+        "fail": 31,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after_files": {
+        "pass": 280,
+        "fail": 31,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": 0,
+      "lost": 0,
+      "before_classification_sha256": "56bd7ed8b2e85694af8ab3d9f919f63cb0dae8f151b0b844c6395fe96abbd723",
+      "after_classification_sha256": "56bd7ed8b2e85694af8ab3d9f919f63cb0dae8f151b0b844c6395fe96abbd723",
+      "before_host_sha256": "4be8592f6d7852ded9944a6be0c898ddc520f94c0d012a87bd064c764d12b875",
+      "after_host_sha256": "69cbb8c495327453c1efa9a966812b05708fe31e6d38cb94d064b32dc349912d",
+      "after_elapsed_seconds": 4.126,
+      "gained_variants": 0,
+      "lost_variants": 0
+    }
+  },
+  "arguments_object_subdirectory": {
+    "selected": 263,
+    "before": {
+      "pass": 240,
+      "fail": 23
+    },
+    "after": {
+      "pass": 263
+    },
+    "gained": 23,
+    "lost": 0
+  },
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "unique_union": {
+    "selected": 28984,
+    "before_passing": 28248,
+    "after_passing": 28309,
+    "gained": 61,
+    "lost": 0,
+    "before_passing_variants": 52943,
+    "after_passing_variants": 53025,
+    "gained_variants": 82,
+    "lost_variants": 0
+  }
+}

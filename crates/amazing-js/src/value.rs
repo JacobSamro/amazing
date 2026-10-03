@@ -223,6 +223,7 @@ impl fmt::Debug for Obj {
         match (&b.exotic, &b.func) {
             (_, Some(func)) => write!(f, "[function {}]", func.name),
             (Exotic::Array, _) => write!(f, "[array; {} props]", b.props.len()),
+            (Exotic::Arguments(_), _) => write!(f, "[mapped arguments]"),
             (Exotic::TypedArray, _) => write!(f, "[typed array]"),
             (Exotic::Error, _) => write!(f, "[error]"),
             (Exotic::Map(_), _) => write!(f, "[map]"),
@@ -769,6 +770,8 @@ pub enum Exotic {
     Ordinary,
     WindowProxy(Rc<RefCell<crate::interp::WindowProxyState>>),
     Array,
+    /// Cell-only aliases preserve escaped arguments without retaining a whole environment.
+    Arguments(HashMap<PropertyKey, crate::env::BindingCell>),
     TypedArray,
     Error,
     Map(MapState),
@@ -968,6 +971,7 @@ pub struct JsObject {
     pub(crate) realm: Option<u64>,
     pub proto: Option<Obj>,
     pub exotic: Exotic,
+    pub(crate) arguments_object: bool,
     /// Whether new own properties may be created.
     pub extensible: bool,
     /// Callable payload; `Some` iff this object is a function.
@@ -1023,6 +1027,7 @@ impl JsObject {
             realm: None,
             proto: None,
             exotic: Exotic::Ordinary,
+            arguments_object: false,
             extensible: true,
             func: None,
             constructed: false,
@@ -1221,6 +1226,7 @@ impl JsObject {
                     .collect();
             }
             self.shape_version = self.shape_version.wrapping_add(1);
+            if let Exotic::Arguments(map) = &mut self.exotic { map.remove(&key); }
             true
         } else {
             true

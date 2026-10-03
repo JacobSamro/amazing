@@ -86,6 +86,17 @@ impl BindingCell {
         Ok(binding.value.clone())
     }
 
+    /// Write an initialized mutable formal cell retained by mapped arguments.
+    pub(crate) fn write_mutable(&self, value: JsValue) -> Result<(), Throw> {
+        let mut binding = self.0.borrow_mut();
+        if !binding.initialized { return Err(Throw::reference_error("parameter is uninitialized")); }
+        if !binding.mutable || binding.import_target.is_some() {
+            return Err(Throw::type_error("binding is not mutable"));
+        }
+        binding.value = value;
+        Ok(())
+    }
+
     pub fn is_uninitialized(&self) -> bool {
         !self.target().0.borrow().initialized
     }
@@ -191,6 +202,14 @@ impl Env {
                     let _ = object.define(name, property);
                 }
             }
+        }
+        // Var/function redeclaration reuses its existing binding identity.
+        // Mapped arguments and escaped references retain this precise cell.
+        if let Some(cell) = self.vars.get(name) {
+            let mut existing = cell.0.borrow_mut();
+            existing.value = value;
+            existing.initialized = true;
+            return Ok(());
         }
         self.vars.insert(
             name.to_string(),

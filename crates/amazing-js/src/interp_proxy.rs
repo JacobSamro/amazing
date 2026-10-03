@@ -276,6 +276,7 @@ impl Interpreter {
     fn default_get_own_property(&mut self, target: &Obj, key: &PropertyKey) -> Result<Option<Property>, Throw> {
         if let Some(result) = self.proxy_get_own_property(target, key) { return result; }
         if let Some(result) = self.window_proxy_own_property(target, key) { return result; }
+        if let Some(result) = arguments_own_property(target, key) { return result; }
         if let Some(descriptor) = binary_index_descriptor(target, key) { return Ok(descriptor); }
         match key.as_string() {
             Some(name) => self.legacy_own_property(target, name.clone(), false),

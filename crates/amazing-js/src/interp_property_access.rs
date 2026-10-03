@@ -24,6 +24,7 @@ impl Interpreter {
                 return self.binding_with_realm(realm, |i| i.get_prop_receiver(&JsValue::Object(global), key, receiver));
             }
             if let Some(result) = self.proxy_get(object, key, receiver.clone()) { return result; }
+            if let Some(cell) = arguments_mapped_cell(object, key) { return cell.read(); }
         }
         let text = key.as_string().map(|name| name.to_utf8_lossy());
         let k = text.as_deref().unwrap_or("");
@@ -135,6 +136,7 @@ impl Interpreter {
             return Err(Throw::type_error("module namespace properties cannot be assigned"));
         }
         if let Some(result) = binary_set_index(self, &o, &key, x.clone()) { return result; }
+        arguments_write_mapping(&o, &key, x.clone())?;
         if let Some(forward_to) = self.binding_put_forwards_target(&o, k) {
             let target = self.get_prop(v, k)?;
             self.set_prop(&target, forward_to, x)?;

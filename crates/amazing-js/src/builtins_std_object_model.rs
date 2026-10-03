@@ -1,3 +1,5 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/function/arguments.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // Ordinary object operations shared by the standard-library built-ins.
 // These live beside the built-ins until the runtime adopts them.
 
@@ -71,6 +73,13 @@ impl Interpreter {
         }
 
         let mut fields = self.std_descriptor_fields(descriptor)?;
+        let mapped_cell = arguments_mapped_cell(target, key);
+        let mapped_value = fields.value.clone();
+        let mapped_detach = fields.get.is_some() || fields.set.is_some() || fields.writable == Some(false);
+        if fields.get.is_none() && fields.set.is_none() && fields.value.is_none()
+            && fields.writable == Some(false) {
+            if let Some(cell) = &mapped_cell { fields.value = Some(cell.read()?); }
+        }
         let is_array = matches!(target.borrow().exotic, Exotic::Array);
         if is_array && key.as_string().is_some_and(|name| name.to_utf8_lossy() == "length") {
             if let Some(value) = fields.value.take() {
@@ -95,7 +104,9 @@ impl Interpreter {
             return Ok(false);
         }
 
-        let original = if let Some(name) = key.as_string() {
+        let original = if let Some(result) = arguments_own_property(target, key) {
+            result?
+        } else if let Some(name) = key.as_string() {
             self.legacy_own_property(target, name, false)?
         } else { target.borrow().own_prop(key).cloned() }.or_else(|| {
             if key.as_string().is_some_and(|name| name.to_utf8_lossy() == "length") {
@@ -174,6 +185,7 @@ impl Interpreter {
             if self.legacy_define(target, name, &property)? { return Ok(true); }
         }
         target.borrow_mut().define(key, property).unwrap();
+        arguments_finish_define(target, key, mapped_cell, mapped_value, mapped_detach)?;
         if let Some(index) = extending_array_index {
             let mut length = target.borrow().own_prop("length").cloned().unwrap();
             length.value = JsValue::num(index as f64 + 1.0);
@@ -185,6 +197,9 @@ impl Interpreter {
     fn set_with_receiver(&mut self, target: &Obj, key: &PropertyKey, value: JsValue, receiver: JsValue) -> Result<bool, Throw> {
         if let Some(result) = self.window_proxy_set(target, key, value.clone(), receiver.clone()) { return result; }
         if let Some(result) = self.proxy_set(target, key, value.clone(), receiver.clone()) { return result; }
+        if matches!(&receiver, JsValue::Object(object) if Rc::ptr_eq(&object.0, &target.0)) {
+            arguments_write_mapping(target, key, value.clone())?;
+        }
         if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
             return Ok(false);
         }
@@ -287,7 +302,8 @@ impl Interpreter {
         // real descriptor object handed to arbitrary trap code, so build one
         // and fall back for this (rare -- ordinary objects are the common
         // case) branch only.
-        if self.is_window_proxy(target) || self.proxy_parts(target).is_some() {
+        if self.is_window_proxy(target) || self.proxy_parts(target).is_some()
+            || matches!(&target.borrow().exotic, Exotic::Arguments(_)) {
             let mut descriptor = JsObject::ordinary();
             descriptor.set_own("value", value);
             if existing.is_none() {
