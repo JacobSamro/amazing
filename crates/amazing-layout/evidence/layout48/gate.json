@@ -1,0 +1,63 @@
+{
+  "session": 10684,
+  "exit_code": 0,
+  "fixed_base": "7096c91c31f3178f395a11ee8da16df988da89e0",
+  "workspace": {
+    "passed": 3657,
+    "skipped": 17
+  },
+  "layout": 467,
+  "doctests": 4,
+  "harness": 7,
+  "geometry": {
+    "before": 0,
+    "after": 4,
+    "eligible": 4,
+    "lost": 0
+  },
+  "static": {
+    "before": 960,
+    "after": 972,
+    "eligible": 1765,
+    "lost": 0
+  },
+  "log_sha256": {
+    "before-build.log": "d9a328f81141800f398c448a5bf9ffca75b994db421baa1c5bf738a53c1b7741",
+    "after-css-CSS2-normal-flow.log": "9c4c04fd8d654f1445f11f17acac04dff269becdc6d1ed49c75bf47c6e9bc354",
+    "before-css-css-display.log": "8baf9e6706494e0129984cd6ea52289d45e88dc1e9e700798be2284d22e01d0c",
+    "before-geometry-pixels.log": "53424d15ebb33c647175316a60920badcc2b447ee2ff9581350cec2b363e1684",
+    "after-css-css-viewport.log": "afc9a006d628d49dd1d6e7f6270d5481dbdac1138d21dda14a07aa07d77de430",
+    "before-css-css-contain.log": "79e494d2849cf45e66e3b508c4fc231d50d942f7e5e92c0223dc47790df25811",
+    "after-css-css-overflow.log": "df563c2948107aace9cb09333f1d6ff37c6ab6f2437c464a8928d59ac7991de1",
+    "before-css-CSS2-normal-flow.log": "490e5b682ae7e3a896845041d26e108c27d39728aa32fd7124cd06485f81622f",
+    "after-css-css-position.log": "2618ac150ec0b6e21a0a85def2226af7b71d3d2c8b3db1d21d388a419254ef42",
+    "after-css-css-ruby.log": "f365f27897489b520653f89f9601efbb66d965f752109286afe856c2ef586527",
+    "nextest.log": "4d32b7a4be6115c828a3c95abd8c953be7d7e6607e5f672ea1e9c6ee5c0e6235",
+    "after-css-CSS2-floats.log": "da182a6d07f85f7b588406e23890f3305ada4e9b42d1348ae2207e5a7c5b0fe1",
+    "after-css-css-fonts.log": "88a4aa4b4f5a1d5187a192edcd917c37412171335735cd54b2fe7e30ff1bff25",
+    "before-css-css-viewport.log": "449673cf53d3b1e49c1a80209bf0ce42add895b119b208eb105529c05f7124ac",
+    "after-css-css-contain.log": "9b4ba7718ceb6713b2d2e42f518e7503b774292009c78f422638e5c1000eb3c0",
+    "before-css-css-ruby.log": "504d9040802f5b527606cb1a0ce6e1bf277368410248c2de6de2b6759cc878a9",
+    "before-css-css-overflow.log": "5be1e2a0a96d820cda439535a44084147c97a07f9ef9151d8b1f972ca679c78e",
+    "before-css-css-tables.log": "1126773a78bbb7fb394c4c38bdec13ecc9d7f2865526852ad0e99061cc3f1101",
+    "before-css-CSS2-floats.log": "b6f4e75367fec56c6aba00679517437898ff32e9fde74337fe5e9715b960fca1",
+    "after-css-css-transforms.log": "b81b6663d7ddb410ba0716fe58a8ce3ec9f153489f10a210d4940f1c0714d78f",
+    "before-css-CSS2-positioning.log": "33104f5d0087cbc93c20623bfefeacaa3c3c581c32eefc9b4204c61e5dd3fd0d",
+    "after-css-css-tables.log": "696ccb7915a5aa78de230045bd108daeee9c56ce640a6f60640d75d5d3d6d279",
+    "before-css-css-position.log": "e80b2dfb1049c707ebd7f5c18f6dd53190c9994fed1b27eaab66e286afaaf2e2",
+    "before-css-css-fonts.log": "7992357d31d5fd356aabde6ed065106ce485aea51af03e9261905cb79f8d80b5",
+    "after-build.log": "5020f950303250c75b861d6ef3899132d3ab18435fdb0d2f71d05742e12d4f0d",
+    "before-css-css-transforms.log": "edbb500e3420921754e4698753cf2bf8e3b9d97138e6f8b10c8d321ff930aeed",
+    "before-css-css-backgrounds.log": "8d9baad4c4d0b6667895b5149601583351b523af4f73940a2677c9ac20acbbd0",
+    "harness.log": "209637c5270ea62667d3505f25f6e8e713fd220b3020983b799e40ff6ae4138a",
+    "before-css-css-sizing.log": "18ead1ce745ea8ae1c6b2dffe2d6d8742547679c916663f24e5df10e81848316",
+    "before-css-css-images.log": "cb688ee2090ff23ead5a41c7411e2dbc79f9cd0d8d2798140d85da4e03e7eea9",
+    "after-geometry-pixels.log": "6c491490659fff14282e58337f91dcdddce9921948bd1d69668c8e90bd60d035",
+    "after-css-css-backgrounds.log": "370d3e9295cf808ffe5c8a56c68e26f3745f277f8de24704647857d6b5120e47",
+    "after-css-CSS2-positioning.log": "fea25ca0829f654e2938acf4c182e0d165acc0cbb6d7c5b71bc1a4eff236290e",
+    "after-css-css-images.log": "8d3be5a0456fbb9ff208da28e3bb1b462fbf9adf8d179b063ef703d9faf21518",
+    "after-css-css-sizing.log": "1ce652cc181e76541c67b5b0129d02273e453d85ba8d112c888053ab2acf0c02",
+    "after-css-css-display.log": "6809e94af4881c38d8c5f1f42cb8bd1fc8f174c25989d045739283fae553ed43",
+    "doctests.log": "7a71db83b91e7278555f40aeaaf884800c2e1fd660950e710601ed60120851e1"
+  }
+}
