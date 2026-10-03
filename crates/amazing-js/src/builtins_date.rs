@@ -1268,16 +1268,6 @@ impl Interpreter {
             "constructor",
             binary_writable_property(constructor.clone()),
         );
-        // Objects with [[DateValue]] report "[object Date]". Date.prototype is
-        // itself ordinary, so this tag must live on the prototype. It is made
-        // writable so an instance can still shadow it with its own
-        // @@toStringTag (symbol-tag-override-instances.js); the engine has no
-        // Exotic::Date brand, and Test262 does not observe the inherited-tag
-        // difference for Date.prototype itself.
-        let _ = proto.borrow_mut().define(
-            WellKnownSymbol::ToStringTag.symbol(),
-            symbol_data(JsValue::str("Date"), true, true),
-        );
 
         for (name, native, length) in [
             ("getTime", date_proto_get_time as crate::value::NativeFn, 0),
@@ -1365,5 +1355,63 @@ impl Interpreter {
         }
 
         self.define_global("Date", constructor);
+    }
+}
+
+#[cfg(test)]
+mod date_tag_metadata_tests {
+    use super::*;
+    #[test]
+    fn initial_date_prototype_has_no_explicit_tag_and_proxy_date_is_unbranded() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();
+            let source=r#"
+              var valid=Object.getOwnPropertyDescriptor(Date.prototype,Symbol.toStringTag)===undefined && !Reflect.ownKeys(Date.prototype).includes(Symbol.toStringTag);
+              valid=valid && Object.prototype.toString.call(Date.prototype)==='[object Object]';
+              var date=new Date(0),proxy=new Proxy(date,{});date.join=undefined;
+              valid=valid && Object.prototype.toString.call(date)==='[object Date]' && Object.prototype.toString.call(proxy)==='[object Object]';
+              valid=valid && Array.prototype.toString.call(date)==='[object Date]' && Array.prototype.toString.call(proxy)==='[object Object]';valid;
+            "#;
+            assert_eq!(i.run_script_with_backend(source,backend).unwrap(),JsValue::Bool(true),"{backend:?}");
+        }
+    }
+    #[test]
+    fn user_date_tags_preserve_receiver_override_and_abrupt_observation() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();
+            let source=r#"
+              var valid=true,date=new Date(0),proxy=new Proxy(date,{}),seen;
+              Object.defineProperty(date,Symbol.toStringTag,{get:function(){seen=this;return'Custom';},configurable:true});
+              valid=valid && Object.prototype.toString.call(proxy)==='[object Custom]' && seen===proxy;
+              valid=valid && Object.prototype.toString.call(date)==='[object Custom]' && seen===date;
+              delete date[Symbol.toStringTag];Date.prototype[Symbol.toStringTag]='User';
+              valid=valid && Object.prototype.toString.call(proxy)==='[object User]' && Object.prototype.toString.call(Date.prototype)==='[object User]';
+              delete Date.prototype[Symbol.toStringTag];date[Symbol.toStringTag]=7;
+              valid=valid && Object.prototype.toString.call(date)==='[object Date]' && Object.prototype.toString.call(proxy)==='[object Object]';
+              var error={};Object.defineProperty(date,Symbol.toStringTag,{get:function(){throw error;},configurable:true});
+              try{Object.prototype.toString.call(proxy);valid=false;}catch(e){valid=valid && e===error;}
+              var revoked=Proxy.revocable(date,{});revoked.revoke();try{Object.prototype.toString.call(revoked.proxy);valid=false;}catch(e){valid=valid && e instanceof TypeError;}valid;
+            "#;
+            assert_eq!(i.run_script_with_backend(source,backend).unwrap(),JsValue::Bool(true),"{backend:?}");
+        }
+    }
+    #[test]
+    fn foreign_date_tags_do_not_leak_a_brand_through_proxy_or_prototype() {
+        for backend in [ExecutionBackend::TreeWalk,ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();let global=i.binding_create_object(None).unwrap();let realm=i.binding_create_realm(global).unwrap();
+            for(name,source) in [("foreignDate","new Date(0)"),("foreignDatePrototype","Date.prototype"),("foreignTag","Object.prototype.toString"),("foreignArrayTag","Array.prototype.toString"),("foreignType","TypeError.prototype")] {
+                let value=i.binding_eval_in_realm(realm,source).unwrap();i.global_env.declare_var(name,value).unwrap();
+            }
+            let source=r#"
+              var valid=Object.getOwnPropertyDescriptor(foreignDatePrototype,Symbol.toStringTag)===undefined;
+              valid=valid && foreignTag.call(foreignDatePrototype)==='[object Object]' && Object.prototype.toString.call(foreignDate)==='[object Date]';
+              var proxy=new Proxy(foreignDate,{});foreignDate.join=undefined;
+              valid=valid && foreignTag.call(proxy)==='[object Object]' && foreignArrayTag.call(proxy)==='[object Object]';
+              var seen;Object.defineProperty(foreignDate,Symbol.toStringTag,{get:function(){seen=this;return'ForeignUser';}});
+              valid=valid && foreignTag.call(proxy)==='[object ForeignUser]' && seen===proxy;
+              var revoked=Proxy.revocable(foreignDate,{});revoked.revoke();try{foreignTag.call(revoked.proxy);valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===foreignType;}valid;
+            "#;
+            assert_eq!(i.run_script_with_backend(source,backend).unwrap(),JsValue::Bool(true),"{backend:?}");
+        }
     }
 }

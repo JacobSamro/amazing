@@ -1,0 +1,419 @@
+{
+  "ticket": "JSRT-60",
+  "base_sha": "250e7683e6756d864f7fc6e32e49fbbf7d66db74",
+  "host_profile": "release",
+  "workspace": {
+    "passed": 4043,
+    "skipped": 17,
+    "elapsed_seconds": 74.81
+  },
+  "doctests": 4,
+  "modes": {
+    "default": {
+      "configuration": "AMAZING_JS_VM unset: existing default execution policy",
+      "unique": {
+        "selected": 32419,
+        "before_pass": 32214,
+        "after_pass": 32215,
+        "gained_files": [
+          "built-ins/Array/prototype/toString/non-callable-join-string-tag.js"
+        ],
+        "lost_files": [],
+        "gained_variants": [
+          [
+            "built-ins/Array/prototype/toString/non-callable-join-string-tag.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/toString/non-callable-join-string-tag.js",
+            "strict"
+          ]
+        ],
+        "lost_variants": []
+      },
+      "selections": {
+        "built-ins-Date": {
+          "execution_mode": "default",
+          "selected": 618,
+          "before": {
+            "pass": 618,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53254
+          },
+          "after": {
+            "pass": 618,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53254
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 4.362,
+          "elapsed_after": 4.063,
+          "before_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "after_host_sha256": "43c87ac703710e10cff18a21ee2adff2bcb576725394515249e6754f38c10ab4",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Array": {
+          "execution_mode": "default",
+          "selected": 3332,
+          "before": {
+            "pass": 3326,
+            "fail": 5,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50540
+          },
+          "after": {
+            "pass": 3327,
+            "fail": 4,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50540
+          },
+          "gained": [
+            "built-ins/Array/prototype/toString/non-callable-join-string-tag.js"
+          ],
+          "lost": [],
+          "elapsed_before": 14.705,
+          "elapsed_after": 14.797,
+          "before_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "after_host_sha256": "43c87ac703710e10cff18a21ee2adff2bcb576725394515249e6754f38c10ab4",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Object": {
+          "execution_mode": "default",
+          "selected": 3414,
+          "before": {
+            "pass": 3411,
+            "fail": 2,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50458
+          },
+          "after": {
+            "pass": 3411,
+            "fail": 2,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50458
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 10.075,
+          "elapsed_after": 10.563,
+          "before_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "after_host_sha256": "43c87ac703710e10cff18a21ee2adff2bcb576725394515249e6754f38c10ab4",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Proxy": {
+          "execution_mode": "default",
+          "selected": 311,
+          "before": {
+            "pass": 311,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53561
+          },
+          "after": {
+            "pass": 311,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53561
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 3.159,
+          "elapsed_after": 3.388,
+          "before_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "after_host_sha256": "43c87ac703710e10cff18a21ee2adff2bcb576725394515249e6754f38c10ab4",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Reflect": {
+          "execution_mode": "default",
+          "selected": 154,
+          "before": {
+            "pass": 153,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53718
+          },
+          "after": {
+            "pass": 153,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53718
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 3.099,
+          "elapsed_after": 2.914,
+          "before_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "after_host_sha256": "43c87ac703710e10cff18a21ee2adff2bcb576725394515249e6754f38c10ab4",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "language": {
+          "execution_mode": "default",
+          "selected": 24590,
+          "before": {
+            "pass": 24395,
+            "fail": 169,
+            "timeout": 0,
+            "unsupported": 26,
+            "skipped": 29282
+          },
+          "after": {
+            "pass": 24395,
+            "fail": 169,
+            "timeout": 0,
+            "unsupported": 26,
+            "skipped": 29282
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 55.232,
+          "elapsed_after": 57.141,
+          "before_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "after_host_sha256": "43c87ac703710e10cff18a21ee2adff2bcb576725394515249e6754f38c10ab4",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        }
+      }
+    },
+    "bytecode": {
+      "configuration": "AMAZING_JS_VM=1: existing eligible top-level Program compilation with normal fallback",
+      "unique": {
+        "selected": 32419,
+        "before_pass": 32112,
+        "after_pass": 32113,
+        "gained_files": [
+          "built-ins/Array/prototype/toString/non-callable-join-string-tag.js"
+        ],
+        "lost_files": [],
+        "gained_variants": [
+          [
+            "built-ins/Array/prototype/toString/non-callable-join-string-tag.js",
+            "non-strict"
+          ],
+          [
+            "built-ins/Array/prototype/toString/non-callable-join-string-tag.js",
+            "strict"
+          ]
+        ],
+        "lost_variants": []
+      },
+      "selections": {
+        "built-ins-Date": {
+          "execution_mode": "bytecode",
+          "selected": 618,
+          "before": {
+            "pass": 618,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53254
+          },
+          "after": {
+            "pass": 618,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53254
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 4.1,
+          "elapsed_after": 4.447,
+          "before_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "after_host_sha256": "43c87ac703710e10cff18a21ee2adff2bcb576725394515249e6754f38c10ab4",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Array": {
+          "execution_mode": "bytecode",
+          "selected": 3332,
+          "before": {
+            "pass": 3322,
+            "fail": 9,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50540
+          },
+          "after": {
+            "pass": 3323,
+            "fail": 8,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50540
+          },
+          "gained": [
+            "built-ins/Array/prototype/toString/non-callable-join-string-tag.js"
+          ],
+          "lost": [],
+          "elapsed_before": 14.543,
+          "elapsed_after": 14.324,
+          "before_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "after_host_sha256": "43c87ac703710e10cff18a21ee2adff2bcb576725394515249e6754f38c10ab4",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Object": {
+          "execution_mode": "bytecode",
+          "selected": 3414,
+          "before": {
+            "pass": 3411,
+            "fail": 2,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50458
+          },
+          "after": {
+            "pass": 3411,
+            "fail": 2,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50458
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 10.178,
+          "elapsed_after": 11.178,
+          "before_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "after_host_sha256": "43c87ac703710e10cff18a21ee2adff2bcb576725394515249e6754f38c10ab4",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Proxy": {
+          "execution_mode": "bytecode",
+          "selected": 311,
+          "before": {
+            "pass": 311,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53561
+          },
+          "after": {
+            "pass": 311,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53561
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 3.369,
+          "elapsed_after": 3.302,
+          "before_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "after_host_sha256": "43c87ac703710e10cff18a21ee2adff2bcb576725394515249e6754f38c10ab4",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Reflect": {
+          "execution_mode": "bytecode",
+          "selected": 154,
+          "before": {
+            "pass": 153,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53718
+          },
+          "after": {
+            "pass": 153,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53718
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 3.072,
+          "elapsed_after": 2.917,
+          "before_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "after_host_sha256": "43c87ac703710e10cff18a21ee2adff2bcb576725394515249e6754f38c10ab4",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "language": {
+          "execution_mode": "bytecode",
+          "selected": 24590,
+          "before": {
+            "pass": 24297,
+            "fail": 267,
+            "timeout": 0,
+            "unsupported": 26,
+            "skipped": 29282
+          },
+          "after": {
+            "pass": 24297,
+            "fail": 267,
+            "timeout": 0,
+            "unsupported": 26,
+            "skipped": 29282
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 55.226,
+          "elapsed_after": 56.258,
+          "before_host_sha256": "d0e5f6e968fec2387b4c8cbe798eaa73b9e4a688ea7eaa5d4995f48fa219e3bd",
+          "after_host_sha256": "43c87ac703710e10cff18a21ee2adff2bcb576725394515249e6754f38c10ab4",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        }
+      }
+    }
+  },
+  "source_sha256": {
+    "crates/amazing-js/src/builtins_date.rs": "a765b8b3bb79615ff11ce164ae550bb7f5b8813b496d39e98d7d34c8a88affe3"
+  },
+  "baseline_reuse": "Date two-mode baseline freshly executed against exact JSRT59. Other five whole selections reuse exact JSRT59 final release records; all six baseline host binary hashes are identical, verified."
+}
