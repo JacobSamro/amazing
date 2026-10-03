@@ -1577,7 +1577,7 @@ mod tests {
         for (css, root_transparent, body_transparent) in [
             ("body{background:red}", true, false),
             ("html{background:white}body{background:red}", false, false),
-            ("html{background:url(root.png)}", false, true),
+            ("html{background-image:url(root.png)}", false, true),
             ("html{background:red;background:initial}body{background:blue}", true, false),
             ("html{background:red;background:revert}body{background:blue}", true, false),
             ("html{background:red}body{background:inherit}", false, false),
