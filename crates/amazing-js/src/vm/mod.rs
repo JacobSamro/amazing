@@ -236,6 +236,7 @@ enum Instruction {
     Call(Register, Register, Register, Vec<CallArgument>),
     Construct(Register, Register, Vec<CallArgument>),
     Throw(Register),
+    RejectCallTarget,
     Yield(Register, Register),
     YieldDelegate(Register, Register),
     /// `yield*` in an async generator: awaits each inner result (see `async_delegate`).
@@ -1204,6 +1205,9 @@ impl Program {
                     Instruction::Construct(dst, callee, arguments) => {
                         let args = expand_arguments(&registers, spreads, arguments)?;
                         registers[*dst] = i.construct(&registers[*callee], args)?;
+                    }
+                    Instruction::RejectCallTarget => {
+                        return Err(Throw::reference_error("function call is not an assignment reference"));
                     }
                     Instruction::Throw(src) => {
                         return Ok(Some(Abrupt::Throw(Throw(registers[*src].clone()))))

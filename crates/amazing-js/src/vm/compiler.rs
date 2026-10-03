@@ -1646,6 +1646,10 @@ impl Compiler {
                 let key = self.member_key(object, prop, true)?;
                 self.emit(Instruction::ResolveMember(slot, old, object, key));
             }
+            ExprKind::Call { optional: false, .. } => {
+                self.expression(target)?;
+                self.emit(Instruction::RejectCallTarget);
+            }
             _ => return Err(self.error(target.span, "assignment target")),
         }
         Ok((slot, old))

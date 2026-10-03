@@ -22,6 +22,10 @@ impl Interpreter {
         match &target.kind {
             ExprKind::Paren(inner) => self.capture_reference(inner, env),
             ExprKind::Ident(identifier) => self.name_reference(env, &identifier.name),
+            ExprKind::Call { optional: false, .. } => {
+                self.eval_expr(target, env)?;
+                Err(Throw::reference_error("function call is not an assignment reference"))
+            }
             ExprKind::Member { obj, prop, optional: false } => {
                 let super_reference = matches!(obj.kind, ExprKind::Super);
                 if super_reference {

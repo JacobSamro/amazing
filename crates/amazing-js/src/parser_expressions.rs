@@ -51,8 +51,12 @@ impl Parser {
                 if matches!(left.kind, ExprKind::Assign { .. }) {
                     return Err(self.err_at(left.span.start, "assignment expression is not an assignment target"));
                 }
-                if !self.strict_script && matches!(left.kind, ExprKind::Call { .. }) {
-                    // Annex B permits a CallExpression as a sloppy assignment target.
+                let mut target = &left;
+                while let ExprKind::Paren(inner) = &target.kind { target = inner; }
+                if matches!(target.kind, ExprKind::Call { .. }) {
+                    // Annex B admits ordinary sloppy calls, including grouped
+                    // calls, but never an optional chain as the target.
+                    ensure_simple_assignable(&left, !self.strict_script).map_err(|e| self.err(e.message))?;
                 } else {
                     ensure_assignable(&left).map_err(|e| self.err(e.message))?;
                 }

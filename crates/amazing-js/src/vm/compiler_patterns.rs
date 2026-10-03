@@ -190,6 +190,10 @@ impl Compiler {
                     let object = self.expression(obj)?;
                     self.write_member_reference(slot, object, prop)?;
                     Ok(Some(slot))
+                } else if matches!(target.kind, ExprKind::Call { optional: false, .. }) {
+                    self.expression(target)?;
+                    self.emit(Instruction::RejectCallTarget);
+                    Ok(Some(slot))
                 } else { Err(self.error(target.span, "assignment target")) }
             }
         })();
