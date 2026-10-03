@@ -354,8 +354,8 @@ fn externally_scheduled_return_and_disposal_never_pump_at_script_entry() {
             .any(|value| value != &JsValue::Bool(true))
         {
             failures.push(format!(
-                "actor={actor}: {}",
-                i.run_script("log.join(',')").unwrap().to_js_string()
+                "actor={actor}: {:?}",
+                i.run_script("log.join(',')").unwrap()
             ));
         }
     }
