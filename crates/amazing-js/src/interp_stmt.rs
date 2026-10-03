@@ -133,6 +133,10 @@ impl Interpreter {
     fn exec_loop_body(&mut self, body: &ast::Stmt, env: &EnvHandle) -> Result<Flow, Throw> {
         let value = self.completion.clone();
         let result = self.exec_stmt(body, env);
+        let result = match result {
+            Err(_) if has_pending_return() => Ok(Flow::Return(take_pending_return().unwrap())),
+            other => other,
+        };
         if self.completion.is_none() { self.completion = value; }
         result
     }

@@ -183,6 +183,18 @@ fn injected_generator_returns_cannot_mask_finalizer_or_disposer_throws() {
         cases.push(format!("var original={{}},same=false;var g=eval('(function*(){{{actor_prefix}try{{yield 1}}finally{{throw undefined}}}})');var it=g();it.next();try{{it.return(original)}}catch(e){{same=e===undefined}}same"));
         cases.push(format!("var original={{}};var g=eval('(function*(){{{actor_prefix}try{{yield 1}}finally{{9}}}})');var it=g();it.next();var r=it.return(original);r.done&&r.value===original"));
     }
+    for actor_prefix in ["", "with({}){};"] {
+        for original_throw in [false, true] {
+            let signal = if original_throw {
+                "it.throw(original)"
+            } else {
+                "it.return(original)"
+            };
+            let expected = if original_throw { "original" } else { "marker" };
+            cases.push(format!("var original={{}},marker={{}},same=false;var iterable={{[Symbol.iterator](){{return {{next(){{return {{value:1,done:false}}}},return(){{throw marker}}}}}}}};var g=eval('(function*(){{{actor_prefix}for(var x of iterable) yield x;}})');var it=g();it.next();try{{{signal}}}catch(e){{same=e==={expected}}}same"));
+        }
+        cases.push(format!("var original={{}},same=false;var iterable={{[Symbol.iterator](){{return {{next(){{return {{value:1,done:false}}}},return(){{throw undefined}}}}}}}};var g=eval('(function*(){{{actor_prefix}for(var x of iterable) yield x;}})');var it=g();it.next();try{{it.return(original)}}catch(e){{same=e===undefined}}same"));
+    }
     let borrowed: Vec<_> = cases
         .iter()
         .map(|source| (source.as_str(), JsValue::Bool(true)))
