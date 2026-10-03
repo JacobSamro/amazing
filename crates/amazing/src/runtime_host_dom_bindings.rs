@@ -2225,6 +2225,8 @@ mod tests {
             const shadowHost=d.createElement('div');d.body.appendChild(shadowHost);
             const closed=shadowHost.attachShadow({mode:'closed'}),shadowText=d.createTextNode('closed');closed.appendChild(shadowText);
             s.setBaseAndExtent(shadowText,0,shadowText,6);
+            check(!s.isCollapsed&&s.rangeCount===0&&s.type==='None'&&s.anchorNode===null,'actual shadow boundaries vs public visibility');
+            let badOptions=false;try{s.getComposedRanges(1);}catch(e){badOptions=e instanceof w.TypeError;}check(badOptions,'dictionary conversion realm');
             const rootSnapshots=Selection.prototype.getComposedRanges.call(s,{shadowRoots:[closed]});
             check(Object.getPrototypeOf(rootSnapshots)===Array.prototype,'result array callee realm');
             check(Object.getPrototypeOf(rootSnapshots[0])===w.StaticRange.prototype&&rootSnapshots[0].startContainer===shadowText,'snapshot Selection realm closed exposure');

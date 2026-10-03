@@ -112,6 +112,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         O::SelectionGetComposedRanges => {
             let mut roots = Vec::new();
             if let Some(options) = args.first().filter(|value| !host.is_nullish(value)) {
+                if !host.is_object_value(options)? { return Err(host.type_error("Expected GetComposedRangesOptions dictionary")); }
                 let value = host.get_property(options, "shadowRoots")?;
                 if !host.is_undefined(&value) { roots = host.sequence_shadow_roots(&value)?; }
             }
@@ -141,7 +142,10 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
             }
             let points = host.with_dom(|dom| dom.selection_visible_points(id))?;
             if op == O::SelectionRangeCount { return Ok(host.number(if points.is_some() { 1. } else { 0. })); }
-            if op == O::SelectionIsCollapsed { return Ok(host.boolean(points.is_none_or(|(anchor, focus)| anchor == focus))); }
+            if op == O::SelectionIsCollapsed {
+                let actual_points = host.with_dom(|dom| dom.selection_points(id))?;
+                return Ok(host.boolean(actual_points.is_none_or(|(anchor, focus)| anchor == focus)));
+            }
             if op == O::SelectionType {
                 let value = match points { None => "None", Some((a,f)) if a == f => "Caret", Some(_) => "Range" };
                 return host.string(&value.encode_utf16().collect::<Vec<_>>());
