@@ -281,12 +281,7 @@ fn doctype_public_system_and_non_fetching_policy() {
     ] {
         malformed(src);
     }
-    assert_eq!(
-        parse_xml("<!DOCTYPE r [<!ENTITY a 'x'>]><r>&a;</r>")
-            .unwrap_err()
-            .kind,
-        XmlErrorKind::Unsupported
-    );
+    assert_eq!(text(&parse_xml("<!DOCTYPE r [<!ENTITY a 'x'>]><r>&a;</r>").unwrap()), "x");
 }
 
 #[test]
@@ -613,9 +608,138 @@ fn xhtml_entity_subset_never_comes_from_mime_namespace_system_url_or_fragment_co
     }
     assert_eq!(parse_xml("<!DOCTYPE r SYSTEM 'https://html.spec.whatwg.org/entities.dtd'><r>&copy;</r>")
         .unwrap_err().kind, XmlErrorKind::Unsupported);
-    assert_eq!(parse_xml("<!DOCTYPE r PUBLIC '-//W3C//DTD XHTML 1.0 Strict//EN' 'unloaded.dtd' [<!ENTITY x 'y'>]><r>&x;</r>")
-        .unwrap_err().kind, XmlErrorKind::Unsupported);
+    assert_eq!(text(&parse_xml("<!DOCTYPE r PUBLIC '-//W3C//DTD XHTML 1.0 Strict//EN' 'unloaded.dtd' [<!ENTITY x 'y'>]><r>&x;&copy;</r>").unwrap()), "y©");
     let dom = parse_xml("<!DOCTYPE r PUBLIC '-//W3C//DTD XHTML 1.0 Strict//EN' 'unloaded.dtd'><r><![CDATA[&copy;]]><!--&copy;--><?p &copy;?></r>").unwrap();
     assert_eq!(text(&dom), "&copy;");
     assert_eq!(parse_xml_fragment(&XmlFragmentContext::default(), "&copy;").unwrap_err().kind, XmlErrorKind::Malformed);
+}
+
+#[test]
+fn internal_dtd_declaration_grammar_and_nonvalidating_defaults() {
+    let source = "<!DOCTYPE r [<!ELEMENT r (a,(b|c)+,d?)><!ELEMENT a EMPTY><!ELEMENT b ANY><!ELEMENT c (#PCDATA|a)*><!ELEMENT d (#PCDATA)><!NOTATION image PUBLIC 'image format'><!ENTITY logo SYSTEM 'logo.bin' NDATA image><!ATTLIST r plain CDATA 'first' plain CDATA 'later' token NMTOKENS '  x   y ' fixed CDATA #FIXED 'default' required ID #REQUIRED implied IDREF #IMPLIED choice (yes|no) 'yes' picture NOTATION (image) #IMPLIED><!--DTD--><?dtd test?>]><r fixed='explicit' choice='not-enumerated'/>";
+    let dom = parse_xml(source).unwrap();
+    let root = elements(&dom)[0];
+    for (name, value) in [("plain", "first"), ("token", "x y"), ("fixed", "explicit"), ("choice", "not-enumerated")] {
+        assert_eq!(dom.get_attribute_ns(root, None, name), Some(value));
+    }
+    assert_eq!(dom.get_attribute_ns(root, None, "required"), None);
+    assert_eq!(dom.get_attribute_ns(root, None, "implied"), None);
+    // Content validity and root/type correspondence are not WF constraints.
+    parse_xml("<!DOCTYPE unrelated [<!ELEMENT unrelated EMPTY>]><r>text</r>").unwrap();
+}
+
+#[test]
+fn internal_dtd_entity_phases_quotes_whitespace_and_first_binding() {
+    let dom = parse_xml("<!DOCTYPE r [<!ENTITY value 'first'><!ENTITY value 'later'><!ENTITY quote '&#34;'><!ENTITY generated '&#13;&#9;'><!ENTITY escaped '&#38;#60;'><!ATTLIST r a NMTOKENS #IMPLIED>]><r a='  x &generated; &#9; &quote; &escaped;  '>&value;&generated;&escaped;</r>").unwrap();
+    let root = elements(&dom)[0];
+    assert_eq!(dom.get_attribute_ns(root, None, "a"), Some("x \t \" <"));
+    assert_eq!(String::from_utf16(&dom.inner_text_approx(root).unwrap()).unwrap(), "first\r\t<");
+    malformed("<!DOCTYPE r [<!ENTITY literal '&#60;'>]><r a='&literal;'/>");
+    malformed("<!DOCTYPE r [<!ENTITY unused '&missing;'>]><r/>");
+    malformed("<!DOCTYPE r [<!ENTITY external SYSTEM 'unloaded'>]><r a='&external;'/>");
+    malformed("<!DOCTYPE r [<!ATTLIST r a CDATA '&later;'><!ENTITY later 'x'>]><r/>");
+    for declaration in ["<!ENTITY lt '<'>", "<!ENTITY amp '&#38;'>", "<!ENTITY gt 'x'>"] {
+        malformed(&format!("<!DOCTYPE r [{declaration}]><r/>"));
+    }
+    parse_xml("<!DOCTYPE r [<!ENTITY lt '&#38;#60;'><!ENTITY amp '&#38;#38;'><!ENTITY gt '&#62;'><!ENTITY apos '\"'><!ENTITY quot '&#34;'>]><r/>").expect_err("wrong apos redeclaration");
+}
+
+#[test]
+fn internal_dtd_defaults_bind_namespaces_before_expanded_names() {
+    let dom = parse_xml("<!DOCTYPE p:r [<!ENTITY uri 'urn:actual'><!ATTLIST p:r xmlns:p CDATA '&uri;' p:a CDATA 'value' xmlns CDATA 'urn:default'>]><p:r><child/></p:r>").unwrap();
+    let nodes = elements(&dom);
+    assert_eq!(dom.namespace_uri(nodes[0]), Some("urn:actual"));
+    assert_eq!(dom.namespace_uri(nodes[1]), Some("urn:default"));
+    assert_eq!(dom.get_attribute_ns(nodes[0], Some("urn:actual"), "a"), Some("value"));
+    malformed("<!DOCTYPE r [<!ATTLIST r xmlns:xml CDATA 'urn:wrong'>]><r/>");
+    malformed("<!DOCTYPE r [<!ATTLIST r xmlns:a CDATA 'urn:x' xmlns:b CDATA 'urn:x' a:c CDATA 'x'>]><r b:c='y'/>");
+}
+
+#[test]
+fn internal_dtd_content_entities_have_actual_balanced_xml_nodes() {
+    let dom = parse_xml("<!DOCTYPE r [<!ENTITY inner '<p:a><![CDATA[&#38;literal;]]></p:a>'><!ENTITY outer 'before&inner;after'>]><r xmlns:p='urn:x'>start&outer;end</r>").unwrap();
+    let nodes = elements(&dom);
+    assert_eq!(dom.namespace_uri(nodes[1]), Some("urn:x"));
+    let children: Vec<_> = dom.children(nodes[0]).collect();
+    assert_eq!(children.len(), 3);
+    assert!(matches!(&dom.get(children[0]).kind, NodeKind::Text { data } if data == "startbefore"));
+    assert!(matches!(&dom.get(children[2]).kind, NodeKind::Text { data } if data == "afterend"));
+    let cdata = dom.children(nodes[1]).next().unwrap();
+    assert!(matches!(&dom.get(cdata).kind, NodeKind::CDATASection { data } if data == "&literal;"));
+    assert_eq!(dom.owner_document(cdata), Some(NodeIdx(0)));
+    for body in ["</r>", "<a>", "<?xml version='1.0'?>", "<!DOCTYPE x>", "]]>"] {
+        malformed(&format!("<!DOCTYPE r [<!ENTITY e \"{body}\">]><r>&e;</r>"));
+    }
+}
+
+#[test]
+fn internal_parameter_entities_are_complete_declaration_sequences() {
+    let source = "<!DOCTYPE r [<!ENTITY % declarations \"<!ENTITY value 'good'><!ATTLIST r a CDATA 'default'>\">%declarations;]><r>&value;</r>";
+    let dom = parse_xml(source).unwrap();
+    let root = elements(&dom)[0];
+    assert_eq!(String::from_utf16(&dom.inner_text_approx(root).unwrap()).unwrap(), "good");
+    assert_eq!(dom.get_attribute_ns(root, None, "a"), Some("default"));
+    for subset in ["<!ENTITY % p 'EMPTY'><!ELEMENT r %p;>", "<!ENTITY % p 'x'><!ENTITY e '%p;'>", "<!ENTITY % p '<!ELEMENT'>%p; r EMPTY>", "<!ENTITY % p '&#37;p;'>%p;"] {
+        malformed(&format!("<!DOCTYPE r [{subset}]><r/>"));
+    }
+    let standalone = format!("<?xml version='1.0' standalone='yes'?>{source}");
+    malformed(&standalone);
+    // A later direct duplicate satisfies the direct-declaration WF rule without
+    // replacing the value from the first parameter-supplied declaration.
+    let source = source.replace("]><r>", "<!ENTITY value 'later'>]><r>");
+    let dom = parse_xml(&format!("<?xml version='1.0' standalone='yes'?>{source}")).unwrap();
+    assert_eq!(String::from_utf16(&dom.inner_text_approx(elements(&dom)[0]).unwrap()).unwrap(), "good");
+}
+
+#[test]
+fn internal_dtd_malformed_families_and_external_boundaries() {
+    for subset in ["<!ELEMENT r>", "<!ELEMENT r (a|b,c)>", "<!ELEMENT r (#PCDATA|a)>", "<!ELEMENT r (a,)>", "<!ATTLIST r a UNKNOWN 'x'>", "<!ATTLIST r a (x|) 'x'>", "<!ATTLIST r a CDATA #FIXED>", "<!NOTATION n PUBLIC 'bad^'>", "<!ENTITY e SYSTEM 'x'NDATA n>", "<!ENTITY % e SYSTEM 'x' NDATA n>", "<![IGNORE[x]]>", "<!--a--b-->", "<?xml bad?>"] {
+        malformed(&format!("<!DOCTYPE r [{subset}]><r/>"));
+    }
+    for subset in ["<!ENTITY e SYSTEM 'unloaded'>", "<!ENTITY e PUBLIC 'public' 'unloaded'>"] {
+        assert_eq!(parse_xml(&format!("<!DOCTYPE r [{subset}]><r>&e;</r>")).unwrap_err().kind, XmlErrorKind::Unsupported);
+        parse_xml(&format!("<!DOCTYPE r [{subset}]><r/>")).unwrap();
+    }
+    malformed("<!DOCTYPE r [<!NOTATION n SYSTEM 'n'><!ENTITY e SYSTEM 'x' NDATA n>]><r>&e;</r>");
+    assert_eq!(parse_xml("<!DOCTYPE r [<!ENTITY % e SYSTEM 'unloaded'>%e;]><r/>").unwrap_err().kind, XmlErrorKind::Unsupported);
+    assert_eq!(parse_xml("<!DOCTYPE r [<!ENTITY a '&b;'><!ENTITY b '&a;'>]><r>&a;</r>").unwrap_err().kind, XmlErrorKind::Malformed);
+    let mut subset = String::new();
+    for n in 0..34 { subset.push_str(&format!("<!ENTITY e{n} '&e{};'>", n+1)); }
+    subset.push_str("<!ENTITY e34 'end'>");
+    assert_eq!(parse_xml(&format!("<!DOCTYPE r [{subset}]><r>&e0;</r>")).unwrap_err().kind, XmlErrorKind::Limit);
+}
+
+
+#[test]
+fn internal_dtd_entities_keep_template_contents_and_public_fragment_boundaries() {
+    let dom = parse_xml("<!DOCTYPE r [<!ENTITY e '<h:template>x<![CDATA[y]]><h:template/></h:template>'>]><r xmlns:h='http://www.w3.org/1999/xhtml'>&e;</r>").unwrap();
+    let root = dom.children(NodeIdx(0)).find(|node| dom.name(*node) == Some("r")).unwrap();
+    let template = dom.children(root).next().unwrap();
+    assert_eq!(dom.children(template).count(), 0);
+    let contents = dom.template_contents(template).unwrap();
+    let owner = dom.owner_document(contents).unwrap();
+    assert_ne!(owner, NodeIdx(0));
+    let nodes: Vec<_> = dom.children(contents).collect();
+    assert_eq!(nodes.len(), 3);
+    assert!(matches!(&dom.get(nodes[1]).kind, NodeKind::CDATASection { data } if data == "y"));
+    for node in nodes { assert_eq!(dom.owner_document(node), Some(owner)); }
+    for parser in [parse_xml as fn(&str) -> Result<Dom, XmlError>, parse_xml_decoded] {
+        let dom = parser("<!DOCTYPE r [<!ENTITY e 'works'>]><r>&e;</r>").unwrap();
+        assert_eq!(text(&dom), "works");
+    }
+    malformed("<!DOCTYPE r [<!ENTITY unused '&unused;'>]><r/>");
+    assert_eq!(parse_xml_fragment(&XmlFragmentContext::default(), "&e;").unwrap_err().kind, XmlErrorKind::Malformed);
+    assert_eq!(parse_xml_fragment(&XmlFragmentContext::default(), "<!DOCTYPE r [<!ENTITY e 'x'>]><r/>").unwrap_err().kind, XmlErrorKind::Malformed);
+}
+
+
+#[test]
+fn internal_entity_recursion_checks_ignore_actual_literal_markup_regions() {
+    let literal = parse_xml("<!DOCTYPE r [<!ENTITY e '<![CDATA[&missing;]]><!--&missing;--><?p &missing;?>'>]><r>&e;</r>").unwrap();
+    assert_eq!(text(&literal), "&missing;");
+    for body in ["<![CDATA[&#38;e;]]>", "<!--&#38;e;-->", "<?p &#38;e;?>"] {
+        let dom = parse_xml(&format!("<!DOCTYPE r [<!ENTITY e '{body}'>]><r>&e;</r>")).unwrap();
+        let root = elements(&dom)[0];
+        assert_eq!(dom.children(root).count(), 1);
+    }
 }

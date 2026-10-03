@@ -1,7 +1,7 @@
 //! Fatal-error XML 1.0 Fifth Edition / Namespaces 1.0 parser.
 //!
 //! Input is already decoded Unicode; CR/CRLF are normalized before parsing.
-//! DTD internal subsets, arbitrary external entity loading, scripting, and
+//! Arbitrary external entity loading, scripting, and
 //! document.write are unsupported. HTML-specified XHTML public identifiers use
 //! the built-in canonical character entity subset; no network access is needed.
 //! No HTML recovery, implicit elements, case folding, or HTML named entities.
@@ -11,6 +11,11 @@ use amazing_dom::Namespace;
 use amazing_dom::{Dom, NodeIdx, NodeKind};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::rc::Rc;
+use std::cell::RefCell;
+#[path = "xml_dtd.rs"]
+mod dtd;
+use dtd::{Dtd, ExpansionBudget, EntityPolicy};
 
 pub const HTML_NAMESPACE: &str = "http://www.w3.org/1999/xhtml";
 pub const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
@@ -95,6 +100,10 @@ struct Parser<'a> {
     external_subset: bool,
     canonical_xhtml_subset: bool,
     standalone: bool,
+    dtd: Rc<Dtd>,
+    budget: Rc<RefCell<ExpansionBudget>>,
+    inherited_depth: usize,
+    replacement: bool,
 }
 type ResultXml<T> = Result<T, XmlError>;
 
@@ -109,7 +118,7 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
 /// Reuses the document declaration grammar during byte encoding selection.
 pub(super) fn encoding_declaration(src: &str) -> Result<Option<String>, XmlError> {
     if !src.starts_with("<?xml") || !src[5..].starts_with(xml_space) { return Ok(None); }
-    let mut parser = Parser { src, pos: 0, external_subset: false, canonical_xhtml_subset: false, standalone: false };
+    let mut parser = Parser { src, pos: 0, external_subset: false, canonical_xhtml_subset: false, standalone: false, dtd: Rc::default(), budget: Rc::default(), inherited_depth: 0, replacement: false };
     parser.declaration().map(|declaration| declaration.encoding)
 }
 
@@ -120,7 +129,14 @@ pub fn parse_xml_decoded(src: &str) -> Result<Dom, XmlError> {
 }
 
 fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool) -> ResultXml<(Dom, Option<XmlDeclaration>)> {
+    parse_inner_with_entities(src, context, strip_bom, None)
+}
+struct EntityContext {
+    dtd: Rc<Dtd>, budget: Rc<RefCell<ExpansionBudget>>, policy: EntityPolicy, depth: usize,
+}
+fn parse_inner_with_entities(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool, entity: Option<EntityContext>) -> ResultXml<(Dom, Option<XmlDeclaration>)> {
     let fragment = context.is_some();
+    let replacement = entity.is_some();
     let mut dom = Dom::new();
     if src.len() > 16 * 1024 * 1024 {
         return Err(XmlError {
@@ -130,14 +146,20 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
         });
     }
     let input = if !strip_bom { src } else { src.strip_prefix('\u{feff}').unwrap_or(src) };
-    let normalized = input.replace("\r\n", "\n").replace('\r', "\n");
+    let normalized = if replacement { std::borrow::Cow::Borrowed(input) }
+        else { std::borrow::Cow::Owned(input.replace("\r\n", "\n").replace('\r', "\n")) };
     let mut p = Parser {
         src: &normalized,
         pos: 0,
         external_subset: false,
         canonical_xhtml_subset: false,
-        standalone: false,
+        standalone: entity.as_ref().is_some_and(|e| e.policy.standalone),
+        dtd: entity.as_ref().map_or_else(Rc::default, |e| e.dtd.clone()),
+        budget: entity.as_ref().map_or_else(Rc::default, |e| e.budget.clone()),
+        inherited_depth: entity.as_ref().map_or(0, |e| e.depth),
+        replacement,
     };
+    if let Some(entity) = entity { p.external_subset = entity.policy.external_subset; p.canonical_xhtml_subset = entity.policy.canonical; }
     // This parser arena is XML even before a response/DOMParser caller installs
     // its actual MIME, URL and selected byte encoding. Template owners inherit
     // the XML document type while retaining their independent creation defaults.
@@ -153,9 +175,7 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
     } else {
         None
     };
-    p.standalone = declaration
-        .as_ref()
-        .is_some_and(|d| d.standalone == Some(true));
+    if !replacement { p.standalone = declaration.as_ref().is_some_and(|d| d.standalone == Some(true)); }
     let mut stack: Vec<Frame> = Vec::new();
     let mut bindings = BTreeMap::from([("xml".into(), XML_NAMESPACE.into())]);
     if let Some(context) = context {
@@ -249,11 +269,11 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
                 system_id = p.literal()?.into();
                 p.space();
             }
-            if p.rest().starts_with('[') {
-                return Err(p.special(
-                    XmlErrorKind::Unsupported,
-                    "DTD internal subsets are unsupported",
-                ));
+            if p.take("[") {
+                let (environment, consumed) = dtd::read_subset(p.rest(), p.pos, p.policy(), &mut p.budget.borrow_mut())?;
+                p.dtd = Rc::new(environment);
+                p.pos += consumed;
+                p.space();
             }
             p.expect(">")?;
             dom.doctype = Some(name.clone());
@@ -286,7 +306,7 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
             if !fragment && stack.is_empty() && root_seen {
                 return Err(p.error("multiple document elements"));
             }
-            if stack.len() >= 512 {
+            if stack.len() + p.inherited_depth >= 512 {
                 return Err(p.special(XmlErrorKind::Limit, "element depth exceeds 512"));
             }
             let qualified = p.qname()?;
@@ -320,8 +340,22 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
                 if raw.contains('<') {
                     return Err(p.error("literal < in attribute"));
                 }
-                let value = p.references(raw, true)?;
+                let mut value = dtd::attribute_value(&p.dtd, &mut p.budget.borrow_mut(), p.policy(), raw, p.pos, !p.replacement)?;
+                if p.dtd.attributes.get(&qualified).is_some_and(|attrs| attrs.iter().any(|a| a.name == key && a.tokenized)) {
+                    value = dtd::collapse_spaces(&value);
+                }
                 attrs.push((key, value));
+            }
+            if let Some(defaults) = p.dtd.attributes.get(&qualified) {
+                for attribute in defaults {
+                    if !raw_names.contains(&attribute.name) {
+                        if let Some(value) = &attribute.default {
+                            if attrs.len() >= 1024 { return Err(p.special(XmlErrorKind::Limit, "attribute count exceeds 1024")); }
+                            p.budget.borrow_mut().charge_bytes(value.len(), p.pos)?;
+                            attrs.push((attribute.name.clone(), value.clone()));
+                        }
+                    }
+                }
             }
             let mut previous_bindings = Vec::new();
             for (key, uri) in &attrs {
@@ -405,8 +439,7 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
                 if raw.contains("]]>") {
                     return Err(p.error("]]> in character data"));
                 }
-                let data = p.references(raw, false)?;
-                p.append_node(&mut dom, parent, NodeKind::Text { data: data.into() })?;
+                p.content(&mut dom, parent, raw, &bindings, stack.len() + p.inherited_depth)?;
             }
         }
     }
@@ -557,81 +590,71 @@ impl<'a> Parser<'a> {
             namespace_uri: uri,
         })
     }
-    fn references(&self, raw: &str, attribute: bool) -> ResultXml<String> {
-        let mut result = String::new();
+    fn policy(&self) -> EntityPolicy {
+        EntityPolicy { external_subset: self.external_subset, canonical: self.canonical_xhtml_subset, standalone: self.standalone }
+    }
+    fn append_text(&self, dom: &mut Dom, parent: NodeIdx, text: &str) -> ResultXml<()> {
+        if text.is_empty() { return Ok(()); }
+        if let Some(last) = dom.last_child(parent).filter(|last| matches!(dom.get(*last).kind, NodeKind::Text { .. })) {
+            let offset = dom.character_data_utf16(last).unwrap().len();
+            self.dom_result(dom.replace_character_data(last, offset, 0, &text.encode_utf16().collect::<Vec<_>>()))?;
+        } else { self.append_node(dom, parent, NodeKind::Text { data: text.into() })?; }
+        Ok(())
+    }
+    fn content(&self, dom: &mut Dom, parent: NodeIdx, raw: &str, bindings: &BTreeMap<String, String>, depth: usize) -> ResultXml<()> {
         let mut rest = raw;
         while !rest.is_empty() {
-            if let Some(tail) = rest.strip_prefix('&') {
-                let end = tail
-                    .find(';')
-                    .ok_or_else(|| self.error("unterminated reference"))?;
-                let entity = &tail[..end];
-                let c = match entity {
-                    "lt" => '<',
-                    "gt" => '>',
-                    "amp" => '&',
-                    "quot" => '"',
-                    "apos" => '\'',
-                    _ => {
-                        let (digits, radix) = if let Some(s) = entity.strip_prefix("#x") {
-                            (s, 16)
-                        } else if let Some(s) = entity.strip_prefix('#') {
-                            (s, 10)
-                        } else {
-                            if !entity
-                                .chars()
-                                .next()
-                                .is_some_and(|c| c != ':' && name_start(c))
-                                || !entity.chars().all(|c| c != ':' && name_char(c))
-                            {
-                                return Err(self.error("invalid entity reference name"));
-                            }
-                            if self.canonical_xhtml_subset && !self.standalone {
-                                if let Some(value) = crate::entities::named_lookup(&tail[..=end]) {
-                                    // Canonical DTD definitions are character references.
-                                    // Tab/NewLine become literal replacement whitespace;
-                                    // XML attribute normalization therefore maps them to SP.
-                                    for c in value.chars() {
-                                        result.push(if attribute && xml_space(c) { ' ' } else { c });
-                                    }
-                                    rest = &tail[end + 1..];
-                                    continue;
-                                }
-                                return Err(self.error("undeclared entity in canonical XHTML subset"));
-                            }
-                            return Err(if self.external_subset && !self.standalone {
-                                self.special(XmlErrorKind::Unsupported, "entity may require an external DTD; external entities are not loaded")
-                            } else {
-                                self.error("undeclared entity")
-                            });
-                        };
-                        if digits.is_empty()
-                            || !digits.chars().all(|c| {
-                                if radix == 16 {
-                                    c.is_ascii_hexdigit()
-                                } else {
-                                    c.is_ascii_digit()
-                                }
-                            })
-                        {
-                            return Err(self.error("invalid character reference"));
-                        }
-                        u32::from_str_radix(digits, radix)
-                            .ok()
-                            .and_then(char::from_u32)
-                            .filter(|c| xml_char(*c))
-                            .ok_or_else(|| self.error("forbidden character reference"))?
-                    }
-                };
-                result.push(c);
-                rest = &tail[end + 1..];
+            let Some(index) = rest.find('&') else { return self.append_text(dom, parent, rest); };
+            self.append_text(dom, parent, &rest[..index])?;
+            let tail = &rest[index + 1..];
+            let end = tail.find(';').ok_or_else(|| self.error("unterminated reference"))?;
+            let name = &tail[..end];
+            if name.starts_with('#') {
+                self.append_text(dom, parent, &dtd::character_reference(name, self.pos)?.to_string())?;
+            } else if let Some(c) = dtd::predefined(name) {
+                self.append_text(dom, parent, &c.to_string())?;
             } else {
-                let c = rest.chars().next().unwrap();
-                rest = &rest[c.len_utf8()..];
-                result.push(if attribute && xml_space(c) { ' ' } else { c });
+                dtd::valid_reference_name(name, self.pos)?;
+                // The canonical external character subset consists exclusively
+                // of character references, so its resolved scalars stay text.
+                if !self.dtd.general.contains_key(name) && self.canonical_xhtml_subset && !self.standalone {
+                    let value = crate::entities::named_lookup(&tail[..=end]).ok_or_else(|| self.error("undeclared entity in canonical XHTML subset"))?;
+                    self.append_text(dom, parent, value)?;
+                } else {
+                    let body = dtd::general_body(&self.dtd, self.policy(), name, self.pos, !self.replacement)?;
+                    self.budget.borrow_mut().enter(false, name, self.pos)?;
+                    let result = (|| {
+                        self.budget.borrow_mut().charge_bytes(body.len(), self.pos)?;
+                        let context = XmlFragmentContext { namespaces: bindings.iter().map(|(prefix, uri)|
+                            (if prefix.is_empty() { None } else { Some(prefix.clone()) }, uri.clone())).collect(), ..Default::default() };
+                        let source = parse_inner_with_entities(&body, Some(&context), false, Some(EntityContext {
+                            dtd: self.dtd.clone(), budget: self.budget.clone(), policy: self.policy(), depth,
+                        }))?.0;
+                        if dom.owner_document(parent).is_some() {
+                            self.dom_result(dom.import_subtree_children(&source, NodeIdx(0), parent))?;
+                        } else {
+                            // An entity replacement's temporary arena uses its
+                            // Document as the fragment container. Import through
+                            // a real owner-bearing fragment, then use parser
+                            // attachment rules for its top-level text/elements.
+                            let container = self.dom_result(dom.create_document_fragment(parent))?;
+                            self.dom_result(dom.import_subtree_children(&source, NodeIdx(0), container))?;
+                            let children: Vec<_> = dom.children(container).collect();
+                            for child in children {
+                                dom.detach(child);
+                                dom.attach_last(parent, child);
+                            }
+                        }
+                        self.dom_result(dom.normalize(parent))?;
+                        Ok(())
+                    })();
+                    self.budget.borrow_mut().leave();
+                    result?;
+                }
             }
+            rest = &tail[end + 1..];
         }
-        Ok(result)
+        Ok(())
     }
     fn declaration(&mut self) -> ResultXml<XmlDeclaration> {
         self.expect("<?xml")?;

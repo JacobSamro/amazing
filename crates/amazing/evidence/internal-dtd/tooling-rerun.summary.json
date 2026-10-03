@@ -1,0 +1,11 @@
+{
+  "original_attempt": "/Users/jMac/Projects/OpenSource/amazing/.agents/html/internal-dtd-qualification",
+  "original_exit": 100,
+  "failed_phase": "xml-manifest",
+  "cause": "byte format only; canonical parsed original metadata equality confirmed",
+  "old_raw_sha256": "47343ed7637d5eec751ca086db960feee134ff723d76b0a599350358f814122c",
+  "generated_raw_sha256": "8a221c5280813ee338ccfc93761b18251db707b822aebccf3cf70e1f9850ee49",
+  "canonical_data_sha256": "bd022cf77843d1481008077492542beabc4d7ae96566f45d2320d40b80ebeccc",
+  "clean_reruns": 1,
+  "engine_source_and_fixtures_unchanged": true
+}
