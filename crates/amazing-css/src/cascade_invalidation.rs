@@ -221,6 +221,7 @@ fn selector_mentions_class(selector: &Selector, old: Option<&str>, new: Option<&
             Simple::ComplexNegation(args) | Simple::ComplexMatches(args) | Simple::ComplexWhere(args) =>
                 args.iter().any(|arg| arg.compounds.iter().any(|comp| compound_has(comp, contains))),
             Simple::Has(_) | Simple::NthChildOf { .. } => true,
+            Simple::Host(_) | Simple::HostContext(_) | Simple::Slotted(_) => true,
             _ => false,
         })
     }
@@ -766,6 +767,7 @@ fn collect_compound(compound: &Compound, effect: InvalidationSet, index: &mut Fe
             Simple::Pseudo(Pseudo::Link) | Simple::Pseudo(Pseudo::Visited) => {
                 insert_feature(index, Feature::Attribute("href".into()), effect);
             }
+            Simple::Pseudo(Pseudo::HasSlotted) => index.has_relational=true,
             Simple::Pseudo(pseudo) => {
                 let name = match pseudo {
                     Pseudo::Hover => Some("hover"),
@@ -839,6 +841,14 @@ fn collect_compound(compound: &Compound, effect: InvalidationSet, index: &mut Fe
                 }
             }
             Simple::Has(_) => index.has_relational = true,
+            Simple::Host(argument) => {
+                index.has_relational=true;
+                if let Some(argument)=argument { collect_compound(argument,effect,index); }
+            }
+            Simple::HostContext(argument) | Simple::Slotted(argument) => {
+                index.has_relational=true;
+                collect_compound(argument,effect,index);
+            }
             Simple::NthChildOf { selectors, .. } => {
                 index.has_structural = true;
                 index.has_nth_of = true;

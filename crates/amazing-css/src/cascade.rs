@@ -577,6 +577,8 @@ struct Candidate<'a> {
     order: u64,
     layer: usize,
     proximity: usize,
+    context_depth: usize,
+    context_root: Option<NodeIdx>,
 }
 
 /// CSS Cascade 5 §6.1 order: transitions, important declarations, animations,
@@ -600,6 +602,12 @@ fn beats(new: &Candidate<'_>, cur: &Candidate<'_>) -> bool {
         } else {
             new.origin > cur.origin
         };
+    }
+    // Encapsulation precedes inline, layers and selector specificity.
+    // Outer normal declarations win; inner important declarations win.
+    if new.context_depth != cur.context_depth {
+        return if new.important { new.context_depth > cur.context_depth }
+            else { new.context_depth < cur.context_depth };
     }
     if new.inline != cur.inline {
         return new.inline;
@@ -656,6 +664,8 @@ fn winners<'a>(
                             // every author declaration, not just UA layers.
                             return !(winner.origin == Origin::Ua && winner.important);
                         }
+                        // Layers belong to their actual encapsulation context.
+                        if c.context_root != winner.context_root { return true; }
                         if winner.inline {
                             return !c.inline;
                         }
@@ -703,6 +713,8 @@ fn compute_one(
         order: u64,
         layer: usize,
         proximity: usize,
+        context_depth: usize,
+        context_root: Option<NodeIdx>,
     }
 
     // Collect declarations from every matching rule plus the inline
@@ -731,6 +743,8 @@ fn compute_one(
                 order: source_order,
                 layer: usize::MAX,
                 proximity: usize::MAX,
+                context_depth: computed_shadow::context_depth(dom,el),
+                context_root: computed_shadow::tree_root(dom,el),
             });
         }
     }
@@ -753,6 +767,8 @@ fn compute_one(
                     order: source_order,
                     layer: rule.layer,
                     proximity,
+                    context_depth: rule.context_depth,
+                    context_root: rule.tree.or_else(||computed_shadow::tree_root(dom,el)),
                 });
             }
         }
@@ -780,6 +796,8 @@ fn compute_one(
                 order: source_order,
                 layer: usize::MAX,
                 proximity: usize::MAX,
+                context_depth: computed_shadow::context_depth(dom,el),
+                context_root: computed_shadow::tree_root(dom,el),
             });
         }
     }
@@ -805,6 +823,8 @@ fn compute_one(
                 order: source_order,
                 layer: usize::MAX,
                 proximity: usize::MAX,
+                context_depth: computed_shadow::context_depth(dom,el),
+                context_root: computed_shadow::tree_root(dom,el),
             });
         }
     }
@@ -824,6 +844,8 @@ fn compute_one(
             order: d.order,
             layer: d.layer,
             proximity: d.proximity,
+            context_depth: d.context_depth,
+            context_root: d.context_root,
         };
         candidates.entry(&d.prop).or_default().push(cand);
     }
@@ -1342,6 +1364,8 @@ pub fn compute_element_paint_style(
             order: order as u64 + 1,
             layer: usize::MAX,
             proximity: usize::MAX,
+            context_depth: 0,
+            context_root: None,
         });
     }
     let (computed, sources) = resolve_candidate_pool(candidates, parent, 16.0, None, &MediaEnvironment::default());

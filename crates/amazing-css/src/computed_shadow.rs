@@ -12,8 +12,8 @@ use amazing_dom::NodeKind;
 /// contexts and sheet collection/URL provenance are the driver's responsibility.
 ///
 /// This extends computed styles, not layout's flat-tree box traversal. Existing
-/// selector support is retained: :host/::slotted and tree-scoped named resources
-/// need their own interfaces. Generated shadow counters are not synthesized.
+/// Host/slotted declarations retain their actual selector-tree context.
+/// Tree-scoped named resources and generated shadow counters remain separate.
 pub fn compute_document_with_shadow_font_metrics(
     dom: &Dom, document: NodeIdx, author_sheets: &[Stylesheet],
     shadow_sheets: &[(NodeIdx, Vec<Stylesheet>)], environment: &MediaEnvironment,
@@ -56,7 +56,7 @@ pub fn compute_document_pseudo_with_shadow_font_metrics(
         dom, document, author_sheets, shadow_sheets, environment, animated, context);
     let origin = principal.get(node)?;
     let rules = Rules::new(dom, document, author_sheets, shadow_sheets, environment);
-    let author = rules.author(tree_root(dom, node)?);
+    let author = rules.author();
     let mut ua = compile_sheets(&[parse_stylesheet(UA_SHEET), parse_stylesheet("slot {display:contents}")], true, environment);
     if pseudo == PseudoElement::Backdrop {
         ua.extend(compile_sheets(&[parse_stylesheet("::backdrop {position:fixed;inset:0}")], true, environment));
@@ -100,7 +100,7 @@ fn native_document(dom: &Dom, node: NodeIdx) -> Option<NodeIdx> {
     }
     None
 }
-fn tree_root(dom: &Dom, node: NodeIdx) -> Option<NodeIdx> {
+pub(super) fn tree_root(dom: &Dom, node: NodeIdx) -> Option<NodeIdx> {
     let mut current = node;
     let mut seen = HashSet::new();
     loop {
@@ -113,7 +113,7 @@ fn tree_root(dom: &Dom, node: NodeIdx) -> Option<NodeIdx> {
 }
 struct Rules {
     ua: Vec<CompiledRule>,
-    author: BTreeMap<NodeIdx, Vec<CompiledRule>>,
+    author: Vec<CompiledRule>,
 }
 impl Rules {
     fn new(dom: &Dom, document: NodeIdx, sheets: &[Stylesheet],
@@ -128,12 +128,28 @@ impl Rules {
         }
         Self { ua: compile_sheets(&[parse_stylesheet(UA_SHEET),
             parse_stylesheet("slot {display:contents}")], true, environment),
-            author: grouped.into_iter().map(|(root, sheets)|
-                (root, compile_sheets(&sheets, false, environment))).collect() }
+            author: grouped.into_iter().flat_map(|(root, sheets)| {
+                let mut rules=compile_sheets(&sheets, false, environment);
+                for rule in &mut rules {
+                    rule.tree=Some(root);
+                    rule.context_depth=context_depth(dom,root);
+                }
+                rules
+            }).collect() }
     }
-    fn author(&self, root: NodeIdx) -> &[CompiledRule] {
-        self.author.get(&root).map(Vec::as_slice).unwrap_or(&[])
+    fn author(&self) -> &[CompiledRule] {
+        &self.author
     }
+}
+
+pub(super) fn context_depth(dom:&Dom,mut node:NodeIdx)->usize {
+    let mut depth=0;
+    while let Some(root)=tree_root(dom,node) {
+        let Some(data)=dom.shadow_data(root) else {break};
+        depth+=1;
+        node=data.host;
+    }
+    depth
 }
 struct Computation<'a> {
     dom: &'a Dom, document: NodeIdx, root: Option<NodeIdx>, rules: &'a Rules,
@@ -156,11 +172,11 @@ impl Computation<'_> {
                 self.visiting.remove(&node); return false;
             }
         }
-        let Some(tree) = tree_root(self.dom, node) else {
+        let Some(_) = tree_root(self.dom, node) else {
             self.visiting.remove(&node); return false;
         };
         let parent_style = parent.and_then(|parent| self.out.get(parent)).cloned();
-        let author = self.rules.author(tree);
+        let author = self.rules.author();
         let pseudos = PseudoElement::STYLED.map(|pseudo|
             self.rules.ua.iter().chain(author).any(|rule| rule.targets(pseudo)));
         let (style, sources, _) = style_element(self.dom, node, parent_style.as_ref(),

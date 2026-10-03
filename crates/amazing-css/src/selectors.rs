@@ -21,6 +21,13 @@
 use crate::syntax::{Token, serialize, tokenize};
 use amazing_dom::{Dom, Namespace, NodeIdx};
 use std::fmt;
+#[path = "shadow_selectors.rs"]
+mod shadow_selectors;
+pub use shadow_selectors::{matches_in_tree, matches_pseudo_in_tree};
+pub(crate) use shadow_selectors::{selector_origins,selector_parent};
+#[cfg(test)]
+#[path = "shadow_selector_tests.rs"]
+mod shadow_selector_tests;
 
 // ---------------------------------------------------------------------------
 // AST
@@ -65,6 +72,11 @@ pub enum Simple {
     },
     Pseudo(Pseudo),
     PseudoElement(PseudoElement),
+    /// CSS Shadow 1: only meaningful in an explicit shadow tree context.
+    Host(Option<Box<Compound>>),
+    HostContext(Box<Compound>),
+    /// An alias for actual elements assigned to an originating slot.
+    Slotted(Box<Compound>),
     /// `:not(compound, …)` — never matches if any argument matches.
     Negation(Vec<Compound>),
     /// `:is(compound, …)` / legacy alias `:matches(…)` — matches if any
@@ -127,6 +139,7 @@ pub enum AttrOp {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pseudo {
+    HasSlotted,
     Root,
     Scope,
     FirstChild,
@@ -227,7 +240,7 @@ impl Selector {
 
 fn compound_contains_pseudo_element(compound: &Compound) -> bool {
     compound.simple.iter().any(|simple| match simple {
-        Simple::PseudoElement(_) => true,
+        Simple::PseudoElement(_) | Simple::Slotted(_) => true,
         Simple::Negation(args) | Simple::Matches(args) | Simple::Where(args) => {
             args.iter().any(compound_contains_pseudo_element)
         }
@@ -261,6 +274,12 @@ fn simple_specificity(s: &Simple) -> Specificity {
         Simple::Id(_) => spec.a += 1,
         Simple::Class(_) | Simple::Attr { .. } | Simple::Pseudo(_) => spec.b += 1,
         Simple::Type(_) | Simple::PseudoElement(_) => spec.c += 1,
+        Simple::Host(argument) => {
+            spec.b += 1;
+            if let Some(argument) = argument { spec = spec + compound_specificity(argument); }
+        }
+        Simple::HostContext(argument) => { spec.b += 1; spec = spec + compound_specificity(argument); }
+        Simple::Slotted(argument) => { spec.c += 1; spec = spec + compound_specificity(argument); }
         Simple::Negation(args) | Simple::Matches(args) => {
             // Most specific argument (compounds sum internally); an empty
             // list counts as zero.
@@ -312,15 +331,22 @@ pub fn parse_selector(src: &str) -> Option<Selector> {
         failed: false,
     };
     p.skip_ws();
-    let sel = p.complex()?;
+    let mut sel = p.complex()?;
     p.skip_ws();
     if p.failed || p.pos != p.toks.len() {
         return None; // trailing junk
     }
     let rightmost = sel.compounds.len() - 1;
-    for (index, compound) in sel.compounds.iter().enumerate() {
+    for (index, compound) in sel.compounds.iter_mut().enumerate() {
         let mut pseudo = None;
-        for simple in &compound.simple {
+        let mut slotted = false;
+        for simple in &mut compound.simple {
+            if matches!(simple, Simple::Slotted(_)) {
+                if index != rightmost || slotted || pseudo.is_some() { return None; }
+                slotted = true;
+                continue;
+            }
+            if slotted && !slotted_tail(simple) { return None; }
             if let Simple::PseudoElement(kind) = simple {
                 if index != rightmost {
                     return None;
@@ -351,6 +377,28 @@ pub fn parse_selector(src: &str) -> Option<Selector> {
         }
     }
     Some(sel)
+}
+
+fn slotted_tail(simple:&mut Simple)->bool {
+    match simple {
+        Simple::PseudoElement(PseudoElement::Before | PseudoElement::After | PseudoElement::Marker | PseudoElement::Placeholder | PseudoElement::FileSelectorButton) => true,
+        _=>user_action_selector(simple),
+    }
+}
+fn user_action_selector(simple:&mut Simple)->bool {
+    match simple {
+        Simple::Pseudo(Pseudo::Hover | Pseudo::Active | Pseudo::Focus | Pseudo::FocusVisible | Pseudo::FocusWithin)=>true,
+        Simple::Negation(args)=>args.iter_mut().all(|compound|compound.simple.iter_mut().all(user_action_selector)),
+        Simple::Matches(args) | Simple::Where(args)=> {
+            args.retain_mut(|compound|compound.simple.iter_mut().all(user_action_selector));
+            true
+        }
+        Simple::ComplexMatches(args) | Simple::ComplexWhere(args)=> {
+            args.retain_mut(|selector|selector.compounds.len()==1 && selector.compounds[0].simple.iter_mut().all(user_action_selector));
+            true
+        }
+        _=>false,
+    }
 }
 
 struct SelParser<'t> {
@@ -554,7 +602,8 @@ impl<'t> SelParser<'t> {
             Token::Function(f) => {
                 // Functional pseudo-classes; contents parsed below.
                 if double_colon {
-                    return None;
+                    if !f.eq_ignore_ascii_case("slotted") { return None; }
+                    return self.shadow_argument("slotted");
                 }
                 return self.functional_args(f.to_ascii_lowercase());
             }
@@ -590,7 +639,9 @@ impl<'t> SelParser<'t> {
         if double_colon {
             return None;
         }
+        if lower == "host" { return Some(Simple::Host(None)); }
         let pseudo = match lower.as_str() {
+            "has-slotted" => Pseudo::HasSlotted,
             "root" => Pseudo::Root,
             "scope" => Pseudo::Scope,
             "first-child" => Pseudo::FirstChild,
@@ -623,6 +674,7 @@ impl<'t> SelParser<'t> {
     /// Parses `(selector-list)` after `:not(` / `:is(` / `:matches(` /
     /// `:where(`, and `(an+b)` after `:nth-child(`/`:nth-last-child(`.
     fn functional_args(&mut self, name: String) -> Option<Simple> {
+        if matches!(name.as_str(), "host" | "host-context") { return self.shadow_argument(&name); }
         debug_assert!(matches!(self.peek(), Some(Token::OpenParen)));
         // Function tokens are always followed by an explicit OpenParen
         // token; every functional form consumes it before its arguments.
@@ -715,6 +767,20 @@ impl<'t> SelParser<'t> {
             }
             _ => None,
         }
+    }
+
+    fn shadow_argument(&mut self, name: &str) -> Option<Simple> {
+        if self.bump()? != Token::OpenParen { return None; }
+        self.skip_ws();
+        let argument = self.compound()?;
+        if compound_contains_pseudo_element(&argument) { return None; }
+        self.skip_ws();
+        if self.bump()? != Token::CloseParen { return None; }
+        Some(match name {
+            "host" => Simple::Host(Some(Box::new(argument))),
+            "host-context" => Simple::HostContext(Box::new(argument)),
+            _ => Simple::Slotted(Box::new(argument)),
+        })
     }
 
     fn nth_args(&mut self, from_last: bool) -> Option<Simple> {
@@ -1044,6 +1110,7 @@ fn simple_in_scope(dom: &Dom, el: NodeIdx, s: &Simple, scope: Option<NodeIdx>) -
             ci,
         } => match_attr(dom, el, name, *op, value, *ci),
         Simple::PseudoElement(_) => true,
+        Simple::Host(_) | Simple::HostContext(_) | Simple::Slotted(_) => false,
         Simple::Pseudo(Pseudo::Scope) => {
             scope.map_or_else(|| matches_pseudo(dom, el, Pseudo::Root), |root| root == el)
         }
@@ -1183,10 +1250,13 @@ fn nth_index_of(dom: &Dom, el: NodeIdx, from_last: bool, selectors: &[Selector])
 
 fn matches_pseudo(dom: &Dom, el: NodeIdx, p: Pseudo) -> bool {
     match p {
+        Pseudo::HasSlotted => dom.is_html_slot(el)
+            && dom.assigned_nodes(el, false, false).is_ok_and(|nodes| !nodes.is_empty())
+            && dom.assigned_nodes(el, true, false).is_ok_and(|nodes| !nodes.is_empty()),
         Pseudo::Root | Pseudo::Scope => dom
             .get(el)
             .parent
-            .is_some_and(|par| dom.name(par).is_none()),
+            .is_some_and(|par| matches!(dom.get(par).kind, amazing_dom::NodeKind::Document)),
         Pseudo::FirstChild => nth_index(dom, el, false) == Some(1),
         Pseudo::LastChild => nth_index(dom, el, true) == Some(1),
         Pseudo::OnlyChild => {

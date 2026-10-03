@@ -13,6 +13,9 @@ pub(super) struct CompiledRule {
     scopes: Vec<CompiledScope>,
     owner: Option<NodeIdx>,
     pub(super) base_url: Option<String>,
+    pub(super) tree: Option<NodeIdx>,
+    pub(super) context_depth: usize,
+    implicit_scope_prefixes: Vec<bool>,
 }
 struct CompiledScope {
     start: Option<Vec<Selector>>,
@@ -90,6 +93,11 @@ pub(super) fn compile_sheets(
                             layer: 0,
                             owner: sheet.scope_root,
                             base_url: sheet.base_url.clone(),
+                            tree: None,
+                            context_depth: 0,
+                            implicit_scope_prefixes: rule.selector_srcs.iter().map(|source|
+                                !rule.scopes.is_empty() && parse_selector(source).is_some_and(|selector|
+                                    !selector.compounds.iter().any(has_scope))).collect(),
                         },
                     ));
                 }
@@ -175,19 +183,31 @@ impl CompiledRule {
         el: NodeIdx,
         pseudo: Option<PseudoElement>,
     ) -> Option<(Specificity, usize)> {
-        let matches_target = |sel: &Selector, scope| match pseudo {
-            Some(kind) => matches_pseudo_in_scope(dom, el, sel, kind, scope),
-            None => matches_in_scope(dom, el, sel, scope),
+        let matches_target = |sel: &Selector, scope| match (self.tree, pseudo) {
+            (Some(tree),Some(kind)) => crate::selectors::matches_pseudo_in_tree(dom,el,sel,kind,scope,tree),
+            (Some(tree),None) => crate::selectors::matches_in_tree(dom,el,sel,scope,tree),
+            (None,Some(kind)) => matches_pseudo_in_scope(dom, el, sel, kind, scope),
+            (None,None) => matches_in_scope(dom, el, sel, scope),
         };
         let mut best = None;
-        for (root, proximity) in self.scope_roots(dom, el)? {
-            for (selector, spec) in &self.selectors {
-                if matches_target(selector, root)
+        for (index,(selector,spec)) in self.selectors.iter().enumerate() {
+            let origins=self.tree.map_or_else(||vec![el],|tree|crate::selectors::selector_origins(dom,el,selector,tree));
+            for origin in origins {for (root,proximity) in self.scope_roots(dom,origin)? {
+                let inclusive_host=self.tree.and_then(|tree|dom.shadow_data(tree)).is_some_and(|data|root==Some(data.host) && el==data.host)
+                    && self.implicit_scope_prefixes[index];
+                let mut inclusive;
+                let subject_selector=if inclusive_host {
+                    inclusive=selector.clone();
+                    inclusive.compounds.remove(0);
+                    inclusive.combinators.remove(0);
+                    &inclusive
+                } else {selector};
+                if matches_target(subject_selector, root)
                     && best.is_none_or(|(s, p)| *spec > s || (*spec == s && proximity < p))
                 {
                     best = Some((*spec, proximity));
                 }
-            }
+            }}
         }
         best
     }
@@ -202,7 +222,7 @@ impl CompiledRule {
             if dom.name(n).is_some() {
                 ancestors.push(n);
             }
-            node = dom.get(n).parent;
+            node = self.tree.map_or_else(||dom.get(n).parent,|tree|crate::selectors::selector_parent(dom,n,tree));
         }
         let document_root = *ancestors.last()?;
         let mut instances: Vec<Option<NodeIdx>> = vec![None];
@@ -219,8 +239,11 @@ impl CompiledRule {
                     let starts = match &scope.start {
                         Some(selectors) => selectors
                             .iter()
-                            .any(|s| matches_in_scope(dom, root, s, outer)),
-                        None => root == self.owner.unwrap_or(document_root),
+                            .any(|s| self.tree.map_or_else(||matches_in_scope(dom,root,s,outer),|tree|crate::selectors::matches_in_tree(dom,root,s,outer,tree))),
+                        None => root == self.owner.and_then(|owner| {
+                            if self.tree==Some(owner) { dom.shadow_data(owner).map(|data|data.host).or(Some(owner)) }
+                            else { Some(owner) }
+                        }).unwrap_or(document_root),
                     };
                     if !starts {
                         continue;
@@ -229,7 +252,7 @@ impl CompiledRule {
                         ancestors[..=distance].iter().any(|n| {
                             selectors
                                 .iter()
-                                .any(|s| matches_in_scope(dom, *n, s, Some(root)))
+                                .any(|s| self.tree.map_or_else(||matches_in_scope(dom,*n,s,Some(root)),|tree|crate::selectors::matches_in_tree(dom,*n,s,Some(root),tree)))
                         })
                     });
                     if !excluded && !next.contains(&Some(root)) {
