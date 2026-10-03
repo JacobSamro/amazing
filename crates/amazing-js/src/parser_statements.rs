@@ -349,9 +349,13 @@ impl Parser {
                     } else if let TokenKind::Str(value) = self.cur().kind.clone() {
                         self.bump();
                         (BindingKey::Static(value), None)
-                    } else if let TokenKind::Numeric(value) = self.cur().kind.clone() {
-                        self.bump();
-                        (BindingKey::Static(value.raw), None)
+                    } else if matches!(self.cur().kind, TokenKind::Numeric(_)) {
+                        // A numeric literal's raw digits are not its property name
+                        // (radix prefixes, exponents and BigInt all need NumericValue).
+                        // Retain the constant literal through the existing key path;
+                        // no user code runs when converting its primitive value.
+                        let literal = self.parse_primary_expr()?;
+                        (BindingKey::Computed(Box::new(literal)), None)
                     } else {
                         let identifier = self.prop_name()?;
                         (
