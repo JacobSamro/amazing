@@ -159,10 +159,10 @@ fn connected_shadow_membership_is_actual_and_detached_owner_document_does_not_su
         let root = dom.attach_shadow(host, ShadowOptions { mode, delegates_focus: false,
             slot_assignment: SlotAssignment::Named, clonable: false, serializable: false }).unwrap();
         let text = dom.create_text(root, "abc"); let id = dom.document_selection(document).unwrap();
-        dom.selection_select_children(id, text).unwrap();
+        dom.selection_select_children(id, root).unwrap();
         let selected = dom.selection_state(id).unwrap().range.unwrap();
         assert_eq!(dom.range(selected).unwrap(), AbstractRange {
-            start: BoundaryPoint::new(text, 0), end: BoundaryPoint::new(text, 3) });
+            start: BoundaryPoint::new(root, 0), end: BoundaryPoint::new(root, 1) });
         assert!(dom.selection_visible_points(id).unwrap().is_some());
         dom.selection_clear(id).unwrap(); dom.selection_add(id, selected).unwrap();
         assert_eq!(dom.selection_state(id).unwrap().range, Some(selected));
@@ -171,7 +171,7 @@ fn connected_shadow_membership_is_actual_and_detached_owner_document_does_not_su
         assert_eq!(dom.selection_visible_points(id).unwrap(), None);
         dom.selection_clear(id).unwrap(); dom.selection_add(id, selected).unwrap();
         assert_eq!(dom.selection_state(id).unwrap().range, None);
-        dom.selection_select_children(id, text).unwrap();
+        dom.selection_select_children(id, root).unwrap();
         assert_eq!(dom.selection_state(id).unwrap().range, None);
         let detached = dom.create_node_in(document, NodeKind::Text { data: "detached".into() }).unwrap();
         dom.selection_collapse_at(id, Some(BoundaryPoint::new(detached, 0))).unwrap();
