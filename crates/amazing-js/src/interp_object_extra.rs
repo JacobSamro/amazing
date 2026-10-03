@@ -35,6 +35,31 @@ mod object_semantic_tests {
     }
 
     #[test]
+    fn all_installed_math_methods_constants_and_intrinsic_metadata_follow_descriptors() {
+        check(r#"
+            var valid=true;
+            var lengths={abs:1,acos:1,acosh:1,asin:1,asinh:1,atan:1,atan2:2,atanh:1,cbrt:1,ceil:1,clz32:1,cos:1,cosh:1,exp:1,expm1:1,f16round:1,floor:1,fround:1,hypot:2,imul:2,log:1,log10:1,log1p:1,log2:1,max:2,min:2,pow:2,random:0,round:1,sign:1,sin:1,sinh:1,sqrt:1,sumPrecise:1,tan:1,tanh:1,trunc:1};
+            for(var name of Object.keys(lengths)) {
+                var f=Math[name],d=Object.getOwnPropertyDescriptor(Math,name),n=Object.getOwnPropertyDescriptor(f,'name'),l=Object.getOwnPropertyDescriptor(f,'length');
+                valid=valid && typeof f==='function' && d.value===f && d.writable && !d.enumerable && d.configurable && !('get' in d);
+                valid=valid && n.value===name && !n.writable && !n.enumerable && n.configurable;
+                valid=valid && l.value===lengths[name] && !l.writable && !l.enumerable && l.configurable;
+                valid=valid && !Object.hasOwn(f,'prototype');
+                try { Reflect.construct(f,[]);valid=false; } catch(e) {valid=valid && e instanceof TypeError;}
+            }
+            for(var name of ['E','LN10','LN2','LOG10E','LOG2E','PI','SQRT1_2','SQRT2']) {
+                var d=Object.getOwnPropertyDescriptor(Math,name);valid=valid && typeof d.value==='number' && !d.writable && !d.enumerable && !d.configurable;
+            }
+            var tag=Object.getOwnPropertyDescriptor(Math,Symbol.toStringTag),global=Object.getOwnPropertyDescriptor(globalThis,'Math');
+            valid=valid && tag.value==='Math' && !tag.writable && !tag.enumerable && tag.configurable;
+            valid=valid && global.value===Math && global.writable && !global.enumerable && global.configurable;
+            valid=valid && Object.keys(Math).length===0 && Object.getPrototypeOf(Math)===Object.prototype && Object.prototype.toString.call(Math)==='[object Math]';
+            valid=valid && Object.getOwnPropertyNames(Math).length===Object.keys(lengths).length+8 && Object.getOwnPropertySymbols(Math).length===1;
+            valid;
+        "#);
+    }
+
+    #[test]
     fn empty_accessor_kinds_survive_completion_generic_updates_and_conversion() {
         check(r#"
             var valid=true;

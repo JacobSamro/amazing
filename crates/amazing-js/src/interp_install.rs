@@ -1,3 +1,6 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/math/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// Math intrinsic method names, lengths and property attributes adapted to local installers.
 // Realm builtin installation and native function construction.
 
 include!("builtins_date.rs");
@@ -552,20 +555,21 @@ impl Interpreter {
         self.install_thread_generator_methods();
         self.install_temporal();
         let math = self.object_value();
-        for (n, f) in [
-            ("abs", native_abs as crate::value::NativeFn),
-            ("max", native_max as crate::value::NativeFn),
-            ("min", native_min as crate::value::NativeFn),
-            ("floor", native_math_floor as crate::value::NativeFn),
-            ("ceil", native_math_ceil as crate::value::NativeFn),
-            ("round", native_math_round as crate::value::NativeFn),
-            ("sqrt", native_math_sqrt as crate::value::NativeFn),
-            ("pow", native_math_pow as crate::value::NativeFn),
-            ("trunc", native_math_trunc as crate::value::NativeFn),
-            ("sign", native_math_sign as crate::value::NativeFn),
-            ("random", native_math_random as crate::value::NativeFn),
+        let JsValue::Object(math_object) = &math else { unreachable!() };
+        for (name, length, native) in [
+            ("abs", 1, native_abs as crate::value::NativeFn),
+            ("max", 2, native_max as crate::value::NativeFn),
+            ("min", 2, native_min as crate::value::NativeFn),
+            ("floor", 1, native_math_floor as crate::value::NativeFn),
+            ("ceil", 1, native_math_ceil as crate::value::NativeFn),
+            ("round", 1, native_math_round as crate::value::NativeFn),
+            ("sqrt", 1, native_math_sqrt as crate::value::NativeFn),
+            ("pow", 2, native_math_pow as crate::value::NativeFn),
+            ("trunc", 1, native_math_trunc as crate::value::NativeFn),
+            ("sign", 1, native_math_sign as crate::value::NativeFn),
+            ("random", 0, native_math_random as crate::value::NativeFn),
         ] {
-            let _ = self.set_prop(&math, n, Self::native(n, f, &self.function_proto));
+            std_core_define(self, math_object, name, length, native);
         }
         self.define_global("Math", math);
         let console = self.object_value();

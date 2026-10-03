@@ -1,0 +1,411 @@
+{
+  "ticket": "JSRT-49",
+  "base_sha": "7b205bede6ceda82682405c8e2d8b10d05ebdc77",
+  "workspace": {
+    "passed": 3967,
+    "skipped": 17,
+    "elapsed_seconds": 74.84
+  },
+  "doctests": 4,
+  "selections": {
+    "built-ins-Math": {
+      "selected": 327,
+      "before": {
+        "pass": 304,
+        "fail": 23,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53545
+      },
+      "after": {
+        "pass": 321,
+        "fail": 6,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53545
+      },
+      "gained": [
+        "built-ins/Math/abs/length.js",
+        "built-ins/Math/abs/prop-desc.js",
+        "built-ins/Math/ceil/length.js",
+        "built-ins/Math/ceil/prop-desc.js",
+        "built-ins/Math/floor/length.js",
+        "built-ins/Math/floor/prop-desc.js",
+        "built-ins/Math/pow/length.js",
+        "built-ins/Math/pow/prop-desc.js",
+        "built-ins/Math/random/prop-desc.js",
+        "built-ins/Math/round/length.js",
+        "built-ins/Math/round/prop-desc.js",
+        "built-ins/Math/sign/length.js",
+        "built-ins/Math/sign/prop-desc.js",
+        "built-ins/Math/sqrt/length.js",
+        "built-ins/Math/sqrt/prop-desc.js",
+        "built-ins/Math/trunc/length.js",
+        "built-ins/Math/trunc/prop-desc.js"
+      ],
+      "lost": [],
+      "elapsed_before": 3.736,
+      "elapsed_after": 3.378,
+      "before_host_sha256": "4cfbe5aa8044e12613d23c39f6fdd73c16426b2aca068027a47142cfabbbf266",
+      "after_host_sha256": "0336c5e8116425fee46653b6a9937cba5860a4dac6c3389c23b76129c270ded4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before": {
+        "pass": 3403,
+        "fail": 10,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "after": {
+        "pass": 3410,
+        "fail": 3,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "gained": [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-101.js",
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-104.js",
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-108.js",
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-109.js",
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-110.js",
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-112.js",
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-96.js"
+      ],
+      "lost": [],
+      "elapsed_before": 10.689,
+      "elapsed_after": 10.447,
+      "before_host_sha256": "4cfbe5aa8044e12613d23c39f6fdd73c16426b2aca068027a47142cfabbbf266",
+      "after_host_sha256": "0336c5e8116425fee46653b6a9937cba5860a4dac6c3389c23b76129c270ded4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Reflect": {
+      "selected": 154,
+      "before": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "after": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "gained": [],
+      "lost": [],
+      "elapsed_before": 3.126,
+      "elapsed_after": 3.23,
+      "before_host_sha256": "4cfbe5aa8044e12613d23c39f6fdd73c16426b2aca068027a47142cfabbbf266",
+      "after_host_sha256": "0336c5e8116425fee46653b6a9937cba5860a4dac6c3389c23b76129c270ded4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Function": {
+      "selected": 515,
+      "before": {
+        "pass": 506,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "after": {
+        "pass": 506,
+        "fail": 9,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "gained": [],
+      "lost": [],
+      "elapsed_before": 4.713,
+      "elapsed_after": 4.64,
+      "before_host_sha256": "4cfbe5aa8044e12613d23c39f6fdd73c16426b2aca068027a47142cfabbbf266",
+      "after_host_sha256": "0336c5e8116425fee46653b6a9937cba5860a4dac6c3389c23b76129c270ded4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "language": {
+      "selected": 24590,
+      "before": {
+        "pass": 24389,
+        "fail": 175,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "after": {
+        "pass": 24389,
+        "fail": 175,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "gained": [],
+      "lost": [],
+      "elapsed_before": 55.312,
+      "elapsed_after": 53.343,
+      "before_host_sha256": "4cfbe5aa8044e12613d23c39f6fdd73c16426b2aca068027a47142cfabbbf266",
+      "after_host_sha256": "0336c5e8116425fee46653b6a9937cba5860a4dac6c3389c23b76129c270ded4",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    }
+  },
+  "unique": {
+    "selected": 29000,
+    "before_pass": 28755,
+    "after_pass": 28779,
+    "gained_files": [
+      "built-ins/Math/abs/length.js",
+      "built-ins/Math/abs/prop-desc.js",
+      "built-ins/Math/ceil/length.js",
+      "built-ins/Math/ceil/prop-desc.js",
+      "built-ins/Math/floor/length.js",
+      "built-ins/Math/floor/prop-desc.js",
+      "built-ins/Math/pow/length.js",
+      "built-ins/Math/pow/prop-desc.js",
+      "built-ins/Math/random/prop-desc.js",
+      "built-ins/Math/round/length.js",
+      "built-ins/Math/round/prop-desc.js",
+      "built-ins/Math/sign/length.js",
+      "built-ins/Math/sign/prop-desc.js",
+      "built-ins/Math/sqrt/length.js",
+      "built-ins/Math/sqrt/prop-desc.js",
+      "built-ins/Math/trunc/length.js",
+      "built-ins/Math/trunc/prop-desc.js",
+      "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-101.js",
+      "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-104.js",
+      "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-108.js",
+      "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-109.js",
+      "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-110.js",
+      "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-112.js",
+      "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-96.js"
+    ],
+    "lost_files": [],
+    "gained_variants": [
+      [
+        "built-ins/Math/abs/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/abs/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/abs/prop-desc.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/abs/prop-desc.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/ceil/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/ceil/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/ceil/prop-desc.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/ceil/prop-desc.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/floor/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/floor/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/floor/prop-desc.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/floor/prop-desc.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/pow/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/pow/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/pow/prop-desc.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/pow/prop-desc.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/random/prop-desc.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/random/prop-desc.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/round/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/round/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/round/prop-desc.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/round/prop-desc.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/sign/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/sign/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/sign/prop-desc.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/sign/prop-desc.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/sqrt/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/sqrt/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/sqrt/prop-desc.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/sqrt/prop-desc.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/trunc/length.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/trunc/length.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/trunc/prop-desc.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/trunc/prop-desc.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-101.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-101.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-104.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-104.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-108.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-108.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-109.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-109.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-110.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-110.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-112.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-112.js",
+        "strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-96.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-4-96.js",
+        "strict"
+      ]
+    ],
+    "lost_variants": []
+  },
+  "upstream": {
+    "repository": "boa-dev/boa",
+    "path": "core/engine/src/builtins/math/mod.rs",
+    "sha": "39cd11214ecb366200157dab96b3919e61e9a391",
+    "license": "MIT"
+  }
+}
