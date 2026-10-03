@@ -16,6 +16,69 @@ mod object_semantic_tests {
         }
     }
     #[test]
+    fn static_object_boundaries_box_or_preserve_primitives_as_required() {
+        check(r#"
+            var valid=true, values=[undefined,null,true,false,0,-0,NaN,'x',2n,Symbol('x')];
+            for(var v of values){valid=valid && !Object.isExtensible(v) && Object.is(Object.preventExtensions(v),v);}
+            valid=valid && Object.preventExtensions.call({})===undefined && Object.isExtensible()===false;
+            var primitives=[true,3,'x',2n,Symbol('x')], prototypes=[Boolean.prototype,Number.prototype,String.prototype,BigInt.prototype,Symbol.prototype];
+            for(var k=0;k<primitives.length;k++)valid=valid && Object.getPrototypeOf(primitives[k])===prototypes[k];
+            for(var v of [undefined,null])for(var fn of [Object.getPrototypeOf,Object.keys,Object.values,Object.entries,Object.getOwnPropertyNames,Object.getOwnPropertySymbols,Object.getOwnPropertyDescriptors]){
+                try{fn(v);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+            }
+            valid=valid && Object.keys('\ud83d\ude00').join(',')==='0,1' && Object.keys(3).length===0 && Object.keys(Symbol()).length===0;
+            var boxed=Object('ab');valid=valid && Object.keys(boxed).join(',')==='0,1' && Object.getOwnPropertyNames(boxed).join(',')==='0,1,length';
+            var ordinary={valueOf(){throw 7;},toString(){throw 8;}};
+            valid=valid && Object.isExtensible(ordinary) && Object.preventExtensions(ordinary)===ordinary && !Object.isExtensible(ordinary);
+            valid;
+        "#);
+    }
+
+    #[test]
+    fn static_object_proxy_trap_order_and_abrupt_identity_are_semantic() {
+        check(r#"
+            var log=[], valid=true, target={}, sentinel={};
+            var p=new Proxy(target,{getPrototypeOf(t){log.push('proto');return null;},isExtensible(t){log.push('extensible');return Reflect.isExtensible(t);},
+                preventExtensions(t){log.push('prevent');return Reflect.preventExtensions(t);}});
+            valid=valid && Object.getPrototypeOf(p)===null && Object.isExtensible(p) && Object.preventExtensions(p)===p && !Object.isExtensible(p);
+            valid=valid && log.join(',')==='proto,extensible,prevent,extensible';
+            for(var name of ['getPrototypeOf','isExtensible','preventExtensions']){
+                var handler={};Object.defineProperty(handler,name,{get(){throw sentinel;}});p=new Proxy({},handler);
+                try{Object[name](p);valid=false;}catch(e){valid=valid && e===sentinel;}
+            }
+            p=new Proxy({},{preventExtensions(){return false;}});try{Object.preventExtensions(p);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+            p=new Proxy({},{preventExtensions(){return true;}});try{Object.preventExtensions(p);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+            var s=Symbol(),reads=0;log=[];
+            p=new Proxy({a:1,b:2,[s]:3},{ownKeys(t){log.push('keys');return ['b',s,'a'];},getOwnPropertyDescriptor(t,k){log.push(k);return Reflect.getOwnPropertyDescriptor(t,k);},get(){reads++;throw sentinel;}});
+            valid=valid && Object.keys(p).join(',')==='b,a' && log.join(',')==='keys,b,a' && reads===0;
+            var r=Proxy.revocable({},{});r.revoke();
+            for(var fn of [Object.getPrototypeOf,Object.isExtensible,Object.preventExtensions,Object.keys]){try{fn(r.proxy);valid=false;}catch(e){valid=valid && e instanceof TypeError;}}
+            valid;
+        "#);
+    }
+
+    #[test]
+    fn static_object_boxing_uses_callee_realm_and_preserves_window_policy() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let child = i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
+            for (name, expression) in [("foreignGetProto", "Object.getPrototypeOf"), ("foreignKeys", "Object.keys"),
+                ("foreignStringProto", "String.prototype"), ("foreignNumberProto", "Number.prototype"), ("foreignTypeErrorProto", "TypeError.prototype")] {
+                let value = i.binding_eval_in_realm(child, expression).unwrap();
+                i.global_env.declare_var(name, value).unwrap();
+            }
+            let window = i.binding_create_window_proxy(child).unwrap();
+            i.global_env.declare_var("windowProxy", window).unwrap();
+            let result = i.run_script_with_backend(r#"
+                var valid=foreignGetProto('x')===foreignStringProto && foreignGetProto(3)===foreignNumberProto;
+                try{foreignKeys(null);valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===foreignTypeErrorProto;}
+                try{Object.preventExtensions(windowProxy);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+                valid;
+            "#, backend).unwrap();
+            assert_eq!(result, JsValue::Bool(true), "{backend:?}");
+        }
+    }
+    #[test]
     fn prototype_accessors_and_membership_use_semantic_proxy_methods() {
         check(r#"
             var getter=function(){return 1;}, setter=function(v){}, calls='';

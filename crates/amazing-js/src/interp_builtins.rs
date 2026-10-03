@@ -2,7 +2,7 @@
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT:
 // JSRT-30 optional result-capability completion in Promise reaction jobs.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/object/mod.rs)
-// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: prototype tags and own-property order.
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: prototype tags, own-property order and static primitive boundaries.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/array/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: Array.isArray semantic dispatch.
 
@@ -888,11 +888,10 @@ fn native_object_get_prototype_of(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    match args.first() {
-        Some(JsValue::Symbol(_)) => Ok(JsValue::Object(i.symbol_proto.clone())),
-        Some(JsValue::Object(object)) => i.default_get_prototype(object),
-        _ => Err(Throw::type_error("getPrototypeOf target is not an object")),
-    }
+    let target = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if target.is_null() || target.is_undefined() { return Err(Throw::type_error("getPrototypeOf target is nullish")); }
+    let JsValue::Object(object) = native_object(i, JsValue::Undefined, vec![target])? else { unreachable!() };
+    i.default_get_prototype(&object)
 }
 
 fn native_object_set_prototype_of(
@@ -1064,26 +1063,16 @@ fn native_define_property(
 
 fn native_prevent_extensions(
     i: &mut Interpreter,
-    this: JsValue,
+    _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let target = args.first().cloned().unwrap_or(this);
-    match target {
-        JsValue::Object(object) => {
-            if matches!(object.borrow().exotic, Exotic::Proxy(_)) {
-                if !i.default_prevent_extensions(&object)? {
-                    return Err(Throw::type_error("cannot prevent extensions on this proxy"));
-                }
-                return Ok(JsValue::Object(object));
-            }
-            if i.is_window_proxy(&object) || i.legacy_for(&object).is_some() { return Err(Throw::type_error("cannot prevent extensions on a legacy platform object")); }
-            object.borrow_mut().extensible = false;
-            Ok(JsValue::Object(object))
+    let target = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if let JsValue::Object(object) = &target {
+        if !i.default_prevent_extensions(object)? {
+            return Err(Throw::type_error("cannot prevent extensions on this object"));
         }
-        _ => Err(Throw::type_error(
-            "preventExtensions target is not an object",
-        )),
     }
+    Ok(target)
 }
 
 fn native_is_extensible(
@@ -1093,7 +1082,7 @@ fn native_is_extensible(
 ) -> Result<JsValue, Throw> {
     match args.first() {
         Some(JsValue::Object(object)) => Ok(JsValue::Bool(i.default_is_extensible(object)?)),
-        _ => Err(Throw::type_error("isExtensible target is not an object")),
+        _ => Ok(JsValue::Bool(false)),
     }
 }
 
@@ -2062,6 +2051,8 @@ fn key_value(key: &MapKey) -> JsValue {
 
 fn native_object_keys(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let src = a.first().cloned().unwrap_or(JsValue::Undefined);
+    if src.is_null() || src.is_undefined() { return Err(Throw::type_error("Object.keys target is nullish")); }
+    let src = native_object(i, JsValue::Undefined, vec![src])?;
     let keys = i
         .enumerable_keys(&src)?
         .into_iter()
