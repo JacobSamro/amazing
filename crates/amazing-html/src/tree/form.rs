@@ -5,8 +5,15 @@
 use super::*;
 
 impl TreeBuilder {
+    /// HTML §13.2.4.4: a template fragment context also means parsing
+    /// template contents even though it is absent from the open stack.
+    fn parsing_template_contents(&self) -> bool {
+        self.stack_has("template") || (self.fragment_context_namespace == Namespace::Html
+            && self.fragment_context.as_deref() == Some("template"))
+    }
+
     pub(super) fn start_form(&mut self, attrs: Vec<(String, String)>) {
-        let in_template = self.stack_has("template");
+        let in_template = self.parsing_template_contents();
         if self.form.is_some() && !in_template { return; }
         self.close_p_element();
         let element = self.insert_element("form", attrs);
@@ -15,7 +22,7 @@ impl TreeBuilder {
     }
 
     pub(super) fn end_form(&mut self) {
-        if !self.stack_has("template") {
+        if !self.parsing_template_contents() {
             let Some(element) = self.form.take() else { return; };
             if !self.has_in_specific_scope_matching(&[], |node| node == element) { return; }
             self.generate_implied_end_tags(None);
@@ -30,8 +37,9 @@ impl TreeBuilder {
     }
 
     pub(super) fn insert_table_form(&mut self, attrs: Vec<(String, String)>) {
-        if !self.stack_has("template") && self.form.is_none() {
-            self.form = Some(self.insert_element("form", attrs));
-        }
+        let in_template = self.parsing_template_contents();
+        if self.form.is_some() && !in_template { return; }
+        let element = self.insert_element("form", attrs);
+        if !in_template { self.form = Some(element); }
     }
 }

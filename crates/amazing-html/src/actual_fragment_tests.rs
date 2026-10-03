@@ -67,6 +67,31 @@ fn actual_attributes_form_and_document_modes_control_fragment_rules() {
     assert_eq!(dom.local_name(dom.children(NodeIdx(0)).next().unwrap()), Some("b"));
     assert!(!dom.document_scripting_enabled(NodeIdx(0)).unwrap());
 }
+
+#[test]
+fn template_fragment_form_rules_ignore_outer_form_pointer_but_preserve_namespace_and_case() {
+    let html = Some(crate::xml::HTML_NAMESPACE);
+    for ancestor in [false, true] {
+        let mut template = context("template", html);
+        template.has_form_ancestor = ancestor;
+        for source in ["<div><form></div><input type=text></form>",
+            "<table><form id=first></form><form id=second></form></table>",
+            "<form id=first><form id=second></form></form>"] {
+            let dom = parse(&template, source);
+            let forms = dom.tree_order(NodeIdx(0)).into_iter()
+                .filter(|node| dom.namespace(*node) == Some(Namespace::Html) && dom.local_name(*node) == Some("form"))
+                .count();
+            assert_eq!(forms, if source.starts_with("<div>") { 1 } else { 2 }, "{ancestor}: {source}");
+        }
+    }
+    // Foreign or differently-cased contexts are not HTML template contexts.
+    for mut other in [context("TEMPLATE", html), context("template", Some("urn:actual"))] {
+        other.has_form_ancestor = true;
+        let dom = parse(&other, "<form><input></form>");
+        assert!(!dom.tree_order(NodeIdx(0)).into_iter().any(|node|
+            dom.namespace(*node) == Some(Namespace::Html) && dom.local_name(*node) == Some("form")));
+    }
+}
 #[test]
 fn xml_fragment_direct_grammar_and_actual_namespace_scope() {
     let context = XmlFragmentContext { namespace_uri: Some("urn:context".into()), prefix: Some("c".into()),
