@@ -1,8 +1,9 @@
 //! Fatal-error XML 1.0 Fifth Edition / Namespaces 1.0 parser.
 //!
 //! Input is already decoded Unicode; CR/CRLF are normalized before parsing.
-//! DTD internal subsets, external entity loading, scripting, and document.write
-//! are unsupported. External doctype identifiers are retained but never fetched.
+//! DTD internal subsets, arbitrary external entity loading, scripting, and
+//! document.write are unsupported. HTML-specified XHTML public identifiers use
+//! the built-in canonical character entity subset; no network access is needed.
 //! No HTML recovery, implicit elements, case folding, or HTML named entities.
 
 #[cfg(test)]
@@ -92,6 +93,7 @@ struct Parser<'a> {
     src: &'a str,
     pos: usize,
     external_subset: bool,
+    canonical_xhtml_subset: bool,
     standalone: bool,
 }
 type ResultXml<T> = Result<T, XmlError>;
@@ -107,7 +109,7 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
 /// Reuses the document declaration grammar during byte encoding selection.
 pub(super) fn encoding_declaration(src: &str) -> Result<Option<String>, XmlError> {
     if !src.starts_with("<?xml") || !src[5..].starts_with(xml_space) { return Ok(None); }
-    let mut parser = Parser { src, pos: 0, external_subset: false, standalone: false };
+    let mut parser = Parser { src, pos: 0, external_subset: false, canonical_xhtml_subset: false, standalone: false };
     parser.declaration().map(|declaration| declaration.encoding)
 }
 
@@ -133,6 +135,7 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
         src: &normalized,
         pos: 0,
         external_subset: false,
+        canonical_xhtml_subset: false,
         standalone: false,
     };
     // This parser arena is XML even before a response/DOMParser caller installs
@@ -241,6 +244,7 @@ fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool)
                 if !public_id.chars().all(pubid_char) {
                     return Err(p.error("invalid public identifier"));
                 }
+                p.canonical_xhtml_subset = canonical_xhtml_public_id(&public_id);
                 p.require_space()?;
                 system_id = p.literal()?.into();
                 p.space();
@@ -582,6 +586,19 @@ impl<'a> Parser<'a> {
                             {
                                 return Err(self.error("invalid entity reference name"));
                             }
+                            if self.canonical_xhtml_subset && !self.standalone {
+                                if let Some(value) = crate::entities::named_lookup(entity) {
+                                    // Canonical DTD definitions are character references.
+                                    // Tab/NewLine become literal replacement whitespace;
+                                    // XML attribute normalization therefore maps them to SP.
+                                    for c in value.chars() {
+                                        result.push(if attribute && xml_space(c) { ' ' } else { c });
+                                    }
+                                    rest = &tail[end + 1..];
+                                    continue;
+                                }
+                                return Err(self.error("undeclared entity in canonical XHTML subset"));
+                            }
                             return Err(if self.external_subset && !self.standalone {
                                 self.special(XmlErrorKind::Unsupported, "entity may require an external DTD; external entities are not loaded")
                             } else {
@@ -685,6 +702,30 @@ fn split_name(name: &str) -> (Option<&str>, &str) {
     name.split_once(':')
         .map_or((None, name), |(prefix, local)| (Some(prefix), local))
 }
+// HTML §14.2 selects the same canonical entity-only DTD for these public IDs.
+// The normative linked data URL has all 2125 semicolon-terminated names in our
+// existing WHATWG table. No URL suffix, MIME, root tag, or unknown DTD enables it.
+const XHTML_PUBLIC_IDS: &[&str] = &[
+    "-//W3C//DTD XHTML 1.0 Transitional//EN",
+    "-//W3C//DTD XHTML 1.1//EN",
+    "-//W3C//DTD XHTML 1.0 Strict//EN",
+    "-//W3C//DTD XHTML 1.0 Frameset//EN",
+    "-//W3C//DTD XHTML Basic 1.0//EN",
+    "-//W3C//DTD XHTML 1.1 plus MathML 2.0//EN",
+    "-//W3C//DTD XHTML 1.1 plus MathML 2.0 plus SVG 1.1//EN",
+    "-//W3C//DTD MathML 2.0//EN",
+    "-//WAPFORUM//DTD XHTML Mobile 1.0//EN",
+    "-//WAPFORUM//DTD XHTML Mobile 1.1//EN",
+    "-//WAPFORUM//DTD XHTML Mobile 1.2//EN",
+];
+fn canonical_xhtml_public_id(public_id: &str) -> bool {
+    // XML public identifier comparison uses collapsed XML whitespace. Retain
+    // the original literal on DocumentType; this normalization selects policy.
+    let normalized = public_id.split(xml_space).filter(|word| !word.is_empty())
+        .collect::<Vec<_>>().join(" ");
+    XHTML_PUBLIC_IDS.contains(&normalized.as_str())
+}
+
 fn xml_space(c: char) -> bool {
     matches!(c, '\x20' | '\t' | '\n' | '\r')
 }

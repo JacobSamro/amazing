@@ -882,4 +882,27 @@ mod tests {
         }
     }
 
+    #[test]
+    fn canonical_xhtml_subset_resolves_real_response_entities_without_external_transport() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+            "<!doctype html><iframe src='child.xhtml'></iframe>"), native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+        let calls = Rc::new(RefCell::new(0)); let observed = calls.clone();
+        let callback_host = host.clone();
+        scheduler.set_frame_resource_loader(Rc::new(move |request| {
+            *observed.borrow_mut() += 1;
+            assert!(callback_host.try_borrow_mut().is_ok());
+            assert_eq!(request.kind, HtmlFrameResourceKind::Document);
+            assert_eq!(request.requested_url, "https://example.test/child.xhtml");
+            Ok(response("https://example.test/child.xhtml", Some("application/xhtml+xml"),
+                b"<!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.0 Strict//EN' 'https://never-fetch.invalid/a.dtd'><html xmlns='http://www.w3.org/1999/xhtml'><body><p id='p' a='&Tab;&NewLine;'>&copy;&NotEqualTilde;</p></body></html>".to_vec()))
+        }));
+        scheduler.set_frame_resource_resolver(Rc::new(|_| panic!("canonical DTD issued a legacy transport request")));
+        scheduler.set_location_url("https://example.test/root.html");
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script("var d=document.querySelector('iframe').contentDocument;[d.contentType,d.getElementById('p').textContent,d.getElementById('p').getAttribute('a')].join('|')")
+            .unwrap_or_else(|error| panic!("actual XHTML subset: {}", error.describe())), JsValue::str("application/xhtml+xml|©≂̸|  "));
+        assert_eq!(*calls.borrow(), 1);
+    }
+
 }

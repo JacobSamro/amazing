@@ -572,3 +572,50 @@ fn xml_fragment_character_data_in_nested_templates_inherits_actual_insertion_doc
     let contents = dom.template_contents(top[1]).unwrap();
     assert_eq!(dom.children(contents).count(), 5);
 }
+
+
+#[test]
+fn canonical_xhtml_public_identifiers_select_complete_character_entity_subset() {
+    for public_id in XHTML_PUBLIC_IDS {
+        let source = format!("<!DOCTYPE r PUBLIC '{public_id}' 'https://never-fetch.invalid/a.dtd'><r a='&COPY;&LT;&Tab;&NewLine;&#9;'>&copy;&NotEqualTilde;&AMP;&LT;&Tab;&NewLine;</r>");
+        let dom = parse_xml(&source).unwrap();
+        assert_eq!(text(&dom), "©≂̸&<\t\n");
+        let root = elements(&dom)[0];
+        assert_eq!(dom.get_attribute_ns(root, None, "a"), Some("©<  \t"));
+        let doctype = dom.children(NodeIdx(0)).next().unwrap();
+        assert!(matches!(&dom.get(doctype).kind, NodeKind::DocumentType { public_id: id, system_id, .. }
+            if id == *public_id && system_id == "https://never-fetch.invalid/a.dtd"));
+    }
+    let id = "  -//W3C//DTD\nXHTML 1.0   Strict//EN  ";
+    let dom = parse_xml(&format!("<!DOCTYPE r PUBLIC '{id}' 'unloaded.dtd'><r>&copy;</r>")).unwrap();
+    assert_eq!(text(&dom), "©");
+}
+
+#[test]
+fn canonical_subset_preserves_every_standard_name_and_scalar_sequence() {
+    for (name, expected) in crate::entities::NAMED {
+        let source = format!("<!DOCTYPE r PUBLIC '-//W3C//DTD XHTML 1.0 Strict//EN' 'unloaded.dtd'><r>&{name};</r>");
+        let dom = parse_xml(&source).unwrap_or_else(|error| panic!("{name}: {error}"));
+        assert_eq!(text(&dom), *expected, "{name}");
+    }
+}
+
+#[test]
+fn xhtml_entity_subset_never_comes_from_mime_namespace_system_url_or_fragment_context() {
+    for source in ["<html xmlns='http://www.w3.org/1999/xhtml'>&copy;</html>",
+        "<!DOCTYPE r PUBLIC '-//W3C//DTD XHTML 1.0 Strict//EN' 'unloaded.dtd'><r>&Copy;</r>",
+        "<?xml version='1.0' standalone='yes'?><!DOCTYPE r PUBLIC '-//W3C//DTD XHTML 1.0 Strict//EN' 'unloaded.dtd'><r>&copy;</r>"] {
+        malformed(source);
+    }
+    for public_id in ["-//W3C//DTD XHTML 1.0 strict//EN", "-//W3C//DTD SVG 1.1//EN", "unknown"] {
+        let source = format!("<!DOCTYPE r PUBLIC '{public_id}' 'unloaded.dtd'><r>&copy;</r>");
+        assert_eq!(parse_xml(&source).unwrap_err().kind, XmlErrorKind::Unsupported);
+    }
+    assert_eq!(parse_xml("<!DOCTYPE r SYSTEM 'https://html.spec.whatwg.org/entities.dtd'><r>&copy;</r>")
+        .unwrap_err().kind, XmlErrorKind::Unsupported);
+    assert_eq!(parse_xml("<!DOCTYPE r PUBLIC '-//W3C//DTD XHTML 1.0 Strict//EN' 'unloaded.dtd' [<!ENTITY x 'y'>]><r>&x;</r>")
+        .unwrap_err().kind, XmlErrorKind::Unsupported);
+    let dom = parse_xml("<!DOCTYPE r PUBLIC '-//W3C//DTD XHTML 1.0 Strict//EN' 'unloaded.dtd'><r><![CDATA[&copy;]]><!--&copy;--><?p &copy;?></r>").unwrap();
+    assert_eq!(text(&dom), "&copy;");
+    assert_eq!(parse_xml_fragment(&XmlFragmentContext::default(), "&copy;").unwrap_err().kind, XmlErrorKind::Malformed);
+}
