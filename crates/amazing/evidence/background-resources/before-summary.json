@@ -1,0 +1,46 @@
+{
+  "eligible": 42,
+  "counts": {
+    "mismatch": 24,
+    "pass": 18
+  },
+  "excluded": {
+    "reference-mode": 7,
+    "flagged": 5,
+    "xml-parser-mode": 10,
+    "no-url-resource": 3,
+    "unsupported-resource-kind": 1,
+    "non-relative-resource": 1
+  },
+  "lost": [
+    "css__css-backgrounds__border-image-repeat-round-1.html",
+    "css__css-backgrounds__border-image-repeat-round-2.html",
+    "css__css-backgrounds__border-image-repeat-space-1.html",
+    "css__css-backgrounds__border-image-repeat-space-2.html",
+    "css__css-backgrounds__border-image-repeat-space-3.html",
+    "css__css-backgrounds__border-image-repeat-space-4-ref-1.html",
+    "css__css-backgrounds__border-image-repeat-space-4.html",
+    "css__css-backgrounds__border-image-repeat-space-5-ref-1.html",
+    "css__css-backgrounds__border-image-repeat-space-5.html",
+    "css__css-backgrounds__border-image-space-001.html"
+  ],
+  "gained": [
+    "css__css-backgrounds__border-image-006.html",
+    "css__css-backgrounds__border-image-007.html",
+    "css__css-backgrounds__border-image-calc.html",
+    "css__css-backgrounds__border-image-displayed-with-transparent-border-color.html",
+    "css__css-backgrounds__border-image-repeat-repeat-001.html",
+    "css__css-backgrounds__border-image-repeat-space-011.html",
+    "css__css-backgrounds__border-image-shorthand-002.htm",
+    "css__css-backgrounds__border-image-shorthand-003.htm",
+    "css__css-backgrounds__border-image-slice-004.htm",
+    "css__css-backgrounds__border-image-slice-006.htm",
+    "css__css-backgrounds__border-image-slice-fill-001.html",
+    "css__css-backgrounds__border-image-slice-fill-002.html",
+    "css__css-backgrounds__border-image-width-001.htm",
+    "css__css-backgrounds__border-image-width-008.html",
+    "css__css-backgrounds__border-image-width-009.html"
+  ],
+  "new": [],
+  "removed": []
+}

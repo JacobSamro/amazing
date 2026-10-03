@@ -1,0 +1,9 @@
+# Installed CSS background resources
+
+Fixed dependency: closed root `ff8d81978711ca7e2cd343f3351f5d2632009b04`, plus fixture-only `c49fc3e4` correction on both native references. Source change `3b0f1d65d9ffebbcb233904085eabf4067440235`; corrected candidate `c4939d16b4143a41a09537e695116cedb33c9979`; corrected before `5ea318acc6888d55d9b73623b63bcd220deb944f`.
+
+PageMedia now collects actual principal/generated CSS background URL layers and keys decoded resources by element, relative URL and winning stylesheet base. PagePaint and StyledImages forward that source through the genuine provider chain. Both retained resource collectors preserve source identity. The existing utility decoder and paint algorithms are unchanged. Native groups cover two stylesheet bases sharing identical relative text, principal and pseudo pixels, and retiring a source-aware retained resource.
+
+The pinned decoded-image border corpus contains 42 HTML cases. The ordinary CLI plus actual sandboxed utility decoder improves 18 to 37 passes, +19 and zero lost/new/removed classifications. All 13 earlier fallback-era passing cases are retained. The five remaining mismatches are actual round sizing and slice cases, separately routed to Layout; no blank-reference waiver is used.
+
+Production baseline pixels were rendered from closed ff8 before the fixture-only correction; that correction touches only two invalid test iterator dereferences and does not change the release renderer. Final native checks use the corrected source on both sides. Final source `668e33eb9018bb4140c6accbed1d688934010aff` corrects only public test API paths and reproduces the exact measured renderer hash. Native before4030/1failed/17skipped and after4032/1failed/17skipped, both4 doctests pass. The same existing template-table-form HTML failure remains held for its owner; both new resource groups pass. Durable pixel metadata and maps are in `crates/amazing/evidence/background-resources`.

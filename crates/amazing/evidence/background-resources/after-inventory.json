@@ -1,0 +1,191 @@
+{
+  "selected": 42,
+  "excluded": {
+    "reference-mode": 7,
+    "flagged": 5,
+    "xml-parser-mode": 10,
+    "no-url-resource": 3,
+    "unsupported-resource-kind": 1,
+    "non-relative-resource": 1
+  },
+  "excluded_tests": {
+    "css/css-backgrounds/border-image-002.html": "reference-mode",
+    "css/css-backgrounds/border-image-003.html": "reference-mode",
+    "css/css-backgrounds/border-image-004.html": "reference-mode",
+    "css/css-backgrounds/border-image-011.html": "reference-mode",
+    "css/css-backgrounds/border-image-012.html": "flagged",
+    "css/css-backgrounds/border-image-017.xht": "xml-parser-mode",
+    "css/css-backgrounds/border-image-018.xht": "xml-parser-mode",
+    "css/css-backgrounds/border-image-019.xht": "xml-parser-mode",
+    "css/css-backgrounds/border-image-020.xht": "xml-parser-mode",
+    "css/css-backgrounds/border-image-021.html": "reference-mode",
+    "css/css-backgrounds/border-image-image-type-001.htm": "flagged",
+    "css/css-backgrounds/border-image-image-type-002.htm": "flagged",
+    "css/css-backgrounds/border-image-image-type-003.htm": "no-url-resource",
+    "css/css-backgrounds/border-image-image-type-004.htm": "flagged",
+    "css/css-backgrounds/border-image-image-type-005.htm": "flagged",
+    "css/css-backgrounds/border-image-outset-003.html": "no-url-resource",
+    "css/css-backgrounds/border-image-outset-004.html": "reference-mode",
+    "css/css-backgrounds/border-image-repeat-005.html": "unsupported-resource-kind",
+    "css/css-backgrounds/border-image-repeat-1.html": "non-relative-resource",
+    "css/css-backgrounds/border-image-slice-001.xht": "xml-parser-mode",
+    "css/css-backgrounds/border-image-slice-002.xht": "xml-parser-mode",
+    "css/css-backgrounds/border-image-slice-003.xht": "xml-parser-mode",
+    "css/css-backgrounds/border-image-slice-fill-003.html": "reference-mode",
+    "css/css-backgrounds/border-image-width-005.xht": "xml-parser-mode",
+    "css/css-backgrounds/border-image-width-006.xht": "xml-parser-mode",
+    "css/css-backgrounds/border-image-width-007.xht": "xml-parser-mode",
+    "css/css-backgrounds/border-image-width-should-extend-to-padding.html": "no-url-resource"
+  },
+  "tests": {
+    "css/css-backgrounds/border-image-006.html": [
+      "css/css-backgrounds/support/1x1-green.png"
+    ],
+    "css/css-backgrounds/border-image-007.html": [
+      "css/css-backgrounds/support/50x50-green.png"
+    ],
+    "css/css-backgrounds/border-image-013.html": [
+      "css/css-backgrounds/support/green-dot.png",
+      "css/css-backgrounds/support/img-ref-2.png"
+    ],
+    "css/css-backgrounds/border-image-calc.html": [
+      "css/css-backgrounds/support/green_color.png"
+    ],
+    "css/css-backgrounds/border-image-displayed-with-transparent-border-color.html": [
+      "css/css-backgrounds/support/100x100-blue-and-orange.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-002.htm": [
+      "css/css-backgrounds/support/blue-and-red-diamonds-81x81.png",
+      "css/css-backgrounds/support/blue-diamond-27x27.png",
+      "css/css-backgrounds/support/new-red-diamond-27x27.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-004.htm": [
+      "css/css-backgrounds/support/blue-and-red-diamonds-81x81.png",
+      "css/css-backgrounds/support/blue-diamond-27x27.png",
+      "css/css-backgrounds/support/new-red-diamond-27x27.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-repeat-001.html": [
+      "css/css-backgrounds/support/500x500-white-red-green-irreg-polygon.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-round-003.html": [
+      "css/css-backgrounds/support/4bicolor-squares.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-round-1.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-round-2.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-round-stretch-001.html": [
+      "css/css-backgrounds/support/4bicolor-squares.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-round.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-space-011.html": [
+      "css/css-backgrounds/support/border-image-repeat-space-011.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-space-1.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-space-10.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-space-2.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-space-3.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-space-4-ref-1.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-space-4.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-space-5-ref-1.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-space-5.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-space-6.html": [
+      "css/css-backgrounds/support/reticule-bl.png",
+      "css/css-backgrounds/support/reticule-bo.png",
+      "css/css-backgrounds/support/reticule-br.png",
+      "css/css-backgrounds/support/reticule-ct.png",
+      "css/css-backgrounds/support/reticule-le.png",
+      "css/css-backgrounds/support/reticule-ri.png",
+      "css/css-backgrounds/support/reticule-tl.png",
+      "css/css-backgrounds/support/reticule-to.png",
+      "css/css-backgrounds/support/reticule-tr.png",
+      "css/css-backgrounds/support/reticule.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-space-7.html": [
+      "css/css-backgrounds/support/reticule-bl.png",
+      "css/css-backgrounds/support/reticule-bo.png",
+      "css/css-backgrounds/support/reticule-br.png",
+      "css/css-backgrounds/support/reticule-ct.png",
+      "css/css-backgrounds/support/reticule-le.png",
+      "css/css-backgrounds/support/reticule-ri.png",
+      "css/css-backgrounds/support/reticule-tl.png",
+      "css/css-backgrounds/support/reticule-to.png",
+      "css/css-backgrounds/support/reticule-tr.png",
+      "css/css-backgrounds/support/reticule.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-space-8.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-space-9.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-repeat-stretch-round-001.html": [
+      "css/css-backgrounds/support/4bicolor-squares.png"
+    ],
+    "css/css-backgrounds/border-image-round-and-stretch.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-shorthand-001.htm": [
+      "css/css-backgrounds/support/blue-and-red-diamonds-81x81.png"
+    ],
+    "css/css-backgrounds/border-image-shorthand-002.htm": [
+      "css/css-backgrounds/support/9grid40-30-20-10-red-old.png"
+    ],
+    "css/css-backgrounds/border-image-shorthand-003.htm": [
+      "css/css-backgrounds/support/9grid40-30-20-10-red-old.png"
+    ],
+    "css/css-backgrounds/border-image-slice-004.htm": [
+      "css/css-backgrounds/support/9grid20-40-red.png"
+    ],
+    "css/css-backgrounds/border-image-slice-005.htm": [
+      "css/css-backgrounds/support/9grid40-30-20-10-red.png"
+    ],
+    "css/css-backgrounds/border-image-slice-006.htm": [
+      "css/css-backgrounds/support/green_color.png"
+    ],
+    "css/css-backgrounds/border-image-slice-007.htm": [
+      "css/css-backgrounds/support/9grid40-30-20-10-green.png"
+    ],
+    "css/css-backgrounds/border-image-slice-fill-001.html": [
+      "css/css-backgrounds/support/500x500-red-with-green-center.png"
+    ],
+    "css/css-backgrounds/border-image-slice-fill-002.html": [
+      "css/css-backgrounds/support/500x500-red-with-green-center.png"
+    ],
+    "css/css-backgrounds/border-image-slice-percentage.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-space-001.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-width-001.htm": [
+      "css/css-backgrounds/support/green_color.png"
+    ],
+    "css/css-backgrounds/border-image-width-008.html": [
+      "css/css-backgrounds/support/border.png"
+    ],
+    "css/css-backgrounds/border-image-width-009.html": [
+      "css/css-backgrounds/support/9-colored-areas.png"
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "eligible": 42,
+  "before_pass": 18,
+  "after_pass": 37,
+  "gained": [
+    "css__css-backgrounds__border-image-013.html",
+    "css__css-backgrounds__border-image-repeat-002.htm",
+    "css__css-backgrounds__border-image-repeat-004.htm",
+    "css__css-backgrounds__border-image-repeat-round-1.html",
+    "css__css-backgrounds__border-image-repeat-round-2.html",
+    "css__css-backgrounds__border-image-repeat-round.html",
+    "css__css-backgrounds__border-image-repeat-space-1.html",
+    "css__css-backgrounds__border-image-repeat-space-10.html",
+    "css__css-backgrounds__border-image-repeat-space-2.html",
+    "css__css-backgrounds__border-image-repeat-space-3.html",
+    "css__css-backgrounds__border-image-repeat-space-4-ref-1.html",
+    "css__css-backgrounds__border-image-repeat-space-4.html",
+    "css__css-backgrounds__border-image-repeat-space-5-ref-1.html",
+    "css__css-backgrounds__border-image-repeat-space-5.html",
+    "css__css-backgrounds__border-image-repeat-space-6.html",
+    "css__css-backgrounds__border-image-repeat-space-7.html",
+    "css__css-backgrounds__border-image-round-and-stretch.html",
+    "css__css-backgrounds__border-image-slice-percentage.html",
+    "css__css-backgrounds__border-image-space-001.html"
+  ],
+  "lost": [],
+  "strong_baseline_lost": [],
+  "remaining": [
+    "css__css-backgrounds__border-image-repeat-round-003.html",
+    "css__css-backgrounds__border-image-repeat-round-stretch-001.html",
+    "css__css-backgrounds__border-image-repeat-stretch-round-001.html",
+    "css__css-backgrounds__border-image-slice-005.htm",
+    "css__css-backgrounds__border-image-slice-007.htm"
+  ]
+}
