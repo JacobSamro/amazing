@@ -60,3 +60,71 @@ fn import_preserves_template_fragment_and_nested_template_ownership() {
     let outer_doc = target.owner_document(target.template_contents(outer).unwrap()).unwrap();
     assert_eq!(target.owner_document(target.template_contents(inner).unwrap()), Some(outer_doc));
 }
+
+#[test]
+fn template_owner_inherits_only_document_type_and_is_shared() {
+    use crate::document_surface::{DocumentMetadata, QuirksMode};
+    let mut dom = Dom::new();
+    dom.set_document_metadata(NodeIdx(0), DocumentMetadata {
+        url: "https://example.test/active".into(), content_type: "text/html".into(),
+        character_set: "Shift_JIS".into(),
+    }).unwrap();
+    dom.set_document_scripting_enabled(NodeIdx(0), true).unwrap();
+    dom.set_document_quirks_mode(NodeIdx(0), QuirksMode::Quirks).unwrap();
+    let first = dom.create_element_ns_in(NodeIdx(0), Some("http://www.w3.org/1999/xhtml"), "template").unwrap();
+    let fragment = dom.ensure_template_contents(first).unwrap();
+    let inert = dom.owner_document(fragment).unwrap();
+    let metadata = dom.document_metadata(inert).unwrap().unwrap();
+    assert_eq!(metadata.url, "about:blank");
+    assert_eq!(metadata.character_set, "UTF-8");
+    assert_eq!(metadata.content_type, "text/html");
+    assert!(!dom.document_scripting_enabled(inert).unwrap());
+    assert_eq!(dom.document_quirks_mode(inert), Ok(QuirksMode::NoQuirks));
+    let second = dom.create_element_ns_in(NodeIdx(0), Some("http://www.w3.org/1999/xhtml"), "template").unwrap();
+    let second_contents = dom.ensure_template_contents(second).unwrap();
+    assert_eq!(dom.owner_document(second_contents), Some(inert));
+    let nested = dom.create_element(fragment, "template");
+    let nested_contents = dom.ensure_template_contents(nested).unwrap();
+    assert_eq!(dom.owner_document(nested_contents), Some(inert));
+    let clone = dom.clone_node(first, true).unwrap();
+    assert_eq!(dom.owner_document(dom.template_contents(clone).unwrap()), Some(inert));
+}
+
+#[test]
+fn template_in_xml_document_has_xml_inert_owner_even_at_root_slot() {
+    use crate::document_surface::DocumentMetadata;
+    let mut dom = Dom::new();
+    dom.set_document_metadata(NodeIdx(0), DocumentMetadata {
+        url: "https://example.test/document.xml".into(), content_type: "application/xhtml+xml".into(),
+        character_set: "UTF-16".into(),
+    }).unwrap();
+    let template = dom.create_element_ns_in(NodeIdx(0), Some("http://www.w3.org/1999/xhtml"), "template").unwrap();
+    let fragment = dom.ensure_template_contents(template).unwrap();
+    let inert = dom.owner_document(fragment).unwrap();
+    let metadata = dom.document_metadata(inert).unwrap().unwrap();
+    assert_eq!(metadata.content_type, "application/xml");
+    assert_eq!(metadata.url, "about:blank");
+    assert_eq!(metadata.character_set, "UTF-8");
+}
+
+#[test]
+fn template_associations_do_not_alias_recycled_node_slots() {
+    let mut dom = Dom::new();
+    let document = dom.create_document();
+    let template = dom.create_element_ns_in(document, Some("http://www.w3.org/1999/xhtml"), "template").unwrap();
+    let contents = dom.ensure_template_contents(template).unwrap();
+    let inert = dom.owner_document(contents).unwrap();
+    // The complete unreachable association is retired together; none of these
+    // slots retains a script wrapper, child or external DOM reference.
+    for node in [contents, template, inert, document] { dom.retire_unreachable_node(node).unwrap(); }
+    let replacement_document = dom.create_document();
+    assert_eq!(replacement_document, document);
+    let replacement = dom.create_element_ns_in(replacement_document, Some("http://www.w3.org/1999/xhtml"), "template").unwrap();
+    assert_eq!(dom.template_contents(replacement), None);
+    let new_contents = dom.ensure_template_contents(replacement).unwrap();
+    assert_eq!(dom.template_of_contents(new_contents), Some(replacement));
+    let new_inert = dom.owner_document(new_contents).unwrap();
+    assert_ne!(new_inert, replacement_document);
+    assert!(matches!(dom.get(new_inert).kind, crate::NodeKind::Document));
+    assert!(!dom.document_scripting_enabled(new_inert).unwrap());
+}

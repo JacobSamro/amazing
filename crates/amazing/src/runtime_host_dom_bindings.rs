@@ -1353,6 +1353,41 @@ mod tests {
     }
 
     #[test]
+    fn template_markup_uses_contents_document_and_preserves_fragment_context() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = super::super::install(&mut js, host.clone()).unwrap();
+        bindings.set_document_url(&mut js, "https://example.test/active");
+        let result = js.run_script(r#"
+            let step=0; function check(v){step++;if(!v)throw 'template context '+step;}
+            const template=document.createElement('template');
+            const contents=template.content, owner=contents.ownerDocument;
+            check(owner !== document && owner.URL === 'about:blank' && owner.characterSet === 'UTF-8');
+            template.innerHTML='<noscript>&lt;&amp;&gt;</noscript><template><b>nested</b></template>';
+            check(template.content === contents && template.childNodes.length === 0);
+            check(contents.firstChild.textContent === '<&>');
+            check(contents.lastChild.content.ownerDocument === owner);
+            check(template.innerHTML === '<noscript>&lt;&amp;&gt;</noscript><template><b>nested</b></template>');
+            const copy=template.cloneNode(true);check(copy.content !== contents && copy.content.ownerDocument === owner);
+            contents.firstChild.outerHTML='<noscript>&lt;&amp;&gt;</noscript>';
+            check(contents.firstChild.textContent === '<&>');
+            contents.firstChild.insertAdjacentHTML('afterend','<noscript>&lt;&amp;&gt;</noscript>');
+            check(contents.childNodes[1].textContent === '<&>');
+            template.insertAdjacentHTML('beforeend','<noscript>&lt;&amp;&gt;</noscript>');
+            check(template.firstChild.ownerDocument === document && template.firstChild.textContent === '&lt;&amp;&gt;');
+            const inert=document.implementation.createHTMLDocument('');inert.adoptNode(template);
+            check(template.content === contents && contents.ownerDocument !== owner && contents.ownerDocument !== inert);
+            check(contents.lastChild.content.ownerDocument === contents.ownerDocument);
+            const fragment=document.createDocumentFragment(), span=document.createElement('span');fragment.append(span);
+            span.outerHTML='<p>replacement</p>';check(fragment.firstChild.localName === 'p');
+            fragment.firstChild.insertAdjacentHTML('beforebegin','<b>before</b>');check(fragment.firstChild.localName === 'b');
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)), "{result:?}");
+    }
+
+    #[test]
     fn base_reflection_uses_fallback_url_and_preserves_webidl_strings() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();

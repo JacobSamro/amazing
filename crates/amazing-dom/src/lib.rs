@@ -174,8 +174,8 @@ pub struct Dom {
     custom_elements: custom_elements::CustomElements,
     form_states: Vec<Option<forms::ControlState>>,
     radio_lists: Vec<(NodeIdx, Vec<u16>)>,
-    template_contents: Vec<(NodeIdx, NodeIdx)>,
-    template_owner_documents: Vec<(NodeIdx, NodeIdx)>,
+    template_contents: Vec<(NodeIdx, u64, NodeIdx, u64)>,
+    template_owner_documents: Vec<(NodeIdx, u64, NodeIdx, u64)>,
     observables: observable::Observables,
     animations: animation::Animations,
     /// In-memory backing store for `navigator.clipboard`'s `readText`/

@@ -17,44 +17,49 @@ impl Dom {
         let document = self.get(template).owner_document;
         let owner = self.appropriate_template_document(document);
         let contents = self.create_document_fragment(owner)?;
-        self.template_contents.push((template, contents));
+        self.template_contents.push((template, self.node_generation(template).unwrap(),
+            contents, self.node_generation(contents).unwrap()));
         Ok(contents)
     }
 
     pub fn template_contents(&self, template: NodeIdx) -> Option<NodeIdx> {
-        self.template_contents.iter().find(|(node, _)| *node == template).map(|(_, contents)| *contents)
+        self.template_contents.iter().find(|(node, version, contents, contents_version)|
+            *node == template && self.node_generation(*node) == Some(*version)
+                && self.node_generation(*contents) == Some(*contents_version))
+            .map(|(_, _, contents, _)| *contents)
     }
 
     /// Reverse of `template_contents`: the `<template>` element that owns
     /// `contents`, if `contents` is itself a template-contents fragment.
     pub fn template_of_contents(&self, contents: NodeIdx) -> Option<NodeIdx> {
-        self.template_contents.iter().find(|(_, c)| *c == contents).map(|(template, _)| *template)
+        self.template_contents.iter().find(|(template, version, node, node_version)|
+            *node == contents && self.node_generation(*template) == Some(*version)
+                && self.node_generation(*node) == Some(*node_version))
+            .map(|(template, _, _, _)| *template)
     }
 
     pub(crate) fn appropriate_template_document(&mut self, document: NodeIdx) -> NodeIdx {
-        if self.template_owner_documents.iter().any(|(_, inert)| *inert == document) {
+        let valid = |&(source, version, inert, inert_version): &(NodeIdx, u64, NodeIdx, u64)|
+            self.node_generation(source) == Some(version)
+                && self.node_generation(inert) == Some(inert_version);
+        if self.template_owner_documents.iter().filter(|entry| valid(entry)).any(|(_, _, inert, _)| *inert == document) {
             return document;
         }
-        if let Some((_, inert)) = self.template_owner_documents.iter().find(|(source, _)| *source == document) {
+        if let Some((_, _, inert, _)) = self.template_owner_documents.iter()
+            .filter(|entry| valid(entry)).find(|(source, _, _, _)| *source == document) {
             return *inert;
         }
+        let html = self.document_metadata(document).ok().flatten()
+            .map_or(document == NodeIdx(0), |metadata| metadata.content_type == "text/html");
         let inert = self.create_document();
-        // DOM Standard "appropriate template contents owner document": the
-        // new document has `document`'s type, so an HTML source document's
-        // inert template contents document is also an HTML document.
-        // Without this, every element built into `<template>` content (this
-        // owner document's whole purpose) reports a foreign-case `tagName`,
-        // since `is_html_document` requires explicit `text/html` metadata
-        // rather than defaulting to it for any document but the main one.
-        // The main document (`NodeIdx(0)`) often has no explicit metadata
-        // set either, so default to HTML there too, matching that same
-        // main-document special case.
-        let metadata = self.document_metadata(document).ok().flatten().cloned()
-            .unwrap_or_else(|| DocumentMetadata {
-                url: String::new(), content_type: "text/html".into(), character_set: "UTF-8".into(),
-            });
-        let _ = self.set_document_metadata(inert, metadata);
-        self.template_owner_documents.push((document, inert));
+        // A fresh document inherits only the HTML document type. URL,
+        // encoding, mode and browsing context keep their creation defaults.
+        let metadata = DocumentMetadata { url: "about:blank".into(),
+            content_type: if html { "text/html" } else { "application/xml" }.into(),
+            character_set: "UTF-8".into() };
+        self.set_document_metadata(inert, metadata).expect("new template owner document");
+        self.template_owner_documents.push((document, self.node_generation(document).unwrap(),
+            inert, self.node_generation(inert).unwrap()));
         inert
     }
 

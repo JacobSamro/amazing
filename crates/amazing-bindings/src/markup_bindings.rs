@@ -199,7 +199,7 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
             let markup = required_string(host, args.get(if position.is_some() { 1 } else { 0 }))?;
             let (parent, reference, parse_context, context_node) = host.with_dom(|dom| {
                 let parent = dom.get(node).parent;
-                let (insertion_parent, reference) = match position.as_deref() {
+                let (mut insertion_parent, reference) = match position.as_deref() {
                     Some("beforebegin") => (parent.ok_or(DomError::NoModificationAllowedError)?, Some(node)),
                     Some("afterend") => (parent.ok_or(DomError::NoModificationAllowedError)?, dom.get(node).next_sibling),
                     Some("afterbegin") => (node, dom.get(node).first_child),
@@ -208,13 +208,20 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
                     None => (node, None),
                     _ => unreachable!(),
                 };
-                let context_node = if insertion_parent == node { node } else { insertion_parent };
-                let context_node = dom.shadow_data(context_node).map_or(context_node, |data| data.host);
-                let context_document = if matches!(dom.get(context_node).kind, NodeKind::Document) {
-                    context_node
-                } else { dom.owner_document(context_node).ok_or(DomError::InvalidNode)? };
+                // Select the actual target before parsing: template setters
+                // replace their persistent contents, whose document has no
+                // browsing context. Keep its host for tokenizer/insertion mode.
+                if matches!(op, O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe) && dom.is_html_template(node) {
+                    insertion_parent = dom.ensure_template_contents(node)?;
+                }
+                let context_node = if let Some(data) = dom.shadow_data(insertion_parent) {
+                    if matches!(op, O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe) { data.host } else { insertion_parent }
+                } else if let Some(template) = dom.template_of_contents(insertion_parent) {
+                    if matches!(op, O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe) { template } else { insertion_parent }
+                } else { insertion_parent };
+                let context_document = dom.owner_document(insertion_parent).unwrap_or(insertion_parent);
                 let scripting_enabled = dom.document_scripting_enabled(context_document)?;
-                let context = if matches!(dom.get(context_node).kind, NodeKind::Document) {
+                let context = if matches!(dom.get(context_node).kind, NodeKind::Document | NodeKind::DocumentFragment) {
                     FragmentContext { scripting_enabled, local_name: "body".into(), namespace_uri: Some("http://www.w3.org/1999/xhtml".into()) }
                 } else {
                     FragmentContext { scripting_enabled, local_name: dom.local_name(context_node).ok_or(DomError::TypeError)?.into(),
@@ -244,9 +251,7 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
             let top_level_shadow = (op == O::ElementSetHTMLUnsafe)
                 .then(|| top_level_declarative_shadow_template(&parsed)).flatten();
             host.with_dom(|dom| {
-                let insertion = if matches!(op, O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe) && dom.is_html_template(node) {
-                    dom.ensure_template_contents(node)?
-                } else { parent };
+                let insertion = parent;
                 let document = dom.owner_document(insertion).unwrap_or(insertion);
                 if let Some((template, options, keep_registry_null)) = top_level_shadow {
                     // Spec's "attach a shadow root" throwing (already a
