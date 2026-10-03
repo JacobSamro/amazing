@@ -128,3 +128,5 @@ reproduced in the table row for that upstream.
 - tafia/quick-xml @ 2eaa844b4b40117fb7ed4d1f512ede918125aeab — MIT, Copyright (c) 2016 Johann Tuffe. Complete supported XML byte-detection area from src/encoding.rs adapted in crates/amazing-html/src/xml_encoding.rs; full license adjacent.
 
 - html5lib/html5lib-python @ fd4f032bc090d44fb11a84b352dad7cbee0a4745 — MIT; Copyright (c) 2006-2013 James Graham and other contributors. Complete EncodingParser.getAttribute adapted into crates/amazing-html/src/encoding_prescan.rs; full license encoding_prescan.LICENSE-MIT.
+
+| W3C XML Test Suite 20130923 (https://www.w3.org/XML/Test/) | W3C Software Notice and License (19980720) | Original catalog copyrights include Sun Microsystems1998–1999, OASIS1999–2001 and individual fixture authors; full preserved notices in CATALOG-NOTICES.md | crates/amazing-html/evidence/html70-xml-conformance/manifest.json: normative fixture IDs/metadata/descriptions only; no upstream engine implementation code |

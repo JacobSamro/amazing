@@ -1,0 +1,40 @@
+{
+  "catalog_expectation_mismatches": 31,
+  "unread_external_entity_mismatches": [
+    "not-wf-not-sa-001",
+    "not-wf-not-sa-003",
+    "not-wf-not-sa-004",
+    "not-wf-not-sa-006",
+    "not-wf-not-sa-007",
+    "not-wf-not-sa-008",
+    "not-wf-not-sa-009",
+    "o-p09fail1",
+    "o-p09fail2",
+    "o-p30fail1",
+    "o-p31fail1",
+    "o-p61fail1",
+    "o-p62fail1",
+    "o-p62fail2",
+    "o-p63fail1",
+    "o-p63fail2",
+    "o-p64fail1",
+    "o-p64fail2",
+    "ibm-not-wf-P30-ibm30n01.xml",
+    "ibm-not-wf-P31-ibm31n01.xml",
+    "ibm-not-wf-P61-ibm61n01.xml",
+    "ibm-not-wf-P62-ibm62n01.xml",
+    "ibm-not-wf-P62-ibm62n02.xml",
+    "ibm-not-wf-P62-ibm62n03.xml",
+    "ibm-not-wf-P62-ibm62n04.xml",
+    "ibm-not-wf-P62-ibm62n05.xml",
+    "ibm-not-wf-P62-ibm62n06.xml",
+    "ibm-not-wf-P62-ibm62n07.xml",
+    "ibm-not-wf-P62-ibm62n08.xml"
+  ],
+  "rfc7303_bom_authority_conflicts": [
+    "hst-lhs-007",
+    "hst-lhs-008"
+  ],
+  "raw_classifications_preserved": true,
+  "passing_credit_added": false
+}

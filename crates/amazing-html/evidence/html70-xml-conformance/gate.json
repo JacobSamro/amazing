@@ -1,0 +1,30 @@
+{
+  "before": "4c5e07aacccfe12a8ed7377b2281aa2b970af5c0",
+  "after": "446bf0c0ca91137e0941cc78056887564e4663b6",
+  "sources": [
+    "bf87e85c14e20d2a85715ed3aa6ee0851dbe3d04",
+    "446bf0c0ca91137e0941cc78056887564e4663b6"
+  ],
+  "owned": 695,
+  "owned_skipped": 6,
+  "workspace": 4132,
+  "workspace_skipped": 17,
+  "doctests": 4,
+  "cli_trees": 1894,
+  "expanded_trees": 1930,
+  "expanded_unsupported": 6,
+  "xmlts_total": 2377,
+  "xmlts_current_profile": 1992,
+  "xmlts_counts": {
+    "pass": 568,
+    "unsupported": 1388,
+    "profile-unsupported": 385,
+    "fail": 31,
+    "optional-error-observation": 5
+  },
+  "passing_assertions_lost": 0,
+  "passing_files_lost": 0,
+  "causal_parser_assertions_gained": 0,
+  "production_parser_changed": false,
+  "retained_engine_binaries_identical": true
+}
