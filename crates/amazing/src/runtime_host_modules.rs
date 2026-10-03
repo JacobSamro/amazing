@@ -133,7 +133,7 @@ impl ModuleRuntime {
             Rc::new(RefCell::new(ModuleLinker::new(self.resolver(js))))
         }).clone()
     }
-    fn evaluate(&self, js: &mut Interpreter, id: &str, source: &str) -> Result<JsValue, Throw> {
+    fn evaluate(&self, js: &mut Interpreter, id: &str, source: &str) -> Result<(JsValue, Option<JsValue>), Throw> {
         let key = (js.binding_current_realm(), id.to_owned());
         if let Some(error) = self.failures.borrow().get(&key).cloned() { return Err(error); }
         let registry = self.registry(js);
@@ -144,11 +144,17 @@ impl ModuleRuntime {
                 self.fetch_failures.borrow_mut().insert(key.clone());
             }
             linked.map_err(module_failure)?;
-            ModuleLinker::evaluate_shared(&registry, id, js).map_err(module_failure)?;
+            let completion = ModuleLinker::evaluate_async_shared(&registry, id, js).map_err(module_failure)?;
+            let pending = match js.binding_module_evaluation_state(&completion)? {
+                amazing_js::value::PromiseFate::Rejected(reason) => return Err(Throw(reason)),
+                amazing_js::value::PromiseFate::Pending => Some(completion),
+                amazing_js::value::PromiseFate::Fulfilled(_) => None,
+            };
             let namespace = registry.borrow().namespace_object(id);
-            namespace.ok_or_else(|| Throw::type_error("module namespace missing"))
+            namespace.map(|namespace| (namespace, pending))
+                .ok_or_else(|| Throw::type_error("module namespace missing"))
         })();
-        if let Err(error) = &result { self.failures.borrow_mut().insert(key, error.clone()); }
+        if let Err(error) = &result { self.failures.borrow_mut().insert(key, js.binding_normalize_throw(error.clone())); }
         result
     }
     fn install(&self, js: &mut Interpreter) {
@@ -288,7 +294,20 @@ impl RuntimeBindings {
             runtime.inline_urls.borrow_mut().insert(id.clone(), url);
             id
         };
-        let result = runtime.evaluate(js, &id, source);
+        let result = runtime.evaluate(js, &id, source).and_then(|(namespace, pending)| {
+            if let Some(promise) = pending {
+                let bindings = self.clone();
+                let url = runtime.inline_urls.borrow().get(&id).cloned().unwrap_or_else(|| id.clone());
+                // HTML run-a-module-script reports asynchronous rejection in
+                // the registering realm. Script load and parser progress do
+                // not wait for top-level await to settle.
+                js.binding_observe_module_evaluation(&promise, Rc::new(move |js, result| {
+                    if let Err(error) = result { bindings.report_module_exception(js, &error, &url)?; }
+                    Ok(())
+                }))?;
+            }
+            Ok(namespace)
+        });
         if let Some(document) = document { runtime.current_scripts.borrow_mut().insert(document, previous.flatten()); }
         result
     }
@@ -409,6 +428,36 @@ mod tests {
         driver.run_script("var evaluated;import('./deferred.js').then(ns=>evaluated=ns);").unwrap();
         driver.pump_at(std::time::Duration::ZERO, false).unwrap();
         assert!(matches!(driver.run_script("evaluated.value===9 && evaluated!==lazy && deferredRuns===1").unwrap(), JsValue::Bool(true)));
+    }
+    #[test]
+    fn pending_page_modules_resume_without_blocking_load_and_share_import_namespace() {
+        let mut driver = scheduler();
+        driver.run_script("window.order=[];").unwrap();
+        let module = script(ScriptKind::Module, 0, true);
+        driver.run_page_script(&module,
+            "order.push('start');await new Promise(resolve=>setTimeout(resolve,1));order.push('end');export const value=7;",
+            "https://example.test/root.js").unwrap();
+        driver.finish_module_script(&module, None, "https://example.test/root.js", true).unwrap();
+        driver.run_script("var ns;import('./root.js').then(value=>ns=value);order.push('next');").unwrap();
+        assert!(matches!(driver.run_script("order.join(',')==='start,next' && typeof ns==='undefined' && document.currentScript===null").unwrap(), JsValue::Bool(true)));
+        driver.pump_at(std::time::Duration::ZERO, false).unwrap();
+        driver.pump_at(std::time::Duration::from_millis(1), false).unwrap();
+        assert!(matches!(driver.run_script("order.join(',')==='start,next,end' && ns.value===7 && document.currentScript===null").unwrap(), JsValue::Bool(true)));
+    }
+    #[test]
+    fn pending_page_module_errors_report_original_value_after_external_load() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse("<script id=root></script>"), native_forwarded: false }));
+        let node = host.borrow_mut().query_selector("script").unwrap();
+        let mut driver = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        driver.set_location_url("https://example.test/page.html");
+        driver.run_script("window.original={};var errors=[],events=[];window.addEventListener('error',e=>{errors.push(e.error);events.push('error');});document.getElementById('root').addEventListener('load',()=>events.push('load'));").unwrap();
+        let module = script(ScriptKind::Module, node, true);
+        driver.run_page_script(&module, "await new Promise(resolve=>setTimeout(resolve,1));throw window.original;", "https://example.test/root.js").unwrap();
+        driver.finish_module_script(&module, None, "https://example.test/root.js", true).unwrap();
+        assert!(matches!(driver.run_script("events.join(',')==='load' && errors.length===0").unwrap(), JsValue::Bool(true)));
+        driver.pump_at(std::time::Duration::ZERO, false).unwrap();
+        driver.pump_at(std::time::Duration::from_millis(1), false).unwrap();
+        assert!(matches!(driver.run_script("events.join(',')==='load,error' && errors.length===1 && errors[0]===window.original").unwrap(), JsValue::Bool(true)));
     }
     #[test]
     fn browser_dynamic_import_caches_materialized_dependency_errors() {
