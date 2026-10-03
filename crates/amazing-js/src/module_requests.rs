@@ -197,7 +197,11 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         let loaded = self
             .resolver
             .resolve_request(request, referrer)
-            .map_err(|message| ModuleFailure::new(ModulePhase::Resolution, message))?;
+            .map_err(|message| ModuleFailure {
+                thrown: self.resolver.resolve_request_error(request, referrer, &message),
+                phase: ModulePhase::Resolution,
+                message,
+            })?;
         let id = loaded.id.clone();
         self.load_host_record(loaded, request.phase == ImportPhase::Source)?;
         if request.phase != ImportPhase::Source {

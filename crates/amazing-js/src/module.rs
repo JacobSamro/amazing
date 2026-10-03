@@ -65,6 +65,9 @@ pub trait ModuleResolver {
         let (id, source) = self.resolve(&request.specifier.to_utf8_lossy(), referrer)?;
         Ok(LoadedModule { id, source: ModuleSource::JavaScript(source) })
     }
+    /// Hosts distinguish specifier-resolution exceptions from fetch failure.
+    /// A fetch failure has no module-script error value and remains `None`.
+    fn resolve_request_error(&self, _request: &ModuleRequest, _referrer: &str, _message: &str) -> Option<Throw> { None }
 }
 
 impl<F> ModuleResolver for F
@@ -240,7 +243,10 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                     let result = self.load_host_record(loaded, request.phase == ImportPhase::Source);
                     if let Err(failure) = result { self.request_failures.insert((id.into(),request.edge_key()),failure); }
                 }
-                Err(message) => { self.request_failures.insert((id.into(),key),ModuleFailure::new(ModulePhase::Resolution,message)); }
+                Err(message) => {
+                    let thrown = self.resolver.resolve_request_error(&request, id, &message);
+                    self.request_failures.insert((id.into(),key),ModuleFailure { phase: ModulePhase::Resolution, message, thrown });
+                }
             }
         }
         Ok(())
