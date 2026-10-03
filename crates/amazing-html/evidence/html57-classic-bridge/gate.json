@@ -1,0 +1,25 @@
+{
+  "baseline": "3f6595f328a240845ea8c8078b51df0a94f00a17",
+  "source": "d11c27805ab0053f013b90f018f5de22e9b0f1b4",
+  "series": [
+    "e79b98afab443d71514bbbc546b1852a6e407866",
+    "d11c27805ab0053f013b90f018f5de22e9b0f1b4"
+  ],
+  "owned_passed": 670,
+  "owned_skipped": 6,
+  "workspace_passed": 4107,
+  "workspace_skipped": 17,
+  "doctests_passed": 4,
+  "cli_html5lib_passed": 1894,
+  "expanded_passed": 1930,
+  "expanded_unsupported": 6,
+  "all_passing_assertion_losses": 0,
+  "all_passing_file_losses": 0,
+  "wpt_assertion_gains": 0,
+  "raw_logs_sha256": {
+    "html57-generation-after-owned.log": "8a31fad870c14debba351378ac4d2577178b2fd6867690e8b0c31407fad222fa",
+    "html57-generation-after-build.log": "797133a35fc57de2677492527cc69e727d3a67ba676fc03aa2826156b7141cf7",
+    "html57-generation-after-workspace.log": "69d3b3d58beef4098e72641fdb55f46e118f368fbc0db5a24537011fe09d9650",
+    "html57-generation-after-doc.log": "c589018341529e5d38f54d9bd6782d272d5bf4d1d0685c94d419286fae57a785"
+  }
+}
