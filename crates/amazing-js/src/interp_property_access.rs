@@ -10,8 +10,17 @@ impl Interpreter {
         receiver: JsValue,
     ) -> Result<JsValue, Throw> {
         if let JsValue::Object(object) = v {
-            if let Some(target) = self.window_proxy_target(object, WindowProxyOperation::Get, Some(key)) {
-                let (realm, global) = target?;
+            if let Some(target) = self.window_proxy_property_target(object, WindowProxyOperation::Get, Some(key)) {
+                let (realm, global, property) = target?;
+                if let WindowProxyProperty::Descriptor(property) = property {
+                    return match property {
+                        Some(property) => match property.getter {
+                            Some(getter) => self.call_value(&getter, receiver, Vec::new()),
+                            None => Ok(property.value),
+                        },
+                        None => Ok(JsValue::Undefined),
+                    };
+                }
                 return self.binding_with_realm(realm, |i| i.get_prop_receiver(&JsValue::Object(global), key, receiver));
             }
             if let Some(result) = self.proxy_get(object, key, receiver.clone()) { return result; }

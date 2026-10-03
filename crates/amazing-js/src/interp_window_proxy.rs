@@ -9,6 +9,69 @@ mod window_proxy_receiver_tests {
     use super::*;
 
     #[test]
+    fn synthetic_window_descriptors_preserve_caller_receiver_and_mask_target() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let caller = i.binding_current_realm();
+            let target = i.binding_create_realm(JsValue::object(JsObject::ordinary())).unwrap();
+            let proxy = i.binding_create_window_proxy(target).unwrap();
+            i.define_global("foreignWindow", proxy.clone());
+            let getter = i.run_script_with_backend("(function(){return this===foreignWindow})", backend).unwrap();
+            let descriptor = Property { value: JsValue::Undefined, writable: false,
+                enumerable: false, configurable: true, getter: Some(getter.clone()), setter: None };
+            i.binding_with_realm(target, |i| {
+                i.run_script("var targetHits=0;Object.defineProperty(globalThis,'safe',{get(){targetHits++;return 'target'},set(v){targetHits+=100},configurable:true});var hidden=42")?;
+                Ok(())
+            }).unwrap();
+            i.binding_set_window_proxy_access_hook(Rc::new(|_, _| Ok(())));
+            i.binding_set_window_proxy_property_hook(Rc::new(move |i, access| {
+                assert_eq!(i.binding_current_realm(), caller);
+                assert_eq!(access.current, caller);
+                Ok(match access.key {
+                    Some(JsValue::Str(key)) if key.to_utf8_lossy() == "safe" => WindowProxyProperty::Descriptor(Some(descriptor.clone())),
+                    Some(JsValue::Str(key)) if key.to_utf8_lossy() == "hidden" => WindowProxyProperty::Descriptor(None),
+                    _ => WindowProxyProperty::Target,
+                })
+            }));
+            assert_eq!(i.run_script_with_backend("foreignWindow.safe===true && foreignWindow.hidden===undefined && Object.getOwnPropertyDescriptor(foreignWindow,'hidden')===undefined", backend).unwrap(), JsValue::Bool(true));
+            let first = i.binding_get_own_property(&proxy, "safe").unwrap().unwrap();
+            let second = i.binding_get_own_property(&proxy, "safe").unwrap().unwrap();
+            assert_eq!(first.getter, Some(getter));
+            assert_eq!(first.getter, second.getter);
+            assert!(first.setter.is_none() && !first.enumerable && first.configurable);
+            assert_eq!(i.binding_with_realm(target, |i| i.run_script("targetHits")).unwrap(), JsValue::num(0.0));
+            assert_eq!(i.binding_current_realm(), caller);
+        }
+    }
+
+    #[test]
+    fn synthetic_window_descriptors_revalidate_navigation_and_access_denial() {
+        let mut i = Interpreter::new();
+        let first = i.binding_create_realm(JsValue::object(JsObject::ordinary())).unwrap();
+        let second = i.binding_create_realm(JsValue::object(JsObject::ordinary())).unwrap();
+        let proxy = i.binding_create_window_proxy(first).unwrap();
+        let checked = Rc::new(RefCell::new(Vec::new()));
+        let seen = checked.clone();
+        i.binding_set_window_proxy_access_hook(Rc::new(move |_, access| {
+            seen.borrow_mut().push(access.target);
+            Ok(())
+        }));
+        let navigable = proxy.clone();
+        i.binding_set_window_proxy_property_hook(Rc::new(move |i, access| {
+            if access.target == first { i.binding_retarget_window_proxy(&navigable, second)?; }
+            Ok(WindowProxyProperty::Descriptor(Some(Property::data(JsValue::str(
+                if access.target == first { "stale" } else { "current" }
+            )))))
+        }));
+        assert_eq!(i.binding_get_property(&proxy, "safe").unwrap(), JsValue::str("current"));
+        assert_eq!(&*checked.borrow(), &[first, second]);
+        i.binding_set_window_proxy_access_hook(Rc::new(|_, _| Err(Throw::type_error("denied"))));
+        i.binding_set_window_proxy_property_hook(Rc::new(|_, _| panic!("synthesis must follow authorization")));
+        assert!(i.binding_get_property(&proxy, "safe").is_err());
+        assert!(i.binding_get_own_property(&proxy, "safe").is_err());
+    }
+
+    #[test]
     fn root_window_proxy_uses_target_prototype_and_live_location() {
         for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
             let mut i = Interpreter::new();
@@ -64,12 +127,28 @@ pub struct WindowProxyAccess {
 
 pub type WindowProxyAccessHook = dyn Fn(&mut Interpreter, WindowProxyAccess) -> Result<(), Throw>;
 
+/// Property selection after the WindowProxy access policy succeeds. A host can
+/// supply a caller-realm cross-origin descriptor without exposing target setters.
+#[derive(Clone, Debug)]
+pub enum WindowProxyProperty {
+    Target,
+    /// `None` explicitly hides the property, rather than forwarding to the target.
+    Descriptor(Option<Property>),
+}
+
+pub type WindowProxyPropertyHook = dyn Fn(&mut Interpreter, WindowProxyAccess)
+    -> Result<WindowProxyProperty, Throw>;
+
 #[derive(Clone, Debug)]
 pub struct WindowProxyState { target: RealmHandle }
 
 impl Interpreter {
     pub fn binding_set_window_proxy_access_hook(&mut self, hook: Rc<WindowProxyAccessHook>) {
         self.window_access = Some(hook);
+    }
+
+    pub fn binding_set_window_proxy_property_hook(&mut self, hook: Rc<WindowProxyPropertyHook>) {
+        self.window_property = Some(hook);
     }
 
     pub fn binding_set_realm_origin(&mut self, realm: RealmHandle, origin: &str) -> Result<(), Throw> {
@@ -119,6 +198,19 @@ impl Interpreter {
 
     fn window_proxy_target(&mut self, object: &Obj, operation: WindowProxyOperation,
         key: Option<&PropertyKey>) -> Option<Result<(RealmHandle, Obj), Throw>> {
+        self.window_proxy_resolve_target(object, operation, key, false)
+            .map(|result| result.map(|(realm, target, _)| (realm, target)))
+    }
+
+    fn window_proxy_property_target(&mut self, object: &Obj, operation: WindowProxyOperation,
+        key: Option<&PropertyKey>)
+        -> Option<Result<(RealmHandle, Obj, WindowProxyProperty), Throw>> {
+        self.window_proxy_resolve_target(object, operation, key, true)
+    }
+
+    fn window_proxy_resolve_target(&mut self, object: &Obj, operation: WindowProxyOperation,
+        key: Option<&PropertyKey>, synthesize: bool)
+        -> Option<Result<(RealmHandle, Obj, WindowProxyProperty), Throw>> {
         let state = match &object.borrow().exotic {
             Exotic::WindowProxy(state) => state.clone(),
             _ => return None,
@@ -135,7 +227,7 @@ impl Interpreter {
                     key: key.map(|key| match key { PropertyKey::String(s) => JsValue::Str(s.clone()),
                         PropertyKey::Symbol(s) => JsValue::Symbol(s.clone()) }),
                 };
-                if let Some(hook) = self.window_access.clone() { hook(self, access)?; }
+                if let Some(hook) = self.window_access.clone() { hook(self, access.clone())?; }
                 else if self.realm_origin != target_origin {
                     return Err(Throw::type_error("cross-origin WindowProxy access requires host permission"));
                 }
@@ -144,8 +236,17 @@ impl Interpreter {
                 if state.borrow().target != target {
                     continue;
                 }
+                let property = if synthesize && matches!(operation, WindowProxyOperation::Get | WindowProxyOperation::GetOwnProperty) {
+                    match self.window_property.clone() {
+                        Some(hook) => hook(self, access)?,
+                        None => WindowProxyProperty::Target,
+                    }
+                } else { WindowProxyProperty::Target };
+                // Descriptor synthesis can itself navigate. Never use a stale
+                // descriptor or skip policy for the replacement Window.
+                if state.borrow().target != target { continue; }
                 let JsValue::Object(global) = self.binding_realm_global(target)? else { unreachable!() };
-                return Ok((target, global));
+                return Ok((target, global, property));
             }
             Err(Throw::type_error("WindowProxy target keeps changing during access"))
         })())
@@ -171,11 +272,13 @@ impl Interpreter {
 impl Interpreter {
     fn window_proxy_own_property(&mut self, object: &Obj, key: &PropertyKey)
         -> Option<Result<Option<Property>, Throw>> {
-        self.window_proxy_target(object, WindowProxyOperation::GetOwnProperty, Some(key))
-            .map(|target| target.and_then(|(realm, global)| self.binding_with_realm(realm, |i| {
+        self.window_proxy_property_target(object, WindowProxyOperation::GetOwnProperty, Some(key))
+            .map(|target| target.and_then(|(realm, global, property)| {
+                if let WindowProxyProperty::Descriptor(property) = property { return Ok(property); }
+                self.binding_with_realm(realm, |i| {
                 match key { PropertyKey::String(name) => i.legacy_own_property(&global, name, false),
                     PropertyKey::Symbol(_) => Ok(global.borrow().own_prop(key).cloned()) }
-            })))
+            }) }))
     }
 
     fn window_proxy_has(&mut self, object: &Obj, key: &PropertyKey) -> Option<Result<bool, Throw>> {

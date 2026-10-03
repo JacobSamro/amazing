@@ -1399,3 +1399,30 @@ selection **23882 → 23977/24590**, **95 gained, zero lost**; Function
 **25117 → 25212 passing**, **95 gained, zero lost**, no timeouts. Gains cover
 Annex B eval16, direct eval8, indirect eval6, class expressions24, super4 and
 class statements37. Evidence: `js-runtime_jsrt35_evidence.json`.
+
+## JSRT-38 WindowProxy caller-realm descriptors (2026-10-03)
+
+Frozen base `bf59a0cddb0443154fc53b8b8af7b0e8bbf6040d`. HTML52 exposed
+that permitting a safe cross-origin property through the access hook forwarded
+the target's original descriptor, including its Replaceable setter. The new
+additive `WindowProxyPropertyHook` selects `Target` or
+`Descriptor(Option<Property>)` after authorization in the caller realm.
+`Descriptor(None)` explicitly masks a property. Get invokes a synthesized
+getter with the original receiver; GetOwnProperty returns the same host-cached
+descriptor. Navigation during either hook restarts authorization and synthesis
+against the replacement target. The existing access hook and setter paths
+retain their interfaces. Internal target resolution does not invoke the
+synthesis hook, avoiding discarded descriptors during native getter operations.
+
+Two grouped regressions cover both backends, caller realm and receiver,
+stable getter identity, absent setters, hidden target getters/properties,
+navigation revalidation and denial before synthesis. HTML owns the cached
+cross-origin safe property descriptors and the real installed driver/WPT gate.
+Reference: [CrossOriginGetOwnPropertyHelper](https://html.spec.whatwg.org/multipage/nav-history-apis.html#crossorigingetownpropertyhelper).
+Final measurements are recorded in `js-runtime_jsrt38_evidence.json`.
+
+Final Boat workspace **3757 passed/17 skipped, 75.759 seconds**, **4 doctests**.
+Matched 15-second/4-job whole selections: Proxy **280/311**, Object
+**3338/3414**, Reflect **151/154**, Function **502/515**, all unchanged.
+Unique union **4394 cases**, **4271 passing before and after**, zero losses
+and zero timeouts. HTML owns the installed cross-origin descriptor gate.
