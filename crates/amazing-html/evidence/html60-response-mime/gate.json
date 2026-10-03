@@ -1,0 +1,19 @@
+{
+  "before": "92191ddbc820d84ca9ee2294a0d3282011e82b48",
+  "after": "3be5040dcbe97c745f3b6a933730f5fb6325bddd",
+  "source_series": [
+    "38c30ea196aaaa378ff56458a592863ce36242d2",
+    "3be5040dcbe97c745f3b6a933730f5fb6325bddd"
+  ],
+  "owned_before": 673,
+  "owned_after": 675,
+  "workspace_before": 4110,
+  "workspace_after": 4112,
+  "owned_skip": 6,
+  "workspace_skip": 17,
+  "docs": 4,
+  "cli": 1894,
+  "expanded": 1930,
+  "unsupported": 6,
+  "binary_sha256": "636bb576d7db955097bf5037d6be7fc224759eab06b89b90f1d4753c973c4667  /tmp/amazing-target-html/release/amazing\n6287e986018a83acf4e4784c154b7d3abfc8c1fe24622fcfc29d16d910d22e04  /tmp/amazing-target-html/release/examples/html5lib_host\n"
+}

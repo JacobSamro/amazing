@@ -3712,3 +3712,4 @@ actual template contents and preserving HTML Range append execution policy.
 - HTML59 READY: actual native Selection context/Window receiver helpers; Boat 671 owned/4108 workspace/4 docs, whole contexts/modules/syntax/CSSOM/Selection exact names zero loss. Evidence `crates/amazing-html/evidence/html59-selection-context`; lower Selection activation is independent.
 
 - HTML61 READY: pure native/gen/live/ancestor guarded actual Document realm accessor, callbacks absent; 673owned/4110workspace/4docs and wholecontexts/modules/syntax/CSSOM/Selection exact0loss. Evidence `html61-document-realm`.
+- HTML60 READY: actual Document/classic MIME and charset use existing Fetch header record extraction/nosniff;675owned/4112workspace/4docs and wholecontexts/modules/syntax/CSSOM/Selection exact0loss, no credited corpus gain. Evidence `html60-response-mime`; quoted duplicate response/BOM groups pass.
