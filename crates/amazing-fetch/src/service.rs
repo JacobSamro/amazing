@@ -290,6 +290,10 @@ pub struct NetworkService {
     ready: Vec<ServiceEvent>,
 }
 impl NetworkService {
+    /// A service result already queued for delivery is not pending I/O.
+    pub fn has_pending_request_io(&self, id: ServiceId) -> bool {
+        self.active.get(&id).is_some_and(|task| self.dispatcher.has_pending_request_io(task.pending.id()))
+    }
     pub fn start_child_navigation(&mut self, target: HttpUrl,
         parent: &crate::api::NavigableContext) -> Result<ServiceId, ApiError> {
         let request = ApiRequest::child_navigation(target, parent)?;

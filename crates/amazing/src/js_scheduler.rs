@@ -381,6 +381,10 @@ impl DriverScheduler {
         self.pump_at_with_render(now, render, |_, _| {})
     }
 
+    pub(crate) fn has_pending_network_io(&self) -> bool {
+        self.bindings.has_pending_network_io()
+    }
+
     /// Like [`Self::pump_at`], but invokes `on_render` for each `Action::Render`
     /// the event loop yields. The loop orders resize/scroll, then rAF callbacks,
     /// then the `AfterAnimationFrames` render step, so a compositor can tick at

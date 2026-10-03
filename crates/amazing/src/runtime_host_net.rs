@@ -170,6 +170,25 @@ impl Drop for XhrStateOverrideGuard {
     fn drop(&mut self) { self.0.borrow_mut().net.xhr_ready_state_override = self.1; }
 }
 
+impl RuntimeBindings {
+    /// Pure actual HTTP-I/O activity, without realm entry or user callbacks.
+    /// Ready data/cache results, stale/aborted XHR and WebSockets are excluded.
+    pub(crate) fn has_pending_network_io(&self) -> bool {
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        state.net.fetch_pending.iter().any(|(id, _, _, signal)|
+            matches!(host.dom.abort_signal_reason(*signal), Ok(None))
+                && state.net.fetch_network.has_pending_request_io(*id))
+            || state.net.xhr_pending.iter().any(|task| {
+                let XhrTransport::Dispatch(pending) = &task.transport else { return false; };
+                matches!(&*task.record.borrow(), FetchObject::Xhr(xhr)
+                    if xhr.generation() == task.generation && xhr.send_invoked()
+                        && xhr.state() != XhrState::Done
+                        && state.net.fetch_network.dispatcher.has_pending_request_io(pending.id()))
+            })
+    }
+}
+
 impl RuntimeBindingHost<'_> {
     /// Read only the policy installed on this exact native Document lifetime.
     /// This pure lookup neither enters a realm nor invokes embedding callbacks.
@@ -1762,6 +1781,40 @@ mod tests {
         assert!(host.try_borrow_mut().is_ok());assert!(bindings.state.try_borrow_mut().is_ok());
         assert_eq!(snapshot.csp,policy.csp);
     }
+    #[test]
+    fn pending_io_query_excludes_data_abort_stale_and_idle_websocket_records() {
+        use super::*;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/root.html", listener.local_addr().unwrap());
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse("<body>"), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(crate::js_scheduler::JS_CAPACITY).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = crate::runtime_binding_host::install(&mut js, host.clone()).unwrap();
+        bindings.set_document_url(&mut js, &url);
+        assert!(!bindings.has_pending_network_io());
+        js.run_script("var data=new XMLHttpRequest();data.open('GET','data:text/plain,ready');data.send();").unwrap();
+        assert!(!bindings.has_pending_network_io());
+        js.run_script("var xhr=new XMLHttpRequest();xhr.open('GET','/wait');xhr.send();").unwrap();
+        assert!(bindings.has_pending_network_io());
+        js.run_script("xhr.abort()").unwrap();
+        assert!(!bindings.has_pending_network_io());
+        js.run_script("xhr.open('GET','/wait');xhr.send();").unwrap();
+        assert!(bindings.has_pending_network_io());
+        js.run_script("xhr.open('GET','/replacement')").unwrap();
+        assert!(!bindings.has_pending_network_io());
+        js.run_script("var controller=new AbortController();fetch('/wait',{signal:controller.signal}).catch(()=>{});").unwrap();
+        assert!(bindings.has_pending_network_io());
+        js.run_script("controller.abort()").unwrap();
+        assert!(!bindings.has_pending_network_io());
+        // An unrelated retained WebSocket alone cannot slow virtual turns.
+        let mut state = bindings.state.borrow_mut();
+        state.net.ws_by_service.insert(ServiceId(u64::MAX), 0);
+        drop(state);
+        assert!(!bindings.has_pending_network_io());
+        assert!(host.try_borrow_mut().is_ok());
+        assert!(bindings.state.try_borrow_mut().is_ok());
+    }
+
     #[test]
     fn document_query_encoder_keeps_state_and_url_error_escapes() {
         assert_eq!(super::encode_document_query("あい", "iso-2022-jp"), b"\x1b$B$\"$$\x1b(B");

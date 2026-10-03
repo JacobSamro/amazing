@@ -1372,7 +1372,7 @@ fn execute_page(
     }
     // WPT runs against a deterministic 60 Hz virtual display. Each completed
     // turn gets one rendering opportunity, including a stable rAF timestamp.
-    let mut frame = 0_u64;
+    let mut clock = IoAwareClock::default();
     while !COMPLETE.get() {
         // Drains iframes queued since the last turn: script-driven
         // `src`/DOM mutations already pushed them via
@@ -1468,11 +1468,57 @@ fn execute_page(
                 depth + 1,
             );
         }
-        scheduler.pump_at(Duration::from_micros(frame.saturating_mul(16_667)), true)
+        let pending_io = scheduler.has_pending_network_io();
+        if pending_io { std::thread::sleep(Duration::from_millis(1)); }
+        let (now, render) = clock.advance(pending_io, Instant::now());
+        scheduler.pump_at(now, render)
             .map_err(|e| e.describe())?;
-        frame = frame.saturating_add(1);
     }
     Ok(())
+}
+
+/// Virtual idle turns remain deterministic. Real HTTP work consumes actual
+/// monotonic time, so rapid polling cannot expire JS timers before the OS has
+/// delivered a response. The supervisor's hard wall-clock deadline is intact.
+#[derive(Default)]
+struct IoAwareClock {
+    now: Duration,
+    next_render: Duration,
+    io_checkpoint: Option<Instant>,
+    started: bool,
+}
+impl IoAwareClock {
+    fn advance(&mut self, pending_io: bool, wall: Instant) -> (Duration, bool) {
+        const FRAME: Duration = Duration::from_micros(16_667);
+        if pending_io {
+            if let Some(previous) = self.io_checkpoint { self.now = self.now.saturating_add(wall.saturating_duration_since(previous)); }
+            self.io_checkpoint = Some(wall);
+        } else {
+            if self.started { self.now = self.now.saturating_add(FRAME); }
+            self.io_checkpoint = None;
+        }
+        self.started = true;
+        let render = self.now >= self.next_render;
+        if render { self.next_render = self.now.saturating_add(FRAME); }
+        (self.now, render)
+    }
+}
+
+#[cfg(test)]
+mod io_clock_tests {
+    use super::*;
+    #[test]
+    fn real_io_does_not_accelerate_timers_or_rendering_and_idle_turns_resume() {
+        let wall = Instant::now();
+        let mut clock = IoAwareClock::default();
+        assert_eq!(clock.advance(false, wall), (Duration::ZERO, true));
+        assert_eq!(clock.advance(false, wall), (Duration::from_micros(16_667), true));
+        assert_eq!(clock.advance(true, wall), (Duration::from_micros(16_667), false));
+        assert_eq!(clock.advance(true, wall + Duration::from_millis(2)), (Duration::from_micros(18_667), false));
+        assert_eq!(clock.advance(true, wall + Duration::from_millis(22)), (Duration::from_micros(38_667), true));
+        assert_eq!(clock.advance(false, wall), (Duration::from_micros(55_334), true));
+        assert_eq!(clock.advance(true, wall), (Duration::from_micros(55_334), false));
+    }
 }
 
 /// The venus build hosts have no git; `scripts/ensure-wpt.sh` extracts the

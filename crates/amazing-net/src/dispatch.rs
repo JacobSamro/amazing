@@ -329,6 +329,11 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
     pub fn in_flight(&self) -> usize {
         self.active.len() + self.websockets.len()
     }
+    /// Actual HTTP work; idle sockets, WebSockets and paused consumers do
+    /// not require a driver to wait for a wall-clock I/O event.
+    pub fn has_pending_request_io(&self, id: RequestId) -> bool {
+        self.active.get(&id).is_some_and(|entry| !entry.paused)
+    }
     pub fn submit(
         &mut self,
         input: &str,
