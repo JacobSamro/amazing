@@ -73,7 +73,7 @@ pub fn decode(bytes: &[u8], transport_label: Option<&str>) -> Result<DecodedXml,
 }
 fn codec(label: &str) -> Result<Encoding, XmlDecodeError> {
     amazing_encoding::encoding_for_label(label)
-        .filter(|encoding| !matches!(encoding, Encoding::Replacement | Encoding::XUserDefined))
+        .filter(|encoding| *encoding != Encoding::Replacement)
         .ok_or_else(|| XmlDecodeError(format!("unsupported XML encoding: {label}")))
 }
 fn decode_as(bytes: &[u8], encoding: Encoding) -> Result<DecodedXml, XmlDecodeError> {
@@ -133,7 +133,8 @@ mod tests {
         for bytes in [b"\xff\xfe\0\0<\0\0\0".as_slice(), b"\0\0\xfe\xff\0\0\0<", b"\x4c\x6f\xa7\x94", b"\xff", b"\xc0\xaf"] {
             assert!(decode(bytes, None).is_err(), "{bytes:?}");
         }
-        for label in ["unknown", "replacement", "x-user-defined"] { assert!(decode(b"<r/>", Some(label)).is_err()); }
+        for label in ["unknown", "replacement"] { assert!(decode(b"<r/>", Some(label)).is_err()); }
+        assert_eq!(decode(b"<r>\x80</r>", Some("x-user-defined")).unwrap().text, "<r>\u{f780}</r>");
         assert!(decode(b"<?xml version='1.0' encoding='unknown'?><r/>", None).is_err());
         assert!(decode(b"<?xml version='1.0' encoding='UTF-16'?><r/>", None).is_err());
         assert_eq!(decode(b"<?xml version='1.0' encoding='unknown'?><r/>", Some("utf-8")).unwrap().encoding, Encoding::Utf8);
