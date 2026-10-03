@@ -698,7 +698,7 @@ mod image_loader_tests {
 /// native binding from a child realm throws "host function dispatcher is
 /// not installed", since `host_native_dispatch` is itself per-realm state.
 pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> Rc<HostNativeDispatch> {
-    Rc::new(move |js, id, this, args, _new_target| {
+    Rc::new(move |js, id, this, args, new_target| {
         let entry = state
             .borrow()
             .functions
@@ -712,6 +712,16 @@ pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> 
         match entry {
             NativeEntry::Cssom(operation) => adapter.cssom_invoke_native(operation, this, &args),
             NativeEntry::Canvas(target, member) => adapter.invoke_canvas(target, member, this, &args),
+            NativeEntry::Operation(Operation::XMLSerializerConstructor) => {
+                let target = new_target.ok_or_else(|| Throw::type_error("XMLSerializer requires new"))?;
+                // Read the user-observable prototype before allocating native state.
+                let prototype = adapter.js.binding_get_property(&target, "prototype")?;
+                let value = adapter.dom_xml_serializer_new()?;
+                if let (JsValue::Object(object), JsValue::Object(prototype)) = (&value, prototype) {
+                    object.borrow_mut().proto = Some(prototype);
+                }
+                Ok(value)
+            }
             NativeEntry::Operation(operation) => adapter.invoke_operation_with_html_hooks(operation, this, &args),
             NativeEntry::Net(entry) => adapter.invoke_net(entry, this, &args),
             NativeEntry::IllegalConstructor => Err(Throw::type_error("Illegal constructor")),

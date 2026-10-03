@@ -1542,7 +1542,14 @@ mod tests {
             let missing=false;try{serializer.serializeToString();}catch(e){missing=e instanceof TypeError;}check(missing);
             let wrong=false;try{XMLSerializer.prototype.serializeToString.call({},root);}catch(e){wrong=e instanceof TypeError;}check(wrong);
             let construct=false;try{XMLSerializer();}catch(e){construct=e instanceof TypeError;}check(construct);
-            check(new XMLSerializer() !== serializer);return true;}catch(e){return String(e)+" at step "+step;}})();
+            check(new XMLSerializer() !== serializer);
+            const custom={};function Target(){}Target.prototype=custom;
+            const reflected=Reflect.construct(XMLSerializer,[],Target);
+            check(Object.getPrototypeOf(reflected) === custom);
+            check(XMLSerializer.prototype.serializeToString.call(reflected,root).startsWith('<ns1:root'));
+            class Derived extends XMLSerializer {}const derived=new Derived();
+            check(derived instanceof Derived && derived instanceof XMLSerializer);
+            return true;}catch(e){return String(e)+" at step "+step;}})();
         "#).unwrap();
         assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
     }
