@@ -2661,6 +2661,7 @@ mod tests {
         let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
         scheduler.set_location_url("https://example.test/main.html");
         assert_eq!(scheduler.run_script(r#"
+            (function() {
             function check(x) { if(!x) throw new Error('Window descriptors'); }
             const child=document.querySelector('iframe').contentWindow;
             for(const name of ['frames','length','parent']) {
@@ -2691,7 +2692,8 @@ mod tests {
                 let rejected=false; try { setter.call(receiver,0); } catch(error) { rejected=error instanceof TypeError; }
                 check(rejected);
             }
-            true
+            return true;
+            })()
         "#).unwrap(), JsValue::Bool(true));
     }
 
