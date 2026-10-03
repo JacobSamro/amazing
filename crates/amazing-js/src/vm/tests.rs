@@ -1856,18 +1856,18 @@ fn async_jobs_interleave_with_promise_reactions() {
 #[test]
 fn fuel_stops_backedges_and_vm_state_is_clean_after_error() {
     let mut interpreter = Interpreter::new();
-    interpreter.completion = JsValue::str("saved");
+    interpreter.completion = Some(JsValue::str("saved"));
     let code =
         compile(&parse_script("let x = 0; while (true) { let local = 3; x++; }").unwrap(), false).unwrap();
     let error = code.run(&mut interpreter, 100).unwrap_err();
     assert!(error.describe().contains("instruction limit"));
-    assert_eq!(interpreter.completion, JsValue::str("saved"));
+    assert_eq!(interpreter.completion, Some(JsValue::str("saved")));
     assert!(interpreter.global_env.resolve("local").is_none());
     let result = interpreter
         .run_script_with_backend("2 + 3", ExecutionBackend::Bytecode)
         .unwrap();
     assert_eq!(result, JsValue::num(5.0));
-    assert_eq!(interpreter.completion, JsValue::str("saved"));
+    assert_eq!(interpreter.completion, Some(JsValue::str("saved")));
 }
 
 #[test]
