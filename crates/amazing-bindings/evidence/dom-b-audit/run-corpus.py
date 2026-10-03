@@ -131,7 +131,9 @@ assert selection, 'empty corpus'
 # concurrency setting sized for the other ~99% of tests -- see
 # --heavy-timeout-ms/--heavy-workers above for the measurements behind this.
 import re
-HEAVY = re.compile(r'^html/dom/reflection-[^/]+\.html$')
+# These two combinatorial Range pages also exceed the ordinary deadline.
+# Keep the same frozen deadline/serialized pool on both sides of bulk gates.
+HEAVY = re.compile(r'^(?:html/dom/reflection-[^/]+|dom/ranges/Range-(?:mutations-dataChange|set))\.html$')
 heavy_selection = [t for t in selection if HEAVY.match(t)]
 normal_selection = [t for t in selection if not HEAVY.match(t)]
 def run_test(item, timeout_ms):
