@@ -19,14 +19,14 @@ pub(super) enum AsyncDelegatePhase {
     Received,
     /// Awaiting the inner iterator's `next`/`throw`/`return` result (`kind` is which one).
     AwaitingResult { kind: u8 },
-    /// A `return` resumption reached a done inner result: awaiting its value before returning.
+    /// A `return` resumption found no inner return: Await its value again after GetMethod.
     AwaitingReturnValue,
     /// A `throw` resumption found no inner `throw` method: awaiting the inner `return()` result
     /// (AsyncIteratorClose) before throwing the protocol TypeError.
     AwaitingClose,
 }
 
-pub(super) struct AsyncDelegate {
+pub(crate) struct AsyncDelegate {
     iterator: JsValue,
     next: JsValue,
     /// The inner iterator came from `@@iterator` (wrapped per CreateAsyncFromSyncIterator).
@@ -35,7 +35,7 @@ pub(super) struct AsyncDelegate {
 }
 
 /// What the `YieldDelegateAsync` instruction does next.
-pub(super) enum AsyncDelegateStep {
+pub(crate) enum AsyncDelegateStep {
     /// Yield this inner value to the consumer (AsyncGeneratorYield; no further await).
     Yield(JsValue),
     /// Suspend the frame until this value settles.
@@ -61,7 +61,7 @@ fn get_method(i: &mut Interpreter, value: &JsValue, key: impl Into<crate::value:
 }
 
 /// GetIterator(value, async): `@@asyncIterator`, else a sync iterator from `@@iterator`.
-pub(super) fn start(i: &mut Interpreter, iterable: &JsValue) -> Result<AsyncDelegate, Throw> {
+pub(crate) fn start(i: &mut Interpreter, iterable: &JsValue) -> Result<AsyncDelegate, Throw> {
     let (method, sync) = match get_method(i, iterable, WellKnownSymbol::AsyncIterator.symbol())? {
         Some(method) => (method, false),
         None => match get_method(i, iterable, WellKnownSymbol::Iterator.symbol())? {
@@ -80,7 +80,7 @@ pub(super) fn start(i: &mut Interpreter, iterable: &JsValue) -> Result<AsyncDele
 /// Advance the delegation with `(kind, input)`: the consumer's resumption (0 next, 1 return,
 /// 2 throw) in `Received`, or an awaited settlement (0 fulfilled, 2 rejected) otherwise. An
 /// `Err` completes the `yield*` with a throw; the caller then drops the delegation state.
-pub(super) fn step(i: &mut Interpreter, state: &mut AsyncDelegate, kind: u8, input: JsValue)
+pub(crate) fn step(i: &mut Interpreter, state: &mut AsyncDelegate, kind: u8, input: JsValue)
     -> Result<AsyncDelegateStep, Throw>
 {
     match std::mem::replace(&mut state.phase, AsyncDelegatePhase::Received) {
@@ -124,8 +124,12 @@ fn call_inner(i: &mut Interpreter, state: &mut AsyncDelegate, kind: u8, input: J
         0 => state.next.clone(),
         1 => match get_method(i, &iterator, "return")? {
             Some(method) => method,
-            // The resumption value was already awaited (AsyncGeneratorUnwrapYieldResumption).
-            None => return Ok(AsyncDelegateStep::Return(input)),
+            // Yield* requires this second Await after GetMethod, even though
+            // AsyncGeneratorUnwrapYieldResumption already awaited the input.
+            None => {
+                state.phase = AsyncDelegatePhase::AwaitingReturnValue;
+                return Ok(AsyncDelegateStep::Await(input));
+            },
         },
         _ => match get_method(i, &iterator, "throw")? {
             Some(method) => method,
@@ -155,8 +159,9 @@ fn inner_result(i: &mut Interpreter, state: &mut AsyncDelegate, kind: u8, done: 
         return Ok(AsyncDelegateStep::Yield(value));
     }
     if kind == 1 {
-        state.phase = AsyncDelegatePhase::AwaitingReturnValue;
-        return Ok(AsyncDelegateStep::Await(value));
+        // A done inner return supplies ReturnCompletion(value) directly.
+        // Genuine async iterator values are not implicitly awaited here.
+        return Ok(AsyncDelegateStep::Return(value));
     }
     Ok(AsyncDelegateStep::Complete(value))
 }

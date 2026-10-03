@@ -22,7 +22,8 @@
 // `Interp::drive_async`, crates/lumen/src/interpreter.rs, same commit): a plain async function
 // the VM does not compile runs here too, parking at each `await` and resumed from the awaited
 // value's reaction (`start_thread_async_function`/`thread_async_function_step`). Async
-// generator bodies retain the legacy `await_value` policy outside Return-specific Await.
+// generator bodies use the same checked, owner-depth Await protocol. Ordinary async Yield
+// awaits its operand; async Yield* drives the shared actual-iterator state machine.
 //
 // `yield`'s "inject a `.return(v)`/`.throw(e)` completion at the suspended point" is not
 // representable in `eval_expr`'s `Result<JsValue, Throw>` return type (only `exec_stmt`'s
@@ -334,6 +335,8 @@ fn park(msg: Suspend) -> Resume {
 /// resumption to `eval_expr`'s return shape. Callers must have already checked `in_coroutine()`;
 /// `park` panics with a clear message otherwise instead of silently misbehaving.
 fn coroutine_yield_to_expr(i: &mut Interpreter, value: JsValue) -> Result<JsValue, Throw> {
+    let value = if current_async_generator(i) { coroutine_async_generator_await(i, value)? }
+        else { value };
     match park_segment(i, Suspend::Yield(value)) {
         Resume::Next(v) => Ok(v),
         Resume::Throw(e) => Err(Throw(e)),
@@ -345,19 +348,11 @@ fn coroutine_yield_to_expr(i: &mut Interpreter, value: JsValue) -> Result<JsValu
     }
 }
 
-/// `yield* iterable` (spec 15.5.5, sync delegation). Forwards `next`/`throw`/`return` resumptions
-/// to the inner iterator, yielding each of its non-done results in turn, and completes the outer
-/// `yield*` expression with the inner iterator's own final `value` once it reports `done`.
-/// Reuses the sync `@@iterator` protocol uniformly for both sync and async generator bodies (an
-/// async generator delegating via its own `@@asyncIterator`, and truly awaiting each delegated
-/// value, is out of scope here for the same reason plain `await` is -- see the module doc).
+/// Yield* uses actual iterator records. Async delegation shares the VM's
+/// protocol state machine; ordinary sync delegation forwards raw result objects.
 fn yield_delegate(i: &mut Interpreter, iterable: JsValue) -> Result<JsValue, Throw> {
+    if current_async_generator(i) { return coroutine_async_yield_delegate(i, iterable); }
     let state = i.start_sync_yield_delegate(&iterable)?;
-    // The legacy async coroutine driver still wraps values synchronously. Preserve that policy;
-    // genuine asynchronous delegation remains the VM async_delegate implementation.
-    let legacy_async = SEGMENT.with(|segment| segment.borrow().as_ref()
-        .and_then(|segment| segment.own_function.as_ref())
-        .is_some_and(|function| function.borrow().func.as_ref().is_some_and(|function| function.is_async)));
     let mut resume = Resume::Next(JsValue::Undefined);
     loop {
         let (kind, input) = match resume {
@@ -372,9 +367,7 @@ fn yield_delegate(i: &mut Interpreter, iterable: JsValue) -> Result<JsValue, Thr
                 return Err(Throw(JsValue::Undefined));
             }
             crate::interp::YieldDelegateStep::YieldResult(result) => {
-                let suspend = if legacy_async { Suspend::Yield(i.get_prop(&result, "value")?) }
-                    else { Suspend::YieldIteratorResult(result) };
-                resume = park_segment(i, suspend);
+                resume = park_segment(i, Suspend::YieldIteratorResult(result));
             }
         }
     }
@@ -769,7 +762,7 @@ impl Interpreter {
         // Captured now, inside the generator function's own call, so every later segment (each
         // driven from an arbitrary `.next()` call site) runs with this function's frame and
         // strictness rather than the driver's (see `Segment`).
-        let segment = Segment::capture(self, strict, false);
+        let segment = Segment::capture(self, strict, is_async);
         let job = SendBody(Box::new(move |i: &mut Interpreter| -> Suspend {
             SEGMENT.with(|s| *s.borrow_mut() = Some(segment));
             enter_segment(i);

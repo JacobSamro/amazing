@@ -253,20 +253,10 @@ fn borrowed_generator_methods_preserve_body_and_request_realms() {
         i.global_env
             .declare_var("childArray", child_array_proto)
             .unwrap();
-        // Node/V8 on Boat and the normative Await/Yield trace establish
-        // that native Yield's implicit Await resumes through a child-realm
-        // callback. The actor's deliberately preserved legacy Yield policy
-        // does not Await its operand; keep that diagnostic explicit rather
-        // than claiming whole Yield parity in this Return-only ticket.
+        // Ordinary async Yield now awaits its operand on both consumers.
+        // Its child-realm reaction becomes the actual previous Yield context.
         i.global_env
-            .declare_var(
-                "expectedYieldPrototype",
-                if actor {
-                    JsValue::Object(i.object_proto.clone())
-                } else {
-                    child_object_proto.clone()
-                },
-            )
+            .declare_var("expectedYieldPrototype", child_object_proto.clone())
             .unwrap();
         i.global_env
             .declare_var("childObject", child_object_proto)

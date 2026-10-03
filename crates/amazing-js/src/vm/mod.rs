@@ -5,6 +5,10 @@
 #![forbid(unsafe_code)]
 
 mod async_delegate;
+pub(crate) use async_delegate::{
+    AsyncDelegateStep as AsyncYieldDelegateStep, start as start_async_yield_delegate,
+    step as step_async_yield_delegate,
+};
 mod async_from_sync;
 mod compiler;
 pub(crate) use compiler::global_annex_candidates;
