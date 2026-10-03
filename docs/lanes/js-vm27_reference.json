@@ -1,0 +1,61 @@
+{
+  "node": "v24.18.1",
+  "results": [
+    {
+      "name": "inner-name-heritage-TDZ",
+      "value": {
+        "error": "ReferenceError",
+        "keyVisited": false
+      }
+    },
+    {
+      "name": "yield-class-key-closure-and-private-identity",
+      "value": {
+        "first": "key",
+        "before": "ReferenceError",
+        "closureSame": true,
+        "own": 7,
+        "cross": "TypeError"
+      }
+    },
+    {
+      "name": "yield-heritage-outer-private-environment",
+      "value": {
+        "first": "base",
+        "parent": true
+      }
+    },
+    {
+      "name": "abrupt-return-restores-sloppy-finally",
+      "value": {
+        "done": true,
+        "value": 9,
+        "leak": 3
+      }
+    },
+    {
+      "name": "abrupt-throw-restores-sloppy-catch",
+      "value": {
+        "done": true,
+        "identity": true,
+        "leak": 4
+      }
+    },
+    {
+      "name": "strict-after-await-heritage",
+      "error": "ReferenceError",
+      "leaked": false
+    },
+    {
+      "name": "strict-after-await-key",
+      "error": "ReferenceError",
+      "leaked": false
+    }
+  ],
+  "host": "Boat pool-js-vm/bx_e32kqbvv through MAIN linux-run.sh",
+  "sources": [
+    "https://tc39.es/ecma262/multipage/ecmascript-language-functions-and-classes.html#sec-runtime-semantics-classdefinitionevaluation",
+    "https://github.com/lucid-softworks/lumen/blob/f6c9860d44fa52249cfd647122edea184d32c863/crates/lumen/src/eval.rs"
+  ],
+  "scope": "Reference only; no Amazing production-change or gain claim"
+}

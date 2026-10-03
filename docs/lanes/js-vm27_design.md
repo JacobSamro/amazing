@@ -192,3 +192,17 @@ realms, With restoration, synchronous/asynchronous suspension, injected
 Throw/Return with catch/finally/disposal, and debugger quantum stops.
 No pass losses or new host crashes; existing eight fallback removals must be
 measured, not inferred from the opcode inventory.
+
+Node **v24.18.1** on Boat confirms seven reference cases: heritage class-name
+TDZ before keys, retained computed-key closures and per-evaluation private
+brands, outer private names during heritage, outer sloppy catch/finally after
+injected Throw/Return, and strictness after Await in heritage and keys. See
+[js-vm27_reference.json](js-vm27_reference.json). These are reference results,
+not Amazing before/after improvements.
+
+Review refinement: heritage's last Reference must survive separately from its
+value until the outer environment has been restored. A class-private
+Value-or-existing-Reference operand can use the current name/capture/key/GetValue
+gateways without adding a Reference variant. The same six phase methods remain;
+ClassPrepareElements resolves that operand before prototype validation. Do not
+substitute eager expression lowering for this ordering.
