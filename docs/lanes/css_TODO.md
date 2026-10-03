@@ -2904,3 +2904,9 @@ layout generated/applicability map remains separate.
 Parent granted one driver assertion correction: phase2_style.rs font-weight bold→700 records computed normalization, retaining selector/cascade semantics. First workspace had3569pass/1obsolete expectation; full corrected-source gate rerun.
 
 CSS47 final: CSS409/workspace3570/17skip+4docs;4231→4256/5126 (+25/lost0);wholefonts24/32 unchanged/all32stable/lost0. Renderer8eee72f3b7304afd70ba361b5e213b8af37a418076bfd9baa930d9ee4d1ec6a3.
+
+### CSS48 — native-document computed pseudo styles
+
+CSSOM https://drafts.csswg.org/cssom/#dom-window-getcomputedstyle and CSS Pseudo4 https://drafts.csswg.org/css-pseudo-4/. Compute actual recognized pseudo cascade without conditioning on generated boxes; selected native-document sheets, principal inheritance, root units, display context and actual font callback. Generation map unchanged. Backdrop fully styleable/current inheritance with Position4 UA fixed/inset default. Three grouped regressions. Specialized selection parent-highlight inheritance, limited property applicability and pseudo animation samples remain explicit follow-ons; actual used dimensions belong to driver/layout. Fixed CSS47 ea3d491b; identical15-dir and wholefonts zero-loss gate.
+
+CSS48 final: CSS412/workspace3573/17skip+4docs;4256/5126 unchanged/lost0;wholefonts24/32/all32stable/lost0. Renderer6e412187daa5d8fa0b76136f1e8ba5bc0dfdd38f088a05cc03d443506c99afaf. Driver CSSOM adoption/gains separate; next lower gradient computed-value family (largest43-case cluster).

@@ -26,6 +26,10 @@ use crate::parser::{Declaration, Stylesheet, parse_declarations, parse_styleshee
 use crate::selectors::{PseudoElement, Selector, Specificity, parse_selector};
 use crate::values::ComputedValue;
 use crate::media_queries::MediaEnvironment;
+#[path = "computed_pseudo.rs"]
+mod computed_pseudo;
+pub use computed_pseudo::compute_document_pseudo_with_font_metrics;
+
 use amazing_dom::{Dom, NodeIdx};
 use std::collections::{BTreeMap, HashMap, HashSet};
 

@@ -111,6 +111,8 @@ impl Default for ComputedStyle {
 }
 
 impl ComputedStyle {
+    pub(crate) fn root_font_size_px(&self) -> f32 { self.root_font_px as f32 }
+
     pub(crate) fn set_contextual_value(&mut self, property: &str, css: &str) {
         self.props.insert(property.into(), css.into());
         self.typed.insert(property.into(), values::parse(property, css).unwrap_or(ComputedValue::Unparsed));

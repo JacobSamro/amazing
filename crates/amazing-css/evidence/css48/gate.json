@@ -1,0 +1,34 @@
+{
+  "ticket": "CSS-48",
+  "base": "ea3d491bcbf23996be9337e73c74a210f8b8f9bf",
+  "platform": "Boat Linux native /tmp source+target",
+  "renderer_sha256": "6e412187daa5d8fa0b76136f1e8ba5bc0dfdd38f088a05cc03d443506c99afaf",
+  "workspace": 3573,
+  "workspace_skipped": 17,
+  "doctests": 4,
+  "css_tests": 412,
+  "new_grouped_regressions": 3,
+  "parsing": {
+    "before": 4256,
+    "after": 4256,
+    "total": 5126,
+    "gained": [],
+    "lost": []
+  },
+  "render": {
+    "fonts": {
+      "before_pass": 24,
+      "after_pass": 24,
+      "total": 32,
+      "unchanged": 32,
+      "gained": [],
+      "lost": []
+    }
+  },
+  "driver_owner": "js_date CSSOM follow-on; installed WPT gains measured separately",
+  "limitations": [
+    "Selection parent-highlight inheritance and limited property applicability remain separate policy",
+    "Pseudo animation samples need a pseudo sampling interface",
+    "Used geometry and active-document checks belong to driver/layout"
+  ]
+}
