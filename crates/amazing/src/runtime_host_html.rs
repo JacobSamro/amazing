@@ -147,6 +147,7 @@ pub(super) struct FrameRuntime {
 #[derive(Clone)]
 struct WindowContext {
     document: NodeIdx,
+    document_generation: u64,
     frame: Option<NodeIdx>,
     global: JsValue,
     window: JsValue,
@@ -174,6 +175,17 @@ impl HtmlWindowProperty {
     }
 }
 
+/// Immutable policy identity of an actual live browsing-context Document.
+#[derive(Clone, Debug)]
+pub(super) struct HtmlDocumentContext {
+    pub(super) document_url: String,
+    pub(super) fallback_base_url: Option<String>,
+    pub(super) origin: amazing_fetch::Origin,
+    pub(super) top_level_origin: amazing_fetch::Origin,
+    /// Immediate parent first, top-level last; root has no ancestors.
+    pub(super) ancestor_origins: Vec<amazing_fetch::Origin>,
+}
+
 impl FrameRuntime {
     pub(super) fn has_document(&self, document: NodeIdx) -> bool {
         document == NodeIdx(0) || self.documents.values().any(|frame| frame.document == Some(document))
@@ -188,6 +200,32 @@ impl FrameRuntime {
         self.contexts.iter().find_map(|(realm, context)|
             (context.document == document && self.live_context(context, *realm))
                 .then(|| context.document_url.clone()))
+    }
+
+    /// Policy snapshot without realm entry, script callbacks or mutable scope.
+    pub(super) fn document_context(&self, dom: &Dom, document: NodeIdx) -> Option<HtmlDocumentContext> {
+        let (realm, context) = self.contexts.iter().find(|(realm, context)|
+            context.document == document && self.live_context(context, **realm)
+                && dom.node_generation(document) == Some(context.document_generation))?;
+        let mut seen = HashSet::from([*realm]);
+        let mut current = context;
+        let mut ancestors = Vec::new();
+        while current.parent != current.window {
+            let (parent_realm, parent) = self.contexts.iter().find(|(realm, candidate)|
+                candidate.window == current.parent && self.live_context(candidate, **realm)
+                    && dom.node_generation(candidate.document) == Some(candidate.document_generation))?;
+            if !seen.insert(*parent_realm) { return None; }
+            ancestors.push(parent.fetch_origin.clone());
+            current = parent;
+        }
+        if current.window != context.top { return None; }
+        let fallback_base_url = self.about_base_urls.get(&document).and_then(|(generation, base)| {
+            let applicable = ParsedUrl::parse(&context.document_url).is_ok_and(|url|
+                matches_about_url(&url, "blank") || (matches_about_url(&url, "srcdoc") && url.query().is_none()));
+            (*generation == context.document_generation && applicable).then(|| base.clone())
+        });
+        Some(HtmlDocumentContext { document_url: context.document_url.clone(), fallback_base_url,
+            origin: context.fetch_origin.clone(), top_level_origin: current.fetch_origin.clone(), ancestor_origins: ancestors })
     }
 
     /// Genuine Window identity without entering a realm or invoking script.
@@ -589,8 +627,10 @@ impl RuntimeBindings {
         let global = js.binding_realm_global(realm)?;
         let (parent, top) = parent_context.map(|(_, context)| (context.window, context.top))
             .unwrap_or_else(|| (proxy.clone(), proxy.clone()));
+        let document_generation = self.state.borrow().host.borrow().dom.node_generation(document)
+            .ok_or_else(|| Throw::type_error("Missing frame document"))?;
         self.state.borrow_mut().frames.contexts.insert(realm, WindowContext {
-            document, frame: Some(frame), global, window: proxy, parent, top, origin, fetch_origin, document_url: child_url.to_owned(),
+            document, document_generation, frame: Some(frame), global, window: proxy, parent, top, origin, fetch_origin, document_url: child_url.to_owned(),
             installed: false, indices: 0,
         });
         let state = self.state.clone();
@@ -1537,6 +1577,12 @@ impl RuntimeBindingHost<'_> {
 }
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn html_document_context(&self, document: NodeIdx) -> Option<HtmlDocumentContext> {
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        state.frames.document_context(&host.dom, document)
+    }
+
     /// HTML's immutable about base URL, only when applicable to this Document.
     /// URL/base element changes in the creator cannot change the saved value.
     pub(super) fn html_document_fallback_base_url(&self, document: NodeIdx) -> Option<String> {
@@ -1580,8 +1626,10 @@ impl RuntimeBindingHost<'_> {
             let global = self.js.binding_global_object();
             let document_url = self.state.borrow().document_url.clone().unwrap_or_else(|| "about:blank".into());
             let fetch_origin = HttpUrl::parse(&document_url).map(|url| url.origin().clone()).unwrap_or_else(|_| amazing_fetch::Origin::opaque());
+            let document_generation = self.state.borrow().host.borrow().dom.node_generation(NodeIdx(0))
+                .ok_or_else(|| Throw::type_error("Missing root document"))?;
             self.state.borrow_mut().frames.contexts.insert(realm, WindowContext {
-                document: NodeIdx(0), frame: None, global, parent: window.clone(), top: window.clone(), window,
+                document: NodeIdx(0), document_generation, frame: None, global, parent: window.clone(), top: window.clone(), window,
                 origin: ParsedUrl::parse(&document_url).map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into()), fetch_origin, document_url, installed: false, indices: 0,
             });
         }
@@ -2376,6 +2424,52 @@ mod tests {
     use crate::{dom_host::BrowserDomHost, js_scheduler::{DriverScheduler, JS_CAPACITY}};
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::{Shutdown, TcpListener};
+
+    #[test]
+    fn document_policy_snapshot_uses_actual_origins_ancestry_and_generations() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+            "<!doctype html><base href='https://example.test/saved/'><iframe id=a></iframe><iframe id=b sandbox='allow-scripts'></iframe>"), native_forwarded: false }));
+        let mut js = Interpreter::new();
+        js.set_dom_host(host.clone());
+        let bindings = crate::runtime_binding_host::install(&mut js, host.clone()).unwrap();
+        bindings.set_document_url(&mut js, "https://example.test/committed/page");
+        let state = bindings.state.borrow();
+        let borrowed = host.borrow();
+        let root = state.frames.document_context(&borrowed.dom, NodeIdx(0)).unwrap();
+        assert_eq!(root.document_url, "https://example.test/committed/page");
+        assert_eq!(root.origin.serialize(), "https://example.test");
+        assert!(root.ancestor_origins.is_empty());
+        let children: Vec<_> = state.frames.documents.values().filter_map(|entry| entry.document).collect();
+        let snapshots: Vec<_> = children.iter().map(|document| state.frames.document_context(&borrowed.dom, *document).unwrap()).collect();
+        assert_eq!(snapshots.len(), 2);
+        for snapshot in &snapshots {
+            assert_eq!(snapshot.document_url, "about:blank");
+            assert_eq!(snapshot.fallback_base_url.as_deref(), Some("https://example.test/saved/"));
+            assert_eq!(snapshot.top_level_origin, root.origin);
+            assert_eq!(snapshot.ancestor_origins, vec![root.origin.clone()]);
+        }
+        let opaque = snapshots.iter().find(|snapshot| snapshot.origin.opaque_id().is_some()).unwrap();
+        assert_ne!(opaque.origin, root.origin);
+        assert_ne!(opaque.origin, amazing_fetch::Origin::opaque());
+        let retired = children[0];
+        let realm = *state.frames.contexts.iter().find(|(_, context)| context.document == retired).unwrap().0;
+        drop(borrowed);
+        drop(state);
+        // Pending URL changes cannot alter the committed snapshot.
+        js.set_location_url("https://pending.test/not-committed");
+        let mut state = bindings.state.borrow_mut();
+        assert_eq!(state.frames.document_context(&host.borrow().dom, NodeIdx(0)).unwrap().origin, root.origin);
+        state.frames.contexts.get_mut(&realm).unwrap().document_generation += 1;
+        assert!(state.frames.document_context(&host.borrow().dom, retired).is_none());
+        state.frames.contexts.get_mut(&realm).unwrap().document_generation -= 1;
+        let frame = state.frames.contexts[&realm].frame.unwrap();
+        state.frames.documents.get_mut(&frame).unwrap().document = None;
+        assert!(state.frames.document_context(&host.borrow().dom, retired).is_none());
+        // A stale root ancestor invalidates the entire child policy snapshot.
+        let root_realm = *state.frames.contexts.iter().find(|(_, context)| context.frame.is_none()).unwrap().0;
+        state.frames.contexts.get_mut(&root_realm).unwrap().document_generation += 1;
+        assert!(state.frames.document_context(&host.borrow().dom, children[1]).is_none());
+    }
 
     #[test]
     fn about_documents_capture_creation_base_and_full_blank_url() {
