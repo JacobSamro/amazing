@@ -3025,3 +3025,9 @@ CSS53 final corrected58f: workspace3946/17skip+4docs, all prior3939 native named
   root/BODY canvas geometry/propagation; this lower change does not claim those browser gains.
 - References checked2026-10-03: https://drafts.csswg.org/css-backgrounds-3/#the-background-color
   and https://html.spec.whatwg.org/multipage/rendering.html#flow-content-3 .
+
+### CSS58 — actual tree-counting source context (in progress)
+- Independent closed CSS56 357adb00 base; no held CSS57 shorthand or CSS51 paint dependency. CSS Values5 tree-counting and CSS Shadow1 §4.2 checked2026-10-03: DOM inclusive element siblings; ordinary pseudo uses ultimate originating element; loosely matched automatic references cannot expose an inward shadow tree. https://drafts.csswg.org/css-values-5/#tree-counting https://drafts.csswg.org/css-shadow-1/#tree-scoped-reference
+- Private per-token defining-root metadata survives local/nested/inherited custom values and fallbacks. Literal winners retain actual Candidate.context_root. Counting occurs after substitution before typed computed values and inheritance, including provisional writing-mode/axes passes. Public syntax Token and DOM identity remain unchanged.
+- Numeric math validates zero-argument counting function type without invented count; shorthands defer contextual functions through existing atomic computed-time expansion. No tree/geometry context is fabricated for convenience APIs without an actual DOM source.
+- Whole grouped DOM/pseudo/variable/shadow/native-document/gradient/font/length regressions written; owned native plus17 parsing, then matched workspace/docs/nine full rendering directories pending. Preserve every closed56 strong classification.

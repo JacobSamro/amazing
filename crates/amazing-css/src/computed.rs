@@ -70,7 +70,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Debug, Clone, PartialEq)]
 enum CustomValue {
-    Valid(Vec<Token>),
+    Valid(tree_context::ScopedTokens),
     Invalid,
 }
 
@@ -446,7 +446,7 @@ impl FromIterator<(String, String)> for ComputedStyle {
             if name.starts_with("--") {
                 style
                     .custom
-                    .insert(name, CustomValue::Valid(tokenize(&value)));
+                    .insert(name, CustomValue::Valid(tree_context::ScopedTokens::new(tokenize(&value),None)));
             } else {
                 style.props.insert(name.to_ascii_lowercase(), value);
             }
@@ -1232,7 +1232,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         return text_policy::expand(&property, value).unwrap_or_default();
     }
     if position_values::supported(&property) {
-        return if contains_var_function(value) { vec![(property, value.into())] } else { position_values::canonical(&property, value).map(|value| vec![(property, value)]).unwrap_or_default() };
+        return if (contains_var_function(value) || tree_context::contains(value)) { vec![(property, value.into())] } else { position_values::canonical(&property, value).map(|value| vec![(property, value)]).unwrap_or_default() };
     }
     if property == "font-width" { return expand_declaration("font-stretch", value); }
     if property == "word-wrap" { return expand_declaration("overflow-wrap", value); }
@@ -1247,14 +1247,14 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         return font_synthesis::expand(value).unwrap_or_default();
     }
     if property == "list-style" {
-        if contains_var_function(value) {
+        if (contains_var_function(value) || tree_context::contains(value)) {
             return ["list-style-type", "list-style-image", "list-style-position"]
                 .into_iter().map(|name| (name.to_owned(), deferred(DEFERRED_LIST_STYLE, value))).collect();
         }
         return expand_list_style(value).unwrap_or_default();
     }
     if matches!(property.as_str(), "animation" | "transition") {
-        if contains_var_function(value) {
+        if (contains_var_function(value) || tree_context::contains(value)) {
             let (prefix, names): (&str, &[&str]) = if property == "animation" {
                 (DEFERRED_ANIMATION, &["animation-name", "animation-duration", "animation-timing-function", "animation-delay", "animation-iteration-count", "animation-direction", "animation-fill-mode", "animation-play-state", "animation-composition", "animation-timeline"])
             } else {
@@ -1266,7 +1266,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     }
     if metadata(&property).is_some()
         && css_wide_keyword(value).is_none()
-        && !contains_var_function(value)
+        && !(contains_var_function(value) || tree_context::contains(value))
         && !contains_attr_function(value)
         && !matches!(property.as_str(), "opacity" | "fill-opacity" | "overflow")
         && values::parse(&property, value).is_none()
@@ -1283,7 +1283,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         None
     };
     match property.as_str() {
-        "all" if contains_var_function(value) => PROPERTIES
+        "all" if (contains_var_function(value) || tree_context::contains(value)) => PROPERTIES
             .iter()
             .filter(|property| !matches!(property.name, "direction" | "unicode-bidi"))
             .map(|property| (property.name.to_owned(), deferred(DEFERRED_ALL, value)))
@@ -1330,7 +1330,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         }
         // Rollback/defaulting must reach every border longhand. Treat a
         // var-bearing border as a deferred whole value for the same reason.
-        "border" if css_wide_keyword(value).is_some() || contains_var_function(value) => SIDES
+        "border" if css_wide_keyword(value).is_some() || (contains_var_function(value) || tree_context::contains(value)) => SIDES
             .iter()
             .flat_map(|side| {
                 expand_side_border(&format!("border-{side}"), value).unwrap_or_default()
@@ -1360,7 +1360,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         // RC-32: `outline`'s shorthand is the same three-part grammar as
         // `border`'s (order-independent width/style/color keywords), minus
         // the per-side replication -- `outline` has no per-side longhands.
-        "outline" if css_wide_keyword(value).is_some() || contains_var_function(value) => [
+        "outline" if css_wide_keyword(value).is_some() || (contains_var_function(value) || tree_context::contains(value)) => [
             "outline-width",
             "outline-style",
             "outline-color",
@@ -1387,7 +1387,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 ("outline-color".to_owned(), color.to_owned()),
             ]
         }
-        "background" if contains_var_function(value) => PROPERTIES.iter()
+        "background" if (contains_var_function(value) || tree_context::contains(value)) => PROPERTIES.iter()
             .filter(|p| p.name.starts_with("background-"))
             .map(|p| (p.name.to_owned(), deferred(DEFERRED_BACKGROUND, value))).collect(),
         "background" => expand_basic_background(value).unwrap_or_default(),
@@ -1400,7 +1400,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         .into_iter()
         .map(|name| (name.to_owned(), value.to_owned()))
         .collect(),
-        "border-radius" if contains_var_function(value) => deferred_border_radius(value),
+        "border-radius" if (contains_var_function(value) || tree_context::contains(value)) => deferred_border_radius(value),
         "border-radius" => expand_border_radius(value).unwrap_or_default(),
         // CSS-30: `background-clip`, `-origin`, `-attachment`, `-repeat`,
         // `-size` and `-position`(-x/-y) each get their own real grammar in
@@ -1411,7 +1411,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         // `value.to_owned()` the way `box-shadow`/`transform` do below would
         // be wrong here even when the value validates.
         "background-clip" => {
-            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+            if css_wide_keyword(value).is_some() || (contains_var_function(value) || tree_context::contains(value)) {
                 vec![(property, value.to_owned())]
             } else if let Some(canonical) = background_clip_computed(value) {
                 vec![(property, canonical)]
@@ -1420,7 +1420,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             }
         }
         "background-origin" => {
-            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+            if css_wide_keyword(value).is_some() || (contains_var_function(value) || tree_context::contains(value)) {
                 vec![(property, value.to_owned())]
             } else if let Some(canonical) = background_origin_computed(value) {
                 vec![(property, canonical)]
@@ -1429,7 +1429,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             }
         }
         "background-attachment" => {
-            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+            if css_wide_keyword(value).is_some() || (contains_var_function(value) || tree_context::contains(value)) {
                 vec![(property, value.to_owned())]
             } else if let Some(canonical) = background_attachment_computed(value) {
                 vec![(property, canonical)]
@@ -1438,7 +1438,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             }
         }
         "background-repeat" => {
-            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+            if css_wide_keyword(value).is_some() || (contains_var_function(value) || tree_context::contains(value)) {
                 vec![(property, value.to_owned())]
             } else if let Some(canonical) = background_repeat_computed(value) {
                 vec![(property, canonical)]
@@ -1447,7 +1447,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             }
         }
         "background-size" => {
-            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+            if css_wide_keyword(value).is_some() || (contains_var_function(value) || tree_context::contains(value)) {
                 vec![(property, value.to_owned())]
             } else if let Some(canonical) = background_size_computed(value) {
                 vec![(property, canonical)]
@@ -1456,7 +1456,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             }
         }
         "background-position" => {
-            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+            if css_wide_keyword(value).is_some() || (contains_var_function(value) || tree_context::contains(value)) {
                 vec![(property, value.to_owned())]
             } else if let Some(canonical) = background_position_computed(value) {
                 vec![(property, canonical)]
@@ -1465,7 +1465,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             }
         }
         "background-position-x" | "background-position-y" => {
-            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+            if css_wide_keyword(value).is_some() || (contains_var_function(value) || tree_context::contains(value)) {
                 vec![(property, value.to_owned())]
             } else if let Some(canonical) =
                 background_position_axis_computed(value, property == "background-position-x")
@@ -1477,21 +1477,21 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         }
         "box-shadow"
             if css_wide_keyword(value).is_some()
-                || contains_var_function(value)
+                || (contains_var_function(value) || tree_context::contains(value))
                 || valid_box_shadow(value) =>
         {
             vec![(property, value.to_owned())]
         }
         "transform"
             if css_wide_keyword(value).is_some()
-                || contains_var_function(value)
+                || (contains_var_function(value) || tree_context::contains(value))
                 || valid_transform(value) =>
         {
             vec![(property, value.to_owned())]
         }
         "transform-style"
             if css_wide_keyword(value).is_some()
-                || contains_var_function(value)
+                || (contains_var_function(value) || tree_context::contains(value))
                 || matches!(
                     value.trim().to_ascii_lowercase().as_str(),
                     "flat" | "preserve-3d"
@@ -1501,14 +1501,14 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         }
         "opacity" | "fill-opacity"
             if css_wide_keyword(value).is_some()
-                || contains_var_function(value)
+                || (contains_var_function(value) || tree_context::contains(value))
                 || valid_opacity(value) =>
         {
             vec![(property, value.to_owned())]
         }
         "z-index"
             if css_wide_keyword(value).is_some()
-                || contains_var_function(value)
+                || (contains_var_function(value) || tree_context::contains(value))
                 || valid_z_index(value) =>
         {
             vec![(property, value.to_owned())]
@@ -1517,7 +1517,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             ("overflow-x".to_owned(), value.to_owned()),
             ("overflow-y".to_owned(), value.to_owned()),
         ],
-        "overflow" if contains_var_function(value) => deferred_overflow(value),
+        "overflow" if (contains_var_function(value) || tree_context::contains(value)) => deferred_overflow(value),
         "overflow"
             if (1..=2).contains(&parts.len()) && parts.iter().all(|part| valid_overflow(part)) =>
         {
@@ -1531,7 +1531,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         }
         "overflow-x" | "overflow-y"
             if css_wide_keyword(value).is_some()
-                || contains_var_function(value)
+                || (contains_var_function(value) || tree_context::contains(value))
                 || valid_overflow(value) =>
         {
             vec![(property, value.to_owned())]
@@ -1541,7 +1541,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         | "border-bottom-right-radius"
         | "border-bottom-left-radius"
             if css_wide_keyword(value).is_some()
-                || contains_var_function(value)
+                || (contains_var_function(value) || tree_context::contains(value))
                 || valid_radius_pair(value) =>
         {
             vec![(property, value.to_owned())]
@@ -1559,7 +1559,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         | "border-top-right-radius"
         | "border-bottom-right-radius"
         | "border-bottom-left-radius" => Vec::new(),
-        "font" if contains_var_function(value) => crate::font_shorthand::LONGHANDS
+        "font" if (contains_var_function(value) || tree_context::contains(value)) => crate::font_shorthand::LONGHANDS
             .iter()
             .map(|name| ((*name).to_owned(), deferred(DEFERRED_FONT, value)))
             .collect(),
@@ -1602,7 +1602,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             ("align-content".to_owned(), value.to_owned()),
             ("justify-content".to_owned(), value.to_owned()),
         ],
-        "place-content" if contains_var_function(value) => deferred_place_content(value),
+        "place-content" if (contains_var_function(value) || tree_context::contains(value)) => deferred_place_content(value),
         "place-content" => match split_place_shorthand(value) {
             Some((align, justify)) => vec![
                 ("align-content".to_owned(), align),
@@ -1614,7 +1614,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             ("align-items".to_owned(), value.to_owned()),
             ("justify-items".to_owned(), value.to_owned()),
         ],
-        "place-items" if contains_var_function(value) => deferred_place_items(value),
+        "place-items" if (contains_var_function(value) || tree_context::contains(value)) => deferred_place_items(value),
         "place-items" => match split_place_shorthand(value) {
             Some((align, justify)) => vec![
                 ("align-items".to_owned(), align),
@@ -1626,7 +1626,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             ("align-self".to_owned(), value.to_owned()),
             ("justify-self".to_owned(), value.to_owned()),
         ],
-        "place-self" if contains_var_function(value) => deferred_place_self(value),
+        "place-self" if (contains_var_function(value) || tree_context::contains(value)) => deferred_place_self(value),
         "place-self" => match split_place_shorthand(value) {
             Some((align, justify)) => vec![
                 ("align-self".to_owned(), align),
@@ -1636,7 +1636,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         },
         "grid-column-start" | "grid-column-end" | "grid-row-start" | "grid-row-end"
             if css_wide_keyword(value).is_some()
-                || contains_var_function(value)
+                || (contains_var_function(value) || tree_context::contains(value))
                 || valid_grid_line(value) =>
         {
             vec![(property, value.to_owned())]
@@ -1704,13 +1704,13 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 ("grid-area".to_owned(), value.trim().to_owned()),
             ]
         }
-        "grid-template" if contains_var_function(value) => deferred_grid_template(value),
+        "grid-template" if (contains_var_function(value) || tree_context::contains(value)) => deferred_grid_template(value),
         "grid-template" => expand_grid_template(value).unwrap_or_default(),
         "grid" if css_wide_keyword(value).is_some() => [
             "grid-template-rows", "grid-template-columns", "grid-auto-rows",
             "grid-auto-columns", "grid-auto-flow",
         ].into_iter().map(|name| (name.to_owned(), value.to_owned())).collect(),
-        "grid" if contains_var_function(value) => {
+        "grid" if (contains_var_function(value) || tree_context::contains(value)) => {
             let mut template = deferred_grid_template(value);
             template.extend([
                 ("grid-auto-rows".to_owned(), "auto".to_owned()),
@@ -1733,7 +1733,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                     ("flex-direction".to_owned(), value.to_owned()),
                     ("flex-wrap".to_owned(), value.to_owned()),
                 ]
-            } else if contains_var_function(value) {
+            } else if (contains_var_function(value) || tree_context::contains(value)) {
                 deferred_flex_flow(value)
             } else {
                 expand_flex_flow(value).unwrap_or_default()
@@ -2575,11 +2575,18 @@ pub(crate) fn resolve_with_root_and_attrs(
 }
 
 pub(crate) fn resolve_with_root_attrs_environment(
+    parent: Option<&ComputedStyle>, cascaded: BTreeMap<String,String>, root_font_px:f32,
+    attrs:Option<&[(String,String)]>,environment:&MediaEnvironment,
+) -> ComputedStyle {
+    resolve_with_tree_environment(parent,cascaded,root_font_px,attrs,environment,None)
+}
+pub(crate) fn resolve_with_tree_environment(
     parent: Option<&ComputedStyle>,
     mut cascaded: BTreeMap<String, String>,
     root_font_px: f32,
     attrs: Option<&[(String, String)]>,
     environment: &MediaEnvironment,
+    tree:Option<tree_context::TreeContext<'_>>,
 ) -> ComputedStyle {
     let mut inherited_custom = parent.map(|style| style.custom.clone()).unwrap_or_default();
     let custom_names: Vec<String> = cascaded
@@ -2602,7 +2609,8 @@ pub(crate) fn resolve_with_root_attrs_environment(
                 inherited_custom.insert(name, inherited);
             }
             _ => {
-                local_raw.insert(name, tokenize(&value));
+                let scope=tree.as_ref().and_then(|tree|tree.scope(&name));
+                local_raw.insert(name,tree_context::ScopedTokens::new(tokenize(&value),scope));
             }
         }
     }
@@ -2613,6 +2621,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
         cycles: &cycles,
         memo: BTreeMap::new(),
         resolving: BTreeSet::new(),
+        tree:tree.as_ref(),
     };
     let mut resolved_local = Vec::with_capacity(local_raw.len());
     for name in local_raw.keys() {
@@ -2651,7 +2660,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
                     color_sources.insert(property.name.into(),source.clone());
                 }
             } else {
-                let source=specified.as_deref().and_then(|css|resolver.substitute(&tokenize(css)))
+                let source=specified.as_deref().and_then(|css|resolver.substitute_property(property.name,&tokenize(css)))
                     .and_then(|tokens|attr_values::substitute_attributes(&tokens,attrs))
                     .and_then(|tokens|resolve_deferred_shorthand(property.name,&serialize_computed(&tokens)).ok())
                     .filter(|css|css_wide_keyword(css).is_none() && values::parse(property.name,css).is_some())
@@ -2689,7 +2698,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
     // metadata an invalid or CSS-wide value cannot manufacture an initial.
     for (name, specified) in cascaded {
         let tokens = tokenize(&specified);
-        if let Some(substituted) = resolver.substitute(&tokens) {
+        if let Some(substituted) = resolver.substitute_property(&name,&tokens) {
             let value = serialize_computed(&substituted);
             if css_wide_keyword(&value).is_none() {
                 properties.insert(name, value);
@@ -2792,6 +2801,7 @@ pub(crate) fn substituted_css_wide(style: &ComputedStyle, property: &str, value:
         cycles: &cycles,
         memo: BTreeMap::new(),
         resolving: BTreeSet::new(),
+        tree:None,
     };
     let tokens = resolver.substitute(&tokenize(value))?;
     let value = serialize_computed(&tokens);
@@ -2845,7 +2855,7 @@ fn compute_normal_value(
     attrs: Option<&[(String, String)]>,
     environment: &MediaEnvironment,
 ) -> (String, bool) {
-    let Some(tokens) = resolver.substitute(&tokenize(specified))
+    let Some(tokens) = resolver.substitute_property(property.name,&tokenize(specified))
         .and_then(|tokens| attr_values::substitute_attributes(&tokens, attrs))
         .and_then(|tokens| crate::viewport_units::resolve(&tokens, environment)) else {
         // Invalid at computed-value time behaves as `unset`.
@@ -3364,6 +3374,7 @@ fn serialize_computed(tokens: &[Token]) -> String {
 }
 
 struct VarCall<'a> {
+    fallback_start:Option<usize>,
     name: &'a str,
     fallback: Option<&'a [Token]>,
     end: usize,
@@ -3407,6 +3418,7 @@ fn parse_var_call(tokens: &[Token], function_index: usize) -> Option<VarCall<'_>
     }
     let fallback = comma.map(|comma| &tokens[comma + 1..close]);
     Some(VarCall {
+        fallback_start:comma.map(|comma|comma+1),
         name,
         fallback,
         end: close + 1,
@@ -3486,7 +3498,7 @@ fn collect_dependencies(tokens: &[Token], dependencies: &mut BTreeSet<String>) {
     }
 }
 
-fn cycle_members(local: &BTreeMap<String, Vec<Token>>) -> BTreeSet<String> {
+fn cycle_members(local: &BTreeMap<String, tree_context::ScopedTokens>) -> BTreeSet<String> {
     fn visit(
         name: &str,
         graph: &BTreeMap<String, BTreeSet<String>>,
@@ -3533,61 +3545,9 @@ fn cycle_members(local: &BTreeMap<String, Vec<Token>>) -> BTreeSet<String> {
     cycles
 }
 
-struct CustomResolver<'a> {
-    local: &'a BTreeMap<String, Vec<Token>>,
-    inherited: &'a BTreeMap<String, CustomValue>,
-    cycles: &'a BTreeSet<String>,
-    memo: BTreeMap<String, CustomValue>,
-    resolving: BTreeSet<String>,
-}
-
-impl CustomResolver<'_> {
-    fn resolve_name(&mut self, name: &str) -> CustomValue {
-        if let Some(value) = self.memo.get(name) {
-            return value.clone();
-        }
-        if self.cycles.contains(name) || !self.resolving.insert(name.to_owned()) {
-            return CustomValue::Invalid;
-        }
-        let value = match self.local.get(name).cloned() {
-            Some(tokens) => self
-                .substitute(&tokens)
-                .map(CustomValue::Valid)
-                .unwrap_or(CustomValue::Invalid),
-            None => self
-                .inherited
-                .get(name)
-                .cloned()
-                .unwrap_or(CustomValue::Invalid),
-        };
-        self.resolving.remove(name);
-        self.memo.insert(name.to_owned(), value.clone());
-        value
-    }
-
-    fn substitute(&mut self, tokens: &[Token]) -> Option<Vec<Token>> {
-        let mut output = Vec::new();
-        let mut index = 0usize;
-        while index < tokens.len() {
-            if matches!(tokens.get(index), Some(Token::Function(name)) if name.eq_ignore_ascii_case("var"))
-            {
-                let call = parse_var_call(tokens, index)?;
-                let replacement = match self.resolve_name(call.name) {
-                    CustomValue::Valid(tokens) => Some(tokens),
-                    CustomValue::Invalid => {
-                        call.fallback.and_then(|fallback| self.substitute(fallback))
-                    }
-                }?;
-                output.extend(replacement);
-                index = call.end;
-            } else {
-                output.push(tokens[index].clone());
-                index += 1;
-            }
-        }
-        Some(output)
-    }
-}
+#[path="tree_context.rs"]
+pub(crate) mod tree_context;
+use tree_context::CustomResolver;
 
 #[cfg(test)]
 #[path = "computed_tests.rs"]

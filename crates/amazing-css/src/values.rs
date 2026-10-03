@@ -522,6 +522,15 @@ pub fn parses(property: &str, value: &str) -> bool {
 /// None means invalid in a grammar owned here; Unparsed means outside our scope.
 pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
     use ComputedValue as V;
+    // Tree-dependent numbers have a specified type before their actual value
+    // exists. Do not assign a fake count merely to validate numeric grammar.
+    if crate::computed::tree_context::contains(css) {
+        match property {
+            "opacity"|"fill-opacity"|"zoom" => return crate::math::number_percentage(css,true).then_some(V::Unparsed),
+            "order"|"z-index"|"column-count"|"orphans"|"widows" => return crate::math::number_percentage(css,false).then_some(V::Unparsed),
+            _=>{},
+        }
+    }
     let lower = css.trim().to_ascii_lowercase();
     let s = lower.as_str();
     macro_rules! keyword {

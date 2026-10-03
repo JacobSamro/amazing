@@ -857,7 +857,7 @@ fn compute_one(
         candidates.entry(&d.prop).or_default().push(cand);
     }
 
-    let (mut style, sources) = resolve_candidate_pool(candidates, parent_style, root_font_px, dom.attrs_of(el), environment);
+    let (mut style, sources) = resolve_candidate_pool(candidates, parent_style, root_font_px, dom.attrs_of(el), environment,Some((dom,el)));
     let root = pseudo.is_none() && dom.get(el).parent.is_some_and(|parent|
         matches!(dom.get(parent).kind, amazing_dom::NodeKind::Document));
     if !matches!(pseudo, Some(PseudoElement::FirstLine | PseudoElement::FirstLetter)) {
@@ -904,13 +904,14 @@ fn resolve_candidate_pool<'a>(
     root_font_px: f32,
     attrs: Option<&[(String, String)]>,
     environment: &MediaEnvironment,
+    tree:Option<(&Dom,NodeIdx)>,
 ) -> (ComputedStyle, BTreeMap<String, ElementStyleSource>) {
     let mut champs = winners(&candidates, None);
 
     // Logical properties map with the element's COMPUTED axes, not the raw
     // winning tokens: `direction: inherit` and `var()` must see the inherited
     // or substituted value before their physical side is chosen.
-    let provisional = computed::resolve_with_root_attrs_environment(
+    let provisional = computed::resolve_with_tree_environment(
         parent_style,
         champs
             .iter()
@@ -919,9 +920,10 @@ fn resolve_candidate_pool<'a>(
         root_font_px,
         attrs,
         environment,
+        tree.map(|(dom,node)|computed::tree_context::TreeContext{dom,node,scopes:champs.iter().map(|(p,c)|((*p).to_owned(),c.context_root)).collect()}),
     );
     champs = winners(&candidates, Some(&provisional));
-    let provisional = computed::resolve_with_root_attrs_environment(
+    let provisional = computed::resolve_with_tree_environment(
         parent_style,
         champs
             .iter()
@@ -930,6 +932,7 @@ fn resolve_candidate_pool<'a>(
         root_font_px,
         attrs,
         environment,
+        tree.map(|(dom,node)|computed::tree_context::TreeContext{dom,node,scopes:champs.iter().map(|(p,c)|((*p).to_owned(),c.context_root)).collect()}),
     );
     let rtl = provisional
         .get("direction")
@@ -1151,11 +1154,12 @@ fn resolve_candidate_pool<'a>(
         .into_iter()
         .map(|property| (property, champs.get(property).copied()))
         .collect();
+    let tree_context=tree.map(|(dom,node)|computed::tree_context::TreeContext{dom,node,scopes:champs.iter().map(|(p,c)|((*p).to_owned(),c.context_root)).collect()});
     let cascaded = champs
         .into_iter()
         .map(|(property, candidate)| (property.to_owned(), candidate.value.to_owned()))
         .collect();
-    let mut style = computed::resolve_with_root_attrs_environment(parent_style, cascaded, root_font_px, attrs, environment);
+    let mut style = computed::resolve_with_tree_environment(parent_style, cascaded, root_font_px, attrs, environment,tree_context);
     for (property, winner) in url_bases {
         let base = match winner {
             Some(candidate) if matches!(computed::substituted_css_wide(&style, property, candidate.value), Some(computed::CssWide::Inherit)) ||
@@ -1385,7 +1389,7 @@ pub fn compute_element_paint_style(
             context_root: None,
         });
     }
-    let (computed, sources) = resolve_candidate_pool(candidates, parent, 16.0, None, &MediaEnvironment::default());
+    let (computed, sources) = resolve_candidate_pool(candidates, parent, 16.0, None, &MediaEnvironment::default(),None);
     let source = |property: &str, _inherited: bool| {
         sources
             .get(property)

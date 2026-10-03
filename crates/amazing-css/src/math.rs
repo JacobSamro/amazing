@@ -148,6 +148,9 @@ impl Parser {
             Token::Function(name) => {
                 if !matches!(self.eat()?, Token::OpenParen) { return None; }
                 let name = name.to_ascii_lowercase();
+                if matches!(name.as_str(),"sibling-index"|"sibling-count") {
+                    return matches!(self.eat(),Some(Token::CloseParen)).then_some(Kind::Number);
+                }
                 if name == "calc-size" {
                     // `<calc-size-basis>` starts with a bare keyword (`auto`,
                     // `any`, ...) that `expression()` below cannot parse, so
