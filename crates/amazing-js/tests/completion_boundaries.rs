@@ -77,11 +77,11 @@ fn loops_and_labels_update_empty_abrupt_values() {
             "var n=0;while(n++<2){if(n===1){5}else{;}}",
             JsValue::Undefined,
         ),
-        ("L:{5;with({}){break L}}", JsValue::Undefined),
-        ("L:{with({}){6;{break L}}}", num(6.0)),
+        ("eval('L:{5;with({}){break L}}')", JsValue::Undefined),
+        ("eval('L:{with({}){6;{break L}}}')", num(6.0)),
         ("switch(0){case 0:5;case 1:;}", num(5.0)),
         (
-            "outer:while(true){5;try{with({}){break outer}}finally{9}}",
+            "eval('outer:while(true){5;try{with({}){break outer}}finally{9}}')",
             JsValue::Undefined,
         ),
         ("4;switch(1){case 1:break}", JsValue::Undefined),
@@ -117,7 +117,8 @@ fn call_initializers_and_eval_keep_caller_completion_value() {
 #[test]
 fn generator_resumptions_keep_body_and_driver_completion_separate() {
     matrix(&[
-        ("function* g(){L:{5;yield 1;try{with({}){break L}}finally{yield 2;9}}return 7}var it=g();it.next();it.next();it.next().value",num(7.0)),
+        ("function* g(){L:{5;yield 1;try{break L}finally{yield 2;9}}return 7}var it=g();it.next();it.next();it.next().value",num(7.0)),
+        ("var g=eval('(function*(){L:{5;yield 1;try{with({}){break L}}finally{yield 2;9}}return 7})');var it=g();it.next();it.next();it.next().value",num(7.0)),
         ("function* g(){var n=0;L:while(n++<2){yield n;try{continue L}finally{yield 8}}return 7}var it=g();it.next();it.next();it.next();it.next();it.next().value",num(7.0)),
         (
             "function* g(){try{yield 1;return 7}finally{9}}var it=g();it.next();it.next().value",
