@@ -68,9 +68,11 @@ impl RuntimeBindingHost<'_> {
     pub(in super::super) fn document_write(&mut self, receiver: JsValue, args: &[JsValue],
         newline: bool) -> Result<JsValue, Throw> {
         let document = self.document_receiver_node(&receiver)?;
-        self.check_write_document(document)?;
         let mut text = String::new();
         for arg in args { text.push_str(&String::from_utf16_lossy(&self.to_dom_string(arg)?)); }
+        // WebIDL argument conversion precedes the HTML method algorithm,
+        // including its XML-document InvalidStateError check.
+        self.check_write_document(document)?;
         if newline { text.push('\n'); }
         if !self.state.borrow().active_parsers.contains_key(&document) {
             self.reopen_document(document)?;
@@ -407,6 +409,22 @@ mod tests {
             document.close();
             [moduleValue,moduleCurrent===null,document.readyState,document.body.lastChild.textContent].join('|')
         "#).unwrap(), JsValue::str("42|true|complete|tail"));
+    }
+
+    #[test]
+    fn stream_argument_conversion_precedes_xml_algorithm_and_checks_genuine_receivers() {
+        let mut scheduler = scheduler();
+        assert_eq!(scheduler.run_script(r#"
+            var xml=new DOMParser().parseFromString('<root/>','application/xml'), seen=[];
+            var argument={toString(){seen.push('convert');throw new Error('conversion')}};
+            for(var name of ['write','writeln']) {
+                try {xml[name](argument)} catch(e){seen.push(e.message)}
+                try {xml[name](Symbol('x'))} catch(e){seen.push(e.name)}
+                try {Document.prototype[name].call({},argument)} catch(e){seen.push(e.name)}
+                try {xml[name]('x')} catch(e){seen.push(e.name)}
+            }
+            [seen.join(','),xml.documentElement.localName,!!document.getElementById('old')].join('|')
+        "#).unwrap(), JsValue::str("convert,conversion,TypeError,TypeError,InvalidStateError,convert,conversion,TypeError,TypeError,InvalidStateError|root|true"));
     }
 
     #[test]
