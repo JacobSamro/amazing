@@ -62,7 +62,7 @@ impl RuntimeBindingHost<'_> {
         if let Some(window) = self.iframe_document_window(document) {
             return Ok(Some(window));
         }
-        Ok((document == self.current_document()).then(|| self.js.binding_global_object()))
+        Ok((document == self.current_document()).then(|| self.js.binding_global_this()))
     }
 
     pub(super) fn dom_uses_inherited_accessors(brand: InterfaceBrand) -> bool {
@@ -155,14 +155,15 @@ impl RuntimeBindingHost<'_> {
     }
 
     pub(super) fn dom_window_event_target_slot(&self, value: &JsValue) -> Option<u64> {
-        if self.is_nullish(value) || self.same_value(value, &self.js.binding_global_object()) {
+        if self.is_nullish(value) || self.same_value(value, &self.js.binding_global_this())
+            || self.same_value(value, &self.js.binding_global_object()) {
             Some(self.state.borrow().window_event_target_slot)
         } else { None }
     }
 
     pub(super) fn dom_window_event_target_value(&self, slot: u64) -> Option<JsValue> {
         (self.state.borrow().window_event_target_slot == slot)
-            .then(|| self.js.binding_global_object())
+            .then(|| self.js.binding_global_this())
     }
     pub(super) fn dom_event_interface(&self, key: PlatformKey) -> Result<Interface, Throw> {
         let host = self.state.borrow().host.clone();
