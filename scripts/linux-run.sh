@@ -117,6 +117,11 @@ echo "$$" > "$LANE_LOCK/pid"
 trap 'rm -rf "$LANE_LOCK"' EXIT
 # Source: the lane's worktree (with uncommitted edits), or an exact commit.
 if [ -n "$REF" ]; then
+  case "$REF" in
+    HEAD|HEAD~*|HEAD^*)
+      echo "linux-run: ambiguous ref $REF; use the explicit source commit SHA (HEAD belongs to the main worktree)" >&2
+      exit 2 ;;
+  esac
   COMMIT="$(git -C "$MAIN" rev-parse "$REF")" || exit 2
   SRC="$(mktemp -d)"; SRC_TMP="$SRC"
   trap 'rm -rf "$SRC" "$LANE_LOCK"' EXIT
