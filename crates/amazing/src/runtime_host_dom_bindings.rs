@@ -1518,7 +1518,6 @@ mod tests {
     }
 
     #[test]
-=======
     fn xml_serializer_installed_brand_nodes_utf16_and_namespace_scope() {
         let host=Rc::new(RefCell::new(BrowserDomHost { dom:Dom::new(),native_forwarded:false }));
         let mut js=Interpreter::new_with_external_scheduler(32).unwrap();
