@@ -1,0 +1,49 @@
+{
+  "ticket": "CSS-50",
+  "base": "9ca6b1d439298c59b2663228dcab9f0f0a2e9b3f",
+  "platform": "Boat Linux native /tmp source+target",
+  "workspace": 3580,
+  "workspace_skipped": 17,
+  "doctests": 4,
+  "css_tests": 419,
+  "new_grouped_regressions": 3,
+  "renderer_sha256": "fdda8fb4d48b2a1a1cb669b0db16f3fbd4ce342a685542c1f2e3db89776bfd6b",
+  "parsing": {
+    "before": 4312,
+    "after": 4312,
+    "total": 5126,
+    "gained": [],
+    "lost": []
+  },
+  "render": {
+    "images": {
+      "before_pass": 92,
+      "after_pass": 92,
+      "total": 141,
+      "unchanged": 141,
+      "gained": [],
+      "lost": []
+    },
+    "fonts": {
+      "before_pass": 24,
+      "after_pass": 24,
+      "total": 32,
+      "unchanged": 32,
+      "gained": [],
+      "lost": []
+    },
+    "transforms": {
+      "before_pass": 145,
+      "after_pass": 145,
+      "total": 348,
+      "unchanged": 348,
+      "gained": [],
+      "lost": []
+    }
+  },
+  "limitations": [
+    "Explicit scoped API requires driver stylesheet collection/adoption for installed shadow gains",
+    "Existing rendering APIs do not claim flat-tree box construction or shadow generated counters",
+    "Host/slotted/implicit-shadow-scope selectors and tree-scoped named resource registries remain separate"
+  ]
+}

@@ -29,6 +29,9 @@ use crate::media_queries::MediaEnvironment;
 #[path = "computed_pseudo.rs"]
 mod computed_pseudo;
 pub use computed_pseudo::compute_document_pseudo_with_font_metrics;
+#[path = "computed_shadow.rs"]
+mod computed_shadow;
+pub use computed_shadow::{compute_document_with_shadow_font_metrics, compute_document_pseudo_with_shadow_font_metrics};
 
 use amazing_dom::{Dom, NodeIdx};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -393,6 +396,90 @@ fn compute_document_with_optional_animations(
     out
 }
 
+fn style_element(
+    dom: &Dom,
+    node: NodeIdx,
+    parent_style: Option<&ComputedStyle>,
+    root_font_px: f32,
+    ua_rules: &[CompiledRule],
+    author_rules: &[CompiledRule],
+    body_link: Option<&str>,
+    pseudo_targets: &[bool; 5],
+    animated: Option<&AnimatedValues>,
+    environment: &MediaEnvironment,
+    font_metrics: Option<&dyn crate::font_metric_context::FontMetricContext>,
+    out: &mut StyledDom,
+    root_font_element: bool,
+) -> (ComputedStyle, BTreeMap<String, ElementStyleSource>, f32) {
+    let (mut style, sources) = compute_one(
+        dom,
+        node,
+        parent_style,
+        root_font_px,
+        ua_rules,
+        author_rules,
+        body_link,
+        None,
+        animated,
+        environment,
+    );
+    crate::font_metric_context::resolve(&mut style, node, None, font_metrics);
+    let descendant_root_font_px = if root_font_element {
+        style
+            .get("font-size")
+            .and_then(|value| value.strip_suffix("px"))
+            .and_then(|value| value.parse::<f32>().ok())
+            .unwrap_or(root_font_px)
+    } else {
+        root_font_px
+    };
+    for (pseudo, requested) in PseudoElement::STYLED.into_iter().zip(pseudo_targets) {
+        if !*requested
+            && !(pseudo == PseudoElement::Marker && style.get("display").is_some_and(crate::is_list_item_display))
+        {
+            continue;
+        }
+        let matched = ua_rules.iter().chain(author_rules.iter()).any(|rule| {
+            rule.targets(pseudo) && rule.matching(dom, node, Some(pseudo)).is_some()
+        });
+        if matched {
+            out.matched_pseudos.insert((node.0, pseudo));
+        }
+        if matches!(pseudo, PseudoElement::FirstLine | PseudoElement::FirstLetter) && !matched {
+            continue;
+        }
+        let (mut pseudo_style, _) = compute_one(
+            dom,
+            node,
+            Some(&style),
+            descendant_root_font_px,
+            ua_rules,
+            author_rules,
+            body_link,
+            Some(pseudo),
+            None,
+            environment,
+        );
+        crate::font_metric_context::resolve(&mut pseudo_style, node, Some(pseudo), font_metrics);
+        let has_content =
+            !matches!(pseudo_style.get("content"), None | Some("normal" | "none"));
+        let visible = style.get("display") != Some("none");
+        let applies = match pseudo {
+            PseudoElement::Before | PseudoElement::After => has_content,
+            PseudoElement::Marker => style.get("display").is_some_and(crate::is_list_item_display)
+                && pseudo_style.get("content") != Some("none")
+                && (has_content || pseudo_style.get("list-style-type") != Some("none")
+                    || pseudo_style.get("list-style-image") != Some("none")),
+            PseudoElement::FirstLine | PseudoElement::FirstLetter => visible,
+            _ => false,
+        };
+        if applies && pseudo_style.get("display") != Some("none") && visible {
+            out.pseudo_styles.insert((node.0, pseudo), pseudo_style);
+        }
+    }
+    (style, sources, descendant_root_font_px)
+}
+
 fn style_subtree(
     dom: &Dom,
     node: NodeIdx,
@@ -408,72 +495,11 @@ fn style_subtree(
     out: &mut StyledDom,
 ) {
     if dom.name(node).is_some() {
-        let (mut style, sources) = compute_one(
-            dom,
-            node,
-            parent_style,
-            root_font_px,
-            ua_rules,
-            author_rules,
-            body_link,
-            None,
-            animated,
-            environment,
+        let (style, sources, descendant_root_font_px) = style_element(
+            dom, node, parent_style, root_font_px, ua_rules, author_rules,
+            body_link, pseudo_targets, animated, environment, font_metrics, out,
+            dom.name(node) == Some("html"),
         );
-        crate::font_metric_context::resolve(&mut style, node, None, font_metrics);
-        let descendant_root_font_px = if dom.name(node) == Some("html") {
-            style
-                .get("font-size")
-                .and_then(|value| value.strip_suffix("px"))
-                .and_then(|value| value.parse::<f32>().ok())
-                .unwrap_or(root_font_px)
-        } else {
-            root_font_px
-        };
-        for (pseudo, requested) in PseudoElement::STYLED.into_iter().zip(pseudo_targets) {
-            if !*requested
-                && !(pseudo == PseudoElement::Marker && style.get("display").is_some_and(crate::is_list_item_display))
-            {
-                continue;
-            }
-            let matched = ua_rules.iter().chain(author_rules.iter()).any(|rule| {
-                rule.targets(pseudo) && rule.matching(dom, node, Some(pseudo)).is_some()
-            });
-            if matched {
-                out.matched_pseudos.insert((node.0, pseudo));
-            }
-            if matches!(pseudo, PseudoElement::FirstLine | PseudoElement::FirstLetter) && !matched {
-                continue;
-            }
-            let (mut pseudo_style, _) = compute_one(
-                dom,
-                node,
-                Some(&style),
-                descendant_root_font_px,
-                ua_rules,
-                author_rules,
-                body_link,
-                Some(pseudo),
-                None,
-                environment,
-            );
-            crate::font_metric_context::resolve(&mut pseudo_style, node, Some(pseudo), font_metrics);
-            let has_content =
-                !matches!(pseudo_style.get("content"), None | Some("normal" | "none"));
-            let visible = style.get("display") != Some("none");
-            let applies = match pseudo {
-                PseudoElement::Before | PseudoElement::After => has_content,
-                PseudoElement::Marker => style.get("display").is_some_and(crate::is_list_item_display)
-                    && pseudo_style.get("content") != Some("none")
-                    && (has_content || pseudo_style.get("list-style-type") != Some("none")
-                        || pseudo_style.get("list-style-image") != Some("none")),
-                PseudoElement::FirstLine | PseudoElement::FirstLetter => visible,
-                _ => false,
-            };
-            if applies && pseudo_style.get("display") != Some("none") && visible {
-                out.pseudo_styles.insert((node.0, pseudo), pseudo_style);
-            }
-        }
         for child in dom.children(node) {
             style_subtree(
                 dom,

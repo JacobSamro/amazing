@@ -2922,3 +2922,9 @@ CSS49 final: CSS415/workspace3576/17skip+4docs;4256→4312/5126 (+56/lost0), inc
 Installed CSSOM dependency audit found one lost generic(fangsong) subtest after47. Fonts4 https://drafts.csswg.org/css-fonts-4/#generic-family-value defines four script functions fangsong/kai/khmer-mul/nastaliq and current bare emoji/fangsong as named custom-ident families. Whole grammar and canonical computed/shorthand serialization corrected, invalid args/prefix functions rejected, quoted meaningful whitespace retained. Font-only source independent of49; lower fixed49 workspace/docs+15dirs+fonts final, driver191 installed boundary separate. Actual script-specific installed font mapping is a provider policy, not claimed by parsing.
 
 CSS47A final: CSS416/workspace3577/17skip+4docs;4312/5126 unchanged/lost0;wholefonts24/32/all32stable/lost0. Renderer02a32cfff71c698b03ba26b1bbf7eb0eb406d43c8a14a33764323860791c1425. Independent font source dependency supplied to installed191 CSSOM owner.
+
+### CSS50 — native shadow style boundaries
+
+CSS Shadow1 https://drafts.csswg.org/css-shadow-1/ and Cascade4 flat-tree value processing. Additive explicit scoped principal/pseudo entry points preserve native IDs and driver actual font context; document ordinary selectors cannot enter shadow scopes. Attached open/closed/nested host inheritance, named/manual immediate slot inheritance, UA slot display:contents, flattened membership and nested Document isolation. Existing APIs preserved. :host/::slotted, scoped named resources and actual shadow layout/generated counters remain explicit follow-ons.
+
+CSS50 final: CSS419/workspace3580/17skip+4docs;4312/5126 unchanged/lost0;wholeimages92/141,fonts24/32,transforms145/348 all521stable/lost0. Rendererfdda8fb4d48b2a1a1cb669b0db16f3fbd4ce342a685542c1f2e3db89776bfd6b. Driver scoped collection adoption/installed shadow gains remain separate.

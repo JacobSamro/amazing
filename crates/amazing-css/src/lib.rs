@@ -68,7 +68,7 @@ mod viewport_units;
 
 pub use cascade::{
     ElementFill, ElementPaintStyle, ElementStyleSource, ElementStyleValue, StyledDom, compute,
-    compute_with_animations, compute_with_animations_and_environment, compute_with_environment, compute_with_font_metrics, compute_document_with_font_metrics, compute_document_pseudo_with_font_metrics,
+    compute_with_animations, compute_with_animations_and_environment, compute_with_environment, compute_with_font_metrics, compute_document_with_font_metrics, compute_document_pseudo_with_font_metrics, compute_document_with_shadow_font_metrics, compute_document_pseudo_with_shadow_font_metrics,
     AnimatedOrigin, AnimatedStyleValue, AnimatedValues,
     compute_element_paint_style,
     recompute_roots, recompute_roots_with_font_metrics, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch,
