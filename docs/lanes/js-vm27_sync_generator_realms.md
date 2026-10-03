@@ -32,3 +32,15 @@ are unchanged. Grouped native/forced-AST proof covers borrowed methods,
 class-key suspension, With/finally injected Return, body ReferenceError realm,
 raw delegated results, user Throw identity and invalid receivers. Readiness
 requires the separate matched release corpus and workspace/doctest gate.
+
+Final source `fe2690f0` on exact `3832dbd2` passes **4220 workspace tests**
+(17 skipped), versus 4217 before, and **four doctests**. All three grouped
+native/forced-AST borrowed-method matrices pass. The 26 matched release
+reports retain **30305 passing files / 56764 variants** among **30442 files /
+56960 variants** in both modes, with identical classifications and failure
+reasons, zero lost passes and no new host crashes. Callable compilation
+attempts/accepted remain 1428421/1428421 in default mode and 802936/802936 in
+VM-program mode; both have zero fallbacks. The whole class27 final reports
+are reused as the exact production-identical before source, with matching
+pins, capability map, jobs, deadlines and release profile. See
+[js-vm27_sync_generator_evidence.json](js-vm27_sync_generator_evidence.json).

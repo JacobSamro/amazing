@@ -1,0 +1,113 @@
+{
+  "ticket": "JSVM27 sync generator realm companion",
+  "base_source": "3832dbd2109602e9cd1c7c204e57a7b9f010db42",
+  "source": "fe2690f01fa63598b66efa9d2a17021c600d5f3d",
+  "source_commits": [
+    "c71e45fefe7343dcf24af7cea5fbbbe2973e162c",
+    "fe2690f01fa63598b66efa9d2a17021c600d5f3d"
+  ],
+  "host": "Boat pool-js-vm / bx_e32kqbvv",
+  "profile": "release",
+  "native": {
+    "before_workspace_passed": 4217,
+    "after_workspace_passed": 4220,
+    "skipped": 17,
+    "doctests_passed": 4,
+    "grouped_native_forced_ast_tests": 3
+  },
+  "metadata": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+    "capabilities": {
+      "protocol": 2,
+      "script_source_context": true,
+      "module": true,
+      "async": true,
+      "can_block": true,
+      "createRealm": true,
+      "detachArrayBuffer": true,
+      "gc": false,
+      "agent": false,
+      "IsHTMLDDA": false,
+      "AbstractModuleSource": false,
+      "evalScript": true,
+      "global": true,
+      "print": true,
+      "intl402": true
+    },
+    "timeout_seconds": 60.0,
+    "jobs": 8
+  },
+  "selectors": [
+    "built-ins/AbstractModuleSource/",
+    "built-ins/AsyncFunction/",
+    "built-ins/AsyncGeneratorFunction/",
+    "built-ins/Function/",
+    "built-ins/GeneratorFunction/",
+    "built-ins/Iterator/",
+    "built-ins/Object/",
+    "built-ins/Promise",
+    "built-ins/Proxy/",
+    "built-ins/Reflect/",
+    "language",
+    "language/expressions/class/",
+    "language/statements/class/"
+  ],
+  "scope": "Actual synchronous body and ordinary yielded result use retained body realm; completed and initial/completed abrupt result use actual invoking context. Delegated result identity retained. No new realm fields or async policy changes.",
+  "reference_artifact": "js-vm27_sync_generator_reference.json",
+  "modes": {
+    "default": {
+      "selected_files": 30442,
+      "selected_variants": 56960,
+      "before_passed_files": 30305,
+      "after_passed_files": 30305,
+      "before_passed_variants": 56764,
+      "after_passed_variants": 56764,
+      "before_host_sha256": "6ee1c811f522ebd991ce34ac188a592f30b4781998c151f677c7bf5134ec17bc",
+      "after_host_sha256": "358f5dcb7c84df0ed7ab6fbc92a70316316afa4997c2436d919dc5ff314505ec",
+      "before_trace": {
+        "attempts": 1428421,
+        "accepted": 1428421,
+        "fallbacks": {}
+      },
+      "after_trace": {
+        "attempts": 1428421,
+        "accepted": 1428421,
+        "fallbacks": {}
+      },
+      "gained_files": 0,
+      "lost_files": 0,
+      "gained_variants": 0,
+      "lost_variants": 0,
+      "reason_changes": 0,
+      "new_host_abnormal_exits": 0
+    },
+    "vm": {
+      "selected_files": 30442,
+      "selected_variants": 56960,
+      "before_passed_files": 30305,
+      "after_passed_files": 30305,
+      "before_passed_variants": 56764,
+      "after_passed_variants": 56764,
+      "before_host_sha256": "6ee1c811f522ebd991ce34ac188a592f30b4781998c151f677c7bf5134ec17bc",
+      "after_host_sha256": "358f5dcb7c84df0ed7ab6fbc92a70316316afa4997c2436d919dc5ff314505ec",
+      "before_trace": {
+        "attempts": 802936,
+        "accepted": 802936,
+        "fallbacks": {}
+      },
+      "after_trace": {
+        "attempts": 802936,
+        "accepted": 802936,
+        "fallbacks": {}
+      },
+      "gained_files": 0,
+      "lost_files": 0,
+      "gained_variants": 0,
+      "lost_variants": 0,
+      "reason_changes": 0,
+      "new_host_abnormal_exits": 0
+    }
+  }
+}
