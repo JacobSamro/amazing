@@ -267,6 +267,8 @@ mod tests {
         let cdata=dom.create_node_in(NodeIdx(0),NodeKind::CDATASection { data: "<&>".into() }).unwrap();
         dom.pre_insert(pi,fragment,None).unwrap();dom.pre_insert(cdata,fragment,None).unwrap();
         assert_eq!(text(&dom,fragment,true),"<?xml-stylesheet a='b'?><![CDATA[<&>]]>");
+        let doctype=dom.create_document_type_in(NodeIdx(0),"html","-//Example//EN","urn:example").unwrap();
+        assert_eq!(text(&dom,doctype,true),"<!DOCTYPE html PUBLIC \"-//Example//EN\" \"urn:example\">");
         let html=dom.create_element_ns_in(NodeIdx(0),Some(HTML),"br").unwrap();
         assert_eq!(text(&dom,html,false),"<br xmlns=\"http://www.w3.org/1999/xhtml\" />");
         let template=dom.create_element_ns_in(NodeIdx(0),Some(HTML),"template").unwrap();
