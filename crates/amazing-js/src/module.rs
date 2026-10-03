@@ -1,3 +1,6 @@
+// Declaration-instantiation portions adapted from lucid-softworks/lumen
+// (crates/lumen/src/interpreter.rs, build_hoist_ops/apply_hoist_ops)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 //! Synchronous source-text modules. Resolution and linking are separate from
 //! evaluation so a missing module/export is reported in the resolution phase.
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -325,7 +328,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         // any of it evaluates. A dependency cycle can therefore read hoisted functions and
         // observes TDZ for lexical declarations.
         for record_id in &new_ids {
-            let (program, default_binding) = {
+            let (mut program, default_binding) = {
                 let record = &self.records[record_id];
                 let (program, default) = module_program(record);
                 (program, if self.synthetic.contains_key(record_id) { Some("\0module.default".into()) } else { default })
@@ -356,6 +359,12 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             let prepared = engine.prepare_module(&program);
             engine.global_env = previous;
             prepared.map_err(ModuleFailure::runtime)?;
+            // ModuleDeclarationInstantiation created these objects exactly once.
+            // Their evaluation is empty; omit them from the execution adapter so
+            // legacy run_program entry cannot replace a function already observed
+            // by an importing module in a cycle. Nested declarations remain in
+            // their original statements and instantiate in their own block scope.
+            program.body.retain(|statement| !matches!(statement.kind, StmtKind::Function(_)));
             let mut object = JsObject::ordinary();
             object.proto = None;
             object.extensible = false;
@@ -758,22 +767,25 @@ fn module_program(record: &ModuleRecord) -> (Program, Option<String>) {
                 if let Some(name) = named {
                     default_binding = Some(name);
                     body.push(stmt.clone());
+                } else if let StmtKind::Function(function) = &stmt.kind {
+                    // Anonymous default functions are HoistableDeclarations,
+                    // including async/generator forms, rather than expressions.
+                    // `default` cannot be a source BindingIdentifier, so this
+                    // reserved adapter binding is collision-free and gives the
+                    // existing function factory the observable name "default".
+                    let mut function = (**function).clone();
+                    function.name = Some(Ident::new("default", stmt.span));
+                    default_binding = Some("default".into());
+                    body.push(Stmt::new(StmtKind::Function(Box::new(function)), stmt.span));
                 } else {
-                    let expr = match &stmt.kind {
-                        StmtKind::Function(function) => {
-                            Expr::new(ExprKind::Function(function.clone()), stmt.span)
-                        }
-                        StmtKind::Class(class) => {
-                            Expr::new(ExprKind::Class(class.clone()), stmt.span)
-                        }
-                        _ => unreachable!(),
-                    };
-                    default_binding = Some("\0module.default".into());
+                    let StmtKind::Class(class) = &stmt.kind else { unreachable!() };
+                    let expr = Expr::new(ExprKind::Class(class.clone()), stmt.span);
+                    default_binding = Some("default".into());
                     body.push(default_declaration(expr, stmt.span));
                 }
             }
             ModuleItem::ExportDefaultExpression(expr) => {
-                default_binding = Some("\0module.default".into());
+                default_binding = Some("default".into());
                 body.push(default_declaration(expr.clone(), expr.span));
             }
             _ => {}
@@ -872,7 +884,7 @@ fn default_declaration(expr: Expr, span: Span) -> Stmt {
             kind: VarKind::Const,
             resource_kind: None,
             decls: vec![Declarator {
-                binding: Binding::Ident(Ident::new("\0module.default", span)),
+                binding: Binding::Ident(Ident::new("default", span)),
                 init: Some(expr),
                 span,
             }],

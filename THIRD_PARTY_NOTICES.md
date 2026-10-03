@@ -132,3 +132,4 @@ reproduced in the table row for that upstream.
 | W3C XML Test Suite 20130923 (https://www.w3.org/XML/Test/) | W3C Software Notice and License (19980720) | Original catalog copyrights include Sun Microsystems1998–1999, OASIS1999–2001 and individual fixture authors; full preserved notices in CATALOG-NOTICES.md | crates/amazing-html/evidence/html70-xml-conformance/manifest.json: normative fixture IDs/metadata/descriptions only; no upstream engine implementation code |
 
 - jsdom/jsdom, MIT, Copyright (c) 2010 Elijah Insua; Selection-impl.js @9547fbf5b60af45d54c9e34d0891c7808f6ee2ce adapted in crates/amazing-dom/src/selection.rs.
+- lucid-softworks/lumen, MIT, Copyright (c) 2026 Lucid Softworks limited; interpreter.rs build_hoist_ops/apply_hoist_ops @ f6c9860d44fa52249cfd647122edea184d32c863 declaration instantiation adapted in crates/amazing-js/src/module.rs.
