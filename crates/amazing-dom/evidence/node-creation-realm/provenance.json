@@ -1,0 +1,59 @@
+{
+  "base": "deb2cefcdb110adced3c1fb32b89a38f51844ba6",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "platform": "Linux Boat, native /tmp source and target, 2 cargo jobs",
+  "pages": 579,
+  "ordinary_timeout_seconds": 25,
+  "heavy_range_timeout_seconds": 150,
+  "native": {
+    "before": 4016,
+    "after": 4027,
+    "skipped": 17,
+    "doctests": 4
+  },
+  "credited_assertion_gains": 168,
+  "uncredited_xhr_completion": 1,
+  "identical_html_dependencies": [
+    "fb3faccc832fe956a8dabf6ab1fc6349a20e1d14",
+    "f7b4846013fb0f9a38a6176fa7aad52f0e02ca9f",
+    "b797c52ee8521575d5405b15fb355acbee44d882",
+    "b6698061a9b14737b09a06d8db39036e8b2b4877",
+    "e44b958be36d109fa9c51c5fb6a2116d37daad25",
+    "37c331adb00f5e8ded3bc239ed2cb0c5b5055678",
+    "0a8b232138a377b66704d38c1cff28c2afa9328f",
+    "d96f0894a406c8dfe94e07cbb28439e091c06002"
+  ],
+  "before": {
+    "source": "4bb491cf57d5d66ca76b7b7dd02e2644885a90dc",
+    "binary_sha256": "8909c77f63433478c1966d568d3b960335bfcb7082f3827e8850e135841f7f28",
+    "raw_report_sha256": "9c1292a4162c09a66de739fba0928be527c7eb0b2c93fa0d71c053c43ef27bfb",
+    "syntax72_sha256": "0569986d9a8f62880c7cc4be274af583606b0acd7aa54beedcf801061eb8a5bb",
+    "file_statuses": {
+      "unsupported": 33,
+      "pass": 322,
+      "timeout": 21,
+      "fail": 185,
+      "error": 18
+    }
+  },
+  "after": {
+    "source": "30c995a7cda3e5e4929436470321c6b4dbbd46d7",
+    "binary_sha256": "be16bd7a5d315e3885bad165db1774fdb824f9990e84b46422ae79f7aed7cc32",
+    "raw_report_sha256": "6eb5365cbb69ca85dd17a7947205ffd64f0697a729acf39506d080677ff7c5bc",
+    "syntax72_sha256": "0569986d9a8f62880c7cc4be274af583606b0acd7aa54beedcf801061eb8a5bb",
+    "file_statuses": {
+      "unsupported": 33,
+      "pass": 336,
+      "timeout": 19,
+      "fail": 173,
+      "error": 18
+    }
+  },
+  "accepted_sources": [
+    "afa9d3482fb7ef3619788bfaba0ce2db1bb75c24",
+    "58358536b4a15c5759e8331c6bf2e71553f5348d (whole579 plus full66 Range120s)",
+    "12e307b7fd8b12a43a7a6171705ff5cb83a4e100",
+    "85c76154e195fdbbdb1526f5679394e233917ac0"
+  ],
+  "html_timing_evidence": "ac85836b0a9a649de3929330b568e0563d754b2e"
+}

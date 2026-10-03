@@ -1,0 +1,37 @@
+{
+  "node-realm-before -> before": {
+    "lost_passing_names": {},
+    "lost_accepted_file_passes": [],
+    "retained_pages": 579
+  },
+  "node-realm-context-before -> after": {
+    "lost_passing_names": {},
+    "lost_accepted_file_passes": [],
+    "retained_pages": 579
+  },
+  "node-realm-before -> after": {
+    "lost_passing_names": {},
+    "lost_accepted_file_passes": [],
+    "retained_pages": 579
+  },
+  "range-fixed-after -> after": {
+    "lost_passing_names": {},
+    "lost_accepted_file_passes": [],
+    "retained_pages": 579
+  },
+  "range-extended-after -> after": {
+    "lost_passing_names": {},
+    "lost_accepted_file_passes": [],
+    "retained_pages": 66
+  },
+  "xml-resourced-after -> after": {
+    "lost_passing_names": {},
+    "lost_accepted_file_passes": [],
+    "retained_pages": 579
+  },
+  "importer-values-fixed-after -> after": {
+    "lost_passing_names": {},
+    "lost_accepted_file_passes": [],
+    "retained_pages": 579
+  }
+}

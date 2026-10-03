@@ -3376,3 +3376,14 @@ are present on both; candidate compiler corrections use the existing DOMParser
 web_slot receiver validator and imported HostHandle test type. Original failed
 diagnostics remain scratch. Baseline native4015/17 is green; final whole579
 comparison and HTML timing13 proof remain pending. These are WIP observations.
+
+Node creation/relevant realm READY on final4bb491cf→30c995a7: Linux workspace
+4016→4027 passed/17 skipped +four docs, whole579 assertions57039→57208,
+2278→2111fail/seven errors, exact0lost names/multiplicities/accepted-filepasses.
+168 causal gains plus one uncredited XHR completion; all13creation-realm cases
+pass. Initial stronger57037 and previous accepted Range/XML/importer passes
+retained. Syntax72 byte-identical2702/6. HTML timing prerequisite owned proof
+ac85836b closes whole13+220syntax+111modules/trees at0loss; identical context-only
+d96 correction restored23MO names without changing Node algorithms.
+Evidence: amazing-dom/evidence/node-creation-realm. Realm GC remains separate;
+PI17 invalid-document fixture/spec mismatch is recorded without parser relaxation.

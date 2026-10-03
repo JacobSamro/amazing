@@ -1,0 +1,26 @@
+{
+  "before": {
+    "pass": 57037,
+    "fail": 2274,
+    "error": 6
+  },
+  "after": {
+    "pass": 57039,
+    "fail": 2278,
+    "error": 7
+  },
+  "pages_before": 579,
+  "pages_after": 579,
+  "lost_assertions": 0,
+  "lost_files": 0,
+  "lost": {},
+  "gained": {
+    "dom/nodes/Node-appendChild.html": {
+      "Appending a document": 1
+    },
+    "dom/ranges/Range-extractContents-dynamic-end.html": {
+      "Range.extractContents should not extract out-of-bounds nodes if end container is removed during iframe unload": 1
+    }
+  },
+  "removed_files": []
+}
