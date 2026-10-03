@@ -1,0 +1,86 @@
+{
+  "syntax.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "the-base-element-after.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "windows-after.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "the-template-element.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "cssom.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "the-window-object-after.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "the-windowproxy-exotic-object-after.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "the-iframe-element-after.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "whole-html-syntax.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "selection.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "serialization.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "base-url-after.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "domparsing.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "dom.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "ranges.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "encoding.jsonl": {
+    "lost": 0,
+    "gained": 0,
+    "lost_files": []
+  },
+  "modules": {
+    "lost": 0,
+    "gained": 0
+  }
+}
