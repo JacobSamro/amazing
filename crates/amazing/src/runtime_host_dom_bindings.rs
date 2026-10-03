@@ -2309,7 +2309,7 @@ impl RuntimeBindingHost<'_> {
         state.host.borrow().dom.range(range).map_err(|_| Throw::type_error("Released Range"))?;
         state.range_creation_realms.get(&range).copied().ok_or_else(|| Throw::type_error("Range creation realm is unregistered"))
     }
-    fn dom_selection_range_value(&mut self, selection: amazing_dom::selection::SelectionId,
+    pub(super) fn dom_selection_range_value(&mut self, selection: amazing_dom::selection::SelectionId,
         range: amazing_dom::range::Range) -> Result<Option<JsValue>, Throw> {
         let state = self.state.borrow();
         let selected = state.host.borrow().dom.selection_state(selection)
@@ -2321,7 +2321,7 @@ impl RuntimeBindingHost<'_> {
         drop(state);
         Ok(root.and_then(|root| self.root_value(root)))
     }
-    fn dom_selection_set_range_value(&mut self, selection: amazing_dom::selection::SelectionId,
+    pub(super) fn dom_selection_set_range_value(&mut self, selection: amazing_dom::selection::SelectionId,
         range: amazing_dom::range::Range, value: &JsValue) -> Result<(), Throw> {
         let handle = self.platform_object(value, InterfaceBrand::RANGE).ok_or_else(|| Throw::type_error("Expected a genuine Range"))?;
         if handle.slot != range.slot() as u64 { return Err(Throw::type_error("Range wrapper does not match association")); }
