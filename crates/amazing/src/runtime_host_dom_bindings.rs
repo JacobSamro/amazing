@@ -1524,7 +1524,7 @@ mod tests {
         let mut js=Interpreter::new_with_external_scheduler(32).unwrap();
         js.set_dom_host(host.clone());super::super::install(&mut js,host).unwrap();
         let result=js.run_script(r#"
-            let step=0;function check(v){step++;if(!v)throw 'XML serialization '+step;}
+            (function(){let step=0;try{function check(v){step++;if(!v)throw 'XML serialization '+step;}
             const serializer=new XMLSerializer();check(serializer instanceof XMLSerializer);
             check(XMLSerializer.length === 0 && XMLSerializer.prototype.serializeToString.length === 1);
             const root=document.createElementNS('urn:root','p:root');
@@ -1542,7 +1542,7 @@ mod tests {
             let missing=false;try{serializer.serializeToString();}catch(e){missing=e instanceof TypeError;}check(missing);
             let wrong=false;try{XMLSerializer.prototype.serializeToString.call({},root);}catch(e){wrong=e instanceof TypeError;}check(wrong);
             let construct=false;try{XMLSerializer();}catch(e){construct=e instanceof TypeError;}check(construct);
-            check(new XMLSerializer() !== serializer);true;
+            check(new XMLSerializer() !== serializer);return true;}catch(e){return String(e)+" at step "+step;}})();
         "#).unwrap();
         assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
     }
