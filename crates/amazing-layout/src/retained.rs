@@ -796,6 +796,42 @@ mod tests {
         assert_eq!(tree.box_for_ref(damage.box_ref).unwrap().node, Some(child));
     }
 
+    #[test]
+    fn resolved_query_rejects_stale_contained_geometry_until_full_positioning() {
+        use crate::{resolved_style_geometry,LayoutSource};
+        let dom = amazing_html::parse("<body><section><div>x</div></section><p>after</p></body>");
+        let child = node_named(&dom,"div"); let text = FallbackTextSystem::new();
+        let before = "body{margin:0}section{display:flow-root;contain:layout;width:100px;height:80px}section>div{width:20px;height:20px}";
+        let after = "body{margin:0}section{display:flow-root;contain:layout;width:100px;height:80px}section>div{width:40px;height:20px}";
+        let old = styled(&dom,before); let mut root = crate::layout_styled_document(
+            &dom,&old,&text,&NoReplacedElements,200.0,None);
+        assert_eq!(resolved_style_geometry(&root,LayoutSource::Element(child)).unwrap().content_box.w,20.0);
+        let changed = delta(styled(&dom,after),child,"width");
+        assert!(try_relayout_contained(&mut root,&dom,&old,&changed,&text));
+        assert!(resolved_style_geometry(&root,LayoutSource::Element(child)).is_none());
+        let fresh = crate::layout_styled_document(&dom,&changed.styles,&text,&NoReplacedElements,200.0,None);
+        assert_eq!(resolved_style_geometry(&fresh,LayoutSource::Element(child)).unwrap().content_box.w,40.0);
+    }
+
+    #[test]
+    fn resolved_query_keeps_unchanged_used_geometry_after_retained_opacity_update() {
+        use crate::{resolved_style_geometry,LayoutSource};
+        let dom = amazing_html::parse("<body><div>x</div></body>");
+        let child = node_named(&dom,"div"); let text = FallbackTextSystem::new();
+        let before = "body{margin:0}div{width:20px;height:10px;opacity:1}";
+        let after = "body{margin:0}div{width:20px;height:10px;opacity:.5}";
+        let mut tree = LayoutTree::new(&dom,styled(&dom,before),&text,&NoReplacedElements,200.0,None);
+        let initial = resolved_style_geometry(tree.root(),LayoutSource::Element(child)).unwrap();
+        let result = tree.update(&dom,delta(styled(&dom,after),child,"opacity"),
+            &InputChanges::default(),&text,&NoReplacedElements,200.0,None);
+        assert_eq!(result.outcome,UpdateOutcome::Retained);
+        let actual = resolved_style_geometry(tree.root(),LayoutSource::Element(child)).unwrap();
+        assert_eq!(actual.content_box,initial.content_box);
+        assert_eq!(actual.border_box,initial.border_box);
+        assert_eq!(actual.containing_block,initial.containing_block);
+        assert!(actual.insets.left.is_none()&&actual.insets.top.is_none());
+    }
+
     /// Run explicitly on a build host to track ADR 0010's 20 ms p95 target.
     #[test]
     #[ignore]

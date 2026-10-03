@@ -9,6 +9,7 @@ use crate::block::{layout_block, layout_block_with_text};
 use crate::font::FontSource;
 use crate::position_constraints::Axis;
 use crate::values;
+use crate::resolved_geometry::{ResolvedPosition, InsetOverconstraint};
 use crate::{Flow, LayoutBox, Rect};
 
 #[derive(Clone, Copy)]
@@ -63,6 +64,7 @@ pub(crate) fn layout_positioned(
     fonts: &FontSource,
     text: Option<&dyn TextSystem>,
 ) {
+    clear_resolved_positions(root);
     let viewport = Rect {
         x: 0.0,
         y: 0.0,
@@ -78,6 +80,15 @@ pub(crate) fn layout_positioned(
             .unwrap_or_else(|| is_rtl(root)),
     };
     position_subtree(root, viewport, viewport, true, viewport, viewport, fonts, text);
+    crate::resolved_geometry::capture_geometry_snapshot(root);
+}
+
+fn clear_resolved_positions(box_: &mut LayoutBox) {
+    box_.resolved_position = None;
+    if let Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) = &mut box_.flow {
+        for child in children { clear_resolved_positions(child); }
+    }
+    for child in &mut box_.positioned { clear_resolved_positions(child); }
 }
 
 fn position_subtree(
@@ -90,6 +101,9 @@ fn position_subtree(
     fonts: &FontSource,
     text: Option<&dyn TextSystem>,
 ) {
+    if box_.resolved_position.is_none() {
+        box_.resolved_position = Some(ResolvedPosition::normal(normal_containing_block.rect));
+    }
     if position_kind(box_) == PositionKind::Relative {
         let (dx, dy) = relative_offset(
             box_,
@@ -175,6 +189,7 @@ fn position_subtree(
             let x = box_.content_box.x - child.border_box.w;
             let y = box_.content_box.y;
             shift_box(child, x - child.border_box.x, y - child.border_box.y);
+            child.resolved_position = Some(ResolvedPosition::normal(box_.content_box));
             continue;
         }
         if child.inline_atomic {
@@ -228,6 +243,7 @@ fn position_subtree(
             containing_block,
             static_anchor,
             specified_margins,
+            &computed_style,
             text,
         );
         shift_box(child, x - child.border_box.x, y - child.border_box.y);
@@ -293,7 +309,7 @@ fn resolve_inset(
 }
 
 fn relative_offset(
-    box_: &LayoutBox,
+    box_: &mut LayoutBox,
     containing_block: ContainingBlock,
     cb_height_definite: bool,
     text: Option<&dyn TextSystem>,
@@ -320,6 +336,16 @@ fn relative_offset(
         left.or_else(|| right.map(|value| -value)).unwrap_or(0.0)
     };
     let dy = top.or_else(|| bottom.map(|value| -value)).unwrap_or(0.0);
+    box_.resolved_position = Some(ResolvedPosition {
+        snapshot: None,
+        containing_block: containing_block.rect,
+        insets: values::SidesM { left: Some(dx), right: Some(-dx), top: Some(dy), bottom: Some(-dy) },
+        overconstrained: InsetOverconstraint {
+            left: rtl && left.is_some() && right.is_some(),
+            right: !rtl && left.is_some() && right.is_some(),
+            top: false, bottom: top.is_some() && bottom.is_some(),
+        },
+    });
     (dx, dy)
 }
 
@@ -598,10 +624,11 @@ fn absolute_origin(
     containing_block: ContainingBlock,
     anchor: StaticAnchor,
     margins: values::SidesM,
+    original_style: &amazing_css::ComputedStyle,
     text: Option<&dyn TextSystem>,
 ) -> (f32, f32) {
     let cb = containing_block.rect;
-    let x = Axis {
+    let x_axis = Axis {
         extent: cb.w,
         start: resolve_inset(box_, "left", cb.w, text),
         end: resolve_inset(box_, "right", cb.w, text),
@@ -612,9 +639,8 @@ fn absolute_origin(
         static_end: anchor.right,
         end_wins: containing_block.rtl,
         split_negative: false,
-    }
-    .solve();
-    let y = Axis {
+    };
+    let y_axis = Axis {
         extent: cb.h,
         start: resolve_inset(box_, "top", cb.h, text),
         end: resolve_inset(box_, "bottom", cb.h, text),
@@ -625,8 +651,36 @@ fn absolute_origin(
         static_end: false,
         end_wins: false,
         split_negative: true,
-    }
-    .solve();
+    };
+    let x = x_axis.solve();
+    let y = y_axis.solve();
+    // These are the actual constraint equation's margin-edge insets, including
+    // auto/static solutions. Computed losers remain independently flagged.
+    let left = x.border_start - x.margin_start;
+    let right = cb.w - x.border_start - box_.border_box.w - x.margin_end;
+    let top = y.border_start - y.margin_start;
+    let bottom = cb.h - y.border_start - box_.border_box.h - y.margin_end;
+    let over = |axis: Axis, property: &str, used_start: f32, used_end: f32| {
+        let both = axis.start.is_some() && axis.end.is_some()
+            && axis.margin_start.is_some() && axis.margin_end.is_some();
+        let fixed_size = original_style.get(property).is_some_and(|value|
+            !matches!(value, "auto" | "stretch" | "-webkit-fill-available"))
+            || box_.replaced_size.is_some() || box_.svg_sizing.is_some();
+        // Auto opposing-inset fill is not overconstrained unless min/max
+        // sizing made the actual solved equation discard an author inset.
+        let discarded = axis.start.is_some_and(|value| (value-used_start).abs() > 0.001)
+            || axis.end.is_some_and(|value| (value-used_end).abs() > 0.001);
+        both && (fixed_size || discarded)
+    };
+    let over_x = over(x_axis, "width", left, right);
+    let over_y = over(y_axis, "height", top, bottom);
+    box_.resolved_position = Some(ResolvedPosition {
+        snapshot: None,
+        containing_block: cb,
+        insets: values::SidesM { left: Some(left), right: Some(right), top: Some(top), bottom: Some(bottom) },
+        overconstrained: InsetOverconstraint { left: over_x && x_axis.end_wins,
+            right: over_x && !x_axis.end_wins, top: false, bottom: over_y },
+    });
     box_.margin = values::SidesM {
         left: Some(x.margin_start),
         right: Some(x.margin_end),

@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "subdir": "css/CSS2/positioning",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+  "host": "box-node-e47177aaec561ee8",
+  "generated": "2026-10-03T01:05:11Z",
+  "counts": {
+    "pass": 4,
+    "mismatch": 3,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "tests": {
+    "css__CSS2__positioning__abspos-block-level-001.html": "mismatch",
+    "css__CSS2__positioning__absolute-non-replaced-min-max-001.html": "pass",
+    "css__CSS2__positioning__absolute-non-replaced-min-001.html": "pass",
+    "css__CSS2__positioning__auto-position-rtl-child-viewport-scrollbar.html": "pass",
+    "css__CSS2__positioning__abspos-negative-margin-001.html": "mismatch",
+    "css__CSS2__positioning__abspos-float-with-inline-container.html": "mismatch",
+    "css__CSS2__positioning__absolute-non-replaced-max-001.html": "pass"
+  }
+}

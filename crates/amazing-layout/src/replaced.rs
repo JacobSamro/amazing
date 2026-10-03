@@ -27,6 +27,7 @@ pub struct InlineReplaced {
     pub kind: ReplacedKind,
     /// Resolved URL of CSS generated `content: url(...)`, when applicable.
     pub generated_url: Option<String>,
+    pub generated_pseudo: Option<amazing_css::selectors::PseudoElement>,
     pub source_order: Option<u64>,
     pub style: ComputedStyle,
     pub font_size: f32,
@@ -49,6 +50,7 @@ pub(crate) struct Geometry {
 pub struct StyledReplacedFrag<'a> {
     pub node: NodeIdx,
     pub generated_url: Option<String>,
+    pub generated_pseudo: Option<amazing_css::selectors::PseudoElement>,
     pub source_order: Option<u64>,
     pub kind: ReplacedKind,
     pub style: &'a ComputedStyle,
@@ -84,6 +86,7 @@ impl LayoutBox {
                 Some(StyledReplacedFrag {
                     node: fragment.node,
                     generated_url: info.generated_url.clone(),
+                    generated_pseudo: info.generated_pseudo,
                     source_order: info.source_order,
                     kind: info.kind,
                     style: &info.style,
@@ -221,6 +224,7 @@ pub(crate) fn construct(
     let mut replaced = Box::new(InlineReplaced {
         kind,
         generated_url: None,
+        generated_pseudo: None,
         source_order: None,
         style: style.clone(),
         font_size,
@@ -246,7 +250,7 @@ pub(crate) fn generated_image(
     style: &ComputedStyle,
     font_size: f32,
     source_order: u64,
-    marker: bool,
+    pseudo: amazing_css::selectors::PseudoElement,
     provider: &dyn ReplacedElementProvider,
 ) -> InlineNode {
     let natural = provider.intrinsic_size_by_url(url)
@@ -256,7 +260,7 @@ pub(crate) fn generated_image(
             width: style.scale_used_length(size.width as f64) as f32,
             height: style.scale_used_length(size.height as f64) as f32,
         })
-        .unwrap_or(if marker {
+        .unwrap_or(if pseudo == amazing_css::selectors::PseudoElement::Marker {
             IntrinsicSize { width: font_size, height: font_size }
         } else {
             IntrinsicSize { width: 300.0, height: 150.0 }
@@ -264,6 +268,7 @@ pub(crate) fn generated_image(
     let mut replaced = Box::new(InlineReplaced {
         kind: ReplacedKind::Image,
         generated_url: Some(url.to_owned()),
+        generated_pseudo: Some(pseudo),
         source_order: Some(source_order),
         style: style.clone(),
         font_size,

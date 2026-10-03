@@ -50,10 +50,17 @@ pub fn build_layout_tree_with_replaced(
     fonts: &FontSource,
     replaced: &dyn ReplacedElementProvider,
 ) -> LayoutBox {
+    build_layout_tree_from_root(dom, NodeIdx(0), styled, fonts, replaced)
+}
+
+pub(crate) fn build_layout_tree_from_root(
+    dom: &Dom, document: NodeIdx, styled: &StyledDom, fonts: &FontSource,
+    replaced: &dyn ReplacedElementProvider,
+) -> LayoutBox {
     let root_style = ComputedStyle::default();
-    let start = dom_html(dom)
+    let start = dom_html_from_root(dom, document)
         .and_then(|html| find_element(dom, html, "body"))
-        .or_else(|| dom_html(dom));
+        .or_else(|| dom_html_from_root(dom, document));
     match start {
         Some(idx) => {
             let mut root = build_element(dom, styled, idx, values::ROOT_FONT_SIZE, fonts, replaced);
@@ -75,7 +82,7 @@ pub fn build_layout_tree_with_replaced(
                 }
             }
             crate::table_tree::normalize(&mut root);
-            let root_metric_style = dom_html(dom)
+            let root_metric_style = dom_html_from_root(dom, document)
                 .and_then(|html| styled.get(html).map(|style| (html, style)))
                 .map(|(html, style)| text_style(
                     dom, html, style,
@@ -87,7 +94,7 @@ pub fn build_layout_tree_with_replaced(
             // line-height, which can differ from `root`'s (the body box,
             // when body is present) -- resolve it from `<html>` directly
             // rather than reusing the body's already-resolved line_height.
-            let root_line_height = dom_html(dom)
+            let root_line_height = dom_html_from_root(dom, document)
                 .and_then(|html| styled.get(html))
                 .map(|style| {
                     let root_font_size = values::resolve_used_font_size(style, values::ROOT_FONT_SIZE);
@@ -96,7 +103,7 @@ pub fn build_layout_tree_with_replaced(
                 })
                 .unwrap_or(root.line_height);
             assign_root_font_metric_style(&mut root, &root_metric_style, root_line_height, None, None);
-            let order = document_order(dom);
+            let order = document_order(dom, document);
             assign_source_order(&mut root, &order);
             root
         },
@@ -114,9 +121,11 @@ pub fn build_layout_tree_with_replaced(
     }
 }
 
-fn dom_html(dom: &Dom) -> Option<NodeIdx> {
-    find_element(dom, NodeIdx(0), "html")
+fn dom_html_from_root(dom: &Dom, document: NodeIdx) -> Option<NodeIdx> {
+    find_element(dom, document, "html")
 }
+#[cfg(test)]
+fn dom_html(dom: &Dom) -> Option<NodeIdx> { dom_html_from_root(dom, NodeIdx(0)) }
 
 /// First element child of `parent` with the given tag name.
 fn find_element(dom: &Dom, parent: NodeIdx, name: &str) -> Option<NodeIdx> {
@@ -249,7 +258,7 @@ fn generated_box(
                     PseudoElement::After => 3,
                     _ => 2,
                 }) << 32) | run_index as u64,
-                pseudo == PseudoElement::Marker,
+                pseudo,
                 replaced,
             )),
             _ => {}
@@ -298,7 +307,7 @@ fn append_generated(
 /// DOM child links, rather than arena allocation ids, define source order.
 /// Each node reserves marker/before/principal/after positions around its
 /// descendants. This also handles nodes inserted before older siblings.
-fn document_order(dom: &Dom) -> std::collections::HashMap<NodeIdx, [u64; 4]> {
+fn document_order(dom: &Dom, document: NodeIdx) -> std::collections::HashMap<NodeIdx, [u64; 4]> {
     fn visit(dom: &Dom, node: NodeIdx, next: &mut u64, slots: &mut std::collections::HashMap<NodeIdx, [u64; 4]>) {
         let mut positions = [0; 4];
         for position in &mut positions[..3] {
@@ -313,7 +322,7 @@ fn document_order(dom: &Dom) -> std::collections::HashMap<NodeIdx, [u64; 4]> {
         slots.insert(node, positions);
     }
     let mut slots = std::collections::HashMap::new();
-    visit(dom, NodeIdx(0), &mut 0, &mut slots);
+    visit(dom, document, &mut 0, &mut slots);
     slots
 }
 

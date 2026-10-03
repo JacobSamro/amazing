@@ -70,6 +70,10 @@
 
 pub mod block;
 mod containment;
+mod resolved_geometry;
+#[cfg(test)]
+mod resolved_geometry_tests;
+pub use resolved_geometry::{LayoutSource, ResolvedStyleGeometry, ResolvedBoxKind, ResolvedPropertyApplicability, InsetOverconstraint, resolved_style_geometry};
 mod display_policy;
 #[cfg(test)]
 mod display_policy_tests;
@@ -167,6 +171,7 @@ pub struct LayoutBox {
     pub source_order: Option<u64>,
     /// Last in-flow source slot, including anonymous inline runs.
     pub(crate) source_end_order: Option<u64>,
+    pub(crate) resolved_position: Option<resolved_geometry::ResolvedPosition>,
     pub(crate) generated_pseudo: Option<amazing_css::selectors::PseudoElement>,
     /// Computed ::first-line style; applied to the first formatted line.
     pub first_line_style: Option<ComputedStyle>,
@@ -252,6 +257,7 @@ impl LayoutBox {
             node,
             source_order: None,
             source_end_order: None,
+            resolved_position: None,
             generated_pseudo: None,
             first_line_style: None,
             outside_marker: false,
@@ -579,6 +585,27 @@ pub fn layout_styled_document(
     let mut root = box_tree::build_layout_tree_with_replaced(dom, styled, &fonts, replaced);
     block::layout_root_with_text(&mut root, viewport_width, viewport_height, text);
     root
+}
+
+/// Lays out one actual document in the DOM arena without renumbering nodes.
+/// The caller supplies this document's real viewport and computed style scope.
+/// Invalid indices and non-document roots return `None`.
+pub fn layout_styled_document_from_root(
+    dom: &amazing_dom::Dom,
+    document: NodeIdx,
+    styled: &amazing_css::StyledDom,
+    text: &dyn TextSystem,
+    replaced: &dyn ReplacedElementProvider,
+    viewport_width: f32,
+    viewport_height: Option<f32>,
+) -> Option<LayoutBox> {
+    if document.0 as usize >= dom.node_count()
+        || !matches!(dom.get(document).kind, amazing_dom::NodeKind::Document)
+    { return None; }
+    let fonts = font::FontSource::fallback();
+    let mut root = box_tree::build_layout_tree_from_root(dom, document, styled, &fonts, replaced);
+    block::layout_root_with_text(&mut root, viewport_width, viewport_height, text);
+    Some(root)
 }
 
 /// Sheet-preserving counterpart of the string entry point. Callers retain
