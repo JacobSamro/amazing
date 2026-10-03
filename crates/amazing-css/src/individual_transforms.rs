@@ -113,7 +113,7 @@ fn number(n: f64) -> String {
     n.to_string()
 }
 
-fn length(css: &str, font: f64, root: f64) -> String {
+pub(super) fn length(css: &str, font: f64, root: f64) -> String {
     let mut tokens = tokenize(css);
     for token in &mut tokens {
         if let Token::Dimension(n, unit) = token {

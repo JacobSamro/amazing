@@ -16,7 +16,7 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
     Some(match name {
         // CompositorOnly
         "opacity" |
-        "transform" |
+        "transform" | "transform-origin" | "perspective-origin" | "transform-box" |
         "filter" |
         "backdrop-filter" |
         "mix-blend-mode" |
@@ -281,7 +281,7 @@ mod tests {
         // `background-position-x`/`-y`, all PaintOnly. CSS39 adds thirteen
         // registered text policy axes, all Layout. CSS42 adds six image-border
         // properties, all PaintOnly.
-        assert_eq!(counts, [16, 52, 142, 34]);
+        assert_eq!(counts, [19, 52, 142, 34]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }

@@ -39,6 +39,8 @@ mod text_policy;
 mod font_variant_policy;
 #[path = "border_image_policy.rs"]
 mod border_image_policy;
+#[path = "position_values.rs"]
+pub(crate) mod position_values;
 // CSS-29: `box-shadow`'s `<shadow>` list grammar moved out too, for the same
 // reason as `grid_values` above (kept this file under the 4,000-line policy
 // after the box-shadow-invalid.html fix). Only `valid_box_shadow` crosses
@@ -430,6 +432,9 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "background-attachment", initial: "scroll", inherited: false },
     PropertyMetadata { name: "image-orientation", initial: "from-image", inherited: true },
     PropertyMetadata { name: "object-fit", initial: "fill", inherited: false },
+    PropertyMetadata { name: "transform-origin", initial: "50% 50%", inherited: false },
+    PropertyMetadata { name: "perspective-origin", initial: "50% 50%", inherited: false },
+    PropertyMetadata { name: "transform-box", initial: "view-box", inherited: false },
     PropertyMetadata { name: "object-position", initial: "50% 50%", inherited: false },
     PropertyMetadata { name: "aspect-ratio", initial: "auto", inherited: false },
     PropertyMetadata { name: "border-spacing", initial: "0px", inherited: true },
@@ -1142,6 +1147,9 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     };
     if crate::text_properties::axes(&property).is_some() {
         return text_policy::expand(&property, value).unwrap_or_default();
+    }
+    if position_values::supported(&property) {
+        return if contains_var_function(value) { vec![(property, value.into())] } else { position_values::canonical(&property, value).map(|value| vec![(property, value)]).unwrap_or_default() };
     }
     if property == "word-wrap" { return expand_declaration("overflow-wrap", value); }
     if property == "border-image" { return border_image_policy::expand(value).unwrap_or_default(); }
@@ -2776,6 +2784,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
     crate::font_variant::serialize(&mut style.props);
     let border_image_root = if parent.is_none() { style.props.get("font-size").and_then(|css|css.strip_suffix("px")).and_then(|n|n.parse().ok()).unwrap_or(style.root_font_px) } else { style.root_font_px };
     crate::border_image::resolve_properties(&mut style.props, border_image_root);
+    position_values::resolve(&mut style.props, border_image_root);
     crate::text_properties::serialize(&mut style.props);
     crate::font_size_adjust::resolve_css_math(&mut style.props, style.root_font_px);
     style.resolve_relative_colors();
@@ -2954,6 +2963,8 @@ fn compute_normal_value(
         crate::animation::canonical(property.name, &computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "font-size" {
         computed_font_size(&computed, parent, root_font_px).unwrap_or(computed)
+    } else if position_values::supported(property.name) {
+        position_values::canonical(property.name, &computed).unwrap_or(computed)
     } else if crate::border_image::supported(property.name) {
         crate::border_image::canonical(property.name, &computed).unwrap_or(computed)
     } else if crate::font_properties::is_audited_longhand(property.name) {
@@ -3116,6 +3127,7 @@ fn computed_opacity(value: &str) -> Option<String> {
 
 fn valid_new_paint_property(property: &str, value: &str) -> bool {
     match property {
+        property if position_values::supported(property) => position_values::canonical(property, value).is_some(),
         property if crate::border_image::supported(property) => crate::border_image::canonical(property, value).is_some(),
         property if contain_intrinsic::is_longhand(property) => contain_intrinsic::valid(property, value),
         "background-image" => crate::image_values::valid_background_image(value),

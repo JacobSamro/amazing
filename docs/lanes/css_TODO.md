@@ -2801,3 +2801,29 @@ static WPT runner omits fixture fonts/containing geometry; no fabricated context
 Evidence `crates/amazing-css/evidence/css42/`; final bulk gate pending.
 
 CSS42 final: CSS393, workspace3553/17skip+4docs; identical15selection4126→4163/5126 (+37/lost0); wholebackgrounds75/134 unchanged/all134stable/lost0. Renderer215feb8660fefe52a17351ba78709d51c2b3957737443d1cbecd1396ba3a6e6c. Own completed PPM scratch removed after durablemaps/logs fetched; sharedtargets preserved. Next positions/origin grammar family.
+
+### CSS43 — position and origin family
+
+Fixed CSS42 `6cd6ffe5168edf069e7a5e7a1a5f8978c1e484cc`. CSS Values4 §8.3
+(https://drafts.csswg.org/css-values-4/#position) excludes background-only
+three-value syntax and disallows mixed numeric/keyword axis reordering.
+CSS Transforms1 §4 (https://drafts.csswg.org/css-transforms-1/#transform-origin-property)
+restricts Z to a length and X/Y to one/two-value grammar; Transforms2 §9
+(https://drafts.csswg.org/css-transforms-2/#perspective-origin-property) permits
+generic four-value edge offsets. Transform-box registers all five references.
+Canonical computed axes resolve physical keywords and actual em/rem/absolute
+lengths, preserve percentages and unknown metric units until their real context,
+and omit zero Z. Defaults transform50%50%, perspective50%50%, boxview-box.
+Parent/layout L44 owns actual reference rectangles and origin consumption.
+Old painter image.rs explicitly rejects calc; object-position complements
+require its precise parser consumer before final zero-loss rendering gate.
+
+Parent precisely approved image.rs::position parser consumer plus grouped tests.
+CSS exposes PositionAxis fractions/pixel offsets, affine_position_axis/pair and
+resolve(actual_basis); no context guesses and no nonlinear sampling. Painter
+retains same actual leftover geometry under contain/cover and legacy edge inputs.
+Four CSS grouped regressions plus one painter grouped regression; origin effect
+hooks remain L44-owned. InitialCSS396green; parsing4163→4215/5126 (+52/lost0).
+Combined final workspace/wholeimages+transforms gate active.
+
+CSS43 final: workspace3558/17skip+4docs; parsing4163→4215/5126 (+52/lost0), wholeimages92/141 andtransforms145/348 unchanged/all489stable/lost0. Rendererabaef3139e14cb76403fff329403f0c535d6130f45de53b31d7fbd2db2dbf7d2. Fivegroupedregressions (fourCSS/onepainter). Next additive CSSOM computed enumeration/serialization seam requested by driver ownerjs_date.

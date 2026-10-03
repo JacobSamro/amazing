@@ -22,7 +22,7 @@ fn image_orientation_and_object_properties_compute_on_all_replaced_tags() {
         let style = styles.get(*node).unwrap();
         assert_eq!(style.get("image-orientation"), Some("none"));
         assert_eq!(style.get("object-fit"), Some("cover"));
-        assert_eq!(style.get("object-position"), Some("right 10px bottom 20px"));
+        assert_eq!(style.get("object-position"), Some("calc(100% - 10px) calc(100% - 20px)"));
     }
     let sheet = parse_stylesheet("img { image-orientation: 90deg flip; object-fit:invalid; object-position:garbage }");
     let style = compute(&dom, &[sheet]);
@@ -35,7 +35,7 @@ fn image_orientation_and_object_properties_compute_on_all_replaced_tags() {
     let img = style.get(nodes[0]).unwrap();
     assert_eq!(img.get("image-orientation"), Some("none"));
     assert_eq!(img.get("object-fit"), Some("contain"));
-    assert_eq!(img.get("object-position"), Some("left top"));
+    assert_eq!(img.get("object-position"), Some("0% 0%"));
 }
 
 #[test]

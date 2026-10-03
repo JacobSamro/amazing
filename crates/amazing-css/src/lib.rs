@@ -71,6 +71,7 @@ pub use cascade::{
     recompute_roots, recompute_roots_with_font_metrics, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch,
 };
 pub use computed::ComputedStyle;
+pub use computed::position_values::{PositionAxis, affine_position_axis, affine_position_pair};
 pub use media_queries::{ColorScheme, ContrastPreference, HoverCapability, MediaEnvironment, MediaQueryList, MediaType, PointerCapability, evaluate as evaluate_media_query, parse_sizes_attribute};
 pub use change_classification::{StyleChangeKind, classify_style_property};
 pub use animation::{Keyframe, KeyframesRule, keyframes_rules};

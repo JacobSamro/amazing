@@ -146,8 +146,18 @@ fn keyword(s: &str, horizontal: bool) -> Option<ObjectPosition> {
     })
 }
 // One/two-component positions and three/four-component edge-offset syntax.
-// calc() and logical-position keywords are deliberately not parsed here.
+// Computed affine calc axes use the lower CSS query; legacy edge input is
+// retained for callers with synthetic styles. Logical/context units stay unresolved.
 pub(crate) fn position(s: &str) -> Option<(ObjectPosition, ObjectPosition)> {
+    if let Some((x, y)) = amazing_css::affine_position_pair(s) {
+        let convert = |axis: amazing_css::PositionAxis| {
+            let fraction = axis.fraction as f32;
+            let offset = axis.offset_px as f32;
+            (fraction.is_finite() && offset.is_finite())
+                .then_some(ObjectPosition { fraction, offset })
+        };
+        return Some((convert(x)?, convert(y)?));
+    }
     let normalized = s.to_ascii_lowercase();
     let tokens: Vec<_> = normalized.split_whitespace().collect();
     let center = ObjectPosition::default();
@@ -306,6 +316,43 @@ mod tests {
         assert_eq!(r.x, -25.0);
         assert!(position("left right").is_none());
         assert!(position("NaN% 0").is_none());
+    }
+    #[test]
+    fn computed_calc_positions_preserve_edge_offsets_and_actual_leftover() {
+        for (raw, computed) in [
+            (
+                "right 10px bottom 20px",
+                "calc(100% - 10px) calc(100% - 20px)",
+            ),
+            ("left 5% top 10%", "5% 10%"),
+            (
+                "right -3px bottom -4px",
+                "calc(100% + 3px) calc(100% + 4px)",
+            ),
+        ] {
+            assert_eq!(position(raw), position(computed));
+        }
+        let (x, y) = position("calc(25% - 10px) calc(75% + 5px)").unwrap();
+        let presentation = ImagePresentation {
+            fit: ObjectFit::Cover,
+            x,
+            y,
+        };
+        let dest = presentation
+            .destination(
+                Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 100.0,
+                    h: 100.0,
+                },
+                (200, 100),
+            )
+            .unwrap();
+        assert_eq!((dest.x, dest.y), (-35.0, 5.0));
+        for css in ["calc(10% + 1em) 0%", "min(10%,20px) 0%", "calc(1px / 0) 0%"] {
+            assert!(position(css).is_none(), "{css}");
+        }
     }
     #[test]
     fn invalid_geometry_fails_closed() {

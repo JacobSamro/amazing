@@ -581,11 +581,8 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         "object-fit" => {
             return matches!(s, "fill" | "contain" | "cover" | "none" | "scale-down").then_some(V::Unparsed);
         }
-        "object-position" => {
-            let parts: Vec<_> = s.split_ascii_whitespace().collect();
-            let valid = |part: &str| matches!(part, "left" | "right" | "top" | "bottom" | "center")
-                || LengthPercentage::parse(part).is_some();
-            return (!parts.is_empty() && parts.len() <= 4 && parts.iter().all(|part| valid(part))).then_some(V::Unparsed);
+        "object-position" | "transform-origin" | "perspective-origin" | "transform-box" => {
+            return crate::computed::position_values::canonical(property,css).map(|_|V::Unparsed);
         }
         "grid-template-columns" | "grid-template-rows" => {
             if crate::computed::css_wide_keyword(css).is_some() {
