@@ -206,6 +206,11 @@ impl DriverScheduler {
         let bindings = self.bindings.clone();
         self.enter(|js| bindings.dispatch_animation_event(js, event))
     }
+    pub(crate) fn dispatch_user_agent_payload(&mut self,target:amazing_dom::events::EventTarget,
+        event:amazing_dom::events::Event)->Result<bool,Throw> {
+        let bindings=self.bindings.clone();
+        self.enter(|js|bindings.dispatch_user_agent_payload(js,target,event))
+    }
     pub(crate) fn install_inline_handler(&mut self, node: u32, event: &str, body: &str) -> Result<(), Throw> {
         let bindings = self.bindings.clone();
         self.enter(|js| bindings.install_canonical_inline_handler(js, node, event, body))

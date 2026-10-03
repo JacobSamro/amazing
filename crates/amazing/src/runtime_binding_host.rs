@@ -294,6 +294,12 @@ impl RuntimeBindings {
             amazing_dom::events::EventInit { bubbles: true, cancelable: false, composed: false })
     }
 
+    pub(crate) fn dispatch_user_agent_payload(&self,js:&mut Interpreter,
+        target:amazing_dom::events::EventTarget,event:amazing_dom::events::Event)->Result<bool,Throw> {
+        let mut adapter=RuntimeBindingHost {js,state:self.state.clone()};
+        amazing_bindings::dispatch_user_agent_event_with_payload(&mut adapter,target,event)
+    }
+
     pub(crate) fn dispatch_window_event(&self, js: &mut Interpreter, name: &str,
         init: amazing_dom::events::EventInit) -> Result<(), Throw> {
         let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
