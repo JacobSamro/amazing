@@ -1764,3 +1764,29 @@ Next JS28 audit: whole module import phases and typed attributes, faithful defer
 namespace triggers and graph evaluation. Source/defer argument effects currently
 short-circuit; static phase/attributes currently ignored. Exact shared property/value
 hooks and host adoption need parent/owner grants; Runtime35 retains contextual eval.
+
+
+### JS-28 — typed module requests, asynchronous SCC evaluation and deferred namespaces
+
+Completed source series `d9449fa7` + `52bacee5` + `8c4f1b8e` + `da8b0498`,
+matched fixed JS27 dependency with integrator host14 on both sides. Additive phase
+and attribute loader contract, genuine host source/synthetic records, source-only
+parse boundary, ordered asynchronous siblings/SCC ancestors, cached cycle-root
+errors, faithful deferred readiness and namespace triggers, internal asynchronous
+completion observer, active coroutine async disposal and standalone/external
+legacy checkpoint compatibility. No driver type support is claimed by the API.
+
+Linux workspace **3777/17 skipped +4 docs**, explicit host **1**, owned JS/regex
+**593/1 skipped**, eighteen new grouped tests. Whole language **23982→24134 files
+(+152)** and **44516→44721 variants (+205)**, zero losses. Whole Object3338/6662,
+Reflect151/302 and Promise627/1248 unchanged, zero losses. Four existing RegExp
+literal files/eight variant10s deadlines on both sides. Exact proof and API:
+[js-lang_JS28-evidence.json](js-lang_JS28-evidence.json),
+[js-lang_JS28-interface.md](js-lang_JS28-interface.md).
+
+Next JS29: faithful callable name/length/property order metadata, lossless
+symbol/UTF16 SetFunctionName and precise assignment NamedEvaluation. Parent and
+VM owner granted narrow descriptor order and plain/logical identifier companion
+emission; preserve raw reference evaluation order, FDI/factory/context metadata
+and broad nonsuspending class fallback guards. Gate whole language/Function/
+Object/Proxy and both-backend grouped metadata cases.
