@@ -2037,10 +2037,10 @@ mod tests {
         let mut key=adapter.node_object_key(NodeIdx(0));key.generation+=1;
         assert!(adapter.node_from_object_key(key).is_none());
         let prototype=adapter.prototype(Interface::Document).unwrap();
-        let stale=adapter.js.binding_wrap_host(amazing_js::HostHandle { arena:key.arena,slot:key.slot,generation:key.generation,brand:InterfaceBrand::NODE.0 },&prototype).unwrap();
+        let stale=adapter.js.binding_wrap_host(HostHandle { arena:key.arena,slot:key.slot,generation:key.generation,brand:InterfaceBrand::NODE.0 },&prototype).unwrap();
         assert!(adapter.node_brand(&stale).is_none());
         let implementation_prototype=adapter.prototype(Interface::DOMImplementation).unwrap();
-        let stale_implementation=adapter.js.binding_wrap_host(amazing_js::HostHandle {
+        let stale_implementation=adapter.js.binding_wrap_host(HostHandle {
             arena:key.arena,slot:key.slot,generation:key.generation,brand:InterfaceBrand::DOM_IMPLEMENTATION.0 },&implementation_prototype).unwrap();
         assert!(adapter.platform_object(&stale_implementation,InterfaceBrand::DOM_IMPLEMENTATION).is_none());
         adapter.js.global_obj.borrow_mut().set_own("staleImplementation",stale_implementation);
