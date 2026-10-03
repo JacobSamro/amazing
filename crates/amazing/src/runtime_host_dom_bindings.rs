@@ -1543,9 +1543,10 @@ mod tests {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
         js.set_dom_host(host.clone());
-        let _bindings = super::super::install(&mut js, host).unwrap();
+        let bindings = super::super::install(&mut js, host).unwrap();
+        bindings.set_document_url(&mut js, "https://example.test/range-xml");
         let result = js.run_script(r#"
-            let step=0;function check(v){step++;if(!v)throw 'range XML context '+step;}
+            (function(){let step=0;try{function check(v){step++;if(!v)throw 'range XML context '+step;}
             const doc=new DOMParser().parseFromString('<p:root xmlns:p="urn:parent" xmlns="urn:default" xmlns:x="urn:outer"><c:child xmlns:c="urn:child" xmlns:x="urn:local"/></p:root>','application/xml');
             const child=doc.documentElement.firstChild,r=doc.createRange();r.selectNodeContents(child);
             const f=r.createContextualFragment('<x:item x:value="ok"/><plain/><![CDATA[cdata]]>tail');
@@ -1560,7 +1561,7 @@ mod tests {
                 let invalid=false;try{r.createContextualFragment(source);}catch(e){invalid=e.name === 'SyntaxError';}check(invalid);
             }
             check(child.parentNode === doc.documentElement && r.startContainer === child);
-            true;
+            return true;}catch(e){return String(e)+' at XML context step '+step;}})();
         "#).unwrap();
         assert!(matches!(result, JsValue::Bool(true)), "{result:?}");
     }
