@@ -113,6 +113,9 @@ pub(super) struct FrameRuntime {
     cross_origin_descriptors: HashMap<(RealmHandle, RealmHandle, String), Property>,
     /// Captured creation/navigation base, retained for old documents too.
     about_base_urls: HashMap<NodeIdx, (u64, String)>,
+    /// Inert parser Documents inherit a typed origin without acquiring a
+    /// browsing context. Opaque identities are preserved, never URL-derived.
+    inert_document_origins: HashMap<NodeIdx, (u64, amazing_fetch::Origin)>,
     /// Queued Location changes carry their actual source, even after it moves.
     pending_navigations: HashMap<RealmHandle, HtmlNavigation>,
     parser_imports: HashMap<NodeIdx, IncrementalImportRef>,
@@ -192,6 +195,31 @@ pub(super) struct HtmlDocumentContext {
 }
 
 impl FrameRuntime {
+    pub(super) fn document_origin(&self, dom: &Dom, document: NodeIdx) -> Option<amazing_fetch::Origin> {
+        let generation = dom.node_generation(document)?;
+        if !matches!(&dom.get(document).kind, amazing_dom::NodeKind::Document) { return None; }
+        if let Some(context) = self.contexts.iter().find_map(|(realm, context)|
+            (context.document == document && context.document_generation == generation
+                && self.live_context(context, *realm)).then_some(context)) {
+            return Some(context.fetch_origin.clone());
+        }
+        self.inert_document_origins.get(&document)
+            .filter(|(saved, _)| *saved == generation).map(|(_, origin)| origin.clone())
+    }
+
+    pub(super) fn set_inert_document_origin(&mut self, dom: &Dom, document: NodeIdx,
+        origin: amazing_fetch::Origin) -> Result<(), amazing_dom::DomError> {
+        let generation = dom.node_generation(document).ok_or(amazing_dom::DomError::InvalidNode)?;
+        if !matches!(&dom.get(document).kind, amazing_dom::NodeKind::Document) {
+            return Err(amazing_dom::DomError::TypeError);
+        }
+        if let Some((saved, old)) = self.inert_document_origins.get(&document) {
+            if *saved == generation && *old != origin { return Err(amazing_dom::DomError::InvalidStateError); }
+        }
+        self.inert_document_origins.insert(document, (generation, origin));
+        Ok(())
+    }
+
     pub(super) fn has_document(&self, document: NodeIdx) -> bool {
         document == NodeIdx(0) || self.documents.values().any(|frame| frame.document == Some(document))
     }
@@ -1454,6 +1482,20 @@ impl RuntimeBindings {
 type IncrementalImportRef = Rc<RefCell<amazing_dom::markup::IncrementalDocumentImport>>;
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn html_document_origin(&self, document: NodeIdx) -> Option<amazing_fetch::Origin> {
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        state.frames.document_origin(&host.dom, document)
+    }
+
+    pub(super) fn html_set_inert_document_origin(&self, document: NodeIdx,
+        origin: amazing_fetch::Origin) -> Result<(), amazing_dom::DomError> {
+        let mut state = self.state.borrow_mut();
+        let host = state.host.clone();
+        let host = host.borrow();
+        state.frames.set_inert_document_origin(&host.dom, document, origin)
+    }
+
     fn html_navigation_source(&mut self, url: &str, replace: bool) -> Result<HtmlNavigation, Throw> {
         let target = self.js.binding_current_realm();
         let source = self.js.binding_incumbent_realm();
@@ -2332,6 +2374,28 @@ mod tests {
         state.frames.contexts.get_mut(&root_realm).unwrap().document_generation += 1;
         assert!(state.frames.document_context(&host.borrow().dom, children[1]).is_none());
         assert!(state.frames.document_context_for_realm(&host.borrow().dom, root_realm).is_none());
+    }
+
+    #[test]
+    fn inert_document_origins_keep_opaque_identity_without_fabricating_contexts() {
+        let mut dom = Dom::new();
+        let mut frames = FrameRuntime::default();
+        let inert = dom.create_document();
+        let opaque = amazing_fetch::Origin::opaque();
+        assert!(frames.document_origin(&dom, inert).is_none());
+        frames.set_inert_document_origin(&dom, inert, opaque.clone()).unwrap();
+        assert_eq!(frames.document_origin(&dom, inert), Some(opaque.clone()));
+        assert!(frames.document_context(&dom, inert).is_none());
+        assert!(frames.set_inert_document_origin(&dom, inert, amazing_fetch::Origin::opaque()).is_err());
+        let retained = frames.document_origin(&dom, inert).unwrap();
+        frames.inert_document_origins.get_mut(&inert).unwrap().0 += 1;
+        assert!(frames.document_origin(&dom, inert).is_none());
+        assert_eq!(retained, opaque);
+        let element = dom.create_element(NodeIdx(0), "div");
+        assert!(frames.set_inert_document_origin(&dom, element, retained).is_err());
+        assert!(frames.document_origin(&dom, element).is_none());
+        assert!(frames.document_origin(&dom, NodeIdx(u32::MAX)).is_none());
+        assert!(frames.set_inert_document_origin(&dom, NodeIdx(u32::MAX), amazing_fetch::Origin::opaque()).is_err());
     }
 
     #[test]
