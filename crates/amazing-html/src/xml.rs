@@ -68,6 +68,21 @@ pub fn parse_xml(src: &str) -> Result<Dom, XmlError> {
     parse_xml_with_declaration(src).map(|(dom, _)| dom)
 }
 
+/// Actual XML context namespace environment, captured before parsing.
+/// None denotes the default prefix; empty values explicitly unbind a prefix.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct XmlFragmentContext {
+    pub namespace_uri: Option<String>,
+    pub prefix: Option<String>,
+    pub namespaces: Vec<(Option<String>, String)>,
+}
+
+/// Parses XML fragments directly, with fatal namespace/wellformedness errors.
+/// Multiple top-level nodes and text are returned beneath the fragment arena root.
+pub fn parse_xml_fragment(context: &XmlFragmentContext, src: &str) -> Result<Dom, XmlError> {
+    parse_inner(src, Some(context)).map(|(dom, _)| dom)
+}
+
 struct Frame {
     node: NodeIdx,
     qualified: String,
@@ -86,6 +101,11 @@ type ResultXml<T> = Result<T, XmlError>;
 /// The declaration's encoding label describes caller-decoded input; this entry
 /// point does not decode bytes or reinterpret an already-decoded string.
 pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclaration>)> {
+    parse_inner(src, None)
+}
+
+fn parse_inner(src: &str, context: Option<&XmlFragmentContext>) -> ResultXml<(Dom, Option<XmlDeclaration>)> {
+    let fragment = context.is_some();
     let mut dom = Dom::new();
     if src.len() > 16 * 1024 * 1024 {
         return Err(XmlError {
@@ -94,11 +114,8 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
             message: "document exceeds 16 MiB".into(),
         });
     }
-    let normalized = src
-        .strip_prefix('\u{feff}')
-        .unwrap_or(src)
-        .replace("\r\n", "\n")
-        .replace('\r', "\n");
+    let input = if fragment { src } else { src.strip_prefix('\u{feff}').unwrap_or(src) };
+    let normalized = input.replace("\r\n", "\n").replace('\r', "\n");
     let mut p = Parser {
         src: &normalized,
         pos: 0,
@@ -109,7 +126,7 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
         p.pos = offset;
         return Err(p.error("forbidden XML character"));
     }
-    let declaration = if p.rest().starts_with("<?xml") && p.rest()[5..].starts_with(xml_space) {
+    let declaration = if !fragment && p.rest().starts_with("<?xml") && p.rest()[5..].starts_with(xml_space) {
         Some(p.declaration()?)
     } else {
         None
@@ -119,6 +136,38 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
         .is_some_and(|d| d.standalone == Some(true));
     let mut stack: Vec<Frame> = Vec::new();
     let mut bindings = BTreeMap::from([("xml".into(), XML_NAMESPACE.into())]);
+    if let Some(context) = context {
+        let mut declared = BTreeSet::new();
+        for (prefix, uri) in &context.namespaces {
+            let key = prefix.as_deref().unwrap_or("");
+            if !declared.insert(key.to_owned()) { return Err(p.error("duplicate context namespace prefix")); }
+            if !key.is_empty() && (!name_start(key.chars().next().unwrap())
+                || key.contains(':') || !key.chars().all(name_char)) {
+                return Err(p.error("invalid context namespace prefix"));
+            }
+            if key == "xmlns" || uri == XMLNS_NAMESPACE || (key == "xml") != (uri == XML_NAMESPACE)
+                || !uri.chars().all(xml_char) { return Err(p.error("illegal context namespace binding")); }
+            if uri.is_empty() { bindings.remove(key); } else { bindings.insert(key.into(), uri.clone()); }
+        }
+        if let Some(uri) = context.namespace_uri.as_deref().filter(|uri| !uri.is_empty()) {
+            let prefix = context.prefix.as_deref().unwrap_or("");
+            if !prefix.is_empty() && (!name_start(prefix.chars().next().unwrap())
+                || prefix.contains(':') || !prefix.chars().all(name_char)) {
+                return Err(p.error("invalid context element prefix"));
+            }
+            if prefix == "xmlns" || uri == XMLNS_NAMESPACE || (prefix == "xml") != (uri == XML_NAMESPACE)
+                || !uri.chars().all(xml_char) { return Err(p.error("illegal context element namespace")); }
+            // DOM lookupNamespaceURI includes the context element's own binding.
+            // An omitted environment binding can be seeded from that real name;
+            // a conflicting explicit snapshot is an invalid caller context.
+            if bindings.get(prefix).is_some_and(|bound| bound != uri) {
+                return Err(p.error("conflicting context element namespace"));
+            }
+            if !declared.contains(prefix) { bindings.insert(prefix.into(), uri.into()); }
+        } else if context.prefix.as_deref().is_some_and(|prefix| !prefix.is_empty()) {
+            return Err(p.error("context prefix has no namespace"));
+        }
+    }
     let mut root_seen = false;
     let mut doctype_seen = false;
     while !p.rest().is_empty() {
@@ -148,6 +197,7 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
                 },
             );
         } else if p.take("<!DOCTYPE") {
+            if fragment { return Err(p.error("doctype in XML fragment")); }
             if root_seen || doctype_seen {
                 return Err(p.error("doctype must precede the sole root"));
             }
@@ -190,11 +240,10 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
                 },
             );
         } else if p.take("<![CDATA[") {
-            if stack.is_empty() {
-                return Err(p.error("CDATA outside root"));
-            }
+            if !fragment && stack.is_empty() { return Err(p.error("CDATA outside root")); }
             let data = p.until("]]>")?;
-            dom.create_text(parent, data);
+            if fragment { dom.append_child(parent, NodeKind::CDATASection { data: data.into() }); }
+            else { dom.create_text(parent, data); }
         } else if p.take("</") {
             let name = p.qname()?;
             p.space();
@@ -207,7 +256,7 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
             }
             restore_bindings(&mut bindings, frame.previous_bindings);
         } else if p.take("<") {
-            if stack.is_empty() && root_seen {
+            if !fragment && stack.is_empty() && root_seen {
                 return Err(p.error("multiple document elements"));
             }
             if stack.len() >= 512 {
@@ -285,12 +334,15 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
                 }
                 resolved.push(XmlAttribute { name, value });
             }
-            let node = p.dom_result(dom.create_element_expanded(
-                parent,
-                name.namespace_uri.as_deref(),
-                split_name(&name.qualified).0,
-                &name.local,
-            ))?;
+            let node = if fragment {
+                let node = p.dom_result(dom.create_element_expanded_in(NodeIdx(0),
+                    name.namespace_uri.as_deref(), split_name(&name.qualified).0, &name.local))?;
+                dom.attach_last(parent, node);
+                node
+            } else {
+                p.dom_result(dom.create_element_expanded(parent, name.namespace_uri.as_deref(),
+                    split_name(&name.qualified).0, &name.local))?
+            };
             for attr in resolved {
                 p.dom_result(dom.set_attribute_expanded(
                     node,
@@ -314,7 +366,7 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
             let end = p.rest().find('<').unwrap_or(p.rest().len());
             let raw = &p.rest()[..end];
             p.pos += end;
-            if stack.is_empty() {
+            if !fragment && stack.is_empty() {
                 if !raw.chars().all(xml_space) {
                     return Err(p.error("character data outside root"));
                 }
@@ -330,7 +382,7 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
     if !stack.is_empty() {
         return Err(p.error("unclosed element"));
     }
-    if !root_seen {
+    if !fragment && !root_seen {
         return Err(p.error("missing document element"));
     }
     Ok((dom, declaration))

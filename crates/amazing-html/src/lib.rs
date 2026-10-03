@@ -44,7 +44,7 @@ pub use tree::IncrementalParser;
 pub use tree::{is_javascript_mime_type, strip_ascii_whitespace, ParserConstruction, ParserCustomElementHost, ScriptMode};
 pub use resumable::{ParseSignal, ResumableParser};
 pub use byte_stream::IncrementalByteParser;
-pub use xml::{parse_xml, XmlError, XmlErrorKind};
+pub use xml::{parse_xml, parse_xml_fragment, XmlFragmentContext, XmlError, XmlErrorKind};
 
 /// Whether scripting affects HTML tree construction. Enabled parsing prepares
 /// script events; the embedding is responsible for actually executing them.
@@ -65,6 +65,8 @@ mod byte_stream_tests;
 mod fuzz_tests;
 #[cfg(test)]
 mod fragment_tests;
+#[cfg(test)]
+mod actual_fragment_tests;
 #[cfg(test)]
 mod template_tests;
 #[cfg(test)]
@@ -132,6 +134,41 @@ pub fn parse_with_custom_element_host(
         src
     };
     tree::build_with_custom_element_host(src, dom, host)
+}
+
+/// Expanded attribute snapshot of the actual fragment context element.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HtmlFragmentAttribute {
+    pub namespace_uri: Option<String>,
+    pub prefix: Option<String>,
+    pub local_name: String,
+    pub value: Vec<u16>,
+}
+
+/// Actual context identity and owner-document state; names are case-sensitive.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HtmlFragmentContext {
+    pub local_name: String,
+    pub namespace_uri: Option<String>,
+    pub attributes: Vec<HtmlFragmentAttribute>,
+    pub has_form_ancestor: bool,
+    pub scripting_enabled: bool,
+    pub quirks_mode: amazing_dom::QuirksMode,
+}
+
+/// Parse using an actual DOM context snapshot. Script execution/marking belongs
+/// to the caller (innerHTML and Range have different script preparation rules).
+pub fn parse_fragment_with_context(
+    context: &HtmlFragmentContext, src: &str, allow_shadow_roots: bool,
+) -> Result<Dom, String> {
+    if context.local_name.is_empty() || context.local_name.chars().any(|c|
+        c.is_ascii_whitespace() || matches!(c, '<' | '>' | '\0')) {
+        return Err("invalid HTML fragment context name".into());
+    }
+    let normalized = src.replace("\r\n", "\n").replace('\r', "\n");
+    let source = tree::build_fragment_with_context(&normalized, context, allow_shadow_roots)?;
+    export_fragment(source, &context.local_name,
+        context.namespace_uri.as_deref() == Some(xml::HTML_NAMESPACE))
 }
 
 /// Parses an HTML fragment in any HTML element context and
@@ -222,8 +259,31 @@ fn parse_fragment_inner(
         src, &context, namespace, allow_declarative_shadow_roots, scripting_mode,
     );
 
+    export_fragment(source, &context, namespace == Namespace::Html)
+}
+
+fn export_fragment(source: Dom, context: &str, html_context: bool) -> Result<Dom, String> {
     fn clone_subtree(source: &Dom, source_node: NodeIdx, target: &mut Dom, parent: NodeIdx) {
-        let created = target.append_child(parent, source.get(source_node).kind.clone());
+        // Namespace identifiers belong to an arena; intern URI identities anew.
+        let created = if matches!(source.get(source_node).kind, amazing_dom::NodeKind::Element { .. }) {
+            let document = target.owner_document(parent).expect("fragment owner");
+            let node = target.create_element_expanded_in(document, source.namespace_uri(source_node),
+                source.prefix(source_node), source.local_name(source_node).expect("element name"))
+                .expect("parser element identity");
+            target.attach_last(parent, node);
+            for attribute in source.attributes_expanded(source_node).unwrap_or_default() {
+                target.set_attribute_expanded(node, attribute.namespace_uri, attribute.prefix,
+                    attribute.local_name, attribute.value).expect("parser attribute identity");
+                if let Some(units) = source.attribute_ns_utf16(source_node, attribute.namespace_uri, attribute.local_name) {
+                    let attr = target.get_attribute_node(node, attribute.namespace_uri, attribute.local_name)
+                        .expect("cloned attribute");
+                    target.set_attr_value(attr, units).expect("cloned attribute units");
+                }
+            }
+            node
+        } else {
+            target.append_child(parent, source.get(source_node).kind.clone())
+        };
         // A declarative shadow root's content lives under a separate
         // `ShadowRootData`-tracked node (`shadow_root_of_host`), never as an
         // ordinary DOM child of its host -- the template that requested it
@@ -261,14 +321,16 @@ fn parse_fragment_inner(
         })
         .ok_or_else(|| "fragment root was not constructed".to_owned())?;
     let mut fragment = Dom::new();
-    fragment.set_document_scripting_enabled(NodeIdx(0), scripting_mode == ScriptingMode::Enabled)
+    fragment.set_document_scripting_enabled(NodeIdx(0), source.document_scripting_enabled(NodeIdx(0)).expect("parser document"))
+        .expect("fragment root is a document");
+    fragment.set_document_quirks_mode(NodeIdx(0), source.document_quirks_mode(NodeIdx(0)).expect("parser document"))
         .expect("fragment root is a document");
     for child in source.children(root) {
         clone_subtree(&source, child, &mut fragment, NodeIdx(0));
     }
     // After an explicit </html> in the html fragment context, comments are
     // document siblings of the synthetic root but still belong in the result.
-    if context == "html" {
+    if html_context && context == "html" {
         for child in source.children(NodeIdx(0)) {
             if child != root {
                 clone_subtree(&source, child, &mut fragment, NodeIdx(0));

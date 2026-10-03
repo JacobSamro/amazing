@@ -1912,51 +1912,39 @@ impl RuntimeBindingHost<'_> {
     }
 }
 
+fn html_fragment_context(context: FragmentContext) -> amazing_html::HtmlFragmentContext {
+    amazing_html::HtmlFragmentContext {
+        local_name: context.local_name,
+        namespace_uri: context.namespace_uri,
+        has_form_ancestor: context.has_form_ancestor,
+        scripting_enabled: context.scripting_enabled,
+        quirks_mode: context.quirks_mode,
+        attributes: context.attributes.into_iter().map(|attribute| amazing_html::HtmlFragmentAttribute {
+            namespace_uri: attribute.namespace_uri, prefix: attribute.prefix,
+            local_name: attribute.local_name, value: attribute.value,
+        }).collect(),
+    }
+}
+
 impl FragmentParser for RuntimeBindingHost<'_> {
     fn parse_fragment(&mut self, context: FragmentContext, markup: &[u16]) -> Result<Dom, DomError> {
-        // HTML-40 (2): a MathML/SVG context element (e.g. `Element.innerHTML`
-        // set on one) used to be rejected outright here; the tree builder now
-        // tracks the context's own namespace (`parse_fragment_with_namespace`)
-        // for the spec's "adjusted current node" fragment-case special-casing.
-        let namespace = match context.namespace_uri.as_deref() {
-            Some("http://www.w3.org/1999/xhtml") | None => amazing_dom::Namespace::Html,
-            Some("http://www.w3.org/2000/svg") => amazing_dom::Namespace::Svg,
-            Some("http://www.w3.org/1998/Math/MathML") => amazing_dom::Namespace::MathMl,
-            _ => return Err(DomError::NotSupportedError),
-        };
         let markup = String::from_utf16(markup).map_err(|_| DomError::TypeError)?;
-        // A paragraph uses the ordinary in-body fragment insertion mode.
-        // The parser's `div` context has the same tokenizer and insertion
-        // state for this context; special contexts remain explicit above.
-        let parser_context = if namespace == amazing_dom::Namespace::Html && context.local_name == "p" {
-            "div"
-        } else {
-            &context.local_name
-        };
-        let scripting_mode = if context.scripting_enabled { amazing_html::ScriptingMode::Enabled }
-            else { amazing_html::ScriptingMode::Disabled };
-        amazing_html::parse_fragment_with_scripting_mode(parser_context, namespace, &markup, scripting_mode)
+        amazing_html::parse_fragment_with_context(&html_fragment_context(context), &markup, false)
             .map_err(|_| DomError::NotSupportedError)
     }
 
     fn parse_fragment_with_shadow_roots(&mut self, context: FragmentContext, markup: &[u16]) -> Result<Dom, DomError> {
-        // `amazing_html::parse_fragment_with_shadow_roots` only covers the
-        // HTML-namespace context that `Element`/`ShadowRoot.setHTMLUnsafe`
-        // actually need (matching `parse_fragment`'s own default scope, see
-        // that function's doc comment); a foreign-namespace context (e.g.
-        // `setHTMLUnsafe` called on an SVG/MathML element) falls back to the
-        // ordinary, non-shadow-aware parse rather than failing outright --
-        // no regression, since declarative shadow roots were never
-        // supported there at all before this method existed.
-        if !matches!(context.namespace_uri.as_deref(), Some("http://www.w3.org/1999/xhtml") | None) {
-            return self.parse_fragment(context, markup);
-        }
         let markup = String::from_utf16(markup).map_err(|_| DomError::TypeError)?;
-        let parser_context = if context.local_name == "p" { "div" } else { &context.local_name };
-        let scripting_mode = if context.scripting_enabled { amazing_html::ScriptingMode::Enabled }
-            else { amazing_html::ScriptingMode::Disabled };
-        amazing_html::parse_fragment_with_shadow_roots_and_scripting_mode(parser_context, &markup, scripting_mode)
+        amazing_html::parse_fragment_with_context(&html_fragment_context(context), &markup, true)
             .map_err(|_| DomError::NotSupportedError)
+    }
+
+    fn parse_xml_fragment(&mut self, context: amazing_bindings::host::XmlFragmentContext, markup: &[u16]) -> Result<Dom, DomError> {
+        let markup = String::from_utf16(markup).map_err(|_| DomError::SyntaxError)?;
+        let context = amazing_html::XmlFragmentContext {
+            namespace_uri: context.namespace_uri, prefix: context.prefix, namespaces: context.namespaces,
+        };
+        amazing_html::parse_xml_fragment(&context, &markup).map_err(|_| DomError::SyntaxError)
     }
 }
 

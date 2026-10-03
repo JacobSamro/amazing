@@ -200,6 +200,8 @@ pub struct TreeBuilder {
     /// adjusted current node is the (untracked) context element, not it.
     /// Unused (stays `Html`) outside fragment parsing.
     fragment_context_namespace: Namespace,
+    fragment_actual_context: bool,
+    fragment_context_attrs: Vec<(String, String)>,
     /// HTML-31: set by `text_mode`'s `</script>` handling when the just-closed
     /// script is a classic, parser-blocking script during full-document (not
     /// fragment) parsing. `ResumableParser::run` stops tokenizing the instant
@@ -348,6 +350,8 @@ impl TreeBuilder {
             fragment: false,
             fragment_context: None,
             fragment_context_namespace: Namespace::Html,
+            fragment_actual_context: false,
+            fragment_context_attrs: Vec::new(),
             pending_script: None,
             script_events: Vec::new(),
         }
@@ -603,7 +607,7 @@ impl TreeBuilder {
                 // Without the same adjustment here, an SVG `foreignObject`
                 // fragment context would fail the case-sensitive HTML-
                 // integration-point name match below.
-                let name = if self.fragment_context_namespace == Namespace::Svg {
+                let name = if self.fragment_context_namespace == Namespace::Svg && !self.fragment_actual_context {
                     Self::adjusted_svg_tag_name(name)
                 } else {
                     name
@@ -621,7 +625,7 @@ impl TreeBuilder {
     /// context has no real `NodeIdx` to look attributes up on.
     pub(super) fn adjusted_current_attrs(&self) -> Option<&[(String, String)]> {
         if self.fragment && self.open.len() == 1 {
-            None
+            Some(&self.fragment_context_attrs)
         } else {
             self.current().and_then(|idx| self.dom.attrs_of(idx))
         }
@@ -1183,6 +1187,7 @@ impl TreeBuilder {
     /// (§13.2.4.1).
     fn reset_insertion_mode(&mut self) {
         for &node in self.open.iter().rev() {
+            if self.dom.namespace(node) != Some(Namespace::Html) { continue; }
             let n = self.dom.name(node).unwrap_or("");
             let next = match n {
                 "td" | "th" => Some(Mode::InCell),
@@ -1209,9 +1214,9 @@ impl TreeBuilder {
                 // template.dat: ~30 of this file's cases had a `<body>` one
                 // level too deep for exactly this reason).
                 "head" => Some(Mode::InHead),
-                "html" if self.fragment => Some(fragment_insertion_mode(
-                    self.fragment_context.as_deref().unwrap_or("html")
-                )),
+                "html" if self.fragment => Some(if self.fragment_context_namespace == Namespace::Html {
+                    fragment_insertion_mode(self.fragment_context.as_deref().unwrap_or("html"))
+                } else { Mode::InBody }),
                 "html" => Some(if self.head.is_none() {
                     Mode::BeforeHead
                 } else {
@@ -2771,9 +2776,48 @@ pub(crate) fn build_fragment_with_scripting_mode(
     builder.fragment = true;
     builder.fragment_context = Some(context.to_owned());
     builder.fragment_context_namespace = namespace;
+    run_fragment(builder, src, context, namespace, scripting_mode)
+}
+
+pub(crate) fn build_fragment_with_context(
+    src: &str, context: &crate::HtmlFragmentContext, allow_shadow_roots: bool,
+) -> Result<Dom, String> {
+    let mut builder = TreeBuilder::new();
+    let scripting_mode = if context.scripting_enabled { ScriptingMode::Enabled } else { ScriptingMode::Disabled };
+    builder.set_scripting_mode(scripting_mode);
+    builder.allow_declarative_shadow_roots = allow_shadow_roots;
+    builder.fragment = true;
+    builder.fragment_actual_context = true;
+    builder.fragment_context = Some(context.local_name.clone());
+    let context_node = builder.dom.create_element_expanded_in(NodeIdx(0), context.namespace_uri.as_deref(),
+        None, &context.local_name).map_err(|error| format!("invalid fragment context: {error:?}"))?;
+    let namespace = builder.dom.namespace(context_node).expect("context element");
+    builder.fragment_context_namespace = namespace;
+    for attribute in &context.attributes {
+        builder.dom.set_attribute_expanded(context_node, attribute.namespace_uri.as_deref(),
+            attribute.prefix.as_deref(), &attribute.local_name, &String::from_utf16_lossy(&attribute.value))
+            .map_err(|error| format!("invalid context attribute: {error:?}"))?;
+        let attr = builder.dom.get_attribute_node(context_node, attribute.namespace_uri.as_deref(), &attribute.local_name)
+            .expect("context attribute");
+        builder.dom.set_attr_value(attr, attribute.value.clone()).map_err(|error| format!("context attribute: {error:?}"))?;
+        if attribute.namespace_uri.as_deref().is_none_or(str::is_empty) {
+            builder.fragment_context_attrs.push((attribute.local_name.clone(), String::from_utf16_lossy(&attribute.value)));
+        }
+    }
+    builder.document_mode = context.quirks_mode;
+    builder.dom.set_document_quirks_mode(NodeIdx(0), context.quirks_mode).expect("parser document");
+    if context.has_form_ancestor {
+        builder.form = Some(builder.dom.create_element_expanded_in(NodeIdx(0), Some(crate::xml::HTML_NAMESPACE),
+            None, "form").expect("form pointer"));
+    }
+    Ok(run_fragment(builder, src, &context.local_name, namespace, scripting_mode))
+}
+
+fn run_fragment(mut builder: TreeBuilder, src: &str, context: &str, namespace: Namespace,
+    scripting_mode: ScriptingMode) -> Dom {
     builder.insert_and_push("html", Vec::new());
-    builder.mode = fragment_insertion_mode(context);
-    if context == "template" { builder.template_modes.push(Mode::InTemplate); }
+    builder.mode = if namespace == Namespace::Html { fragment_insertion_mode(context) } else { Mode::InBody };
+    if namespace == Namespace::Html && context == "template" { builder.template_modes.push(Mode::InTemplate); }
     let mut tokenizer = Tokenizer::new(src.chars().collect());
     // These are HTML-only RAWTEXT/RCDATA-ish tag names; a foreign context
     // (e.g. SVG's own `<title>`, which is an ordinary child-bearing element,

@@ -26,10 +26,7 @@ impl TreeBuilder {
         namespace == Namespace::MathMl && matches!(name, "mi" | "mo" | "mn" | "ms" | "mtext")
     }
 
-    /// `attrs` is `None` for the synthetic fragment-context identity (no
-    /// tested fixture combines a foreign fragment context with
-    /// `annotation-xml`'s `encoding`-attribute breakout, so that case is
-    /// conservatively not an HTML integration point).
+    /// Actual context attributes participate in annotation-xml integration.
     fn is_html_integration_point_ns(
         namespace: Namespace,
         name: &str,
