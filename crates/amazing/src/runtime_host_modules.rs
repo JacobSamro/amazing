@@ -500,7 +500,7 @@ mod tests {
                     body: if root { b"import './dep.js';window.modulePolicyRoot=true;".to_vec() }
                           else { b"window.modulePolicyDependency=true;".to_vec() } })
             }));
-            let mut script = script(ScriptKind::Module, node, external);
+            let mut script = script(&bindings, ScriptKind::Module, node, external);
             script.body = "import './inline-dep.js';window.modulePolicyRoot=true;".into();
             let url = bindings.page_script_url(&js, &script, "https://example.test/page.html");
             let source = if external { bindings.load_module_source(&js, &url).unwrap() } else { script.body.clone() };
@@ -535,7 +535,7 @@ mod tests {
         assert_eq!(documents.len(), 2);
         let nodes = documents.iter().map(|document| host.borrow_mut().dom.create_element(*document, "script")).collect::<Vec<_>>();
         for node in &nodes {
-            let script = script(ScriptKind::Module, node.0, false);
+            let script = script(&bindings, ScriptKind::Module, node.0, false);
             for (value, expected) in [(None, "no-referrer"), (Some(""), "no-referrer"),
                 (Some("bogus"), "no-referrer"), (Some(" origin "), "no-referrer"),
                 (Some("origin,no-referrer"), "no-referrer"), (Some("ORIGIN"), "origin"), (Some("same-origin"), "same-origin")] {
@@ -548,11 +548,11 @@ mod tests {
         headers = amazing_net::Headers::new();
         headers.append("Referrer-Policy", "unsafe-url".into()).unwrap();
         bindings.set_document_response_referrer_policy(NodeIdx(0), &headers).unwrap();
-        for node in &nodes { assert_eq!(bindings.module_script_options(&script(ScriptKind::Module, node.0, false)).referrer_policy, "no-referrer"); }
+        for node in &nodes { assert_eq!(bindings.module_script_options(&script(&bindings, ScriptKind::Module, node.0, false)).referrer_policy, "no-referrer"); }
         js.run_script("document.getElementById('srcdoc').remove()").unwrap();
         bindings.navigate_iframes(&mut js);
-        for node in &nodes { assert_eq!(bindings.module_script_options(&script(ScriptKind::Module, node.0, false)).referrer_policy, "no-referrer"); }
-        let invalid = script(ScriptKind::Module, u32::MAX, false);
+        for node in &nodes { assert_eq!(bindings.module_script_options(&script(&bindings, ScriptKind::Module, node.0, false)).referrer_policy, "no-referrer"); }
+        let invalid = script(&bindings, ScriptKind::Module, u32::MAX, false);
         assert!(bindings.module_script_options(&invalid).referrer_policy.is_empty());
     }
 
