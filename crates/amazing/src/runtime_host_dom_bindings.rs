@@ -1515,6 +1515,14 @@ mod tests {
             check(r.createContextualFragment('<foo></foo>').firstChild.namespaceURI === 'http://www.w3.org/1999/xhtml');
             math.setAttribute('encoding','application/xml');
             check(r.createContextualFragment('<foo></foo>').firstChild.namespaceURI === math.namespaceURI);
+            const uppercase=document.createElementNS('http://www.w3.org/1999/xhtml','TITLE');
+            r.selectNodeContents(uppercase);
+            check(r.createContextualFragment('<b>x</b>').firstChild.localName === 'b');
+            const svgContext=document.createElementNS('http://www.w3.org/2000/svg','foreignObject');
+            r.selectNodeContents(svgContext);
+            check(r.createContextualFragment('<b>x</b>').firstChild.namespaceURI === 'http://www.w3.org/1999/xhtml');
+            const comment=document.createComment('context');body.append(comment);r.selectNodeContents(comment);
+            check(r.createContextualFragment('<tr><td>x</td></tr>').firstChild.localName === 'tr');
             const foreign=document.createElementNS('urn:actual-context','MixedCase');r.selectNodeContents(foreign);
             check(r.createContextualFragment('<foo></foo>').firstChild.namespaceURI === 'urn:actual-context');
             check(r.createContextualFragment('<body><p>x').firstChild.namespaceURI === 'http://www.w3.org/1999/xhtml');
