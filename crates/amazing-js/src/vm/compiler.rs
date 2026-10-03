@@ -1212,6 +1212,17 @@ impl Compiler {
             ExprKind::Null => {
                 self.emit(Instruction::Constant(dst, JsValue::Null));
             }
+            ExprKind::DynamicImport(args) | ExprKind::DynamicImportPhase { args, .. } => {
+                let specifier = args.first().ok_or_else(|| self.error(expression.span, "import requires a specifier"))?;
+                let specifier = self.expression(specifier)?;
+                let options = args.get(1).map(|options| self.expression(options)).transpose()?.unwrap_or(0);
+                let phase = match &expression.kind {
+                    ExprKind::DynamicImportPhase { phase, .. } if phase == "source" => crate::module::ImportPhase::Source,
+                    ExprKind::DynamicImportPhase { .. } => crate::module::ImportPhase::Defer,
+                    _ => crate::module::ImportPhase::Evaluation,
+                };
+                self.emit(Instruction::DynamicImport(dst, specifier, options, phase));
+            }
             ExprKind::Yield { argument, delegate: false } if self.is_generator => {
                 let mut value = match argument {
                     Some(argument) => self.expression(argument)?,

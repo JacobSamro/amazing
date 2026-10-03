@@ -15,6 +15,8 @@ mod patterns;
 mod tests;
 #[cfg(test)]
 mod tests_with;
+#[cfg(test)]
+mod tests_import;
 
 use super::{callable_function, for_iteration_env, new_promise, perform_promise_then, promise_resolving_functions, reference_name, settle_promise, Interpreter, Reference};
 use crate::ast::{BinOp, ForLeft, UnOp, VarKind};
@@ -168,6 +170,7 @@ enum Instruction {
     LoadName(Register, String, bool),
     LoadCallName(Register, Register, String),
     LoadThis(Register),
+    DynamicImport(Register, Register, Register, crate::module::ImportPhase),
     ResolveName(usize, Register, String),
     ResolveWriteName(usize, String),
     RequireResolved(usize),
@@ -740,6 +743,9 @@ impl Program {
                     // `this` is a ReferenceError before a derived
                     // constructor's `super()` call has run.
                     Instruction::LoadThis(dst) => registers[*dst] = env.resolve_this_checked()?,
+                    Instruction::DynamicImport(dst, specifier, options, phase) => {
+                        registers[*dst] = i.dynamic_import_values(registers[*specifier].clone(), registers[*options].clone(), &env, *phase)?;
+                    }
                     Instruction::LoadNewTarget(dst) => {
                         registers[*dst] = i.current_new_target().unwrap_or(JsValue::Undefined);
                     }

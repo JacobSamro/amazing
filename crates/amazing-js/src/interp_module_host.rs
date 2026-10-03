@@ -187,6 +187,13 @@ impl Interpreter {
             Some(options) => self.eval_expr(options, env)?,
             None => JsValue::Undefined,
         };
+        self.dynamic_import_values(value, options, env, phase)
+    }
+
+    // AST and VM argument evaluation share the complete post-evaluation
+    // ImportCall algorithm. Conversion and host errors reject its promise;
+    // evaluating either argument remains the caller's synchronous boundary.
+    fn dynamic_import_values(&mut self,value:JsValue,options:JsValue,env:&EnvHandle,phase:crate::module::ImportPhase) -> Result<JsValue,Throw> {
         let referrer = env.resolve("\0module.id");
         let referrer = match &referrer {
             Some(JsValue::Str(s)) => s.to_string(),
