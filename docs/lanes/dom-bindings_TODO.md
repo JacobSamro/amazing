@@ -3283,3 +3283,19 @@ identical rawhash. Four pinned remaining failures recorded against current
 namespace algorithm in evidence/xml-serializer/audit.md; no fixture rewrites.
 Fresh-box helper omissions fixed identically with pinned html/dom and
 trusted-types/support resource directories; incomplete reports excluded.
+### Range contextual fragment context and parsing (gate in progress)
+
+Fixed dependency df7a8558494e4cdb30e2b9578f6546e46770cfdd includes ready
+HTML54 direct HTML/XML fragment APIs. Lower Range operation captures live start
+context after DOMString conversion, uses actual owner-document mode, namespaces,
+attributes, form ancestry, scripting and quirks state, and imports fresh nodes
+without moving Range boundaries. HTML html/null context uses the prescribed body
+fallback; XML consumes actual in-scope bindings with strict selected UTF16 units.
+Overridden/irrelevant invalid declarations remain ignored by nearest-wins lookup.
+Native groups cover conversion reentrancy, actual mixed namespace/case contexts,
+template owner metadata, quirks table behavior, XML direct fragment grammar and
+fatal errors, and imported XML script inertness through template/HTML adoption.
+HTML54 owner supplies XML-only imported-script marking395ef1c3; HTML Range script
+append behavior remains enabled. Top-level XHTML WPT remains unsupported by the
+current harness, and is reported honestly. No ready or gain claim until matched
+whole nodes/ranges/domparsing/serializer/parser/template plus native/docs complete.
