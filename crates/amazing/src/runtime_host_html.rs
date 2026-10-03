@@ -228,6 +228,14 @@ impl FrameRuntime {
             origin: context.fetch_origin.clone(), top_level_origin: current.fetch_origin.clone(), ancestor_origins: ancestors })
     }
 
+    /// Resolve the requesting realm's actual live Document policy without JS.
+    pub(super) fn document_context_for_realm(&self, dom: &Dom, realm: RealmHandle) -> Option<HtmlDocumentContext> {
+        let context = self.contexts.get(&realm)?;
+        if !self.live_context(context, realm)
+            || dom.node_generation(context.document) != Some(context.document_generation) { return None; }
+        self.document_context(dom, context.document)
+    }
+
     /// Genuine Window identity without entering a realm or invoking script.
     pub(super) fn document_for_window(&self, window: &JsValue) -> Option<NodeIdx> {
         let global = self.contexts.iter().find(|(_, context)| *window == context.global);
@@ -2444,6 +2452,13 @@ mod tests {
         let children: Vec<_> = state.frames.documents.values().filter_map(|entry| entry.document).collect();
         let snapshots: Vec<_> = children.iter().map(|document| state.frames.document_context(&borrowed.dom, *document).unwrap()).collect();
         assert_eq!(snapshots.len(), 2);
+        for (realm, context) in &state.frames.contexts {
+            let by_realm = state.frames.document_context_for_realm(&borrowed.dom, *realm).unwrap();
+            let by_document = state.frames.document_context(&borrowed.dom, context.document).unwrap();
+            assert_eq!(by_realm.document_url, by_document.document_url);
+            assert_eq!(by_realm.origin, by_document.origin);
+            assert_eq!(by_realm.top_level_origin, by_document.top_level_origin);
+        }
         for snapshot in &snapshots {
             assert_eq!(snapshot.document_url, "about:blank");
             assert_eq!(snapshot.fallback_base_url.as_deref(), Some("https://example.test/saved/"));
@@ -2463,14 +2478,17 @@ mod tests {
         assert_eq!(state.frames.document_context(&host.borrow().dom, NodeIdx(0)).unwrap().origin, root.origin);
         state.frames.contexts.get_mut(&realm).unwrap().document_generation += 1;
         assert!(state.frames.document_context(&host.borrow().dom, retired).is_none());
+        assert!(state.frames.document_context_for_realm(&host.borrow().dom, realm).is_none());
         state.frames.contexts.get_mut(&realm).unwrap().document_generation -= 1;
         let frame = state.frames.contexts[&realm].frame.unwrap();
         state.frames.documents.get_mut(&frame).unwrap().document = None;
         assert!(state.frames.document_context(&host.borrow().dom, retired).is_none());
+        assert!(state.frames.document_context_for_realm(&host.borrow().dom, realm).is_none());
         // A stale root ancestor invalidates the entire child policy snapshot.
         let root_realm = *state.frames.contexts.iter().find(|(_, context)| context.frame.is_none()).unwrap().0;
         state.frames.contexts.get_mut(&root_realm).unwrap().document_generation += 1;
         assert!(state.frames.document_context(&host.borrow().dom, children[1]).is_none());
+        assert!(state.frames.document_context_for_realm(&host.borrow().dom, root_realm).is_none());
     }
 
     #[test]
