@@ -2714,6 +2714,7 @@ fn native_ua_payload_cancellation_and_activation_share_one_dispatch() {
     let listener=host.script(move |host,receiver,args| {
         assert_eq!(receiver,&V::Node(input));
         assert_eq!(call(host,O::EventIsTrusted,args[0].clone(),&[]),V::Bool(true));
+        assert_eq!(call(host,O::EventTimeStamp,args[0].clone(),&[]),V::Number(12.));
         assert_eq!(call(host,O::EventExtra("clientX"),args[0].clone(),&[]),V::Number(31.5));
         assert_eq!(call(host,O::EventExtra("shiftKey"),args[0].clone(),&[]),V::Bool(true));
         assert!(host.dom.input_checked(input).unwrap());
