@@ -1,3 +1,5 @@
+// IteratorRecord and array-pattern stepping portions adapted from lucid-softworks/lumen
+// (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // `is_anonymous_function_definition` and `property_key_as_fn_name` below are ported/adapted
 // from lucid-softworks/lumen (crates/lumen/src/eval.rs, IsAnonymousFunctionDefinition/
 // SetFunctionName helpers) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
@@ -77,124 +79,71 @@ fn property_key_as_fn_name(key: &PropertyKey) -> String {
     }
 }
 
-/// A lazily-stepped iterator for array-pattern `BindingInitialization`
-/// (§8.6.2/§8.6.3): unlike `Interpreter::iterate`'s eager collect-everything
-/// (right for spread and for-of, which always want every value), a pattern
-/// without a trailing rest element must pull only as many values as it has
-/// elements, then perform IteratorClose (§7.4.11) exactly once — an iterator
-/// that legitimately never signals `done` (e.g. an infinite generator bound
-/// to `[x]`) must not be drained to completion first.
-enum PatternIter {
-    /// An array whose `[Symbol.iterator]` is still the untouched intrinsic:
-    /// index access is spec-equivalent, and %ArrayIteratorPrototype% has no
-    /// `return` method, so IteratorClose on it is always a no-op — `close`
-    /// is simply never called for this variant.
-    Fast { value: JsValue, index: usize, len: usize },
-    Protocol { iterator: JsValue, next: JsValue, done: bool },
+/// IteratorRecord used by array binding and assignment patterns. Even intrinsic
+/// arrays use the actual iterator so prototype hooks and live length stay visible.
+struct PatternIter {
+    iterator: JsValue,
+    next: JsValue,
+    done: bool,
 }
 
 impl PatternIter {
-    fn new(i: &mut Interpreter, value: &JsValue) -> Result<PatternIter, Throw> {
-        if let JsValue::Object(object) = value {
-            if matches!(object.borrow().exotic, Exotic::Array) && i.has_original_array_iterator(value)? {
-                let len = match object.borrow().get_own("length") {
-                    Some(JsValue::Num(n)) => n as usize,
-                    _ => 0,
-                };
-                return Ok(PatternIter::Fast { value: value.clone(), index: 0, len });
-            }
-        }
+    fn new(i: &mut Interpreter, value: &JsValue) -> Result<Self, Throw> {
         let method = i.get_prop(value, WellKnownSymbol::Iterator.symbol())?;
         if callable_function(&method).is_none() {
             return Err(Throw::type_error("value is not iterable"));
         }
         let iterator = i.call_value(&method, value.clone(), Vec::new())?;
+        if !iterator.is_object() {
+            return Err(Throw::type_error("iterator is not an object"));
+        }
+        // GetIterator caches next; callability is checked only by IteratorNext.
         let next = i.get_prop(&iterator, "next")?;
-        if callable_function(&next).is_none() {
-            return Err(Throw::type_error("iterator's next method is not callable"));
-        }
-        Ok(PatternIter::Protocol { iterator, next, done: false })
+        Ok(Self { iterator, next, done: false })
     }
 
-    /// `Ok(None)` is IteratorStep returning done — never advances past it.
+    fn step_result(&mut self, i: &mut Interpreter) -> Result<Option<JsValue>, Throw> {
+        if self.done { return Ok(None); }
+        let result = (|| {
+            let result = i.call_value(&self.next, self.iterator.clone(), Vec::new())?;
+            if !result.is_object() {
+                return Err(Throw::type_error("iterator result is not an object"));
+            }
+            if i.get_prop(&result, "done")?.to_boolean() {
+                self.done = true;
+                Ok(None)
+            } else {
+                Ok(Some(result))
+            }
+        })();
+        if result.is_err() { self.done = true; }
+        result
+    }
+
     fn step(&mut self, i: &mut Interpreter) -> Result<Option<JsValue>, Throw> {
-        match self {
-            PatternIter::Fast { value, index, len } => {
-                if *index >= *len {
-                    return Ok(None);
-                }
-                let v = i.get_prop(value, &index.to_string())?;
-                *index += 1;
-                Ok(Some(v))
-            }
-            PatternIter::Protocol { iterator, next, done } => {
-                if *done {
-                    return Ok(None);
-                }
-                let result = match i.call_value(next, iterator.clone(), Vec::new()) {
-                    Ok(result) => result,
-                    Err(error) => {
-                        *done = true;
-                        return Err(error);
-                    }
-                };
-                let result_value = match result {
-                    JsValue::Object(_) => result,
-                    _ => {
-                        *done = true;
-                        return Err(Throw::type_error("iterator result is not an object"));
-                    }
-                };
-                // IteratorComplete/IteratorValue (§7.4.6/§7.4.7): the full
-                // [[Get]], not a raw own-property probe, so a `done`/`value`
-                // accessor that throws is observed instead of silently
-                // reading as absent (an iterator whose result objects define
-                // `value` as a getter would otherwise loop forever).
-                let is_done = match i.get_prop(&result_value, "done") {
-                    Ok(value) => value.to_boolean(),
-                    Err(error) => {
-                        *done = true;
-                        return Err(error);
-                    }
-                };
-                if is_done {
-                    *done = true;
-                    return Ok(None);
-                }
-                match i.get_prop(&result_value, "value") {
-                    Ok(value) => Ok(Some(value)),
-                    Err(error) => {
-                        *done = true;
-                        Err(error)
-                    }
-                }
-            }
+        let Some(result) = self.step_result(i)? else { return Ok(None); };
+        match i.get_prop(&result, "value") {
+            Ok(value) => Ok(Some(value)),
+            Err(error) => { self.done = true; Err(error) }
         }
     }
 
-    /// Pulls every remaining value for a trailing rest element; the
-    /// iterator is naturally exhausted afterward, so `close` need not run.
+    /// Elision performs IteratorStep without observing IteratorValue.
+    fn skip(&mut self, i: &mut Interpreter) -> Result<(), Throw> {
+        self.step_result(i).map(|_| ())
+    }
+
     fn collect_rest(&mut self, i: &mut Interpreter) -> Result<Vec<JsValue>, Throw> {
         let mut values = Vec::new();
-        while let Some(value) = self.step(i)? {
-            values.push(value);
-        }
+        while let Some(value) = self.step(i)? { values.push(value); }
         Ok(values)
     }
 
-    /// IteratorClose: a no-op once already done (naturally exhausted, a
-    /// rest element drained it, or `step` itself already failed). The
-    /// caller (see its own call sites) discards this `Err` when the pattern
-    /// itself already failed abruptly, or surfaces it as the new completion
-    /// when the pattern otherwise finished normally (7.4.6 step 2 vs 3/4).
+    /// Callers combine completions: an existing throw wins over close failure.
     fn close(&mut self, i: &mut Interpreter) -> Result<(), Throw> {
-        if let PatternIter::Protocol { iterator, done, .. } = self {
-            if !*done {
-                *done = true;
-                return i.close_iterator(iterator);
-            }
-        }
-        Ok(())
+        if self.done { return Ok(()); }
+        self.done = true;
+        i.close_iterator(&self.iterator)
     }
 }
 
@@ -269,7 +218,7 @@ impl Interpreter {
                                 self.bind_pattern_mode(element, item, kind, env)?;
                             }
                         } else {
-                            iter.step(self)?;
+                            iter.skip(self)?;
                         }
                     }
                     Ok(())

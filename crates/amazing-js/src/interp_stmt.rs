@@ -1,3 +1,5 @@
+// Normal IteratorClose GetMethod/completion portions adapted from lucid-softworks/lumen
+// (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Assignment-pattern reference ordering portions adapted from lucid-softworks/lumen
 // (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Statement evaluation: exec_stmt/exec_stmts and everything they call for control flow --
@@ -1772,7 +1774,7 @@ impl Interpreter {
                                 self.assign_prepared_pattern(element, &item, reference, env)?;
                             }
                             None => {
-                                iter.step(self)?;
+                                iter.skip(self)?;
                             }
                         }
                     }
@@ -3134,8 +3136,11 @@ impl Interpreter {
     /// `close_async_iterator`'s already-correct treatment for `for await`.
     fn close_iterator(&mut self, iterator: &JsValue) -> Result<(), Throw> {
         let return_method = self.get_prop(iterator, "return")?;
-        if callable_function(&return_method).is_none() {
+        if matches!(return_method, JsValue::Undefined | JsValue::Null) {
             return Ok(());
+        }
+        if callable_function(&return_method).is_none() {
+            return Err(Throw::type_error("iterator's return method is not callable"));
         }
         match self.call_value(&return_method, iterator.clone(), Vec::new())? {
             JsValue::Object(_) => Ok(()),
