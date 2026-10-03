@@ -1893,13 +1893,16 @@ mod tests {
             const made=inner.DOMImplementation.prototype.createHTMLDocument.call(document.implementation,'title');
             check(Object.getPrototypeOf(made)===Document.prototype);
             check(made.documentElement instanceof HTMLHtmlElement && made.querySelector('title').firstChild instanceof Text);
-            const childValues=inner.Function('return [new Text("x"),new Comment("x"),new DocumentFragment(),new Document()]')();
+            const childValues=inner.Function('return [new Text("x"),new Comment("x"),new DocumentFragment(),new Document(),new Option("x","v",true,true),new ProcessingInstruction("t","d")]')();
             for(let n=0;n<3;n++)check(childValues[n].ownerDocument===inner.document);
             check(Object.getPrototypeOf(childValues[0])===inner.Text.prototype);
             check(Object.getPrototypeOf(childValues[1])===inner.Comment.prototype);
             check(Object.getPrototypeOf(childValues[2])===inner.DocumentFragment.prototype);
             check(Object.getPrototypeOf(childValues[3])===inner.Document.prototype);
             check(Object.getPrototypeOf(childValues[3].cloneNode())===inner.Document.prototype);
+            check(childValues[4].ownerDocument===inner.document && Object.getPrototypeOf(childValues[4])===inner.HTMLOptionElement.prototype);
+            check(Object.getPrototypeOf(childValues[4].firstChild)===inner.Text.prototype);
+            check(childValues[5].ownerDocument===inner.document && Object.getPrototypeOf(childValues[5])===inner.ProcessingInstruction.prototype);
             return true;}catch(e){return String(e)+' at step '+step;}})()"#).unwrap();
         assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
     }
@@ -1995,8 +1998,8 @@ mod tests {
         bindings.set_document_url(&mut js,"https://example.test/stale-realms");
         let realm=js.binding_current_realm();let actual=bindings.state.borrow_mut().realm_documents.remove(&realm).unwrap();
         let count=host.borrow().dom.node_count();
-        let result=js.run_script("(function(){let n=0;for(const make of [()=>new Text('x'),()=>new Comment('x'),()=>new DocumentFragment(),()=>new Document(),()=>new DOMParser()]){try{make()}catch(e){if(e instanceof TypeError)n++;}}return n;})()").unwrap();
-        assert_eq!(result,JsValue::Number(5.0));assert_eq!(host.borrow().dom.node_count(),count);
+        let result=js.run_script("(function(){let n=0;for(const make of [()=>new Text('x'),()=>new Comment('x'),()=>new DocumentFragment(),()=>new Document(),()=>new DOMParser(),()=>new Option('x'),()=>new ProcessingInstruction('t','d')]){try{make()}catch(e){if(e instanceof TypeError)n++;}}return n;})()").unwrap();
+        assert_eq!(result,JsValue::Number(7.0));assert_eq!(host.borrow().dom.node_count(),count);
         bindings.state.borrow_mut().realm_documents.insert(realm,(actual.0,actual.1+1));
         assert_eq!(js.run_script("(function(){try{document.createElement('div')}catch(e){return e instanceof TypeError;}return false;})()").unwrap(),JsValue::Bool(true));
         assert_eq!(host.borrow().dom.node_count(),count);bindings.state.borrow_mut().realm_documents.insert(realm,actual);
