@@ -183,6 +183,13 @@ impl FrameRuntime {
         self.documents.iter().find_map(|(node, frame)| (frame.document == Some(document)).then_some(*node))
     }
 
+    /// Actual committed document URL, without entering JS or consulting script scope.
+    pub(super) fn document_url(&self, document: NodeIdx) -> Option<String> {
+        self.contexts.iter().find_map(|(realm, context)|
+            (context.document == document && self.live_context(context, *realm))
+                .then(|| context.document_url.clone()))
+    }
+
     /// Genuine Window identity without entering a realm or invoking script.
     pub(super) fn document_for_window(&self, window: &JsValue) -> Option<NodeIdx> {
         let global = self.contexts.iter().find(|(_, context)| *window == context.global);
@@ -1442,10 +1449,7 @@ impl RuntimeBindingHost<'_> {
 
     /// Actual committed URL, independent of a pending Location or script scope.
     pub(super) fn html_document_url(&self, document: NodeIdx) -> Option<String> {
-        let state = self.state.borrow();
-        state.frames.contexts.iter().find_map(|(realm, context)|
-            (context.document == document && state.frames.live_context(context, *realm))
-                .then(|| context.document_url.clone()))
+        self.state.borrow().frames.document_url(document)
     }
 
     /// A navigated child document retains its associated WindowProxy even
