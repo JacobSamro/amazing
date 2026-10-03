@@ -46,6 +46,23 @@ struct FrameDocument {
     html: Option<String>,
 }
 
+#[derive(Clone)]
+struct NavigationSource {
+    document: NodeIdx,
+    generation: u64,
+    base_url: String,
+    origin: String,
+}
+
+#[derive(Clone)]
+struct HtmlNavigation {
+    document: NodeIdx,
+    generation: u64,
+    url: String,
+    replace: bool,
+    source: NavigationSource,
+}
+
 /// The `sandbox` attribute's recognized tokens, ASCII-case-insensitive and
 /// space-separated. Absent attribute means not sandboxed at all (full
 /// access, matching an ordinary same-origin child). Tokens this driver does
@@ -90,6 +107,8 @@ pub(super) struct FrameRuntime {
     cross_origin_descriptors: HashMap<(RealmHandle, RealmHandle, String), Property>,
     /// Captured creation/navigation base, retained for old documents too.
     about_base_urls: HashMap<NodeIdx, (u64, String)>,
+    /// Queued Location changes carry their actual source, even after it moves.
+    pending_navigations: HashMap<RealmHandle, HtmlNavigation>,
     parser_imports: HashMap<NodeIdx, IncrementalImportRef>,
     /// `(frame, document, fire_load_events)`. `fire_load_events` is false
     /// only for an iframe with neither `src` nor `srcdoc`: its initial
@@ -175,7 +194,7 @@ impl FrameRuntime {
 }
 
 fn context_origin(js: &mut Interpreter, context: &WindowContext, realm: RealmHandle) -> Result<String, Throw> {
-    if context.frame.is_some() { return Ok(context.origin.clone()); }
+    if context.frame.is_some() || !context.origin.is_empty() { return Ok(context.origin.clone()); }
     js.binding_with_realm(realm, |js| Ok(ParsedUrl::parse(js.binding_location_href())
         .map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into())))
 }
@@ -422,6 +441,13 @@ fn fetch_child_document(logical_url: &str, parent_url: &str,
 }
 
 impl RuntimeBindings {
+    pub(super) fn html_set_document_origin(&self, url: &str) {
+        let origin = ParsedUrl::parse(url).map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into());
+        for context in self.state.borrow_mut().frames.contexts.values_mut().filter(|context| context.frame.is_none()) {
+            context.origin = origin.clone();
+        }
+    }
+
     /// IPC-10 installs this when its navigator can consume method, body,
     /// enctype and target together. The current interpreter entry accepts URL only.
     pub(crate) fn set_form_navigation_hook(&self, hook: FormNavigationHook) {
@@ -1281,6 +1307,48 @@ impl RuntimeBindings {
 type IncrementalImportRef = Rc<RefCell<amazing_dom::markup::IncrementalDocumentImport>>;
 
 impl RuntimeBindingHost<'_> {
+    fn html_navigation_source(&mut self, url: &str, replace: bool) -> Result<HtmlNavigation, Throw> {
+        let target = self.js.binding_current_realm();
+        let source = self.js.binding_incumbent_realm();
+        let contexts = {
+            let state = self.state.borrow();
+            state.frames.contexts.get(&target).cloned().zip(state.frames.contexts.get(&source).cloned())
+        };
+        let Some((target_context, source_context)) = contexts else {
+            return Err(throw_dom_error(self, DomError::NotSupportedError));
+        };
+        let base_url = self.dom_document_base_url(source_context.document).map_err(|error| throw_dom_error(self, error))?;
+        let origin = context_origin(self.js, &source_context, source)?;
+        let generations = {
+            let state = self.state.borrow();
+            let host = state.host.borrow();
+            host.dom.node_generation(target_context.document).zip(host.dom.node_generation(source_context.document))
+        };
+        let Some((target_generation, source_generation)) = generations else {
+            return Err(Throw::type_error("Stale navigation document"));
+        };
+        Ok(HtmlNavigation { document: target_context.document, generation: target_generation,
+            url: url.into(), replace, source: NavigationSource { document: source_context.document,
+                generation: source_generation, base_url, origin } })
+    }
+
+    pub(super) fn html_location_navigate(&mut self, url: &str, replace: bool) -> Result<(), Throw> {
+        let navigation = self.html_navigation_source(url, replace)?;
+        let target = self.js.binding_current_realm();
+        self.state.borrow_mut().frames.pending_navigations.insert(target, navigation);
+        self.js.binding_location_navigate(url, replace);
+        Ok(())
+    }
+
+    pub(super) fn html_location_reload(&mut self) -> Result<(), Throw> {
+        let url = self.js.binding_location_href().to_owned();
+        let navigation = self.html_navigation_source(&url, false)?;
+        let target = self.js.binding_current_realm();
+        self.state.borrow_mut().frames.pending_navigations.insert(target, navigation);
+        self.js.binding_location_reload();
+        Ok(())
+    }
+
     /// A navigated child document retains its associated WindowProxy even
     /// when a parent-realm script reads the document's defaultView.
     pub(super) fn iframe_document_window(&self, document: NodeIdx) -> Option<JsValue> {

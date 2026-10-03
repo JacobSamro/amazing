@@ -259,6 +259,7 @@ impl RuntimeBindings {
     pub(crate) fn set_document_url(&self, js: &mut Interpreter, url: &str) {
         self.set_module_document_base(js, url);
         self.state.borrow_mut().document_url = Some(url.to_owned());
+        self.html_set_document_origin(url);
         self.navigate_iframes(js);
     }
 
@@ -1544,9 +1545,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
         Ok(self.js.binding_location_href().to_owned())
     }
     fn location_navigate(&mut self, url: &str, replace: bool) -> Result<(), Throw> {
-        self.js.binding_location_navigate(url, replace);
-        self.state.borrow_mut().document_url = Some(url.to_owned());
-        Ok(())
+        self.html_location_navigate(url, replace)
     }
     fn form_selection_changed(&mut self, node: NodeIdx) -> Result<(), Throw> {
         let mut state = self.state.borrow_mut();
@@ -1592,8 +1591,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
         self.navigate_form(request)
     }
     fn location_reload(&mut self) -> Result<(), Throw> {
-        self.js.binding_location_reload();
-        Ok(())
+        self.html_location_reload()
     }
     fn location_ancestor_origins(&mut self) -> Result<JsValue, Throw> {
         let arena = self.state.borrow().arena;
