@@ -1536,10 +1536,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
 
     fn document_location(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
-        if document != NodeIdx(0) { return Ok(None); }
-        let arena = self.state.borrow().arena;
-        self.wrap_platform_object(PlatformKey { arena, slot: 0, generation: 1 },
-            InterfaceBrand::LOCATION).map(Some)
+        self.html_document_location(document)
     }
     fn location_href(&mut self) -> Result<String, Throw> {
         Ok(self.js.binding_location_href().to_owned())

@@ -2215,8 +2215,55 @@ impl RuntimeBindingHost<'_> {
         }
     }
 
+    /// A borrowed Location function follows its genuine receiver's Window,
+    /// with the caller's origin checked before entering the target realm.
+    fn invoke_html_location(&mut self, operation: Operation, receiver: JsValue,
+        args: &[JsValue]) -> Result<JsValue, Throw> {
+        let contexts = self.state.borrow().frames.contexts.iter()
+            .map(|(realm, context)| (*realm, context.clone())).collect::<Vec<_>>();
+        let target = contexts.iter().find(|(_, context)| match &context.global {
+            JsValue::Object(global) => global.borrow().get_own("[[LocationObject]]")
+                .is_some_and(|location| self.js.binding_same_value(&receiver, &location)),
+            _ => false,
+        }).cloned();
+        let Some((target_realm, target)) = target else {
+            return invoke_operation(self, operation, receiver, args);
+        };
+        let source_realm = self.js.binding_incumbent_realm();
+        let source = contexts.iter().find(|(realm, _)| *realm == source_realm).map(|(_, context)| context.clone());
+        let source_origin = match &source { Some(context) => context_origin(self.js, context, source_realm)?, None => "null".into() };
+        let target_origin = context_origin(self.js, &target, target_realm)?;
+        if source_origin != target_origin && !matches!(operation, Operation::LocationSetHref | Operation::LocationReplace) {
+            return Err(throw_dom_error(self, DomError::SecurityError));
+        }
+        let state = self.state.clone();
+        let args = if target.frame.is_some() && matches!(operation,
+            Operation::LocationSetHref | Operation::LocationAssign | Operation::LocationReplace) {
+            let value = args.first().ok_or_else(|| Throw::type_error("Missing required argument"))?;
+            let scalar = String::from_utf16_lossy(&self.to_dom_string(value)?);
+            let source = source.ok_or_else(|| throw_dom_error(self, DomError::NotSupportedError))?;
+            let base = self.dom_document_base_url(source.document).map_err(|error| throw_dom_error(self, error))?;
+            let base = ParsedUrl::parse(&base).ok();
+            let url = ParsedUrl::parse_with_base(&scalar, base.as_ref())
+                .map_err(|_| throw_dom_error(self, DomError::SyntaxError))?.serialize();
+            vec![JsValue::str(&url)]
+        } else { args.to_vec() };
+        self.js.binding_with_realm(target_realm, |js| {
+            let mut adapter = RuntimeBindingHost { js, state };
+            invoke_operation(&mut adapter, operation, receiver, &args)
+        })
+    }
+
     pub(super) fn invoke_operation_with_html_hooks(&mut self, operation: Operation,
         receiver: JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
+        if matches!(operation, Operation::LocationHref | Operation::LocationSetHref | Operation::LocationOrigin
+            | Operation::LocationProtocol | Operation::LocationSetProtocol | Operation::LocationHost | Operation::LocationSetHost
+            | Operation::LocationHostname | Operation::LocationSetHostname | Operation::LocationPort | Operation::LocationSetPort
+            | Operation::LocationPathname | Operation::LocationSetPathname | Operation::LocationSearch | Operation::LocationSetSearch
+            | Operation::LocationHash | Operation::LocationSetHash | Operation::LocationAssign | Operation::LocationReplace
+            | Operation::LocationReload | Operation::LocationAncestorOrigins | Operation::LocationToString) {
+            return self.invoke_html_location(operation, receiver, args);
+        }
         // HTML-35: a script produced by a fragment-parsing API (`innerHTML`,
         // `insertAdjacentHTML`) must never execute, however it is later
         // moved (WHATWG HTML: the fragment-parsing algorithm marks every
@@ -2369,9 +2416,10 @@ mod tests {
                 a.contentDocument.baseURI,old.baseURI];
             location.href='https://other.test/pending';
             const fresh=document.createElement('iframe'); document.body.appendChild(fresh);
-            observations.push(fresh.contentDocument.baseURI);
+            observations.push(fresh.contentDocument.baseURI, a.contentDocument.location===w.location, old.location===null,
+                Object.getOwnPropertyDescriptor(location,'href').get.call(w.location));
             observations.join('|');
-        "#).unwrap(), JsValue::str("true|true|about:blank?two#last|https://example.test/source-base/|https://example.test/root-base/|https://example.test/root-base/"));
+        "#).unwrap(), JsValue::str("true|true|about:blank?two#last|https://example.test/source-base/|https://example.test/root-base/|https://example.test/root-base/|true|true|about:blank?two#last"));
     }
 
     #[test]
