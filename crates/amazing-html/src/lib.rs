@@ -266,7 +266,7 @@ fn export_fragment(source: Dom, context: &str, html_context: bool) -> Result<Dom
     fn clone_subtree(source: &Dom, source_node: NodeIdx, target: &mut Dom, parent: NodeIdx) {
         // Namespace identifiers belong to an arena; intern URI identities anew.
         let created = if matches!(source.get(source_node).kind, amazing_dom::NodeKind::Element { .. }) {
-            let document = target.owner_document(parent).expect("fragment owner");
+            let document = target.owner_document(parent).unwrap_or(parent);
             let node = target.create_element_expanded_in(document, source.namespace_uri(source_node),
                 source.prefix(source_node), source.local_name(source_node).expect("element name"))
                 .expect("parser element identity");
