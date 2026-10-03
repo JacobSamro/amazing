@@ -110,11 +110,9 @@ impl ModuleResolver for BrowserModuleResolver {
                     let final_url = amazing_net::ParsedUrl::parse(&response.url)
                         .map_err(|error| format!("invalid module response URL: {error}"))?.serialize();
                     self.response_urls.borrow_mut().insert((self.realm, id.clone()), final_url);
-                    if let Some(policy) = response.headers.get("referrer-policy") {
-                        let policy = module_referrer_policy(policy);
-                        if !policy.is_empty() {
-                            self.options.borrow_mut().entry((self.realm, id.clone())).or_default().referrer_policy = policy;
-                        }
+                    let policy = module_referrer_policy(&response.headers.get_all("referrer-policy").join(","));
+                    if !policy.is_empty() {
+                        self.options.borrow_mut().entry((self.realm, id.clone())).or_default().referrer_policy = policy;
                     }
                     Ok(decode_module(&response.body))
                 })
@@ -486,7 +484,9 @@ mod tests {
             recorded.borrow_mut().push(request);
             let mut headers = amazing_net::Headers::new();
             headers.append("content-type", "text/javascript; charset=windows-1252".into()).unwrap();
+            headers.append("referrer-policy", "origin".into()).unwrap();
             headers.append("referrer-policy", "garbage, no-referrer".into()).unwrap();
+            headers.append("referrer-policy", "unknown, ".into()).unwrap();
             Ok(amazing_net::Response { url: url.into(), status: 200, reason: "OK".into(), headers, body: source.as_bytes().to_vec() })
         }));
         let script = script(ScriptKind::Module, node, true);
