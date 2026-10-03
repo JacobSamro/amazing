@@ -7,10 +7,11 @@ impl RuntimeBindingHost<'_> {
     /// Copy realm handles introduce no additional JS object or Rc roots.
     pub(super) fn dom_register_document_realm(&mut self, document: NodeIdx, realm: RealmHandle)
         -> Result<(), Throw> {
-        let anchor = self.with_dom(|dom| {
+        let (anchor, generation) = self.with_dom(|dom| {
             let anchor = dom.node_creation_document(document)?;
             if !matches!(dom.get(document).kind, NodeKind::Document) { return Err(DomError::TypeError); }
-            Ok(anchor)
+            let generation = dom.node_generation(document).ok_or(DomError::InvalidNode)?;
+            Ok((anchor, generation))
         })?;
         // A newly created child context may precede the navigation's final
         // active-frame bookkeeping. Read its actual validated creation record,
@@ -25,7 +26,7 @@ impl RuntimeBindingHost<'_> {
             return Err(Throw::type_error("Document allocation realm already registered"));
         }
         state.node_creation_realms.insert(anchor, realm);
-        state.realm_documents.entry(realm).or_insert(anchor);
+        state.realm_documents.entry(realm).or_insert((document, generation));
         Ok(())
     }
 
