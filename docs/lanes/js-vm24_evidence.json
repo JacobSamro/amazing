@@ -1,0 +1,118 @@
+{
+  "ticket": "JSVM24",
+  "base": "ac6c786f8c3f49191b18d13e48faefdd851af8d4",
+  "identical_fixture_dependency": "c03ce24b3d92fd868ece4625dc1115a3328fce0e",
+  "before": "27354c2887af1bdfbf1f394d1c5498365153f624",
+  "source_sha": "29e3058445adb057b1c90cc2ee5f54e75c65a6c9",
+  "workspace": {
+    "before_passed": 3995,
+    "after_passed": 3999,
+    "skipped": 17,
+    "before_doctests": 4,
+    "after_doctests": 4
+  },
+  "selectors": [
+    "language",
+    "built-ins/Promise",
+    "built-ins/Iterator/",
+    "built-ins/Object/",
+    "built-ins/Reflect/",
+    "built-ins/Proxy/",
+    "built-ins/Function/",
+    "built-ins/AsyncFunction/",
+    "built-ins/GeneratorFunction/",
+    "built-ins/AsyncGeneratorFunction/"
+  ],
+  "jobs": 8,
+  "timeout_seconds": 60,
+  "modes": {
+    "default": {
+      "selected_files": 30434,
+      "before_passed_files": 30187,
+      "after_passed_files": 30187,
+      "gained_files": [],
+      "lost_files": [],
+      "before_passed_variants": 56535,
+      "after_passed_variants": 56535,
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_host_sha256": "77ae6dae9a3c0bb9328c46034f8692a028dfe804c70dcf343b831935d961d3f5",
+      "after_host_sha256": "13bcd4f27a9a48e0d9d17b9588075b7e2908dc4a0b2b92f94fdb1642ce1a9743"
+    },
+    "vm": {
+      "selected_files": 30434,
+      "before_passed_files": 30187,
+      "after_passed_files": 30187,
+      "gained_files": [],
+      "lost_files": [],
+      "before_passed_variants": 56535,
+      "after_passed_variants": 56535,
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_host_sha256": "77ae6dae9a3c0bb9328c46034f8692a028dfe804c70dcf343b831935d961d3f5",
+      "after_host_sha256": "13bcd4f27a9a48e0d9d17b9588075b7e2908dc4a0b2b92f94fdb1642ce1a9743"
+    }
+  },
+  "language_compile_trace": {
+    "default": {
+      "before": {
+        "attempts": 814399,
+        "accepted": 814355,
+        "fallbacks": 44,
+        "reasons": {
+          "statement kind": 14,
+          "class field or static block": 8,
+          "expression kind": 18,
+          "member access": 4
+        },
+        "host_sha256": "77ae6dae9a3c0bb9328c46034f8692a028dfe804c70dcf343b831935d961d3f5",
+        "language_passed_files": 24448,
+        "language_passed_variants": 45223
+      },
+      "after": {
+        "attempts": 814395,
+        "accepted": 814365,
+        "fallbacks": 30,
+        "reasons": {
+          "class field or static block": 8,
+          "expression kind": 18,
+          "member access": 4
+        },
+        "host_sha256": "13bcd4f27a9a48e0d9d17b9588075b7e2908dc4a0b2b92f94fdb1642ce1a9743",
+        "language_passed_files": 24448,
+        "language_passed_variants": 45223
+      }
+    },
+    "vm": {
+      "before": {
+        "attempts": 445301,
+        "accepted": 445257,
+        "fallbacks": 44,
+        "reasons": {
+          "statement kind": 14,
+          "class field or static block": 8,
+          "expression kind": 18,
+          "member access": 4
+        },
+        "host_sha256": "77ae6dae9a3c0bb9328c46034f8692a028dfe804c70dcf343b831935d961d3f5",
+        "language_passed_files": 24448,
+        "language_passed_variants": 45223
+      },
+      "after": {
+        "attempts": 445291,
+        "accepted": 445261,
+        "fallbacks": 30,
+        "reasons": {
+          "class field or static block": 8,
+          "expression kind": 18,
+          "member access": 4
+        },
+        "host_sha256": "13bcd4f27a9a48e0d9d17b9588075b7e2908dc4a0b2b92f94fdb1642ce1a9743",
+        "language_passed_files": 24448,
+        "language_passed_variants": 45223
+      }
+    }
+  },
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5"
+}

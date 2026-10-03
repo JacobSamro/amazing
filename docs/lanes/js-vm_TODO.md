@@ -1269,7 +1269,7 @@ yield10, class initialization8, expression18, member4. They remain measured
 fallbacks; class initialization and suspended With are not silently ignored.
 Evidence: [js-vm23_evidence.json](js-vm23_evidence.json).
 
-## JSVM24 — suspended With object environments (in progress)
+## JSVM24 — suspended With object environments
 
 Fixed dependency `ac6c786f`, with identical Window descriptor fixture correction
 `c03ce24b` on baseline and candidate. Extend the existing function-only With
@@ -1282,4 +1282,24 @@ real coroutine fixtures when syntax becomes natively supported. The full matrix
 compares native and forced AST async functions, generators, async generators,
 object methods and arrows, with resumed lookup/write/delete, proxies,
 unscopables, closures, control flow, external completion, head suspension,
-iteration and disposal. Measured whole-corpus and workspace proof pending.
+iteration and disposal. All 180 matrix cases and three additional boundary
+groups pass. The exact candidate is `29e3058445adb057b1c90cc2ee5f54e75c65a6c9`;
+the fixed before source is `27354c2887af1bdfbf1f394d1c5498365153f624`.
+
+Final Linux gate: **3999 workspace tests passed**, 17 skipped, and **four
+doctests passed**. Ten whole selections in both default and opt-in VM program
+modes cover **30434 unique files**, with **30187 passing files** and **56535
+passing variants** before and after. Both modes lose **zero files and
+variants**; this is native eligibility progress with unchanged pass counts.
+The default language selection independently retains 24448 passing files and
+45223 passing variants. Matched whole-language compile-trace proof is recorded
+separately from this full corpus gate.
+
+Matched language-only runtime callable traces reduce fallback attempts
+**44→30** in each mode, removing all 14 statement/With rejections. Default
+attempts/accepted: **814399/814355→814395/814365**; VM program mode:
+**445301/445257→445291/445261**. Remaining measured reasons are class
+initialization8, expression18 and member4. Both trace replays retain all
+24448 language file passes and 45223 variant passes. These counts describe
+the language trace, not the ten-selection gate or every unsupported syntax.
+Evidence: [js-vm24_evidence.json](js-vm24_evidence.json).
