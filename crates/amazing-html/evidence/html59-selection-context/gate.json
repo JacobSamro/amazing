@@ -1,0 +1,23 @@
+{
+  "before": "5f46d0f44550011aa2b10fc111781147db1ce75b",
+  "after": "ca17ab4962fb5bf10a03c731a6202114b063a6e8",
+  "source_series": [
+    "b87febccf9c362eead33d25be693f34512de7223",
+    "284887d649892e33258ea881911aa19ee523b18f",
+    "1111b5fecb5ade32bc4c06d0413b016e835af3cf",
+    "3002a01a7674cdcb79a67a42f1846eec2c9a6f43",
+    "4acd5d42e79a38e659ad019265034bea585107e9",
+    "ca17ab4962fb5bf10a03c731a6202114b063a6e8"
+  ],
+  "core_prerequisite": "4f5d5442a4b08bda0e1cd78bcc9c926cc38a46e6",
+  "core_owner_evidence": "f0990d80828b3abb24ee4b69e819874f41229b33",
+  "owned_before": 670,
+  "owned_after": 671,
+  "workspace_before": 4107,
+  "workspace_after": 4108,
+  "skipped": 17,
+  "doctests": 4,
+  "cli_trees": 1894,
+  "expanded_trees": 1930,
+  "unsupported": 6
+}
