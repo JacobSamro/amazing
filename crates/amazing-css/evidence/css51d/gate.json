@@ -1,0 +1,14 @@
+{
+  "source": "186241d9ad25193c513d83442ca176aaa1b83b08",
+  "base": "e15d2d87",
+  "platform": "Linux Boat native ext4",
+  "css_tests": 431,
+  "css_doctests": 0,
+  "parsing_passed": 4312,
+  "parsing_total": 5126,
+  "files": 514,
+  "skipped_nonliteral": 169,
+  "gained": 0,
+  "lost": 0,
+  "all_failure_multiplicities_unchanged": true
+}
