@@ -251,7 +251,7 @@ mod tests {
     fn xml_node_kinds_html_empty_rules_template_contents_and_cycles() {
         let mut dom=Dom::new();
         let fragment=dom.create_document_fragment(NodeIdx(0)).unwrap();
-        let pi=dom.create_processing_instruction_in(NodeIdx(0),"xml-stylesheet","a='b'").unwrap();
+        let pi=dom.create_processing_instruction_in(NodeIdx(0),"xml-stylesheet",&units("a='b'")).unwrap();
         let cdata=dom.create_node_in(NodeIdx(0),NodeKind::CDATASection { data: "<&>".into() }).unwrap();
         dom.pre_insert(pi,fragment,None).unwrap();dom.pre_insert(cdata,fragment,None).unwrap();
         assert_eq!(text(&dom,fragment,true),"<?xml-stylesheet a='b'?><![CDATA[<&>]]>");
