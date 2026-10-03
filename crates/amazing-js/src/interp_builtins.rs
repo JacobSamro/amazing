@@ -1521,7 +1521,7 @@ fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) 
     if Rc::ptr_eq(&source.0, &capability.0) {
         settle_promise(
             capability,
-            PromiseFate::Rejected(Throw::type_error("promise resolution cycle").0),
+            PromiseFate::Rejected(i.normalize_throw(Throw::type_error("promise resolution cycle")).0),
             i,
         )?;
         return Ok(true);
@@ -1869,18 +1869,18 @@ fn combinator_entry(
         Ok(_) => {
             settle_promise(
                 &target,
-                PromiseFate::Rejected(Throw::type_error("resolve is not a function").0),
+                PromiseFate::Rejected(i.normalize_throw(Throw::type_error("resolve is not a function")).0),
                 i,
             )?;
             return Ok(capability_promise(&target));
         }
-        Err(Throw(value)) => {
-            settle_promise(&target, PromiseFate::Rejected(value), i)?;
+        Err(error) => {
+            settle_promise(&target, PromiseFate::Rejected(i.normalize_throw(error).0), i)?;
             return Ok(capability_promise(&target));
         }
     };
-    if let Err(Throw(value)) = body(i, &target, this, &resolve) {
-        settle_promise(&target, PromiseFate::Rejected(value), i)?;
+    if let Err(error) = body(i, &target, this, &resolve) {
+        settle_promise(&target, PromiseFate::Rejected(i.normalize_throw(error).0), i)?;
     }
     Ok(capability_promise(&target))
 }

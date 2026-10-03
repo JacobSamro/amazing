@@ -1690,13 +1690,6 @@ impl Interpreter {
             JsValue::Object(p) => p,
             _ => return Err(Throw::type_error("prototype is not an object")),
         };
-        if let (JsValue::Object(lhs), Some(fun)) = (a, r.borrow().func.clone()) {
-            if let Some(JsValue::Str(lhs_name)) = lhs.borrow().get_own("name") {
-                if !fun.name.is_empty() && lhs_name.units() == fun.name.encode_utf16().collect::<Vec<_>>() {
-                    return Ok(JsValue::Bool(true));
-                }
-            }
-        }
         let mut c = match a {
             JsValue::Object(o) => {
                 if let Some(result) = self.window_proxy_prototype(o) {

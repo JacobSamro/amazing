@@ -1,0 +1,793 @@
+{
+  "ticket": "JSRT-43",
+  "base_sha": "ae4d7d90bc1d34ebd0e72cad34887db25d58b966",
+  "workspace": {
+    "passed": 3782,
+    "skipped": 17,
+    "elapsed_seconds": 75.019
+  },
+  "doctests": 4,
+  "selections": {
+    "language": {
+      "selected": 24590,
+      "before": {
+        "pass": 24029,
+        "fail": 535,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "after": {
+        "pass": 24048,
+        "fail": 516,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "gained": [
+        "language/expressions/async-arrow-function/dflt-params-ref-later.js",
+        "language/expressions/async-arrow-function/dflt-params-ref-self.js",
+        "language/expressions/async-function/named-dflt-params-ref-later.js",
+        "language/expressions/async-function/named-dflt-params-ref-self.js",
+        "language/expressions/async-function/nameless-dflt-params-ref-later.js",
+        "language/expressions/async-function/nameless-dflt-params-ref-self.js",
+        "language/expressions/class/async-method-static/dflt-params-ref-later.js",
+        "language/expressions/class/async-method-static/dflt-params-ref-self.js",
+        "language/expressions/class/async-method/dflt-params-ref-later.js",
+        "language/expressions/class/async-method/dflt-params-ref-self.js",
+        "language/expressions/instanceof/S11.8.6_A6_T3.js",
+        "language/expressions/object/method-definition/async-meth-dflt-params-ref-later.js",
+        "language/expressions/object/method-definition/async-meth-dflt-params-ref-self.js",
+        "language/statements/async-function/dflt-params-ref-later.js",
+        "language/statements/async-function/dflt-params-ref-self.js",
+        "language/statements/class/async-method-static/dflt-params-ref-later.js",
+        "language/statements/class/async-method-static/dflt-params-ref-self.js",
+        "language/statements/class/async-method/dflt-params-ref-later.js",
+        "language/statements/class/async-method/dflt-params-ref-self.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 53.874,
+      "elapsed_after": 56.088,
+      "before_host_sha256": "d6d2d1057a704905af0fac920846a45a14fce8c9e3f7358c8aed7aa96f458d15",
+      "after_host_sha256": "d14cab5ab0367325e1ee6e0cb6545aa398110075412fa88a7ae743d8c4926247",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-AsyncFunction": {
+      "selected": 18,
+      "before": {
+        "pass": 18,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53854
+      },
+      "after": {
+        "pass": 18,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53854
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.688,
+      "elapsed_after": 2.806,
+      "before_host_sha256": "d6d2d1057a704905af0fac920846a45a14fce8c9e3f7358c8aed7aa96f458d15",
+      "after_host_sha256": "d14cab5ab0367325e1ee6e0cb6545aa398110075412fa88a7ae743d8c4926247",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-AsyncGeneratorFunction": {
+      "selected": 23,
+      "before": {
+        "pass": 23,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53849
+      },
+      "after": {
+        "pass": 23,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53849
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.878,
+      "elapsed_after": 2.593,
+      "before_host_sha256": "d6d2d1057a704905af0fac920846a45a14fce8c9e3f7358c8aed7aa96f458d15",
+      "after_host_sha256": "d14cab5ab0367325e1ee6e0cb6545aa398110075412fa88a7ae743d8c4926247",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Promise": {
+      "selected": 732,
+      "before": {
+        "pass": 627,
+        "fail": 105,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53140
+      },
+      "after": {
+        "pass": 659,
+        "fail": 73,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53140
+      },
+      "gained": [
+        "built-ins/Promise/allSettled/iter-arg-is-false-reject.js",
+        "built-ins/Promise/allSettled/iter-arg-is-null-reject.js",
+        "built-ins/Promise/allSettled/iter-arg-is-number-reject.js",
+        "built-ins/Promise/allSettled/iter-arg-is-symbol-reject.js",
+        "built-ins/Promise/allSettled/iter-arg-is-true-reject.js",
+        "built-ins/Promise/allSettled/iter-arg-is-undefined-reject.js",
+        "built-ins/Promise/allSettled/iter-assigned-false-reject.js",
+        "built-ins/Promise/allSettled/iter-assigned-null-reject.js",
+        "built-ins/Promise/allSettled/iter-assigned-number-reject.js",
+        "built-ins/Promise/allSettled/iter-assigned-string-reject.js",
+        "built-ins/Promise/allSettled/iter-assigned-symbol-reject.js",
+        "built-ins/Promise/allSettled/iter-assigned-true-reject.js",
+        "built-ins/Promise/allSettled/iter-assigned-undefined-reject.js",
+        "built-ins/Promise/allSettled/iter-returns-false-reject.js",
+        "built-ins/Promise/allSettled/iter-returns-null-reject.js",
+        "built-ins/Promise/allSettled/iter-returns-number-reject.js",
+        "built-ins/Promise/allSettled/iter-returns-symbol-reject.js",
+        "built-ins/Promise/allSettled/iter-returns-true-reject.js",
+        "built-ins/Promise/allSettled/iter-returns-undefined-reject.js",
+        "built-ins/Promise/any/iter-arg-is-false-reject.js",
+        "built-ins/Promise/any/iter-arg-is-null-reject.js",
+        "built-ins/Promise/any/iter-arg-is-number-reject.js",
+        "built-ins/Promise/any/iter-arg-is-symbol-reject.js",
+        "built-ins/Promise/any/iter-arg-is-true-reject.js",
+        "built-ins/Promise/any/iter-arg-is-undefined-reject.js",
+        "built-ins/Promise/any/iter-assigned-false-reject.js",
+        "built-ins/Promise/any/iter-assigned-null-reject.js",
+        "built-ins/Promise/any/iter-assigned-number-reject.js",
+        "built-ins/Promise/any/iter-assigned-string-reject.js",
+        "built-ins/Promise/any/iter-assigned-symbol-reject.js",
+        "built-ins/Promise/any/iter-assigned-true-reject.js",
+        "built-ins/Promise/any/iter-assigned-undefined-reject.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 6.54,
+      "elapsed_after": 6.364,
+      "before_host_sha256": "d6d2d1057a704905af0fac920846a45a14fce8c9e3f7358c8aed7aa96f458d15",
+      "after_host_sha256": "d14cab5ab0367325e1ee6e0cb6545aa398110075412fa88a7ae743d8c4926247",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Function": {
+      "selected": 515,
+      "before": {
+        "pass": 504,
+        "fail": 11,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "after": {
+        "pass": 504,
+        "fail": 11,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 4.361,
+      "elapsed_after": 5.191,
+      "before_host_sha256": "d6d2d1057a704905af0fac920846a45a14fce8c9e3f7358c8aed7aa96f458d15",
+      "after_host_sha256": "d14cab5ab0367325e1ee6e0cb6545aa398110075412fa88a7ae743d8c4926247",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before": {
+        "pass": 3377,
+        "fail": 36,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "after": {
+        "pass": 3377,
+        "fail": 36,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 10.191,
+      "elapsed_after": 11.654,
+      "before_host_sha256": "d6d2d1057a704905af0fac920846a45a14fce8c9e3f7358c8aed7aa96f458d15",
+      "after_host_sha256": "d14cab5ab0367325e1ee6e0cb6545aa398110075412fa88a7ae743d8c4926247",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Proxy": {
+      "selected": 311,
+      "before": {
+        "pass": 310,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "after": {
+        "pass": 310,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53561
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.306,
+      "elapsed_after": 3.476,
+      "before_host_sha256": "d6d2d1057a704905af0fac920846a45a14fce8c9e3f7358c8aed7aa96f458d15",
+      "after_host_sha256": "d14cab5ab0367325e1ee6e0cb6545aa398110075412fa88a7ae743d8c4926247",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Reflect": {
+      "selected": 154,
+      "before": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "after": {
+        "pass": 153,
+        "fail": 1,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53718
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.99,
+      "elapsed_after": 3.052,
+      "before_host_sha256": "d6d2d1057a704905af0fac920846a45a14fce8c9e3f7358c8aed7aa96f458d15",
+      "after_host_sha256": "d14cab5ab0367325e1ee6e0cb6545aa398110075412fa88a7ae743d8c4926247",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    }
+  },
+  "unique": {
+    "selected": 29757,
+    "before_pass": 29041,
+    "after_pass": 29092,
+    "gained_files": [
+      "language/expressions/async-arrow-function/dflt-params-ref-later.js",
+      "language/expressions/async-arrow-function/dflt-params-ref-self.js",
+      "language/expressions/async-function/named-dflt-params-ref-later.js",
+      "language/expressions/async-function/named-dflt-params-ref-self.js",
+      "language/expressions/async-function/nameless-dflt-params-ref-later.js",
+      "language/expressions/async-function/nameless-dflt-params-ref-self.js",
+      "language/expressions/class/async-method-static/dflt-params-ref-later.js",
+      "language/expressions/class/async-method-static/dflt-params-ref-self.js",
+      "language/expressions/class/async-method/dflt-params-ref-later.js",
+      "language/expressions/class/async-method/dflt-params-ref-self.js",
+      "language/expressions/instanceof/S11.8.6_A6_T3.js",
+      "language/expressions/object/method-definition/async-meth-dflt-params-ref-later.js",
+      "language/expressions/object/method-definition/async-meth-dflt-params-ref-self.js",
+      "language/statements/async-function/dflt-params-ref-later.js",
+      "language/statements/async-function/dflt-params-ref-self.js",
+      "language/statements/class/async-method-static/dflt-params-ref-later.js",
+      "language/statements/class/async-method-static/dflt-params-ref-self.js",
+      "language/statements/class/async-method/dflt-params-ref-later.js",
+      "language/statements/class/async-method/dflt-params-ref-self.js",
+      "built-ins/Promise/allSettled/iter-arg-is-false-reject.js",
+      "built-ins/Promise/allSettled/iter-arg-is-null-reject.js",
+      "built-ins/Promise/allSettled/iter-arg-is-number-reject.js",
+      "built-ins/Promise/allSettled/iter-arg-is-symbol-reject.js",
+      "built-ins/Promise/allSettled/iter-arg-is-true-reject.js",
+      "built-ins/Promise/allSettled/iter-arg-is-undefined-reject.js",
+      "built-ins/Promise/allSettled/iter-assigned-false-reject.js",
+      "built-ins/Promise/allSettled/iter-assigned-null-reject.js",
+      "built-ins/Promise/allSettled/iter-assigned-number-reject.js",
+      "built-ins/Promise/allSettled/iter-assigned-string-reject.js",
+      "built-ins/Promise/allSettled/iter-assigned-symbol-reject.js",
+      "built-ins/Promise/allSettled/iter-assigned-true-reject.js",
+      "built-ins/Promise/allSettled/iter-assigned-undefined-reject.js",
+      "built-ins/Promise/allSettled/iter-returns-false-reject.js",
+      "built-ins/Promise/allSettled/iter-returns-null-reject.js",
+      "built-ins/Promise/allSettled/iter-returns-number-reject.js",
+      "built-ins/Promise/allSettled/iter-returns-symbol-reject.js",
+      "built-ins/Promise/allSettled/iter-returns-true-reject.js",
+      "built-ins/Promise/allSettled/iter-returns-undefined-reject.js",
+      "built-ins/Promise/any/iter-arg-is-false-reject.js",
+      "built-ins/Promise/any/iter-arg-is-null-reject.js",
+      "built-ins/Promise/any/iter-arg-is-number-reject.js",
+      "built-ins/Promise/any/iter-arg-is-symbol-reject.js",
+      "built-ins/Promise/any/iter-arg-is-true-reject.js",
+      "built-ins/Promise/any/iter-arg-is-undefined-reject.js",
+      "built-ins/Promise/any/iter-assigned-false-reject.js",
+      "built-ins/Promise/any/iter-assigned-null-reject.js",
+      "built-ins/Promise/any/iter-assigned-number-reject.js",
+      "built-ins/Promise/any/iter-assigned-string-reject.js",
+      "built-ins/Promise/any/iter-assigned-symbol-reject.js",
+      "built-ins/Promise/any/iter-assigned-true-reject.js",
+      "built-ins/Promise/any/iter-assigned-undefined-reject.js"
+    ],
+    "lost_files": [
+
+    ],
+    "gained_variants": [
+      [
+        "language/expressions/async-arrow-function/dflt-params-ref-later.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/async-arrow-function/dflt-params-ref-later.js",
+        "strict"
+      ],
+      [
+        "language/expressions/async-arrow-function/dflt-params-ref-self.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/async-arrow-function/dflt-params-ref-self.js",
+        "strict"
+      ],
+      [
+        "language/expressions/async-function/named-dflt-params-ref-later.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/async-function/named-dflt-params-ref-later.js",
+        "strict"
+      ],
+      [
+        "language/expressions/async-function/named-dflt-params-ref-self.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/async-function/named-dflt-params-ref-self.js",
+        "strict"
+      ],
+      [
+        "language/expressions/async-function/nameless-dflt-params-ref-later.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/async-function/nameless-dflt-params-ref-later.js",
+        "strict"
+      ],
+      [
+        "language/expressions/async-function/nameless-dflt-params-ref-self.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/async-function/nameless-dflt-params-ref-self.js",
+        "strict"
+      ],
+      [
+        "language/expressions/class/async-method-static/dflt-params-ref-later.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/class/async-method-static/dflt-params-ref-later.js",
+        "strict"
+      ],
+      [
+        "language/expressions/class/async-method-static/dflt-params-ref-self.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/class/async-method-static/dflt-params-ref-self.js",
+        "strict"
+      ],
+      [
+        "language/expressions/class/async-method/dflt-params-ref-later.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/class/async-method/dflt-params-ref-later.js",
+        "strict"
+      ],
+      [
+        "language/expressions/class/async-method/dflt-params-ref-self.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/class/async-method/dflt-params-ref-self.js",
+        "strict"
+      ],
+      [
+        "language/expressions/instanceof/S11.8.6_A6_T3.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/instanceof/S11.8.6_A6_T3.js",
+        "strict"
+      ],
+      [
+        "language/expressions/object/method-definition/async-meth-dflt-params-ref-later.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/object/method-definition/async-meth-dflt-params-ref-later.js",
+        "strict"
+      ],
+      [
+        "language/expressions/object/method-definition/async-meth-dflt-params-ref-self.js",
+        "non-strict"
+      ],
+      [
+        "language/expressions/object/method-definition/async-meth-dflt-params-ref-self.js",
+        "strict"
+      ],
+      [
+        "language/statements/async-function/dflt-params-ref-later.js",
+        "non-strict"
+      ],
+      [
+        "language/statements/async-function/dflt-params-ref-later.js",
+        "strict"
+      ],
+      [
+        "language/statements/async-function/dflt-params-ref-self.js",
+        "non-strict"
+      ],
+      [
+        "language/statements/async-function/dflt-params-ref-self.js",
+        "strict"
+      ],
+      [
+        "language/statements/class/async-method-static/dflt-params-ref-later.js",
+        "non-strict"
+      ],
+      [
+        "language/statements/class/async-method-static/dflt-params-ref-later.js",
+        "strict"
+      ],
+      [
+        "language/statements/class/async-method-static/dflt-params-ref-self.js",
+        "non-strict"
+      ],
+      [
+        "language/statements/class/async-method-static/dflt-params-ref-self.js",
+        "strict"
+      ],
+      [
+        "language/statements/class/async-method/dflt-params-ref-later.js",
+        "non-strict"
+      ],
+      [
+        "language/statements/class/async-method/dflt-params-ref-later.js",
+        "strict"
+      ],
+      [
+        "language/statements/class/async-method/dflt-params-ref-self.js",
+        "non-strict"
+      ],
+      [
+        "language/statements/class/async-method/dflt-params-ref-self.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-arg-is-false-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-arg-is-false-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-arg-is-null-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-arg-is-null-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-arg-is-number-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-arg-is-number-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-arg-is-symbol-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-arg-is-symbol-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-arg-is-true-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-arg-is-true-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-arg-is-undefined-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-arg-is-undefined-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-false-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-false-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-null-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-null-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-number-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-number-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-string-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-string-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-symbol-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-symbol-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-true-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-true-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-undefined-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-assigned-undefined-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-false-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-false-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-null-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-null-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-number-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-number-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-symbol-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-symbol-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-true-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-true-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-undefined-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/allSettled/iter-returns-undefined-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-arg-is-false-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-arg-is-false-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-arg-is-null-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-arg-is-null-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-arg-is-number-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-arg-is-number-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-arg-is-symbol-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-arg-is-symbol-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-arg-is-true-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-arg-is-true-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-arg-is-undefined-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-arg-is-undefined-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-false-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-false-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-null-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-null-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-number-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-number-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-string-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-string-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-symbol-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-symbol-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-true-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-true-reject.js",
+        "strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-undefined-reject.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Promise/any/iter-assigned-undefined-reject.js",
+        "strict"
+      ]
+    ],
+    "lost_variants": [
+
+    ]
+  },
+  "dependency_sha": "cb3a8b459f721213adb00bcf5d295fb25346fb15",
+  "scope": "Async entry error normalization; removal of own-name instanceof shortcut; combinator IfAbruptRejectPromise and legacy self-cycle normalization"
+}

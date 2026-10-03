@@ -1157,6 +1157,183 @@ mod thread_generator_tests {
     }
 
     #[test]
+    fn async_parameter_abrupt_completions_reject_with_real_errors() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            for function in [
+                "async function f(a=a){body++;}",
+                "async function f(a=b,b=0){body++;}",
+                "async (a=a)=>{body++;}",
+                "async (a=b,b=0)=>{body++;}",
+                "({async m(a=a){body++;}}).m",
+                "({async m(a=b,b=0){body++;}}).m",
+                "(class {static async m(a=a){body++;}}).m",
+                "(class {static async m(a=b,b=0){body++;}}).m",
+                "(new (class {async m(a=a){body++;}})).m",
+                "(new (class {async m(a=b,b=0){body++;}})).m",
+                // Unsupported with keeps the AST/coroutine body path distinct
+                // from the independently compiled async body path.
+                "async function f(a=a){with({}){} body++;}",
+                "async function f(a=b,b=0){with({}){} body++;}",
+            ] {
+                let mut i = Interpreter::new();
+                let source = format!(r#"
+                    var body=0, seen=0, synchronous=false, trace=[];
+                    var f=({function});
+                    try {{
+                        var p=f();
+                        trace.push(p instanceof Promise);
+                        p.then(()=>seen=-1,e=>{{seen=e instanceof ReferenceError ? 1 : -2;trace.push('reject');}});
+                    }} catch(e) {{synchronous=true;}}
+                    trace.push('returned');
+                "#);
+                i.run_script_with_backend(&source, backend).unwrap();
+                i.drain_microtasks().unwrap();
+                assert_eq!(i.run_script("!synchronous && body===0 && seen===1 && trace.join(',')==='true,returned,reject'").unwrap(), JsValue::Bool(true), "{backend:?}: {function}");
+            }
+            for parameters in ["{x}=null", "[x]=null", "{[null.key]:x}={}"] {
+                let mut i = Interpreter::new();
+                let source = format!("var body=0,result=false;async function f({parameters}){{body++;}} f().then(()=>{{}},e=>result=e instanceof TypeError);");
+                i.run_script_with_backend(&source, backend).unwrap();
+                i.drain_microtasks().unwrap();
+                assert_eq!(i.run_script("result && body===0").unwrap(), JsValue::Bool(true), "{backend:?}: {parameters}");
+            }
+        }
+    }
+
+    #[test]
+    fn async_parameter_rejection_preserves_identity_context_and_sync_call_boundaries() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            i.run_script_with_backend(r#"
+                var sentinel=Object.create(null), reasons=[], trace=[], body=0;
+                function fail(){trace.push('default');throw sentinel;}
+                var iterable={[Symbol.iterator](){return {next(){throw sentinel;}}}};
+                var object={get x(){throw sentinel;}};
+                var functions=[
+                    async function(a=fail()){body++;},
+                    async function({x}=object){body++;},
+                    async function([x]=iterable){body++;},
+                    async function(a=fail()){with({}){} body++;}
+                ];
+                for(var f of functions){f().then(()=>reasons.push(false),e=>reasons.push(e===sentinel));}
+                var receiver={tag:17,async method(a=this.tag,b=arguments[0]){return a===17&&b===undefined;}};
+                receiver.method().then(v=>reasons.push(v));
+                var synchronous=0;
+                for(var g of [function(a=a){},function*(a=a){},async function*(a=a){}]){
+                    try{g();}catch(e){if(e instanceof ReferenceError)synchronous++;}
+                }
+                trace.push('returned');
+            "#, backend).unwrap();
+            i.drain_microtasks().unwrap();
+            assert_eq!(i.run_script("body===0 && synchronous===3 && reasons.length===5 && reasons.every(Boolean) && trace.join(',')==='default,default,returned'").unwrap(), JsValue::Bool(true), "{backend:?}");
+        }
+    }
+
+    #[test]
+    fn promise_error_boundaries_normalize_internal_errors_and_preserve_user_values() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            i.run_script_with_backend(r#"
+                var checks=[],sentinel=Object.create(null);
+                for(var method of ['all','race','allSettled','any']){
+                    class C extends Promise{}
+                    C.resolve=1;
+                    C[method]([]).catch(e=>checks.push(e instanceof TypeError));
+                    Promise[method](null).catch(e=>checks.push(e instanceof TypeError));
+                    Promise[method]({[Symbol.iterator](){return {next(){return null;}}}})
+                        .catch(e=>checks.push(e instanceof TypeError));
+                    Object.defineProperty(C,'resolve',{get(){throw sentinel;}});
+                    C[method]([]).catch(e=>checks.push(e===sentinel));
+                    Promise[method]({[Symbol.iterator](){throw sentinel;}})
+                        .catch(e=>checks.push(e===sentinel));
+                }
+                var cycle=Promise.resolve().then(()=>cycle);
+                cycle.catch(e=>checks.push(e instanceof TypeError));
+                var userError=new TypeError('user');
+                Object.setPrototypeOf(userError,null);
+                Promise.reject(userError).catch(e=>checks.push(e===userError && Object.getPrototypeOf(e)===null));
+            "#, backend).unwrap();
+            i.drain_microtasks().unwrap();
+            assert_eq!(i.run_script("checks.length===22 && checks.every(Boolean)").unwrap(), JsValue::Bool(true), "{backend:?}");
+
+            let legacy = new_promise(&i, PromiseFate::Pending);
+            let JsValue::Object(target) = &legacy else { unreachable!(); };
+            assert!(adopt_promise_result(target, &legacy, &mut i).unwrap());
+            let error = match &target.borrow().exotic {
+                Exotic::Promise(state) => match &state.state {
+                    PromiseFate::Rejected(error) => error.clone(),
+                    _ => panic!("legacy cycle did not reject"),
+                },
+                _ => unreachable!(),
+            };
+            let JsValue::Object(error) = error else { panic!("legacy cycle error was not an object"); };
+            let prototype = i.run_script("TypeError.prototype").unwrap();
+            assert_eq!(error.borrow().proto.clone().map(JsValue::Object), Some(prototype), "{backend:?}");
+        }
+    }
+
+    #[test]
+    fn instance_identity_uses_prototypes_instead_of_forgeable_names() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let result = i.run_script_with_backend(r#"
+                var valid=true;
+                for(var C of [Error,EvalError,RangeError,ReferenceError,SyntaxError,TypeError,URIError,Array,Function]){
+                    valid=valid && !({name:C.name} instanceof C);
+                    var inherited=Object.create(C.prototype);
+                    inherited.name='unrelated';
+                    valid=valid && inherited instanceof C;
+                }
+                function Named(){}
+                valid=valid && !({name:'Named'} instanceof Named) && new Named() instanceof Named;
+                valid;
+            "#, backend).unwrap();
+            assert_eq!(result, JsValue::Bool(true), "{backend:?}");
+        }
+    }
+
+    #[test]
+    fn async_parameter_errors_keep_the_callee_realm_across_wrappers() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let parent = i.binding_current_realm();
+            let child = i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
+            let function = i.binding_with_realm(child, |i| i.run_script_with_backend("(async function foreign(a=a){})", backend)).unwrap();
+            let child_error = i.binding_eval_in_realm(child, "ReferenceError").unwrap();
+            let child_promise = i.binding_eval_in_realm(child, "Promise").unwrap();
+            i.global_env.declare_var("foreign", function).unwrap();
+            i.global_env.declare_var("ChildReferenceError", child_error).unwrap();
+            i.global_env.declare_var("ChildPromise", child_promise).unwrap();
+            let function = i.global_env.resolve("foreign").unwrap();
+            let promise = i.call_value(&function, JsValue::Undefined, vec![]).unwrap();
+            let child_promise_proto = i.binding_eval_in_realm(child, "Promise.prototype").unwrap();
+            let child_error_proto = i.binding_eval_in_realm(child, "ReferenceError.prototype").unwrap();
+            let JsValue::Object(promise) = promise else { panic!("async call did not return an object"); };
+            assert_eq!(promise.borrow().proto.clone().map(JsValue::Object), Some(child_promise_proto), "{backend:?}: promise realm");
+            let error = match &promise.borrow().exotic {
+                Exotic::Promise(state) => match &state.state {
+                    PromiseFate::Rejected(error) => error.clone(),
+                    state => panic!("expected parameter rejection, got {state:?}"),
+                },
+                _ => panic!("async call did not return a Promise"),
+            };
+            let JsValue::Object(error) = error else { panic!("TDZ did not reject with an object"); };
+            assert_eq!(error.borrow().proto.clone().map(JsValue::Object), Some(child_error_proto), "{backend:?}: error realm");
+            i.run_script_with_backend(r#"
+                var checked=0, sameRealm=true;
+                for(var f of [foreign,foreign.bind(null),new Proxy(foreign,{})]){
+                    var p=f();
+                    sameRealm=sameRealm && p instanceof ChildPromise && !(p instanceof Promise);
+                    p.catch(e=>{if(e instanceof ChildReferenceError && !(e instanceof ReferenceError))checked++;});
+                }
+            "#, backend).unwrap();
+            i.drain_microtasks().unwrap();
+            assert_eq!(i.run_script("sameRealm+':'+checked").unwrap(), JsValue::str("true:3"), "{backend:?}");
+            assert_eq!(i.binding_current_realm(), parent);
+        }
+    }
+
+    #[test]
     fn ast_await_uses_internal_promise_reactions() {
         for source in [
             "var result=0,reads=0;var p=Promise.resolve(7);Object.defineProperty(p,'then',{get(){reads++;throw 99}});async function f(){with({}){} return await p} f().then(v=>result=v);",

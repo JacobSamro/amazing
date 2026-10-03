@@ -2234,7 +2234,7 @@ impl Interpreter {
         } else if bytecode_async {
             match r {
                 Ok(value) => Ok(value),
-                Err(Throw(value)) => Ok(new_promise(self, PromiseFate::Rejected(value))),
+                Err(error) => Ok(new_promise(self, PromiseFate::Rejected(self.normalize_throw(error).0))),
             }
         } else if thread_started.get() {
             // The coroutine path already returned the function's own promise. (Its synchronous
@@ -2248,7 +2248,7 @@ impl Interpreter {
             // the whole `g()` call the way a plain (non-generator) async function's call is here.
             match r {
                 Ok(value) => Ok(new_promise(self, PromiseFate::Fulfilled(value))),
-                Err(Throw(value)) => Ok(new_promise(self, PromiseFate::Rejected(value))),
+                Err(error) => Ok(new_promise(self, PromiseFate::Rejected(self.normalize_throw(error).0))),
             }
         } else {
             r

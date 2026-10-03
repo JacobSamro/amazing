@@ -1628,3 +1628,57 @@ whole language **24029/24590**, Array **3233/3332**, Proxy **310/311**,
 JSON **165/165** unchanged. Unique union **31966 cases**,
 **31246 → 31267 passing** (+21), **42 gained variants**, zero lost files
 or variants and zero timeouts. Evidence: `js-runtime_jsrt42_evidence.json`.
+
+## JSRT-43 Async call parameter rejection boundary (2026-10-03)
+
+Frozen base `ae4d7d90bc1d34ebd0e72cad34887db25d58b966`. Shared call entry
+already catches abrupt parameter initialization for both bytecode async
+functions and AST async bodies. Its two rejected-Promise branches previously
+stored internal Error fallback objects before normalization, so TDZ rejections
+lacked ReferenceError.prototype and failed instanceof. Both branches now call
+the existing normalize_throw operation while still inside the callee realm.
+No parameter/body environment, default-expression evaluation, declaration
+metadata, invocation token, or generator timing changes are involved.
+
+Three grouped regressions cover both backends: self/later TDZ across async
+functions/arrows/object and class methods, independently compiled and AST
+fallback bodies, destructuring TypeErrors, default/getter/iterator thrown
+identity, receiver/arguments visibility, synchronous ordinary/generator/async-
+generator parameter errors, callback ordering and foreign callee-realm
+Promise/Error prototypes through direct, bound and Proxy calls.
+
+A separately committed host API `binding_function_realm` delegates the existing
+fallible GetFunctionRealm helper, including bound/Proxy chains and revoked
+Proxy errors. The API introduces no new algorithm or realm switching; its
+native foreign-function and nested-wrapper regression supports the DOM
+XMLSerializer intrinsic-prototype fallback consumer.
+
+The callee-realm group exposed an independent instanceof shortcut: matching
+an object's own name against the constructor name incorrectly bypassed the
+prototype walk, making foreign Error instances match parent-realm constructors
+and allowing ordinary objects to forge brands. Parent granted removal of only
+that shortcut. The existing semantic Proxy/WindowProxy prototype path remains.
+A fourth grouped regression checks Error-family/Array/Function/name forgery
+and genuine inherited prototypes; the full gate also includes Function,
+Object, Proxy and Reflect. Direct rejected-Promise and Error prototype checks
+separate rejection construction from reaction/caller behavior.
+
+Removing the name shortcut exposed a previously concealed native regression
+in Promise combinator rejection branding. Under the parent's exact additive
+grant, the three shared combinator_entry IfAbruptRejectPromise boundaries now
+normalize internal errors (non-callable resolve, resolve getter failure and
+combinator body failure). The legacy adoption self-cycle TypeError is similarly
+normalized, matching the newer resolving-pair helper. Five grouped tests cover
+both backends, including all four combinators, primitive/getter/iterator
+abrupt completions, direct and legacy cycles, and unchanged Promise.reject
+user-value identity/prototype. No central settlement normalization is added.
+
+Final Boat workspace **3782 passed/17 skipped, 75.019 seconds**, **4 doctests**.
+Matched whole language **24029 → 24048/24590** (+19), Promise
+**627 → 659/732** (+32). AsyncFunction **18/18**, AsyncGeneratorFunction
+**23/23**, Function **504/515**, Object **3377/3414**, Proxy **310/311**,
+Reflect **153/154** unchanged. Unique union **29757 cases**,
+**29041 → 29092 passing** (+51), **102 gained variants**, zero lost files
+or variants and zero timeouts. Host API dependency `cb3a8b459f721213adb00bcf5d295fb25346fb15`
+is separate; corpus before was frozen42, after includes its neutral wrapper.
+Evidence: `js-runtime_jsrt43_evidence.json`.
