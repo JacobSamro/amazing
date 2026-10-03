@@ -1,0 +1,189 @@
+{
+  "node": "v24.18.1",
+  "v8": "13.6.233.17-node.50",
+  "cases": {
+    "077": {
+      "ok": true,
+      "type": "number",
+      "value": "63"
+    },
+    "0010": {
+      "ok": true,
+      "type": "number",
+      "value": "8"
+    },
+    "000": {
+      "ok": true,
+      "type": "number",
+      "value": "0"
+    },
+    "08": {
+      "ok": true,
+      "type": "number",
+      "value": "8"
+    },
+    "009": {
+      "ok": true,
+      "type": "number",
+      "value": "9"
+    },
+    "078": {
+      "ok": true,
+      "type": "number",
+      "value": "78"
+    },
+    "08.1_2": {
+      "ok": true,
+      "type": "number",
+      "value": "8.12"
+    },
+    "09e1_0": {
+      "ok": true,
+      "type": "number",
+      "value": "90000000000"
+    },
+    "077.toString()": {
+      "ok": true,
+      "type": "string",
+      "value": "63"
+    },
+    "08..toString()": {
+      "ok": true,
+      "type": "string",
+      "value": "8"
+    },
+    "00.1": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "077.1": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "00e1": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "077e1": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "00n": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "077n": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "08n": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "0_0": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "00_1": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "08_1": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "0_1n": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "0x_1": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "0o8": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "0b2": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "0x1_n": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "1__0": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "1_.0": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "1._0": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "1e_1": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "1e+_1": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "1n0": {
+      "ok": false,
+      "error": "SyntaxError"
+    },
+    "0o0007": {
+      "ok": true,
+      "type": "number",
+      "value": "7"
+    },
+    "0xffffffffffffffffffffffffffffffffffffffff": {
+      "ok": true,
+      "type": "number",
+      "value": "1.461501637330903e+48"
+    },
+    "0x1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000": {
+      "ok": true,
+      "type": "number",
+      "value": "Infinity"
+    },
+    "0x20000000000001": {
+      "ok": true,
+      "type": "number",
+      "value": "9007199254740992"
+    },
+    "0x20000000000003": {
+      "ok": true,
+      "type": "number",
+      "value": "9007199254740996"
+    },
+    "'use strict';0o007": {
+      "parse": true
+    },
+    "'use strict';077": {
+      "parse": false,
+      "error": "SyntaxError"
+    },
+    "class C{0o007(){}}": {
+      "parse": true
+    },
+    "class C{077(){}}": {
+      "parse": false,
+      "error": "SyntaxError"
+    },
+    "class C{08=1}": {
+      "parse": false,
+      "error": "SyntaxError"
+    },
+    "({999999999999999999999n:1})": {
+      "parse": true
+    }
+  },
+  "source_commit": "4622fd244bb29f6027e3661e3ba614be49d86650",
+  "execution": "Boat pool-js-b Node original test probes",
+  "primary": "https://tc39.es/ecma262/2025/multipage/ecmascript-language-lexical-grammar.html#sec-literals-numeric-literals"
+}

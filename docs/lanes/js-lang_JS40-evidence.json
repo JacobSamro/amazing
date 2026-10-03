@@ -1,0 +1,598 @@
+{
+  "ticket": "JS40",
+  "base_commit": "bdb84488e76d611f02dd4ed635ae30fad2895e56",
+  "baseline_tests_commit": "34ae060b071d2e27329d6d2734f20292965486ca",
+  "source_commit": "1a793a8a2437128928eb3bfdf208c64abe215e42",
+  "corpus_source_commit": "1a793a8a2437128928eb3bfdf208c64abe215e42",
+  "corpora": {
+    "default:language": {
+      "before": {
+        "files": {
+          "pass": 24475,
+          "fail": 89,
+          "timeout": 0,
+          "unsupported": 26,
+          "skipped": 29282
+        },
+        "variants": {
+          "pass": 45273,
+          "fail": 105,
+          "timeout": 0,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 24477,
+          "fail": 87,
+          "timeout": 0,
+          "unsupported": 26,
+          "skipped": 29282
+        },
+        "variants": {
+          "pass": 45276,
+          "fail": 102,
+          "timeout": 0,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "gained_files": [
+        "language/expressions/object/literal-property-name-bigint.js",
+        "language/literals/numeric/legacy-octal-integer.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        "language/expressions/object/literal-property-name-bigint.js#non-strict",
+        "language/expressions/object/literal-property-name-bigint.js#strict",
+        "language/literals/numeric/legacy-octal-integer.js#non-strict"
+      ],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "dca156274ddd907385631b178ab6e224e72628e381fe38ec205a5e48d8b1caa2",
+      "after_host_sha256": "4ecf24dd93b1d7c8e8f3c70cd5bf5f5af0bdb3a8a4991550a3701b88b6e16c19",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "bfa8578dba7456b6de4ecc05100741d2ad2ec37287bb3aeac32a723682df326b",
+      "after_classification_sha256": "aa41a9d2bf9f9cd7b1c4d7ce91727d695b1659a1d53fadb10390575468d80320",
+      "same_inventory": true
+    },
+    "default:built-ins-Number-": {
+      "before": {
+        "files": {
+          "pass": 340,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53532
+        },
+        "variants": {
+          "pass": 680,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 340,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53532
+        },
+        "variants": {
+          "pass": 680,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "dca156274ddd907385631b178ab6e224e72628e381fe38ec205a5e48d8b1caa2",
+      "after_host_sha256": "4ecf24dd93b1d7c8e8f3c70cd5bf5f5af0bdb3a8a4991550a3701b88b6e16c19",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "6b696b4bdd92c252f0283bd57f65db67195225b1d9dca807687b849f46d39367",
+      "after_classification_sha256": "6b696b4bdd92c252f0283bd57f65db67195225b1d9dca807687b849f46d39367",
+      "same_inventory": true
+    },
+    "default:built-ins-BigInt-": {
+      "before": {
+        "files": {
+          "pass": 77,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53795
+        },
+        "variants": {
+          "pass": 154,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 77,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53795
+        },
+        "variants": {
+          "pass": 154,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "dca156274ddd907385631b178ab6e224e72628e381fe38ec205a5e48d8b1caa2",
+      "after_host_sha256": "4ecf24dd93b1d7c8e8f3c70cd5bf5f5af0bdb3a8a4991550a3701b88b6e16c19",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "445e0660c150f07ddfc6ef4e7c94179b54b3015d5f4942d7fe5b8a6f7924932d",
+      "after_classification_sha256": "445e0660c150f07ddfc6ef4e7c94179b54b3015d5f4942d7fe5b8a6f7924932d",
+      "same_inventory": true
+    },
+    "default:built-ins-Object-": {
+      "before": {
+        "files": {
+          "pass": 3411,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50458
+        },
+        "variants": {
+          "pass": 6802,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 3411,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50458
+        },
+        "variants": {
+          "pass": 6802,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "dca156274ddd907385631b178ab6e224e72628e381fe38ec205a5e48d8b1caa2",
+      "after_host_sha256": "4ecf24dd93b1d7c8e8f3c70cd5bf5f5af0bdb3a8a4991550a3701b88b6e16c19",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "7bb1d7e2ff141aead0e67cbb93688505577a00f0a105647353fbbe14c0c46ee5",
+      "after_classification_sha256": "7bb1d7e2ff141aead0e67cbb93688505577a00f0a105647353fbbe14c0c46ee5",
+      "same_inventory": true
+    },
+    "default:built-ins-Function-": {
+      "before": {
+        "files": {
+          "pass": 507,
+          "fail": 8,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53357
+        },
+        "variants": {
+          "pass": 889,
+          "fail": 16,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 507,
+          "fail": 8,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53357
+        },
+        "variants": {
+          "pass": 889,
+          "fail": 16,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "dca156274ddd907385631b178ab6e224e72628e381fe38ec205a5e48d8b1caa2",
+      "after_host_sha256": "4ecf24dd93b1d7c8e8f3c70cd5bf5f5af0bdb3a8a4991550a3701b88b6e16c19",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "24dcbdc21d7149bdf33fea1fdcb49463351de6704745f12d2e5bef1a0217c46a",
+      "after_classification_sha256": "24dcbdc21d7149bdf33fea1fdcb49463351de6704745f12d2e5bef1a0217c46a",
+      "same_inventory": true
+    },
+    "default:built-ins-Proxy-": {
+      "before": {
+        "files": {
+          "pass": 311,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53561
+        },
+        "variants": {
+          "pass": 607,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 311,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53561
+        },
+        "variants": {
+          "pass": 607,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "default",
+      "before_host_sha256": "dca156274ddd907385631b178ab6e224e72628e381fe38ec205a5e48d8b1caa2",
+      "after_host_sha256": "4ecf24dd93b1d7c8e8f3c70cd5bf5f5af0bdb3a8a4991550a3701b88b6e16c19",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "0b90cabd4d8c94a86db74fed5fb1473f04bb0273b56e77e30363754c5a44055a",
+      "after_classification_sha256": "0b90cabd4d8c94a86db74fed5fb1473f04bb0273b56e77e30363754c5a44055a",
+      "same_inventory": true
+    },
+    "vm:language": {
+      "before": {
+        "files": {
+          "pass": 24475,
+          "fail": 89,
+          "timeout": 0,
+          "unsupported": 26,
+          "skipped": 29282
+        },
+        "variants": {
+          "pass": 45273,
+          "fail": 105,
+          "timeout": 0,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 24477,
+          "fail": 87,
+          "timeout": 0,
+          "unsupported": 26,
+          "skipped": 29282
+        },
+        "variants": {
+          "pass": 45276,
+          "fail": 102,
+          "timeout": 0,
+          "unsupported": 52,
+          "skipped": 0
+        }
+      },
+      "gained_files": [
+        "language/expressions/object/literal-property-name-bigint.js",
+        "language/literals/numeric/legacy-octal-integer.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        "language/expressions/object/literal-property-name-bigint.js#non-strict",
+        "language/expressions/object/literal-property-name-bigint.js#strict",
+        "language/literals/numeric/legacy-octal-integer.js#non-strict"
+      ],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "dca156274ddd907385631b178ab6e224e72628e381fe38ec205a5e48d8b1caa2",
+      "after_host_sha256": "4ecf24dd93b1d7c8e8f3c70cd5bf5f5af0bdb3a8a4991550a3701b88b6e16c19",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "bfa8578dba7456b6de4ecc05100741d2ad2ec37287bb3aeac32a723682df326b",
+      "after_classification_sha256": "aa41a9d2bf9f9cd7b1c4d7ce91727d695b1659a1d53fadb10390575468d80320",
+      "same_inventory": true
+    },
+    "vm:built-ins-Number-": {
+      "before": {
+        "files": {
+          "pass": 340,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53532
+        },
+        "variants": {
+          "pass": 680,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 340,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53532
+        },
+        "variants": {
+          "pass": 680,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "dca156274ddd907385631b178ab6e224e72628e381fe38ec205a5e48d8b1caa2",
+      "after_host_sha256": "4ecf24dd93b1d7c8e8f3c70cd5bf5f5af0bdb3a8a4991550a3701b88b6e16c19",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "6b696b4bdd92c252f0283bd57f65db67195225b1d9dca807687b849f46d39367",
+      "after_classification_sha256": "6b696b4bdd92c252f0283bd57f65db67195225b1d9dca807687b849f46d39367",
+      "same_inventory": true
+    },
+    "vm:built-ins-BigInt-": {
+      "before": {
+        "files": {
+          "pass": 77,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53795
+        },
+        "variants": {
+          "pass": 154,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 77,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53795
+        },
+        "variants": {
+          "pass": 154,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "dca156274ddd907385631b178ab6e224e72628e381fe38ec205a5e48d8b1caa2",
+      "after_host_sha256": "4ecf24dd93b1d7c8e8f3c70cd5bf5f5af0bdb3a8a4991550a3701b88b6e16c19",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "445e0660c150f07ddfc6ef4e7c94179b54b3015d5f4942d7fe5b8a6f7924932d",
+      "after_classification_sha256": "445e0660c150f07ddfc6ef4e7c94179b54b3015d5f4942d7fe5b8a6f7924932d",
+      "same_inventory": true
+    },
+    "vm:built-ins-Object-": {
+      "before": {
+        "files": {
+          "pass": 3411,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50458
+        },
+        "variants": {
+          "pass": 6802,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 3411,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50458
+        },
+        "variants": {
+          "pass": 6802,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "dca156274ddd907385631b178ab6e224e72628e381fe38ec205a5e48d8b1caa2",
+      "after_host_sha256": "4ecf24dd93b1d7c8e8f3c70cd5bf5f5af0bdb3a8a4991550a3701b88b6e16c19",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "7bb1d7e2ff141aead0e67cbb93688505577a00f0a105647353fbbe14c0c46ee5",
+      "after_classification_sha256": "7bb1d7e2ff141aead0e67cbb93688505577a00f0a105647353fbbe14c0c46ee5",
+      "same_inventory": true
+    },
+    "vm:built-ins-Function-": {
+      "before": {
+        "files": {
+          "pass": 507,
+          "fail": 8,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53357
+        },
+        "variants": {
+          "pass": 889,
+          "fail": 16,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 507,
+          "fail": 8,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53357
+        },
+        "variants": {
+          "pass": 889,
+          "fail": 16,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "dca156274ddd907385631b178ab6e224e72628e381fe38ec205a5e48d8b1caa2",
+      "after_host_sha256": "4ecf24dd93b1d7c8e8f3c70cd5bf5f5af0bdb3a8a4991550a3701b88b6e16c19",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "24dcbdc21d7149bdf33fea1fdcb49463351de6704745f12d2e5bef1a0217c46a",
+      "after_classification_sha256": "24dcbdc21d7149bdf33fea1fdcb49463351de6704745f12d2e5bef1a0217c46a",
+      "same_inventory": true
+    },
+    "vm:built-ins-Proxy-": {
+      "before": {
+        "files": {
+          "pass": 311,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53561
+        },
+        "variants": {
+          "pass": 607,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 311,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53561
+        },
+        "variants": {
+          "pass": 607,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "profile": "release",
+      "mode": "vm",
+      "before_host_sha256": "dca156274ddd907385631b178ab6e224e72628e381fe38ec205a5e48d8b1caa2",
+      "after_host_sha256": "4ecf24dd93b1d7c8e8f3c70cd5bf5f5af0bdb3a8a4991550a3701b88b6e16c19",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "0b90cabd4d8c94a86db74fed5fb1473f04bb0273b56e77e30363754c5a44055a",
+      "after_classification_sha256": "0b90cabd4d8c94a86db74fed5fb1473f04bb0273b56e77e30363754c5a44055a",
+      "same_inventory": true
+    }
+  },
+  "workspace_passed": 4231,
+  "workspace_skipped": 17,
+  "doctests_passed": 4,
+  "remaining_nonpass_changes": 0,
+  "owned_new_groups": 8,
+  "corrected_baseline_new_groups_failed": 7,
+  "baseline_reuse": {
+    "language_and_Function_actual_corpus_source": "380910ce99c6988a8cf41382d612d679adb86dcf",
+    "fresh_other_four_builtin_corpus_source": "4622fd244bb29f6027e3661e3ba614be49d86650",
+    "reason": "Production engine/host/runner unchanged by tests-only baseline; identical release host SHA256 verified."
+  }
+}

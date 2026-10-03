@@ -1890,3 +1890,10 @@ Next JS39: parked whole synchronous ForOf actual IteratorRecord, with existing p
 Source `380910ce` with corrected positive/negative fixture completion `dc688542`/`0f0ef6ad` on fixed coherent `35217ac3`. Cached actual iterator/next, live Array/String overrides, no close on next/done/value errors, binding/body close precedence and suspended-generator ownership. Fifteen grouped native/forced-AST tests; corrected baseline seven new failing groups, all final green. Linux workspace **4223/17 skipped +4 docs**, whole language **+5 files/+10 variants** per mode (24475/45273), nine builtin selections unchanged, all 20 paired reports **zero losses**, no changed remaining failure reason/detail. Final release artifact matches actual measured corpus source. [Evidence](js-lang_JS39-evidence.json), [design](js-lang_JS39-for-of.md).
 
 Next JS40: approved whole NumericLiteral raw legacy provenance, Annex B and strict/dot/exponent/separator/BigInt grammar boundaries, accurate long-radix NumericValue and semantic numeric property keys. Preserve existing VM27 class/strict work; coordinate any token payload representation changes. Whole language/Number/BigInt/Object/Function/Proxy and native/AST literal/property/class/destructuring matrices.
+
+
+## JS40 — whole NumericLiteral grammar, value and property keys
+
+Source9a3fe559 plus252490f7/1a793a8a on fixed ready39bdb84488. Scanner snapshots preserve raw legacy leading-zero provenance without public schema expansion; exact octal/non-octal, strict/directive/property/class/module, separators/suffix and long-radix values; Number/BigInt property and binding keys canonicalized. Eight grouped tests, seven baseline failures all recovered. Workspace **4231/17 skipped +4 docs**, twelve paired release reports: language **+2 files/+3 variants** each mode (24477/45276), Number/BigInt/Object/Function/Proxy unchanged, **zero losses and zero remaining nonpass reason/detail changes**. [Evidence](js-lang_JS40-evidence.json), [design](js-lang_JS40-numeric.md).
+
+Next proposed module default-declaration instantiation/identity area is read-only pending parent scoped approval; preserve VM direct-eval helper ownership.

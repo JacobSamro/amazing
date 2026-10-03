@@ -1,6 +1,6 @@
 # JS40: NumericLiteral grammar, value and property keys
 
-Fixed dependency: JS39 proof bdb84488e76d611f02dd4ed635ae30fad2895e56, incorporating coherent root35217ac3. Tests-only baseline4622fd244bb29f6027e3661e3ba614be49d86650. No moving integration dependency during measurement.
+Fixed dependency: JS39 proof bdb84488e76d611f02dd4ed635ae30fad2895e56, incorporating coherent root35217ac3. Corrected tests-only baseline34ae060b071d2e27329d6d2734f20292965486ca. No moving integration dependency during measurement.
 
 Existing TokenStream scanner snapshots preserve the original spelling independently of normalized Numeric digits/radix. Crate-private prefix and span queries detect actual legacy leading zeros, including trivia/comments and speculative RegExp scanning. No public Token or Numeric schema, AST field, VM opcode or class adapter changes are required.
 
@@ -12,4 +12,10 @@ Port: lucid-softworks/lumen crates/lumen/src/lexer.rs @f6c9860d44fa52249cfd64712
 
 Primary reference: [ECMA-262 NumericLiteral grammar and NumericValue](https://tc39.es/ecma262/2025/multipage/ecmascript-language-lexical-grammar.html#sec-literals-numeric-literals), especially12.9.3.1 strict early errors and12.9.3.3 value conversion. Original Boat Node reference probes are in tests/numeric_literal_reference.cjs.
 
-Validation pending: eight grouped native/forced-AST and parser/scanner groups, whole language/Number/BigInt/Object/Function/Proxy in both modes, workspace nextest and doctests, release profile/60-second deadline. No readiness claim before complete matched zero-loss proof.
+Object binding numeric keys now retain the existing computed constant-expression form instead of copying normalized raw digits into a static string. This applies exact Number/BigInt key conversion once, including nondecimal BigInt, without user-code evaluation or new AST variants. The first candidate's grouped binding test exposed this missing adapter; the final candidate reran all twelve corpus reports after correction.
+
+Final source: `1a793a8a2437128928eb3bfdf208c64abe215e42`. Boat Linux workspace **4231 passed/17 skipped +4 doctests**. All eight grouped actual-native/forced-AST and parser/scanner tests pass; corrected baseline had seven failing groups. An invalid Rust format string in the initial test matrix was corrected identically on both sides; compile diagnostics are retained and excluded from gains.
+
+Twelve paired release-profile, 60-second, eight-job reports retain the same inventory/pin/input/runner/capabilities. Language **24475/45273 →24477/45276**, **+2 files/+3 variants** per mode: literal-property-name-bigint and legacy-octal-integer. Number **340/680**, BigInt **77/154**, Object **3411/6802**, Function **507/889**, Proxy **311/607** unchanged. **Zero lost files/variants; zero remaining nonpass reason/detail changes.** Before host `dca156274ddd907385631b178ab6e224e72628e381fe38ec205a5e48d8b1caa2`; final host `4ecf24dd93b1d7c8e8f3c70cd5bf5f5af0bdb3a8a4991550a3701b88b6e16c19`.
+
+Language/Function baseline reports reuse actual JS39 corpus source380910ce, identical production engine/host/runner and matching release artifact; fresh other builtin baseline reports ran source4622. Final workspace and all twelve candidate reports ran exact1a793a8a. [Compact evidence](js-lang_JS40-evidence.json) records source identity and hashes; [Node reference](js-lang_JS40-reference.json) records original Boat Node24.18.1 results. Main scratch retains initial compile diagnostics, corrected before failures, first candidate binding failure, all final raw reports and zero-loss comparison. No claim of full module/eval conformance.
