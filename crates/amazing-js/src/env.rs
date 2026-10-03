@@ -434,7 +434,22 @@ impl EnvHandle {
     }
 
     pub(crate) fn install_script_var_cell(&self, name: &str, value: JsValue) {
+        let existing = {
+            let frame = self.0.borrow();
+            let mut current = frame.parent.clone();
+            let mut cell = None;
+            while let Some(parent) = current {
+                let parent = parent.0.borrow();
+                if parent.kind != EnvKind::Global || !match (&frame.global_declarations, &parent.global_declarations) {
+                    (Some(a), Some(b)) => Rc::ptr_eq(a, b), _ => false,
+                } { break; }
+                if let Some(binding) = parent.vars.get(name).filter(|binding| !binding.is_lexical()) { cell = Some(binding.clone()); break; }
+                current = parent.parent.clone();
+            }
+            cell
+        };
         let mut frame = self.0.borrow_mut();
+        if let Some(cell) = existing { frame.vars.entry(name.to_owned()).or_insert(cell); return; }
         frame.vars.entry(name.to_owned()).or_insert_with(|| BindingCell(Rc::new(RefCell::new(Binding {
             value, mutable: true, immutable_strict: true, lexical: false, initialized: true, import_target: None,
         }))));
@@ -442,6 +457,25 @@ impl EnvHandle {
 
     pub(crate) fn forget_script_var(&self, name: &str) {
         if let Some(record) = &self.0.borrow().global_declarations { record.borrow_mut().var_names.remove(name); }
+    }
+
+    // Keep the Window-overlay declaration behavior without invoking getters
+    // or mutating an object behind its DefineOwnProperty gateway.
+    pub(crate) fn global_overlay_data_value(&self, name: &str) -> Option<JsValue> {
+        let frame = self.0.borrow();
+        let object = frame.global_object.clone()?;
+        let parent = frame.parent.as_ref()?.0.borrow();
+        if parent.kind != EnvKind::Global || !parent.global_object.as_ref().is_some_and(|other| Rc::ptr_eq(&object.0, &other.0)) { return None; }
+        drop(parent);
+        let mut current = Some(object);
+        while let Some(object) = current {
+            let object = object.borrow();
+            if let Some(property) = object.own_prop(name) {
+                return Some(if property.is_data() { property.value.clone() } else { JsValue::Undefined });
+            }
+            current = object.proto.clone();
+        }
+        None
     }
 
     pub(crate) fn reserve_script_lexical(&self, name: &str, mutable: bool) -> Result<(), Throw> {
@@ -460,13 +494,20 @@ impl EnvHandle {
             if env.has_local_lexical(name) { return true; }
             let frame = env.0.borrow();
             if frame.kind != EnvKind::Global { break; }
-            current = frame.parent.clone();
+            current = frame.parent.clone().filter(|parent| {
+                let parent = parent.0.borrow();
+                parent.kind == EnvKind::Global && match (&frame.global_declarations, &parent.global_declarations) {
+                    (Some(a), Some(b)) => Rc::ptr_eq(a, b),
+                    _ => false,
+                }
+            });
         }
         false
     }
 
     pub(crate) fn global_binding_object(&self, name: &str) -> Option<Obj> {
         let frame = self.0.borrow();
+        if frame.script_cell(name).is_some() { return None; }
         if let Some(cell) = frame.vars.get(name) {
             return (frame.kind == EnvKind::Global && !cell.0.borrow().lexical)
                 .then(|| frame.global_object.clone()).flatten();
@@ -531,7 +572,7 @@ impl EnvHandle {
                 while let Some(object) = current {
                     let object = object.borrow();
                     if let Some(property) = object.own_prop(name) {
-                        if property.getter.is_none() && property.setter.is_none() { value = property.value.clone(); }
+                        if property.is_data() { value = property.value.clone(); }
                         break;
                     }
                     current = if overlay { object.proto.clone() } else { None };

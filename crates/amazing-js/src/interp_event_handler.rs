@@ -43,7 +43,11 @@ impl Interpreter {
         let mut current = Some(env.clone());
         while let Some(frame) = current {
             if frame.local_cell(name).is_some() {
-                return Ok(Some(Reference::Binding(name.to_owned(), frame.clone())));
+                if let Some(object) = frame.global_binding_object(name) {
+                    if self.default_has_property(&object, &PropertyKey::from(name))? {
+                        return Ok(Some(Reference::ObjectBinding(object, name.to_owned(), false)));
+                    }
+                } else { return Ok(Some(Reference::Binding(name.to_owned(), frame.clone()))); }
             }
             let (object, parent) = {
                 let frame = frame.0.borrow();
@@ -102,9 +106,15 @@ impl Interpreter {
     pub(super) fn delete_scoped_name(&mut self, env: &EnvHandle, name: &str) -> Result<JsValue, Throw> {
         let deleted = match self.scoped_reference(env, name)? {
             None => true,
-            Some(Reference::ObjectBinding(object, key, _)) => {
-                if let Some(result) = self.legacy_delete(&object, name)? { result }
-                else { object.borrow_mut().delete_own(&key) }
+            Some(Reference::ObjectBinding(object, key, with)) => {
+                if with {
+                    if let Some(result) = self.legacy_delete(&object, name)? { result }
+                    else { object.borrow_mut().delete_own(&key) }
+                } else {
+                    let deleted = self.default_delete_property(&object, &PropertyKey::from(key.as_str()))?;
+                    if deleted { env.global_scope().remove_object_binding(name); }
+                    deleted
+                }
             }
             Some(Reference::Binding(binding, _))
                 if env.shares_binding_frame(&self.global_env, &binding) => {

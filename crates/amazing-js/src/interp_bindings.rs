@@ -707,6 +707,9 @@ mod tests {
             assert!(i.global_env.local_cell("hostValue").unwrap().same_target(&original.local_cell("hostValue").unwrap()));
             i.run_script("var gets=0;Object.defineProperty(Object.getPrototypeOf(window),'inheritedGetter',{get(){gets++;return 7},configurable:true});").unwrap();
             assert_eq!(i.run_script_with_backend("var inheritedGetter;gets===0", backend).unwrap(), JsValue::Bool(true));
+            let getter = i.global_env.resolve("listener").unwrap();
+            i.binding_define_accessor_property(&window, "length", Some(&getter), None, false, true).unwrap();
+            assert_eq!(i.run_script_with_backend("function length(){return ['0px','1px','2px']}length().join(',')==='0px,1px,2px'&&window.length===length", backend).unwrap(), JsValue::Bool(true));
         }
     }
 

@@ -63,12 +63,24 @@ fn has_use_strict_directive(statements: &[Stmt]) -> bool {
 pub fn compile(ast: &ast::Program, is_module: bool) -> Result<Program, CompileError> {
     let mut c = Compiler::new(false);
     c.strict = is_module || has_use_strict_directive(&ast.body);
+    if !is_module {
+        c.native_declarations = true;
+        c.annex_declarations(&ast.body, &[]);
+        c.program.global_declarations = Some(super::super::GlobalDeclarationPlan::new(&ast.body, c.strict));
+    }
     c.hoist_functions(&ast.body)?;
     c.statements(&ast.body, ast.span)?;
     if c.program.code.len() > MAX_INSTRUCTIONS {
         return Err(c.error(ast.span, "instruction limit"));
     }
     Ok(c.program)
+}
+
+pub(crate) fn global_annex_candidates(body: &[Stmt], strict: bool) -> std::collections::HashSet<usize> {
+    let mut compiler = Compiler::new(false);
+    compiler.strict = strict;
+    compiler.annex_declarations(body, &[]);
+    compiler.annex_b
 }
 
 /// Compile a method body with the same path used for function declarations.
@@ -228,6 +240,7 @@ impl Compiler {
             annex_b: std::collections::HashSet::new(),
             block_function_nodes: std::collections::HashSet::new(),
             program: Program {
+                global_declarations: None,
                 code: vec![],
                 statement_spans: Vec::new(),
                 registers: 1,
@@ -660,10 +673,10 @@ impl Compiler {
                     if declaration.kind == VarKind::Const && binding.init.is_none() {
                         return Err(self.error(binding.span, "const requires an initializer"));
                     }
-                    if declaration.kind != VarKind::Var && (!self.native_declarations || self.scope_depth == 0) && (declaration.resource_kind.is_some() || !matches!(binding.binding, Binding::Ident(_))) {
+                    if declaration.kind != VarKind::Var && (!self.native_declarations || (self.scope_depth == 0 && self.program.global_declarations.is_none())) && (declaration.resource_kind.is_some() || !matches!(binding.binding, Binding::Ident(_))) {
                         self.reserve_pattern(&binding.binding, declaration.kind == VarKind::Let);
                     }
-                    let reference = if declaration.kind == VarKind::Var && self.with_depth != 0 {
+                    let reference = if declaration.kind == VarKind::Var && (self.with_depth != 0 || self.program.global_declarations.is_some()) {
                         self.with_binding_reference(&binding.binding)
                     } else { None };
                     let value = match &binding.init {
@@ -680,7 +693,7 @@ impl Compiler {
                         let slot = *self.resource_stack.last().ok_or_else(|| self.error(binding.span, "unscoped using declaration"))?;
                         self.emit(Instruction::ResourceCapture(slot, value, resource_kind == ast::ResourceKind::AwaitUsing));
                     }
-                    if declaration.kind == VarKind::Var && self.with_depth != 0 {
+                    if declaration.kind == VarKind::Var && (self.with_depth != 0 || self.program.global_declarations.is_some()) {
                         self.with_binding_prepared(&binding.binding, value, reference, binding.span)?;
                     } else { self.binding_pattern(&binding.binding, value, declaration.kind, binding.span)?; }
                 }

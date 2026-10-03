@@ -129,7 +129,7 @@ impl Interpreter {
                     if d.kind == ast::VarKind::Var && x.init.is_none() {
                         continue;
                     }
-                    let reference = if d.kind == ast::VarKind::Var && has_local_object_environment(env) {
+                    let reference = if d.kind == ast::VarKind::Var && uses_object_var_assignment(env) {
                         match &x.binding {
                             Binding::Ident(name) => Some(self.capture_reference(&ast::Expr::new(ExprKind::Ident(name.clone()), name.span), env)?),
                             _ => None,
@@ -210,7 +210,7 @@ impl Interpreter {
                         if promoted {
                             if let Some(local) = env.local_cell(&n.name) {
                                 if let Ok(v) = local.read() {
-                                    let _ = scope.assign(&n.name, v);
+                                    self.copy_annex_binding(&scope, &n.name, v)?;
                                 }
                             }
                         }
@@ -225,35 +225,7 @@ impl Interpreter {
                 }
                 Ok(Flow::Normal)
             }
-            StmtKind::Block(b) => {
-                self.completion = JsValue::Undefined;
-                let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-                // BlockDeclarationInstantiation's own function-hoisting: every direct
-                // FunctionDeclaration child of this block is lexically bound, to a fresh
-                // closure, at block entry -- independent of Annex B (this happens in strict
-                // mode too; it's what makes `f` resolve inside the block at all, and what
-                // Annex B.3.3's sync step above reads from).
-                for stmt in &b.body {
-                    if let Some(f) = labeled_function_decl(stmt) {
-                        if let Some(n) = &f.name {
-                            let v = self.make_function(f, &e);
-                            if e.local_cell(&n.name).is_some() {
-                                // Annex B.3.3.4: non-strict code may give the same name more
-                                // than one FunctionDeclaration directly in one block (the
-                                // duplicate-LexicallyDeclaredNames early error is relaxed only
-                                // when every duplicate is a FunctionDeclaration).
-                                // BlockDeclarationInstantiation still runs InitializeBinding once
-                                // per declaration in source order, so the last one silently wins
-                                // rather than re-declaring into a cell that already exists.
-                                let _ = e.assign(&n.name, v);
-                            } else {
-                                e.declare_lexical(&n.name, v, true)?;
-                            }
-                        }
-                    }
-                }
-                self.exec_stmts_with_disposal(&b.body, &e)
-            }
+            StmtKind::Block(b) => self.exec_lexical_block(b, env),
             StmtKind::If { cond, then, els } => {
                 self.completion = JsValue::Undefined;
                 if self.eval_expr(cond, env)?.to_boolean() {
@@ -502,11 +474,12 @@ impl Interpreter {
                     // indistinguishable by identity/is_lexical alone from a genuine hoist_inner
                     // placeholder -- `current_function_param_names` checks the AST directly).
                     let blocked_by_param = self.current_function_param_names().iter().any(|p| p == &n.name);
-                    if !blocked_by_param && scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical()) {
+                    if !blocked_by_param && scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical())
+                        && is_annex_b_eligible(self, f.as_ref() as *const ast::FunctionItem) {
                         let implicit = EnvHandle::new(EnvKind::Block, Some(env.clone()));
                         let v = self.make_function(f, &implicit);
                         let _ = implicit.declare_lexical(&n.name, v.clone(), true);
-                        let _ = scope.assign(&n.name, v);
+                        self.copy_annex_binding(&scope, &n.name, v)?;
                         return Ok(Flow::Normal);
                     }
                 }
@@ -878,12 +851,49 @@ impl Interpreter {
             ),
         }
     }
-    fn exec_try(&mut self, t: &ast::TryStmt, env: &EnvHandle) -> Result<Flow, Throw> {
+    fn exec_lexical_block(&mut self, b: &ast::Block, env: &EnvHandle) -> Result<Flow, Throw> {
+        self.completion = JsValue::Undefined;
         let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-        let result = (|| {
-            self.hoist(&t.block.body, env)?;
-            self.exec_stmts_with_disposal(&t.block.body, &e)
-        })();
+        for statement in &b.body {
+            match &statement.kind {
+                StmtKind::Var(declaration) if declaration.kind != ast::VarKind::Var => {
+                    for item in &declaration.decls {
+                        for name in binding_names(&item.binding) { e.declare_uninitialized(&name, declaration.kind == ast::VarKind::Let)?; }
+                    }
+                }
+                StmtKind::Class(class) => { if let Some(name) = &class.name { e.declare_uninitialized(&name.name, true)?; } }
+                _ => {}
+            }
+        }
+        // BlockDeclarationInstantiation's own function-hoisting: every direct
+        // FunctionDeclaration child of this block is lexically bound, to a fresh
+        // closure, at block entry -- independent of Annex B (this happens in strict
+        // mode too; it's what makes `f` resolve inside the block at all, and what
+        // Annex B.3.3's sync step above reads from).
+        for stmt in &b.body {
+            if let Some(f) = labeled_function_decl(stmt) {
+                if let Some(n) = &f.name {
+                    let v = self.make_function(f, &e);
+                    if e.local_cell(&n.name).is_some() {
+                        // Annex B.3.3.4: non-strict code may give the same name more
+                        // than one FunctionDeclaration directly in one block (the
+                        // duplicate-LexicallyDeclaredNames early error is relaxed only
+                        // when every duplicate is a FunctionDeclaration).
+                        // BlockDeclarationInstantiation still runs InitializeBinding once
+                        // per declaration in source order, so the last one silently wins
+                        // rather than re-declaring into a cell that already exists.
+                        let _ = e.assign(&n.name, v);
+                    } else {
+                        e.declare_lexical(&n.name, v, true)?;
+                    }
+                }
+            }
+        }
+        self.exec_stmts_with_disposal(&b.body, &e)
+    }
+
+    fn exec_try(&mut self, t: &ast::TryStmt, env: &EnvHandle) -> Result<Flow, Throw> {
+        let result = self.exec_lexical_block(&t.block, env);
         let mut out = match result {
             Ok(x) => Ok(x),
             // A coroutine-backed generator's `.return(v)` completion at a suspended `yield`
@@ -901,8 +911,7 @@ impl Interpreter {
                         if let Some(binding) = &c.binding {
                             self.bind_pattern(binding, th.0, ast::VarKind::Let, &ce)?;
                         }
-                        self.hoist_catch_body(c, env)?;
-                        self.exec_stmts_with_disposal(&c.body.body, &ce)
+                        self.exec_lexical_block(&c.body, &ce)
                     })()
                 } else {
                     Err(th)
@@ -910,13 +919,10 @@ impl Interpreter {
             }
         };
         if let Some(f) = &t.finally {
-            let fe = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-            let result = (|| {
-                self.hoist(&f.body, env)?;
-                self.exec_stmts_with_disposal(&f.body, &fe)
-            })();
+            let completion = self.completion.clone();
+            let result = self.exec_lexical_block(f, env);
             match result {
-                Ok(Flow::Normal) => {}
+                Ok(Flow::Normal) => { self.completion = completion; }
                 Ok(x) => out = Ok(x),
                 Err(e) => out = Err(e),
             }

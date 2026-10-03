@@ -1286,7 +1286,10 @@ impl Interpreter {
         self.completion = JsValue::Undefined;
         let env = direct_eval_env.unwrap_or_else(|| self.global_env.clone());
         if self.in_eval { self.validate_eval_global_declarations(&p.body, &env)?; }
-        self.hoist(&p.body, &env)?;
+        if !self.in_eval && env.kind() == EnvKind::Global {
+            let plan = GlobalDeclarationPlan::new(&p.body, self.strict_eval_context);
+            self.instantiate_global_declarations(&plan, &env)?;
+        } else { self.hoist(&p.body, &env)?; }
         self.in_eval = false;
         for s in &p.body {
             if let StmtKind::Expression(e) = &s.kind {
@@ -1337,32 +1340,10 @@ impl Interpreter {
         // pushed by an ancestor Block/If/For/etc already walking into this level -- must
         // still prevent promoting a same-named function nested somewhere inside a sibling
         // Block/Switch/If/loop. Every StmtKind::Block/Switch/etc arm below already does this
-        // self-seeding when recursing into ITS OWN child body; only the very first, top-level
-        // call (a function/script/module/eval body, or one of StmtKind::Try's per-block resets)
-        // was missing it.
+        // self-seeding when recursing into its own child body. The initial
+        // function/module/eval body seeds these barriers once.
         let mut blocked = block_lexical_names(body);
         self.hoist_inner(body, env, false, &mut blocked)
-    }
-
-    /// `hoist()` for a Catch clause's own body, with B.3.5's extra exception: hypothetically
-    /// replacing a colliding nested FunctionDeclaration with `var F;` (the same substitution
-    /// B.3.3.3 always imagines before promoting it) is a Syntax Error against a CatchParameter's
-    /// own bound names UNLESS the CatchParameter is a plain BindingIdentifier -- in which case
-    /// the resulting `catch (f) { var f; }` shape is explicitly exempted, so Annex B proceeds
-    /// normally there. A *destructuring* CatchParameter never gets that exemption, so it always
-    /// blocks a same-named nested function's promotion. `catch.binding` (not `catch.param`, a
-    /// bare-identifier-only shortcut) is the full pattern.
-    ///
-    /// Shared by hoist_inner's own StmtKind::Try arm (the static, once-per-call AST pre-pass that
-    /// must still see a catch body's declarations even if the try block never actually throws)
-    /// and exec_try's per-execution re-hoist (interp_stmt.rs) -- both call sites hoist the exact
-    /// same catch body and must agree on this exception, so this is the only place it is written.
-    fn hoist_catch_body(&mut self, catch: &ast::CatchClause, env: &EnvHandle) -> Result<(), Throw> {
-        let mut blocked = block_lexical_names(&catch.body.body);
-        if let Some(binding @ (Binding::Array(_) | Binding::Object(_) | Binding::Rest(_) | Binding::Default(_, _))) = &catch.binding {
-            push_blocked(&mut blocked, binding_names(binding));
-        }
-        self.hoist_inner(&catch.body.body, env, false, &mut blocked)
     }
 
     /// `nested` is `false` only for the direct statement list of a function/script/module/eval
@@ -1373,9 +1354,8 @@ impl Interpreter {
     /// of the same name (tracked via `blocked`), it gets an undefined-initialized legacy `var`
     /// binding in the enclosing scope (`hoist_var`), synced with the block's own lexical binding
     /// when the `FunctionDeclaration` statement is actually evaluated -- see `StmtKind::Function`
-    /// and `StmtKind::Block`'s block-entry hoist in interp_stmt.rs. `StmtKind::Try` deliberately
-    /// starts a *fresh* top-level hoist (unchanged from before this split): Annex B promotion out
-    /// of try/catch/finally bodies is a known, documented gap.
+    /// and lexical block entry in interp_stmt.rs. Try/catch/finally retain the
+    /// enclosing barriers; a simple catch parameter keeps Annex B's exception.
     /// Adapted from lucid-softworks/lumen (crates/lumen/src/interpreter.rs, collect_annexb_funcs)
     /// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
     fn hoist_inner(&mut self, body: &[ast::Stmt], env: &EnvHandle, nested: bool, blocked: &mut Vec<String>) -> Result<(), Throw> {
@@ -1466,12 +1446,17 @@ impl Interpreter {
                     self.hoist_nested_bodies(&bodies, env, blocked)?;
                 }
                 StmtKind::Try(statement) => {
-                    self.hoist(&statement.block.body, env)?;
+                    self.hoist_nested_bodies(&[statement.block.body.as_slice()], env, blocked)?;
                     if let Some(catch) = &statement.catch {
-                        self.hoist_catch_body(catch, env)?;
+                        let old = blocked.len();
+                        if let Some(binding) = &catch.binding {
+                            if !matches!(binding, Binding::Ident(_)) { push_blocked(blocked, binding_names(binding)); }
+                        }
+                        self.hoist_nested_bodies(&[catch.body.body.as_slice()], env, blocked)?;
+                        blocked.truncate(old);
                     }
                     if let Some(finally) = &statement.finally {
-                        self.hoist(&finally.body, env)?;
+                        self.hoist_nested_bodies(&[finally.body.as_slice()], env, blocked)?;
                     }
                 }
                 _ => {}
@@ -1723,6 +1708,7 @@ include!("interp_with.rs");
 include!("interp_async.rs");
 include!("interp_realms.rs");
 include!("interp_eval_declarations.rs");
+include!("interp_global_declarations.rs");
 include!("interp_eval_context.rs");
 include!("interp_window_proxy.rs");
 include!("interp_module_host.rs");

@@ -7,6 +7,7 @@
 mod async_delegate;
 mod async_from_sync;
 mod compiler;
+pub(crate) use compiler::global_annex_candidates;
 mod fast_path;
 mod resources;
 mod patterns;
@@ -349,6 +350,7 @@ struct HoistedFunction {
 /// Immutable, compiler-produced code. No external bytecode loader is exposed.
 #[derive(Debug)]
 pub struct Program {
+    global_declarations: Option<super::GlobalDeclarationPlan>,
     code: Vec<Instruction>,
     statement_spans: Vec<(usize, crate::tokens::Span)>,
     registers: usize,
@@ -366,6 +368,7 @@ pub struct Program {
 /// until exception handlers are compiled, but belongs to the frame so it can
 /// survive an instruction-boundary suspension with the other VM state.
 struct VmFrame {
+    global_annex_allowed: Option<std::collections::HashSet<String>>,
     // A resume can arrive through an unrelated next()/promise callback. Keep
     // the original method/arrow call context, not the resumer's context.
     call_context: Option<super::CallFrame>,
@@ -552,6 +555,7 @@ impl Program {
         fuel: usize,
     ) -> Result<Box<VmFrame>, Throw> {
         let mut frame = Box::new(VmFrame {
+            global_annex_allowed: None,
             call_context: i.frames.last().cloned(),
             strict_context: i.strict_eval_context,
             registers: take_registers(self.registers),
@@ -579,6 +583,13 @@ impl Program {
             resource_has_awaited: vec![false; self.resource_slots],
             for_in_states: (0..self.for_in_slots).map(|_| None).collect(),
         });
+        if let Some(plan) = &self.global_declarations {
+            if frame.env.kind() == EnvKind::Global && !i.in_eval {
+                consume(&mut frame.fuel)?;
+                frame.global_annex_allowed = Some(i.instantiate_global_declarations(plan, &frame.env)?);
+                return Ok(frame);
+            }
+        }
         for name in &self.hoisted {
             consume(&mut frame.fuel)?;
             frame.env.hoist_var(name)?;
@@ -633,6 +644,7 @@ impl Program {
             }
         }
         let VmFrame {
+            global_annex_allowed,
             call_context: _,
             strict_context: _,
             registers,
@@ -973,9 +985,10 @@ impl Program {
                         }
                     }
                     Instruction::CopyBlockFunction(name) => {
+                        if global_annex_allowed.as_ref().is_some_and(|allowed| !allowed.contains(name)) { return Ok(None); }
                         let value = env.local_cell(name).ok_or_else(|| Throw::reference_error("missing block function"))?.read()?;
                         let scope = env.var_scope();
-                        if !scope.assign(name, value.clone())? { scope.declare_var(name, value)?; }
+                        i.copy_annex_binding(&scope, name, value)?;
                     }
                     Instruction::NamedEvaluation(dst, expression, name) => { i.named_evaluation(expression, &mut registers[*dst], name); }
                     Instruction::NamedPropertyEvaluation(dst, expression, key) => {

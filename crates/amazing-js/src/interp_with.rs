@@ -12,6 +12,10 @@ fn has_local_object_environment(env: &EnvHandle) -> bool {
     false
 }
 
+fn uses_object_var_assignment(env: &EnvHandle) -> bool {
+    has_local_object_environment(env) || env.var_scope().kind() == EnvKind::Global
+}
+
 fn with_assignment_target(binding: &Binding) -> ast::Expr {
     let span = match binding {
         Binding::Ident(name) => name.span,

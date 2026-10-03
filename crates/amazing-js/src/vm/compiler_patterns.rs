@@ -134,7 +134,7 @@ impl Compiler {
         // Plain identifiers can reuse the existing single-step binder. Every
         // pattern uses the same native lowering, whether or not it suspends.
         match left {
-            ast::ForLeft::Decl(declaration) if declaration.kind == VarKind::Var && self.with_depth != 0 => {
+            ast::ForLeft::Decl(declaration) if declaration.kind == VarKind::Var && (self.with_depth != 0 || self.program.global_declarations.is_some()) => {
                 self.emit(Instruction::EnterScope);
                 for item in &declaration.decls {
                     let reference = self.with_binding_reference(&item.binding);

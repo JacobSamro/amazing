@@ -51,6 +51,7 @@ impl Interpreter {
         }
         if let Some(value) = function { scope.declare_var(name, value)?; }
         else { scope.hoist_var(name)?; }
+        if scope.kind() == EnvKind::Global { scope.register_script_var(name); }
         Ok(())
     }
 

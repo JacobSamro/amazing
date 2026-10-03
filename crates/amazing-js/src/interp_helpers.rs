@@ -171,7 +171,7 @@ impl Interpreter {
         kind: Option<ast::VarKind>,
         env: &EnvHandle,
     ) -> Result<(), Throw> {
-        if kind == Some(ast::VarKind::Var) && has_local_object_environment(env) {
+        if kind == Some(ast::VarKind::Var) && uses_object_var_assignment(env) {
             let target = with_assignment_target(binding);
             return self.assign_pattern_expr(&target, &value, env);
         }
