@@ -52,6 +52,7 @@ impl RuntimeBindings {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
     use crate::js_scheduler::{DriverScheduler, JS_CAPACITY};
     #[test]
     fn canonical_inline_handler_replacement_preserves_order_and_cancellation() {
