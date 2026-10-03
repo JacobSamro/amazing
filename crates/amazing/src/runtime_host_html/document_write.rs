@@ -198,7 +198,7 @@ impl RuntimeBindingHost<'_> {
     }
 
     fn check_document_open_origin(&mut self, document: NodeIdx) -> Result<(), Throw> {
-        let source_realm = self.js.binding_incumbent_realm();
+        let source_realm = self.js.binding_entry_realm();
         let pair = {
             let state = self.state.borrow();
             state.frames.contexts.get(&source_realm).cloned().zip(state.frames.contexts.iter()
@@ -220,7 +220,7 @@ impl RuntimeBindingHost<'_> {
     }
 
     fn update_open_document_url(&mut self, document: NodeIdx) -> Result<(), Throw> {
-        let source_realm = self.js.binding_incumbent_realm();
+        let source_realm = self.js.binding_entry_realm();
         let pair = {
             let state = self.state.borrow();
             state.frames.contexts.get(&source_realm).cloned().zip(state.frames.contexts.iter()
@@ -409,6 +409,23 @@ mod tests {
             document.close();
             [moduleValue,moduleCurrent===null,document.readyState,document.body.lastChild.textContent].join('|')
         "#).unwrap(), JsValue::str("42|true|complete|tail"));
+    }
+
+    #[test]
+    fn reopened_child_url_uses_entry_document_across_borrowed_child_functions() {
+        let mut scheduler = scheduler();
+        scheduler.run_script(r#"
+            var frame=document.createElement('iframe');
+            frame.srcdoc='<script>window.openAgain=function(){return document.open()};<\/script>';
+            document.body.appendChild(frame);
+        "#).unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script(r#"
+            var child=frame.contentDocument,win=frame.contentWindow;
+            var returned=win.openAgain();
+            child.write('<!doctype html><p>opened');child.close();
+            [returned===child,child.URL,document.URL,child.defaultView===win].join('|')
+        "#).unwrap(), JsValue::str("true|https://example.test/main.html|https://example.test/main.html#fragment|true"));
     }
 
     #[test]
