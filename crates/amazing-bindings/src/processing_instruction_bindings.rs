@@ -12,7 +12,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         let data = if let Some(value) = args.get(1).filter(|value| !host.is_undefined(value)) {
             host.to_dom_string(value)?
         } else { Vec::new() };
-        let document = host.current_document();
+        let document = host.current_document_for_nodes()?;
         let node = host.with_dom(|dom| {
             let target = String::from_utf16(&target).map_err(|_| DomError::InvalidCharacterError)?;
             dom.create_processing_instruction_in(document, &target, &data)

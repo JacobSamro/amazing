@@ -295,7 +295,7 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
             | O::DocumentConstructor
     );
     let target = if constructor {
-        host.current_document()
+        host.current_document_for_nodes()?
     } else {
         required_node(host, Some(&receiver))?
     };
@@ -381,11 +381,16 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     } else {
         false
     };
+    if matches!(operation, O::CreateText | O::CreateCDATASection | O::CreateComment
+        | O::CloneNode | O::SetTextContent | O::Append | O::Prepend | O::ReplaceChildren
+        | O::Before | O::After | O::ReplaceWith) {
+        host.current_document_for_nodes()?;
+    }
     let result = host.with_dom(|dom| {
         use ResultValue as R;
         let result = match operation {
             O::DocumentConstructor => {
-                let document = dom.create_document();
+                let document = dom.create_document_in_realm_of(target)?;
                 dom.set_document_metadata(document, amazing_dom::document_surface::DocumentMetadata {
                     url: "about:blank".into(), content_type: "application/xml".into(),
                     character_set: "UTF-8".into(),
@@ -591,6 +596,7 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
         ResultValue::String(v) => host.string(&v)?,
         ResultValue::Node(v) => {
             if operation == O::DocumentConstructor { host.mark_constructed_document(v); }
+            if operation == O::CloneNode { host.mark_cloned_node(target, v); }
             host.wrap_node(v)?
         },
         ResultValue::Children(v) => host.child_nodes(v)?,

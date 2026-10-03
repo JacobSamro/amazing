@@ -7,7 +7,10 @@ pub(crate) fn handles(op: O) -> bool {
 
 pub(crate) fn invoke<H: BindingHost + DocumentHost>(host: &mut H, op: O, receiver: H::Value,
     args: &[H::Value]) -> Result<H::Value, H::Error> {
-    if op == O::DOMParserConstructor { return host.dom_parser_new(); }
+    if op == O::DOMParserConstructor {
+        host.current_document_for_nodes()?;
+        return host.dom_parser_new();
+    }
     if op == O::DocumentParseHTMLUnsafe {
         // Static `Document.parseHTMLUnsafe(html, options?)` (HTML spec
         // "dynamic markup insertion"): a new inert `text/html` Document
@@ -28,7 +31,8 @@ pub(crate) fn invoke<H: BindingHost + DocumentHost>(host: &mut H, op: O, receive
         // note in `host.rs`).
         let html = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         let html = String::from_utf16_lossy(&host.to_dom_string(html)?);
-        let url = host.document_field(host.current_document(), DocumentField::URL)?;
+        let relevant = host.current_document_for_nodes()?;
+        let url = host.document_field(relevant, DocumentField::URL)?;
         let url = String::from_utf16_lossy(&url);
         let document = match host.create_inert_document(html.as_bytes(), "text/html", &url, Some("UTF-8")) {
             Ok(document) => document,
@@ -47,14 +51,15 @@ pub(crate) fn invoke<H: BindingHost + DocumentHost>(host: &mut H, op: O, receive
         | "application/xhtml+xml" | "image/svg+xml") {
         return Err(host.type_error("Unsupported DOMParser content type"));
     }
-    let url = host.document_field(host.current_document(), DocumentField::URL)?;
+    let relevant = host.dom_parser_relevant_document(&receiver)?;
+    let url = host.document_field(relevant, DocumentField::URL)?;
     let url = String::from_utf16_lossy(&url);
-    let result = host.create_inert_document(source.as_bytes(), &kind, &url, Some("UTF-8"));
+    let result = host.create_inert_document_for_parser(&receiver, source.as_bytes(), &kind, &url, Some("UTF-8"));
     let document = match result {
         Ok(document) => document,
         Err(DomError::SyntaxError) if kind != "text/html" => {
             let error = br#"<parsererror xmlns="http://www.mozilla.org/newlayout/xml/parsererror.xml">XML parsing error</parsererror>"#;
-            match host.create_inert_document(error, &kind, &url, Some("UTF-8")) {
+            match host.create_inert_document_for_parser(&receiver, error, &kind, &url, Some("UTF-8")) {
                 Ok(document) => document,
                 Err(error) => return host.with_dom::<H::Value>(|_| Err(error)),
             }

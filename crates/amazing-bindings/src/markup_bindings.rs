@@ -55,6 +55,10 @@ fn seam_result<H: BindingHost, T>(host: &mut H, result: Result<T, DomError>) -> 
 pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
     host: &mut H, op: O, receiver: H::Value, args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    if matches!(op, O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe | O::ElementSetOuterHTML
+        | O::ElementInsertAdjacentHTML | O::ElementInsertAdjacentText | O::ElementSetInnerText) {
+        host.current_document_for_nodes()?;
+    }
     let node = host.node_brand(&receiver).ok_or_else(|| host.type_error("Expected a Node"))?;
     if matches!(op, O::ParentQuerySelector | O::ParentQuerySelectorAll | O::ElementMatches
         | O::ElementClosest | O::ElementWebkitMatchesSelector) {

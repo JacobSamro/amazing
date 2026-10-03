@@ -8,14 +8,24 @@ impl RuntimeBindingHost<'_> {
     pub(super) fn dom_register_document_realm(&mut self, document: NodeIdx, realm: RealmHandle)
         -> Result<(), Throw> {
         let anchor = self.with_dom(|dom| {
+            let anchor = dom.node_creation_document(document)?;
             if !matches!(dom.get(document).kind, NodeKind::Document) { return Err(DomError::TypeError); }
-            dom.node_creation_document(document)
+            Ok(anchor)
         })?;
+        // A newly created child context may precede the navigation's final
+        // active-frame bookkeeping. Read its actual validated creation record,
+        // never infer an Origin from its URL or its parent.
+        let origin = self.html_document_creation_origin(document, realm);
+        if let Some(origin) = origin {
+            self.html_set_inert_document_origin(document, origin)
+                .map_err(|_| Throw::type_error("Document origin registration failed"))?;
+        }
         let mut state = self.state.borrow_mut();
         if state.node_creation_realms.get(&anchor).is_some_and(|existing| *existing != realm) {
             return Err(Throw::type_error("Document allocation realm already registered"));
         }
         state.node_creation_realms.insert(anchor, realm);
+        state.realm_documents.entry(realm).or_insert(anchor);
         Ok(())
     }
 
@@ -23,6 +33,63 @@ impl RuntimeBindingHost<'_> {
         let anchor = self.with_dom(|dom| dom.node_creation_document(node))?;
         self.state.borrow().node_creation_realms.get(&anchor).copied()
             .ok_or_else(|| Throw::type_error("Node creation realm is not registered"))
+    }
+
+    pub(super) fn dom_current_document_for_nodes(&self) -> Result<NodeIdx, Throw> {
+        let state = self.state.borrow();
+        let (document, generation) = state.realm_documents.get(&self.js.binding_current_realm())
+            .copied().ok_or_else(|| Throw::type_error("Realm Document is not registered"))?;
+        let host = state.host.borrow();
+        if host.dom.node_generation(document) != Some(generation)
+            || !matches!(host.dom.get(document).kind, NodeKind::Document) {
+            return Err(Throw::type_error("Realm Document is stale"));
+        }
+        Ok(document)
+    }
+
+    pub(super) fn dom_parser_new_in_relevant_realm(&mut self) -> Result<JsValue, Throw> {
+        let document = self.dom_current_document_for_nodes()?;
+        let generation = self.state.borrow().host.borrow().dom.node_generation(document)
+            .ok_or_else(|| Throw::type_error("Realm Document is stale"))?;
+        let origin = self.html_document_origin(document)
+            .ok_or_else(|| Throw::type_error("DOMParser relevant document origin is unavailable"))?;
+        self.web_allocate(WebObject::DomParser {
+            realm: self.js.binding_current_realm(), document: (document, generation), origin,
+        }, InterfaceBrand::DOM_PARSER)
+    }
+
+    pub(super) fn dom_parser_document(&self, parser: &JsValue) -> Result<NodeIdx, Throw> {
+        let slot = self.web_key(parser, InterfaceBrand::DOM_PARSER)?;
+        let state = self.state.borrow();
+        let WebObject::DomParser { document: (document, generation), .. } = &state.web_objects[slot] else {
+            return Err(Throw::type_error("Expected a DOMParser"));
+        };
+        let host = state.host.borrow();
+        if host.dom.node_generation(*document) != Some(*generation) {
+            return Err(Throw::type_error("DOMParser relevant Document is stale"));
+        }
+        Ok(*document)
+    }
+
+    pub(super) fn dom_parse_for_parser(&mut self, parser: &JsValue, bytes: &[u8], content_type: &str,
+        url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
+        self.dom_parser_document(parser).map_err(|_| DomError::TypeError)?;
+        let slot = self.web_key(parser, InterfaceBrand::DOM_PARSER).map_err(|_| DomError::TypeError)?;
+        let (realm, origin) = {
+            let state = self.state.borrow();
+            let WebObject::DomParser { realm, origin, .. } = &state.web_objects[slot] else {
+                return Err(DomError::TypeError);
+            };
+            (*realm, origin.clone())
+        };
+        // Argument conversion is already complete; only inert native parsing
+        // enters the receiver's actual saved realm. No script is executed.
+        let state = self.state.clone();
+        let document = self.js.binding_with_realm(realm, |js| {
+            Ok(RuntimeBindingHost { js, state }.create_inert_document(bytes, content_type, url, charset))
+        }).map_err(|_| DomError::TypeError)??;
+        self.html_set_inert_document_origin(document, origin)?;
+        Ok(document)
     }
 
     pub(super) fn dom_xml_serializer_new(&mut self) -> Result<JsValue, Throw> {
@@ -1788,6 +1855,129 @@ mod tests {
             true;
         "#).unwrap();
         assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
+    }
+
+    #[test]
+    fn node_factories_use_document_realm_and_child_constructors_use_child_document() {
+        let host=Rc::new(RefCell::new(BrowserDomHost { dom:amazing_html::parse("<body><iframe></iframe></body>"),native_forwarded:false }));
+        let mut scheduler=crate::js_scheduler::DriverScheduler::new(host,32).unwrap();
+        scheduler.set_location_url("https://example.test/node-realms");
+        scheduler.run_script("globalThis.frame=document.querySelector('iframe');void frame.contentWindow").unwrap();
+        let result=scheduler.run_script(r#"(function(){let step=0;try{
+            function check(v){step++;if(!v)throw 'factory '+step;}
+            const inner=frame.contentWindow;
+            for(const [method,iface,args] of [['createTextNode','Text',['x']],['createComment','Comment',['x']],
+                ['createProcessingInstruction','ProcessingInstruction',['t','d']],['createDocumentFragment','DocumentFragment',[]],
+                ['createAttribute','Attr',['a']]]){
+                const node=inner.Document.prototype[method].apply(document,args);
+                check(Object.getPrototypeOf(node)===window[iface].prototype);
+                check(node.ownerDocument===document);
+            }
+            const xml=document.implementation.createDocument(null,'r',null);
+            check(Object.getPrototypeOf(xml)===XMLDocument.prototype);
+            check(inner.Document.prototype.createCDATASection.call(xml,'x') instanceof CDATASection);
+            const doctype=inner.DOMImplementation.prototype.createDocumentType.call(document.implementation,'html','','');
+            check(Object.getPrototypeOf(doctype)===DocumentType.prototype);
+            const made=inner.DOMImplementation.prototype.createHTMLDocument.call(document.implementation,'title');
+            check(Object.getPrototypeOf(made)===Document.prototype);
+            check(made.documentElement instanceof HTMLHtmlElement && made.querySelector('title').firstChild instanceof Text);
+            const childValues=inner.Function('return [new Text("x"),new Comment("x"),new DocumentFragment(),new Document()]')();
+            for(let n=0;n<3;n++)check(childValues[n].ownerDocument===inner.document);
+            check(Object.getPrototypeOf(childValues[0])===inner.Text.prototype);
+            check(Object.getPrototypeOf(childValues[1])===inner.Comment.prototype);
+            check(Object.getPrototypeOf(childValues[2])===inner.DocumentFragment.prototype);
+            check(Object.getPrototypeOf(childValues[3])===inner.Document.prototype);
+            check(Object.getPrototypeOf(childValues[3].cloneNode())===inner.Document.prototype);
+            return true;}catch(e){return String(e)+' at step '+step;}})()"#).unwrap();
+        assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
+    }
+
+    #[test]
+    fn adoption_keeps_creation_realm_while_clone_import_and_new_markup_use_current_document() {
+        let host=Rc::new(RefCell::new(BrowserDomHost { dom:amazing_html::parse("<body><iframe></iframe></body>"),native_forwarded:false }));
+        let mut scheduler=crate::js_scheduler::DriverScheduler::new(host,32).unwrap();
+        scheduler.set_location_url("https://example.test/adoption-realms");
+        scheduler.run_script("globalThis.frame=document.querySelector('iframe');void frame.contentWindow").unwrap();
+        let result=scheduler.run_script(r#"(function(){let step=0;try{
+            function check(v){step++;if(!v)throw 'adopt '+step;}
+            const inner=frame.contentWindow;
+            const foreign=inner.document.createElement('div');foreign.innerHTML='text<!--comment--><span a="b"></span>';
+            const original=Object.getPrototypeOf(foreign);
+            check(document.body.appendChild(foreign)===foreign);
+            check(foreign.ownerDocument===document && Object.getPrototypeOf(foreign)===original);
+            check(Object.getPrototypeOf(foreign.firstChild)===inner.Text.prototype);
+            check(Object.getPrototypeOf(foreign.childNodes[1])===inner.Comment.prototype);
+            check(foreign.firstChild===foreign.childNodes[0]);
+            const clone=inner.Node.prototype.cloneNode.call(foreign,true);
+            check(Object.getPrototypeOf(clone)===HTMLDivElement.prototype);
+            check(Object.getPrototypeOf(clone.firstChild)===Text.prototype);
+            check(Object.getPrototypeOf(clone.lastChild.getAttributeNode('a'))===Attr.prototype);
+            const imported=inner.document.importNode(clone,true);
+            check(Object.getPrototypeOf(imported)===inner.HTMLDivElement.prototype);
+            check(Object.getPrototypeOf(imported.firstChild)===inner.Text.prototype);
+            const template=inner.document.createElement('template');template.innerHTML='<span>old</span>';
+            const content=template.content;const old=content.firstChild;
+            check(Object.getPrototypeOf(content.ownerDocument)===inner.Document.prototype);
+            document.body.appendChild(template);check(template.content===content);
+            check(Object.getPrototypeOf(old)===inner.HTMLSpanElement.prototype);
+            template.innerHTML='<span>new</span>';check(Object.getPrototypeOf(template.content.firstChild)===HTMLSpanElement.prototype);
+            foreign.innerHTML='new<!--new-->';check(Object.getPrototypeOf(foreign.firstChild)===Text.prototype);
+            const range=document.createRange();range.selectNodeContents(foreign);
+            check(Object.getPrototypeOf(inner.Range.prototype.cloneContents.call(range))===DocumentFragment.prototype);
+            const retained=foreign.firstChild;frame.remove();
+            check(foreign.firstChild===retained && Object.getPrototypeOf(imported)===inner.HTMLDivElement.prototype);
+            check(imported.ownerDocument===inner.document);
+            return true;}catch(e){return String(e)+' at step '+step;}})()"#).unwrap();
+        assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
+    }
+
+    #[test]
+    fn domparser_receiver_realm_survives_borrowed_method_conversion_and_removed_frame() {
+        let host=Rc::new(RefCell::new(BrowserDomHost { dom:amazing_html::parse("<body><iframe srcdoc=''></iframe></body>"),native_forwarded:false }));
+        let mut scheduler=crate::js_scheduler::DriverScheduler::new(host,32).unwrap();
+        scheduler.set_location_url("https://example.test/parser-realms");
+        scheduler.run_script("globalThis.frame=document.querySelector('iframe');void frame.contentWindow").unwrap();
+        let result=scheduler.run_script(r#"(function(){let step=0;try{
+            function check(v){step++;if(!v)throw 'parser '+step;}
+            const inner=frame.contentWindow;const parser=new inner.DOMParser();
+            let converted=0;const source={toString(){converted++;frame.remove();return '<r><child/></r>';}};
+            const parsed=DOMParser.prototype.parseFromString.call(parser,source,'application/xml');
+            check(converted===1 && Object.getPrototypeOf(parsed)===inner.XMLDocument.prototype);
+            check(parsed.URL==='about:srcdoc' && parsed.baseURI==='about:srcdoc');
+            check(Object.getPrototypeOf(parsed.documentElement)===inner.Element.prototype);
+            check(parsed.defaultView===null);
+            const clone=Node.prototype.cloneNode.call(parsed,true);
+            check(Object.getPrototypeOf(clone)===inner.XMLDocument.prototype);
+            const error=DOMParser.prototype.parseFromString.call(parser,'<broken>','application/xml');
+            check(Object.getPrototypeOf(error)===inner.XMLDocument.prototype);
+            check(error.documentElement.localName==='parsererror');
+            let wrong=false;try{DOMParser.prototype.parseFromString.call({},source,'text/html');}catch(e){wrong=e instanceof TypeError;}
+            check(wrong && converted===1);
+            return true;}catch(e){return String(e)+' at step '+step;}})()"#).unwrap();
+        assert!(matches!(result,JsValue::Bool(true)),"{result:?}");
+    }
+
+    #[test]
+    fn missing_stale_realm_document_and_stale_node_identity_fail_before_dom_mutation() {
+        let host=Rc::new(RefCell::new(BrowserDomHost { dom:Dom::new(),native_forwarded:false }));
+        let mut js=Interpreter::new_with_external_scheduler(32).unwrap();js.set_dom_host(host.clone());
+        let bindings=super::super::install(&mut js,host.clone()).unwrap();
+        bindings.set_document_url(&mut js,"https://example.test/stale-realms");
+        let realm=js.binding_current_realm();let actual=bindings.state.borrow_mut().realm_documents.remove(&realm).unwrap();
+        let count=host.borrow().dom.node_count();
+        let result=js.run_script("(function(){let n=0;for(const make of [()=>new Text('x'),()=>new Comment('x'),()=>new DocumentFragment(),()=>new Document(),()=>new DOMParser()]){try{make()}catch(e){if(e instanceof TypeError)n++;}}return n;})()").unwrap();
+        assert_eq!(result,JsValue::Number(5.0));assert_eq!(host.borrow().dom.node_count(),count);
+        bindings.state.borrow_mut().realm_documents.insert(realm,(actual.0,actual.1+1));
+        assert_eq!(js.run_script("(function(){try{document.createElement('div')}catch(e){return e instanceof TypeError;}return false;})()").unwrap(),JsValue::Bool(true));
+        assert_eq!(host.borrow().dom.node_count(),count);bindings.state.borrow_mut().realm_documents.insert(realm,actual);
+        let mut adapter=RuntimeBindingHost {js:&mut js,state:bindings.state.clone()};
+        let mut key=adapter.node_object_key(NodeIdx(0));key.generation+=1;
+        assert!(adapter.node_from_object_key(key).is_none());
+        let prototype=adapter.prototype(Interface::Document).unwrap();
+        let stale=adapter.js.binding_wrap_host(amazing_js::HostHandle { arena:key.arena,slot:key.slot,generation:key.generation,brand:InterfaceBrand::NODE.0 },&prototype).unwrap();
+        assert!(adapter.node_brand(&stale).is_none());
+        adapter.js.global_obj.borrow_mut().set_own("staleNode",stale);
+        assert_eq!(adapter.js.run_script("(function(){try{Node.prototype.appendChild.call(staleNode,document.createComment('x'));}catch(e){return e instanceof TypeError;}return false;})()").unwrap(),JsValue::Bool(true));
     }
 
 }

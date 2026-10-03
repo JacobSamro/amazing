@@ -43,6 +43,7 @@ fn implementation_document<H: BindingHost>(host: &mut H, receiver: &H::Value) ->
 pub(crate) fn invoke<H: BindingHost>(
     host: &mut H, op: O, receiver: H::Value, args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    host.current_document_for_nodes()?;
     if op == O::DocumentImplementation {
         let node = document(host, &receiver)?;
         return host.wrap_platform_object(host.node_platform_key(node), InterfaceBrand::DOM_IMPLEMENTATION);

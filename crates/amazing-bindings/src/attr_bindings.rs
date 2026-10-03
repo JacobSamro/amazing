@@ -107,6 +107,7 @@ pub(crate) fn invoke<H: BindingHost>(
     host: &mut H, op: O, receiver: H::Value, args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
     if matches!(op, O::CreateAttribute | O::CreateAttributeNS) {
+        host.current_document_for_nodes()?;
         let doc = document(host, &receiver)?;
         let attr = if op == O::CreateAttribute {
             let mut name = argument(host, args, 0)?;

@@ -64,6 +64,7 @@ enum Output { Void, Node(NodeIdx), Number(f64), Boolean(bool), Range(Range), Str
 pub(crate) fn invoke<H: BindingHost + FragmentParser>(
     host: &mut H, op: O, receiver: H::Value, args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    host.current_document_for_nodes()?;
     if op == O::StaticRangeConstructor {
         let dictionary = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         if host.is_nullish(dictionary) {
@@ -99,7 +100,7 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser>(
                 else { Err(DomError::TypeError) }
             })?;
             node
-        } else { host.current_document() };
+        } else { host.current_document_for_nodes()? };
         let range = host.with_dom(|dom| dom.create_range(document))?;
         return host.wrap_platform_object(range_key(host, range), InterfaceBrand::RANGE);
     }

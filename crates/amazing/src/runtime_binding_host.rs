@@ -103,7 +103,7 @@ enum NativeEntry {
 }
 
 enum WebObject {
-    DomParser,
+    DomParser { realm: RealmHandle, document: (NodeIdx, u64), origin: amazing_fetch::Origin },
     XmlSerializer,
     Url(UrlWithSearchParams, Option<u64>),
     Params(UrlSearchParams),
@@ -130,12 +130,13 @@ struct BindingState {
     interfaces: HashMap<RealmHandle, Vec<(Interface, JsValue, JsValue)>>,
     // Copy handles introduce no JsValue/Rc roots.
     node_creation_realms: HashMap<(NodeIdx, u64), RealmHandle>,
+    realm_documents: HashMap<RealmHandle, (NodeIdx, u64)>,
     roots: Vec<Option<JsValue>>,
     captured_resolvers: Option<(JsValue, JsValue)>,
     promise_resolvers: HashMap<usize, (JsValue, JsValue)>,
     legacy_document: JsValue,
     legacy_elements: HashMap<u32, JsValue>,
-    constructed_documents: HashSet<NodeIdx>,
+    constructed_documents: HashSet<(NodeIdx, u64)>,
     abort_timeouts: Vec<(AbortSignalId, u64)>,
     document_url: Option<String>,
     document_character_set: Option<String>,
@@ -590,7 +591,9 @@ impl RuntimeBindingHost<'_> {
             let node = self
                 .node_from_object_key(key)
                 .ok_or_else(|| Throw::type_error("Invalid node wrapper"))?;
-            let constructed = self.state.borrow().constructed_documents.contains(&node);
+            let generation = self.state.borrow().host.borrow().dom.node_generation(node)
+                .ok_or_else(|| Throw::type_error("Invalid node wrapper"))?;
+            let constructed = self.state.borrow().constructed_documents.contains(&(node, generation));
             let host = self.state.borrow().host.clone();
             let host = host.borrow();
             return Ok(match &host.dom.get(node).kind {
@@ -796,6 +799,7 @@ pub(crate) fn install(
         functions: Vec::new(),
         interfaces: HashMap::new(),
         node_creation_realms: HashMap::new(),
+        realm_documents: HashMap::new(),
         roots: Vec::new(),
         captured_resolvers: None,
         promise_resolvers: HashMap::new(),
@@ -922,10 +926,18 @@ impl BindingHost for RuntimeBindingHost<'_> {
         self.dom_xml_serializer_new()
     }
     fn dom_parser_new(&mut self) -> Result<JsValue, Throw> {
-        self.web_allocate(WebObject::DomParser, InterfaceBrand::DOM_PARSER)
+        self.dom_parser_new_in_relevant_realm()
+    }
+    fn dom_parser_relevant_document(&self, parser: &JsValue) -> Result<NodeIdx, Throw> {
+        self.dom_parser_document(parser)
+    }
+    fn create_inert_document_for_parser(&mut self, parser: &JsValue, bytes: &[u8], content_type: &str,
+        url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
+        self.dom_parse_for_parser(parser, bytes, content_type, url, charset)
     }
     fn create_inert_document(&mut self, bytes: &[u8], content_type: &str,
         url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
+        self.current_document_for_nodes().map_err(|_| DomError::TypeError)?;
         let mime = content_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
         let (parsed, detected_encoding) = if mime == "text/html" {
             let decoded = amazing_html::encoding::decode(bytes, charset);
@@ -951,9 +963,11 @@ impl BindingHost for RuntimeBindingHost<'_> {
         } else { return Err(DomError::NotSupportedError); };
         let character_set = amazing_html::encoding::canonical_name(detected_encoding);
         let host = self.state.borrow().host.clone();
-        let result = host.borrow_mut().dom.import_inert_document(&parsed, url, &mime,
-            character_set);
-        result
+        let document = host.borrow_mut().dom.import_inert_document(&parsed, url, &mime,
+            character_set)?;
+        self.dom_register_document_realm(document, self.js.binding_current_realm())
+            .map_err(|_| DomError::TypeError)?;
+        Ok(document)
     }
 
     fn global_object(&mut self) -> Result<JsValue, Throw> {
@@ -1871,10 +1885,26 @@ impl BindingHost for RuntimeBindingHost<'_> {
         self.define_data_property(&constructor, name, method, true, false, true)
     }
     fn current_document(&self) -> NodeIdx {
-        NodeIdx(0)
+        self.dom_current_document_for_nodes().expect("DOM callbacks require a registered realm Document")
+    }
+    fn current_document_for_nodes(&self) -> Result<NodeIdx, Throw> {
+        self.dom_current_document_for_nodes()
     }
     fn mark_constructed_document(&mut self, document: NodeIdx) {
-        self.state.borrow_mut().constructed_documents.insert(document);
+        let generation = self.state.borrow().host.borrow().dom.node_generation(document)
+            .expect("Fresh constructed Document");
+        self.state.borrow_mut().constructed_documents.insert((document, generation));
+    }
+    fn mark_cloned_node(&mut self, source: NodeIdx, copy: NodeIdx) {
+        let host = self.state.borrow().host.clone();
+        let dom = &host.borrow().dom;
+        if !matches!(dom.get(source).kind, NodeKind::Document) { return; }
+        let source_generation = dom.node_generation(source).expect("Cloned source is live");
+        let copy_generation = dom.node_generation(copy).expect("Fresh cloned Document");
+        let mut state = self.state.borrow_mut();
+        if state.constructed_documents.contains(&(source, source_generation)) {
+            state.constructed_documents.insert((copy, copy_generation));
+        }
     }
     fn with_dom<R>(
         &mut self,

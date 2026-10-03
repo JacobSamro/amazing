@@ -10,6 +10,7 @@ pub(crate) fn create<H: BindingHost + FragmentParser>(
     let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
     // String conversion may move the live Range: capture its context afterward.
     let markup = host.to_dom_string(value)?;
+    host.current_document_for_nodes()?;
     let (document, element, html_hint) = host.with_dom(|dom| {
         let node = dom.range(range)?.start.node;
         let document = dom.owner_document(node).unwrap_or(node);

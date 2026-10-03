@@ -1393,9 +1393,21 @@ pub trait BindingHost: Sized {
         _url: &str, _charset: Option<&str>) -> Result<NodeIdx, DomError> {
         Err(DomError::NotSupportedError)
     }
+    fn create_inert_document_for_parser(&mut self, _parser: &Self::Value, bytes: &[u8],
+        content_type: &str, url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
+        self.create_inert_document(bytes, content_type, url, charset)
+    }
+    fn dom_parser_relevant_document(&self, _parser: &Self::Value) -> Result<NodeIdx, Self::Error> {
+        self.current_document_for_nodes()
+    }
     fn current_document(&self) -> NodeIdx;
+    /// Node allocation must fail before mutation if its realm context is absent.
+    fn current_document_for_nodes(&self) -> Result<NodeIdx, Self::Error> { Ok(self.current_document()) }
     /// Record the interface identity of `new Document()` before its wrapper is made.
     fn mark_constructed_document(&mut self, _document: NodeIdx) {}
+    /// Preserve Document interface identity after native cloning, without
+    /// callbacks into user code or changing custom-element construction.
+    fn mark_cloned_node(&mut self, _source: NodeIdx, _copy: NodeIdx) {}
     fn with_dom<R>(
         &mut self,
         callback: impl FnOnce(&mut Dom) -> Result<R, DomError>,
