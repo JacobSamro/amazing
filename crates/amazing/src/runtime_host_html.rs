@@ -702,6 +702,7 @@ impl RuntimeBindings {
             i.set_location_url(child_url);
             i.set_host_native_dispatcher(build_host_native_dispatcher(state.clone()));
             let mut adapter = RuntimeBindingHost { js: i, state: state.clone() };
+            adapter.dom_register_document_realm(document, realm)?;
             // A real Document/Element/Array/... surface for this realm, not
             // the top realm's: `frame.contentWindow.Array !== window.Array`
             // and `frame.contentWindow.Document !== window.Document`.
