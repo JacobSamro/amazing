@@ -71,7 +71,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         return Err(host.type_error("Invalid Selection"));
     }
     let id = SelectionId::from_slot(handle.slot as usize);
-    let previous_range = host.with_dom(|dom| dom.selection_state(id).map(|state| state.range))?;
+    let mut previous_range = host.with_dom(|dom| dom.selection_state(id).map(|state| state.range))?;
     match op {
         O::SelectionAddRange | O::SelectionRemoveRange => {
             let range = range_from_value(host, args.first())?;
@@ -85,6 +85,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
             let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
             let node = if host.is_nullish(value) { None } else { Some(required_node(host, Some(value))?) };
             let offset = unsigned_long(host, args.get(1))?;
+            previous_range = host.with_dom(|dom| dom.selection_state(id).map(|state| state.range))?;
             host.with_dom(|dom| dom.selection_collapse_at(id, node.map(|node| BoundaryPoint::new(node, offset))))?;
         }
         O::SelectionCollapseToStart | O::SelectionCollapseToEnd => {
@@ -93,6 +94,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         O::SelectionExtend => {
             let node = required_node(host, args.first())?;
             let offset = unsigned_long(host, args.get(1))?;
+            previous_range = host.with_dom(|dom| dom.selection_state(id).map(|state| state.range))?;
             host.with_dom(|dom| dom.selection_extend(id, BoundaryPoint::new(node, offset)))?;
         }
         O::SelectionSetBaseAndExtent => {
@@ -102,6 +104,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
             let anchor_offset = unsigned_long(host, args.get(1))?;
             let focus = required_node(host, args.get(2))?;
             let focus_offset = unsigned_long(host, args.get(3))?;
+            previous_range = host.with_dom(|dom| dom.selection_state(id).map(|state| state.range))?;
             host.with_dom(|dom| dom.selection_set_base_and_extent(id, BoundaryPoint::new(anchor, anchor_offset), BoundaryPoint::new(focus, focus_offset)))?;
         }
         O::SelectionSelectAllChildren => {

@@ -2157,6 +2157,9 @@ mod tests {
             s.setBaseAndExtent(t,1,t,4);const deleted=s.getRangeAt(0);s.deleteFromDocument();
             check(t.data==='aef'&&s.getRangeAt(0)===deleted&&s.isCollapsed,'delete retained identity');
             check(document.implementation.createHTMLDocument('').getSelection()===null,'inert null');
+            const foreign=document.implementation.createHTMLDocument(''),foreignText=foreign.createTextNode('foreign');foreign.body.appendChild(foreignText);
+            s.setBaseAndExtent(foreignText,{valueOf(){s.setPosition(t,1);return 0;}},foreignText,1);
+            check(s.anchorNode===t&&s.anchorOffset===1,'reentrant conversion foreign no-op preserves registered range');
             caught=false;try{Document.prototype.getSelection.call({});}catch(e){caught=e instanceof TypeError;}check(caught,'wrong receiver');
             return true;
         })()"#).unwrap();
