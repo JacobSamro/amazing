@@ -8,6 +8,14 @@ impl Dom {
     pub fn lookup_namespace_uri(
         &self, node: NodeIdx, prefix: Option<&str>,
     ) -> Result<Option<String>, DomError> {
+        self.lookup_namespace_uri_utf16(node, prefix)
+            .map(|value| value.map(|units| String::from_utf16_lossy(&units)))
+    }
+
+    /// Resolve the actual selected declaration without losing DOMString units.
+    pub fn lookup_namespace_uri_utf16(
+        &self, node: NodeIdx, prefix: Option<&str>,
+    ) -> Result<Option<Vec<u16>>, DomError> {
         self.check_node(node)?;
         let prefix = prefix.filter(|prefix| !prefix.is_empty());
         let start = match &self.get(node).kind {
@@ -20,11 +28,11 @@ impl Dom {
         };
         let mut current = start;
         while let Some(element) = current {
-            if prefix == Some("xml") { return Ok(Some(XML.into())); }
-            if prefix == Some("xmlns") { return Ok(Some(XMLNS.into())); }
+            if prefix == Some("xml") { return Ok(Some(XML.encode_utf16().collect())); }
+            if prefix == Some("xmlns") { return Ok(Some(XMLNS.encode_utf16().collect())); }
             let namespace = self.namespace_uri(element);
             if namespace.is_some() && self.prefix(element) == prefix {
-                return Ok(namespace.map(str::to_owned));
+                return Ok(namespace.map(|uri| uri.encode_utf16().collect()));
             }
             for attr in self.attributes_expanded(element).unwrap_or_default() {
                 if attr.namespace_uri != Some(XMLNS) { continue; }
@@ -32,7 +40,11 @@ impl Dom {
                     None => attr.prefix.is_none() && attr.local_name == "xmlns",
                     Some(prefix) => attr.prefix == Some("xmlns") && attr.local_name == prefix,
                 };
-                if matches { return Ok((!attr.value.is_empty()).then(|| attr.value.to_owned())); }
+                if matches {
+                    let value = self.attribute_ns_utf16(element, attr.namespace_uri, attr.local_name)
+                        .unwrap_or_else(|| attr.value.encode_utf16().collect());
+                    return Ok((!value.is_empty()).then_some(value));
+                }
             }
             current = self.get(element).parent.filter(|parent|
                 matches!(self.get(*parent).kind, NodeKind::Element { .. }));

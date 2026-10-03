@@ -53,8 +53,9 @@ pub(crate) fn xml(dom: &Dom, element: Option<NodeIdx>) -> Result<XmlFragmentCont
     }
     let mut namespaces = Vec::new();
     for prefix in prefixes {
-        match dom.lookup_namespace_uri(element, prefix.as_deref())? {
-            Some(uri) => namespaces.push((prefix, uri)),
+        match dom.lookup_namespace_uri_utf16(element, prefix.as_deref())? {
+            Some(uri) => namespaces.push((prefix,
+                String::from_utf16(&uri).map_err(|_| DomError::SyntaxError)?)),
             None if prefix.is_none() || declared.contains(&prefix) => namespaces.push((prefix, String::new())),
             None => (),
         }
@@ -106,5 +107,32 @@ mod tests {
         assert_eq!(snapshot.attributes[0].prefix.as_deref(), Some("a"));
         assert!(snapshot.has_form_ancestor && snapshot.scripting_enabled);
         assert_eq!(snapshot.quirks_mode, QuirksMode::Quirks);
+    }
+}
+
+#[cfg(test)]
+mod xml_namespace_units_tests {
+    use super::*;
+    #[test]
+    fn xml_snapshot_validates_only_selected_namespace_declaration_units() {
+        let mut dom=Dom::new();
+        let parent=dom.create_element_ns_in(NodeIdx(0),Some("urn:parent"),"r:parent").unwrap();
+        dom.set_attribute_qualified_ns(parent,Some(XMLNS),"xmlns:p","initial").unwrap();
+        let declaration=dom.get_attribute_node(parent,Some(XMLNS),"p").unwrap();
+        dom.set_attr_value(declaration,vec![0xd800]).unwrap();
+        let child=dom.create_element_ns(parent,Some("urn:child"),"c:child").unwrap();
+        assert_eq!(xml(&dom,Some(child)).unwrap_err(),DomError::SyntaxError);
+        dom.set_attribute_qualified_ns(child,Some(XMLNS),"xmlns:p","urn:valid").unwrap();
+        assert!(xml(&dom,Some(child)).unwrap().namespaces.contains(&(Some("p".into()),"urn:valid".into())));
+        dom.set_attribute_qualified_ns(child,Some(XMLNS),"xmlns:p","").unwrap();
+        assert!(xml(&dom,Some(child)).unwrap().namespaces.contains(&(Some("p".into()),String::new())));
+        dom.set_attribute_qualified_ns(child,Some(XMLNS),"xmlns:c","ignored").unwrap();
+        let own=dom.get_attribute_node(child,Some(XMLNS),"c").unwrap();
+        dom.set_attr_value(own,vec![0xdc00]).unwrap();
+        dom.set_attribute_qualified_ns(child,Some(XMLNS),"xmlns:xml","ignored").unwrap();
+        let built_in=dom.get_attribute_node(child,Some(XMLNS),"xml").unwrap();
+        dom.set_attr_value(built_in,vec![0xd800]).unwrap();
+        assert!(xml(&dom,Some(child)).unwrap().namespaces.contains(&(Some("c".into()),"urn:child".into())));
+        assert!(xml(&dom,Some(child)).unwrap().namespaces.contains(&(Some("xml".into()),XML.into())));
     }
 }
