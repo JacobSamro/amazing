@@ -1,0 +1,28 @@
+{
+  "before": "15291bf78bd205c3ae633e1fe0f033ed4b23ecc1",
+  "after": "964535e098c952fa9f2389a7246cccf57d2913c1",
+  "source_series": [
+    "511011706899a94761df1d62a89f970d2f58a509",
+    "5593ae42104173df62490e080c5de6931a4da1ff",
+    "781f6b5d4f2ce216b5488e525bb01a5b86c689ac",
+    "4a6fdf6ca1ea87e9b5fbcf440547a01b7b80c93d",
+    "964535e098c952fa9f2389a7246cccf57d2913c1"
+  ],
+  "owned_before": 677,
+  "owned_after": 679,
+  "workspace_before": 4114,
+  "workspace_after": 4116,
+  "owned_skip": 6,
+  "workspace_skip": 17,
+  "docs": 4,
+  "cli": 1894,
+  "expanded": 1930,
+  "unsupported": 6,
+  "upstream": {
+    "repo": "tafia/quick-xml",
+    "path": "src/encoding.rs",
+    "commit": "2eaa844b4b40117fb7ed4d1f512ede918125aeab",
+    "license": "MIT"
+  },
+  "binary_sha256": "5544ddb440585b80d7463737bdd45e4b524f3f4bd32256e793fb6dcf67bb90bd  /tmp/amazing-target-html/release/amazing\nafae02009f215d07caa76e073d84fda834e63060ec3b6ca8d7a6e6bd041b17c9  /tmp/amazing-target-html/release/examples/html5lib_host\n"
+}
