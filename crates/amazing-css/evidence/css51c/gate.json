@@ -1,0 +1,16 @@
+{
+  "base": "e5d2f5e0e76e6e75e6febe955aea67ad7d1c4656",
+  "platform": "Linux Boat native ext4",
+  "workspace_before_passed": 3929,
+  "workspace_passed": 3932,
+  "workspace_skipped": 17,
+  "doctests_passed": 4,
+  "new_grouped_tests": 3,
+  "parsing_passed": 4312,
+  "parsing_total": 5126,
+  "parsing_files": 514,
+  "parsing_skipped_nonliteral": 169,
+  "parsing_gained": 0,
+  "parsing_lost": 0,
+  "render_gains": "Not claimed: facade decoded-resource adoption gated separately"
+}

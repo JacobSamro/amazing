@@ -1115,7 +1115,10 @@ fn resolve_candidate_pool<'a>(
         .filter(|(_, candidate)| candidate.author_declaration)
         .map(|(property, _)| *property)
         .collect();
-    let url_bases: Vec<_> = ["content", "list-style-image", "border-image-source"]
+    // URL tokens are resolved against the declaration's stylesheet, including
+    // tokens supplied through var(). Keep provenance per winning longhand:
+    // identical relative resources in different sheets are distinct resources.
+    let url_bases: Vec<_> = ["content", "background-image", "list-style-image", "border-image-source"]
         .into_iter()
         .map(|property| (property, champs.get(property).copied()))
         .collect();
@@ -1497,6 +1500,10 @@ ruby, rb, rt, rbc, rtc { unicode-bidi: isolate; }
 rtc, rt { font-variant-east-asian: ruby; white-space: nowrap; line-height: 1; }
 rtc, :not(rtc) > rt { font-size: 50%; }
 "#;
+
+#[cfg(test)]
+#[path = "url_provenance_tests.rs"]
+mod url_provenance_tests;
 
 #[cfg(test)]
 mod tests {
