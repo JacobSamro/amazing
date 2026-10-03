@@ -115,7 +115,7 @@ impl Interpreter {
                 let _ = self.close_async_iterator(&iterator, !async_iterator);
                 return Err(error);
             }
-            match self.exec_stmt(body, &iteration_env) {
+            match self.exec_loop_body(body, &iteration_env) {
                 Ok(Flow::Normal | Flow::Continue(None)) => {}
                 Ok(Flow::Break(None)) => {
                     self.close_async_iterator(&iterator, !async_iterator)?;

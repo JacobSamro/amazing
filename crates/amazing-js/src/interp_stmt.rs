@@ -1,3 +1,5 @@
+// StatementList/try completion portions adapted from lucid-softworks/lumen
+// (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Normal IteratorClose GetMethod/completion portions adapted from lucid-softworks/lumen
 // (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Assignment-pattern reference ordering portions adapted from lucid-softworks/lumen
@@ -115,13 +117,34 @@ fn labeled_function_decl(stmt: &ast::Stmt) -> Option<&ast::FunctionItem> {
 
 impl Interpreter {
     fn exec_stmt(&mut self, s: &ast::Stmt, env: &EnvHandle) -> Result<Flow, Throw> {
+        self.completion = None;
+        let result = self.exec_stmt_inner(s, env);
+        // These statements apply UpdateEmpty(result, undefined), including
+        // abrupt break/continue. A Block and Label preserve genuine Empty.
+        if matches!(&s.kind, StmtKind::If { .. } | StmtKind::With { .. } | StmtKind::Try(_)
+            | StmtKind::While { .. } | StmtKind::DoWhile { .. } | StmtKind::For { .. }
+            | StmtKind::ForIn { .. } | StmtKind::ForOf { .. } | StmtKind::ForAwaitOf { .. }
+            | StmtKind::Switch { .. }) && self.completion.is_none() {
+            self.completion = Some(JsValue::Undefined);
+        }
+        result
+    }
+
+    fn exec_loop_body(&mut self, body: &ast::Stmt, env: &EnvHandle) -> Result<Flow, Throw> {
+        let value = self.completion.clone();
+        let result = self.exec_stmt(body, env);
+        if self.completion.is_none() { self.completion = value; }
+        result
+    }
+
+    fn exec_stmt_inner(&mut self, s: &ast::Stmt, env: &EnvHandle) -> Result<Flow, Throw> {
         if let Some(hook) = self.debug_hook.clone() {
             hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line, self.depth);
         }
         match &s.kind {
             StmtKind::Empty | StmtKind::Debugger => Ok(Flow::Normal),
             StmtKind::Expression(e) => {
-                self.completion = self.eval_expr(e, env)?;
+                self.completion = Some(self.eval_expr(e, env)?);
                 Ok(Flow::Normal)
             }
             StmtKind::Var(d) => {
@@ -227,7 +250,7 @@ impl Interpreter {
             }
             StmtKind::Block(b) => self.exec_lexical_block(b, env),
             StmtKind::If { cond, then, els } => {
-                self.completion = JsValue::Undefined;
+                self.completion = Some(JsValue::Undefined);
                 if self.eval_expr(cond, env)?.to_boolean() {
                     self.exec_if_branch(then, env)
                 } else if let Some(e) = els {
@@ -237,7 +260,7 @@ impl Interpreter {
                 }
             }
             StmtKind::While { test, body } => {
-                self.completion = JsValue::Undefined;
+                self.completion = Some(JsValue::Undefined);
                 self.loop_while(test, body, env, None)
             }
             StmtKind::With { object, body } => {
@@ -262,7 +285,7 @@ impl Interpreter {
                 self.exec_stmt(body, &with_env)
             }
             StmtKind::DoWhile { body, test } => {
-                self.completion = JsValue::Undefined;
+                self.completion = Some(JsValue::Undefined);
                 self.loop_do_while(body, test, env, None)
             }
             StmtKind::For {
@@ -271,7 +294,7 @@ impl Interpreter {
                 update,
                 body,
             } => {
-                self.completion = JsValue::Undefined;
+                self.completion = Some(JsValue::Undefined);
                 self.loop_for(
                     init.as_ref(),
                     test.as_ref(),
@@ -282,7 +305,7 @@ impl Interpreter {
                 )
             }
             StmtKind::ForIn { left, right, body } => {
-                self.completion = JsValue::Undefined;
+                self.completion = Some(JsValue::Undefined);
                 let v = self.eval_for_head_right(left, right, env)?;
                 let object = match v {
                     JsValue::Null | JsValue::Undefined => None,
@@ -300,7 +323,7 @@ impl Interpreter {
                 while let Some(k) = self.next_for_in_key(&mut iterator)? {
                     let iteration_env = for_iteration_env(left, env);
                     self.bind_for(left, JsValue::str(k), &iteration_env)?;
-                    match self.exec_stmt(body, &iteration_env)? {
+                    match self.exec_loop_body(body, &iteration_env)? {
                         Flow::Normal | Flow::Continue(None) => {}
                         Flow::Break(None) => break,
                         x => return Ok(x),
@@ -309,17 +332,17 @@ impl Interpreter {
                 Ok(Flow::Normal)
             }
             StmtKind::ForOf { left, right, body } => {
-                self.completion = JsValue::Undefined;
+                self.completion = Some(JsValue::Undefined);
                 let v = self.eval_for_head_right(left, right, env)?;
                 self.exec_for_of(left, &v, body, env)
             }
             StmtKind::ForAwaitOf { left, right, body } => {
-                self.completion = JsValue::Undefined;
+                self.completion = Some(JsValue::Undefined);
                 let iterable = self.eval_for_head_right(left, right, env)?;
                 self.exec_for_await_of(left, &iterable, body, env)
             }
             StmtKind::Switch { disc, cases } => {
-                self.completion = JsValue::Undefined;
+                self.completion = Some(JsValue::Undefined);
                 // 14.12's CaseBlockEvaluation: the discriminant is evaluated
                 // in the *outer* environment, but every case's test
                 // expression and body run in ONE fresh Block environment
@@ -414,7 +437,7 @@ impl Interpreter {
             )),
             StmtKind::Throw(e) => Err(Throw(self.eval_expr(e, env)?)),
             StmtKind::Try(t) => {
-                self.completion = JsValue::Undefined;
+                self.completion = Some(JsValue::Undefined);
                 self.exec_try(t, env)
             }
         }
@@ -427,7 +450,10 @@ impl Interpreter {
     fn exec_switch_cases(&mut self, cases: &[ast::SwitchCase], start: Option<usize>, env: &EnvHandle) -> Result<Flow, Throw> {
         let mut i = start;
         while let Some(n) = i {
-            match self.exec_stmts(&cases[n].body, env)? {
+            let previous = self.completion.clone();
+            let result = self.exec_stmts(&cases[n].body, env);
+            if self.completion.is_none() { self.completion = previous; }
+            match result? {
                 Flow::Normal => {
                     i = (n + 1 < cases.len()).then_some(n + 1);
                 }
@@ -509,10 +535,15 @@ impl Interpreter {
     }
 
     fn exec_stmts(&mut self, body: &[ast::Stmt], env: &EnvHandle) -> Result<Flow, Throw> {
-        for s in body {
-            match self.exec_stmt(s, env)? {
+        let mut value = None;
+        self.completion = None;
+        for statement in body {
+            let result = self.exec_stmt(statement, env);
+            if self.completion.is_none() { self.completion = value.clone(); }
+            value = self.completion.clone();
+            match result? {
                 Flow::Normal => {}
-                x => return Ok(x),
+                abrupt => return Ok(abrupt),
             }
         }
         Ok(Flow::Normal)
@@ -580,6 +611,7 @@ impl Interpreter {
     /// disposal error, with the scope otherwise completing normally, propagates as-is.
     /// Ported from lucid-softworks/lumen (crates/lumen/src/eval.rs) @ f6c9860d, MIT.
     fn dispose_frame(&mut self, frame: Vec<Disposable>, result: Result<Flow, Throw>) -> Result<Flow, Throw> {
+        let protected = self.completion.clone();
         let mut completion = result;
         for d in frame.into_iter().rev() {
             let disposed = self
@@ -594,6 +626,7 @@ impl Interpreter {
                 };
             }
         }
+        self.completion = protected;
         completion
     }
 
@@ -652,8 +685,9 @@ impl Interpreter {
         env: &EnvHandle,
         label: Option<&str>,
     ) -> Result<Flow, Throw> {
+        self.completion = Some(JsValue::Undefined);
         while self.eval_expr(test, env)?.to_boolean() {
-            match self.exec_stmt(body, env)? {
+            match self.exec_loop_body(body, env)? {
                 Flow::Normal | Flow::Continue(None) => {}
                 Flow::Break(None) => break,
                 Flow::Break(Some(name)) if label == Some(name.as_str()) => break,
@@ -671,8 +705,9 @@ impl Interpreter {
         env: &EnvHandle,
         label: Option<&str>,
     ) -> Result<Flow, Throw> {
+        self.completion = Some(JsValue::Undefined);
         loop {
-            match self.exec_stmt(body, env)? {
+            match self.exec_loop_body(body, env)? {
                 Flow::Break(None) => break,
                 Flow::Break(Some(name)) if label == Some(name.as_str()) => break,
                 Flow::Continue(None) | Flow::Normal => {}
@@ -719,12 +754,14 @@ impl Interpreter {
         env: &EnvHandle,
         label: Option<&str>,
     ) -> Result<Flow, Throw> {
+        self.completion = Some(JsValue::Undefined);
         let loop_env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
         if let Some(init) = init {
             match init {
                 ForInit::Decl(decl) => {
                     let fake = ast::Stmt::new(StmtKind::Var((**decl).clone()), body.span.clone());
                     self.exec_stmt(&fake, &loop_env)?;
+                    self.completion = Some(JsValue::Undefined);
                 }
                 ForInit::Expr(expression) => {
                     self.eval_expr(expression, &loop_env)?;
@@ -783,7 +820,7 @@ impl Interpreter {
                     break;
                 }
             }
-            match self.exec_stmt(body, &iteration_env)? {
+            match self.exec_loop_body(body, &iteration_env)? {
                 Flow::Break(None) => break,
                 Flow::Break(Some(name)) if label == Some(name.as_str()) => break,
                 Flow::Continue(None) => {}
@@ -852,7 +889,7 @@ impl Interpreter {
         }
     }
     fn exec_lexical_block(&mut self, b: &ast::Block, env: &EnvHandle) -> Result<Flow, Throw> {
-        self.completion = JsValue::Undefined;
+        self.completion = None;
         let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
         for statement in &b.body {
             match &statement.kind {
@@ -918,11 +955,11 @@ impl Interpreter {
                 }
             }
         };
+        let protected = self.completion.clone();
         if let Some(f) = &t.finally {
-            let completion = self.completion.clone();
             let result = self.exec_lexical_block(f, env);
             match result {
-                Ok(Flow::Normal) => { self.completion = completion; }
+                Ok(Flow::Normal) => self.completion = protected,
                 Ok(x) => out = Ok(x),
                 Err(e) => out = Err(e),
             }
@@ -2086,7 +2123,7 @@ impl Interpreter {
         let previous_completion = self.completion.clone();
         let previous_strict = self.strict_eval_context;
         if interpreted { self.strict_eval_context = strict_function; }
-        self.completion = JsValue::Undefined;
+        self.completion = None;
         let r = (|| -> Result<JsValue, Throw> {
             match fun.body {
                 FunctionBody::Bytecode(code) => {
@@ -3276,7 +3313,7 @@ impl Interpreter {
     ) -> Result<Flow, Throw> {
         let Some(is_async) = dispose else {
             self.bind_for(left, value, iteration_env)?;
-            return self.exec_stmt(body, iteration_env);
+            return self.exec_loop_body(body, iteration_env);
         };
         self.using_stack.push(Vec::new());
         let step = self.for_of_iteration_step(left, value, body, iteration_env, is_async);
@@ -3294,7 +3331,7 @@ impl Interpreter {
     ) -> Result<Flow, Throw> {
         self.add_disposable(&value, is_async)?;
         self.bind_for(left, value, iteration_env)?;
-        self.exec_stmt(body, iteration_env)
+        self.exec_loop_body(body, iteration_env)
     }
 
     fn custom_iterator(&mut self, value: &JsValue) -> Result<Option<JsValue>, Throw> {

@@ -108,6 +108,8 @@ struct Segment {
     strict: bool,
     /// The driver's strictness, restored when the current segment ends.
     saved_strict: bool,
+    completion: Option<JsValue>,
+    saved_completion: Option<JsValue>,
     /// `i.frames.len()` inside the current segment: an `await` evaluated at exactly this depth
     /// belongs to the body itself (anything deeper is a nested, non-coroutine call).
     base: usize,
@@ -127,6 +129,8 @@ impl Segment {
             own_function: frame.and_then(|f| f.own_function.clone()),
             strict,
             saved_strict: false,
+            completion: None,
+            saved_completion: None,
             base: 0,
             awaits,
         }
@@ -145,6 +149,7 @@ fn enter_segment(i: &mut Interpreter) {
                 new_target: segment.new_target.clone(),
                 own_function: segment.own_function.clone(),
             });
+            segment.saved_completion = std::mem::replace(&mut i.completion, segment.completion.clone());
             segment.saved_strict = i.strict_eval_context;
             i.strict_eval_context = segment.strict;
             segment.base = i.frames.len();
@@ -155,7 +160,8 @@ fn enter_segment(i: &mut Interpreter) {
 /// End the current segment: pop its frame, restore the driver's strictness.
 fn leave_segment(i: &mut Interpreter) {
     SEGMENT.with(|segment| {
-        if let Some(segment) = segment.borrow().as_ref() {
+        if let Some(segment) = segment.borrow_mut().as_mut() {
+            segment.completion = std::mem::replace(&mut i.completion, segment.saved_completion.clone());
             i.frames.pop();
             i.strict_eval_context = segment.saved_strict;
         }

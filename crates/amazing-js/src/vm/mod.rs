@@ -232,6 +232,10 @@ enum Instruction {
     TryNormal,
     EndFinally,
     Complete(Register),
+    SaveCompletion(Register, Register),
+    CompleteEmpty,
+    UpdateEmptyCompletion(Register, Register),
+    EnsureCompletionValue,
     Return(Register),
     MakeFunction(Register, FunctionCode),
     MakeNamedFunction(Register, FunctionCode, String),
@@ -440,7 +444,7 @@ pub struct GeneratorState {
     frame: Option<Box<VmFrame>>,
     started: bool,
     executing: bool,
-    completion: JsValue,
+    completion: Option<JsValue>,
     async_promise: Option<Obj>,
     // Async generators only: a FIFO of outstanding `.next()`/`.return()`/
     // `.throw()` calls. Unlike a plain async function (one call, one backing
@@ -515,7 +519,7 @@ struct TryHandler {
     phase: TryPhase,
     caught: Option<JsValue>,
     pending: Option<Abrupt>,
-    saved_completion: Option<JsValue>,
+    saved_completion: Option<Option<JsValue>>,
     iterator_close: bool,
 }
 
@@ -529,7 +533,7 @@ impl Program {
     /// Legacy user callbacks reached through coercion are not fuel-metered yet.
     pub fn run(&self, interpreter: &mut Interpreter, limit: usize) -> Result<JsValue, Throw> {
         let previous = interpreter.completion.clone();
-        interpreter.completion = JsValue::Undefined;
+        interpreter.completion = None;
         let env = interpreter.global_env.clone();
         let result = self.execute(interpreter, env, limit);
         interpreter.completion = previous;
@@ -1100,7 +1104,20 @@ impl Program {
                         }
                         *pc = handler.end;
                     }
-                    Instruction::Complete(src) => i.completion = registers[*src].clone(),
+                    Instruction::Complete(src) => i.completion = Some(registers[*src].clone()),
+                    Instruction::CompleteEmpty => i.completion = None,
+                    Instruction::SaveCompletion(value, present) => {
+                        registers[*present] = JsValue::Bool(i.completion.is_some());
+                        registers[*value] = i.completion.clone().unwrap_or(JsValue::Undefined);
+                    }
+                    Instruction::UpdateEmptyCompletion(value, present) => {
+                        if i.completion.is_none() && registers[*present].to_boolean() {
+                            i.completion = Some(registers[*value].clone());
+                        }
+                    }
+                    Instruction::EnsureCompletionValue => {
+                        if i.completion.is_none() { i.completion = Some(JsValue::Undefined); }
+                    }
                     Instruction::Return(src) => {
                         return Ok(Some(Abrupt::Return(registers[*src].clone())));
                     }
@@ -1591,7 +1608,7 @@ impl Program {
             if i.external_scheduling.is_none() {
                 i.drain_jobs()?;
             }
-            i.completion.clone()
+            i.completion.clone().unwrap_or(JsValue::Undefined)
         };
         *completed = Some(value.clone());
         Ok(FrameOutcome::Completed(value))
@@ -1952,7 +1969,7 @@ impl FunctionCode {
             frame,
             started: false,
             executing: false,
-            completion: JsValue::Undefined,
+            completion: None,
             async_promise: None,
             queue: VecDeque::new(),
             awaiting: false,
@@ -1976,7 +1993,7 @@ impl FunctionCode {
             frame,
             started: true,
             executing: false,
-            completion: JsValue::Undefined,
+            completion: None,
             async_promise: Some(target.clone()),
             queue: VecDeque::new(),
             awaiting: false,

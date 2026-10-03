@@ -97,3 +97,5 @@ reproduced in the table row for that upstream.
 - **boa-dev/boa** — MIT, Copyright (c) 2019 Jason Williams; `core/engine/src/builtins/promise/mod.rs` @ `39cd11214ecb366200157dab96b3919e61e9a391`; Promise.try/withResolvers and Promise prototype tag installation adapted in `crates/amazing-js/src/interp_promise_static.rs` and `crates/amazing-js/src/interp_install.rs`.
 
 - **boa-dev/boa** — MIT, Copyright (c) 2019 Jason Williams; `core/engine/src/builtins/math/mod.rs` @ `39cd11214ecb366200157dab96b3919e61e9a391`; Number::exponentiate guards adapted in `crates/amazing-js/src/value.rs`, reused by Math.pow, AST Pow and the VM numeric Pow consumer.
+
+- lucid-softworks/lumen @ f6c9860d44fa52249cfd647122edea184d32c863 — MIT; Copyright (c) 2026 Lucid Softworks limited. StatementList/try completion algorithms adapted in `crates/amazing-js/src/interp_stmt.rs` and `crates/amazing-js/src/vm/compiler_completions.rs`.

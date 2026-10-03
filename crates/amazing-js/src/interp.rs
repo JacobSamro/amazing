@@ -351,7 +351,7 @@ pub struct Interpreter {
     random_state: u64,
     jobs: VecDeque<Job>,
     external_scheduling: Option<ExternalScheduling>,
-    completion: JsValue,
+    completion: Option<JsValue>,
     frames: Vec<CallFrame>,
     strict_eval_context: bool,
     /// Saved `strict_eval_context` values for the VM's `EnterStrict`/
@@ -572,7 +572,7 @@ impl Interpreter {
             random_state: host_realm ^ 0xA076_1D64_78BD_642F,
             jobs: VecDeque::new(),
             external_scheduling: None,
-            completion: JsValue::Undefined,
+            completion: None,
             frames: Vec::new(),
             strict_eval_context: false,
             vm_strict_stack: Vec::new(),
@@ -1291,7 +1291,7 @@ impl Interpreter {
             }
         }
         let previous_completion = self.completion.clone();
-        self.completion = JsValue::Undefined;
+        self.completion = None;
         let env = direct_eval_env.unwrap_or_else(|| self.global_env.clone());
         if self.in_eval { self.validate_eval_global_declarations(&p.body, &env)?; }
         if !self.in_eval && env.kind() == EnvKind::Global {
@@ -1299,30 +1299,13 @@ impl Interpreter {
             self.instantiate_global_declarations(&plan, &env)?;
         } else { self.hoist(&p.body, &env)?; }
         self.in_eval = false;
-        for s in &p.body {
-            if let StmtKind::Expression(e) = &s.kind {
-                // Bypasses `exec_stmt` for perf (no `Flow` unwrapping needed
-                // for a plain top-level expression statement), so CDP-20's
-                // debug hook is called explicitly here too — otherwise every
-                // top-level `expr;` statement (extremely common: every bare
-                // `Runtime.evaluate` call is exactly this) would be
-                // invisible to a line breakpoint.
-                if let Some(hook) = self.debug_hook.clone() {
-                    hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line, self.depth);
-                }
-                self.completion = self.eval_expr(e, &env)?;
-                continue;
-            }
-            match self.exec_stmt(s, &env)? {
-                Flow::Normal => {}
-                Flow::Return(v) => self.completion = v,
-                Flow::Break(_) | Flow::Continue(_) => {
-                    return Err(Throw::syntax_error("illegal break or continue"))
-                }
-            }
+        match self.exec_stmts(&p.body, &env)? {
+            Flow::Normal => {}
+            Flow::Return(value) => self.completion = Some(value),
+            Flow::Break(_) | Flow::Continue(_) => return Err(Throw::syntax_error("illegal break or continue")),
         }
         if self.external_scheduling.is_none() { self.drain_jobs()?; }
-        let result = self.completion.clone();
+        let result = self.completion.clone().unwrap_or(JsValue::Undefined);
         self.completion = previous_completion;
         Ok(result)
     }

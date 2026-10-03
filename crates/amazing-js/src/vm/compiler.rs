@@ -18,6 +18,9 @@ mod resources;
 mod declarations;
 #[path = "compiler_with.rs"]
 mod with;
+#[path = "compiler_completions.rs"]
+mod completions;
+use completions::CompletionBoundary;
 
 const MAX_REGISTERS: usize = 65_536;
 const MAX_INSTRUCTIONS: usize = 262_144;
@@ -215,6 +218,7 @@ struct Compiler {
     /// The innermost disposal scope captures each using declaration.
     resource_stack: Vec<usize>,
     with_depth: usize,
+    completion_stack: Vec<CompletionBoundary>,
 }
 
 /// One entry per enclosing loop, `switch`, or plain labeled statement a
@@ -228,6 +232,7 @@ struct LoopCtx {
     labels: Vec<String>,
     /// `scope_depth` at both the break and the continue target.
     depth: usize,
+    completion_depth: usize,
     is_loop: bool,
     break_patches: Vec<usize>,
     continue_patches: Vec<usize>,
@@ -262,11 +267,12 @@ impl Compiler {
             scope_depth: 0,
             resource_stack: Vec::new(),
             with_depth: 0,
+            completion_stack: Vec::new(),
         }
     }
 
     fn push_loop(&mut self, labels: Vec<String>, is_loop: bool) {
-        self.loop_stack.push(LoopCtx { labels, is_loop, depth: self.scope_depth, break_patches: Vec::new(), continue_patches: Vec::new() });
+        self.loop_stack.push(LoopCtx { labels, is_loop, depth: self.scope_depth, completion_depth: self.completion_stack.len(), break_patches: Vec::new(), continue_patches: Vec::new() });
     }
 
     /// Pop the innermost loop entry, patching its `break`s to `break_target`
@@ -624,6 +630,9 @@ impl Compiler {
         self.enter(statement.span)?;
         let start = self.program.code.len();
         self.program.statement_spans.push((start, statement.span));
+        self.emit(Instruction::CompleteEmpty);
+        let fills_empty = matches!(&statement.kind, StmtKind::If { .. } | StmtKind::With { .. } | StmtKind::Try(_));
+        if fills_empty { self.completion_stack.push(CompletionBoundary::Undefined); }
         let resources = matches!(&statement.kind, StmtKind::For { init: Some(ast::ForInit::Decl(d)), .. } if d.resource_kind.is_some())
             .then(|| self.begin_resources());
         let result = self.statement_inner(statement);
@@ -631,6 +640,10 @@ impl Compiler {
             Some((slot, handler)) => self.end_resources(slot, handler, statement.span),
             None => Ok(()),
         });
+        if fills_empty {
+            self.emit(Instruction::EnsureCompletionValue);
+            self.completion_stack.pop();
+        }
         // Give otherwise empty declarations/statements their own position:
         // a branch must not deliver the skipped statement's debugger hook
         // merely because its next live instruction shares the same offset.
@@ -709,7 +722,7 @@ impl Compiler {
                 self.emit(Instruction::Declare(name.name.clone(), dst, VarKind::Let));
             }
             StmtKind::Block(block) => {
-                self.emit(Instruction::Complete(0));
+                self.emit(Instruction::CompleteEmpty);
                 self.emit(Instruction::EnterScope);
                 self.instantiate_block(&block.body);
                 self.statements(&block.body, block.span)?;
@@ -744,7 +757,7 @@ impl Compiler {
                 let start = self.program.code.len();
                 let test = self.expression(test)?;
                 let end = self.emit(Instruction::Branch(test, Condition::Falsy, 0));
-                self.statement(body)?;
+                self.loop_statement(body)?;
                 self.emit(Instruction::Jump(start));
                 self.patch(end);
                 let break_target = self.program.code.len();
@@ -755,7 +768,7 @@ impl Compiler {
                 self.push_loop(labels, true);
                 self.emit(Instruction::Complete(0));
                 let start = self.program.code.len();
-                self.statement(body)?;
+                self.loop_statement(body)?;
                 let continue_target = self.program.code.len();
                 let condition = self.expression(test)?;
                 self.emit(Instruction::Branch(condition, Condition::Truthy, start));
@@ -818,7 +831,7 @@ impl Compiler {
                 } else {
                     None
                 };
-                self.statement(body)?;
+                self.loop_statement(body)?;
                 // `continue` must still run the update expression before
                 // re-testing, so its target is here -- right after the body,
                 // right before `update` -- not back at `start`.
@@ -980,12 +993,13 @@ impl Compiler {
                 // Patch each `case` test's branch and (if present) the
                 // fallback `Jump` to `default` now that every body's start
                 // offset can be measured as it's compiled.
+                let case_pair = self.completion_pair(statement.span)?;
                 let mut body_starts = Vec::with_capacity(cases.len());
                 for (case_index, case) in cases.iter().enumerate() {
                     let body_start = self.program.code.len();
                     body_starts.push(body_start);
                     for statement in &case.body {
-                        self.statement(statement)?;
+                        self.completion_statement(statement, case_pair)?;
                     }
                     let _ = case_index;
                 }
@@ -1007,11 +1021,13 @@ impl Compiler {
             }
             StmtKind::Break { label } => {
                 let target = self.find_break_target(statement.span, label)?;
+                self.unwind_completions(self.loop_stack[target].completion_depth);
                 let jump = self.emit(Instruction::ExitTo(0, self.loop_stack[target].depth));
                 self.loop_stack[target].break_patches.push(jump);
             }
             StmtKind::Continue { label } => {
                 let target = self.find_continue_target(statement.span, label)?;
+                self.unwind_completions(self.loop_stack[target].completion_depth);
                 let jump = self.emit(Instruction::ExitTo(0, self.loop_stack[target].depth));
                 self.loop_stack[target].continue_patches.push(jump);
             }

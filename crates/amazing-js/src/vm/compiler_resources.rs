@@ -6,7 +6,7 @@ impl Compiler {
     pub(super) fn for_iteration(&mut self, left: &ast::ForLeft, value: Register, body: &Stmt, span: Span) -> Result<(), CompileError> {
         let resources = matches!(left, ast::ForLeft::Decl(d) if d.resource_kind.is_some()).then(|| self.begin_resources());
         self.bind_for_native(left, value, span)?;
-        self.statement(body)?;
+        self.loop_statement(body)?;
         self.emit(Instruction::LeaveScope);
         if let Some((slot, handler)) = resources { self.end_resources(slot, handler, span)?; }
         Ok(())
@@ -59,7 +59,9 @@ impl Compiler {
     pub(super) fn statements(&mut self, statements: &[Stmt], span: Span) -> Result<(), CompileError> {
         let resources = statements.iter().any(|s| matches!(&s.kind, StmtKind::Var(d) if d.resource_kind.is_some()))
             .then(|| self.begin_resources());
-        for statement in statements { self.statement(statement)?; }
+        self.emit(Instruction::CompleteEmpty);
+        let pair = self.completion_pair(span)?;
+        for statement in statements { self.completion_statement(statement, pair)?; }
         if let Some((slot, handler)) = resources { self.end_resources(slot, handler, span)?; }
         Ok(())
     }
