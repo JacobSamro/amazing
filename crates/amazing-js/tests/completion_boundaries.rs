@@ -168,9 +168,9 @@ fn injected_generator_returns_cannot_mask_finalizer_or_disposer_throws() {
         "try{yield 1}finally{yield 2;throw marker}",
     ];
     let mut cases = Vec::new();
-    // An unsupported With in the callable forces the existing AST coroutine
-    // adapter on this fixed base. Without it the ordinary factory uses VM.
-    for actor_prefix in ["", "with({}){};"] {
+    // Each case is executed by the real VM generator and forced coroutine
+    // consumers below, independently of the script entry backend.
+    for actor_prefix in [""] {
         for body in bodies {
             let drive = if body.contains("yield 2") {
                 "it.return(original);it.next()"
@@ -183,7 +183,7 @@ fn injected_generator_returns_cannot_mask_finalizer_or_disposer_throws() {
         cases.push(format!("var original={{}},same=false;var g=eval('(function*(){{{actor_prefix}try{{yield 1}}finally{{throw undefined}}}})');var it=g();it.next();try{{it.return(original)}}catch(e){{same=e===undefined}}same"));
         cases.push(format!("var original={{}};var g=eval('(function*(){{{actor_prefix}try{{yield 1}}finally{{9}}}})');var it=g();it.next();var r=it.return(original);r.done&&r.value===original"));
     }
-    for actor_prefix in ["", "with({}){};"] {
+    for actor_prefix in [""] {
         for original_throw in [false, true] {
             let signal = if original_throw {
                 "it.throw(original)"
@@ -202,9 +202,55 @@ fn injected_generator_returns_cannot_mask_finalizer_or_disposer_throws() {
         cases.push(format!("var original={{}},marker={{}},same=false;var iterable={{[Symbol.iterator](){{return {{next(){{return {{value:1,done:false}}}},get return(){{throw marker}}}}}}}};var g=eval('(function*(){{{actor_prefix}for(var x of iterable) yield x;}})');var it=g();it.next();try{{it.return(original)}}catch(e){{same=e===marker}}same"));
         cases.push(format!("var original={{}},same=false;var iterable={{[Symbol.iterator](){{return {{next(){{return {{value:1,done:false}}}},return(){{throw undefined}}}}}}}};var g=eval('(function*(){{{actor_prefix}for(var x of iterable) yield x;}})');var it=g();it.next();try{{it.return(original)}}catch(e){{same=e===undefined}}same"));
     }
-    let borrowed: Vec<_> = cases
-        .iter()
-        .map(|source| (source.as_str(), JsValue::Bool(true)))
-        .collect();
-    matrix(&borrowed);
+    let mut failures = Vec::new();
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        for force_actor in [false, true] {
+            for source in &cases {
+                let (setup, drive) = source.split_once(";var it=g();").unwrap();
+                let factory = setup
+                    .split_once("eval('")
+                    .unwrap()
+                    .1
+                    .strip_suffix("')")
+                    .unwrap();
+                let mut i = Interpreter::new();
+                i.run_script_with_backend(setup, backend).unwrap();
+                let JsValue::Object(function) = i.run_script_with_backend("g", backend).unwrap()
+                else {
+                    panic!("generator factory");
+                };
+                assert!(
+                    matches!(
+                        function.borrow().func.as_ref().unwrap().body,
+                        amazing_js::value::FunctionBody::Bytecode(_)
+                    ),
+                    "native generator setup: {source}"
+                );
+                if force_actor {
+                    let parsed = amazing_js::parse_script(factory).unwrap();
+                    let amazing_js::ast::StmtKind::Expression(expression) = &parsed.body[0].kind
+                    else {
+                        panic!("factory expression");
+                    };
+                    let amazing_js::ast::ExprKind::Paren(inner) = &expression.kind else {
+                        panic!("parenthesized factory");
+                    };
+                    let amazing_js::ast::ExprKind::Function(item) = &inner.kind else {
+                        panic!("generator factory AST");
+                    };
+                    // Select the real existing coroutine consumer directly. This
+                    // stays an actor test even when With becomes VM-supported.
+                    function.borrow_mut().func.as_mut().unwrap().body =
+                        amazing_js::value::FunctionBody::Block(item.body.clone());
+                }
+                let actual = i.run_script_with_backend(&format!("var it=g();{drive}"), backend);
+                if !matches!(&actual, Ok(JsValue::Bool(true))) {
+                    failures.push(format!(
+                        "{backend:?}, actor={force_actor}: {source} -> {actual:?}"
+                    ));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
