@@ -561,12 +561,15 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
     {
         return None;
     }
+    let origin = box_.style.get("transform-origin")
+        .and_then(|value| transform_origin_xy(value, reference, box_.style.effective_zoom()))
+        .unwrap_or((reference.x + reference.w * 0.5, reference.y + reference.h * 0.5));
     Some(GroupEffect {
         owner: box_.node,
         opacity,
         transform: transform.unwrap_or(Affine::IDENTITY),
-        origin_x: border.x + border.w * 0.5,
-        origin_y: border.y + border.h * 0.5,
+        origin_x: origin.0,
+        origin_y: origin.1,
         blend,
         isolate,
         filter,
@@ -576,6 +579,56 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
         mask_image,
         mask_bounds: border,
     })
+}
+
+/// CSS Transforms 1 §§5–6: origin offsets use the actual reference rectangle,
+/// including its top-left displacement. Computed canonical px/percentage axes
+/// are resolved by CSS's shared used-axis parser, including piecewise math;
+/// no font/container metrics are invented here. CSS Viewport §4 scales absolute
+/// lengths once: evaluate against unscaled dimensions, then apply effective
+/// zoom to the result, retaining the already-scaled percentage basis.
+/// This painter is 2D: the optional computed Z length stays in style and has no
+/// effect on an affine transform. Perspective requires a projective paint path.
+fn transform_origin_xy(value: &str, reference: Rect, zoom: f64) -> Option<(f32, f32)> {
+    if !zoom.is_finite() || zoom <= 0.0 { return None; }
+    let parts = origin_components(value)?;
+    let xy = match parts.as_slice() {
+        [_, _, _] => format!("{} {}", parts[0], parts[1]),
+        [_] | [_, _] => value.to_owned(),
+        _ => return None,
+    };
+    let (x, y) = if let Some((x, y)) = amazing_css::affine_position_pair(&xy) {
+        (x.resolve(reference.w as f64 / zoom)?, y.resolve(reference.h as f64 / zoom)?)
+    } else {
+        let components = origin_components(&xy)?;
+        let [x, y] = components.as_slice() else { return None; };
+        (amazing_css::used_position_axis(x, reference.w as f64 / zoom)?,
+         amazing_css::used_position_axis(y, reference.h as f64 / zoom)?)
+    };
+    let x = (reference.x as f64 + x * zoom) as f32;
+    let y = (reference.y as f64 + y * zoom) as f32;
+    (x.is_finite() && y.is_finite()).then_some((x, y))
+}
+
+fn origin_components(value: &str) -> Option<Vec<&str>> {
+    let mut depth = 0usize;
+    let mut start = None;
+    let mut parts = Vec::new();
+    for (i, ch) in value.char_indices() {
+        if ch.is_ascii_whitespace() && depth == 0 {
+            if let Some(begin) = start.take() { parts.push(&value[begin..i]); }
+            continue;
+        }
+        start.get_or_insert(i);
+        match ch {
+            '(' => depth += 1,
+            ')' => depth = depth.checked_sub(1)?,
+            _ => {},
+        }
+    }
+    if depth != 0 { return None; }
+    if let Some(begin) = start { parts.push(&value[begin..]); }
+    Some(parts)
 }
 
 fn parse_transform(value: &str, reference_width: f32, reference_height: f32) -> Option<Affine> {
@@ -843,5 +896,117 @@ mod transform_translation_tests {
             assert!(parse_transform(css, 100.0, 50.0).is_none(), "{css}");
         }
         assert!(parse_transform("translateX(100%)", f32::INFINITY, 50.0).is_none());
+    }
+}
+
+#[cfg(test)]
+mod transform_origin_tests {
+    use super::*;
+
+    fn close(actual: f32, expected: f32) {
+        assert!((actual - expected).abs() < 0.001, "{actual} != {expected}");
+    }
+    fn box_with_origin(value: &str, reference: &str) -> LayoutBox {
+        let mut style = amazing_css::ComputedStyle::default();
+        style.set("transform", "rotate(90deg)");
+        style.set("transform-origin", value);
+        style.set("transform-box", reference);
+        let mut box_ = LayoutBox::new(None, amazing_layout::Display::Block, style, 16.0, 20.0);
+        box_.border_box = Rect { x: 400.0, y: 500.0, w: 120.0, h: 80.0 };
+        box_.content_box = Rect { x: 410.0, y: 510.0, w: 100.0, h: 60.0 };
+        box_
+    }
+
+    #[test]
+    fn origins_resolve_independent_axes_against_actual_reference_rectangles() {
+        for reference in ["view-box", "border-box", "stroke-box", "content-box", "fill-box"] {
+            let rect = if matches!(reference, "content-box" | "fill-box") {
+                Rect { x: 410.0, y: 510.0, w: 100.0, h: 60.0 }
+            } else { Rect { x: 400.0, y: 500.0, w: 120.0, h: 80.0 } };
+            for (css, x, y) in [
+                ("0 0", 0.0, 0.0), ("50% 50%", rect.w*0.5, rect.h*0.5),
+                ("100% 0%", rect.w, 0.0), ("left bottom", 0.0, rect.h),
+                ("12px -4px", 12.0, -4.0), ("-25% 150%", -rect.w*0.25, rect.h*1.5),
+                ("calc(100% - 10px) calc(50% + 2px)",rect.w-10.0,rect.h*0.5+2.0),
+                ("calc((25% + 5px) * 2) calc(100% / 2 - 3px)",rect.w*0.5+10.0,rect.h*0.5-3.0),
+                ("0% 100% 25px",0.0,rect.h),
+                ("min(10px, 50%) max(10px, 25%)",10.0,(rect.h*0.25).max(10.0)),
+                ("clamp(20px, 50%, 10px) min(25%, 100px)",20.0,rect.h*0.25),
+                ("calc(min(50%, 10px) + 2px) clamp(5px, 25%, 100px)",12.0,(rect.h*0.25).max(5.0)),
+            ] {
+                let box_ = box_with_origin(css, reference);
+                let effect = effect_for(&box_).unwrap();
+                close(effect.origin_x, rect.x+x); close(effect.origin_y, rect.y+y);
+                // The chosen pivot is invariant; an offset point rotates about it.
+                let matrix = effect.matrix_about_origin();
+                let pivot = matrix.map(rect.x+x,rect.y+y);
+                close(pivot.0,rect.x+x); close(pivot.1,rect.y+y);
+                let rotated = matrix.map(rect.x+x+7.0,rect.y+y+11.0);
+                close(rotated.0,rect.x+x-11.0); close(rotated.1,rect.y+y+7.0);
+            }
+        }
+    }
+
+    #[test]
+    fn origin_uses_finite_computed_geometry_and_keeps_unsupported_units_explicit() {
+        let rect = Rect { x: 20.0, y: 30.0, w: 0.0, h: 0.0 };
+        assert_eq!(transform_origin_xy("100% 100%",rect,1.0),Some((20.0,30.0)));
+        assert_eq!(transform_origin_xy("min(10px, 50%) max(10px, 25%)",rect,1.0),Some((20.0,40.0)));
+        for css in ["1em 2px", "2rem 0", "1cqw 2px", "1ex 2px", "min(1em, 50%) 0", "NaN% 0", "calc(50% - 2px 0", "0 0 0 0"] {
+            assert!(transform_origin_xy(css,rect,1.0).is_none(), "{css}");
+        }
+        for bad in [f32::INFINITY,f32::NAN] {
+            assert!(transform_origin_xy("50% 50%",Rect { w:bad,..rect },1.0).is_none());
+            assert!(transform_origin_xy("0 0",Rect { x:bad,..rect },1.0).is_none());
+        }
+        let box_ = box_with_origin("1em 2px", "content-box");
+        let effect = effect_for(&box_).unwrap();
+        close(effect.origin_x,460.0);close(effect.origin_y,540.0);
+        assert_eq!(box_.style.get("transform-origin"),Some("1em 2px"));
+    }
+
+    #[test]
+    fn zoom_scales_absolute_origin_terms_once_and_preserves_percentage_basis() {
+        for zoom in [0.5_f64,1.0,2.0,4.0] {
+            for (css,x,y) in [
+                ("12px -4px",12.0*zoom,-4.0*zoom),
+                ("50% 25%",60.0*zoom,20.0*zoom),
+                ("calc(100% - 10px) calc(50% + 2px)",110.0*zoom,42.0*zoom),
+                ("min(10px, 50%) clamp(20px, 50%, 10px)",10.0*zoom,20.0*zoom),
+            ] {
+                let mut box_ = box_with_origin(css,"border-box");
+                box_.style.set("zoom",&zoom.to_string());
+                box_.border_box.w *= zoom as f32; box_.border_box.h *= zoom as f32;
+                let effect = effect_for(&box_).unwrap();
+                close(effect.origin_x,400.0+x as f32); close(effect.origin_y,500.0+y as f32);
+            }
+        }
+        let mut dom = amazing_dom::Dom::new();
+        let parent = dom.create_element(amazing_dom::NodeIdx(0),"div");
+        let child = dom.create_element(parent,"span");
+        let styles = amazing_css::compute(&dom,&[amazing_css::parse_stylesheet(
+            "div{zoom:2}span{display:block;zoom:2;font-size:10px;transform:rotate(90deg);transform-origin:1em .5em}")]);
+        let style = styles.get(child).unwrap().clone();
+        assert_eq!(style.effective_zoom(),4.0);
+        assert_eq!(style.get("transform-origin"),Some("10px 5px"));
+        let mut box_ = LayoutBox::new(Some(child),amazing_layout::Display::Block,style,40.0,40.0);
+        box_.border_box = Rect { x:400.0,y:500.0,w:480.0,h:320.0 };
+        let effect = effect_for(&box_).unwrap();
+        close(effect.origin_x,440.0); close(effect.origin_y,520.0);
+    }
+
+    #[test]
+    fn z_and_perspective_origins_do_not_invent_two_dimensional_offsets() {
+        let base = box_with_origin("25% 75%", "border-box");
+        let expected = effect_for(&base).unwrap().matrix_about_origin();
+        for z in ["0px", "100px", "-40px", "calc(10px + 2px)"] {
+            let mut box_ = box_with_origin(&format!("25% 75% {z}"), "border-box");
+            box_.style.set("perspective", "200px");
+            box_.style.set("perspective-origin", "0% 100%");
+            assert_eq!(effect_for(&box_).unwrap().matrix_about_origin(),expected);
+            let commands = build_display_list(&box_);
+            assert!(commands.iter().any(|command| matches!(command,PaintCommand::BeginGroup(effect)
+                if effect.matrix_about_origin()==expected)));
+        }
     }
 }

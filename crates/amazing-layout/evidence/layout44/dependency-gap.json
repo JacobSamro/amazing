@@ -1,0 +1,17 @@
+{
+  "run": "first bulk iteration before CSS44 literal-axis fix",
+  "fixed_dependency": "0110fa82b888879706360f37545a6c7cdb234ded",
+  "layout_paint_tests_run": 618,
+  "passed": 616,
+  "failed": 2,
+  "skipped": 1,
+  "new_failed_groups": [
+    "origin_uses_finite_computed_geometry_and_keeps_unsupported_units_explicit",
+    "origins_resolve_independent_axes_against_actual_reference_rectangles"
+  ],
+  "cause": "CSS43 affine_position_axis called math::font_size_px for literal px/percentage/zero; math validation requires a leading math function. Actual hooks therefore used initial-origin fallback.",
+  "owner": "CSS44 separate lower dependency fix",
+  "raw_fetched_log": "/tmp/layout44-first-nextest.log",
+  "final_gate_evidence": false,
+  "wpt_ran": false
+}
