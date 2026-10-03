@@ -143,6 +143,7 @@ pub(crate) fn invoke<H: BindingHost>(
                 Some(value) if host.is_nullish(value) => None,
                 Some(value) => Some(host.node_brand(value).ok_or_else(|| host.type_error("Expected a DocumentType"))?),
             };
+            let origin = host.capture_document_origin(associated)?;
             let new_doc = host.with_dom(|dom| {
                 if let Some(node) = doctype {
                     if !matches!(dom.get(node).kind, NodeKind::DocumentType { .. }) { return Err(DomError::TypeError); }
@@ -165,6 +166,7 @@ pub(crate) fn invoke<H: BindingHost>(
                 }
                 Ok(doc)
             })?;
+            host.document_created(associated, new_doc, origin)?;
             host.wrap_node(new_doc)
         }
         O::ImplementationCreateHTMLDocument => {
@@ -172,6 +174,7 @@ pub(crate) fn invoke<H: BindingHost>(
                 Some(value) if !host.is_undefined(value) => Some(host.to_dom_string(value)?),
                 _ => None,
             };
+            let origin = host.capture_document_origin(associated)?;
             let new_doc = host.with_dom(|dom| {
                 let doc = dom.create_document_in_realm_of(associated)?;
                 dom.set_document_metadata(doc, amazing_dom::document_surface::DocumentMetadata {
@@ -196,6 +199,7 @@ pub(crate) fn invoke<H: BindingHost>(
                 dom.pre_insert(body, html, None)?;
                 Ok(doc)
             })?;
+            host.document_created(associated, new_doc, origin)?;
             host.wrap_node(new_doc)
         }
         _ => unreachable!(),

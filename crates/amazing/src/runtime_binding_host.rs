@@ -1895,6 +1895,24 @@ impl BindingHost for RuntimeBindingHost<'_> {
             .expect("Fresh constructed Document");
         self.state.borrow_mut().constructed_documents.insert((document, generation));
     }
+    fn capture_document_origin(&self, source: NodeIdx) -> Result<Option<amazing_fetch::Origin>, Throw> {
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        if host.dom.node_generation(source).is_none()
+            || !matches!(host.dom.get(source).kind, NodeKind::Document) {
+            return Err(Throw::type_error("Expected a live origin source Document"));
+        }
+        drop(host);
+        drop(state);
+        self.html_document_origin(source).map(Some)
+            .ok_or_else(|| Throw::type_error("Document origin is unavailable"))
+    }
+    fn document_created(&mut self, _source: NodeIdx, target: NodeIdx,
+        origin: Option<amazing_fetch::Origin>) -> Result<(), Throw> {
+        let origin = origin.ok_or_else(|| Throw::type_error("Document origin snapshot is unavailable"))?;
+        self.html_set_inert_document_origin(target, origin)
+            .map_err(|_| Throw::type_error("Document origin registration failed"))
+    }
     fn mark_cloned_node(&mut self, source: NodeIdx, copy: NodeIdx) {
         let host = self.state.borrow().host.clone();
         let dom = &host.borrow().dom;

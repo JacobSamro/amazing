@@ -1999,4 +1999,47 @@ mod tests {
         assert_eq!(adapter.js.run_script("(function(){try{Node.prototype.appendChild.call(staleNode,document.createComment('x'));}catch(e){return e instanceof TypeError;}return false;})()").unwrap(),JsValue::Bool(true));
     }
 
+    #[test]
+    fn document_factory_and_clone_origins_use_actual_constructor_and_receiver_context() {
+        let host=Rc::new(RefCell::new(BrowserDomHost {
+            dom:amazing_html::parse("<body><iframe sandbox='allow-scripts' srcdoc=''></iframe></body>"),native_forwarded:false }));
+        let mut scheduler=crate::js_scheduler::DriverScheduler::new(host,32).unwrap();
+        scheduler.set_location_url("https://example.test/opaque-document-factories");
+        let root_constructor=scheduler.run_script("Document").unwrap();
+        let root_factory=scheduler.run_script("DOMImplementation.prototype.createDocument").unwrap();
+        let root_html_factory=scheduler.run_script("DOMImplementation.prototype.createHTMLDocument").unwrap();
+        scheduler.run_script("void document.querySelector('iframe').contentWindow").unwrap();
+        let state=scheduler.test_bindings().state.clone();
+        let root=scheduler.js.binding_current_realm();
+        let (child,document)={
+            let bindings=state.borrow();
+            bindings.realm_documents.iter().find(|(realm,_)| **realm!=root)
+                .map(|(realm,(document,_))| (*realm,*document)).unwrap()
+        };
+        let (root_origin,child_origin)={
+            let adapter=RuntimeBindingHost {js:&mut scheduler.js,state:state.clone()};
+            (adapter.html_document_origin(NodeIdx(0)).unwrap(),adapter.html_document_origin(document).unwrap())
+        };
+        assert_ne!(root_origin,child_origin);
+        let docs=scheduler.js.binding_with_realm(child,|js| {
+            js.global_obj.borrow_mut().set_own("foreignDocument",root_constructor);
+            js.global_obj.borrow_mut().set_own("foreignCreateDocument",root_factory);
+            js.global_obj.borrow_mut().set_own("foreignCreateHTMLDocument",root_html_factory);
+            js.run_script(r#"(function(){
+                const own=new Document();
+                const xml=foreignCreateDocument.call(document.implementation,null,'r',null);
+                const html=foreignCreateHTMLDocument.call(document.implementation,{toString(){new Document();return 'title';}});
+                const parsed=new DOMParser().parseFromString('<r/>','application/xml');
+                if(!(own instanceof Document) || !(xml instanceof XMLDocument) || !(html instanceof Document))throw 'prototype';
+                return [own,xml,html,parsed,own.cloneNode(true),xml.cloneNode(true),html.cloneNode(true),parsed.cloneNode(true),new foreignDocument()];
+            })()"#)
+        }).unwrap();
+        let mut adapter=RuntimeBindingHost {js:&mut scheduler.js,state};
+        for index in 0..9 {
+            let value=adapter.get_property(&docs,&index.to_string()).unwrap();
+            let document=adapter.node_brand(&value).unwrap();
+            assert_eq!(adapter.html_document_origin(document),Some(if index==8 {root_origin.clone()} else {child_origin.clone()}));
+        }
+    }
+
 }

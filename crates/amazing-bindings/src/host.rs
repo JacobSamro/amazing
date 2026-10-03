@@ -1408,6 +1408,12 @@ pub trait BindingHost: Sized {
     /// Preserve Document interface identity after native cloning, without
     /// callbacks into user code or changing custom-element construction.
     fn mark_cloned_node(&mut self, _source: NodeIdx, _copy: NodeIdx) {}
+    /// Snapshot a genuine source Document's typed origin after conversion,
+    /// before native allocation. Backends without origin storage opt out.
+    fn capture_document_origin(&self, _source: NodeIdx)
+        -> Result<Option<amazing_fetch::Origin>, Self::Error> { Ok(None) }
+    fn document_created(&mut self, _source: NodeIdx, _target: NodeIdx,
+        _origin: Option<amazing_fetch::Origin>) -> Result<(), Self::Error> { Ok(()) }
     fn with_dom<R>(
         &mut self,
         callback: impl FnOnce(&mut Dom) -> Result<R, DomError>,

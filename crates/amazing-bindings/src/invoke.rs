@@ -386,6 +386,11 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
         | O::Before | O::After | O::ReplaceWith) {
         host.current_document_for_nodes()?;
     }
+    let document_origin = if operation == O::DocumentConstructor
+        || (operation == O::CloneNode && host.with_dom(|dom|
+            Ok(matches!(dom.get(target).kind, NodeKind::Document)))?) {
+        Some(host.capture_document_origin(target)?)
+    } else { None };
     let result = host.with_dom(|dom| {
         use ResultValue as R;
         let result = match operation {
@@ -595,6 +600,7 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
         ResultValue::Number(v) => host.number(v),
         ResultValue::String(v) => host.string(&v)?,
         ResultValue::Node(v) => {
+            if let Some(origin) = document_origin { host.document_created(target, v, origin)?; }
             if operation == O::DocumentConstructor { host.mark_constructed_document(v); }
             if operation == O::CloneNode { host.mark_cloned_node(target, v); }
             host.wrap_node(v)?
