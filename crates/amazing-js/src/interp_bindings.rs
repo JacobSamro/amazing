@@ -198,6 +198,7 @@ impl Interpreter {
             home: None,
             proto_for_new: None,
         });
+        object.realm = Some(self.host_realm);
         object.proto = Some(self.function_proto.clone());
         let _ = object.define("name", Property {
             accessor: false,
