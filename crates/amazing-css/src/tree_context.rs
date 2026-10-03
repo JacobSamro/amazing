@@ -50,11 +50,12 @@ impl TreeContext<'_> {
             scope=parent;
         }
     }
-    fn resolve(&self,tokens:ScopedTokens)->Option<Vec<Token>> {
+    fn resolve(&self,property:&str,tokens:ScopedTokens)->Option<Vec<Token>> {
         let siblings:Vec<_>=self.dom.get(self.node).parent.map(|parent|
             self.dom.children(parent).filter(|n|self.dom.name(*n).is_some()).collect()).unwrap_or_else(||vec![self.node]);
         let index=siblings.iter().position(|n|*n==self.node)?+1;
         let mut output=Vec::new();let mut i=0;
+        let mut functions:Vec<Option<String>>=Vec::new();let mut pending=None;
         while i<tokens.len() {
             let count=match &tokens[i] {
                 Token::Function(name) if name.eq_ignore_ascii_case("sibling-index")=>Some(index),
@@ -64,11 +65,37 @@ impl TreeContext<'_> {
                 if tokens.get(i+1)!=Some(&Token::OpenParen) {return None;}
                 let mut end=i+2;while tokens.get(end)==Some(&Token::Whitespace) {end+=1;}
                 if tokens.get(end)!=Some(&Token::CloseParen) {return None;}
-                output.push(Token::Number(if self.allowed(tokens.scopes[i]) {count as f64}else{0.0}));
+                let value=if self.allowed(tokens.scopes[i]) {count as f64}else{0.0};
+                if numeric_slot(property,functions.last().and_then(|name|name.as_deref())) {
+                    output.push(Token::Number(value));
+                } else {
+                    // A computed numeric function is still a number. Literal
+                    // zero alone would accidentally gain CSS's special
+                    // unitless-zero length/angle grammar. calc() retains type.
+                    output.extend([Token::Function("calc".into()),Token::OpenParen,Token::Number(value),Token::CloseParen]);
+                }
                 i=end+1;
-            } else {output.push(tokens[i].clone());i+=1;}
+            } else {
+                match &tokens[i] {
+                    Token::Function(name)=>pending=Some(name.to_ascii_lowercase()),
+                    Token::OpenParen=>functions.push(pending.take()),
+                    Token::CloseParen=>{functions.pop();},_=>{},
+                }
+                output.push(tokens[i].clone());i+=1;
+            }
         }
         Some(output)
+    }
+}
+fn numeric_slot(property:&str,parent:Option<&str>)->bool {
+    match parent {
+        Some(name)=>matches!(name,"calc"|"min"|"max"|"clamp"|"sign"|"round"|"mod"|"rem"|
+            "abs"|"pow"|"sqrt"|"hypot"|"log"|"exp"|"sin"|"cos"|"tan"|"asin"|"acos"|"atan"|"atan2"|
+            "rgb"|"rgba"|"hsl"|"hsla"|"hwb"|"lab"|"lch"|"oklab"|"oklch"|"color"|"alpha"|
+            "scale"|"scalex"|"scaley"|"scalez"|"scale3d"|"matrix"|"matrix3d"|
+            "brightness"|"contrast"|"grayscale"|"invert"|"opacity"|"saturate"|"sepia"),
+        None=>matches!(property,"opacity"|"fill-opacity"|"zoom"|"font-weight"|"font-size-adjust"|
+            "order"|"z-index"|"column-count"|"orphans"|"widows"|"flex-grow"|"flex-shrink"|"scale"),
     }
 }
 pub(super) struct CustomResolver<'a> {
@@ -95,7 +122,7 @@ impl CustomResolver<'_> {
     pub(super) fn substitute_property(&mut self,name:&str,tokens:&[Token])->Option<Vec<Token>> {
         let scope=self.tree.and_then(|tree|tree.scope(name));
         let tokens=self.substitute_scoped(&ScopedTokens::new(tokens.to_vec(),scope))?;
-        match self.tree {Some(tree)=>tree.resolve(tokens),None=>Some(tokens.tokens)}
+        match self.tree {Some(tree)=>tree.resolve(name,tokens),None=>Some(tokens.tokens)}
     }
     fn substitute_scoped(&mut self,tokens:&ScopedTokens)->Option<ScopedTokens> {
         let mut output=ScopedTokens::new(Vec::new(),None);let mut index=0;
@@ -148,12 +175,12 @@ mod tests {
     fn every_nested_function_and_variable_fallback_keeps_its_actual_source() {
         let mut dom=Dom::new();let root=dom.create_element(NodeIdx(0),"section");
         dom.create_element(root,"i");let target=dom.create_element(root,"b");
-        let mut sheet=parse_stylesheet("section{--index:sibling-index();--nested:var(--index)}b{width:calc(3px * var(--nested));height:calc(4px * var(--absent,sibling-count()));opacity:calc(sibling-index() / sibling-count());transform:translate(calc(5px * sibling-index()),calc(7px * sibling-count()));background-image:linear-gradient(red min(calc(10px * sibling-index()),30px),blue)}");
+        let mut sheet=parse_stylesheet("section{--index:sibling-index();--nested:var(--index)}b{width:calc(3px * var(--nested));height:calc(4px * var(--absent,sibling-count()));opacity:calc(sibling-index() / sibling-count());transform:scale(sibling-index(),sibling-count());background-image:linear-gradient(red min(calc(10px * sibling-index()),30px),blue)}");
         sheet.base_url=Some("https://example.test/theme.css".into());sheet.resource_context=Some(8);
         let result=compute(&dom,&[sheet]);let style=result.get(target).unwrap();
         assert_eq!(style.get("width"),Some("calc(3px * 2)"));assert_eq!(style.get("height"),Some("calc(4px * 2)"));
         assert_eq!(style.get("opacity"),Some("1"));
-        assert!(!style.get("transform").unwrap().contains("sibling-"));
+        assert_eq!(style.get("transform"),Some("scale(2, 2)"));
         assert!(style.get("background-image").unwrap().contains("20px"));
         assert_eq!(style.url_base("background-image"),Some("https://example.test/theme.css"));assert_eq!(style.url_context("background-image"),Some(8));
     }
@@ -202,5 +229,23 @@ mod tests {
         assert!(result.get(body).unwrap().get("background-image").unwrap().contains("40px"));
         for css in ["calc(2px * sibling-index(1))","calc(2px * sibling-count(foo))"] {assert!(!crate::math::length_percentage(css,true));}
         for css in ["calc(2px * sibling-index())","calc(2px * sibling-count( ))"] {assert!(crate::math::length_percentage(css,true));}
+    }
+    #[test]
+    fn numeric_functions_never_acquire_literal_zero_dimension_exceptions() {
+        let mut dom=Dom::new();let html=dom.create_element(NodeIdx(0),"html");
+        let host=dom.create_element(html,"section");let root=shadow(&mut dom,host,amazing_dom::shadow::ShadowMode::Open);
+        let inner=dom.create_element(root,"div");
+        let document=[parse_stylesheet("section{--outer:sibling-index()}")];
+        let sheets=[(root,vec![parse_stylesheet("div{width:var(--outer);height:calc(var(--outer));margin-left:var(--outer);background-position-x:var(--outer);transform:translateX(var(--outer));opacity:var(--outer);z-index:var(--outer)}")])];
+        let styles=crate::compute_document_with_shadow_font_metrics(&dom,NodeIdx(0),&document,&sheets,&MediaEnvironment::default(),None,&Metrics);
+        let style=styles.get(inner).unwrap();
+        for name in ["width","height"] {assert_eq!(style.get(name),Some("auto"),"{name}");}
+        assert_eq!(style.get("margin-left"),Some("0"));
+        assert_eq!(style.get("background-position-x"),Some("0%"));
+        assert_eq!(style.get("transform"),Some("none"));
+        assert_eq!(style.get("opacity"),Some("0"));assert_eq!(style.get("z-index"),Some("0"));
+        let styles=compute(&dom,&[parse_stylesheet("section{width:sibling-index();opacity:sibling-index();transform:scale(sibling-index())}")]);
+        let style=styles.get(host).unwrap();assert_eq!(style.get("width"),Some("auto"));
+        assert_eq!(style.get("opacity"),Some("1"));assert_eq!(style.get("transform"),Some("scale(1)"));
     }
 }
