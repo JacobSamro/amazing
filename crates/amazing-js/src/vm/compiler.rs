@@ -864,13 +864,10 @@ impl Compiler {
                 self.emit(Instruction::IteratorStart(slot, iterable));
                 let handler = self.emit(Instruction::PushTry { catch: None, finally: None, end: 0 });
                 let start = self.program.code.len();
-                let next = self.register(statement.span)?;
-                self.emit(Instruction::AsyncIteratorNext(next, slot));
-                let done = self.register(statement.span)?;
-                self.emit(Instruction::AsyncIteratorDone(done, slot, next));
-                let done_branch = self.emit(Instruction::Branch(done, Condition::Truthy, 0));
                 let value = self.register(statement.span)?;
-                self.emit(Instruction::AsyncIteratorValue(value, next));
+                let done = self.register(statement.span)?;
+                self.emit(Instruction::IteratorStep(value, done, slot));
+                let done_branch = self.emit(Instruction::Branch(done, Condition::Truthy, 0));
                 self.for_iteration(left, value, body, statement.span)?;
                 self.emit(Instruction::Jump(start));
                 self.patch(done_branch);

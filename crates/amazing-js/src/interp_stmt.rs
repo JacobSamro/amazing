@@ -1,3 +1,5 @@
+// Synchronous ForIn/OfBodyEvaluation adapted from lucid-softworks/lumen
+// (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Async-generator ReturnStatement Await adapted from lucid-softworks/lumen
 // (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // StatementList/try completion portions adapted from lucid-softworks/lumen
@@ -3263,51 +3265,10 @@ impl Interpreter {
         env: &EnvHandle,
     ) -> Result<Flow, Throw> {
         let dispose = for_of_dispose_kind(left);
-        let custom_iterator = self.custom_iterator(iterable)?;
-        let Some(iterator) = custom_iterator else {
-            for value in self.iterate(iterable)? {
-                let iteration_env = for_iteration_env(left, env);
-                match self.for_of_iteration_body(left, value, body, &iteration_env, dispose)? {
-                    Flow::Normal | Flow::Continue(None) => {}
-                    Flow::Break(None) => break,
-                    flow => return Ok(flow),
-                }
-            }
-            return Ok(Flow::Normal);
-        };
-        loop {
-            let next = self.get_prop(&iterator, "next")?;
-            let result = match self.call_value(&next, iterator.clone(), Vec::new()) {
-                Ok(result) => result,
-                Err(error) => {
-                    let _ = self.close_iterator(&iterator);
-                    return Err(error);
-                }
-            };
-            let result_value = match result {
-                JsValue::Object(_) => result,
-                _ => {
-                    let _ = self.close_iterator(&iterator);
-                    return Err(Throw::type_error("iterator result is not an object"));
-                }
-            };
-            let done = match self.get_prop(&result_value, "done") {
-                Ok(value) => value.to_boolean(),
-                Err(error) => {
-                    let _ = self.close_iterator(&iterator);
-                    return Err(error);
-                }
-            };
-            if done {
-                break;
-            }
-            let value = match self.get_prop(&result_value, "value") {
-                Ok(value) => value,
-                Err(error) => {
-                    let _ = self.close_iterator(&iterator);
-                    return Err(error);
-                }
-            };
+        // ForIn/OfBodyEvaluation uses GetIterator's actual cached next method.
+        // Step abrupts precede binding/body execution and never IteratorClose.
+        let mut iterator = PatternIter::new(self, iterable)?;
+        while let Some(value) = iterator.step(self)? {
             let iteration_env = for_iteration_env(left, env);
             match self.for_of_iteration_body(left, value, body, &iteration_env, dispose) {
                 Ok(Flow::Normal | Flow::Continue(None)) => {}
@@ -3317,15 +3278,15 @@ impl Interpreter {
                 // rather than being discarded the way it is when we're already unwinding an
                 // abrupt one.
                 Ok(Flow::Break(None)) => {
-                    self.close_iterator(&iterator)?;
+                    iterator.close(self)?;
                     break;
                 }
                 Ok(flow) => {
-                    self.close_iterator(&iterator)?;
+                    iterator.close(self)?;
                     return Ok(flow);
                 }
                 Err(error) => {
-                    let _ = self.close_iterator(&iterator);
+                    let _ = iterator.close(self);
                     return Err(error);
                 }
             }
@@ -3367,31 +3328,5 @@ impl Interpreter {
         self.add_disposable(&value, is_async)?;
         self.bind_for(left, value, iteration_env)?;
         self.exec_loop_body(body, iteration_env)
-    }
-
-    fn custom_iterator(&mut self, value: &JsValue) -> Result<Option<JsValue>, Throw> {
-        let JsValue::Object(object) = value else {
-            return Ok(None);
-        };
-        if matches!(object.borrow().exotic, Exotic::Array) && self.has_original_array_iterator(value)? {
-            return Ok(None);
-        }
-        let method = self.get_prop(value, WellKnownSymbol::Iterator.symbol())?;
-        if callable_function(&method).is_some() {
-            let iterator = self.call_value(&method, value.clone(), Vec::new())?;
-            let next = self.get_prop(&iterator, "next")?;
-            if callable_function(&next).is_none() {
-                return Err(Throw::type_error(
-                    "iterator method did not return an iterator",
-                ));
-            }
-            return Ok(Some(iterator));
-        }
-        let next = self.get_prop(value, "next")?;
-        if callable_function(&next).is_some() {
-            Ok(Some(value.clone()))
-        } else {
-            Ok(None)
-        }
     }
 }

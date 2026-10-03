@@ -272,14 +272,10 @@ enum Instruction {
     AsyncIteratorClose(Register, usize),
     AsyncIteratorCloseAwait(Register, usize),
     AsyncIteratorCloseCheck(Register),
-    /// Plain (sync-only) `for-of`'s iterator start (JSVM-10): unlike
-    /// `AsyncIteratorStart`, never tries `@@asyncIterator` -- a sync `for-of`
-    /// must use `@@iterator` even when both are present. Reuses
-    /// `AsyncIteratorState`'s `Iterator`/`Values` shape (and the existing
-    /// `AsyncIteratorNext`/`Done`/`Value`/`Close`/`CloseCheck` instructions
-    /// unchanged) since the sync half of that state machine is exactly a
-    /// plain iterator's.
+    /// Synchronous GetIterator; caches the actual iterator and next method.
     IteratorStart(usize, Register),
+    /// Step next/done/value without closing on an abrupt iterator operation.
+    IteratorStep(Register, Register, usize),
     /// `for-in`'s enumeration start (JSVM-10): builds a `ForInState` from the
     /// tree walker's own `array_receiver`/prototype-walk rules, `None` for a
     /// nullish right-hand side (the loop body then never runs).
@@ -1452,17 +1448,35 @@ impl Program {
                         }
                     }
                     Instruction::IteratorStart(slot, source) => {
-                        let iterable = registers[*source].clone();
-                        let state = if let Some(value) = i.custom_iterator(&iterable)? {
-                            let next = i.get_prop(&value, "next")?;
-                            if callable_function(&next).is_none() {
-                                return Err(Throw::type_error("iterator next is not callable"));
-                            }
-                            AsyncIteratorState::Iterator { value, next, exhausted: false, sync: true }
-                        } else {
-                            AsyncIteratorState::Values { values: i.iterate(&iterable)?, index: 0, exhausted: false }
+                        let record = super::PatternIter::new(i, &registers[*source])?;
+                        async_iterators[*slot] = Some(AsyncIteratorState::Iterator {
+                            value: record.iterator, next: record.next, exhausted: false, sync: true,
+                        });
+                    }
+                    Instruction::IteratorStep(value, done, slot) => {
+                        let state = async_iterators[*slot].as_mut()
+                            .ok_or_else(|| Throw::type_error("missing synchronous iterator frame"))?;
+                        let AsyncIteratorState::Iterator {
+                            value: iterator, next, exhausted, sync: true,
+                        } = state else {
+                            return Err(Throw::type_error("invalid synchronous iterator frame"));
                         };
-                        async_iterators[*slot] = Some(state);
+                        // IteratorClose applies only after a successful value has entered
+                        // binding/body evaluation. Next, done and value abrupts skip it.
+                        *exhausted = true;
+                        let result = i.call_value(next, iterator.clone(), Vec::new())?;
+                        if !result.is_object() {
+                            return Err(Throw::type_error("iterator result is not an object"));
+                        }
+                        let complete = i.get_prop(&result, "done")?.to_boolean();
+                        registers[*done] = JsValue::Bool(complete);
+                        registers[*value] = if complete {
+                            JsValue::Undefined
+                        } else {
+                            let element = i.get_prop(&result, "value")?;
+                            *exhausted = false;
+                            element
+                        };
                     }
                     Instruction::ForInStart(slot, source) => {
                         let v = registers[*source].clone();
