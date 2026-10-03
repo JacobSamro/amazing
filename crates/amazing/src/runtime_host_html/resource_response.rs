@@ -905,4 +905,37 @@ mod tests {
         assert_eq!(*calls.borrow(), 1);
     }
 
+    #[test]
+    fn actual_xml_cdata_script_source_preserves_classic_module_and_text_boundaries() {
+        for kind in ["text/javascript", "module"] {
+            let source = format!("<script xmlns='http://www.w3.org/1999/xhtml' type='{kind}'>before;<![CDATA[if (1 < 2) window.hit='&literal;';]]>after;</script>");
+            let dom = amazing_html::xml::parse_xml(&source).unwrap();
+            let node = dom.children(NodeIdx(0)).next().unwrap();
+            let script = crate::cmd::js::script_source_from_node(&dom, node).unwrap();
+            assert_eq!(script.body, "before;if (1 < 2) window.hit='&literal;';after;");
+            assert_eq!(script.node_generation, dom.node_generation(node));
+            assert_eq!(script.kind == crate::cmd::js::ScriptKind::Module, kind == "module");
+        }
+    }
+
+    #[test]
+    fn actual_active_xhtml_cdata_scripts_execute_through_child_classic_and_module_adapters() {
+        for kind in ["text/javascript", "module"] {
+            let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+                "<!doctype html><iframe src='child.xhtml'></iframe>"), native_forwarded: false }));
+            let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+            let body = format!("<html xmlns='http://www.w3.org/1999/xhtml'><head/><body><script type='{kind}'><![CDATA[window.cdataRuns=(window.cdataRuns||0)+1;window.cdataValue='&literal;';]]></script></body></html>");
+            let callback_host = host.clone();
+            scheduler.set_frame_resource_loader(Rc::new(move |request| {
+                assert!(callback_host.try_borrow_mut().is_ok());
+                assert_eq!(request.kind, HtmlFrameResourceKind::Document);
+                Ok(response("https://example.test/child.xhtml", Some("application/xhtml+xml"), body.as_bytes().to_vec()))
+            }));
+            scheduler.set_location_url("https://example.test/root.html");
+            scheduler.dispatch_pending_iframe_loads().unwrap();
+            assert_eq!(scheduler.run_script("var f=document.querySelector('iframe');[f.contentWindow.cdataRuns,f.contentWindow.cdataValue,f.contentDocument.contentType,f.contentDocument.querySelector('script').firstChild.nodeType].join('|')")
+                .unwrap_or_else(|error| panic!("{kind}: {}", error.describe())), JsValue::str("1|&literal;|application/xhtml+xml|4"));
+        }
+    }
+
 }
