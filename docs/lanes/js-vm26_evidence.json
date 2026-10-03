@@ -1,0 +1,182 @@
+{
+  "ticket": "JSVM26",
+  "fixed_before": "56f620f804d2549282fc055a2b0ad85ffc0b868d",
+  "tested_production": "8f310c7c9472ce6d7e2562b1bb58e8e209de4660",
+  "final_source": "2c55d20bfd65da961fb0f5b4c5484abfd1bcec87",
+  "corpus_profile": "release",
+  "native_profile": "debug nextest",
+  "host": "Boat pool-js-vm/bx_e32kqbvv via MAIN linux-run.sh",
+  "upstream": {
+    "repository": "boa-dev/boa",
+    "path": "core/engine/src/bytecompiler/mod.rs",
+    "commit": "39cd11214ecb366200157dab96b3919e61e9a391",
+    "license": "MIT",
+    "copyright": "Copyright (c) 2019 Jason Williams"
+  },
+  "inputs": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+    "capabilities": {
+      "protocol": 2,
+      "script_source_context": true,
+      "module": true,
+      "async": true,
+      "can_block": true,
+      "createRealm": true,
+      "detachArrayBuffer": true,
+      "gc": false,
+      "agent": false,
+      "IsHTMLDDA": false,
+      "AbstractModuleSource": false,
+      "evalScript": true,
+      "global": true,
+      "print": true,
+      "intl402": true
+    },
+    "timeout_seconds": 60,
+    "jobs": 8,
+    "limit": 0,
+    "shard": ""
+  },
+  "selectors": [
+    "built-ins/AsyncGeneratorFunction/",
+    "language",
+    "built-ins/GeneratorFunction/",
+    "built-ins/Promise",
+    "built-ins/AsyncFunction/",
+    "built-ins/Proxy/",
+    "built-ins/AbstractModuleSource/",
+    "built-ins/Object/",
+    "built-ins/Iterator/",
+    "built-ins/Reflect/",
+    "built-ins/Function/"
+  ],
+  "comparison": {
+    "default": {
+      "selected_files": 30442,
+      "selected_variants": 56960,
+      "before_passed_files": 30291,
+      "after_passed_files": 30292,
+      "before_passed_variants": 56736,
+      "after_passed_variants": 56738,
+      "gained_files": [
+        "language/expressions/optional-chaining/optional-chain-async-optional-chain-square-brackets.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        [
+          "language/expressions/optional-chaining/optional-chain-async-optional-chain-square-brackets.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/optional-chaining/optional-chain-async-optional-chain-square-brackets.js",
+          "strict"
+        ]
+      ],
+      "lost_variants": [],
+      "reason_changes": [
+        {
+          "path": "language/expressions/optional-chaining/optional-chain-async-optional-chain-square-brackets.js",
+          "variant": "non-strict",
+          "before": "runtime:Test262Error",
+          "after": "completed"
+        },
+        {
+          "path": "language/expressions/optional-chaining/optional-chain-async-optional-chain-square-brackets.js",
+          "variant": "strict",
+          "before": "runtime:Test262Error",
+          "after": "completed"
+        }
+      ],
+      "new_host_abnormal_exits": [],
+      "before_host_sha256": "f3d4202b7e03babc43f6bd810b7693c077ac0d14626ed2543472ebf4be1b2994",
+      "after_host_sha256": "5adb0ef10fe218c37ddf9068f46a0bc06f8c9af81bbd672181e5457fc31faee5",
+      "before_trace": {
+        "attempts": 1067635,
+        "accepted": 1067623,
+        "fallbacks": {
+          "class field or static block": 8,
+          "member access": 4
+        }
+      },
+      "after_trace": {
+        "attempts": 1067633,
+        "accepted": 1067625,
+        "fallbacks": {
+          "class field or static block": 8
+        }
+      }
+    },
+    "vm": {
+      "selected_files": 30442,
+      "selected_variants": 56960,
+      "before_passed_files": 30291,
+      "after_passed_files": 30292,
+      "before_passed_variants": 56736,
+      "after_passed_variants": 56738,
+      "gained_files": [
+        "language/expressions/optional-chaining/optional-chain-async-optional-chain-square-brackets.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        [
+          "language/expressions/optional-chaining/optional-chain-async-optional-chain-square-brackets.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/optional-chaining/optional-chain-async-optional-chain-square-brackets.js",
+          "strict"
+        ]
+      ],
+      "lost_variants": [],
+      "reason_changes": [
+        {
+          "path": "language/expressions/optional-chaining/optional-chain-async-optional-chain-square-brackets.js",
+          "variant": "non-strict",
+          "before": "runtime:Test262Error",
+          "after": "completed"
+        },
+        {
+          "path": "language/expressions/optional-chaining/optional-chain-async-optional-chain-square-brackets.js",
+          "variant": "strict",
+          "before": "runtime:Test262Error",
+          "after": "completed"
+        }
+      ],
+      "new_host_abnormal_exits": [],
+      "before_host_sha256": "f3d4202b7e03babc43f6bd810b7693c077ac0d14626ed2543472ebf4be1b2994",
+      "after_host_sha256": "5adb0ef10fe218c37ddf9068f46a0bc06f8c9af81bbd672181e5457fc31faee5",
+      "before_trace": {
+        "attempts": 579397,
+        "accepted": 579385,
+        "fallbacks": {
+          "class field or static block": 8,
+          "member access": 4
+        }
+      },
+      "after_trace": {
+        "attempts": 579395,
+        "accepted": 579387,
+        "fallbacks": {
+          "class field or static block": 8
+        }
+      }
+    }
+  },
+  "native": {
+    "before_workspace_passed": 4077,
+    "after_workspace_passed": 4082,
+    "skipped": 17,
+    "before_doctests_passed": 4,
+    "after_doctests_passed": 4,
+    "groups": 5,
+    "factory_assertions": "Native Bytecode vs forced AST, super/private and root cases explicitly checked",
+    "note": "Final source differs from tested production only by comments/docs and test-only fixtures; full22corpora use exact8f productionhost, final workspace/docs run exact2c."
+  },
+  "known_boundaries": [
+    "All eight class-field/static-block compile fallbacks remain atomic.",
+    "Non-suspending optional chains retain whole-expression AST adapter.",
+    "No FDI, Reference/AST schema, Promise jobs or factory-policy changes."
+  ]
+}

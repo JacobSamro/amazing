@@ -1371,7 +1371,7 @@ default mode and **487953/487941** in opt-in VM program mode; both retain
 with unchanged Test262 pass counts and callable eligibility.
 Evidence: [js-vm25r_evidence.json](js-vm25r_evidence.json).
 
-## JSVM26 — suspended optional-chain lowering (in progress)
+## JSVM26 — suspended optional-chain lowering
 
 Fixed before `56f620f8` contains ready JSVM25R on the shared `175107c0`
 dependency. Adapt the whole optional-chain reference/short-circuit/delete
@@ -1391,3 +1391,23 @@ their whole AST adapter; class initialization remains an atomic fallback.
 The matched gate covers workspace nextest, doctests, eleven whole Test262
 selections in default and opt-in VM-program modes, and native/forced-AST
 matrices for grouping, receiver roots, private/super access and strict delete.
+
+Final source `2c55d20b`: **4082 workspace tests passed**, 17 skipped, and
+**four doctests passed**, versus 4077 tests on fixed before `56f620f8`.
+Five grouped native/forced-AST matrices include 108 table cases, explicit
+Bytecode factory checks for super/private methods, skipped Await microtask
+quantums, grouped-call errors and captured receivers across generator resume.
+The full corpus uses production source `8f310c7c`; later commits contain only
+comments, documentation and test-only assertions, with a final exact-source
+workspace/doctest gate.
+
+The 22 matched reports cover **30442 unique files / 56960 variants**.
+Both modes gain **one file / two variants**, retain all previous passes and
+finish at **30292 passing files / 56738 passing variants**. Exactly two
+variant reasons change, both to pass; no new host abnormal exits occur.
+Compile fallbacks fall **12→8**, removing all four member-access fallbacks.
+Default attempts/accepted: **1067635/1067623→1067633/1067625**;
+opt-in VM programs: **579397/579385→579395/579387**. The remaining eight
+class-initialization fallbacks are unchanged and require a separate staged
+ClassDefinitionEvaluation design.
+Evidence: [js-vm26_evidence.json](js-vm26_evidence.json).
