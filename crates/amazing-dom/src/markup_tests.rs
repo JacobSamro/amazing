@@ -344,3 +344,18 @@ fn incremental_import_preserves_detached_fragment_children() {
     assert_eq!(dest.get(live).parent, Some(fragment));
     assert_eq!(markup(&dest, fragment), "<open>continued</open>");
 }
+
+#[test]
+fn incremental_import_replaces_root_without_transient_document_full_error() {
+    let mut source = Dom::new(); let old = source.create_element(NodeIdx(0), "old");
+    let open = source.create_element(old, "open");
+    let mut dest = Dom::new(); let document = dest.create_document();
+    let mut import = IncrementalDocumentImport::new(document); import.sync(&mut dest, &source).unwrap();
+    let identity = import.imported(open).unwrap();
+    source.detach(old); let new = source.create_element(NodeIdx(0), "new");
+    source.pre_insert(open, new, None).unwrap();
+    import.sync(&mut dest, &source).unwrap();
+    assert_eq!(import.imported(open), Some(identity));
+    assert_eq!(markup(&dest, document), "<new><open></open></new>");
+    assert!(dest.get(import.imported(old).unwrap()).parent.is_none());
+}

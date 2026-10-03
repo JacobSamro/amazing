@@ -421,8 +421,9 @@ impl IncrementalDocumentImport {
         } else {
             self.ensure_source_node(dest, source, source.owner_document(node).ok_or(DomError::NotSupportedError)?)?
         };
-        let created = self.import_one(dest, source, node, parent, source_parent.is_some())?;
-        if source_parent.is_none() { dest.detach(created); }
+        // Allocate first; its placement is validated by the reconciliation
+        // pass after old document children and ancestor relationships settle.
+        let created = self.import_one(dest, source, node, parent, false)?;
         self.record(node, created);
         Ok(created)
     }
