@@ -1450,42 +1450,41 @@ fn is_text_control(dom: &Dom, el: NodeIdx) -> bool {
     }
 }
 
+// DOM attributes are DOMStrings and can contain unpaired UTF16 surrogates.
+// CSS escapes normalize invalid scalar values to U+FFFD, but that does not
+// make a raw DOM surrogate equal to an actual replacement character.
 fn attr_is(dom: &Dom, el: NodeIdx, name: &str, want: &str) -> bool {
-    attr_of(dom, el, name) == Some(want)
+    dom.attribute_ns_utf16(el,None,name).is_some_and(|actual|
+        actual.iter().copied().eq(want.encode_utf16()))
 }
-
+fn selector_space(unit: &u16) -> bool { matches!(*unit,0x09|0x0a|0x0c|0x0d|0x20) }
 fn class_list_contains(dom: &Dom, el: NodeIdx, class: &str) -> bool {
-    attr_of(dom, el, "class").is_some_and(|v| v.split_ascii_whitespace().any(|w| w == class))
+    let want:Vec<_>=class.encode_utf16().collect();
+    !want.is_empty()&&dom.attribute_ns_utf16(el,None,"class").is_some_and(|actual|
+        actual.split(selector_space).any(|word|word==want.as_slice()))
 }
-
 fn match_attr(dom: &Dom, el: NodeIdx, name: &str, op: AttrOp, value: &str, ci: bool) -> bool {
-    let actual = match attr_of(dom, el, name) {
-        Some(v) => v,
-        None => return false,
-    };
-    let norm = |s: &str| {
-        if ci {
-            s.to_ascii_lowercase()
-        } else {
-            s.to_owned()
+    let Some(mut actual)=dom.attribute_ns_utf16(el,None,name) else {return false;};
+    let mut want:Vec<_>=value.encode_utf16().collect();
+    if ci {
+        for unit in actual.iter_mut().chain(want.iter_mut()) {
+            if (0x41..=0x5a).contains(unit){*unit+=0x20;}
         }
-    };
-    let want = norm(value);
+    }
     match op {
-        AttrOp::Exists => true,
-        AttrOp::Equals => norm(actual) == want,
-        AttrOp::Includes => {
-            !want.is_empty() && actual.split_ascii_whitespace().any(|w| norm(w) == want)
-        }
-        AttrOp::DashMatch => {
-            let a = norm(actual);
-            a == want || a.starts_with(&format!("{want}-"))
-        }
-        AttrOp::Prefix => !want.is_empty() && norm(actual).starts_with(&want),
-        AttrOp::Suffix => !want.is_empty() && norm(actual).ends_with(&want),
-        AttrOp::Substring => !want.is_empty() && norm(actual).contains(&want),
+        AttrOp::Exists=>true,
+        AttrOp::Equals=>actual==want,
+        AttrOp::Includes=>!want.is_empty()&&actual.split(selector_space).any(|word|word==want.as_slice()),
+        AttrOp::DashMatch=>actual==want||(actual.starts_with(&want)&&actual.get(want.len())==Some(&0x2d)),
+        AttrOp::Prefix=>!want.is_empty()&&actual.starts_with(&want),
+        AttrOp::Suffix=>!want.is_empty()&&actual.ends_with(&want),
+        AttrOp::Substring=>!want.is_empty()&&actual.windows(want.len()).any(|window|window==want.as_slice()),
     }
 }
+
+#[cfg(test)]
+#[path = "selector_utf16_tests.rs"]
+mod utf16_tests;
 
 #[cfg(test)]
 mod tests {
