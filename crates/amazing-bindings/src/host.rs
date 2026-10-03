@@ -885,7 +885,6 @@ pub struct FragmentContext {
 pub struct XmlFragmentContext {
     pub namespace_uri: Option<String>,
     pub prefix: Option<String>,
-    pub prefix: Option<String>,
     pub namespaces: Vec<(Option<String>, String)>,
 }
 
