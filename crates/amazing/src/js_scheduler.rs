@@ -207,7 +207,8 @@ impl DriverScheduler {
         self.enter(|js| bindings.dispatch_animation_event(js, event))
     }
     pub(crate) fn install_inline_handler(&mut self, node: u32, event: &str, body: &str) -> Result<(), Throw> {
-        self.enter(|js| js.install_inline_handler(node, event, body))
+        let bindings = self.bindings.clone();
+        self.enter(|js| bindings.install_canonical_inline_handler(js, node, event, body))
     }
 
     fn enter<T>(&mut self, f: impl FnOnce(&mut Interpreter) -> Result<T, Throw>) -> Result<T, Throw> {

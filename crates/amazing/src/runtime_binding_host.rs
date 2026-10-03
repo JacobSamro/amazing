@@ -66,6 +66,8 @@ use self::compositor::{CanvasObject, CanvasTarget};
 
 #[path = "runtime_host_dom_bindings.rs"]
 mod dom_bindings;
+#[path = "runtime_host_inline_events.rs"]
+mod inline_events;
 #[path = "runtime_host_cssom.rs"]
 mod cssom;
 use cssom::{CssomNative, CssomRuntime};
