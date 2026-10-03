@@ -348,8 +348,8 @@ impl Compiler {
         child.strict = self.strict || has_use_strict_directive(&function.body.body);
         child.is_generator = function.is_generator;
         child.is_async = function.is_async;
-        child.native_declarations = !function.is_async && !function.is_generator;
-        if child.native_declarations { child.annex_declarations(&function.body.body, &params); }
+        child.native_declarations = true;
+        child.annex_declarations(&function.body.body, &params);
         child.hoist_functions(&function.body.body)?;
         child.statements(&function.body.body, function.body.span)?;
         let body_lexical_names = super::super::block_lexical_names(&function.body.body);
@@ -390,7 +390,7 @@ impl Compiler {
         let mut child = Self::new(true);
         child.strict = self.strict || matches!(&arrow.body, ast::ArrowBody::Block(block) if has_use_strict_directive(&block.body));
         child.is_async = arrow.is_async;
-        child.native_declarations = !arrow.is_async;
+        child.native_declarations = true;
         match &arrow.body {
             ast::ArrowBody::Expr(expression) => {
                 let value = child.expression(expression)?;
@@ -503,9 +503,9 @@ impl Compiler {
         Ok(ClassCode { constructor, methods, super_class, inferred_name: None })
     }
 
-    // Nested block declarations need lexical instantiation and conditional Annex B
-    // copies. Keep ordinary bodies on the existing interpreter until those are
-    // represented in bytecode rather than hoisting them into the function scope.
+    // Callable bodies instantiate only their direct function declarations here.
+    // Nested lexical functions and conditional Annex B copies are emitted at
+    // their scopes, which remain captured across Await and Yield suspension.
     fn hoist_functions(&mut self, statements: &[Stmt]) -> Result<(), CompileError> {
         for statement in statements {
             if self.native_declarations && !matches!(statement.kind, StmtKind::Function(_)) { continue; }

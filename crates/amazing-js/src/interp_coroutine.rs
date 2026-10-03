@@ -807,15 +807,16 @@ impl Interpreter {
     /// spawned (no OS threads), in which case the caller keeps its synchronous path.
     pub(crate) fn start_thread_async_function(
         &mut self,
-        body: FunctionBody,
+        body: impl Into<Rc<FunctionBody>>,
         env: EnvHandle,
         strict: bool,
     ) -> Option<JsValue> {
+        let body = body.into();
         let segment = Segment::capture(self, strict, true);
         let job = SendBody(Box::new(move |i: &mut Interpreter| -> Suspend {
             SEGMENT.with(|s| *s.borrow_mut() = Some(segment));
             enter_segment(i);
-            let completion = match &body {
+            let completion = match body.as_ref() {
                 FunctionBody::Expr(expression) => i.eval_expr(expression, &env).map(Flow::Return),
                 FunctionBody::Block(block) => {
                     if block.body.iter().any(stmt_declares_resource) {

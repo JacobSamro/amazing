@@ -1138,6 +1138,141 @@ fn jsvm17_default_callables_preserve_caller_metadata_and_binding_semantics() {
 }
 
 #[test]
+fn jsvm21_actor_eligibility_preserves_reused_ast_across_realms_and_workers() {
+    let mut i = Interpreter::new();
+    let parent = i.binding_current_realm();
+    let child = i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
+    i.global_env.declare_var("realmTag", JsValue::num(11.0)).unwrap();
+    i.binding_eval_in_realm(child, "var realmTag=22;").unwrap();
+    // Parse once: every realm evaluates the same declaration nodes, while
+    // each invocation retains its own lexical closures and active realm.
+    let program = crate::parser::parse_script(r#"
+        async function outer(){with({}){}
+            var before=g;
+            {function g(){return realmTag}await 0;}
+            return [before===undefined,g()];
+        }
+        outer;
+    "#).unwrap();
+    let mut functions = Vec::new();
+    for realm in [parent, child, parent] {
+        let function = i.binding_with_realm(realm, |i| i.run_program(&program)).unwrap();
+        functions.push((realm, function));
+    }
+    let mut promises = Vec::new();
+    for (realm, function) in functions {
+        promises.push((realm, i.binding_call_in_realm(realm, &function, JsValue::Undefined, Vec::new()).unwrap()));
+    }
+    i.drain_jobs().unwrap();
+    for (realm, promise) in promises {
+        let JsValue::Object(object) = promise else { unreachable!() };
+        let result = match &object.borrow().exotic {
+            Exotic::Promise(state) => match &state.state {
+                PromiseFate::Fulfilled(value) => value.clone(),
+                other => panic!("realm {realm:?}: {other:?}"),
+            },
+            _ => unreachable!(),
+        };
+        assert_eq!(i.get_prop(&result, "0").unwrap(), JsValue::Bool(true));
+        assert_eq!(i.get_prop(&result, "1").unwrap(), JsValue::num(if realm==child {22.0}else{11.0}));
+    }
+    assert_eq!(i.binding_current_realm(), parent);
+    assert!(i.frames.is_empty());
+}
+
+#[test]
+fn jsvm21_suspended_scopes_preserve_declaration_identity_and_tdz() {
+    let mut failures = Vec::new();
+    let bodies = [
+        "var before=g;{# function g(){return 7} # if(g()!==7)return false}return before===undefined&&g()===7",
+        "# if(false){function g(){}}return g===undefined",
+        "'use strict';{# function g(){return 7} # if(g()!==7)return false}return typeof g==='undefined'",
+        "{# function* g(){yield 7}if(g().next().value!==7)return false}# return typeof g==='undefined'",
+        "{# async function g(){return 7}async function* h(){yield 9}if(typeof g!=='function'||typeof h!=='function')return false}# return typeof g==='undefined'&&typeof h==='undefined'",
+        "{# function occupied(){return 7} # if(occupied()!==7)return false}return occupied===123",
+        "let g=123;{# function g(){return 7} # if(g()!==7)return false}return g===123",
+        "var a=[];for(let n=0;n<3;n++){# function g(){return n}a.push(g);#}return a[0]!==a[1]&&a.map(g=>g()).join(',')==='0,1,2'&&g===a[2]",
+        "{var before=g;# function g(){return 1}function g(){return 2}# if(before()!==2)return false}return g()===2",
+        "{function g(){return 1}# {function g(){return 2}# if(g()!==2)return false}}return g()===1",
+        "# switch(0){case 0:if(g()!==2)return false;# function g(){return 1}break;case 1:function g(){return 2}}return g()===2",
+        "try{throw 123}catch(g){# {function g(){return 7}#}}return g()===7",
+        "try{throw {g:123}}catch({g}){# {function g(){return 7}#}}return typeof g==='undefined'",
+        "try{# function g(){return 7}}finally{# function h(){return 9}}return g()===7&&h()===9",
+        "{# try{x;return false}catch(e){if(!(e instanceof ReferenceError))return false}let x=9;function g(){return x}# return g()===9}",
+        "{# const {x=(()=>g())()}={};function g(){return 7}# return x===7}",
+        "var result;for(let [g] of [[123]]){{# function g(){return 7}result=g();#}}return result===7&&typeof g==='undefined'",
+    ];
+    for (declaration, suspension, generator) in [
+        ("async function outer(occupied){BODY}", "await 0;", false),
+        ("var outer=async(occupied)=>{BODY}", "await 0;", false),
+        ("function* outer(occupied){BODY}", "yield 0;", true),
+        ("async function* outer(occupied){BODY}", "await 0;yield 0;", true),
+        ("var outer=({async method(occupied){BODY}}).method", "await 0;", false),
+        ("var outer=({*method(occupied){BODY}}).method", "yield 0;", true),
+        ("var outer=({async *method(occupied){BODY}}).method", "await 0;yield 0;", true),
+    ] {
+        for body in bodies {
+            for force_ast in [false, true] {
+                let body = body.replace('#', suspension);
+                // With preserves directive position while forcing the AST
+                // coroutine path; nested ordinary declarations still compile.
+                // Strict bodies cannot contain With; validate their native
+                // declaration scopes without changing their grammar context.
+                if force_ast && body.starts_with("'use strict';") { continue; }
+                let body = if force_ast { format!("with({{}}){{}}{body}") } else { body };
+                let source = declaration.replace("BODY", &body);
+                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let mut i = Interpreter::new();
+                i.run_script(&source).unwrap_or_else(|error| panic!("{source}: {error:?}"));
+                let function = i.global_env.resolve("outer").unwrap();
+                let JsValue::Object(object) = &function else { unreachable!() };
+                assert_eq!(matches!(&object.borrow().func.as_ref().unwrap().body, FunctionBody::Bytecode(_)), !force_ast, "{source}");
+                let mut result = i.call_value(&function, JsValue::Undefined, vec![JsValue::num(123.0)])
+                    .unwrap_or_else(|error| panic!("{source}: {error:?}"));
+                let iterator = result.clone();
+                let next = if generator { Some(i.get_prop(&iterator, "next").unwrap()) } else { None };
+                let mut completed = false;
+                for _ in 0..100 {
+                    if let Some(next) = &next {
+                        result = i.call_value(next, iterator.clone(), Vec::new())
+                            .unwrap_or_else(|error| panic!("{source}: {error:?}"));
+                    }
+                    i.drain_jobs().unwrap_or_else(|error| panic!("{source}: {error:?}"));
+                    if let JsValue::Object(object) = &result {
+                        let state = match &object.borrow().exotic {
+                            Exotic::Promise(state) => Some(state.state.clone()), _ => None,
+                        };
+                        if let Some(state) = state {
+                            result = match state {
+                                PromiseFate::Fulfilled(value) => value,
+                                PromiseFate::Rejected(error) => {
+                                    let name = i.get_prop(&error, "name").unwrap_or(JsValue::Undefined);
+                                    let message = i.get_prop(&error, "message").unwrap_or(JsValue::Undefined);
+                                    panic!("{source}: rejected {name:?}: {message:?}");
+                                }
+                                other => panic!("{source}: {other:?}"),
+                            };
+                        }
+                    }
+                    if generator {
+                        if !i.get_prop(&result, "done").unwrap().to_boolean() { continue; }
+                        result = i.get_prop(&result, "value").unwrap();
+                    }
+                    assert_eq!(result, JsValue::Bool(true), "{source}");
+                    completed = true;
+                    break;
+                }
+                assert!(completed, "{source}: generator did not complete");
+                assert!(i.frames.is_empty(), "{source}: frame restoration");
+                }));
+                if outcome.is_err() { failures.push(source); }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{} failed suspended scope scenarios: {failures:?}", failures.len());
+}
+
+#[test]
 fn jsvm18_block_declarations_preserve_lexical_identity_and_annex_b_boundaries() {
     for source in [
         "function outer(){var before=f;{function f(){return 7}}return before===undefined&&f()===7} outer();",

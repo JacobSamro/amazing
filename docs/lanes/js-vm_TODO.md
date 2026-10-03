@@ -1149,3 +1149,41 @@ losses. The initial twelve module-worker losses are all restored by the actor
 state transfer. Final native Boat workspace **3797 passed**,17 skipped;
 doctests **four passed**. Compact evidence:
 [js-vm20_evidence.json](js-vm20_evidence.json).
+
+## JSVM-21: suspended scoped declarations
+
+Fixed dependency `dd65dc6351364058418511426b014f024c5c275d` (JSVM-20).
+Apply the existing MIT Lumen per-occurrence declaration algorithm to async
+functions/arrows, synchronous and async generators, and their methods. The
+compiler hoists only direct body functions, instantiates nested functions in
+fresh lexical scopes and emits only eligible Annex B var copies. Lexical
+reservations, closures and scope barriers survive Await/Yield suspension.
+The upstream remains `lucid-softworks/lumen` at MIT commit
+`f6c9860d44fa52249cfd647122edea184d32c863`; extend its collect_annexb_funcs
+direct-function lexical barrier to the shared AST Block and CaseBlock hoist.
+Try/catch hoist policy and unsupported suspended class initialization remain
+separate.
+
+The 231-scenario suspended-scope matrix exposed 35 existing forced AST failures.
+Eligibility TLS was prepared on the caller thread and read on the coroutine
+worker; move that per-occurrence set into the Interpreter actor, preserving
+AST-address keys and their existing hoist refresh semantics. The actor set
+does not swap with realms, and its borrows end before JavaScript execution.
+Plain async execution also deep-cloned its body after hoisting, changing the
+keyed declaration addresses. The caller now owns that body through
+`Rc<FunctionBody>`: one hoist, worker execution and allocation-failure fallback
+share exactly the same declaration nodes. The coroutine factory accepts
+`impl Into<Rc<FunctionBody>>`, preserving existing module/Expression callers.
+Generators already move their body and retain that path.
+
+All 231 scenarios and the reused parsed-AST foreign-realm worker regression
+pass. They cover TDZ, formal and lexical barriers, fresh per-iteration closures,
+duplicates, strict/non-plain functions, switch and catch scopes, and before/after
+suspension identities in native and forced AST execution. Six whole corpus
+selections cover **26040 unique files**, retaining all **25433 passing files**
+and **47391 passing variants**, zero lost passes or classification changes.
+Final native Boat workspace **3799 passed**,17 skipped; doctests **four passed**.
+Compact evidence: [js-vm21_evidence.json](js-vm21_evidence.json).
+Async entry error normalization is a disjoint runtime-owned follow-up;
+this ticket makes no change to parameter
+binding, invocation context, callable factory policy or module observers.

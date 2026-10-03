@@ -81,22 +81,14 @@ thread_local! {
     /// template object. See `Interpreter::get_template_object`.
     static TEMPLATE_OBJECTS: RefCell<HashMap<(RealmHandle, usize), JsValue>> = RefCell::new(HashMap::new());
 
-    /// Which FunctionDeclaration AST nodes (by address) `hoist_inner`'s most
-    /// recent visit found Annex-B.3.3-eligible (not blocked by an intervening
-    /// `let`/`const`/class of the same name at some level between the
-    /// declaration's own block and the enclosing function/var scope). See
-    /// `hoist_inner`'s `StmtKind::Function` nested-branch (interp.rs) for the
-    /// writer and this file's own `StmtKind::Function` execution arm (the
-    /// Annex B.3.3 "sync step") for the reader.
-    static ANNEX_B_ELIGIBLE: RefCell<HashSet<usize>> = RefCell::new(HashSet::new());
 }
 
-fn annex_b_eligible_set<R>(f: impl FnOnce(&mut HashSet<usize>) -> R) -> R {
-    ANNEX_B_ELIGIBLE.with(|set| f(&mut set.borrow_mut()))
+fn annex_b_eligible_set<R>(i: &Interpreter, f: impl FnOnce(&mut HashSet<usize>) -> R) -> R {
+    f(&mut i.annex_b_eligible.borrow_mut())
 }
 
-fn is_annex_b_eligible(node: *const ast::FunctionItem) -> bool {
-    ANNEX_B_ELIGIBLE.with(|set| set.borrow().contains(&(node as usize)))
+fn is_annex_b_eligible(i: &Interpreter, node: *const ast::FunctionItem) -> bool {
+    i.annex_b_eligible.borrow().contains(&(node as usize))
 }
 
 /// Peels through zero or more `LabelIdentifier :` wrappers (Annex B.3.2 allows a
@@ -205,7 +197,7 @@ impl Interpreter {
                         let blocked_by_param = self.current_function_param_names().iter().any(|p| p == &n.name);
                         let promoted = !blocked_by_param
                             && scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical())
-                            && is_annex_b_eligible(f.as_ref() as *const ast::FunctionItem);
+                            && is_annex_b_eligible(self, f.as_ref() as *const ast::FunctionItem);
                         if promoted {
                             if let Some(local) = env.local_cell(&n.name) {
                                 if let Ok(v) = local.read() {
@@ -2195,9 +2187,14 @@ impl Interpreter {
                         return Ok(self.start_thread_generator(&o, b, e, fun.is_async, strict_function));
                     }
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
+                    // Hoist, coroutine execution and allocation-failure fallback
+                    // must use identical declaration nodes: deep Block clones
+                    // invalidate the per-occurrence Annex B eligibility keys.
+                    let body = Rc::new(FunctionBody::Block(b));
+                    let FunctionBody::Block(b) = body.as_ref() else { unreachable!() };
                     self.hoist(&b.body, &e)?;
                     if thread_async {
-                        if let Some(promise) = self.start_thread_async_function(FunctionBody::Block(b.clone()), e.clone(), strict_function) {
+                        if let Some(promise) = self.start_thread_async_function(body.clone(), e.clone(), strict_function) {
                             thread_started.set(true);
                             return Ok(promise);
                         }

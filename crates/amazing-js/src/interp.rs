@@ -8,7 +8,8 @@
 //! Portions ported from lucid-softworks/lumen (crates/lumen/src/{eval,interpreter}.rs)
 //! @ f6c9860d44fa52249cfd647122edea184d32c863, MIT: explicit resource management's `using_stack`
 //! disposal-frame stack, the `Disposable` record, and `add_disposable`/`dispose_method`/
-//! `dispose_frame` (see their doc comments for the exact adaptation).
+//! `dispose_frame`, plus collect_annexb_funcs block-function lexical barriers
+//! (see their doc comments for the exact adaptation).
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -289,6 +290,11 @@ pub struct Interpreter {
     // Weak owners validate pointer reuse; borrows never cross a JS callback.
     std_iterator_states: RefCell<HashMap<usize, StdIteratorState>>,
     std_collection_iterator_states: RefCell<HashMap<usize, StdCollectionIterData>>,
+    /// Per-occurrence Annex B eligibility computed during hoist and read at
+    /// declaration execution, including serialized coroutine workers. Keys
+    /// retain the existing AST-address semantics and are refreshed by hoist.
+    /// This actor state does not swap with realms.
+    annex_b_eligible: RefCell<HashSet<usize>>,
     pub string_proto: Obj,
     pub number_proto: Obj,
     pub boolean_proto: Obj,
@@ -518,6 +524,7 @@ impl Interpreter {
             std_iterator_prototypes: None,
             std_collection_iterator_prototypes: None,
             std_iterator_states: RefCell::new(HashMap::new()),
+            annex_b_eligible: RefCell::new(HashSet::new()),
             std_collection_iterator_states: RefCell::new(HashMap::new()),
             string_proto,
             number_proto,
@@ -1402,21 +1409,16 @@ impl Interpreter {
                             // undefined placeholder would hide the parameter.
                             let parameter_conflict = !self.in_eval && self.current_function_param_names().contains(&n.name);
                             if parameter_conflict || blocked.iter().any(|b| b == &n.name) {
-                                annex_b_eligible_set(|set| { set.remove(&key); });
+                                annex_b_eligible_set(self, |set| { set.remove(&key); });
                             } else {
-                                annex_b_eligible_set(|set| { set.insert(key); });
+                                annex_b_eligible_set(self, |set| { set.insert(key); });
                                 if self.in_eval { self.create_eval_binding(env, &n.name, None)?; }
                                 else { env.var_scope().hoist_var(&n.name)?; }
                             }
                         }
                     }
                 }
-                StmtKind::Block(b) => {
-                    let added = block_lexical_names(&b.body);
-                    let pushed = push_blocked(blocked, added);
-                    self.hoist_inner(&b.body, env, true, blocked)?;
-                    blocked.truncate(blocked.len() - pushed);
-                }
+                StmtKind::Block(b) => self.hoist_nested_bodies(&[b.body.as_slice()], env, blocked)?,
                 StmtKind::If { then, els, .. } => {
                     self.hoist_inner(std::slice::from_ref(then), env, true, blocked)?;
                     if let Some(e) = els {
@@ -1460,14 +1462,8 @@ impl Interpreter {
                     // declared directly in any case blocks Annex B promotion for a same-named
                     // function declared directly in any OTHER case, not just its own -- push
                     // every case's own lexical names before hoisting any of them.
-                    let mut pushed = 0;
-                    for c in cases {
-                        pushed += push_blocked(blocked, block_lexical_names(&c.body));
-                    }
-                    for c in cases {
-                        self.hoist_inner(&c.body, env, true, blocked)?;
-                    }
-                    blocked.truncate(blocked.len() - pushed);
+                    let bodies = cases.iter().map(|case| case.body.as_slice()).collect::<Vec<_>>();
+                    self.hoist_nested_bodies(&bodies, env, blocked)?;
                 }
                 StmtKind::Try(statement) => {
                     self.hoist(&statement.block.body, env)?;
@@ -1481,6 +1477,38 @@ impl Interpreter {
                 _ => {}
             }
         }
+        Ok(())
+    }
+
+    /// Direct block functions may receive their own Annex B var copies, but
+    /// their lexical names block deeper declarations. Process them before
+    /// extending that barrier, including all clauses of a shared CaseBlock.
+    /// Adapted from Lumen's collect_annexb_funcs at the MIT commit above.
+    fn hoist_nested_bodies(&mut self, bodies: &[&[ast::Stmt]], env: &EnvHandle,
+        blocked: &mut Vec<String>) -> Result<(), Throw>
+    {
+        let old = blocked.len();
+        for body in bodies { push_blocked(blocked, block_lexical_names(body)); }
+        for body in bodies {
+            for statement in *body {
+                if labeled_function_decl(statement).is_some() {
+                    self.hoist_inner(std::slice::from_ref(statement), env, true, blocked)?;
+                }
+            }
+        }
+        for body in bodies {
+            let names = body.iter().filter_map(labeled_function_decl)
+                .filter_map(|function| function.name.as_ref().map(|name| name.name.clone())).collect();
+            push_blocked(blocked, names);
+        }
+        for body in bodies {
+            for statement in *body {
+                if labeled_function_decl(statement).is_none() {
+                    self.hoist_inner(std::slice::from_ref(statement), env, true, blocked)?;
+                }
+            }
+        }
+        blocked.truncate(old);
         Ok(())
     }
 

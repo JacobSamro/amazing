@@ -1,0 +1,38 @@
+{
+  "ticket":"JSVM-21",
+  "base":"dd65dc6351364058418511426b014f024c5c275d",
+  "platform":"Linux Boat native /tmp source and target",
+  "upstream":"lucid-softworks/lumen crates/lumen/src/interpreter.rs collect_annexb_funcs @ f6c9860d44fa52249cfd647122edea184d32c863, MIT",
+  "test262_revision":"3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "input_sha256":"91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+  "before_host_sha256":"04da03a05034c8aa51a22b95e5973771b071e219be904c0f1effaff49e4932af",
+  "supplemental_before_host_sha256":"594f3163fe1b0829661f89318dcf3f06ab677a98a15af451dba1165789e82a69",
+  "before_provenance":"JSVM20 after reports for language/Promise/Iterator and the AsyncFunction/AsyncGeneratorFunction subset. Exact dd65dc63 GeneratorFunction supplemental before differs from JSVM20 runtime source only by removal of an obsolete opcode comment.",
+  "after_host_sha256":"c3f7e2be1e08f4cadafcc4c67ef30d17b2c2975da50ec9fafe8e2ea355ea9e09",
+  "workspace":{"passed":3799,"skipped":17,"doctests_passed":4},
+  "crate":{"passed":566,"skipped":1},
+  "corpus":{
+    "selection":["language","built-ins/AsyncFunction","built-ins/GeneratorFunction","built-ins/AsyncGeneratorFunction","built-ins/Promise","built-ins/Iterator/"],
+    "unique_selected_files":26040,
+    "before_passed_files":25433,"after_passed_files":25433,
+    "before_passed_variants":47391,"after_passed_variants":47391,
+    "gained_files":0,"lost_files":0,"gained_variants":0,"lost_variants":0,
+    "classification_changes":0,"timeout_seconds":20,"jobs":8
+  },
+  "after_classification_sha256":{
+    "language":"2c5852e24afbe79f3114673cacd8e7ec7eee7e87207183a39e8b3b112bb1fc93",
+    "built-ins/AsyncFunction":"169dfba5de940eb8aa2e0f17270fc618992bf5bf1bced2a1c363ccac9f2117db",
+    "built-ins/GeneratorFunction":"da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f",
+    "built-ins/AsyncGeneratorFunction":"22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a",
+    "built-ins/Promise":"9eda4303668d8fe76be297362b634878ec1a03014c83949bd7fbb78ca3081d0b",
+    "built-ins/Iterator/":"d5ae4f2b597d937870650f9ff15774489a4288a46a70b9a7b8b70295c9ab068f"
+  },
+  "regressions":{
+    "suspended_scope_scenarios":231,
+    "initial_forced_ast_failures":35,
+    "final_failures":0,
+    "areas":["TDZ and lexical/formal barriers","Fresh loop closures across Await/Yield","Nested block functions and Annex B copies","Duplicate/switch/catch functions","Non-plain and strict functions","Same parsed AST across parent/child realms and coroutine workers"]
+  },
+  "boundaries":["Existing per-occurrence compiler declaration algorithm covers suspended callables","Interpreter actor-owned eligibility retains AST-address keys and hoist refresh semantics","Same Rc-owned async body used for exactly one hoist, worker and fallback","Generic coroutine factory remains compatible with existing module callers","Block/CaseBlock direct function lexical barriers; Try policy unchanged","No FDI binding, context token, callable factory policy, module observer or suspended class initializer changes"],
+  "artifacts":["jsvm21-workspace-final.log","jsvm21-docs-final.log","jsvm21-crate-v4.log","jsvm21-after-*.json","jsvm21-before-built-ins-GeneratorFunction.json","jsvm20-after-language.json","jsvm20-after-built-ins-Async.json","jsvm20-after-built-ins-Promise.json","jsvm20-after-built-ins-Iterator-.json"]
+}
