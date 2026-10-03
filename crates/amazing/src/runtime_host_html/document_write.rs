@@ -153,6 +153,7 @@ impl RuntimeBindingHost<'_> {
         };
         if !scripting_enabled { return Ok(()); }
         let Some(script) = script else { return Ok(()); };
+        let Some(node) = node else { return Ok(()); };
         let base = self.dom_document_base_url(document).map_err(|error| throw_dom_error(self, error))?;
         let script_url = match script.src.as_deref() {
             Some(src) => ParsedUrl::parse(&base).and_then(|base| base.resolve(src))
@@ -170,14 +171,14 @@ impl RuntimeBindingHost<'_> {
                 && state.frames.live_context(context, **realm)).map(|(realm, _)| *realm)
         };
         let execute = |js: &mut Interpreter| {
-            let text = match script.src.as_deref() {
-                None => Some(script.body.clone()),
+            let payload = match script.src.as_deref() {
+                None => Some((script.body.clone(), script_url.clone())),
                 Some(src) => if script.kind == crate::cmd::js::ScriptKind::Module {
-                    bindings.load_module_source(js, &script_url).ok()
-                } else { fetch_child_script(src, &base, resolver.as_ref()) },
+                    bindings.load_module_source(js, &script_url).ok().map(|text| (text, script_url.clone()))
+                } else { bindings.fetch_document_classic_script(js, document, node, src, &base, resolver.as_ref()) },
             };
-            match text {
-                Some(text) => bindings.execute_document_script(js, &script, &text, &script_url),
+            match payload {
+                Some((text, final_url)) => bindings.execute_document_script(js, &script, &text, &final_url),
                 None if script.kind == crate::cmd::js::ScriptKind::Module =>
                     bindings.finish_module_script(js, &script, None, &script_url, false),
                 None => Ok(()),
