@@ -2981,5 +2981,7 @@ CSS53 final corrected58f: workspace3946/17skip+4docs, all prior3939 native named
   CSSOM/canvas gains claimed until actual consumers adopt the APIs with separate measured gates.
 - Reference: CSS Color4 and Color5 editor draft (10 September 2026), relative-color/mix resolution;
   CSS Backgrounds3 §2.11 canvas propagation. Algorithms are owned std-only code, no upstream port.
-- Gate pending: fixed closed53 before and precise-context candidate; workspace/doctests, all seventeen
-  literal parsing selections, whole colors/images/fonts/transforms/backgrounds render selections.
+- READY source19bd0cad→8709f429: Boat workspace3946→3952 (+6 owned groups), four doctests each;
+  all17 literal parsing selections4312/5126 across514files (failure multiplicities unchanged). Whole
+  colors226/images92/fonts24/transforms141/backgrounds77 =560/891; all891 classifications retained,
+  zero losses. Fixed baseline267aac24, exact candidate8709f429. Durable proof amazing-css/evidence/css54.

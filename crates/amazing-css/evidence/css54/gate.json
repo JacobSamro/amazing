@@ -1,0 +1,112 @@
+{
+  "baseline": "267aac248a33e1644408a7bfef470d130a694709",
+  "source_series": [
+    "19bd0cad0424af6d66a7bebb6cb3e939698bdc90",
+    "8709f429aadc3faefe9dbc4124910f4c937f9743"
+  ],
+  "host": "Boat bx_shgjh66q; native ext4 source and target",
+  "native": {
+    "before": {
+      "passed": 3946,
+      "skipped": 17,
+      "doctests": 4
+    },
+    "after": {
+      "passed": 3952,
+      "skipped": 17,
+      "doctests": 4
+    },
+    "gained_named_tests": [
+      "amazing-css color::precise::tests::actual_shadow_pseudo_and_layer_winners_share_precise_context",
+      "amazing-css color::precise::tests::mixes_keep_tiny_alpha_missing_components_and_weight_normalization",
+      "amazing-css color::precise::tests::mutation_clone_and_every_image_layer_preserve_conservative_transparency",
+      "amazing-css color::precise::tests::precise_absolute_alpha_is_never_quantized_before_transparency",
+      "amazing-css color::precise::tests::relative_coordinates_and_alpha_keep_actual_source_precision",
+      "amazing-css color::precise::tests::winning_variables_inheritance_currentcolor_and_scheme_are_precise"
+    ]
+  },
+  "parsing": {
+    "before": {
+      "passed": 4312,
+      "total": 5126,
+      "files": 514,
+      "skipped_non_literal": 169
+    },
+    "after": {
+      "passed": 4312,
+      "total": 5126,
+      "files": 514,
+      "skipped_non_literal": 169
+    }
+  },
+  "renders": {
+    "css-color": {
+      "counts": {
+        "pass": 226,
+        "mismatch": 10,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 236,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-images": {
+      "counts": {
+        "pass": 92,
+        "mismatch": 49,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 141,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-fonts": {
+      "counts": {
+        "pass": 24,
+        "mismatch": 8,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 32,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-transforms": {
+      "counts": {
+        "pass": 141,
+        "mismatch": 207,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 348,
+      "gained": 0,
+      "lost": 0
+    },
+    "css-backgrounds": {
+      "counts": {
+        "pass": 77,
+        "mismatch": 57,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged": 134,
+      "gained": 0,
+      "lost": 0
+    }
+  },
+  "installed_gains_claimed": false,
+  "before_renderer_sha256": "ea2fbd5489ca598ee6cc57681d079c5d87942481bbfd29f829294ae4a76e0a6b",
+  "after_renderer_sha256": "bf3bcb5a96b8f2c51ca584cfab2c23f0d828739d5288579fb71ec605af58f6a6"
+}
