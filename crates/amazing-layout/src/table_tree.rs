@@ -65,6 +65,7 @@ pub(crate) fn role(b: &LayoutBox) -> Role {
 
 pub(crate) fn anonymous(parent: &LayoutBox, role: Role, children: Vec<LayoutBox>) -> LayoutBox {
     let mut style = ComputedStyle::default();
+    style.inherit_used_context_from(&parent.style);
     // Anonymous boxes inherit computed inherited values; they do not inherit
     // widths, margins, padding, backgrounds, positions or DOM span attributes.
     for name in [

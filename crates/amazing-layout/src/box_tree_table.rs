@@ -14,6 +14,7 @@ pub(super) fn orphan_run(
     replaced: &dyn ReplacedElementProvider,
 ) -> Option<(usize, LayoutBox)> {
     let internal = |entry: &FormattingChild| {
+        if entry.pseudo.is_some() {return false;}
         let Some(style) = styled.get(entry.node) else {
             return false;
         };
@@ -30,6 +31,7 @@ pub(super) fn orphan_run(
     let mut children = Vec::new();
     let mut end = start;
     for (offset, entry) in entries[start..].iter().enumerate() {
+        if entry.pseudo.is_some() {break;}
         if internal(entry) {
             children.push(build_element(
                 dom,

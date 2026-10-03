@@ -81,8 +81,13 @@ fn geometry_hash(box_: &LayoutBox, children: impl Iterator<Item=u64>) -> u64 {
     [box_.margin.top,box_.margin.right,box_.margin.bottom,box_.margin.left]
         .map(|side|side.map(f32::to_bits)).hash(&mut hash);
     box_.style.effective_zoom().to_bits().hash(&mut hash);
+    [box_.used_content_size.width,box_.used_content_size.height].map(|value|value.map(f32::to_bits)).hash(&mut hash);
     for property in ["display","position","direction","width","height","top","right","bottom","left",
-        "margin-top","margin-right","margin-bottom","margin-left"] {
+        "margin-top","margin-right","margin-bottom","margin-left",
+        "box-sizing","min-width","max-width","min-height","max-height",
+        "padding-top","padding-right","padding-bottom","padding-left",
+        "border-top-width","border-right-width","border-bottom-width","border-left-width",
+        "border-top-style","border-right-style","border-bottom-style","border-left-style"] {
         box_.style.get(property).hash(&mut hash);
     }
     for fragment in box_.styled_replaced_fragments() {

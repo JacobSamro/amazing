@@ -681,6 +681,7 @@ fn is_display_none(style: &ComputedStyle) -> bool {
 /// remains intact: text style and relative font metrics still follow its
 /// original parent chain, even when formatting parents differ.
 struct FormattingChild {
+    pseudo: Option<PseudoElement>,
     node: NodeIdx,
     owner: NodeIdx,
     parent_font: f32,
@@ -727,6 +728,7 @@ fn formatting_children(
     let mut pending: Vec<_> = dom
         .children(owner)
         .map(|node| FormattingChild {
+            pseudo: None,
             node,
             owner,
             parent_font: font_size,
@@ -735,7 +737,7 @@ fn formatting_children(
     pending.reverse();
     let mut children = Vec::new();
     while let Some(child) = pending.pop() {
-        if matches!(dom.get(child.node).kind, NodeKind::Element { .. }) {
+        if child.pseudo.is_none() && matches!(dom.get(child.node).kind, NodeKind::Element { .. }) {
             let style = styled.get(child.node).cloned().unwrap_or_default();
             if is_display_none(&style) || crate::replaced::hidden(dom, child.node) {
                 continue;
@@ -748,11 +750,16 @@ fn formatting_children(
                 }
                 let font_size = values::resolve_used_font_size(&style, child.parent_font);
                 let start = pending.len();
+                pending.push(FormattingChild { pseudo:Some(PseudoElement::Before),
+                    node:child.node, owner:child.node, parent_font:font_size });
                 pending.extend(dom.children(child.node).map(|node| FormattingChild {
+                    pseudo: None,
                     node,
                     owner: child.node,
                     parent_font: font_size,
                 }));
+                pending.push(FormattingChild { pseudo:Some(PseudoElement::After),
+                    node:child.node, owner:child.node, parent_font:font_size });
                 pending[start..].reverse();
                 continue;
             }
@@ -1290,6 +1297,16 @@ fn classify_children(
             }
         }
         for entry in formatting_children(dom, styled, idx, font_size) {
+            if let Some(pseudo)=entry.pseudo {
+                if let Some(generated)=generated_box(dom,styled,entry.node,pseudo,entry.parent_font,fonts,replaced) {
+                    if generated.outside_marker || is_out_of_flow(&generated.style) { positioned.push(generated); }
+                    else {
+                        flush_anonymous_into(&mut items,&mut run,&mut positioned,font_size,fonts,&mut Vec::new());
+                        items.push(formatting_item(generated));
+                    }
+                }
+                continue;
+            }
             let child = entry.node;
             let text_parent = styled.get(entry.owner).cloned().unwrap_or_default();
             match &dom.get(child).kind {
@@ -1385,6 +1402,13 @@ fn classify_children(
     let entries = formatting_children(dom, styled, idx, font_size);
     let mut cursor = 0;
     while cursor < entries.len() {
+        if let Some(pseudo)=entries[cursor].pseudo {
+            let entry=&entries[cursor];
+            append_generated(dom,styled,entry.node,pseudo,entry.parent_font,fonts,replaced,
+                &mut blocks,&mut inlines,&mut positioned);
+            cursor+=1;
+            continue;
+        }
         if let Some((end, ruby)) = ruby_model::orphan_run(dom, styled, &entries, cursor, idx, font_size) {
             inlines.push(ruby);
             cursor = end;
@@ -1703,6 +1727,13 @@ fn flatten_inline(
     let entries = formatting_children(dom, styled, idx, font_size);
     let mut cursor = 0;
     while cursor < entries.len() {
+        if let Some(pseudo)=entries[cursor].pseudo {
+            let entry=&entries[cursor];
+            append_generated(dom,styled,entry.node,pseudo,entry.parent_font,fonts,replaced,
+                blocks_out,inlines,positioned_out);
+            cursor+=1;
+            continue;
+        }
         if let Some((end, ruby)) = ruby_model::orphan_run(dom, styled, &entries, cursor, idx, font_size) {
             inlines.push(ruby);
             cursor = end;

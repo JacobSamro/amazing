@@ -63,8 +63,7 @@ pub(crate) fn layout_root_with_text(
         &fonts,
         &mut FloatContext::default(),
         Some(text),
-        true,
-    );
+        true, crate::UsedContentSize::default());
     crate::position::layout_positioned(
         root,
         width,
@@ -134,8 +133,7 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
         fonts,
         &mut FloatContext::default(),
         None,
-        true,
-    )
+        true, crate::UsedContentSize::default())
 }
 
 pub(crate) fn layout_block_with_text(
@@ -143,13 +141,20 @@ pub(crate) fn layout_block_with_text(
     fonts: &FontSource, text: &dyn amazing_text::TextSystem,
 ) -> f32 {
     layout_block_in_context(
-        b, x, y, cbw, fonts, &mut FloatContext::default(), Some(text), true,
-    )
+        b, x, y, cbw, fonts, &mut FloatContext::default(), Some(text), true, crate::UsedContentSize::default())
+}
+
+/// Parent solvers pass content dimensions directly; declarations stay intact.
+pub(crate) fn layout_block_with_used_content_size(
+    b: &mut LayoutBox, x:f32, y:f32, cbw:f32, fonts:&FontSource,
+    text:Option<&dyn amazing_text::TextSystem>, used:crate::UsedContentSize,
+) -> f32 {
+    layout_block_in_context(b,x,y,cbw,fonts,&mut FloatContext::default(),text,true,used)
 }
 
 pub(crate) fn layout_table_content(b: &mut LayoutBox, x:f32, y:f32, width:f32,
     fonts:&FontSource, text:Option<&dyn amazing_text::TextSystem>) -> f32 {
-    layout_block_in_context(b,x,y,width,fonts,&mut FloatContext::default(),text,false)
+    layout_block_in_context(b,x,y,width,fonts,&mut FloatContext::default(),text,false, crate::UsedContentSize::default())
 }
 
 fn layout_block_in_context(
@@ -160,8 +165,9 @@ fn layout_block_in_context(
     fonts: &FontSource,
     inherited: &mut FloatContext,
     text: Option<&dyn amazing_text::TextSystem>,
-    root: bool,
+    root: bool, used: crate::UsedContentSize,
 ) -> f32 {
+    b.used_content_size=used;
     if b.table_wrapper { return crate::table::layout_wrapper(b,x,y,cbw,fonts,text); }
     if crate::table_tree::role(b) == crate::table_tree::Role::Table {
         return crate::table::layout(b, x, y, cbw, fonts, text, 0.0);
@@ -249,8 +255,9 @@ fn layout_block_in_context(
         else { vertical_inline_measure(b, cbw, text) };
     // --- §10.3.3 horizontal constraint ---------------------------------
     let mut content_w;
-    match values::resolve_extent_with_units(&b.style, "width", font_units, Some(cbw)) {
+    match used.width.map(MaybeLen::Px).unwrap_or_else(|| values::resolve_extent_with_units(&b.style, "width", font_units, Some(cbw))) {
         MaybeLen::Px(w) => {
+            let w=if used.width.is_none() && b.style.get("box-sizing")==Some("border-box") { (w-bl-pl-pr-br_).max(0.0) } else {w};
             let fixed = bl + pl + w + pr + br_;
             if floating || b.inline_atomic {
                 b.margin.left = Some(b.margin.left.unwrap_or(0.0));
@@ -368,6 +375,10 @@ fn layout_block_in_context(
             content_w = width.max(0.0);
         }
     }
+    if let Some(width)=used.width { content_w=width.max(0.0); }
+    let declared_content_width=|value:f32| if b.style.get("box-sizing")==Some("border-box") {
+        (value-chrome).max(0.0)
+    } else {value.max(0.0)};
     let calc_size_width_limit = |property| {
         let source = b.style.get(property)?;
         let chrome = bl + pl + pr + br_;
@@ -410,10 +421,10 @@ fn layout_block_in_context(
         values::used_calc_size_with_basis(&b.style, source, font_units, basis, Some(cbw))
     };
     let min_width = values::style_length_percentage_with_units(&b.style, "min-width", font_units)
-        .and_then(|value| value.resolve(Some(cbw))).or_else(|| calc_size_width_limit("min-width"))
+        .and_then(|value| value.resolve(Some(cbw))).map(declared_content_width).or_else(|| calc_size_width_limit("min-width"))
         .unwrap_or(0.0).max(0.0);
     let max_width = values::style_length_percentage_with_units(&b.style, "max-width", font_units)
-        .and_then(|value| value.resolve(Some(cbw))).or_else(|| calc_size_width_limit("max-width"));
+        .and_then(|value| value.resolve(Some(cbw))).map(declared_content_width).or_else(|| calc_size_width_limit("max-width"));
     content_w = max_width.map_or(content_w, |maximum| content_w.min(maximum.max(0.0))).max(min_width);
 
     // Resolve the normal-flow width equation again after min/max clamping.
@@ -447,15 +458,19 @@ fn layout_block_in_context(
 
     let constraint_style = b.style.clone();
     let containing_block_height = b.containing_block_height;
+    let vertical_chrome=bt+pt(b)+pb(b)+bb;
+    let declared_content_height=|height:f32| if constraint_style.get("box-sizing")==Some("border-box") {
+        (height-vertical_chrome).max(0.0)
+    } else {height.max(0.0)};
     let height_constraint = |property| values::style_length_percentage_with_units(&constraint_style, property, font_units)
         .and_then(|length| length.resolve(containing_block_height))
-        .map(|height| height.max(0.0));
+        .map(declared_content_height);
     // `contain-intrinsic-size`'s height half only fills in for a `height`
     // that isn't already a definite length -- an explicit `height:300px`
     // still wins over containment, matching width's treatment in
     // `intrinsic()` above (only the intrinsic *contribution* is overridden).
-    let def_h = values::style_length_percentage_with_units(&b.style, "height", font_units)
-        .and_then(|length| length.resolve(b.containing_block_height))
+    let def_h = used.height.or_else(|| values::style_length_percentage_with_units(&b.style, "height", font_units)
+        .and_then(|length| length.resolve(b.containing_block_height)).map(declared_content_height))
         .or(contain_height_override);
     let inline_basis = def_h.map(|h| {
         constrain_height(
@@ -669,7 +684,9 @@ fn layout_block_in_context(
         .then(|| values::preferred_aspect_ratio(&b.style))
         .flatten()
         .filter(|ratio| *ratio > 0.0)
-        .map(|ratio| content_w / ratio);
+        .map(|ratio| if b.style.get("box-sizing")==Some("border-box") {
+            ((content_w+chrome)/ratio-vertical_chrome).max(0.0)
+        } else {content_w/ratio});
     let fixed_height = other_height_source.or(aspect_ratio_height);
     let min_height = height_constraint("min-height").or_else(|| calc_height("min-height")).unwrap_or(0.0);
     let max_height = height_constraint("max-height").or_else(|| calc_height("max-height"));
@@ -762,7 +779,7 @@ pub(crate) fn layout_atomic_inlines(parent: &mut LayoutBox, x: f32, y: f32, avai
         // Shape at the containing block origin. Placing a first atomic inline
         // then needs no horizontal translation, retaining the same glyph
         // coordinates as an equivalent block (including caption text).
-        layout_block_in_context(child, x, y, outer_width, fonts, &mut FloatContext::default(), text, false);
+        layout_block_in_context(child, x, y, outer_width, fonts, &mut FloatContext::default(), text, false, crate::UsedContentSize::default());
     }
     refresh_atomic_inline_metrics(parent);
 }
@@ -901,7 +918,7 @@ fn stack_blocks(
             let y = (cursor + pending.value())
                 .max(content_y)
                 .max(floats.clear(child.style.get("clear").unwrap_or("none")));
-            layout_block_in_context(child, content_x, y, content_w, fonts, floats, text, false);
+            layout_block_in_context(child, content_x, y, content_w, fonts, floats, text, false, crate::UsedContentSize::default());
             let w = child.border_box.w + cm.left.unwrap_or(0.0) + cm.right.unwrap_or(0.0);
             let h = child.border_box.h + cmt + child.margin.bottom.unwrap_or(0.0);
             let placed = floats.place(side, content_x, content_w, y, w, h);
@@ -953,8 +970,7 @@ fn stack_blocks(
                     fonts,
                     floats,
                     text,
-                    false,
-                );
+                    false, crate::UsedContentSize::default());
                 let (next_left, next_right, next_top) =
                     floats.fit(content_x, content_w, top, child.border_box.h, needed);
                 let (next_left, next_right) = if next_top == top {
@@ -978,8 +994,7 @@ fn stack_blocks(
                 fonts,
                 floats,
                 text,
-                false,
-            );
+                false, crate::UsedContentSize::default());
         }
         if collapses_through {
             if has_clearance {

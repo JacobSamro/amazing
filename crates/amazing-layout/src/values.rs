@@ -370,6 +370,9 @@ pub(crate) fn parse_length_percentage_with_units(
 pub fn style_length_percentage(
     style: &ComputedStyle, property: &str, em: f32, ch: f32,
 ) -> Option<LengthPercentage> {
+    if let Some(px)=style.used_length_px(property) {
+        return px.is_finite().then_some(LengthPercentage{px:px as f32,percentage:0.0,has_percentage:false});
+    }
     let source = match style.typed(property) {
         Some(ComputedValue::LengthPercentageExpression(expression)) => expression.as_str(),
         _ => style.get(property)?,
@@ -380,6 +383,9 @@ pub fn style_length_percentage(
 pub(crate) fn style_length_percentage_with_units(
     style: &ComputedStyle, property: &str, units: FontRelativeUnits,
 ) -> Option<LengthPercentage> {
+    if let Some(px)=style.used_length_px(property) {
+        return px.is_finite().then_some(LengthPercentage{px:px as f32,percentage:0.0,has_percentage:false});
+    }
     let source = match style.typed(property) {
         Some(ComputedValue::LengthPercentageExpression(expression)) => expression.as_str(),
         _ => style.get(property)?,
@@ -395,7 +401,8 @@ pub fn used_length_percentage(
     style: &ComputedStyle, source: &str, em: f32, ch: f32,
 ) -> Option<LengthPercentage> {
     let zoom = style.effective_zoom() as f32;
-    let mut length = parse_length_percentage(source, em / zoom, ch / zoom)?;
+    let units=used_root_units(style,FontRelativeUnits::legacy(em,ch));
+    let mut length = parse_length_percentage_with_units(source,units.divided_by(zoom))?;
     length.px = style.scale_used_length(length.px as f64) as f32;
     Some(length)
 }
@@ -404,9 +411,20 @@ pub(crate) fn used_length_percentage_with_units(
     style: &ComputedStyle, source: &str, units: FontRelativeUnits,
 ) -> Option<LengthPercentage> {
     let zoom = style.effective_zoom() as f32;
+    let units=used_root_units(style,units);
     let mut length = parse_length_percentage_with_units(source, units.divided_by(zoom))?;
     length.px = style.scale_used_length(length.px as f64) as f32;
     Some(length)
+}
+
+/// Root font units use the document's computed size at this box's accumulated
+/// zoom. Provider root glyph metrics and line height follow the same ratio.
+fn used_root_units(style:&ComputedStyle,mut units:FontRelativeUnits)->FontRelativeUnits {
+    let root_em=style.root_font_size_px()*style.effective_zoom() as f32;
+    let scale=if units.root_em>0.0 {root_em/units.root_em}else{1.0};
+    units.root_em=root_em;
+    units.root_ch*=scale;units.root_ic*=scale;units.root_ex*=scale;units.root_cap*=scale;units.root_lh*=scale;
+    units
 }
 
 /// Resolve an intrinsic `calc-size()` after layout has determined the used
@@ -418,7 +436,7 @@ pub(crate) fn used_calc_size_with_basis(
 ) -> Option<f32> {
     let zoom = style.effective_zoom() as f32;
     let mut parser = CalcParser {
-        input: source.trim(), pos: 0, units: units.divided_by(zoom),
+        input: source.trim(), pos: 0, units: used_root_units(style,units).divided_by(zoom),
         size_basis: Some(LengthPercentage { px: basis / zoom, percentage: 0.0, has_percentage: false }),
     };
     let value = parser.sum()?;

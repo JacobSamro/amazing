@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "wpt_revision": "unknown",
+  "subdir": "css/layout48",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+  "host": "box-node-e47177aaec561ee8",
+  "generated": "2026-10-03T05:57:23Z",
+  "counts": {
+    "pass": 4,
+    "mismatch": 0,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "tests": {
+    "css__layout48__table-zoom.html": "pass",
+    "css__layout48__flex-grid.html": "pass",
+    "css__layout48__border-box.html": "pass",
+    "css__layout48__contents-pseudo.html": "pass"
+  },
+  "baseline_compare": {
+    "baseline": "/home/user/amazing/out/layout/layout48/final-2/before-geometry-pixels/run-20261003T054607Z-1568868/compact.json",
+    "gained": [
+      "css__layout48__border-box.html",
+      "css__layout48__contents-pseudo.html",
+      "css__layout48__flex-grid.html",
+      "css__layout48__table-zoom.html"
+    ],
+    "lost": [],
+    "changed": [],
+    "unchanged": [],
+    "new": [],
+    "removed": []
+  }
+}

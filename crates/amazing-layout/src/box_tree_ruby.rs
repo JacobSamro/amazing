@@ -825,11 +825,12 @@ pub(super) fn orphan_run(
                 .get(node)
                 .is_some_and(|s| is_out_of_flow(s) || crate::floats::side(s).is_some())
     };
-    if !internal(entries[start].node) {
+    if entries[start].pseudo.is_some() || !internal(entries[start].node) {
         return None;
     }
     let mut end = start;
     for (offset, entry) in entries[start..].iter().enumerate() {
+        if entry.pseudo.is_some() { break; }
         if internal(entry.node) {
             end = start + offset + 1;
         } else if matches!(&dom.get(entry.node).kind, NodeKind::Text { data } | NodeKind::CDATASection { data } if css_whitespace(data))

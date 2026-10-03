@@ -515,30 +515,30 @@ fn main_limits(it: &LayoutBox, containing: f32, fonts: &FontSource) -> (f32, f32
             _ => return None,
         };
         values::used_calc_size_with_basis(
-            &it.style, source,
+            crate::used_size::style(it), source,
             values::FontRelativeUnits::legacy(it.font_size, it.font_size * 0.6),
             basis, Some(containing),
         )
     };
-    let maximum = match it.style.get("max-width") {
+    let maximum = match crate::used_size::style(it).get("max-width") {
         Some(value) if value.eq_ignore_ascii_case("min-content") => min_content,
         Some(value) if value.eq_ignore_ascii_case("max-content") => max_content,
-        Some(source) => calc_size_limit(source).or_else(|| values::style_length_percentage(&it.style, "max-width", it.font_size, it.font_size * 0.6)
-            .and_then(|value| value.resolve(Some(containing)))
+        Some(source) => calc_size_limit(source).or_else(|| values::style_length_percentage(crate::used_size::style(it), "max-width", it.font_size, it.font_size * 0.6)
+            .and_then(|value| value.resolve(Some(containing))).map(|value| crate::used_size::content_value(it,value,true,containing))
         ).unwrap_or(f32::INFINITY),
         None => f32::INFINITY,
     }
     .max(0.0);
-    let minimum = match it.style.get("min-width") {
+    let minimum = match crate::used_size::style(it).get("min-width") {
         Some(value) if value.eq_ignore_ascii_case("min-content") => min_content,
         Some(value) if value.eq_ignore_ascii_case("max-content") => max_content,
         Some(value) if !value.eq_ignore_ascii_case("auto") => {
-            calc_size_limit(value).or_else(|| values::style_length_percentage(&it.style, "min-width", it.font_size, it.font_size * 0.6)
-                .and_then(|value| value.resolve(Some(containing))))
+            calc_size_limit(value).or_else(|| values::style_length_percentage(crate::used_size::style(it), "min-width", it.font_size, it.font_size * 0.6)
+                .and_then(|value| value.resolve(Some(containing))).map(|value| crate::used_size::content_value(it,value,true,containing)))
                 .unwrap_or(0.0)
         },
-        _ if automatic_minimum_applies(&it.style) => {
-            match values::resolve_extent(&it.style, "width", it.font_size, containing) {
+        _ if automatic_minimum_applies(crate::used_size::style(it)) => {
+            match crate::used_size::extent(&it,"width",containing) {
                 MaybeLen::Px(specified) => min_content.min(specified),
                 MaybeLen::Auto => min_content,
             }
@@ -559,27 +559,27 @@ fn column_limits(it: &LayoutBox, measured_content: f32, containing: f32) -> (f32
         match values::calc_size_basis(source)? {
             "auto" | "min-content" | "max-content" | "fit-content" =>
                 values::used_calc_size_with_basis(
-                    &it.style, source,
+                    crate::used_size::style(it), source,
                     values::FontRelativeUnits::legacy(it.font_size, it.font_size * 0.6),
                     measured_content, Some(containing),
                 ),
             _ => None,
         }
     };
-    let maximum = match it.style.get("max-height") {
+    let maximum = match crate::used_size::style(it).get("max-height") {
         Some(value)
             if value.eq_ignore_ascii_case("min-content")
                 || value.eq_ignore_ascii_case("max-content") =>
         {
             measured_content
         },
-        Some(source) => calc_size_limit(source).or_else(|| values::style_length_percentage(&it.style, "max-height", it.font_size, it.font_size * 0.6)
-            .and_then(|value| value.resolve(Some(containing))))
+        Some(source) => calc_size_limit(source).or_else(|| values::style_length_percentage(crate::used_size::style(it), "max-height", it.font_size, it.font_size * 0.6)
+            .and_then(|value| value.resolve(Some(containing))).map(|value| crate::used_size::content_value(it,value,false,containing)))
             .unwrap_or(f32::INFINITY),
         None => f32::INFINITY,
     }
     .max(0.0);
-    let minimum = match it.style.get("min-height") {
+    let minimum = match crate::used_size::style(it).get("min-height") {
         Some(value)
             if value.eq_ignore_ascii_case("min-content")
                 || value.eq_ignore_ascii_case("max-content") =>
@@ -587,24 +587,24 @@ fn column_limits(it: &LayoutBox, measured_content: f32, containing: f32) -> (f32
             measured_content
         },
         Some(value) if !value.eq_ignore_ascii_case("auto") => {
-            let automatic = values::resolve_extent(&it.style, "height", it.font_size, containing);
+            let automatic = crate::used_size::extent(&it,"height",containing);
             let basis = match automatic {
                 MaybeLen::Px(specified) => measured_content.min(specified),
                 MaybeLen::Auto => measured_content,
             };
             if values::calc_size_basis(value).is_some() {
                 values::used_calc_size_with_basis(
-                    &it.style, value,
+                    crate::used_size::style(it), value,
                     values::FontRelativeUnits::legacy(it.font_size, it.font_size * 0.6),
                     basis, Some(containing),
                 ).unwrap_or(0.0)
             } else {
-                values::style_length_percentage(&it.style, "min-height", it.font_size, it.font_size * 0.6)
-                    .and_then(|value| value.resolve(Some(containing))).unwrap_or(0.0)
+                values::style_length_percentage(crate::used_size::style(it), "min-height", it.font_size, it.font_size * 0.6)
+                    .and_then(|value| value.resolve(Some(containing))).map(|value| crate::used_size::content_value(it,value,false,containing)).unwrap_or(0.0)
             }
         },
-        _ if automatic_minimum_applies(&it.style) => {
-            match values::resolve_extent(&it.style, "height", it.font_size, containing) {
+        _ if automatic_minimum_applies(crate::used_size::style(it)) => {
+            match crate::used_size::extent(&it,"height",containing) {
                 MaybeLen::Px(specified) => measured_content.min(specified),
                 MaybeLen::Auto => measured_content,
             }
@@ -639,8 +639,8 @@ fn layout_row(
         .map(|i| {
             let it = &items[i];
             match props[i].basis_px {
-                Some(b) => b.max(0.0),
-                None => match values::resolve_extent(&it.style, "width", it.font_size, content_w) {
+                Some(b) => crate::used_size::content_value(it,b,true,content_w),
+                None => match crate::used_size::extent(&it,"width",content_w) {
                     MaybeLen::Px(w) => w.max(0.0),
                     MaybeLen::Auto => {
                         // The transferred size suggestion is NOT capped to
@@ -720,15 +720,6 @@ fn layout_row(
             + gaps_total;
         let free = content_w - used;
 
-        // Materialize every flexed content-box width. `layout_block` accepts
-        // a containing width, not a used item width; leaving an auto width in
-        // place would subtract the item's own border/padding a second time.
-        for &i in line {
-            items[i]
-                .style
-                .set("width", &format!("{}px", base[i].max(0.0)));
-        }
-
         // Auto main margins absorb remaining free space before
         // justify-content (§8.1), leaving justify nothing.
         let mut auto_sides = 0usize;
@@ -758,7 +749,8 @@ fn layout_row(
 
         // Lay out at final content widths (origin 0,0; translated below).
         for &i in line {
-            crate::block::layout_block(&mut items[i], 0.0, 0.0, base[i].max(0.0), fonts);
+            crate::block::layout_block_with_used_content_size(&mut items[i],0.0,0.0,content_w,fonts,None,
+                crate::UsedContentSize{width:Some(base[i].max(0.0)),height:None});
         }
 
         // Line cross size, then stretch items whose cross size is auto.
@@ -799,7 +791,7 @@ fn layout_row(
         for &i in line {
             let align = props[i].align_self.unwrap_or(spec.align_items);
             let height_auto = matches!(
-                values::resolve_extent(&items[i].style, "height", items[i].font_size, 0.0),
+                crate::used_size::extent(&items[i],"height",0.0),
                 MaybeLen::Auto
             );
             if align == Pack::Stretch
@@ -912,12 +904,7 @@ fn layout_row(
                         }
                         let align = props[item_index].align_self.unwrap_or(spec.align_items);
                         let height_auto = matches!(
-                            values::resolve_extent(
-                                &items[item_index].style,
-                                "height",
-                                items[item_index].font_size,
-                                0.0,
-                            ),
+                            crate::used_size::extent(&items[item_index],"height",0.0),
                             MaybeLen::Auto
                         );
                         if align == Pack::Stretch
@@ -972,13 +959,14 @@ fn layout_wrapped_column(
         let item = &mut items[index];
         resolve_model(item, content_w);
         let margin = values::resolve_margins(&item.style, item.font_size, content_w);
-        let width = match values::resolve_extent(&item.style, "width", item.font_size, content_w) {
+        let width = match crate::used_size::extent(&item,"width",content_w) {
             MaybeLen::Px(value) => value.max(0.0),
-            MaybeLen::Auto => max_content_width(item, fonts).min(content_w),
+            MaybeLen::Auto => (max_content_width(item, fonts)-h_chrome(item)).max(0.0).min((content_w-h_chrome(item)).max(0.0)),
         };
-        crate::block::layout_block(item, 0.0, 0.0, width, fonts);
-        let main = props[index].basis_px.or_else(|| {
-            match values::resolve_extent(&item.style, "height", item.font_size, height) {
+        crate::block::layout_block_with_used_content_size(item,0.0,0.0,content_w,fonts,None,
+            crate::UsedContentSize{width:Some(width),height:None});
+        let main = props[index].basis_px.map(|value| crate::used_size::content_value(item,value,false,content_w)).or_else(|| {
+            match crate::used_size::extent(&item,"height",height) {
                 MaybeLen::Px(value) => Some(value),
                 MaybeLen::Auto => None,
             }
@@ -1052,9 +1040,9 @@ fn layout_column(
     let mut line_cross = content_w;
     for &i in order {
         let it = &items[i];
-        if let MaybeLen::Px(w) = values::resolve_extent(&it.style, "width", it.font_size, content_w) {
+        if let MaybeLen::Px(w) = crate::used_size::extent(&it,"width",content_w) {
             let margin = values::resolve_margins(&it.style, it.font_size, content_w);
-            let outer_w = w + margin.left.unwrap_or(0.0) + margin.right.unwrap_or(0.0);
+            let outer_w = w + h_chrome(it) + margin.left.unwrap_or(0.0) + margin.right.unwrap_or(0.0);
             line_cross = line_cross.max(outer_w);
         }
     }
@@ -1069,7 +1057,7 @@ fn layout_column(
     let cross_size = |it: &LayoutBox, align: Pack, width_auto: bool, avail_for: f32, fonts: &FontSource| {
         let ml = it.margin.left.unwrap_or(0.0);
         let mr = it.margin.right.unwrap_or(0.0);
-        let avail = (avail_for - ml - mr).max(0.0);
+        let avail = (avail_for - ml - mr - h_chrome(it)).max(0.0);
         match align {
             Pack::Stretch
                 if width_auto
@@ -1078,9 +1066,9 @@ fn layout_column(
             {
                 avail
             },
-            _ => match values::resolve_extent(&it.style, "width", it.font_size, avail_for) {
+            _ => match crate::used_size::extent(&it,"width",avail_for) {
                 MaybeLen::Px(v) => v.min(avail),
-                MaybeLen::Auto => max_content_width(it, fonts).min(avail),
+                MaybeLen::Auto => (max_content_width(it, fonts)-h_chrome(it)).max(0.0).min(avail),
             },
         }
     };
@@ -1088,12 +1076,13 @@ fn layout_column(
     for &i in order {
         let align = props[i].align_self.unwrap_or(spec.align_items);
         let width_auto = matches!(
-            values::resolve_extent(&items[i].style, "width", items[i].font_size, content_w),
+            crate::used_size::extent(&items[i],"width",content_w),
             MaybeLen::Auto
         );
         let w_measure = cross_size(&items[i], align, width_auto, content_w, fonts);
         layout_widths[i] = cross_size(&items[i], align, width_auto, line_cross, fonts);
-        crate::block::layout_block(&mut items[i], 0.0, 0.0, w_measure, fonts);
+        crate::block::layout_block_with_used_content_size(&mut items[i],0.0,0.0,content_w,fonts,None,
+            crate::UsedContentSize{width:Some(w_measure),height:None});
     }
 
     // Main (vertical) sizes use the same §9.7 solver as rows. Measurement
@@ -1109,12 +1098,8 @@ fn layout_column(
         .iter()
         .enumerate()
         .map(|(position, &i)| {
-            props[i].basis_px.unwrap_or_else(|| {
-                match values::resolve_extent(
-                    &items[i].style,
-                    "height",
-                    items[i].font_size,
-                    spec.definite_height.unwrap_or(0.0),
+            props[i].basis_px.map(|value| crate::used_size::content_value(&items[i],value,false,content_w)).unwrap_or_else(|| {
+                match crate::used_size::extent(&items[i],"height",spec.definite_height.unwrap_or(0.0),
                 ) {
                     MaybeLen::Px(height) => height.max(0.0),
                     MaybeLen::Auto => measured[position],
@@ -1157,10 +1142,8 @@ fn layout_column(
         |height| resolve_flexible_lengths(height - gaps_total, &constraints),
     );
     for (position, &i) in order.iter().enumerate() {
-        items[i]
-            .style
-            .set("height", &format!("{}px", base[position].max(0.0)));
-        crate::block::layout_block(&mut items[i], 0.0, 0.0, layout_widths[i], fonts);
+        crate::block::layout_block_with_used_content_size(&mut items[i],0.0,0.0,content_w,fonts,None,
+            crate::UsedContentSize{width:Some(layout_widths[i]),height:Some(base[position].max(0.0))});
     }
 
     // Main-axis placement (justify-content along the vertical axis).
@@ -1276,6 +1259,7 @@ fn stretch_height(it: &mut LayoutBox, target_border_h: f32) {
     if delta <= 0.0 {
         return;
     }
+    it.used_content_size.height=Some((target_border_h-v_chrome(it)).max(0.0));
     it.border_box.h += delta;
     it.content_box.h += delta;
 }
@@ -1401,7 +1385,7 @@ fn intrinsic_preferred_width(b: &LayoutBox) -> Option<f32> {
     if b.style.get("width").is_some_and(|value| value.contains('%')) {
         return None;
     }
-    let MaybeLen::Px(width) = values::resolve_extent(&b.style, "width", b.font_size, 0.0) else {
+    let MaybeLen::Px(width) = crate::used_size::extent(&b,"width",0.0) else {
         return None;
     };
     Some(width.max(0.0))
@@ -1426,13 +1410,13 @@ fn intrinsic_width_constraints(b: &LayoutBox, inner: f32, fonts: &FontSource) ->
     // CSS Sizing 3 §5.2.1: a cyclic percentage in a min size contributes
     // zero during intrinsic sizing. The definite length term still counts.
     let min = values::style_length_percentage(&b.style, "min-width", b.font_size, b.font_size * 0.6)
-        .and_then(|value| value.resolve(Some(0.0)))
+        .and_then(|value| value.resolve(Some(0.0))).map(|value| crate::used_size::content_value(b,value,true,0.0))
         .or_else(|| intrinsic_calc_size(b, "min-width", inner, fonts))
         .unwrap_or(0.0).max(0.0);
     // Cyclic percentages in a maximum size behave as the initial `none`.
     let max = values::style_length_percentage(&b.style, "max-width", b.font_size, b.font_size * 0.6)
         .filter(|value| !value.has_percentage)
-        .and_then(|value| value.resolve(None))
+        .and_then(|value| value.resolve(None)).map(|value| crate::used_size::content_value(b,value,true,0.0))
         .or_else(|| intrinsic_calc_size(b, "max-width", inner, fonts));
     max.map_or(inner, |maximum| inner.min(maximum.max(0.0))).max(min)
 }

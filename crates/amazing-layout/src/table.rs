@@ -283,7 +283,7 @@ fn outer_cell_size(cell: &LayoutBox, size: f32, edges: f32) -> f32 {
 
 // CSS2 §17.6.1 distinguishes HTML table widths from CSS table boxes on
 // ordinary elements. Only the latter add content-box padding and borders.
-fn outer_table_width(b: &LayoutBox, size: f32, edges: f32) -> f32 {
+pub(crate) fn outer_table_width(b: &LayoutBox, size: f32, edges: f32) -> f32 {
     if b.html_table_width || b.style.get("box-sizing") == Some("border-box") {
         size
     } else {
@@ -741,8 +741,8 @@ pub(crate) fn layout(
     // Without this, `length()` (a plain-length parser) never recognizes the
     // keyword, `specified` stayed `None`, and `table-layout:fixed` could
     // never activate for a stretch-sized table.
-    let specified = length(b, "width", cbw)
-        .map(|w| outer_table_width(b, w, edges))
+    let specified = b.used_content_size.width.map(|width| width+edges).or_else(|| length(b, "width", cbw)
+        .map(|w| outer_table_width(b, w, edges)))
         .or_else(|| {
             matches!(b.style.get("width"), Some("stretch" | "-webkit-fill-available"))
                 .then_some(available)
@@ -931,7 +931,7 @@ pub(crate) fn layout(
     // else").
     let cbh = b.containing_block_height.unwrap_or(0.0);
     let vertical_edges = b.padding.top + b.padding.bottom + b.border.top + b.border.bottom;
-    let mut desired = length(b, "height", cbh).unwrap_or(0.0);
+    let mut desired = b.used_content_size.height.or_else(|| length(b, "height", cbh)).unwrap_or(0.0);
     if let Some(max_h) = length(b, "max-height", cbh) {
         desired = desired.min((max_h - vertical_edges).max(0.0));
     }
@@ -1238,7 +1238,23 @@ pub(crate) fn layout_wrapper(
     } else {
         available
     };
+    if let Some(width)=b.used_content_size.width {
+        let grid=at_mut(b,&[0]);
+        let padding=values::resolve_padding(&grid.style,grid.font_size,basis);
+        let border=values::resolve_borders(&grid.style,grid.font_size);
+        grid.used_content_size.width=Some((width-padding.left-padding.right-border.left-border.right).max(0.0));
+    }
     layout(at_mut(b, &[0]), 0.0, 0.0, basis, fonts, text, capmin);
+    if let Some(height)=b.used_content_size.height {
+        let width=at(b,&[0]).border_box.w;
+        let caption_height=(1..children(b).len()).map(|index|
+            crate::block::layout_table_content(at_mut(b,&[index]),0.0,0.0,width,fonts,text)).sum::<f32>();
+        let grid=at_mut(b,&[0]);
+        let chrome=grid.padding.top+grid.padding.bottom+grid.border.top+grid.border.bottom;
+        grid.used_content_size.height=Some((height-caption_height-chrome).max(0.0));
+        layout(grid,0.0,0.0,basis,fonts,text,capmin);
+    }
+
     let width = at(b, &[0]).border_box.w;
     let free = (available - width).max(0.0);
     match (b.margin.left.is_none(), b.margin.right.is_none()) {

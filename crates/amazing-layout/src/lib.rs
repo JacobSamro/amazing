@@ -162,6 +162,11 @@ pub enum Display {
     Grid,
 }
 
+/// Content dimensions assigned by an actual parent sizing solver, in used px.
+/// Author declarations and their min/max box edges remain independent.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct UsedContentSize { pub width: Option<f32>, pub height: Option<f32> }
+
 /// One box of the layout tree. Spec fields are filled by
 /// [`box_tree::build_layout_tree`]; geometry fields by [`block::layout_root`].
 #[derive(Debug)]
@@ -182,6 +187,7 @@ pub struct LayoutBox {
     /// The element's computed declarations (raw strings; lengths resolve at
     /// layout time when the containing-block width is known).
     pub style: ComputedStyle,
+    pub(crate) used_content_size: UsedContentSize,
     pub font_size: f32,
     pub line_height: f32,
     /// Computed face request used for font-relative CSS lengths on this box.
@@ -264,6 +270,7 @@ impl LayoutBox {
             outside_marker: false,
             display,
             style,
+            used_content_size: UsedContentSize::default(),
             font_size,
             line_height,
             font_metric_style: None,
@@ -726,7 +733,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 } else {
                     lines.iter().map(|line| line.height).sum::<f32>()
                 };
-                if !contained_height && layout
+                if !contained_height && layout.used_content_size.height.is_none() && layout
                     .style
                     .get("height")
                     .is_none_or(|value| value.eq_ignore_ascii_case("auto"))
@@ -1867,3 +1874,7 @@ mod ruby_tests;
 
 #[cfg(test)]
 mod inline_padding_tests;
+
+mod used_size;
+#[cfg(test)]
+mod used_size_tests;

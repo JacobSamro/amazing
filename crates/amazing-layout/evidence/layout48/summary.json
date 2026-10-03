@@ -1,0 +1,296 @@
+{
+  "fixed_base": "7096c91c31f3178f395a11ee8da16df988da89e0",
+  "directories": [
+    {
+      "directory": "css-CSS2-floats",
+      "eligible": 39,
+      "before": 29,
+      "after": 30,
+      "gained": [
+        "css__CSS2__floats__overflow-scroll-float-paint-order.html"
+      ],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-CSS2-normal-flow",
+      "eligible": 29,
+      "before": 24,
+      "after": 24,
+      "gained": [],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-CSS2-positioning",
+      "eligible": 7,
+      "before": 5,
+      "after": 5,
+      "gained": [],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-css-backgrounds",
+      "eligible": 134,
+      "before": 77,
+      "after": 78,
+      "gained": [
+        "css__css-backgrounds__background-clip-padding-box-001.html"
+      ],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-css-contain",
+      "eligible": 229,
+      "before": 153,
+      "after": 155,
+      "gained": [
+        "css__css-contain__contain-size-023.html",
+        "css__css-contain__contain-size-027.html"
+      ],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-css-display",
+      "eligible": 35,
+      "before": 27,
+      "after": 28,
+      "gained": [
+        "css__css-display__display-contents-before-after-001.html"
+      ],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-css-fonts",
+      "eligible": 32,
+      "before": 24,
+      "after": 24,
+      "gained": [],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-css-images",
+      "eligible": 141,
+      "before": 92,
+      "after": 92,
+      "gained": [],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-css-overflow",
+      "eligible": 343,
+      "before": 81,
+      "after": 83,
+      "gained": [
+        "css__css-overflow__overflow-clip-transform-001.html",
+        "css__css-overflow__overflow-clipped-transparent-border-clip.html"
+      ],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-css-position",
+      "eligible": 54,
+      "before": 45,
+      "after": 45,
+      "gained": [],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-css-ruby",
+      "eligible": 67,
+      "before": 52,
+      "after": 52,
+      "gained": [],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-css-sizing",
+      "eligible": 138,
+      "before": 99,
+      "after": 99,
+      "gained": [],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-css-tables",
+      "eligible": 82,
+      "before": 59,
+      "after": 60,
+      "gained": [
+        "css__css-tables__tentative__paint__background-image-row.html"
+      ],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-css-transforms",
+      "eligible": 348,
+      "before": 141,
+      "after": 141,
+      "gained": [],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "css-css-viewport",
+      "eligible": 87,
+      "before": 52,
+      "after": 56,
+      "gained": [
+        "css__css-viewport__zoom__column-gap.html",
+        "css__css-viewport__zoom__explicit-inherit__flex-basis.html",
+        "css__css-viewport__zoom__grid.html",
+        "css__css-viewport__zoom__row-gap.html"
+      ],
+      "lost": [],
+      "new": [],
+      "removed": []
+    },
+    {
+      "directory": "geometry-pixels",
+      "eligible": 4,
+      "before": 0,
+      "after": 4,
+      "gained": [
+        "css__layout48__border-box.html",
+        "css__layout48__contents-pseudo.html",
+        "css__layout48__flex-grid.html",
+        "css__layout48__table-zoom.html"
+      ],
+      "lost": [],
+      "new": [],
+      "removed": []
+    }
+  ],
+  "changed": [
+    [
+      "css-CSS2-floats",
+      "css__CSS2__floats__overflow-scroll-float-paint-order.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "css-css-backgrounds",
+      "css__css-backgrounds__background-clip-padding-box-001.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "css-css-contain",
+      "css__css-contain__contain-size-027.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "css-css-contain",
+      "css__css-contain__contain-size-023.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "css-css-display",
+      "css__css-display__display-contents-before-after-001.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "css-css-overflow",
+      "css__css-overflow__overflow-clipped-transparent-border-clip.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "css-css-overflow",
+      "css__css-overflow__overflow-clip-transform-001.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "css-css-tables",
+      "css__css-tables__tentative__paint__background-image-row.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "css-css-viewport",
+      "css__css-viewport__zoom__grid.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "css-css-viewport",
+      "css__css-viewport__zoom__explicit-inherit__flex-basis.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "css-css-viewport",
+      "css__css-viewport__zoom__column-gap.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "css-css-viewport",
+      "css__css-viewport__zoom__row-gap.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "geometry-pixels",
+      "css__layout48__table-zoom.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "geometry-pixels",
+      "css__layout48__flex-grid.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "geometry-pixels",
+      "css__layout48__contents-pseudo.html",
+      "mismatch",
+      "pass"
+    ],
+    [
+      "geometry-pixels",
+      "css__layout48__border-box.html",
+      "mismatch",
+      "pass"
+    ]
+  ],
+  "workspace": {
+    "passed": 3657,
+    "skipped": 17
+  },
+  "doctests": 4,
+  "harness": 7,
+  "layout_tests": 467,
+  "session": 10684,
+  "renderer": "63f22c606039f08951177031be43216771375718fda119a7fcbbbe8cf0775e38"
+}

@@ -1385,7 +1385,7 @@ fn v_chrome(it: &LayoutBox) -> f32 {
 /// `height` is auto when absent, `auto`, or a percentage (percent heights
 /// stay auto in this engine — block.rs precedent).
 fn height_is_auto(it: &LayoutBox) -> bool {
-    match it.style.get("height") {
+    match crate::used_size::style(it).get("height") {
         None => true,
         Some(v) => {
             let v = v.trim();
@@ -1761,7 +1761,7 @@ pub(crate) fn layout_grid_with_context(
         it.grid_subgrid = (subgrid_context.cols.is_some() || subgrid_context.rows.is_some())
             .then_some(subgrid_context);
         let width_auto = matches!(
-            values::resolve_extent(&it.style, "width", it.font_size, area_w),
+            crate::used_size::extent(it,"width",area_w),
             MaybeLen::Auto
         );
         width_auto_flags.push(width_auto);
@@ -1777,14 +1777,14 @@ pub(crate) fn layout_grid_with_context(
         let target = if stretchable && justify == ItemAlign::Stretch {
             avail_content
         } else {
-            match values::resolve_extent(&it.style, "width", it.font_size, area_w) {
+            match crate::used_size::extent(it,"width",area_w) {
                 MaybeLen::Px(w) => w.max(0.0),
                 MaybeLen::Auto => crate::flex::max_content_width(it, fonts).min(avail_content),
             }
         };
         // Materialize so the §10.3.3 resolver lays out at exactly this size.
-        it.style.set("width", &format!("{}px", target));
-        crate::block::layout_block(it, 0.0, 0.0, area_w, fonts);
+        crate::block::layout_block_with_used_content_size(it,0.0,0.0,area_w,fonts,None,
+            crate::UsedContentSize{width:Some(target),height:None});
     }
 
     // --- 5. row sizing ----------------------------------------------------
@@ -1847,14 +1847,14 @@ pub(crate) fn layout_grid_with_context(
             if let Some(context) = it.grid_subgrid.as_mut() {
                 context.rows = axis;
             }
-            crate::block::layout_block(it, 0.0, 0.0, aw.max(0.0), fonts);
+            let used=it.used_content_size;
+            crate::block::layout_block_with_used_content_size(it,0.0,0.0,aw.max(0.0),fonts,None,used);
         }
 
         // Vertical stretch: grow the item to fill the area (materialize the
         // height and re-flow so children see the final block size).
         let align = container_self_align(it, "align-self").unwrap_or(spec.align_items);
-        let own_height_is_percentage = it
-            .style
+        let own_height_is_percentage = crate::used_size::style(it)
             .get("height")
             .is_some_and(|v| v.trim().ends_with('%'));
         if align == ItemAlign::Stretch
@@ -1868,15 +1868,16 @@ pub(crate) fn layout_grid_with_context(
                 - it.margin.bottom.unwrap_or(0.0)
                 - v_chrome(it))
             .max(0.0);
-            if target_h > it.border_box.h {
-                it.style.set("height", &format!("{}px", target_h));
-                crate::block::layout_block(it, 0.0, 0.0, aw.max(0.0), fonts);
+            if target_h > it.content_box.h {
+                let used=crate::UsedContentSize{width:it.used_content_size.width,height:Some(target_h)};
+                crate::block::layout_block_with_used_content_size(it,0.0,0.0,aw.max(0.0),fonts,None,used);
             }
         } else if own_height_is_percentage {
             // Re-resolve against the now-known grid-area height (`ah`), set
             // just above -- step 4's pass used a stale containing block and
             // may have gotten this item's height wrong in either direction.
-            crate::block::layout_block(it, 0.0, 0.0, aw.max(0.0), fonts);
+            let used=it.used_content_size;
+            crate::block::layout_block_with_used_content_size(it,0.0,0.0,aw.max(0.0),fonts,None,used);
         }
 
         // Position within the area using OUTER sizes. Margins are
@@ -2125,12 +2126,12 @@ pub(crate) fn layout_grid_lanes(
         it.border = values::resolve_borders(&it.style, it.font_size);
         let available = (area_w - it.margin.left.unwrap_or(0.0)
             - it.margin.right.unwrap_or(0.0) - h_chrome(it)).max(0.0);
-        let width = match values::resolve_extent(&it.style, "width", it.font_size, area_w) {
+        let width = match crate::used_size::extent(it,"width",area_w) {
             MaybeLen::Px(width) => width.max(0.0),
             MaybeLen::Auto => available,
         };
-        it.style.set("width", &format!("{}px", width));
-        crate::block::layout_block(it, 0.0, 0.0, area_w, fonts);
+        crate::block::layout_block_with_used_content_size(it,0.0,0.0,area_w,fonts,None,
+            crate::UsedContentSize{width:Some(width),height:None});
         let y = content_y + stack + it.margin.top.unwrap_or(0.0);
         crate::flex::translate(it, x + it.margin.left.unwrap_or(0.0) - it.border_box.x,
             y - it.border_box.y);
@@ -2228,21 +2229,21 @@ fn layout_row_lanes(
         let rows = subgrid_axis_for_item(it, "grid-template-rows", &sizes,
             spec.row_gap, &spec.row_line_names, start + 1, span);
         it.grid_subgrid = rows.map(|rows| SubgridContext { cols: None, rows: Some(rows) });
-        let width = match values::resolve_extent(&it.style, "width", it.font_size, content_w) {
+        let width = match crate::used_size::extent(it,"width",content_w) {
             MaybeLen::Px(width) => width.max(0.0),
             MaybeLen::Auto => (crate::flex::max_content_width(it, fonts) - h_chrome(it)).max(0.0)
                 .min((content_w - h_chrome(it)).max(0.0)),
         };
-        it.style.set("width", &format!("{}px", width));
+        let mut used=crate::UsedContentSize{width:Some(width),height:None};
         if height_is_auto(it) {
             let margin = values::resolve_margins(&it.style, it.font_size, content_w);
             let padding = values::resolve_padding(&it.style, it.font_size, content_w);
             let border = values::resolve_borders(&it.style, it.font_size);
             let chrome = margin.top.unwrap_or(0.0) + margin.bottom.unwrap_or(0.0)
                 + padding.top + padding.bottom + border.top + border.bottom;
-            it.style.set("height", &format!("{}px", (area_h - chrome).max(0.0)));
+            used.height=Some((area_h-chrome).max(0.0));
         }
-        crate::block::layout_block(it, 0.0, 0.0, content_w, fonts);
+        crate::block::layout_block_with_used_content_size(it,0.0,0.0,content_w,fonts,None,used);
         let margin = values::resolve_margins(&it.style, it.font_size, content_w);
         let x = content_x + stack + margin.left.unwrap_or(0.0);
         let y = area_y + it.margin.top.unwrap_or(0.0);
