@@ -1,0 +1,44 @@
+{
+  "selected": 8,
+  "gained": 7,
+  "lost": 0,
+  "unchanged": false,
+  "gained_records": [
+    [
+      "html/browsers/the-windowproxy-exotic-object/windowproxy-define-own-property-unforgeable-same-origin.html",
+      "f6e4a4c5db0828bdeafc201c8790886e8429e52ba158890b60668e63fd1d409a",
+      1
+    ],
+    [
+      "html/browsers/the-windowproxy-exotic-object/windowproxy-define-own-property-unforgeable-same-origin.html",
+      "fbcc3205aa2493bf03097af31f660ac9be3706b29b648ec56d472d80ec7f5138",
+      1
+    ],
+    [
+      "html/browsers/the-windowproxy-exotic-object/windowproxy-prevent-extensions.html",
+      "9d1c8b1ddc2d8029b56b1580e457534320d8e37ad516c17547bb30a98b0437f5",
+      1
+    ],
+    [
+      "html/browsers/the-windowproxy-exotic-object/windowproxy-prevent-extensions.html",
+      "a4b730640c30479b00e31fb360a4070ab440e5be6cf47f67ac4cb58e411f5306",
+      1
+    ],
+    [
+      "html/browsers/the-windowproxy-exotic-object/windowproxy-prototype-setting-same-origin.html",
+      "1aefde9df9ab8fd323b05253e43478cf897c4bfbeb40e5dfa94d06972bdbf863",
+      1
+    ],
+    [
+      "html/browsers/the-windowproxy-exotic-object/windowproxy-prototype-setting-same-origin.html",
+      "47175ec6f55eaccf30c642a22aeefc45bc8116d0f2aecafc5fa9b7be3a2fb84e",
+      1
+    ],
+    [
+      "html/browsers/the-windowproxy-exotic-object/windowproxy-prototype-setting-same-origin.html",
+      "f0a85dc05ec0516024b5619dc1a42aad82855ca1c903d843622f79d27e927c35",
+      1
+    ]
+  ],
+  "lost_records": []
+}

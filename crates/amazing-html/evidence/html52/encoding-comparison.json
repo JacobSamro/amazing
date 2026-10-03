@@ -1,0 +1,24 @@
+{
+  "selected": 194,
+  "gained": 9,
+  "lost": 0,
+  "unchanged": false,
+  "gained_records": [
+    [
+      "encoding/remove-only-one-bom.html",
+      "4e4a4945d4864ec627feba8c889d0071bb1bb72ff5d1bd7aad02faec31832576",
+      2
+    ],
+    [
+      "encoding/remove-only-one-bom.html",
+      "b41726f5e42db067325b5e501453e33d44abb346fff964372312e7e0825cf868",
+      3
+    ],
+    [
+      "encoding/remove-only-one-bom.html",
+      "d170d0124ac36eaacf2294a21b56a87c6de94b8da1078d801cea2e73c7924d6d",
+      4
+    ]
+  ],
+  "lost_records": []
+}

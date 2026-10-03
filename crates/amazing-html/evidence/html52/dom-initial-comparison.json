@@ -1,0 +1,20 @@
+{
+  "selected": 314,
+  "gained": 1,
+  "lost": 1,
+  "unchanged": false,
+  "gained_records": [
+    [
+      "dom/nodes/Node-isConnected.html",
+      "d53ec1bd5578c52fc633d1ca73e7c6f1ba6229997e003ae6912f4d2a9d0c13cf",
+      1
+    ]
+  ],
+  "lost_records": [
+    [
+      "dom/nodes/Document-contentType/contentType/xhr_responseType_document.html",
+      "bf8cc0b8dced91155620f90ecac5be808d683e06ffd9f8df86de2e8866891d45",
+      1
+    ]
+  ]
+}

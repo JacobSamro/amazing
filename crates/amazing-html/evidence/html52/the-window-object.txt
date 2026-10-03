@@ -1,0 +1,1 @@
+{"revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293", "suite": "html/browsers/the-window-object", "selected_total": 90, "subtests": {"pass": 246, "fail": 318, "timeout": 0, "notrun": 0, "error": 0}, "files": {"pass": 11, "fail": 35, "timeout": 1, "error": 20, "unsupported": 23}, "raw_sha256": "d567e20fa5762803bd2ec0816345193dfbe184d1c53af8a91d116b7fa88f9b89"}

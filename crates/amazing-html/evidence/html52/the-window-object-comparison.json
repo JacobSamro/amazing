@@ -1,0 +1,74 @@
+{
+  "selected": 90,
+  "gained": 13,
+  "lost": 0,
+  "unchanged": false,
+  "gained_records": [
+    [
+      "html/browsers/the-window-object/Window-document.html",
+      "ce958081097be66c7856ea8e3433eec3d7b7f0639dee94897bb3ea4ad4dd7548",
+      1
+    ],
+    [
+      "html/browsers/the-window-object/accessing-other-browsing-contexts/window_length.html",
+      "4ce9fc09b20c3b2648d13fcbf6b72122b22ad768cb979481914a684d7788c132",
+      1
+    ],
+    [
+      "html/browsers/the-window-object/accessing-other-browsing-contexts/window_length.html",
+      "59bf8d624a487b70ecf1427e2c977644a080a43fdece5dc95347cca124d9ac02",
+      1
+    ],
+    [
+      "html/browsers/the-window-object/accessing-other-browsing-contexts/window_length.html",
+      "693d7c4fc3d376d078695c9f269d4a4fb1d43dec1f2aefc177913241f089cf93",
+      1
+    ],
+    [
+      "html/browsers/the-window-object/accessing-other-browsing-contexts/window_length.html",
+      "fac94ea21d571150bf0056039b85072bcba782056f726fad2395c49da42cecac",
+      1
+    ],
+    [
+      "html/browsers/the-window-object/accessing-other-browsing-contexts/window_length.html",
+      "fe817a02145a6ef54edd6f4e9c097a19b9fb4ff41a8c8de3da5abe438b3bf3d9",
+      1
+    ],
+    [
+      "html/browsers/the-window-object/window-aliases.html",
+      "1263f4fd8b9665b34f603414834c01c7187ab6d54968ca0c6173bfba3ff4c352",
+      1
+    ],
+    [
+      "html/browsers/the-window-object/window-indexed-properties-delete-no-cache.html",
+      "16b9a8d9f89eb7c1476c2bf4d8f4c7ec5ba5664147c6c8cc4eeb30bce96690f1",
+      1
+    ],
+    [
+      "html/browsers/the-window-object/window-indexed-properties-delete-no-cache.html",
+      "dcfb873c71a0d8289da0e11add486069523c0e2b275342266b44b9c7885a9670",
+      1
+    ],
+    [
+      "html/browsers/the-window-object/window-indexed-properties-strict.html",
+      "65781defa6cfe881b682cb19b5d362e322e2bea48fbbb5d1a88fa49d203e3811",
+      1
+    ],
+    [
+      "html/browsers/the-window-object/window-indexed-properties-strict.html",
+      "d6e4a3d3c5c602301afeb441d8fa9601d12e7edebcc8a08d2beebe1c7d7ad18b",
+      1
+    ],
+    [
+      "html/browsers/the-window-object/window-indexed-properties.html",
+      "994761b75f8fb6be2afdea0c08e2ffb8a30f7df8cff82779383e7f39bf6ef303",
+      1
+    ],
+    [
+      "html/browsers/the-window-object/window-indexed-properties.html",
+      "c0433401404ecfae8c79278fb3479f2ccdea35fc9577e4e24b142bffa5acf9ae",
+      1
+    ]
+  ],
+  "lost_records": []
+}

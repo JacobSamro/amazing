@@ -3615,3 +3615,36 @@ preserving all previously passing cycles; no DOM edits. NextHTML52 wholeWindow
 frames/length/indices/parent/top precedes captured fallback53, per parent.
 Shared NativeEntry HtmlWindowGet/HtmlWindowReplaceableSet variants and two
 dispatch arms precisely granted; all context logic/install stays ownedHTML.
+
+HTML52 final fixed93981cfb on HTML51+exactBASE: actual root/child stable
+WindowProxy topology, frames/self identity, document-tree length/readonly
+indices, real parent/top, retired/nested navigation cleanup and inert context
+exclusion. Replaceable setter uses semantic receiver DefineOwnProperty;
+unforgeable top retained. Exact JS38a157 caller-realm property hook creates
+cached anonymous getter-only cross-origin descriptors bound to actual context,
+revalidating retargeting without mutating original target. Native595owned6skip,
+3580workspace17skip4docs; six whole Window/frame/BASE dirs +22 assertions
+(Window13,Proxy7,iframe2), encoding194 +9 frame BOM assertions and DOM314
++1 iframe isConnected. Zero prior passing multiplicities lost against both
+original and intermediate429 results. Syntax2696/12,serializer373/2,
+tree1894CLI+1930expanded/6unsupported retained. Runner self identity line
+restores prior behavior, no reporting gain claimed; no parser/codec gains.
+One accepted XHR contentType assertion timed out in first whole314 sweep;
+matched25s whole314+serializer recheck4workers restored it on identicalbinary.
+Both results retained in evidence/html52, no pass waived. Public pure genuine
+Window document locator a10 supplements dd7 frame/document helpers for CSSOM;
+child CSSOM install is already automatic via lower install_interfaces.
+
+Next53 captured generation-safe immutable about-base URLs: actual creator/
+initiator for blank and container for srcdoc, full blank query/fragment URL
+matching and local response creation, effective base vs referrer URL separated.
+DOM owner supplies pure document effective-base helper and Node.baseURI hook.
+Parent grants exactly LocationHost navigate/reload forwarding into ownedHTML
+to snapshot actual incumbent source/current target before navigation. Actual
+child pending navigation drained in owned lifecycle; root replacement stays
+explicit until snapshot transfer is installed. No assumed parent initiator.
+Next54 whole actual HTML/XML fragment context API for DOM Range: namespaceURI
+interning/export translation, actual context case/attrs/form ancestor/quirks/
+scripting/shadow snapshot; legacy wrappers retain defaults. XML exact namespace/
+prefix/bindings callback uses strict UTF16 and fatal direct fragment parsing,
+not a generated wrapper. Reopened open/write/close sessions remain55.

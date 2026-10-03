@@ -1,0 +1,1 @@
+{"revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293", "suite": "html/infrastructure/urls/base-url", "selected_total": 11, "subtests": {"pass": 1, "fail": 1, "timeout": 0, "notrun": 0, "error": 0}, "files": {"pass": 0, "fail": 1, "timeout": 0, "error": 0, "unsupported": 10}, "raw_sha256": "407b558be9d8a5143b044fd867a62120ea474f8679cf859fb65052b9f50c499f"}
