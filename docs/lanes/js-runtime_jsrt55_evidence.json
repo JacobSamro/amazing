@@ -1,0 +1,280 @@
+{
+  "ticket": "JSRT-55",
+  "base_sha": "bfadb8813837c188e48a0655ac749b6e2dee9979",
+  "workspace": {
+    "passed": 4002,
+    "skipped": 17,
+    "elapsed_seconds": 75.506
+  },
+  "doctests": 4,
+  "selections": {
+    "built-ins-Math": {
+      "selected": 327,
+      "before": {
+        "pass": 324,
+        "fail": 3,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53545
+      },
+      "after": {
+        "pass": 327,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53545
+      },
+      "gained": [
+        "built-ins/Math/sumPrecise/sum-is-infinite.js",
+        "built-ins/Math/sumPrecise/sum-is-minus-zero.js",
+        "built-ins/Math/sumPrecise/sum.js"
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.514,
+      "elapsed_after": 3.149,
+      "before_host_sha256": "b10c07983321b4a9414af8c93f61ca5ba7fd06cfcaf2e3e57027faf2756fea92",
+      "after_host_sha256": "19e253d2052215865a903e30a8d9564c27b518e1fc7c24d4310015bdd8468a03",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Number": {
+      "selected": 340,
+      "before": {
+        "pass": 330,
+        "fail": 10,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53532
+      },
+      "after": {
+        "pass": 330,
+        "fail": 10,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53532
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 3.794,
+      "elapsed_after": 3.345,
+      "before_host_sha256": "b10c07983321b4a9414af8c93f61ca5ba7fd06cfcaf2e3e57027faf2756fea92",
+      "after_host_sha256": "19e253d2052215865a903e30a8d9564c27b518e1fc7c24d4310015bdd8468a03",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-BigInt": {
+      "selected": 77,
+      "before": {
+        "pass": 77,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53795
+      },
+      "after": {
+        "pass": 77,
+        "fail": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53795
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 2.752,
+      "elapsed_after": 2.82,
+      "before_host_sha256": "b10c07983321b4a9414af8c93f61ca5ba7fd06cfcaf2e3e57027faf2756fea92",
+      "after_host_sha256": "19e253d2052215865a903e30a8d9564c27b518e1fc7c24d4310015bdd8468a03",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Iterator": {
+      "selected": 654,
+      "before": {
+        "pass": 643,
+        "fail": 11,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53218
+      },
+      "after": {
+        "pass": 643,
+        "fail": 11,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53218
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 5.966,
+      "elapsed_after": 5.706,
+      "before_host_sha256": "b10c07983321b4a9414af8c93f61ca5ba7fd06cfcaf2e3e57027faf2756fea92",
+      "after_host_sha256": "19e253d2052215865a903e30a8d9564c27b518e1fc7c24d4310015bdd8468a03",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Object": {
+      "selected": 3414,
+      "before": {
+        "pass": 3411,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "after": {
+        "pass": 3411,
+        "fail": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "skipped": 50458
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 10.149,
+      "elapsed_after": 10.19,
+      "before_host_sha256": "b10c07983321b4a9414af8c93f61ca5ba7fd06cfcaf2e3e57027faf2756fea92",
+      "after_host_sha256": "19e253d2052215865a903e30a8d9564c27b518e1fc7c24d4310015bdd8468a03",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "built-ins-Function": {
+      "selected": 515,
+      "before": {
+        "pass": 507,
+        "fail": 8,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "after": {
+        "pass": 507,
+        "fail": 8,
+        "timeout": 0,
+        "unsupported": 0,
+        "skipped": 53357
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 4.446,
+      "elapsed_after": 4.474,
+      "before_host_sha256": "b10c07983321b4a9414af8c93f61ca5ba7fd06cfcaf2e3e57027faf2756fea92",
+      "after_host_sha256": "19e253d2052215865a903e30a8d9564c27b518e1fc7c24d4310015bdd8468a03",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    },
+    "language": {
+      "selected": 24590,
+      "before": {
+        "pass": 24395,
+        "fail": 169,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "after": {
+        "pass": 24395,
+        "fail": 169,
+        "timeout": 0,
+        "unsupported": 26,
+        "skipped": 29282
+      },
+      "gained": [
+
+      ],
+      "lost": [
+
+      ],
+      "elapsed_before": 54.06,
+      "elapsed_after": 52.952,
+      "before_host_sha256": "b10c07983321b4a9414af8c93f61ca5ba7fd06cfcaf2e3e57027faf2756fea92",
+      "after_host_sha256": "19e253d2052215865a903e30a8d9564c27b518e1fc7c24d4310015bdd8468a03",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "timeout_seconds": 15.0,
+      "jobs": 4
+    }
+  },
+  "unique": {
+    "selected": 29917,
+    "before_pass": 29687,
+    "after_pass": 29690,
+    "gained_files": [
+      "built-ins/Math/sumPrecise/sum-is-infinite.js",
+      "built-ins/Math/sumPrecise/sum-is-minus-zero.js",
+      "built-ins/Math/sumPrecise/sum.js"
+    ],
+    "lost_files": [
+
+    ],
+    "gained_variants": [
+      [
+        "built-ins/Math/sumPrecise/sum-is-infinite.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/sumPrecise/sum-is-infinite.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/sumPrecise/sum-is-minus-zero.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/sumPrecise/sum-is-minus-zero.js",
+        "strict"
+      ],
+      [
+        "built-ins/Math/sumPrecise/sum.js",
+        "non-strict"
+      ],
+      [
+        "built-ins/Math/sumPrecise/sum.js",
+        "strict"
+      ]
+    ],
+    "lost_variants": [
+
+    ]
+  }
+}

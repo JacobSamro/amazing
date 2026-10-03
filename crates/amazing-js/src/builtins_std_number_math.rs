@@ -1,3 +1,5 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/math/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // Number's decimal formatting works from the exact binary64 rational. This
 // avoids host formatting ties-to-even behavior in toFixed/toPrecision.
 
@@ -292,20 +294,7 @@ fn std_math_dispatch(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Res
     let name = i.native_stack.last().and_then(|object| object.borrow().func.as_ref().map(|function| function.name.clone()))
         .unwrap_or_default();
     if name == "sumPrecise" {
-        let record = i.std_iterator_from_value(std_reflect_arg(&args, 0))?;
-        let mut total = 0.0f64;
-        let mut correction = 0.0f64;
-        while let Some(value) = std_iterator_step(i, &record)? {
-            let JsValue::Num(number) = value else {
-                std_iterator_close(i, &record)?;
-                return Err(Throw::type_error("Math.sumPrecise requires numbers"));
-            };
-            let adjusted = number - correction;
-            let sum = total + adjusted;
-            correction = (sum - total) - adjusted;
-            total = sum;
-        }
-        return Ok(JsValue::num(total));
+        return native_math_sum_precise(i, std_reflect_arg(&args, 0));
     }
     if name == "hypot" {
         let mut numbers = Vec::new();
