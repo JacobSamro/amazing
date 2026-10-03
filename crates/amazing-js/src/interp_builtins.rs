@@ -3,6 +3,8 @@
 // JSRT-30 optional result-capability completion in Promise reaction jobs.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/object/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: prototype tags and own-property order.
+// Portions ported from boa-dev/boa (core/engine/src/builtins/array/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: Array.isArray semantic dispatch.
 
 fn native_object(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     if let (Some(new_target), Some(active)) = (i.current_new_target(), i.native_stack.last()) {
@@ -927,13 +929,11 @@ fn native_object_has_own(
 }
 
 fn native_array_is_array(
-    _: &mut Interpreter,
+    i: &mut Interpreter,
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    Ok(JsValue::Bool(
-        matches!(args.first(), Some(JsValue::Object(object)) if matches!(object.borrow().exotic, Exotic::Array)),
-    ))
+    Ok(JsValue::Bool(is_array_value(i, args.first().unwrap_or(&JsValue::Undefined))?))
 }
 
 fn native_number_is_nan(

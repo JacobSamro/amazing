@@ -1,3 +1,5 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/array/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: Array own-write exotic dispatch.
 impl Interpreter {
     fn get_prop(&mut self, v: &JsValue, k: impl Into<PropertyKey>) -> Result<JsValue, Throw> {
         self.get_prop_receiver(v, &k.into(), v.clone())
@@ -182,14 +184,10 @@ impl Interpreter {
                 } else { prototype.borrow().proto.clone() };
             }
         }
-        // JSRT-21: fetch the own property once and reuse it below, instead of
-        // re-fetching the identical key right after (the old code called
-        // `own_prop(&key)` twice in a row with nothing between the two calls
-        // that could mutate `o`, on every single indexed set/push). The one
-        // path that CAN mutate `o` between the fetch and the write is the
-        // `k == "length"` ToNumber conversion below (a hostile valueOf could
-        // delete/redefine "length" as a side effect), so that path alone
-        // re-fetches after the conversion rather than trusting the cache.
+        // JSRT-21: fetch the own property once and reuse it for ordinary
+        // writes, since no user code runs between the fetch and the write.
+        // Array length conversion happens in ArraySetLength, which re-reads
+        // the current length descriptor after both numeric conversions.
         let cached = o.borrow().own_prop(&key).cloned();
         if let Some(property) = &cached {
             if let Some(setter) = &property.setter {
@@ -206,32 +204,21 @@ impl Interpreter {
         } else if !o.borrow().extensible {
             return Err(Throw::type_error("object is not extensible"));
         }
-        let is_length_set = k == "length" && matches!(o.borrow().exotic, Exotic::Array);
-        if is_length_set {
-            let n = self.to_number(&x)?;
-            if !n.is_finite() || n < 0.0 || n.fract() != 0.0 {
-                return Err(Throw::range_error("invalid array length"));
+        if matches!(o.borrow().exotic, Exotic::Array) && (k == "length" || array_index_key(&key).is_some()) {
+            let mut fields = StdDescriptorFields { value: Some(x), ..StdDescriptorFields::default() };
+            if cached.is_none() {
+                fields.writable = Some(true);
+                fields.enumerable = Some(true);
+                fields.configurable = Some(true);
             }
+            return if self.array_define_fields(&o, &key, fields)? { Ok(()) }
+                else { Err(Throw::type_error("cannot define Array property")) };
         }
-        let existing = if is_length_set { o.borrow().own_prop(&key).cloned() } else { cached };
-        if let Some(mut property) = existing {
+        if let Some(mut property) = cached {
             property.value = x;
             o.borrow_mut().define(&key, property).unwrap();
         } else {
             o.borrow_mut().set_own(&key, x);
-        }
-        if let Ok(n) = k.parse::<usize>() {
-            if matches!(o.borrow().exotic, Exotic::Array) {
-                let mut length_property = o.borrow().own_prop("length").cloned().unwrap();
-                let len = match length_property.value {
-                    JsValue::Num(n) => n,
-                    _ => 0.0,
-                };
-                if n as f64 + 1.0 > len {
-                    length_property.value = JsValue::num(n as f64 + 1.0);
-                    o.borrow_mut().define("length", length_property).unwrap();
-                }
-            }
         }
         Ok(())
     }

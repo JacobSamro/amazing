@@ -2,10 +2,12 @@
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/object/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: legacy accessor lookup.
+// Portions ported from boa-dev/boa (core/engine/src/builtins/array/mod.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: Array exotic definition dispatch.
 // Ordinary object operations shared by the standard-library built-ins.
 // These live beside the built-ins until the runtime adopts them.
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct StdDescriptorFields {
     value: Option<JsValue>,
     writable: Option<bool>,
@@ -74,7 +76,18 @@ impl Interpreter {
             }
         }
 
-        let mut fields = self.std_descriptor_fields(descriptor)?;
+        let fields = self.std_descriptor_fields(descriptor)?;
+        if matches!(target.borrow().exotic, Exotic::Array) {
+            return self.array_define_fields(target, key, fields);
+        }
+        self.ordinary_define_fields(target, key, fields)
+    }
+
+    // Complete the existing ordinary descriptor algorithm without dispatching
+    // through Array exotic methods again. Arguments and legacy overlays remain
+    // here so their descriptor/alias behavior is unchanged.
+    fn ordinary_define_fields(&mut self, target: &Obj, key: &PropertyKey,
+        mut fields: StdDescriptorFields) -> Result<bool, Throw> {
         let mapped_cell = arguments_mapped_cell(target, key);
         let mapped_value = fields.value.clone();
         let mapped_detach = fields.get.is_some() || fields.set.is_some() || fields.writable == Some(false);
@@ -82,30 +95,6 @@ impl Interpreter {
             && fields.writable == Some(false) {
             if let Some(cell) = &mapped_cell { fields.value = Some(cell.read()?); }
         }
-        let is_array = matches!(target.borrow().exotic, Exotic::Array);
-        if is_array && key.as_string().is_some_and(|name| name.to_utf8_lossy() == "length") {
-            if let Some(value) = fields.value.take() {
-                let number = self.to_number(&value)?;
-                if !number.is_finite() || number < 0.0 || number.fract() != 0.0 || number > u32::MAX as f64 {
-                    return Err(Throw::range_error("invalid array length"));
-                }
-                if target.borrow().own_prop("length").is_some_and(|old| !old.writable && old.value != JsValue::num(number)) {
-                    return Ok(false);
-                }
-                if !array_prepare_length_change(target, number as u32) { return Ok(false); }
-                fields.value = Some(JsValue::num(number));
-            }
-        }
-        let extending_array_index = if is_array {
-            array_index_key(key).and_then(|index| {
-                let length = target.borrow().get_own("length")?.to_number().ok()?;
-                (index as f64 >= length).then_some(index)
-            })
-        } else { None };
-        if extending_array_index.is_some() && target.borrow().own_prop("length").is_some_and(|p| !p.writable) {
-            return Ok(false);
-        }
-
         let original = if let Some(result) = arguments_own_property(target, key) {
             result?
         } else if let Some(name) = key.as_string() {
@@ -138,11 +127,6 @@ impl Interpreter {
                 if self.legacy_define(target, name, &property)? { return Ok(true); }
             }
             target.borrow_mut().define(key, property).unwrap();
-            if let Some(index) = extending_array_index {
-                let mut length = target.borrow().own_prop("length").cloned().unwrap();
-                length.value = JsValue::num(index as f64 + 1.0);
-                target.borrow_mut().define("length", length).unwrap();
-            }
             return Ok(true);
         };
         let old_accessor = property.getter.is_some() || property.setter.is_some();
@@ -188,11 +172,6 @@ impl Interpreter {
         }
         target.borrow_mut().define(key, property).unwrap();
         arguments_finish_define(target, key, mapped_cell, mapped_value, mapped_detach)?;
-        if let Some(index) = extending_array_index {
-            let mut length = target.borrow().own_prop("length").cloned().unwrap();
-            length.value = JsValue::num(index as f64 + 1.0);
-            target.borrow_mut().define("length", length).unwrap();
-        }
         Ok(true)
     }
 
@@ -316,31 +295,13 @@ impl Interpreter {
             return self.define_own_property(target, key, &JsValue::object(descriptor));
         }
         if let Some(mut property) = existing {
-            // An Array's "length" is exotic even through plain [[Set]]: unlike
-            // every other data property, writing it can delete existing
-            // elements (ArraySetLength, 10.4.2.1), so it needs ToNumber +
-            // range validation and array_prepare_length_change here -- this
-            // was previously handled inside the general path's
-            // define_own_property call, which this fast path bypasses.
-            // Losing this branch silently kept stale elements above a
-            // shrunk length (caught by built-ins/Array/length/* and the
-            // ES5 15.4.5.1 corpus: -56 Test262 passes without it).
+            // Length assignment uses the same ArraySetLength operation as
+            // DefineOwnProperty, including both observable numeric conversions.
             if matches!(target.borrow().exotic, Exotic::Array)
                 && key.as_string().is_some_and(|name| name.to_utf8_lossy() == "length") {
-                let number = self.to_number(&value)?;
-                if !number.is_finite() || number < 0.0 || number.fract() != 0.0 || number > u32::MAX as f64 {
-                    return Err(Throw::range_error("invalid array length"));
-                }
-                if !property.writable && property.value != JsValue::num(number) {
-                    return Ok(false);
-                }
-                if !array_prepare_length_change(target, number as u32) { return Ok(false); }
-                property.value = JsValue::num(number);
-                if let Some(name) = key.as_string() {
-                    if self.legacy_define(target, name, &property)? { return Ok(true); }
-                }
-                target.borrow_mut().define(key, property).unwrap();
-                return Ok(true);
+                return self.array_set_length_fields(target, StdDescriptorFields {
+                    value: Some(value), ..StdDescriptorFields::default()
+                });
             }
             // Caller (set_with_receiver) already confirmed this property has
             // no getter/setter and is writable, so only .value changes here;

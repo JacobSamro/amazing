@@ -1682,3 +1682,47 @@ Reflect **153/154** unchanged. Unique union **29757 cases**,
 or variants and zero timeouts. Host API dependency `cb3a8b459f721213adb00bcf5d295fb25346fb15`
 is separate; corpus before was frozen42, after includes its neutral wrapper.
 Evidence: `js-runtime_jsrt43_evidence.json`.
+
+## JSRT-44 Array exotic and abstract operations (2026-10-03)
+
+Frozen base `a4fa67793fe89097ef19510c5e73574149efdb2c`. Whole Array exotic
+DefineOwnProperty, ArraySetLength, ArrayCreate fallback and ArraySpeciesCreate
+port from Boa `core/engine/src/builtins/array/mod.rs` at
+`39cd11214ecb366200157dab96b3919e61e9a391`; MIT license verified at that exact
+revision (Copyright 2019 Jason Williams). File headers and an appended notice
+record attribution. Upstream shape/storage/context dependencies become the
+existing Amazing descriptor fields, ordinary completion and object operations.
+
+The ordinary descriptor completion is extracted without changing Arguments
+alias handling, namespace/TypedArray dispatch, or legacy/WindowProxy policies.
+Genuine Arrays dispatch parsed descriptors through their exotic methods.
+ArraySetLength runs ToUint32 and ToNumber separately, normalizes negative zero,
+reads length state after both conversions, validates the new descriptor before
+any deletion, deletes indices in descending order, and applies deferred
+writable:false even after a blocked deletion restores a partial length.
+The fast tail deletion operation remains intact. Index definitions update
+length only after a successful compatible own property definition; 2^32-1
+and noncanonical index strings remain ordinary properties.
+
+OrdinarySet's Array length branch and the parent's exact additional internal
+own-writer branch share this operation, rather than retaining separate partial
+algorithms. The internal writer preserves its existing own-storage, accessor,
+writable, host, Proxy and namespace behavior. No VM or GDI/FDI changes occur.
+
+Species creation uses fallible semantic IsArray and GetFunctionRealm,
+recognizes only the exact foreign intrinsic Array constructor before suppressing
+species lookup, then performs observable constructor/species access and
+constructibility checks. Non-Array receivers ignore constructor. Public
+Array.isArray reuses the same semantic Proxy/revocation-aware helper.
+ArrayCreate's range applies only to the default Array fallback; custom species
+can accept larger lengths. Five grouped tests cover both backends and direct
+internal own writes. Full Array/Object/Reflect/Proxy/Function/language/JSON
+before/after gate plus workspace/doctests runs on the fixed base.
+
+Final first-pass Boat gate: workspace **3787 passed/17 skipped, 76.323 seconds**,
+**4 doctests**. Whole Array **3233 → 3242/3332** (+9), Object
+**3377 → 3381/3414** (+4). Reflect **153/154**, Proxy **310/311**,
+Function **504/515**, language **24048/24590**, JSON **165/165** unchanged.
+Unique union **32481 cases**, **31790 → 31803 passing** (+13),
+**26 gained variants**, zero lost files or variants and zero timeouts.
+Evidence: `js-runtime_jsrt44_evidence.json`.

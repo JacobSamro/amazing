@@ -80,49 +80,6 @@ fn array_index_key(key: &PropertyKey) -> Option<u32> {
     (index != u32::MAX && index.to_string() == name).then_some(index)
 }
 
-fn array_prepare_length_change(object: &Obj, new_length: u32) -> bool {
-    let old_length = match object.borrow().get_own("length") {
-        Some(JsValue::Num(length)) => length as u32,
-        _ => 0,
-    };
-    if new_length >= old_length { return true; }
-    let mut indices: Vec<_> = object.borrow().own_property_keys().into_iter()
-        .filter_map(|key| array_index_key(&key).filter(|index| *index >= new_length).map(|index| (index, key)))
-        .collect();
-    indices.sort_by(|a, b| b.0.cmp(&a.0));
-    for (index, key) in indices {
-        if !object.borrow_mut().delete_own(&key) {
-            let mut length = object.borrow().own_prop("length").cloned().unwrap();
-            length.value = JsValue::num(index as f64 + 1.0);
-            object.borrow_mut().define("length", length).unwrap();
-            return false;
-        }
-    }
-    true
-}
-
-fn array_species_create(i: &mut Interpreter, source: &JsValue, length: usize) -> Result<JsValue, Throw> {
-    fn default_result(i: &Interpreter, length: usize) -> Result<JsValue, Throw> {
-        if length > u32::MAX as usize { return Err(Throw::range_error("invalid array length")); }
-        Ok(array_result(i, length))
-    }
-    if !matches!(source, JsValue::Object(object) if matches!(object.borrow().exotic, Exotic::Array)) {
-        return default_result(i, length);
-    }
-    let constructor = i.get_prop(source, "constructor")?;
-    if constructor.is_undefined() { return default_result(i, length); }
-    let JsValue::Object(function) = &constructor else { return Err(Throw::type_error("array constructor is not an object")); };
-    let realm = function.borrow().realm;
-    if realm.is_some_and(|realm| realm != i.host_realm && i.realms.get(&realm)
-        .and_then(|state| state.intrinsic_constructors.get("Array"))
-        .is_some_and(|(array, _)| Rc::ptr_eq(&array.0, &function.0))) {
-        return default_result(i, length);
-    }
-    let species = i.get_prop(&constructor, WellKnownSymbol::Species.symbol())?;
-    if species.is_null() || species.is_undefined() { return default_result(i, length); }
-    i.construct(&species, vec![JsValue::num(length as f64)])
-}
-
 fn array_create_data_properties(i: &mut Interpreter, target: &JsValue, values: Vec<JsValue>) -> Result<(), Throw> {
     for (index, value) in values.into_iter().enumerate() { array_create_data_property(i, target, index, value)?; }
     Ok(())

@@ -1741,6 +1741,7 @@ include!("interp_promise_finally.rs");
 include!("interp_promise_keyed.rs");
 include!("interp_function_environments.rs");
 include!("interp_array.rs");
+include!("interp_array_exotic.rs");
 include!("interp_arguments.rs");
 include!("interp_array_protocol.rs");
 include!("interp_array_factories.rs");
