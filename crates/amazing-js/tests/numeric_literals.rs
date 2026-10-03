@@ -157,7 +157,7 @@ fn numeric_early_errors_cover_strict_property_function_and_class_contexts() {
         for source in [
             format!("'use strict';{body}"),
             format!("function f(){{'use strict';{body}}}"),
-            format!("class C{{m(){{{body}}}}"),
+            ["class C{m(){", body, "}}"].concat(),
             format!("'use strict'; function f(x=({body})){{}}"),
         ] {
             if amazing_js::parse_script(&source).is_ok() {
