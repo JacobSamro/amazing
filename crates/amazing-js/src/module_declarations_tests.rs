@@ -107,3 +107,36 @@ fn tla_default_callable_exists_early_and_retains_identity_after_await() {
     matrix(&[("root", "import {before} from 'dep';import f from 'root';await Promise.resolve();export const ok=f===before&&f()===7;export default function(){return 7}"),
         ("dep", "import f from 'root';export const before=f;")], "root", true);
 }
+
+#[test]
+fn synthetic_default_host_value_and_repeat_namespace_identity_are_preserved() {
+    struct Resolver(JsValue);
+    impl ModuleResolver for Resolver {
+        fn resolve(&self, _: &str, _: &str) -> Result<(String, String), String> {
+            Err("typed synthetic fixture only".into())
+        }
+        fn resolve_request(&self, _: &ModuleRequest, _: &str) -> Result<LoadedModule, String> {
+            Ok(LoadedModule { id: "synthetic".into(), source: ModuleSource::Synthetic {
+                default_export: self.0.clone(), module_source: None,
+            } })
+        }
+    }
+    for shared in [false, true] {
+        let value = JsValue::object(JsObject::ordinary());
+        let mut linker = ModuleLinker::new(Resolver(value.clone()));
+        linker.link("root", "import value from 'synthetic';export {value as default};").unwrap();
+        let mut i = Interpreter::new();
+        if shared {
+            let linker = Rc::new(RefCell::new(linker));
+            let first = ModuleLinker::evaluate_shared(&linker, "root", &mut i).unwrap();
+            let namespace = linker.borrow().namespace_object("root").unwrap();
+            let second = ModuleLinker::evaluate_shared(&linker, "root", &mut i).unwrap();
+            assert_eq!(first["default"], value);
+            assert_eq!(second["default"], value);
+            assert_eq!(namespace, linker.borrow().namespace_object("root").unwrap());
+        } else {
+            assert_eq!(linker.evaluate("root", &mut i).unwrap()["default"], value);
+            assert_eq!(linker.evaluate("root", &mut i).unwrap()["default"], value);
+        }
+    }
+}
