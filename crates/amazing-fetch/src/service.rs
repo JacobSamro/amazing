@@ -1193,6 +1193,9 @@ mod tests {
                 ApiRequest::child_navigation(url.clone(),&crate::api::NavigableContext {top_level_origin:origin.clone(),parent_origin:origin.clone(),ancestor_origins:vec![origin.clone()],
                     sandbox_flags:0,frame_csp:Default::default(),referrer:url.serialize(),referrer_policy:String::new(),now_unix:0}).unwrap()
             } else {request(&url)};
+            // Child navigation is manual by default; this group explicitly
+            // exercises automatic follow while preserving navigation mode.
+            request.redirect=crate::RedirectMode::Follow;
             request.cache=ApiCache::NoStore;
             let context=ClientContext {frame_ancestors:vec![origin],csp_destination:CspDestination::Frame,..Default::default()};
             let id=match destination {Some(destination)=>service.start_subresource(request,context,destination),None=>service.start(request,context).unwrap()};
