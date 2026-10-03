@@ -760,42 +760,6 @@ fn trim_ws(mut tokens: &[Token]) -> &[Token] {
     tokens
 }
 
-fn strip_outer_parentheses(tokens: &[Token]) -> Option<&[Token]> {
-    if tokens.first() != Some(&Token::OpenParen) {
-        return None;
-    }
-    let mut depth = 0usize;
-    for (index, token) in tokens.iter().enumerate() {
-        match token {
-            Token::OpenParen => depth += 1,
-            Token::CloseParen => {
-                depth = depth.checked_sub(1)?;
-                if depth == 0 {
-                    return (index == tokens.len() - 1).then_some(&tokens[1..index]);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
-}
-
-fn top_level_colon(tokens: &[Token]) -> Option<usize> {
-    let mut paren_depth = 0usize;
-    let mut square_depth = 0usize;
-    for (index, token) in tokens.iter().enumerate() {
-        match token {
-            Token::OpenParen => paren_depth += 1,
-            Token::CloseParen if paren_depth > 0 => paren_depth -= 1,
-            Token::OpenSquare => square_depth += 1,
-            Token::CloseSquare if square_depth > 0 => square_depth -= 1,
-            Token::Colon if paren_depth == 0 && square_depth == 0 => return Some(index),
-            _ => {}
-        }
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

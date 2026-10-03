@@ -1,4 +1,5 @@
 use super::*;
+use amazing_dom::{Dom,NodeIdx};
 use crate::parser::LayerName;
 fn loaded(css: &str, url: &str) -> LoadedStylesheet {
     let mut sheet = parse_stylesheet(css); sheet.base_url=Some(url.into());
