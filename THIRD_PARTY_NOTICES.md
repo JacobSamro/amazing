@@ -110,3 +110,5 @@ reproduced in the table row for that upstream.
 - Gumichocopengin8/xsum.rs — MIT, Copyright 2015, 2018, 2021, 2024 Radford M. Neal; Copyright 2025 Keita Nonaka; src/xsum_small.rs, src/accumulators/small_accumulator.rs and src/constants.rs @ 7668ca84cb00dc8f4a5fc69229d1d317e9735601: safe exact small superaccumulator adapted in crates/amazing-js/src/interp_math_sum.rs.
 
 - boa-dev/boa — MIT, Copyright (c) 2019 Jason Williams and contributors; core/engine/src/builtins/number/mod.rs @ 39cd11214ecb366200157dab96b3919e61e9a391: whole toFixed/toExponential/toPrecision entry conversion, validation and nonfinite ordering adapted in crates/amazing-js/src/builtins_std_number_math.rs, preserving Amazing's existing exact decimal formatter.
+
+- boa-dev/boa — MIT, Copyright (c) 2019 Jason Williams and contributors; core/engine/src/builtins/iterable/{wrap_for_valid_iterator,iterator_constructor,iterator_prototype}.rs and iterator_helper/{mod,map,filter,take,drop,flat_map,zip}.rs @ 39cd11214ecb366200157dab96b3919e61e9a391: whole synchronous iterator wrapper/lazy-helper/zip protocols adapted to interpreter-owned states in crates/amazing-js/src/builtins_std_iterator.rs.

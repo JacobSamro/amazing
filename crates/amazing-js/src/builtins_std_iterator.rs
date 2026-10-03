@@ -1,10 +1,20 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/iterable/
+// wrap_for_valid_iterator.rs, iterator_constructor.rs, iterator_prototype.rs,
+// iterator_helper/{mod,map,filter,take,drop,flat_map,zip}.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// Whole synchronous wrapper/helper/zip protocols adapted to Amazing's existing
+// interpreter-owned weak-identity states; no coroutine or GC dependencies.
+// Current ECMA-262 adaptation: preserve the normative finite take/drop limit
+// cap and saturate Number callback counters at 2^53.
 // Iterator constructor, direct-iterator wrappers, and lazy helpers.
 
 #[derive(Clone)]
 struct StdIteratorRecord { iterator: JsValue, next: JsValue }
 
+#[derive(Clone)]
 struct StdIteratorConcatSource { iterable: JsValue, method: JsValue }
 
+#[derive(Clone)]
 enum StdIteratorOperation {
     Wrap,
     Map(JsValue), Filter(JsValue), Take(f64), Drop(f64), FlatMap(JsValue),
@@ -15,6 +25,7 @@ enum StdIteratorOperation {
         mode: String, padding: Vec<JsValue>, exhausted: Vec<bool> },
 }
 
+#[derive(Clone)]
 struct StdIteratorState {
     owner: Weak<RefCell<JsObject>>,
     source: Option<StdIteratorRecord>,
@@ -106,9 +117,12 @@ impl Interpreter {
         ] {
             base.borrow_mut().define(name, symbol_data(std_collection_method(self, name, length, native), true, true)).unwrap();
         }
-        for prototype in [&helper, &wrap] {
-            prototype.borrow_mut().define("next", symbol_data(std_collection_method(self, "next", 0, std_iterator_next), true, true)).unwrap();
-            prototype.borrow_mut().define("return", symbol_data(std_collection_method(self, "return", 0, std_iterator_return), true, true)).unwrap();
+        for (prototype, next, ret) in [
+            (&helper, std_iterator_next as crate::value::NativeFn, std_iterator_return as crate::value::NativeFn),
+            (&wrap, std_iterator_wrap_next as crate::value::NativeFn, std_iterator_wrap_return as crate::value::NativeFn),
+        ] {
+            prototype.borrow_mut().define("next", symbol_data(std_collection_method(self, "next", 0, next), true, true)).unwrap();
+            prototype.borrow_mut().define("return", symbol_data(std_collection_method(self, "return", 0, ret), true, true)).unwrap();
         }
         helper.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(), symbol_data(JsValue::str("Iterator Helper"), false, true)).unwrap();
         for (prototype, tag) in [(&array, "Array Iterator"), (&string, "String Iterator")] {
@@ -137,6 +151,7 @@ impl Interpreter {
         let prototype = self.std_iterator_prototypes().map(|(_, helper, wrap)| if wrapped { wrap } else { helper });
         let mut object = JsObject::ordinary();
         object.proto = prototype;
+        if !wrapped { object.realm = Some(self.host_realm); }
         let object = Obj(Rc::new(RefCell::new(object)));
         self.std_iterator_states.borrow_mut().insert(std_weak_id(&object),
             StdIteratorState { owner: Rc::downgrade(&object.0), source, operation, index: 0,
@@ -151,7 +166,11 @@ impl Interpreter {
     }
 
     fn std_iterator_from_value(&mut self, value: JsValue) -> Result<StdIteratorRecord, Throw> {
-        if !value.is_object() && !matches!(value, JsValue::Str(_)) {
+        self.std_iterator_flattenable(value, true)
+    }
+
+    fn std_iterator_flattenable(&mut self, value: JsValue, iterate_strings: bool) -> Result<StdIteratorRecord, Throw> {
+        if !value.is_object() && !(iterate_strings && matches!(value, JsValue::Str(_))) {
             return Err(Throw::type_error("value is not iterable"));
         }
         let method = self.get_prop(&value, WellKnownSymbol::Iterator.symbol())?;
@@ -219,10 +238,10 @@ fn std_iterator_from(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Res
     let record = i.std_iterator_from_value(value)?;
     if let JsValue::Object(object) = &record.iterator {
         if let Some((base, _, _)) = i.std_iterator_prototypes() {
-            let mut prototype = Some(object.clone());
-            while let Some(current) = prototype {
+            let mut prototype = i.default_get_prototype(object)?;
+            while let JsValue::Object(current) = prototype {
                 if Rc::ptr_eq(&current.0, &base.0) { return Ok(record.iterator); }
-                prototype = current.borrow().proto.clone();
+                prototype = i.default_get_prototype(&current)?;
             }
         }
     }
@@ -282,62 +301,126 @@ fn std_iterator_callback(i: &mut Interpreter, callback: &JsValue, value: JsValue
     i.call_value(callback, JsValue::Undefined, vec![value, JsValue::num(index as f64)])
 }
 
+fn std_iterator_wrap_record(i: &Interpreter, this: &JsValue) -> Result<StdIteratorRecord, Throw> {
+    let JsValue::Object(owner) = this else { return Err(Throw::type_error("incompatible Iterator wrapper receiver")); };
+    let states = i.std_iterator_states.borrow();
+    let state = states.get(&std_weak_id(owner))
+        .filter(|state| std_weak_same(&state.owner, owner) && matches!(state.operation, StdIteratorOperation::Wrap))
+        .ok_or_else(|| Throw::type_error("incompatible Iterator wrapper receiver"))?;
+    Ok(state.source.as_ref().unwrap().clone())
+}
+
+fn std_iterator_wrap_next(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let record = std_iterator_wrap_record(i, &this)?;
+    // Wrappers neither inspect nor recreate iterator results, nor track done.
+    i.call_value(&record.next, record.iterator, Vec::new())
+}
+
+fn std_iterator_wrap_return(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let record = std_iterator_wrap_record(i, &this)?;
+    let method = i.get_prop(&record.iterator, "return")?;
+    if method.is_undefined() || method.is_null() {
+        return Ok(sequence_result(i, JsValue::Undefined, true));
+    }
+    if !std_callable(&method) { return Err(Throw::type_error("iterator return is not callable")); }
+    i.call_value(&method, record.iterator, Vec::new())
+}
+
 fn std_iterator_next(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let JsValue::Object(owner) = &this else { return Err(Throw::type_error("incompatible Iterator helper receiver")); };
-    if i.std_iterator_states.borrow().get(&std_weak_id(owner)).is_some_and(|state| state.executing) {
-        return Err(Throw::type_error("Iterator helper is executing"));
+    {
+        let states = i.std_iterator_states.borrow();
+        let state = states.get(&std_weak_id(owner)).filter(|state| std_weak_same(&state.owner, owner))
+            .ok_or_else(|| Throw::type_error("incompatible Iterator helper receiver"))?;
+        if matches!(state.operation, StdIteratorOperation::Wrap) { return Err(Throw::type_error("incompatible Iterator helper receiver")); }
+        if state.executing { return Err(Throw::type_error("Iterator helper is executing")); }
     }
-    let mut state = i.std_iterator_states.borrow_mut().remove(&std_weak_id(owner))
-        .filter(|state| std_weak_same(&state.owner, owner))
-        .ok_or_else(|| Throw::type_error("incompatible Iterator helper receiver"))?;
+    let mut state = i.std_iterator_states.borrow_mut().remove(&std_weak_id(owner)).unwrap();
     state.started = true;
-    let result = if state.done { Ok(None) } else { std_iterator_state_step(i, &mut state) };
+    state.executing = true;
+    // Publish the existing executing state without keeping a RefCell borrow
+    // across user callbacks. All state stays owned by this Interpreter.
+    i.std_iterator_states.borrow_mut().insert(std_weak_id(owner), state.clone());
+    let result = if state.done {
+        // GeneratorResume's completed result belongs to the method callee.
+        Ok(sequence_result(i, JsValue::Undefined, true))
+    } else {
+        let realm = RealmHandle { agent: i.agent_id, realm: owner.borrow().realm.unwrap_or(i.host_realm) };
+        i.binding_with_realm(realm, |i| {
+            let result = std_iterator_state_step(i, &mut state);
+            result.map(|value| sequence_result(i, value.clone().unwrap_or(JsValue::Undefined), value.is_none()))
+                .map_err(|error| i.normalize_throw(error))
+        })
+    };
     if result.as_ref().is_err() { state.done = true; }
+    state.executing = false;
     i.std_iterator_states.borrow_mut().insert(std_weak_id(owner), state);
-    result.map(|value| sequence_result(i, value.clone().unwrap_or(JsValue::Undefined), value.is_none()))
+    result
 }
 
 fn std_iterator_return(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let JsValue::Object(owner) = &this else { return Err(Throw::type_error("incompatible Iterator helper receiver")); };
-    if i.std_iterator_states.borrow().get(&std_weak_id(owner)).is_some_and(|state| state.executing) {
-        return Err(Throw::type_error("Iterator helper is executing"));
-    }
-    let mut state = i.std_iterator_states.borrow_mut().remove(&std_weak_id(owner))
-        .filter(|state| std_weak_same(&state.owner, owner))
-        .ok_or_else(|| Throw::type_error("incompatible Iterator helper receiver"))?;
-    let records = if state.done { Vec::new() }
-        else if let StdIteratorOperation::Zip { records, exhausted, .. } = &state.operation {
-            records.iter().zip(exhausted).rev().filter(|(_, done)| !**done)
-                .map(|(record, _)| record.clone()).collect()
-        } else { state.source.iter().cloned().collect() };
-    state.executing = state.started && !state.done;
-    state.done = true;
-    i.std_iterator_states.borrow_mut().insert(std_weak_id(owner), state);
-    let mut completion = Ok(());
-    for record in records {
-        if let Err(error) = std_iterator_close(i, &record) {
-            if completion.is_ok() { completion = Err(error); }
+    let (records, resume) = {
+        let mut states = i.std_iterator_states.borrow_mut();
+        let state = states.get_mut(&std_weak_id(owner)).filter(|state| std_weak_same(&state.owner, owner))
+            .ok_or_else(|| Throw::type_error("incompatible Iterator helper receiver"))?;
+        if matches!(state.operation, StdIteratorOperation::Wrap) { return Err(Throw::type_error("incompatible Iterator helper receiver")); }
+        if state.executing { return Err(Throw::type_error("Iterator helper is executing")); }
+        let mut records = Vec::new();
+        if !state.done {
+            if let StdIteratorOperation::Zip { records: zipped, exhausted, .. } = &state.operation {
+                records.extend(zipped.iter().zip(exhausted).rev().filter(|(_,done)| !**done)
+                    .map(|(record,_)|record.clone()));
+            } else {
+                if state.started { records.extend(state.inner.iter().cloned()); }
+                records.extend(state.source.iter().cloned());
+            }
         }
-    }
+        // suspended-start becomes completed before closing; suspended-yield
+        // remains executing through closure resumption/closing.
+        state.executing = state.started && !state.done;
+        state.done = true;
+        (records, state.executing)
+    };
+    let close = |i: &mut Interpreter| {
+        let mut completion = Ok(());
+        for record in records {
+            if let Err(error) = std_iterator_close(i, &record) {
+                if completion.is_ok() { completion = Err(error); }
+            }
+        }
+        completion?;
+        Ok(sequence_result(i, JsValue::Undefined, true))
+    };
+    let result = if resume {
+        let realm = RealmHandle { agent: i.agent_id, realm: owner.borrow().realm.unwrap_or(i.host_realm) };
+        i.binding_with_realm(realm, |i| close(i).map_err(|error| i.normalize_throw(error)))
+    } else { close(i) };
     if let Some(state) = i.std_iterator_states.borrow_mut().get_mut(&std_weak_id(owner)) { state.executing = false; }
-    completion?;
-    Ok(sequence_result(i, JsValue::Undefined, true))
+    result
 }
+
+fn std_iterator_counter_next(index: u64) -> u64 { index.saturating_add(1).min(1u64 << 53) }
+
+fn std_iterator_array_from_list(i: &mut Interpreter, values: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let array = array_values(i, Vec::new())?;
+    for (index, value) in values.into_iter().enumerate() {
+        array_create_data_property(i, &array, index, value)?;
+    }
+    Ok(array)
+}
+
 
 fn std_iterator_state_step(i: &mut Interpreter, state: &mut StdIteratorState) -> Result<Option<JsValue>, Throw> {
     loop {
         match &mut state.operation {
-            StdIteratorOperation::Wrap => {
-                let value = std_iterator_step(i, state.source.as_ref().unwrap())?;
-                if value.is_none() { state.done = true; }
-                return Ok(value);
-            }
+            StdIteratorOperation::Wrap => return Err(Throw::type_error("incompatible Iterator helper receiver")),
             StdIteratorOperation::Map(callback) => {
                 let Some(value) = std_iterator_step(i, state.source.as_ref().unwrap())? else {
                     state.done = true; return Ok(None);
                 };
                 let index = state.index;
-                state.index = state.index.checked_add(1).ok_or_else(|| Throw::range_error("iterator index overflow"))?;
+                state.index = std_iterator_counter_next(state.index);
                 return std_iterator_callback(i, callback, value, index)
                     .map(Some).map_err(|error| std_iterator_abrupt_close(i, state.source.as_ref().unwrap(), error));
             }
@@ -346,7 +429,7 @@ fn std_iterator_state_step(i: &mut Interpreter, state: &mut StdIteratorState) ->
                     state.done = true; return Ok(None);
                 };
                 let index = state.index;
-                state.index = state.index.checked_add(1).ok_or_else(|| Throw::range_error("iterator index overflow"))?;
+                state.index = std_iterator_counter_next(state.index);
                 if std_iterator_callback(i, callback, value.clone(), index)
                     .map_err(|error| std_iterator_abrupt_close(i, state.source.as_ref().unwrap(), error))?
                     .to_boolean() { return Ok(Some(value)); }
@@ -363,7 +446,7 @@ fn std_iterator_state_step(i: &mut Interpreter, state: &mut StdIteratorState) ->
             }
             StdIteratorOperation::Drop(remaining) => {
                 while *remaining > 0.0 {
-                    if std_iterator_step(i, state.source.as_ref().unwrap())?.is_none() {
+                    if std_iterator_step_done(i, state.source.as_ref().unwrap())? {
                         state.done = true; return Ok(None);
                     }
                     if remaining.is_finite() { *remaining -= 1.0; }
@@ -374,17 +457,20 @@ fn std_iterator_state_step(i: &mut Interpreter, state: &mut StdIteratorState) ->
             }
             StdIteratorOperation::FlatMap(callback) => {
                 if let Some(inner) = &state.inner {
-                    if let Some(value) = std_iterator_step(i, inner)? { return Ok(Some(value)); }
+                    if let Some(value) = std_iterator_step(i, inner)
+                        .map_err(|error| std_iterator_abrupt_close(i, state.source.as_ref().unwrap(), error))? {
+                        return Ok(Some(value));
+                    }
                     state.inner = None;
                 }
                 let Some(value) = std_iterator_step(i, state.source.as_ref().unwrap())? else {
                     state.done = true; return Ok(None);
                 };
                 let index = state.index;
-                state.index = state.index.checked_add(1).ok_or_else(|| Throw::range_error("iterator index overflow"))?;
+                state.index = std_iterator_counter_next(state.index);
                 let mapped = std_iterator_callback(i, callback, value, index)
                     .map_err(|error| std_iterator_abrupt_close(i, state.source.as_ref().unwrap(), error))?;
-                state.inner = Some(i.std_iterator_from_value(mapped)
+                state.inner = Some(i.std_iterator_flattenable(mapped, false)
                     .map_err(|error| std_iterator_abrupt_close(i, state.source.as_ref().unwrap(), error))?);
             }
             StdIteratorOperation::Concat { sources, position } => {
@@ -404,11 +490,11 @@ fn std_iterator_state_step(i: &mut Interpreter, state: &mut StdIteratorState) ->
                     let Some(value) = std_iterator_step(i, state.source.as_ref().unwrap())? else {
                         state.done = true;
                         return if buffer.is_empty() { Ok(None) }
-                            else { array_values(i, std::mem::take(buffer)).map(Some) };
+                            else { std_iterator_array_from_list(i, std::mem::take(buffer)).map(Some) };
                     };
                     buffer.push(value);
                 }
-                return array_values(i, std::mem::take(buffer)).map(Some);
+                return std_iterator_array_from_list(i, std::mem::take(buffer)).map(Some);
             }
             StdIteratorOperation::Windows { size, partial, buffer } => {
                 if buffer.len() == *size { buffer.remove(0); }
@@ -416,12 +502,12 @@ fn std_iterator_state_step(i: &mut Interpreter, state: &mut StdIteratorState) ->
                     let Some(value) = std_iterator_step(i, state.source.as_ref().unwrap())? else {
                         state.done = true;
                         return if *partial && !buffer.is_empty() && buffer.len() < *size {
-                            array_values(i, std::mem::take(buffer)).map(Some)
+                            std_iterator_array_from_list(i, std::mem::take(buffer)).map(Some)
                         } else { Ok(None) };
                     };
                     buffer.push(value);
                     if buffer.len() == *size {
-                        return array_values(i, buffer.clone()).map(Some);
+                        return std_iterator_array_from_list(i, buffer.clone()).map(Some);
                     }
                 }
             }
@@ -497,7 +583,7 @@ fn std_iterator_state_step(i: &mut Interpreter, state: &mut StdIteratorState) ->
                     }
                     return Ok(Some(JsValue::object(object)));
                 }
-                return array_values(i, values).map(Some);
+                return std_iterator_array_from_list(i, values).map(Some);
             }
         }
     }
@@ -546,7 +632,7 @@ fn std_iterator_limit(i: &mut Interpreter, this: &JsValue, value: JsValue) -> Re
     let number = i.to_number(&value).map_err(|error| std_iterator_abrupt_close(i,
         &StdIteratorRecord { iterator: this.clone(), next: JsValue::Undefined }, error))?;
     let amount = number.trunc();
-    if number.is_nan() || amount < 0.0 || amount > 9_007_199_254_740_991.0 {
+    if number.is_nan() || amount < 0.0 || (number.is_finite() && number > 9_007_199_254_740_991.0) {
         return Err(std_iterator_abrupt_close(i,
             &StdIteratorRecord { iterator: this.clone(), next: JsValue::Undefined },
             Throw::range_error("iterator limit is out of range")));
@@ -572,7 +658,7 @@ fn std_iterator_reduce(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
         accumulator = i.call_value(&callback, JsValue::Undefined,
             vec![accumulator, value, JsValue::num(index as f64)])
             .map_err(|error| std_iterator_abrupt_close(i, &source, error))?;
-        index = index.checked_add(1).ok_or_else(|| Throw::range_error("iterator index overflow"))?;
+        index = std_iterator_counter_next(index);
     }
     Ok(accumulator)
 }
@@ -580,7 +666,7 @@ fn std_iterator_to_array(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) ->
     let source = i.std_iterator_direct(this)?;
     let mut values = Vec::new();
     while let Some(value) = std_iterator_step(i, &source)? { values.push(value); }
-    array_values(i, values)
+    std_iterator_array_from_list(i, values)
 }
 fn std_iterator_join(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     if !this.is_object() { return Err(Throw::type_error("iterator must be an object")); }
@@ -612,7 +698,7 @@ fn std_iterator_for_each(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>)
     while let Some(value) = std_iterator_step(i, &source)? {
         std_iterator_callback(i, &callback, value, index)
             .map_err(|error| std_iterator_abrupt_close(i, &source, error))?;
-        index = index.checked_add(1).ok_or_else(|| Throw::range_error("iterator index overflow"))?;
+        index = std_iterator_counter_next(index);
     }
     Ok(JsValue::Undefined)
 }
@@ -627,7 +713,7 @@ fn std_iterator_some(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
             .to_boolean() {
             std_iterator_close(i, &source)?; return Ok(JsValue::Bool(true));
         }
-        index = index.checked_add(1).ok_or_else(|| Throw::range_error("iterator index overflow"))?;
+        index = std_iterator_counter_next(index);
     }
     Ok(JsValue::Bool(false))
 }
@@ -642,7 +728,7 @@ fn std_iterator_every(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
             .to_boolean() {
             std_iterator_close(i, &source)?; return Ok(JsValue::Bool(false));
         }
-        index = index.checked_add(1).ok_or_else(|| Throw::range_error("iterator index overflow"))?;
+        index = std_iterator_counter_next(index);
     }
     Ok(JsValue::Bool(true))
 }
@@ -657,7 +743,7 @@ fn std_iterator_find(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
             .to_boolean() {
             std_iterator_close(i, &source)?; return Ok(value);
         }
-        index = index.checked_add(1).ok_or_else(|| Throw::range_error("iterator index overflow"))?;
+        index = std_iterator_counter_next(index);
     }
     Ok(JsValue::Undefined)
 }
@@ -770,11 +856,13 @@ fn std_iterator_zip_impl(i: &mut Interpreter, args: Vec<JsValue>, keyed: bool) -
         let own_keys = i.own_property_keys(&iterables)?;
         let mut selected = Vec::new();
         for key in own_keys {
-            if object.borrow().own_prop(&key).is_some_and(|property| property.enumerable) {
+            let descriptor = i.default_get_own_property(object, &key).map_err(|error|
+                std_iterator_close_all(i, &records, &vec![false; records.len()], error))?;
+            if descriptor.is_some_and(|property| property.enumerable) {
                 let value = i.get_prop(&iterables, key.clone()).map_err(|error|
                     std_iterator_close_all(i, &records, &vec![false; records.len()], error))?;
                 if value.is_undefined() { continue; }
-                let record = i.std_iterator_from_value(value).map_err(|error|
+                let record = i.std_iterator_flattenable(value, false).map_err(|error|
                     std_iterator_close_all(i, &records, &vec![false; records.len()], error))?;
                 records.push(record);
                 selected.push(key);
@@ -790,10 +878,10 @@ fn std_iterator_zip_impl(i: &mut Interpreter, args: Vec<JsValue>, keyed: bool) -
             let next = std_iterator_step(i, &outer).map_err(|error|
                 std_iterator_close_all(i, &records, &vec![false; records.len()], error))?;
             let Some(value) = next else { break; };
-            let record = (if value.is_object() { i.std_iterator_from_value(value) }
-                else { Err(Throw::type_error("Iterator.zip input must be an object")) }).map_err(|error| {
-                let error = std_iterator_abrupt_close(i, &outer, error);
-                std_iterator_close_all(i, &records, &vec![false; records.len()], error)
+            let record = i.std_iterator_flattenable(value, false).map_err(|error| {
+                let mut closing = vec![outer.clone()];
+                closing.extend(records.iter().cloned());
+                std_iterator_close_all(i, &closing, &vec![false; closing.len()], error)
             })?;
             records.push(record);
         }
@@ -838,4 +926,216 @@ fn std_iterator_zip(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Resu
 
 fn std_iterator_zip_keyed(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     std_iterator_zip_impl(i, args, true)
+}
+
+#[cfg(test)]
+mod synchronous_iterator_protocol_tests {
+    use super::*;
+    fn check(source: &str) {
+        for backend in [ExecutionBackend::TreeWalk,ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();
+            assert_eq!(i.run_script_with_backend(source,backend).unwrap_or_else(|e|panic!("{backend:?}: {}\n{source}",e.describe())),JsValue::Bool(true),"{backend:?}");
+        }
+    }
+    #[test]
+    fn wrappers_forward_raw_cached_calls_and_recheck_return_without_arguments() {
+        check(r#"
+          var valid=true,gets=0,calls=0,returns=0,retGets=0,result={get done(){throw 'not read';},get value(){throw 'not read';}},base={
+            get next(){gets++;return function(){valid=valid && this===base && arguments.length===0;calls++;return calls===1?result:7;};},
+            get return(){retGets++;return function(){valid=valid && this===base && arguments.length===0;returns++;return returns===1?result:3;};}};
+          var wrap=Iterator.from(base);
+          Object.defineProperty(base,'next',{value:function(){throw 'cached next';}});
+          valid=valid && wrap.next('ignored')===result && wrap.next()===7 && wrap.next()===7 && gets===1 && calls===3;
+          valid=valid && wrap.return('ignored')===result && wrap.return()===3 && returns===2 && retGets===2;
+          Object.defineProperty(base,'return',{value:null,configurable:true});
+          var finished=wrap.return();valid=valid && finished.done && finished.value===undefined;
+          Object.defineProperty(base,'return',{value:1,configurable:true});
+          try{wrap.return();valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+          valid;
+        "#);
+    }
+    #[test]
+    fn wrapper_and_helper_methods_enforce_separate_brands_and_native_metadata() {
+        check(r#"
+          var valid=true,calls=0,base={next(){calls++;return{value:1};}},wrap=Iterator.from(base),helper=wrap.take(1),wp=Object.getPrototypeOf(wrap),hp=Object.getPrototypeOf(helper);
+          for(var pair of [[wp.next,helper],[wp.return,helper],[hp.next,wrap],[hp.return,wrap],[wp.next,new Proxy(wrap,{})],[hp.next,new Proxy(helper,{})]]){
+            try{pair[0].call(pair[1]);valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+          }
+          valid=valid && calls===0 && wp.next!==hp.next && wp.return!==hp.return;
+          for(var proto of [wp,hp])for(var name of ['next','return']){
+            var d=Object.getOwnPropertyDescriptor(proto,name),f=d.value;
+            valid=valid && f.name===name && f.length===0 && d.writable && !d.enumerable && d.configurable && !Object.hasOwn(f,'prototype');
+          }
+          valid;
+        "#);
+    }
+    #[test]
+    fn from_uses_semantic_prototype_walk_and_the_saved_intrinsic_base() {
+        check(r#"
+          var valid=true,log=[],base=Iterator.prototype,value=Object.create(base);value.next=function(){return{done:true};};
+          var proxy=new Proxy(value,{get(t,k,r){log.push(k===Symbol.iterator?'iterator':k);return Reflect.get(t,k,r);},getPrototypeOf(){log.push('proto');return base;}});
+          valid=valid && Iterator.from(proxy)===proxy && log.join(',')==='iterator,next,proto';
+          var wrapped=Iterator.from(base);valid=valid && wrapped!==base;
+          var error={},bad=new Proxy({next(){}},{getPrototypeOf(){throw error;}});
+          try{Iterator.from(bad);valid=false;}catch(e){valid=valid && e===error;}
+          var from=Iterator.from;Iterator={};valid=valid && from(value)===value;valid;
+        "#);
+    }
+    #[test]
+    fn take_drop_allow_infinity_preserve_finite_cap_and_skip_value_reads() {
+        check(r#"
+          var valid=true,take=Iterator.prototype.take,drop=Iterator.prototype.drop;
+          valid=valid && Iterator.from([1,2]).take(Infinity).toArray().join(',')==='1,2' && Iterator.from([1,2]).drop(Infinity).next().done;
+          for(var method of [take,drop])for(var limit of [NaN,-1,-Infinity,2**53]){
+            var log=[],source={get next(){log.push('next');return function(){return{done:true};};},return(){log.push('return');throw 'ignored';}};
+            try{method.call(source,limit);valid=false;}catch(e){valid=valid && e instanceof RangeError;}
+            valid=valid && log.join(',')==='return';
+          }
+          for(var method of [take,drop]){
+            var gets=0,source={get next(){gets++;return function(){return{done:true};};}};
+            var h=method.call(source,2**53-1);valid=valid && gets===1 && h.next().done;
+          }
+          var n=0,reads=0,gets=0,source={get next(){gets++;return function(){var index=n++;return{done:index===3,get value(){reads++;if(index<2)throw 'skipped value';return index;}};};}};
+          var h=drop.call(source,2);valid=valid && h.next().value===2 && h.next().done && reads===1 && gets===1;
+          var source={next(){return{done:true,get value(){throw 'done value';}};}};valid=valid && drop.call(source,Infinity).next().done;valid;
+        "#);
+    }
+    #[test]
+    fn flat_map_rejects_primitives_and_closes_inner_before_outer() {
+        check(r#"
+          var valid=true,flat=Iterator.prototype.flatMap,desc=Object.getOwnPropertyDescriptor(String.prototype,Symbol.iterator),gets=0;
+          Object.defineProperty(String.prototype,Symbol.iterator,{get(){gets++;return desc.value;},configurable:true});
+          for(var mapped of ['x',1,true,null,undefined,2n,Symbol()]){
+            var closed=0,source={next(){return{value:1};},return(){closed++;return{};}};
+            var h=flat.call(source,function(){return mapped;});
+            try{h.next();valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+            valid=valid && closed===1 && gets===0;
+          }
+          valid=valid && Iterator.from('x').next().value==='x' && gets===1;
+          Object.defineProperty(String.prototype,Symbol.iterator,desc);
+          for(var mode of [0,1,2]){
+            var log=[],first={},second={},inner={next(){return{value:7};},return(){log.push('inner');if(mode===1)throw first;if(mode===2)return 1;return{};}},outer={next(){return{value:1};},return(){log.push('outer');throw second;}};
+            var h=flat.call(outer,function(){return inner;});valid=valid && h.next().value===7;
+            try{h.return();valid=false;}catch(e){valid=valid && (mode===0?e===second:mode===1?e===first:e instanceof TypeError);}
+            valid=valid && log.join(',')==='inner,outer' && h.next().done;
+          }
+          var called=0,closed=0,outer={next(){throw 'unused';},return(){closed++;return{};}},h=flat.call(outer,function(){called++;});
+          valid=valid && h.return().done && closed===1 && called===0;valid;
+        "#);
+    }
+    #[test]
+    fn flat_map_inner_abrupt_steps_close_only_outer_with_original_error() {
+        check(r#"
+          var valid=true,error={},flat=Iterator.prototype.flatMap;
+          for(var kind of ['next','done','value','iterator','mapper']){
+            var log=[],inner={next(){if(kind==='next')throw error;return{get done(){if(kind==='done')throw error;return false;},get value(){throw error;}};},return(){log.push('inner');return{};}};
+            if(kind==='iterator')Object.defineProperty(inner,Symbol.iterator,{get(){throw error;}});
+            var outer={next(){return{value:1};},return(){log.push('outer');throw 'ignored';}},h=flat.call(outer,function(){if(kind==='mapper')throw error;return inner;});
+            try{h.next();valid=false;}catch(e){valid=valid && e===error;}
+            valid=valid && log.join(',')==='outer' && h.return().done;
+          }
+          var closed=0,outer={next(){throw error;},return(){closed++;return{};}},h=flat.call(outer,function(){});
+          try{h.next();valid=false;}catch(e){valid=valid && e===error;}
+          valid=valid && closed===0 && h.next().done;valid;
+        "#);
+    }
+    #[test]
+    fn helper_execution_reentrancy_and_completed_state_match_generator_protocol() {
+        check(r#"
+          var valid=true,h,caught=0,source={next(){return{value:1};},return(){return{};}};
+          h=Iterator.prototype.map.call(source,function(v){for(var method of [h.next,h.return]){try{method.call(h);valid=false;}catch(e){valid=valid && e instanceof TypeError;caught++;}}return v;});
+          valid=valid && h.next().value===1 && caught===2 && h.return().done && h.next().done;
+          var h,source={next(){throw 'unused';},return(){valid=valid && h.next().done;return{};}};
+          h=Iterator.prototype.take.call(source,1);valid=valid && h.return().done;
+          var h,closed=0,source={next(){return{value:1};},return(){closed++;try{h.next();valid=false;}catch(e){valid=valid && e instanceof TypeError;}return{};}};
+          h=Iterator.prototype.take.call(source,1);valid=valid && h.next().value===1 && h.return().done && h.next().done && closed===1;valid;
+        "#);
+    }
+    #[test]
+    fn zip_initialization_closes_in_reverse_list_order_and_keyed_descriptors_are_semantic() {
+        check(r#"
+          var valid=true,error={},log=[],a={next(){return{done:true};},return(){log.push('a');throw 'ignored';}},b={next(){return{done:true};},return(){log.push('b');return{};}},bad={get [Symbol.iterator](){throw error;}},n=0,input={next(){return{value:[a,b,bad][n++],done:false};},return(){log.push('input');return{};},[Symbol.iterator](){return this;}};
+          try{Iterator.zip(input);valid=false;}catch(e){valid=valid && e===error;}
+          valid=valid && log.join(',')==='b,a,input';
+          log=[];var data={a,b},proxy=new Proxy(data,{ownKeys(){log.push('keys');return['a','b'];},getOwnPropertyDescriptor(t,k){log.push('desc:'+k);if(k==='b')throw error;return Reflect.getOwnPropertyDescriptor(t,k);},get(t,k,r){log.push('get:'+k);return Reflect.get(t,k,r);}});
+          try{Iterator.zipKeyed(proxy);valid=false;}catch(e){valid=valid && e===error;}
+          valid=valid && log.join(',')==='keys,desc:a,get:a,desc:b,a';
+          var symbol=Symbol(),values={a:[1],b:undefined,[symbol]:[2]},proxy=new Proxy(values,{}),h=Iterator.zipKeyed(proxy),r=h.next().value;
+          valid=valid && r.a===1 && r[symbol]===2 && Object.getPrototypeOf(r)===null && Reflect.ownKeys(r).length===2 && h.next().done;
+          for(var value of ['x',1,true,null,2n,Symbol()]){
+            var closed=0,iter={next(){return{done:true};},return(){closed++;return{};}};
+            try{Iterator.zipKeyed({a:iter,b:value});valid=false;}catch(e){valid=valid && e instanceof TypeError;}
+            valid=valid && closed===1;
+          }
+          valid;
+        "#);
+    }
+    #[test]
+    fn zip_runtime_modes_and_padding_use_step_without_strict_value_get() {
+        check(r#"
+          var valid=true,error={},log=[],empty={next(){return{done:true};}},a={next(){return{value:1};},return(){log.push('a');throw error;}},b={next(){return{value:2};},return(){log.push('b');throw 'ignored';}};
+          var h=Iterator.zip([empty,a,b]);try{h.next();valid=false;}catch(e){valid=valid && e==='ignored';}
+          valid=valid && log.join(',')==='b,a' && h.next().done;
+          var alive={next(){return{done:true,get value(){throw 'strict must not read value';}};}};
+          valid=valid && Iterator.zip([empty,alive],{mode:'strict'}).next().done;
+          var reads=0,padding={get a(){reads++;return 9;},get b(){reads++;return 8;}};
+          var h=Iterator.zipKeyed({a:[1],b:[2,3]},{mode:'longest',padding}),one=h.next().value,two=h.next().value;
+          valid=valid && reads===2 && one.a===1 && one.b===2 && two.a===9 && two.b===3 && h.next().done;
+          valid;
+        "#);
+    }
+    #[test]
+    fn result_lists_create_own_data_without_invoking_inherited_numeric_setters() {
+        check(r#"
+          var valid=true,desc=Object.getOwnPropertyDescriptor(Array.prototype,'0'),calls=0,a=[1,2],z=[[3],[4]],c=[5,6],w=[7,8];
+          Object.defineProperty(Array.prototype,'0',{set(){calls++;throw 'inherited setter';},configurable:true});
+          try{
+            var list=Iterator.from(a).toArray(),zip=Iterator.zip(z).next().value,chunks=Iterator.from(c).chunks(2).next().value,windows=Iterator.from(w).windows(2).next().value;
+            valid=valid && list[0]===1 && list[1]===2 && zip[0]===3 && zip[1]===4 && chunks[0]===5 && windows[0]===7 && calls===0;
+          }finally{if(desc)Object.defineProperty(Array.prototype,'0',desc);else delete Array.prototype[0];}
+          for(var array of [list,zip,chunks,windows]){var d=Object.getOwnPropertyDescriptor(array,'0');valid=valid && d.writable && d.enumerable && d.configurable && !('get' in d);}
+          valid;
+        "#);
+    }
+    #[test]
+    fn borrowed_foreign_helper_methods_preserve_resume_completed_and_brand_realms() {
+        for backend in [ExecutionBackend::TreeWalk,ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();let global=i.binding_create_object(None).unwrap();let child=i.binding_create_realm(global).unwrap();
+            for(name,source) in [
+                ("foreignNext","Object.getPrototypeOf(Iterator.from([1]).take(1)).next"),
+                ("foreignReturn","Object.getPrototypeOf(Iterator.from([1]).take(1)).return"),
+                ("foreignWrapNext","Object.getPrototypeOf(Iterator.from({next(){}})).next"),
+                ("foreignType","TypeError.prototype"),("foreignObject","Object.prototype"),
+            ]{
+                let v=i.binding_eval_in_realm(child,source).unwrap();i.global_env.declare_var(name,v).unwrap();
+            }
+            assert_eq!(i.run_script_with_backend(r#"
+              var valid=true,source={next(){return{value:1};},return(){return 1;}},h=Iterator.prototype.take.call(source,1);
+              var result=foreignNext.call(h);valid=valid && result.value===1 && Object.getPrototypeOf(result)===Object.prototype;
+              try{foreignReturn.call(h);valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===TypeError.prototype;}
+              valid=valid && Object.getPrototypeOf(foreignNext.call(h))===foreignObject;
+              var h=Iterator.prototype.take.call(source,1);
+              try{foreignReturn.call(h);valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===foreignType;}
+              for(var method of [foreignNext,foreignReturn,foreignWrapNext]){
+                try{method.call({});valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===foreignType;}
+              }
+              var h=Iterator.prototype.flatMap.call({next(){return{value:1};}},function(){return 'bad';});
+              try{foreignNext.call(h);valid=false;}catch(e){valid=valid && Object.getPrototypeOf(e)===TypeError.prototype;}
+              var wrapper=Iterator.from({next(){return 3;}});valid=valid && foreignWrapNext.call(wrapper)===3;
+              valid;
+            "#,backend).unwrap_or_else(|e|panic!("{}",e.describe())),JsValue::Bool(true),"{backend:?}");
+        }
+    }
+    #[test]
+    fn number_counters_saturate_in_the_existing_actor_owned_state() {
+        for backend in [ExecutionBackend::TreeWalk,ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();
+            let value=i.run_script_with_backend("var indices=[];Iterator.prototype.map.call({next(){return{value:1};}},function(value,index){indices.push(index);return value;})",backend).unwrap();
+            let JsValue::Object(owner)=&value else {panic!("helper")};
+            i.std_iterator_states.borrow_mut().get_mut(&std_weak_id(owner)).unwrap().index=(1u64<<53)-1;
+            i.global_env.declare_var("helper",value).unwrap();
+            assert_eq!(i.run_script_with_backend("helper.next();helper.next();helper.next();indices[0]===2**53-1 && indices[1]===2**53 && indices[2]===2**53",backend).unwrap(),JsValue::Bool(true));
+        }
+    }
+
 }
