@@ -19,6 +19,8 @@ mod tests_with;
 mod tests_import;
 #[cfg(test)]
 mod tests_return;
+#[cfg(test)]
+mod tests_chains;
 
 use super::{callable_function, for_iteration_env, new_promise, perform_promise_then, promise_resolving_functions, reference_name, settle_promise, Interpreter, Reference};
 use crate::ast::{BinOp, ForLeft, UnOp, VarKind};
@@ -177,6 +179,8 @@ enum Instruction {
     ResolveWriteName(usize, String),
     RequireResolved(usize),
     GetMember(Register, Register, KeyOperand),
+    GetMemberReceiver(Register, Register, KeyOperand, Register),
+    DeleteMember(Register, Register, KeyOperand),
     ResolveMember(usize, Register, Register, KeyOperand),
     StoreReference(usize, Register),
     StorePatternReference(usize, Register),
@@ -791,6 +795,14 @@ impl Program {
                     Instruction::GetMember(dst, object, key) => {
                         let key = key.resolve(&registers)?;
                         registers[*dst] = fast_path::get(i, &registers[*object], key, &mut caches[*pc - 1])?;
+                    }
+                    Instruction::GetMemberReceiver(dst, object, key, receiver) => {
+                        let key = key.resolve(&registers)?;
+                        registers[*dst] = i.get_prop_receiver(&registers[*object], &key, registers[*receiver].clone())?;
+                    }
+                    Instruction::DeleteMember(dst, object, key) => {
+                        let key = key.resolve(&registers)?;
+                        registers[*dst] = i.delete_member_value(registers[*object].clone(), key)?;
                     }
                     Instruction::ResolveMember(slot, dst, object, key) => {
                         let key = key.resolve(&registers)?;

@@ -20,6 +20,8 @@ mod declarations;
 mod with;
 #[path = "compiler_completions.rs"]
 mod completions;
+#[path = "compiler_chains.rs"]
+mod chains;
 use completions::CompletionBoundary;
 
 const MAX_REGISTERS: usize = 65_536;
@@ -1151,6 +1153,11 @@ impl Compiler {
 
     fn expression(&mut self, expression: &Expr) -> Result<Register, CompileError> {
         self.enter(expression.span)?;
+        if may_suspend(expression) && chains::is_chain_expression(expression) {
+            let result = self.suspended_chain(expression);
+            self.depth -= 1;
+            return result;
+        }
         // The VM has no optional chains: hand the whole chain, from its
         // outermost link, to the tree walker so short-circuiting covers
         // every link (`o?.b[f()]` must not call `f`). Super reference operations
