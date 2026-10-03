@@ -1,6 +1,7 @@
 # JS language conformance decision map
 
-Frontier: **JS-25 — contextual eval parsing and caller metadata integration**.
+Frontier: **JS-27 — reference creation, assignment ordering and strict PutValue** (cluster analysis; shared execution ownership being coordinated).
+JS-25 parser API is ready; Runtime35 owns its native eval consumer. JS-26 is complete.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
@@ -1720,3 +1721,30 @@ files,10s/8 workers: **23438 passing files /43617 passing variants unchanged**,
 **zero losses/timeouts**. [js-lang_JS25-evidence.json](js-lang_JS25-evidence.json)
 records exact hashes. API/grammar dependency is ready; runtime contextual eval
 consumer follows source locator34 and retains ownership of callee/env metadata.
+
+
+### JS-26 — decorators and class initialization
+
+Port decorator grammar and evaluator algorithms from MIT Lumen
+`f6c9860d44fa52249cfd647122edea184d32c863`, preserving source-ordered
+expression evaluation, receivers, reverse application, replacement validation,
+private access brands, auto-accessor storage and initializer order. Keep class-local
+bindings uninitialized until decoration completes. Static initializers use the final
+replacement as this and retain the original super HomeObject. Private methods
+precede method extra initializers and fields. Field creation uses the existing
+DefineOwnProperty gateway, preserving Proxy effects and frozen-object failures.
+VM class fallback is atomic and suspension discovery visits all decorator vectors.
+
+Source series `8255d80f` + `19052d3c`, fixed base `bd3bff1a`:
+Linux workspace **3708 passed /17 skipped**, **four doctests**. Whole language/
+including AnnexB 24572 selected files: **23803 → 23843 files**, **44234 → 44307
+variants**, **+40/+73**, **zero lost files or variants**, **zero timeouts**.
+All 20 decorator corpus paths pass. Thirteen grouped owned tests exercise both
+backends and grammar/export boundaries. Details and provenance:
+[js-lang_JS26-interface.md](js-lang_JS26-interface.md),
+[js-lang_JS26-evidence.json](js-lang_JS26-evidence.json).
+
+Next cluster analysis: strict unresolvable PutValue, reference capture before
+assignment defaults/conversions, and destructuring target ordering. Native eval
+context remains Runtime35; invocation/factory metadata remains VM17. No shared
+execution hunks are changed before an explicit owner grant.

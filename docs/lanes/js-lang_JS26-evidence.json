@@ -1,0 +1,167 @@
+{
+  "ticket": "JS26",
+  "source_commits": [
+    "8255d80f",
+    "19052d3c15fda4f9180a7694b3f9408c9eebd6e9"
+  ],
+  "fixed_base": "bd3bff1a43a456ffcabd551b779fd0058120841a",
+  "platform": "Linux Boat pool-js-b, native /tmp source and target, wrapper only",
+  "upstream": {
+    "repository": "lucid-softworks/lumen",
+    "commit": "f6c9860d44fa52249cfd647122edea184d32c863",
+    "license": "MIT",
+    "paths": [
+      "crates/lumen/src/parser.rs",
+      "crates/lumen/src/eval.rs"
+    ]
+  },
+  "workspace_nextest": {
+    "passed": 3708,
+    "skipped": 17,
+    "failed": 0,
+    "elapsed_seconds": 87.405
+  },
+  "workspace_doctests": {
+    "passed": 4,
+    "failed": 0
+  },
+  "owned_tests_final": {
+    "amazing-js": 529,
+    "amazing-regex": 29,
+    "total_passed": 558,
+    "skipped": 1
+  },
+  "corpus": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "filter": "language/",
+    "selected_files": 24572,
+    "timeout_seconds": 10,
+    "jobs": 8,
+    "before": {
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "host_sha256": "46ad4c8136fa090abf96d7e0210fdff4606f7ca61f1724b6b1cd6611a63eb147",
+      "classification_sha256": "4fd3c3e331e6b4646d1b26f3a896af1c74bee268e5ded3c8fa9a1e5575bbded9",
+      "elapsed_seconds": 62.648
+    },
+    "after": {
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "host_sha256": "6095fa8be2ed2f73d4540984fe2f4a1da07d2b22f3bb90a79ede4b2789206342",
+      "classification_sha256": "0c199d222c3fa89988d2f0e9ac863142dabb7d47fece1fa43d635f14948508a8",
+      "elapsed_seconds": 61.307
+    },
+    "files_before": {
+      "pass": 23803,
+      "fail": 743,
+      "timeout": 0,
+      "unsupported": 26,
+      "skipped": 29300
+    },
+    "files_after": {
+      "pass": 23843,
+      "fail": 703,
+      "timeout": 0,
+      "unsupported": 26,
+      "skipped": 29300
+    },
+    "variants_before": {
+      "pass": 44234,
+      "fail": 1108,
+      "timeout": 0,
+      "unsupported": 52,
+      "skipped": 0
+    },
+    "variants_after": {
+      "pass": 44307,
+      "fail": 1035,
+      "timeout": 0,
+      "unsupported": 52,
+      "skipped": 0
+    },
+    "gained_files": 40,
+    "gained_variants": 73,
+    "lost_files": [],
+    "lost_variants": [],
+    "decorator_paths_passed": 20,
+    "gains": [
+      "language/expressions/class/decorator/syntax/class-valid/decorator-member-expr-private-identifier.js",
+      "language/expressions/class/decorator/syntax/valid/decorator-call-expr-identifier-reference-yield.js",
+      "language/expressions/class/decorator/syntax/valid/decorator-call-expr-identifier-reference.js",
+      "language/expressions/class/decorator/syntax/valid/decorator-member-expr-decorator-member-expr.js",
+      "language/expressions/class/decorator/syntax/valid/decorator-member-expr-identifier-reference-yield.js",
+      "language/expressions/class/decorator/syntax/valid/decorator-member-expr-identifier-reference.js",
+      "language/expressions/class/decorator/syntax/valid/decorator-parenthesized-expr-identifier-reference-yield.js",
+      "language/expressions/class/decorator/syntax/valid/decorator-parenthesized-expr-identifier-reference.js",
+      "language/expressions/class/elements/private-methods/prod-private-method-initialize-order.js",
+      "language/expressions/super/prop-dot-cls-null-proto.js",
+      "language/expressions/super/prop-expr-cls-null-proto.js",
+      "language/statements/class/decorator/syntax/class-valid/decorator-member-expr-private-identifier.js",
+      "language/statements/class/decorator/syntax/valid/class-element-decorator-call-expr-identifier-reference.js",
+      "language/statements/class/decorator/syntax/valid/class-element-decorator-member-expr-decorator-member-expr.js",
+      "language/statements/class/decorator/syntax/valid/class-element-decorator-member-expr-identifier-reference.js",
+      "language/statements/class/decorator/syntax/valid/class-element-decorator-parenthesized-expr-identifier-reference.js",
+      "language/statements/class/decorator/syntax/valid/decorator-call-expr-identifier-reference-yield.js",
+      "language/statements/class/decorator/syntax/valid/decorator-call-expr-identifier-reference.js",
+      "language/statements/class/decorator/syntax/valid/decorator-member-expr-decorator-member-expr.js",
+      "language/statements/class/decorator/syntax/valid/decorator-member-expr-identifier-reference-yield.js",
+      "language/statements/class/decorator/syntax/valid/decorator-member-expr-identifier-reference.js",
+      "language/statements/class/decorator/syntax/valid/decorator-parenthesized-expr-identifier-reference-yield.js",
+      "language/statements/class/decorator/syntax/valid/decorator-parenthesized-expr-identifier-reference.js",
+      "language/statements/class/definition/fn-length-static-precedence.js",
+      "language/statements/class/definition/fn-name-static-precedence.js",
+      "language/statements/class/definition/prototype-getter.js",
+      "language/statements/class/definition/prototype-property.js",
+      "language/statements/class/elements/class-field-is-observable-by-proxy.js",
+      "language/statements/class/elements/class-field-on-frozen-objects.js",
+      "language/statements/class/elements/private-methods/prod-private-method-initialize-order.js",
+      "language/statements/class/elements/public-class-field-initialization-is-visible-to-proxy.js",
+      "language/statements/class/name-binding/in-extends-expression-assigned.js",
+      "language/statements/class/subclass/class-definition-null-proto-contains-return-override.js",
+      "language/statements/class/subclass/class-definition-null-proto-missing-return-override.js",
+      "language/statements/class/subclass/class-definition-null-proto-super.js",
+      "language/statements/class/subclass/class-definition-null-proto-this.js",
+      "language/statements/class/subclass/class-definition-null-proto.js",
+      "language/statements/class/subclass/class-definition-parent-proto-null.js",
+      "language/statements/class/subclass/superclass-async-generator-function.js",
+      "language/statements/class/subclass/superclass-generator-function.js"
+    ]
+  },
+  "coverage": [
+    "Decorator grammar and export placement",
+    "Once-only source-ordered decorator expressions and receivers",
+    "Reverse application and callable/accessor replacements",
+    "Context shape and closed addInitializer on normal/abrupt completion",
+    "Symbol/private access brands and property gateways",
+    "Auto-accessor private backing storage",
+    "Static/instance method and field initializer ordering",
+    "Replacement class this with original super HomeObject",
+    "Private method installation before fields",
+    "Atomic VM fallback and decorator suspension discovery"
+  ],
+  "iterations": [
+    {
+      "owned_passed": 552,
+      "owned_failed": 2,
+      "finding": "Return expression classification and access.set inherited setter gateway; corrected before final gate"
+    },
+    {
+      "whole_language_gained_files": 40,
+      "lost_files": [
+        "language/statements/class/subclass/superclass-arrow-function.js"
+      ],
+      "finding": "Reject arrow/bound/proxy nonconstructors before observable prototype lookup; both variants restored in final gate"
+    }
+  ],
+  "limitations": [
+    "No new VM suspension opcode; suspending decorated classes reject partial lowering and use existing whole-frame fallback",
+    "Symbol.metadata is a separate proposal and was not introduced"
+  ],
+  "raw_evidence": [
+    "main .agents/js-lang/js26-before.log",
+    "main .agents/js-lang/js26-final.log",
+    "main .agents/js-lang/js26-language-before.json",
+    "main .agents/js-lang/js26-language-final.json",
+    "main .agents/js-lang/js26-language-diff.json"
+  ]
+}

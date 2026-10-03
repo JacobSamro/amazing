@@ -32,4 +32,8 @@ partial class lowering. This series does not introduce a new VM suspension opcod
 Runtime owns contextual eval and VM owns invocation-frame tokens and constructor
 call-time initialization; these patches do not change those factories or callers.
 
-Validation is pending the whole language corpus and workspace/doctest gate.
+Validation: exact source `19052d3c`, fixed base `bd3bff1a`; Linux workspace
+3708 passed /17 skipped, four doctests. Whole language/ selection 24572 files:
+23803 → 23843 passing files, 44234 → 44307 passing variants, +40/+73,
+zero losses/timeouts. All 20 decorator paths pass. Exact hashes and gained paths
+are in [js-lang_JS26-evidence.json](js-lang_JS26-evidence.json).
