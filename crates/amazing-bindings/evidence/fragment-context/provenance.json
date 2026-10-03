@@ -1,0 +1,14 @@
+{
+  "source": "f0b1cb90",
+  "platform": "Linux Boat pooled dom-bindings",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "directories": [
+    "dom/nodes",
+    "dom/ranges",
+    "domparsing",
+    "html/syntax/serializing-html-fragments",
+    "html/syntax/parsing",
+    "html/semantics/scripting-1/the-template-element"
+  ],
+  "binary_sha256": "014640d1d2172781512c86dca7667d964916c3e022680a11bceecac3740e5902"
+}

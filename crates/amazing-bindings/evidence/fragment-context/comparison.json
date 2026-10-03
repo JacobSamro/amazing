@@ -1,0 +1,15 @@
+{
+  "files": 579,
+  "counts": {
+    "pass": 56239,
+    "fail": 2399,
+    "timeout": 0,
+    "notrun": 0,
+    "error": 6
+  },
+  "lost": [],
+  "gained": {
+    "dom/ranges/Range-mutations-dataChange.html": 269
+  },
+  "uncredited_deadline_completion": 269
+}
