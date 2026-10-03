@@ -208,64 +208,6 @@ fn native_array_species(
     Ok(this)
 }
 
-fn array_await_ready(value: JsValue) -> Result<JsValue, Throw> {
-    if let JsValue::Object(object) = &value {
-        if let Exotic::Promise(state) = &object.borrow().exotic {
-            return match &state.state {
-                PromiseFate::Fulfilled(value) => Ok(value.clone()),
-                PromiseFate::Rejected(value) => Err(Throw(value.clone())),
-                PromiseFate::Pending => Err(Throw::type_error("pending async input is not yet supported")),
-            };
-        }
-    }
-    Ok(value)
-}
-
-fn native_array_from_async(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let result = (|| -> Result<JsValue, Throw> {
-        let source = array_receiver(i, args.first().cloned().unwrap_or(JsValue::Undefined))?;
-        let async_iterator = i.get_prop(&source, WellKnownSymbol::AsyncIterator.symbol())?;
-        if !async_iterator.is_undefined() && !async_iterator.is_null() {
-            return Err(Throw::type_error("async iterator is not yet supported"));
-        }
-        let mapper = args.get(1).cloned().unwrap_or(JsValue::Undefined);
-        if !mapper.is_undefined() && callable_function(&mapper).is_none() {
-            return Err(Throw::type_error("Array.fromAsync mapFn is not callable"));
-        }
-        let iterator = i.get_prop(&source, WellKnownSymbol::Iterator.symbol())?;
-        let items = if iterator.is_undefined() || iterator.is_null() {
-            let length = array_like_length(i, &source)?;
-            (0..length).map(|index| i.get_prop(&source, index.to_string())).collect::<Result<Vec<_>, _>>()?
-        } else {
-            i.iterate(&source)?
-        };
-        let mut values = Vec::with_capacity(items.len());
-        for (index, item) in items.into_iter().enumerate() {
-            let item = array_await_ready(item)?;
-            let value = if mapper.is_undefined() { item } else {
-                i.call_value(&mapper, args.get(2).cloned().unwrap_or(JsValue::Undefined),
-                    vec![item, JsValue::num(index as f64)])?
-            };
-            values.push(array_await_ready(value)?);
-        }
-        array_values(i, values)
-    })();
-    Ok(new_promise(i, match result {
-        Ok(value) => PromiseFate::Fulfilled(value),
-        // `Throw::type_error`/`Throw::range_error` etc. construct a bare,
-        // proto-less error marker (see `normalize_throw`) that every other
-        // catcher in the engine normalizes before a script can observe it
-        // (interp_stmt.rs's exec_try, run_script, ...) -- this promise's
-        // `then` handlers are exactly such an observer, so skipping it here
-        // handed JS code a TypeError-shaped-but-not-actually-`instanceof
-        // TypeError` object (JSVM-10: found via Array.fromAsync's own
-        // Test262 cases once JSVM-9 made `await` truly suspend and actually
-        // reach this rejection instead of some other, already-normalized,
-        // error swallowing it first).
-        Err(error) => PromiseFate::Rejected(i.normalize_throw(error).0),
-    }))
-}
-
 fn native_array_at(
     i: &mut Interpreter,
     this: JsValue,
