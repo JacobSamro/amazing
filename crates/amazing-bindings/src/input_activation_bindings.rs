@@ -56,6 +56,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
             event.set_class(EventClass::Mouse);
             Ok(dom.events_mut().create_event(event))
         })?;
+        host.event_created_for_target(event, EventTarget::Node(node))?;
         if trusted {
             // Driver-initiated (e.g. testdriver's synthetic click sequence):
             // dispatch directly with `DispatchOrigin::UserAgent` so

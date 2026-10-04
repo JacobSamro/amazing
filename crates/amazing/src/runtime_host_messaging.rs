@@ -73,7 +73,6 @@ pub(crate) struct MessagingRealm {
     classes: HashMap<(RealmHandle, u64), (JsValue, JsValue)>,
     targets: Vec<(RealmHandle, u64)>,
     root_realm: RealmHandle,
-    event_realms: HashMap<usize, RealmHandle>,
     generic_target_realms: HashMap<u64, RealmHandle>,
     trusted_getters: HashMap<RealmHandle, JsValue>,
     inbox: VecDeque<QueuedMessage>,
@@ -151,7 +150,6 @@ impl RuntimeBindingHost<'_> {
             classes: HashMap::new(),
             targets: Vec::new(),
             root_realm: self.js.binding_current_realm(),
-            event_realms: HashMap::new(),
             generic_target_realms: HashMap::new(),
             trusted_getters: HashMap::new(),
             inbox: VecDeque::new(),
@@ -471,10 +469,7 @@ impl RuntimeBindingHost<'_> {
             Some(event) if event.class() == amazing_dom::events::EventClass::Message => Ok(()),
             _ => Err(DomError::InvalidStateError),
         })?;
-        self.messaging_ensure()?;
-        let realm=self.js.binding_current_realm();
-        self.state.borrow_mut().messaging.as_mut().unwrap().event_realms.entry(event.slot()).or_insert(realm);
-        Ok(())
+        self.dom_register_event(event)
     }
     pub(super) fn messaging_register_generic_target(&mut self, slot: u64) -> Result<(), Throw> {
         self.with_dom(|dom| if dom.has_event_target(slot) { Ok(()) }
@@ -494,18 +489,16 @@ impl RuntimeBindingHost<'_> {
         Ok(state.messaging.as_ref()
             .and_then(|m| m.generic_target_realms.get(&key.slot)).copied())
     }
-    pub(super) fn messaging_event_realm(&self, key: PlatformKey) -> Result<Option<RealmHandle>, Throw> {
-        let state=self.state.borrow();
-        if key.arena != state.arena || key.generation != 1 {
-            return Err(Throw::type_error("Invalid Event"));
-        }
-        let event=amazing_dom::events::EventId::from_slot(key.slot as usize);
-        Ok(state.messaging.as_ref().and_then(|m| m.event_realms.get(&event.slot())).copied())
-    }
     pub(super) fn messaging_event_target_slot(&self, value: &JsValue) -> Option<u64> {
         let slot = self.messaging_receiver(value, KIND_PORT)
             .or_else(|_| self.messaging_receiver(value, KIND_CHANNEL)).ok()?;
         self.state.borrow().messaging.as_ref()?.targets.get(slot).map(|(_, target)| *target)
+    }
+    pub(super) fn messaging_target_allocation_realm(&self, target: u64) -> Option<RealmHandle> {
+        let state = self.state.borrow();
+        let messaging = state.messaging.as_ref()?;
+        messaging.targets.iter().find(|(_, slot)| *slot == target).map(|(realm, _)| *realm)
+            .or_else(|| messaging.generic_target_realms.get(&target).copied())
     }
     pub(super) fn messaging_event_target_value(&self, target: u64) -> Option<JsValue> {
         let state = self.state.borrow();

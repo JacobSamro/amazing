@@ -119,6 +119,7 @@ enum WebObject {
 mod native_tasks;
 
 struct BindingState {
+    event_creation_realms: HashMap<usize, RealmHandle>,
     native_tasks: native_tasks::NativeTaskRuntime,
     image_states: HashMap<NodeIdx, (ImageLoaderState, u64, u64, crate::runtime_host_replaced_content::ImageDecodeDecision)>,
     image_decodes: Vec<(NodeIdx, u64, Option<u64>, Option<Vec<u16>>, JsValue)>,
@@ -812,6 +813,7 @@ pub(crate) fn install(
         slot
     };
     let state = Rc::new(RefCell::new(BindingState {
+                event_creation_realms: HashMap::new(),
         native_tasks: native_tasks::NativeTaskRuntime::default(),
         image_states: HashMap::new(),
         image_decodes: Vec::new(),
@@ -1197,12 +1199,11 @@ impl BindingHost for RuntimeBindingHost<'_> {
             }
         }
         if brand == InterfaceBrand::EVENT {
-            if let Some(realm) = self.messaging_event_realm(key)? {
-                if realm != self.js.binding_current_realm() {
-                    let state=self.state.clone();
-                    return self.js.binding_with_realm(realm, |js|
-                        RuntimeBindingHost { js, state }.wrap_platform_object(key,brand));
-                }
+            let realm = self.dom_event_realm(key)?;
+            if realm != self.js.binding_current_realm() {
+                let state = self.state.clone();
+                return self.js.binding_with_realm(realm, |js|
+                    RuntimeBindingHost { js, state }.wrap_platform_object(key, brand));
             }
         }
         if matches!(brand, InterfaceBrand::ABORT_CONTROLLER | InterfaceBrand::ABORT_SIGNAL) {
@@ -1318,6 +1319,13 @@ impl BindingHost for RuntimeBindingHost<'_> {
     fn is_message_port(&self, value: &JsValue) -> bool { self.messaging_is_port(value) }
     fn event_target_created(&mut self, slot: u64) -> Result<(), Throw> {
         self.messaging_register_generic_target(slot)
+    }
+    fn event_created(&mut self, event: amazing_dom::events::EventId) -> Result<(), Throw> {
+        self.dom_register_event(event)
+    }
+    fn event_created_for_target(&mut self, event: amazing_dom::events::EventId,
+        target: amazing_dom::events::EventTarget) -> Result<(), Throw> {
+        self.dom_register_event_for_target(event, target)
     }
     fn message_event_created(&mut self, event: amazing_dom::events::EventId) -> Result<(), Throw> {
         self.messaging_register_event(event)

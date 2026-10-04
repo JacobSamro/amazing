@@ -1202,7 +1202,16 @@ pub trait BindingHost: Sized {
     fn is_message_port(&self, _value: &Self::Value) -> bool { false }
     /// Immutable creation realm registration at genuine MessageEvent allocation.
     /// Existing event boundary/target changes never change this association.
-    fn message_event_created(&mut self, _event: amazing_dom::events::EventId) -> Result<(), Self::Error> { Ok(()) }
+    /// Called at genuine Event allocation, before wrapping or callback exposure.
+    fn event_created(&mut self, _event: amazing_dom::events::EventId) -> Result<(), Self::Error> { Ok(()) }
+    /// Native firing and Document.createEvent use the target's relevant realm.
+    fn event_created_for_target(&mut self, event: amazing_dom::events::EventId,
+        _target: amazing_dom::events::EventTarget) -> Result<(), Self::Error> {
+        self.event_created(event)
+    }
+    fn message_event_created(&mut self, event: amazing_dom::events::EventId) -> Result<(), Self::Error> {
+        self.event_created(event)
+    }
     /// Record the immutable allocation realm of a genuine generic EventTarget.
     fn event_target_created(&mut self, _slot: u64) -> Result<(), Self::Error> { Ok(()) }
     fn is_message_event_source(&self, value: &Self::Value) -> bool {

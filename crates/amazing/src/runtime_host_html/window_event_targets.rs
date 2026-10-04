@@ -16,6 +16,12 @@ impl FrameRuntime {
         let realm = self.proxy_targets.iter().find(|(proxy, _)| proxy == value)?.1;
         self.contexts.get(&realm).map(|context| context.event_target_slot)
     }
+    /// Relevant realm of the immutable WindowGlobal target, including retained
+    /// globals. Proxy retargeting and Document activity do not change it.
+    fn window_event_target_realm(&self, slot: u64) -> Option<RealmHandle> {
+        self.contexts.iter().find_map(|(realm, context)|
+            (context.event_target_slot == slot).then_some(*realm))
+    }
     fn window_event_target_value(&self, slot: u64) -> Option<JsValue> {
         let (realm, context) = self.contexts.iter().find(|(_, context)| context.event_target_slot == slot)?;
         let current = self.proxy_targets.iter().any(|(proxy, target)| *target == *realm && *proxy == context.window);
@@ -25,6 +31,9 @@ impl FrameRuntime {
 impl RuntimeBindingHost<'_> {
     pub(in crate::runtime_binding_host) fn html_window_event_target_slot(&self, value: &JsValue) -> Option<u64> {
         self.state.borrow().frames.window_event_target_slot(value)
+    }
+    pub(in crate::runtime_binding_host) fn html_window_event_target_realm(&self, slot: u64) -> Option<RealmHandle> {
+        self.state.borrow().frames.window_event_target_realm(slot)
     }
     pub(in crate::runtime_binding_host) fn html_window_event_target_value(&self, slot: u64) -> Option<JsValue> {
         self.state.borrow().frames.window_event_target_value(slot)
@@ -79,7 +88,8 @@ mod tests {
             let slots: HashSet<_> = state.frames.contexts.values().map(|context| context.event_target_slot).collect();
             assert_eq!(slots.len(), 3);
             assert_ne!(old.event_target_slot, root_slot);
-            for context in state.frames.contexts.values() {
+            for (realm, context) in &state.frames.contexts {
+                assert_eq!(state.frames.window_event_target_realm(context.event_target_slot), Some(*realm));
                 assert_eq!(state.frames.window_event_target_slot(&context.global), Some(context.event_target_slot));
                 assert_eq!(state.frames.window_event_target_slot(&context.window), Some(context.event_target_slot));
                 assert_eq!(host.borrow().dom.document_window_event_target(context.document), Some(context.event_target_slot));
@@ -88,7 +98,7 @@ mod tests {
         };
         scheduler.run_script("document.getElementById('a').srcdoc='<p>new</p>'").unwrap();
         scheduler.dispatch_pending_iframe_loads().unwrap();
-        let current = {
+        let (current_realm, current) = {
             let state = state.borrow();
             let new_realm = state.frames.windows[&frame].0;
             assert_ne!(new_realm, old_realm);
@@ -99,7 +109,9 @@ mod tests {
             assert_eq!(state.frames.window_event_target_slot(&old.window), Some(current.event_target_slot));
             assert_eq!(state.frames.window_event_target_value(old.event_target_slot), Some(old.global.clone()));
             assert_eq!(state.frames.window_event_target_value(current.event_target_slot), Some(current.window.clone()));
-            current
+            assert_eq!(state.frames.window_event_target_realm(old.event_target_slot), Some(old_realm));
+            assert_eq!(state.frames.window_event_target_realm(current.event_target_slot), Some(new_realm));
+            (new_realm, current)
         };
         assert_eq!(host.borrow().dom.document_window_event_target(old.document), None);
         assert!(host.borrow().dom.is_window_event_target(old.event_target_slot));
@@ -110,6 +122,9 @@ mod tests {
         assert_eq!(host.borrow().dom.document_window_event_target(NodeIdx(0)), Some(root_slot));
         assert_eq!(state.frames.window_event_target_slot(&current.window), Some(current.event_target_slot));
         assert_eq!(state.frames.window_event_target_value(current.event_target_slot), Some(current.window));
+        assert_eq!(state.frames.window_event_target_realm(old.event_target_slot), Some(old_realm));
+        assert_eq!(state.frames.window_event_target_realm(current.event_target_slot), Some(current_realm));
+        assert_eq!(state.frames.window_event_target_realm(u64::MAX), None);
         assert_eq!(state.frames.window_event_target_slot(&JsValue::Null), None);
         assert_eq!(state.frames.window_event_target_slot(&JsValue::str("window")), None);
     }

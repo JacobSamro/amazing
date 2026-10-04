@@ -41,12 +41,13 @@ fn release<H: BindingHost>(host: &mut H, data: MessageEventData) {
     }
 }
 fn create<H: BindingHost>(host: &mut H, kind: Vec<u16>, init: EventInit,
-    payload: MessageEventPayload<H::Value>) -> Result<EventId, H::Error> {
+    target: Option<EventTarget>, payload: MessageEventPayload<H::Value>) -> Result<EventId, H::Error> {
     let data = root(host, payload)?;
     let result = host.with_dom(|dom| Ok(dom.events_mut().create_event(
         Event::new_message_utf16(&kind, init, Duration::ZERO, data.clone()))));
     let result = result.and_then(|event| {
-        host.message_event_created(event)?;
+        if let Some(target) = target { host.event_created_for_target(event, target)?; }
+        else { host.message_event_created(event)?; }
         Ok(event)
     });
     if result.is_err() { release(host, data); }
@@ -56,17 +57,17 @@ fn create<H: BindingHost>(host: &mut H, kind: Vec<u16>, init: EventInit,
 /// Returns false if the event was canceled (message events are non-cancelable).
 pub fn dispatch_message_event<H: BindingHost>(host: &mut H, target: EventTarget,
     kind: &str, payload: MessageEventPayload<H::Value>) -> Result<bool, H::Error> {
-    let event = create(host, kind.encode_utf16().collect(), EventInit::default(), payload)?;
+    let event = create(host, kind.encode_utf16().collect(), EventInit::default(), Some(target), payload)?;
     dispatch_created_event(host, target, event)
 }
-pub(crate) fn create_legacy<H: BindingHost>(host: &mut H) -> Result<H::Value, H::Error> {
+pub(crate) fn create_legacy<H: BindingHost>(host: &mut H, document: amazing_dom::NodeIdx) -> Result<H::Value, H::Error> {
     let id = host.with_dom(|dom| {
         let mut event = Event::new_message("", EventInit::default(), Duration::ZERO,
             MessageEventData::default());
         event.mark_uninitialized();
         Ok(dom.events_mut().create_event(event))
     })?;
-    host.message_event_created(id)?;
+    host.event_created_for_target(id, EventTarget::Node(document))?;
     host.wrap_platform_object(key(host, id.slot() as u64), InterfaceBrand::EVENT)
 }
 fn member<H: BindingHost>(host: &mut H, dictionary: Option<&H::Value>, name: &str) -> Result<H::Value, H::Error> {
@@ -122,7 +123,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value,
         let ports = ports(host, &value)?;
         let value = member(host, dictionary, "source")?;
         let source = source(host, value)?;
-        let id = create(host, kind, EventInit { bubbles, cancelable, composed },
+        let id = create(host, kind, EventInit { bubbles, cancelable, composed }, None,
             MessageEventPayload { data, origin, last_event_id, source, ports })?;
         return host.wrap_platform_object(key(host, id.slot() as u64), InterfaceBrand::EVENT);
     }

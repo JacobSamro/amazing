@@ -104,6 +104,7 @@ pub fn dispatch_user_agent_event<H: BindingHost>(host: &mut H, target: EventTarg
 pub fn dispatch_user_agent_event_with_payload<H: BindingHost>(host: &mut H,
     target: EventTarget, event: Event) -> Result<bool, H::Error> {
     let event = host.with_dom(|dom| Ok(dom.events_mut().create_event(event)))?;
+    host.event_created_for_target(event, target)?;
     dispatch_created_event(host, target, event)
 }
 /// Dispatch the existing genuine Event wrapper as a browser-generated event.
@@ -117,6 +118,7 @@ pub fn dispatch_user_agent_event_object<H: BindingHost>(host: &mut H,
 fn dispatch_native_event_result<H: BindingHost>(host: &mut H, target: EventTarget, kind: &str, init: EventInit) -> Result<bool, H::Error> {
     let event = host.with_dom(|dom| Ok(dom.events_mut().create_event(
         Event::new(kind, init, Duration::ZERO))))?;
+    host.event_created_for_target(event, target)?;
     dispatch_created_event(host, target, event)
 }
 pub(crate) fn dispatch_created_event<H: BindingHost>(host: &mut H, target: EventTarget,
@@ -135,7 +137,10 @@ pub fn dispatch_document_load_event<H: BindingHost>(host: &mut H,
         let event = dom.events_mut().create_event(Event::new("load", EventInit::default(), Duration::ZERO));
         dom.begin_document_load_dispatch(document, generation, event).map(|dispatch| Some((event, dispatch)))
     })?;
-    if let Some((event, dispatch)) = started { dispatch_started_event(host, event, dispatch)?; }
+    if let Some((event, dispatch)) = started {
+        host.event_created_for_target(event, EventTarget::Node(document))?;
+        dispatch_started_event(host, event, dispatch)?;
+    }
     Ok(())
 }
 fn dispatch_started_event<H: BindingHost>(host: &mut H, event: EventId,
@@ -160,6 +165,7 @@ pub(crate) fn dispatch_focus_event<H: BindingHost>(host: &mut H, node: amazing_d
         event.set_related_target(related.map(EventTarget::Node));
         Ok(dom.events_mut().create_event(event))
     })?;
+    host.event_created_for_target(event, EventTarget::Node(node))?;
     let mut dispatch = host.with_dom(|dom| dom.begin_event_dispatch(EventTarget::Node(node), event, DispatchOrigin::UserAgent))?;
     loop {
         let invocation = host.with_dom(|dom| Ok(dom.events_mut().next_listener(&mut dispatch)))?;
@@ -330,17 +336,18 @@ pub(crate) fn invoke<H: BindingHost>(
     }
     if matches!(op, O::EventConstructor | O::CustomEventConstructor | O::CreateEvent)
         || event_class(op).is_some() {
-        if op == O::CreateEvent {
+        let legacy_document = if op == O::CreateEvent {
             let node = host.node_brand(&receiver).ok_or_else(|| host.type_error("Expected a Document"))?;
             host.with_dom(|dom| if matches!(dom.get(node).kind, NodeKind::Document) { Ok(()) }
                 else { Err(DomError::TypeError) })?;
-        }
+            Some(node)
+        } else { None };
         let raw_type = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         let event_type_units = host.to_dom_string(raw_type)?;
         // Legacy interface aliases are ASCII; event payloads retain exact DOMStrings.
         let event_type = String::from_utf16_lossy(&event_type_units);
         if op == O::CreateEvent && event_type.eq_ignore_ascii_case("MessageEvent") {
-            return crate::message_event_bindings::create_legacy(host);
+            return crate::message_event_bindings::create_legacy(host, legacy_document.unwrap());
         }
         let init = if op != O::CreateEvent {
             let dictionary = args.get(1);
@@ -411,6 +418,9 @@ pub(crate) fn invoke<H: BindingHost>(
             event.mark_uninitialized();
         }
         let id = host.with_dom(|dom| Ok(dom.events_mut().create_event(event)))?;
+        if let Some(document) = legacy_document {
+            host.event_created_for_target(id, EventTarget::Node(document))?;
+        } else { host.event_created(id)?; }
         return host.wrap_platform_object(key(host, id.slot() as u64), InterfaceBrand::EVENT);
     }
     if matches!(op, O::AddEventListener | O::RemoveEventListener | O::DispatchEvent) {

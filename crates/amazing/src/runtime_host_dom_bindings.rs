@@ -2370,3 +2370,6 @@ mod message_event_adapter;
 #[cfg(test)]
 #[path = "runtime_host_dom_bindings/message_events.rs"]
 mod message_events;
+
+#[path = "runtime_host_dom_bindings/event_realms.rs"]
+mod event_realms;

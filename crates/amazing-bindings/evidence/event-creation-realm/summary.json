@@ -1,0 +1,141 @@
+{
+  "schema": 1,
+  "base": "70a76d75dd90009bd6948c0bae548ded5ab6a7e1",
+  "source": "732ee5239582560d929919ae38ec079c0d04eaed",
+  "suites": {
+    "abort": {
+      "before_files": 6,
+      "after_files": 6,
+      "same_selection": true,
+      "before_passing_assertions": 36,
+      "after_passing_assertions": 36,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [],
+      "raw_before_sha256": "f0ceaf32f74227c11256389e22e1a90007735f6c6952be2999288c6b57606c72",
+      "raw_after_sha256": "965fe74dc8e049ed515537a1d7fce18751b26a0969eade036f524823f4703a32"
+    },
+    "messaging": {
+      "before_files": 136,
+      "after_files": 136,
+      "same_selection": true,
+      "before_passing_assertions": 111,
+      "after_passing_assertions": 111,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [],
+      "raw_before_sha256": "adc86fb3e82d66c0ef04b9cf30b855bcc43216ba56d47c8a6ae3bdf06f059f03",
+      "raw_after_sha256": "88f85be9a69a1abf959d236aace5fdb78aed944b8b70faa2443cae855de4616f"
+    },
+    "core": {
+      "before_files": 888,
+      "after_files": 888,
+      "same_selection": true,
+      "before_passing_assertions": 92842,
+      "after_passing_assertions": 92842,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [],
+      "raw_before_sha256": "8acadb5eef71de71e2042ce8426065331f794c59a8e4813fc35e4327b94bc8c8",
+      "raw_after_sha256": "797d8d7234b42660b48cdc932e6a5638c1437d44f7188e7a00f8a7e4ad982ceb"
+    },
+    "shadow": {
+      "before_files": 277,
+      "after_files": 277,
+      "same_selection": true,
+      "before_passing_assertions": 5681,
+      "after_passing_assertions": 5681,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [],
+      "raw_before_sha256": "3748d8337c1198bf7c56d14c0b7b71e489fc94e6ba0bbb1b54b368c5ddfa1d7f",
+      "raw_after_sha256": "8bea611dce108fad4bcc8742f9934469d39ab803a8d214c2c675616527c179cb"
+    },
+    "xml": {
+      "before_files": 1,
+      "after_files": 1,
+      "same_selection": true,
+      "before_passing_assertions": 112,
+      "after_passing_assertions": 112,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [],
+      "raw_before_sha256": "718a67c2cf5021ab4ec14e116072553105d97f0ffaa7c9e6aaef1f3da7e23402",
+      "raw_after_sha256": "a15f1dcf633e7af1e3b80ed5e178c6ec8e76b50c98a0745050dbd039647bbbc6"
+    },
+    "syntax72": {
+      "before_files": 72,
+      "after_files": 72,
+      "same_selection": true,
+      "before_passing_assertions": 2708,
+      "after_passing_assertions": 2708,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [],
+      "raw_before_sha256": "f53e63affa0899602c48cdb112c7f5b9791a47d1d9d8b1ea506717ff056deaaf",
+      "raw_after_sha256": "f53e63affa0899602c48cdb112c7f5b9791a47d1d9d8b1ea506717ff056deaaf"
+    }
+  },
+  "raw_location": "/home/user/amazing/out/dom-bindings",
+  "before": {
+    "native_summary": [
+      "     Summary [ 151.238s] 4599 tests run: 4599 passed (1 slow), 17 skipped"
+    ],
+    "raw_hashes": {
+      "native.log": "811f1a42478dea6fdd3288946b35734bd87846fe4f02bed2cba88f519684af4c",
+      "docs.log": "0983a669a828334beff7ec9940686d4b76fbaefee22895e8d537efaed4dd48a8",
+      "syntax72.jsonl": "f53e63affa0899602c48cdb112c7f5b9791a47d1d9d8b1ea506717ff056deaaf",
+      "raw.sha256": "fa3ec1352f13997a517c6a5506fdfcf866ff990e756d3ea45b29f06c4289593e"
+    },
+    "shipping_binary_sha256": "637f3c9f4d0e0bd15e5b333770440ec2a90b4bfe9261f4a23f6e6a5cdbc6f37e",
+    "docs_pass": 4
+  },
+  "after": {
+    "native_summary": [
+      "     Summary [ 160.052s] 4609 tests run: 4609 passed (1 slow), 17 skipped"
+    ],
+    "raw_hashes": {
+      "native.log": "76bf13284af1f84e8bdc6bb02267d5c38fda8cd9665451396bbf3501d36e2348",
+      "docs.log": "e66de7d7c1c75b9a8a07f88761a11a67a0a787f31136a59511fc2686a15f9e39",
+      "syntax72.jsonl": "f53e63affa0899602c48cdb112c7f5b9791a47d1d9d8b1ea506717ff056deaaf",
+      "raw.sha256": "626076654102fe3ef1be1c611d6e035cbfad18bdca1841530370fd4433a932b8"
+    },
+    "shipping_binary_sha256": "8acdadd1807be47079439a378f60433fe39778ccc63dbe6c728a2f1553c0b5d3",
+    "docs_pass": 4
+  },
+  "zero_loss": true,
+  "actual_exits": {
+    "before": 0,
+    "original_after_133": 0,
+    "corrected_after_a5": 101,
+    "final_after": 0
+  },
+  "diagnostic_compile_failure": {
+    "source": "a5ef1bb88dd67f8a22de023a5fca6ba7f4f5359a",
+    "native_sha256": "2a35c09878aaf58e2b0c1e4dd7b43fe375835c89f876819d13e84aa74e5af4f7",
+    "raw_path": "/home/user/amazing/out/dom-bindings/event-realm-after-complete/native.log",
+    "cause": "Authored test used nonexistent JsValue::Number; corrected to existing JsValue::num. No production compiler change."
+  },
+  "wpt_pin": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "profile": {
+    "core": "888 files,25s ordinary/150s heavy,jobs4/heavy1",
+    "shadow": "277 files,25s ordinary/150s heavy,actual META-long600s,jobs4/heavy1",
+    "syntax": "72 files,10s ordinary/60s long,jobs4",
+    "abort": "whole dom/abort",
+    "messaging": "whole webmessaging",
+    "xml": "whole html/syntax/serializing-xml-fragments"
+  },
+  "qualified_claim": "Immutable Event creation realm and existing-object redispatch identity; no scheduler eligibility/router/navigation algorithm change."
+}

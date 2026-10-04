@@ -51,6 +51,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
             _ => unreachable!(),
         }
         let id = host.with_dom(|dom| Ok(dom.events_mut().create_event(event)))?;
+        host.event_created(id)?;
         return host.wrap_platform_object(key(host, id.slot() as u64), InterfaceBrand::EVENT);
     }
     let id = event_id(host, &receiver)?;
