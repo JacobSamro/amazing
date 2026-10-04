@@ -89,3 +89,19 @@ manifest path and uses this receipt after the failed job status, avoiding an
 irrelevant remote phase fetch when no job started. This does not retry or
 recover a run. Four metadata checks pass, including distinct rsync/wrapper
 exit fields. The live run and Boat endpoints were untouched.
+
+## Capacity incident boundary
+
+The compact `gate-capacity-diagnosis.json` records two successful metadata-only
+commands on the assigned shard-0 box. The original Cargo exit 101 is preserved;
+its unchanged log ends in warning/help text without a failure diagnostic.
+Observed disk/memory capacity is available and the kernel OOM counter is zero.
+HOME is FUSE while the native filesystem is ext4. These facts do not establish
+Cargo's failure cause, so no speculative capacity or engine change was made.
+
+Python documents exit 120 for cleanup failures, including buffered stream
+flush errors ([sys.exit](https://docs.python.org/3/library/sys.html#sys.exit)).
+That narrows the repeated runner failures toward cleanup/output I/O; it does
+not prove their exact storage error. No third engine rerun, raw pull, lifecycle
+command or other active-gate intervention occurred. The unresolved cause is
+filed in lane questions for a separate justified repair.
