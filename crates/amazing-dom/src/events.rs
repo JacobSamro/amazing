@@ -317,8 +317,9 @@ impl EventTree for Dom {
             EventTarget::Node(node) => {
                 if let Some(slot) = self.find_slot(node, false) { return Some(EventTarget::Node(slot)); }
                 if let Some(parent) = self.get(node).parent { return Some(EventTarget::Node(parent)); }
-                if matches!(self.get(node).kind, NodeKind::Document) && node == crate::NodeIdx(0) {
-                    return self.window_event_target().map(EventTarget::External);
+                if matches!(self.get(node).kind, NodeKind::Document) {
+                    return (event.event_type() != "load").then(|| self.document_window_event_target(node))
+                        .flatten().map(EventTarget::External);
                 }
                 let root = self.shadow_data(node)?;
                 let originated_inside = event.target().is_some_and(|target|
@@ -348,24 +349,13 @@ impl EventTree for Dom {
         }
         let node = match target {
             EventTarget::Node(node) => node,
-            EventTarget::External(slot) => return self.window_event_target() == Some(slot),
+            EventTarget::External(slot) => return self.is_window_event_target(slot),
         };
-        if matches!(self.get(node).kind, NodeKind::Document) {
-            return true;
-        }
-        let document = self.root(node);
-        if !matches!(self.get(document).kind, NodeKind::Document) {
-            return false;
-        }
-        let element = self.children(document).find(|n| self.name(*n).is_some());
-        if element == Some(node) {
-            return true;
-        }
-        element.is_some_and(|e| {
-            self.children(e).find(|n| {
-                self.name(*n) == Some("body") && self.namespace(*n) == Some(Namespace::Html)
-            }) == Some(node)
-        })
+        if self.check_node(node).is_err() { return false; }
+        let document = if matches!(self.get(node).kind, NodeKind::Document) { node }
+            else { self.get(node).owner_document };
+        node == document || self.document_element(document).ok().flatten() == Some(node)
+            || self.document_body(document).ok().flatten() == Some(node)
     }
 }
 impl Dom {
@@ -579,6 +569,12 @@ impl EventTargets {
         id: EventId,
         origin: DispatchOrigin,
     ) -> Result<Dispatch, DomError> {
+        self.begin_dispatch_with_override(tree, target, id, origin, None)
+    }
+    pub(crate) fn begin_dispatch_with_override(
+        &mut self, tree: &impl EventTree, target: EventTarget, id: EventId,
+        origin: DispatchOrigin, target_override: Option<EventTarget>,
+    ) -> Result<Dispatch, DomError> {
         let mut event = self.events.get(id.0).ok_or(DomError::InvalidStateError)?.clone();
         if event.dispatching || !event.initialized {
             return Err(DomError::InvalidStateError);
@@ -596,7 +592,7 @@ impl EventTargets {
             if path.iter().any(|p: &PathEntry| p.invocation == invocation) {
                 return Err(DomError::InvalidStateError);
             }
-            let adjusted_target = tree.retarget(target, invocation);
+            let adjusted_target = tree.retarget(target_override.unwrap_or(target), invocation);
             let adjusted_related = event.related_target.map(|related| tree.retarget(related, invocation));
             let at_target = previous_adjusted != Some(adjusted_target);
             if !path.is_empty() && at_target && adjusted_related == Some(invocation) { break; }
@@ -773,8 +769,31 @@ impl Dom {
     pub fn begin_event_dispatch(
         &mut self, target: EventTarget, event: EventId, origin: DispatchOrigin,
     ) -> Result<Dispatch, DomError> {
+        self.begin_event_dispatch_inner(target, event, origin, None)
+    }
+    /// HTML load dispatch at a genuine associated Window with the Document
+    /// as legacy target override. Public dispatchEvent never enables this flag.
+    pub fn begin_document_load_dispatch(&mut self, document: NodeIdx, generation: u64,
+        event: EventId) -> Result<Dispatch, DomError> {
+        self.check_node(document)?;
+        if !matches!(self.get(document).kind, crate::NodeKind::Document) {
+            return Err(DomError::TypeError);
+        }
+        if self.node_generation(document) != Some(generation) {
+            return Err(DomError::InvalidStateError);
+        }
+        let window = self.document_window_event_target(document).ok_or(DomError::InvalidStateError)?;
+        if !self.is_window_event_target(window) { return Err(DomError::InvalidStateError); }
+        if self.events.event_checked(event).ok_or(DomError::InvalidStateError)?.event_type() != "load" {
+            return Err(DomError::TypeError);
+        }
+        self.begin_event_dispatch_inner(EventTarget::External(window), event,
+            DispatchOrigin::UserAgent, Some(EventTarget::Node(document)))
+    }
+    fn begin_event_dispatch_inner(&mut self, target: EventTarget, event: EventId,
+        origin: DispatchOrigin, target_override: Option<EventTarget>) -> Result<Dispatch, DomError> {
         let mut events = std::mem::take(&mut self.events);
-        let mut result = events.begin_dispatch(self, target, event, origin);
+        let mut result = events.begin_dispatch_with_override(self, target, event, origin, target_override);
         if result.is_ok() {
             let roots = events.event(event).raw_path().iter().map(|target| match target {
                 EventTarget::Node(node) => self.shadow_including_ancestors(*node).into_iter()

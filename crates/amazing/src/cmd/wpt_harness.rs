@@ -1355,22 +1355,11 @@ fn execute_page(
     // iframes` itself skips any frame whose `src`/`srcdoc` hasn't changed)
     // is what actually discovers and queues them.
     scheduler.set_location_url(&url);
-    // Drains that queue, giving each iframe its own realm/WindowProxy and
-    // firing `DOMContentLoaded`/`load` on the child document and `load` on
-    // the frame element (JSRT-9 + HTML-25..27).
-    scheduler.dispatch_pending_iframe_loads().map_err(|e| e.describe())?;
-    for event in ["DOMContentLoaded", "load"] {
-        scheduler
-            .dispatch_dom_event(0, event)
-            .map_err(|e| e.describe())?;
-    }
-    use amazing_js::DomHost;
-    let body = host.borrow_mut().query_selector("body");
-    if let Some(body) = body {
-        scheduler
-            .dispatch_dom_event(body, "load")
-            .map_err(|e| e.describe())?;
-    }
+    // DOMContentLoaded is a Document event; the Window's load waits for
+    // dependent child documents and uses the root Document as its legacy target.
+    scheduler.dispatch_dom_event(0, "DOMContentLoaded").map_err(|e| e.describe())?;
+    scheduler.dispatch_load_blocking_iframe_loads(amazing_dom::NodeIdx(0)).map_err(|e| e.describe())?;
+    scheduler.dispatch_document_load(amazing_dom::NodeIdx(0)).map_err(|e| e.describe())?;
     // WPT runs against a deterministic 60 Hz virtual display. Each completed
     // turn gets one rendering opportunity, including a stable rAF timestamp.
     let mut clock = IoAwareClock::default();

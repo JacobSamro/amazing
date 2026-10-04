@@ -132,7 +132,18 @@ impl DriverScheduler {
         self.render_hook = Some(hook);
     }
     pub(crate) fn dispatch_pending_iframe_loads(&mut self) -> Result<(), Throw> {
-        for (frame, document, fire_load_events) in self.bindings.take_iframe_loads() {
+        self.dispatch_iframe_loads(None)
+    }
+    /// Only current eager child navigations delay this actual Document load.
+    /// Lazy navigation completion remains queued for the normal task turn.
+    pub(crate) fn dispatch_load_blocking_iframe_loads(&mut self, document: amazing_dom::NodeIdx) -> Result<(), Throw> {
+        self.dispatch_iframe_loads(Some(document))
+    }
+    fn dispatch_iframe_loads(&mut self, owner: Option<amazing_dom::NodeIdx>) -> Result<(), Throw> {
+        while let Some(load) = self.bindings.take_next_iframe_load(owner) {
+            let frame = load.frame;
+            let document = load.document;
+            let fire_load_events = load.fire_load_events;
             if let Some(document) = document {
                 // HTML-29: brackets the child document's own top-level
                 // script phase (`setup_iframe_window` narrows the point per
@@ -143,14 +154,23 @@ impl DriverScheduler {
                 self.bindings.begin_document_parsing(document);
                 let bindings = self.bindings.clone();
                 self.enter(|js| bindings.setup_iframe_window(js, frame, document))?;
-                if fire_load_events {
+                if fire_load_events && self.bindings.iframe_load_is_current(&load) {
                     self.dispatch_dom_event(document.0, "DOMContentLoaded")?;
-                    self.dispatch_dom_event(document.0, "load")?;
+                    // A child load waits for newly discovered dependent frames.
+                    // Their own Window load precedes this Document's Window load.
+                    self.dispatch_load_blocking_iframe_loads(document)?;
+                    if self.bindings.iframe_load_is_current(&load) {
+                        self.dispatch_document_load(document)?;
+                    }
                 }
                 self.bindings.end_document_parsing(document);
             }
-            if fire_load_events {
-                self.dispatch_dom_event(frame.0, "load")?;
+            if fire_load_events && self.bindings.iframe_load_is_current(&load) {
+                // HTML fires the embedding element's load separately, with
+                // default flags; it must not bubble into its owner Document.
+                self.dispatch_user_agent_payload(amazing_dom::events::EventTarget::Node(frame),
+                    amazing_dom::events::Event::new("load", amazing_dom::events::EventInit::default(),
+                        std::time::Duration::ZERO))?;
             }
         }
         Ok(())
@@ -196,6 +216,13 @@ impl DriverScheduler {
         self.bindings.set_image_loader_states(&mut self.js, media)?;
         self.drain_outbox()
     }
+    /// HTML's Window load uses the associated Document as its legacy target.
+    /// Public dispatchEvent and Document DOMContentLoaded keep their usual paths.
+    pub(crate) fn dispatch_document_load(&mut self, document: amazing_dom::NodeIdx) -> Result<(), Throw> {
+        let bindings = self.bindings.clone();
+        self.enter(|js| bindings.dispatch_document_load(js, document))
+    }
+
     pub(crate) fn dispatch_dom_event(&mut self, node: u32, event: &str) -> Result<(), Throw> {
         let bindings = self.bindings.clone();
         self.enter(|js| {

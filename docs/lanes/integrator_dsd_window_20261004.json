@@ -1,0 +1,317 @@
+{
+  "schema": 1,
+  "recorded_base": "fc48838bba9e664746147e4d70437be09b785a4e",
+  "gated_source_commit": "37e8c3c1098c0096fdba14615d58ae5642f06021",
+  "workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4451,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_details": [
+      {
+        "command": [
+          "cargo",
+          "nextest",
+          "run",
+          "--workspace",
+          "--locked",
+          "--no-fail-fast",
+          "--status-level",
+          "skip"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "        PASS [   0.002s] (4442/4451) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+          "        PASS [   0.002s] (4443/4451) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+          "        PASS [   0.004s] (4444/4451) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+          "        PASS [   0.005s] (4445/4451) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+          "        PASS [   0.013s] (4446/4451) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+          "        PASS [   0.014s] (4447/4451) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+          "        PASS [   0.003s] (4448/4451) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+          "        PASS [   0.010s] (4449/4451) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+          "        PASS [   7.838s] (4450/4451) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+          "        PASS [  22.083s] (4451/4451) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+          "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+          "     Summary [ 124.095s] 4451 tests run: 4451 passed, 17 skipped"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-qccgjapq/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-37e8c3c1098c0096fdba14615d58ae5642f06021-nextest.log",
+            "durable": {
+              "bytes": 617528,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-37e8c3c1098c0096fdba14615d58ae5642f06021-nextest.log",
+              "sha256": "6e8252952f002a5aa6fe9fdb54d1ef6fac89906bebcdae96592b1420aa48a9ef"
+            },
+            "native": {
+              "bytes": 617528,
+              "path": "/tmp/amazing-gate-command-qccgjapq/output.log",
+              "sha256": "6e8252952f002a5aa6fe9fdb54d1ef6fac89906bebcdae96592b1420aa48a9ef"
+            },
+            "source": "/tmp/amazing-gate-command-qccgjapq/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "nextest",
+        "raw_native": {
+          "bytes": 617528,
+          "path": "/tmp/amazing-gate-command-qccgjapq/output.log",
+          "sha256": "6e8252952f002a5aa6fe9fdb54d1ef6fac89906bebcdae96592b1420aa48a9ef"
+        },
+        "schema": 1,
+        "source_commit": "37e8c3c1098c0096fdba14615d58ae5642f06021",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--workspace",
+          "--locked",
+          "--doc"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "   Doc-tests amazing_webrtc_codecs",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "",
+          "   Doc-tests amazing_webrtc_crypto",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          ""
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-27lr8qyo/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-37e8c3c1098c0096fdba14615d58ae5642f06021-doctests.log",
+            "durable": {
+              "bytes": 16669,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-37e8c3c1098c0096fdba14615d58ae5642f06021-doctests.log",
+              "sha256": "64d96ad1e880bee489ab44c18cf9d3c35b621c1e91891a7f7b22878cb45b36e5"
+            },
+            "native": {
+              "bytes": 16669,
+              "path": "/tmp/amazing-gate-command-27lr8qyo/output.log",
+              "sha256": "64d96ad1e880bee489ab44c18cf9d3c35b621c1e91891a7f7b22878cb45b36e5"
+            },
+            "source": "/tmp/amazing-gate-command-27lr8qyo/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "doctests",
+        "raw_native": {
+          "bytes": 16669,
+          "path": "/tmp/amazing-gate-command-27lr8qyo/output.log",
+          "sha256": "64d96ad1e880bee489ab44c18cf9d3c35b621c1e91891a7f7b22878cb45b36e5"
+        },
+        "schema": 1,
+        "source_commit": "37e8c3c1098c0096fdba14615d58ae5642f06021",
+        "wrapper_exit": 0
+      }
+    ],
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 617528,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-37e8c3c1098c0096fdba14615d58ae5642f06021-nextest.log",
+        "sha256": "6e8252952f002a5aa6fe9fdb54d1ef6fac89906bebcdae96592b1420aa48a9ef"
+      },
+      {
+        "bytes": 16669,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-37e8c3c1098c0096fdba14615d58ae5642f06021-doctests.log",
+        "sha256": "64d96ad1e880bee489ab44c18cf9d3c35b621c1e91891a7f7b22878cb45b36e5"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "37e8c3c1098c0096fdba14615d58ae5642f06021",
+    "summary_lines": [
+      "Summary [ 124.095s] 4451 tests run: 4451 passed, 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "test262": {
+    "job_exit": 0,
+    "shards": 16,
+    "baseline_published_engine_commit": "f5db0fd1",
+    "baseline_gated_source": "d8019deb98e3dbdfbc933c5c2d942ef6f77d5b2b",
+    "baseline_summary_sha256": "38111e7c7dc75d6770d5094c995d927dd8ca775b5afee6ba43c1a7b79e8be671",
+    "summary": {
+      "files": {
+        "fail": 794,
+        "pass": 52612,
+        "skipped": 294,
+        "timeout": 1,
+        "unsupported": 171
+      },
+      "variants": {
+        "fail": 1488,
+        "pass": 101088,
+        "timeout": 2,
+        "unsupported": 340
+      }
+    },
+    "lost_files": 0,
+    "lost_variants": 0,
+    "gained_files": 0,
+    "gained_passing_variants": 0,
+    "provenance": {
+      "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "source_commit": "37e8c3c1098c0096fdba14615d58ae5642f06021",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    "merged_summary_sha256": "421754b719ab4046883fe95640ed1a24b6ad041a67c08e08cc765c4440ed4320",
+    "shard_sha256": {
+      ".shard-37e8c3c1-dsd-window-integration-0.json": "6696ffbf2226a235fb0275c4ccd1693e74c862b59041bc8eb7099b0bff3fcf0b",
+      ".shard-37e8c3c1-dsd-window-integration-1.json": "0d0764cdd32ab06832baf06eb6fae339a73997be9bdac88dda2d8fe16ebb7d73",
+      ".shard-37e8c3c1-dsd-window-integration-10.json": "23797176eb2c900d11e063f7fe0f6a9026636005dcd6b3e4b2349222d260aeb2",
+      ".shard-37e8c3c1-dsd-window-integration-11.json": "bdb1e9a45f731a4cd728047d840bc856ae707a6fae520a976fcaf4e8c1d2a834",
+      ".shard-37e8c3c1-dsd-window-integration-12.json": "9fb7afd227fffd5453b439b266e3100f64654027e6f18c4a764e56365c8405be",
+      ".shard-37e8c3c1-dsd-window-integration-13.json": "a61348784490883e53489a7d426397e886725d17971152d6530fc749ca4a7a93",
+      ".shard-37e8c3c1-dsd-window-integration-14.json": "3bba03e41a50183ea901b428045a597b4a79c056e0a2973ce1cbd673114d08db",
+      ".shard-37e8c3c1-dsd-window-integration-15.json": "a340f8362fb0deab2a8429439fb857543abaa56ec4ea899ec3c7059d98ee5fd1",
+      ".shard-37e8c3c1-dsd-window-integration-2.json": "2a3aa18e36e40315ba9b6f5198935263c4c3edc6bc618a5678a8bf1d6c27e528",
+      ".shard-37e8c3c1-dsd-window-integration-3.json": "2237a550eacdd896c097c6a115f3f7bff4eba3968789c56fdbb70b299ea3667e",
+      ".shard-37e8c3c1-dsd-window-integration-4.json": "bedcfb57df72193f0876e31dbace211038f18fa8e0d0534129ce392eb1385228",
+      ".shard-37e8c3c1-dsd-window-integration-5.json": "0e7f1b31d4537cd9141002678eabb2a6b22611ed8a5d5c0f6f2bb32f263a8ea5",
+      ".shard-37e8c3c1-dsd-window-integration-6.json": "464ea417100856efa044b932eeb18bf265c83f43e1c3ce886f4869e372ba35aa",
+      ".shard-37e8c3c1-dsd-window-integration-7.json": "64212f6a91ecaa90a20d4e034fa4832f8d1b3a74ea2b27f790f8555e2c21faf5",
+      ".shard-37e8c3c1-dsd-window-integration-8.json": "2fbdcc4483e2ca9d191cd764971509156d519cb0e2c05ba24b2b99692ec1573c",
+      ".shard-37e8c3c1-dsd-window-integration-9.json": "d51b27aa681c11942c48b26390d88b9ece8a4c636f716847d98d1d08661d1516"
+    }
+  },
+  "own_corpora": {
+    "document-dsd-policy": {
+      "qualification": {
+        "state": "ready-for-independent-merge-queue",
+        "recorded_base": "fd9183a86c85f1dbcb3d6b2a62676354e9357052",
+        "engine_source_after": "01cee36475fcca7145c9f957077fcad1bdde311f",
+        "source_identity": "Only evidence changed after actual gated source; engine blobs unchanged",
+        "native_before": 4325,
+        "native_after": 4335,
+        "native_skipped": 17,
+        "doctests_before": 4,
+        "doctests_after": 4,
+        "whole_corpus_suites": 14,
+        "phase_exits": "All actual build/native/docs/corpus processes0; initial baseline compaction1/job100 retained, one artifact-only repack0",
+        "shadow_sufficient_profile": {
+          "before": 5676,
+          "after": 5680,
+          "selected": 277,
+          "lost_passing_names_multiplicities": 0,
+          "lost_passing_files": 0,
+          "ordinary_ms": 25000,
+          "actual_META_long_ms": 600000,
+          "heavy_ms": 150000
+        },
+        "original60_diagnostic": {
+          "passing_losses": 10,
+          "matched600_retains_original60_baseline": true,
+          "original_raw_and_deadlines_preserved": true
+        },
+        "encoding_duplicate_disposition": null,
+        "historical_evidence_retained_at": {
+          "local_archive_branch": "archive/html-foundation-dsd-diagnostic",
+          "commit": "b5061c6dcad608ffe9e0d482233adede06f22e0b"
+        },
+        "test262_16_shards": "Integrator qualification on replayed combined head; not claimed by this own XML/WPT gate"
+      },
+      "shadow_comparison_sha256": "26d2cc3c29a5fd633a45de5fa932362e49f8abd0e3bcc75444b8becbf7fa3759"
+    },
+    "window-load-independent": {
+      "qualification": {
+        "state": "ready-for-independent-merge-queue",
+        "recorded_base": "fd9183a86c85f1dbcb3d6b2a62676354e9357052",
+        "engine_source_after": "4424140c5872b86fbca157a1f7dd3330ec7142f7",
+        "source_identity": "Only evidence changed after actual gated source; engine blobs unchanged",
+        "native_before": 4325,
+        "native_after": 4340,
+        "native_skipped": 17,
+        "doctests_before": 4,
+        "doctests_after": 4,
+        "whole_corpus_suites": 14,
+        "phase_exits": "All actual build/native/docs/corpus processes0; initial baseline compaction1/job100 retained, one artifact-only repack0",
+        "shadow_sufficient_profile": {
+          "before": 5676,
+          "after": 5677,
+          "selected": 277,
+          "lost_passing_names_multiplicities": 0,
+          "lost_passing_files": 0,
+          "ordinary_ms": 25000,
+          "actual_META_long_ms": 600000,
+          "heavy_ms": 150000
+        },
+        "original60_diagnostic": {
+          "passing_losses": 26,
+          "matched600_retains_original60_baseline": true,
+          "original_raw_and_deadlines_preserved": true
+        },
+        "encoding_duplicate_disposition": {
+          "raw_passing_repetition_reduction": 51,
+          "unique_file_variant_subtest_losses": 0,
+          "six_pages": "Beforeduplicate-name harnessERROR\u2192afterPASS. BODYonload callbacks previously invoked from duplicated Document/BODY load routes; now genuine Window dispatch once. Exactraw IDs/records and observedpinned handlers saved."
+        },
+        "historical_evidence_retained_at": {
+          "local_archive_branch": "archive/html-foundation-window-diagnostic",
+          "commit": "ecb4b9161dfe487fc5fe1f59300afdb11133fec4"
+        },
+        "test262_16_shards": "Integrator qualification on replayed combined head; not claimed by this own XML/WPT gate"
+      },
+      "shadow_comparison_sha256": "808236fa57c2b2eb48862c2850b186fe780d9848228d0361d34474cd0ae55263"
+    }
+  },
+  "source_conflict_resolution": "Additive module registrations and actual document shadow policy/window association both preserved. Combined head tested."
+}

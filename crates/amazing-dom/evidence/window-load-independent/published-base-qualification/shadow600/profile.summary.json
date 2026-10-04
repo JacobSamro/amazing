@@ -1,0 +1,22 @@
+{
+  "refs": {
+    "before": "fd9183a86c85f1dbcb3d6b2a62676354e9357052",
+    "dsd": "01cee36475fcca7145c9f957077fcad1bdde311f",
+    "window": "4424140c5872b86fbca157a1f7dd3330ec7142f7"
+  },
+  "profile": {
+    "ordinary_ms": 25000,
+    "actual_META_long_ms": 600000,
+    "heavy_ms": 150000,
+    "jobs": 4,
+    "shadow_heavy_selected": 0
+  },
+  "sweep_sha256": "640f558b6720f7dcd91e07bbb7ac4b482dcca1f47623feba2ec640fb3782a38b",
+  "note": "One root-authorized whole277 paired rerun; preserve prior60s diagnostics. No othercorpus/native rerun; release build authenticates exactsource shipping.",
+  "commands": {
+    "dsd-command.sh": "ecc540a549fbbccffdca21a8dbf8a472bc978d1d9955dece33c4d697015cb323",
+    "window-command.sh": "c4cd7af3746d631835daa414e095d099a00467c68d654f525aaf4d0524e631a3",
+    "before-command.sh": "32745ce3e3b207c71112f0ea4df28e1aaff23f5d859bc75436952a89bfbe2e97",
+    "compare-command.sh": "ac51475d0ffafef430ca9236d192b0d59783479099b3c05aa7055570edfdb912"
+  }
+}

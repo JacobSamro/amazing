@@ -314,6 +314,12 @@ impl RuntimeBindings {
             amazing_dom::events::EventTarget::External(slot), name, init)
     }
 
+    pub(crate) fn dispatch_document_load(&self, js: &mut Interpreter,
+        document: NodeIdx) -> Result<(), Throw> {
+        let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
+        amazing_bindings::dispatch_document_load_event(&mut adapter, document)
+    }
+
     pub(crate) fn dispatch_animation_event(&self, js: &mut Interpreter, animation: &amazing_compositor::CssAnimationEvent) -> Result<(), Throw> {
         use amazing_compositor::CssAnimationEventKind as Kind;
         let (name, property) = match animation.kind {
@@ -797,7 +803,7 @@ pub(crate) fn install(
     let window_event_target_slot = {
         let mut host = host.borrow_mut();
         host.dom.set_document_scripting_enabled(NodeIdx(0), true).expect("active root document");
-        let slot = host.dom.create_event_target();
+        let slot = host.dom.create_window_event_target();
         host.dom.set_window_event_target(slot).expect("new Window event target slot");
         slot
     };

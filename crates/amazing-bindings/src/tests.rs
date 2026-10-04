@@ -2787,3 +2787,6 @@ fn selection_programmatic_aliases_directions_and_index_uint32() {
     assert_eq!(call(&mut h,O::SelectionDirection,s,&[]),str_value("none"));
     let inert=h.dom.create_document(); assert_eq!(call(&mut h,O::GetSelection,V::Node(inert),&[]),V::Null);
 }
+
+#[path = "tests_ua_event_object.rs"]
+mod tests_ua_event_object;

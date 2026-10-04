@@ -1099,13 +1099,10 @@ mod windows {
             let host_ref = host.borrow();
             collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut font_sheets)?;
         }
-        js.dispatch_dom_event(0, "load")
+        js.dispatch_load_blocking_iframe_loads(amazing_dom::NodeIdx(0))
+            .map_err(|error| format!("child load listener failed: {}", error.describe()))?;
+        js.dispatch_document_load(NodeIdx(0))
             .map_err(|error| format!("load listener failed: {}", error.describe()))?;
-        let body = host.borrow_mut().query_selector("body");
-        if let Some(body) = body {
-            js.dispatch_dom_event(body, "load")
-                .map_err(|error| format!("body load listener failed: {}", error.describe()))?;
-        }
         js.pump_at(std::time::Duration::from_millis(16), true)
             .map_err(|error| format!("page event loop failed: {}", error.describe()))?;
         font_sheets.clear();

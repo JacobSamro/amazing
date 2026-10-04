@@ -106,6 +106,14 @@ pub fn dispatch_user_agent_event_with_payload<H: BindingHost>(host: &mut H,
     let event = host.with_dom(|dom| Ok(dom.events_mut().create_event(event)))?;
     dispatch_created_event(host, target, event)
 }
+/// Dispatch the existing genuine Event wrapper as a browser-generated event.
+/// Preserves its EventId and typed/value sidecars; canonical validation and
+/// begin-dispatch reject foreign, uninitialized and already-dispatching events.
+pub fn dispatch_user_agent_event_object<H: BindingHost>(host: &mut H,
+    target: EventTarget, value: &H::Value) -> Result<bool, H::Error> {
+    let event = event_id(host, value)?;
+    dispatch_created_event(host, target, event)
+}
 fn dispatch_native_event_result<H: BindingHost>(host: &mut H, target: EventTarget, kind: &str, init: EventInit) -> Result<bool, H::Error> {
     let event = host.with_dom(|dom| Ok(dom.events_mut().create_event(
         Event::new(kind, init, Duration::ZERO))))?;
@@ -113,7 +121,25 @@ fn dispatch_native_event_result<H: BindingHost>(host: &mut H, target: EventTarge
 }
 pub(crate) fn dispatch_created_event<H: BindingHost>(host: &mut H, target: EventTarget,
     event: EventId) -> Result<bool, H::Error> {
-    let mut dispatch = host.with_dom(|dom| dom.begin_event_dispatch(target, event, DispatchOrigin::UserAgent))?;
+    let dispatch = host.with_dom(|dom| dom.begin_event_dispatch(target, event, DispatchOrigin::UserAgent))?;
+    dispatch_started_event(host, event, dispatch)
+}
+/// Fire genuine HTML Window load once, with its associated Document target.
+/// A Document with no browsing context aborts the HTML load firing step.
+pub fn dispatch_document_load_event<H: BindingHost>(host: &mut H,
+    document: amazing_dom::NodeIdx) -> Result<(), H::Error> {
+    let started = host.with_dom(|dom| {
+        let generation = dom.node_generation(document).ok_or(DomError::InvalidStateError)?;
+        if !matches!(dom.get(document).kind, NodeKind::Document) { return Err(DomError::TypeError); }
+        if dom.document_window_event_target(document).is_none() { return Ok(None); }
+        let event = dom.events_mut().create_event(Event::new("load", EventInit::default(), Duration::ZERO));
+        dom.begin_document_load_dispatch(document, generation, event).map(|dispatch| Some((event, dispatch)))
+    })?;
+    if let Some((event, dispatch)) = started { dispatch_started_event(host, event, dispatch)?; }
+    Ok(())
+}
+fn dispatch_started_event<H: BindingHost>(host: &mut H, event: EventId,
+    mut dispatch: amazing_dom::events::Dispatch) -> Result<bool, H::Error> {
     loop {
         let invocation = host.with_dom(|dom| Ok(dom.events_mut().next_listener(&mut dispatch)))?;
         let Some(invocation) = invocation else { break };

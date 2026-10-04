@@ -520,7 +520,9 @@ fn iframe_loads_xml_document_before_its_element_load_event() {
     scheduler.set_location_url("https://example.test/main.html");
     assert_eq!(scheduler.run_script(
         "var frame = document.querySelector('iframe'); var order = []; \
-         frame.contentDocument.addEventListener('load', () => order.push('child')); \
+         frame.contentDocument.addEventListener('load', () => order.push('wrongDocument')); \
+         frame.contentWindow.addEventListener('load', function(e) { \
+             order.push(this===frame.contentWindow && e.target===frame.contentDocument && !e.bubbles ? 'child' : 'wrongWindow'); }); \
          frame.addEventListener('load', () => order.push('frame')); \
          frame.contentDocument.contentType + '|' + \
          frame.contentDocument.documentElement.textContent"

@@ -9,9 +9,14 @@ use super::*;
 mod document_write;
 #[path = "runtime_host_html/document_dsd.rs"]
 mod document_dsd;
+#[path = "runtime_host_html/window_event_targets.rs"]
+mod window_event_targets;
 #[path = "runtime_host_html/resource_response.rs"]
 mod resource_response;
 pub(crate) use resource_response::{HtmlFrameResourceKind, HtmlFrameResourceLoader, HtmlFrameResourceRequest};
+#[path = "runtime_host_html/load_dependencies.rs"]
+mod load_dependencies;
+pub(crate) use load_dependencies::PendingFrameLoad;
 use crate::dom_host::BrowserDomHost;
 use amazing_dom::document_surface::ReadyState;
 use amazing_net::url::ParsedUrl;
@@ -41,6 +46,8 @@ struct FrameDocument {
     document: Option<NodeIdx>,
     url: String,
     sandbox: SandboxFlags,
+    /// Captured for this attribute navigation, never recomputed at dispatch.
+    current_navigation_was_lazy_loaded: bool,
     /// HTML-34: the decoded HTML source still waiting to be parsed, for an
     /// HTML (never XML/XHTML) child document -- `navigate_iframes` only
     /// creates an *empty* document node and stashes this; `setup_iframe_
@@ -129,13 +136,7 @@ pub(super) struct FrameRuntime {
     pending_navigations: HashMap<RealmHandle, HtmlNavigation>,
     parser_imports: HashMap<NodeIdx, IncrementalImportRef>,
     document_write_sessions: HashMap<NodeIdx, document_write::DocumentWriteSession>,
-    /// `(frame, document, fire_load_events)`. `fire_load_events` is false
-    /// only for an iframe with neither `src` nor `srcdoc`: its initial
-    /// `about:blank` is created for `contentDocument`/`contentWindow` to see,
-    /// but per spec no `load` event is queued for it (WPT's
-    /// `iframe-nosrc.html` treats any iframe-level `load` before the page's
-    /// own as a failure).
-    pending_loads: VecDeque<(NodeIdx, Option<NodeIdx>, bool)>,
+    pending_loads: VecDeque<PendingFrameLoad>,
     resolver: Option<FrameResourceResolver>,
     resource_loader: Option<HtmlFrameResourceLoader>,
     document_referrer_policies: HashMap<NodeIdx, (u64, amazing_fetch::ReferrerPolicy)>,
@@ -145,6 +146,8 @@ pub(super) struct FrameRuntime {
     /// connected iframe. The proxy identity survives re-navigation; only the
     /// realm it targets changes, via binding_retarget_window_proxy.
     windows: HashMap<NodeIdx, (RealmHandle, JsValue)>,
+    // Retained after removal: each stable proxy has one latest actual target.
+    proxy_targets: Vec<(JsValue, RealmHandle)>,
     /// Counter minting a fresh opaque-origin string on each navigation of a
     /// sandboxed iframe without `allow-same-origin`, so two such frames (or
     /// the same frame across re-navigations) are never mistaken for the same
@@ -163,6 +166,7 @@ pub(super) struct FrameRuntime {
 // is stable across navigation; stale globals retain their own document identity.
 #[derive(Clone)]
 struct WindowContext {
+    event_target_slot: u64,
     document: NodeIdx,
     document_generation: u64,
     frame: Option<NodeIdx>,
@@ -597,10 +601,6 @@ impl RuntimeBindings {
         self.state.borrow_mut().frames.navigation_hook = Some(hook);
     }
 
-    pub(crate) fn take_iframe_loads(&self) -> Vec<(NodeIdx, Option<NodeIdx>, bool)> {
-        self.state.borrow_mut().frames.pending_loads.drain(..).collect()
-    }
-
     /// HTML-29: opens `document`'s `document.write` parser-active window.
     /// Callers running a document's own top-level classic scripts (the WPT
     /// harness's and the real-page `execute_page_scripts_lenient`/
@@ -697,10 +697,11 @@ impl RuntimeBindings {
             HttpUrl::parse(child_url).map(|url| url.origin().clone()).unwrap_or_else(|_| amazing_fetch::Origin::opaque())
         };
         let existing = self.state.borrow().frames.windows.get(&frame).cloned();
-        let realm = if let Some((_, proxy)) = existing {
+        let realm = if let Some((old_realm, proxy)) = existing {
             let bare = js.binding_create_object(None)?;
             let realm = js.binding_create_realm(bare)?;
             js.binding_retarget_window_proxy(&proxy, realm)?;
+            self.retire_window_event_association(old_realm);
             self.state.borrow_mut().frames.windows.insert(frame, (realm, proxy));
             realm
         } else {
@@ -720,8 +721,17 @@ impl RuntimeBindings {
             .unwrap_or_else(|| (proxy.clone(), proxy.clone()));
         let document_generation = self.state.borrow().host.borrow().dom.node_generation(document)
             .ok_or_else(|| Throw::type_error("Missing frame document"))?;
+        let event_target_slot = {
+            let host = self.state.borrow().host.clone();
+            let mut host = host.borrow_mut();
+            let slot = host.dom.create_window_event_target();
+            host.dom.associate_document_window_event_target(document, document_generation, slot)
+                .map_err(|error| Throw::type_error(&format!("Window association: {error:?}")))?;
+            slot
+        };
+        self.state.borrow_mut().frames.record_proxy_target(&proxy, realm);
         self.state.borrow_mut().frames.contexts.insert(realm, WindowContext {
-            document, document_generation, frame: Some(frame), global, window: proxy, parent, top, origin, fetch_origin, document_url: child_url.to_owned(),
+            event_target_slot, document, document_generation, frame: Some(frame), global, window: proxy, parent, top, origin, fetch_origin, document_url: child_url.to_owned(),
             installed: false, indices: 0,
         });
         let state = self.state.clone();
@@ -866,6 +876,7 @@ impl RuntimeBindings {
             state.frames.documents.retain(|node, _| connected.contains(node));
             state.frames.windows.retain(|node, _| connected.contains(node));
         }
+        self.retire_disconnected_window_event_associations();
         for (node, src, srcdoc, sandbox) in candidates {
             let owner = host.borrow().dom.owner_document(node).unwrap_or(NodeIdx(0));
             // A parent's navigation can retire a document after this sweep
@@ -874,6 +885,8 @@ impl RuntimeBindings {
                 let mut state = self.state.borrow_mut();
                 state.frames.documents.remove(&node);
                 state.frames.windows.remove(&node);
+                drop(state);
+                self.retire_disconnected_window_event_associations();
                 continue;
             }
             let owner_context = self.state.borrow().frames.contexts.iter()
@@ -941,6 +954,17 @@ impl RuntimeBindings {
                 sandbox_flags: sandbox.to_bits(), frame_csp: Default::default(),
                 referrer: source.document_url.clone(), referrer_policy: resource_response::referrer_policy_name(request_referrer_policy).into(),
                 now_unix: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64 };
+            // Snapshot attribute-navigation policy BEFORE any resource callback.
+            // The owner Document controls lazy loading, not child sandbox flags.
+            // Initial about:blank and Location navigation bypass lazy steps.
+            let initial_blank = old_realm.is_none() && srcdoc.is_none()
+                && src.as_deref().filter(|value| !value.is_empty()).is_none_or(|input|
+                    ParsedUrl::parse(&source.base_url).and_then(|base| base.resolve(input))
+                        .is_ok_and(|url| matches_about_url(&url, "blank")));
+            let current_navigation_was_lazy_loaded = pending.is_none() && !initial_blank
+                && host.borrow().dom.document_scripting_enabled(owner).unwrap_or(false)
+                && host.borrow().dom.get_attribute_ns(node, None, "loading")
+                    .is_some_and(|value| value.eq_ignore_ascii_case("lazy"));
             let mut response_policy = None;
             let mut response_referrer_policy = None;
             let loaded = (|| -> Result<LoadedChildDocument, String> {
@@ -1083,8 +1107,8 @@ impl RuntimeBindings {
             let mut state = self.state.borrow_mut();
             let navigation = ChildNavigation { frame: node, requested_src: src.clone(),
                 committed_url: url.clone(), document };
-            state.frames.documents.insert(node, FrameDocument { src, srcdoc, document, url, sandbox, html, source: Some(source) });
-            state.frames.pending_loads.push_back((node, document, fire_load_events));
+            state.frames.documents.insert(node, FrameDocument { src, srcdoc, document, url, sandbox, current_navigation_was_lazy_loaded, html, source: Some(source) });
+            state.frames.enqueue_frame_load(&host.borrow().dom, node, document, fire_load_events, current_navigation_was_lazy_loaded);
             let hook = state.frames.navigation_hook.clone();
             drop(state);
             if let Some(hook) = hook { hook(navigation); }
@@ -1093,7 +1117,7 @@ impl RuntimeBindings {
             let mut state = self.state.borrow_mut();
             let live: HashMap<_, _> = state.frames.documents.iter()
                 .map(|(frame, entry)| (*frame, entry.document)).collect();
-            state.frames.pending_loads.retain(|(frame, document, _)| live.get(frame) == Some(document));
+            state.frames.pending_loads.retain(|load| live.get(&load.frame) == Some(&load.document));
         }
         let _ = self.refresh_window_indices(js);
     }
@@ -1234,6 +1258,20 @@ impl RuntimeBindings {
                 })
             })()
         };
+        let result = result.and_then(|()| {
+            if sandbox.sandboxed && !sandbox.allow_scripts { return Ok(()); }
+            let handlers = {
+                let state = state.borrow();
+                let host = state.host.borrow();
+                let mut handlers = Vec::new();
+                crate::cmd::js::collect_inline_handlers(&host.dom, document, &mut handlers);
+                handlers
+            };
+            for (node, event, body) in handlers {
+                self.install_canonical_inline_handler(js, node, &event, &body)?;
+            }
+            Ok(())
+        });
         state.borrow_mut().document_url = previous_document_url;
         result
     }
@@ -1673,7 +1711,10 @@ impl RuntimeBindingHost<'_> {
         let document = navigation.document;
         let mut state = self.state.borrow_mut();
         state.frames.pending_navigations.insert(target, navigation);
-        if let Some(frame) = frame { state.frames.pending_loads.push_back((frame, Some(document), false)); }
+        if let Some(frame) = frame {
+            let host = state.host.clone();
+            state.frames.enqueue_frame_load(&host.borrow().dom, frame, Some(document), false, false);
+        }
         drop(state);
         self.js.binding_location_navigate(url, replace);
         Ok(())
@@ -1695,7 +1736,10 @@ impl RuntimeBindingHost<'_> {
         let document = navigation.document;
         let mut state = self.state.borrow_mut();
         state.frames.pending_navigations.insert(target, navigation);
-        if let Some(frame) = frame { state.frames.pending_loads.push_back((frame, Some(document), false)); }
+        if let Some(frame) = frame {
+            let host = state.host.clone();
+            state.frames.enqueue_frame_load(&host.borrow().dom, frame, Some(document), false, false);
+        }
         drop(state);
         if frame.is_some() { self.js.binding_location_navigate(&url, false); }
         self.js.binding_location_reload();
@@ -1836,8 +1880,12 @@ impl RuntimeBindingHost<'_> {
             self.state.borrow().host.borrow_mut().dom.set_document_allows_declarative_shadow_roots(NodeIdx(0), true)
                 .map_err(|error| Throw::type_error(format!("Root document shadow policy: {error:?}")))?;
 
+            let event_target_slot = self.state.borrow().window_event_target_slot;
+            self.state.borrow().host.borrow_mut().dom.associate_document_window_event_target(NodeIdx(0), document_generation, event_target_slot)
+                .map_err(|error| Throw::type_error(&format!("Root Window association: {error:?}")))?;
+            self.state.borrow_mut().frames.record_proxy_target(&window, realm);
             self.state.borrow_mut().frames.contexts.insert(realm, WindowContext {
-                document: NodeIdx(0), document_generation, frame: None, global, parent: window.clone(), top: window.clone(), window,
+                event_target_slot, document: NodeIdx(0), document_generation, frame: None, global, parent: window.clone(), top: window.clone(), window,
                 origin: ParsedUrl::parse(&document_url).map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into()), fetch_origin, document_url, installed: false, indices: 0,
             });
         }

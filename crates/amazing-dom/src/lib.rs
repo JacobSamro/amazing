@@ -14,6 +14,7 @@
 #![forbid(unsafe_code)]
 
 pub mod events;
+mod window_event_targets;
 pub mod focus;
 pub mod attr;
 pub mod dataset;
@@ -152,7 +153,7 @@ pub struct Dom {
     focused_elements: Vec<(NodeIdx, NodeIdx, bool)>,
     events: events::EventTargets,
     external_event_targets: u64,
-    window_event_target: Option<u64>,
+    window_event_targets: window_event_targets::WindowEventTargets,
     mutation_records: Vec<mutation::RegisteredRecord>,
     static_node_lists: Vec<Vec<NodeIdx>>,
     collections: Vec<collection::LiveCollection>,
@@ -224,12 +225,7 @@ impl Dom {
         slot
     }
     pub fn has_event_target(&self, slot: u64) -> bool { slot < self.external_event_targets }
-    pub fn set_window_event_target(&mut self, slot: u64) -> Result<(), DomError> {
-        if !self.has_event_target(slot) { return Err(DomError::InvalidStateError); }
-        self.window_event_target = Some(slot);
-        Ok(())
-    }
-    pub fn window_event_target(&self) -> Option<u64> { self.window_event_target }
+
 
     pub fn new() -> Self {
         let mut dom = Self {
@@ -242,7 +238,7 @@ impl Dom {
             focused_elements: Vec::new(),
             events: events::EventTargets::default(),
             external_event_targets: 0,
-            window_event_target: None,
+            window_event_targets: window_event_targets::WindowEventTargets::default(),
             mutation_records: Vec::new(),
             static_node_lists: Vec::new(),
             collections: Vec::new(),

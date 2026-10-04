@@ -9,7 +9,7 @@ impl RuntimeBindings {
     pub(crate) fn install_canonical_inline_handler(&self, js: &mut Interpreter,
         node: u32, event: &str, body: &str) -> Result<(), Throw> {
         let node = NodeIdx(node);
-        let (generation, document, realm, context) = {
+        let (generation, document, realm, context, target) = {
             let state = self.state.borrow();
             let host = state.host.borrow();
             let generation = host.dom.node_generation(node)
@@ -21,7 +21,9 @@ impl RuntimeBindings {
             let realm = state.frames.document_realm(&host.dom, document)
                 .ok_or_else(|| Throw::type_error("Inline handler Document has no realm"))?;
             if !host.dom.document_scripting_enabled(document).unwrap_or(false) { return Ok(()); }
-            (generation, document, realm, context)
+            let Some(target) = host.dom.event_handler_target(node, event)
+                .map_err(|_| Throw::type_error("Invalid inline handler target"))? else { return Ok(()); };
+            (generation, document, realm, context, target)
         };
         let source = format!("(function(event){{{body}}})");
         let callback = js.binding_with_realm(realm, |js|
@@ -36,14 +38,15 @@ impl RuntimeBindings {
             let host = state.host.borrow();
             if host.dom.node_generation(node) != Some(generation)
                 || host.dom.owner_document(node) != Some(document)
-                || state.frames.document_realm(&host.dom, document) != Some(realm) {
+                || state.frames.document_realm(&host.dom, document) != Some(realm)
+                || host.dom.event_handler_target(node, event).ok().flatten() != Some(target) {
                 return Err(Throw::type_error("Inline handler owner changed during compilation"));
             }
         }
         let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
         let root = adapter.retain_value(callback);
         let old = self.state.borrow_mut().host.borrow_mut().dom.events_mut()
-            .set_event_handler(amazing_dom::events::EventTarget::Node(node), event, Some(root));
+            .set_event_handler(target, event, Some(root));
         if let Some(old) = old { adapter.release_value(old); }
         Ok(())
     }

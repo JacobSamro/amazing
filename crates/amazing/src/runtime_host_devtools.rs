@@ -1367,14 +1367,11 @@ impl PageOwner {
         if let Err(thrown) = self.scheduler.dispatch_dom_event(0, "DOMContentLoaded") {
             self.record_load_error(format!("DOMContentLoaded listener: {}", thrown.describe()));
         }
-        if let Err(thrown) = self.scheduler.dispatch_dom_event(0, "load") {
-            self.record_load_error(format!("load listener: {}", thrown.describe()));
+        if let Err(thrown) = self.scheduler.dispatch_load_blocking_iframe_loads(amazing_dom::NodeIdx(0)) {
+            self.record_load_error(format!("child load listener: {}", thrown.describe()));
         }
-        let body = self.dom_host.borrow_mut().query_selector("body");
-        if let Some(body) = body
-            && let Err(thrown) = self.scheduler.dispatch_dom_event(body, "load")
-        {
-            self.record_load_error(format!("body load listener: {}", thrown.describe()));
+        if let Err(thrown) = self.scheduler.dispatch_document_load(amazing_dom::NodeIdx(0)) {
+            self.record_load_error(format!("load listener: {}", thrown.describe()));
         }
         for _ in 0..16 {
             match self.scheduler.pump_at(std::time::Duration::from_millis(16), true) {

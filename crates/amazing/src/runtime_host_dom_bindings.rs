@@ -296,15 +296,17 @@ impl RuntimeBindingHost<'_> {
     }
 
     pub(super) fn dom_window_event_target_slot(&self, value: &JsValue) -> Option<u64> {
-        if self.is_nullish(value) || self.same_value(value, &self.js.binding_global_this())
-            || self.same_value(value, &self.js.binding_global_object()) {
-            Some(self.state.borrow().window_event_target_slot)
-        } else { None }
+        // WebIDL substitutes the actual callee global for a nullish receiver.
+        // HTML resolves genuine globals and retargetable proxies independently.
+        if self.is_nullish(value) {
+            self.html_window_event_target_slot(&self.js.binding_global_this())
+        } else {
+            self.html_window_event_target_slot(value)
+        }
     }
 
     pub(super) fn dom_window_event_target_value(&self, slot: u64) -> Option<JsValue> {
-        (self.state.borrow().window_event_target_slot == slot)
-            .then(|| self.js.binding_global_this())
+        self.html_window_event_target_value(slot)
     }
     pub(super) fn dom_event_interface(&self, key: PlatformKey) -> Result<Interface, Throw> {
         let host = self.state.borrow().host.clone();

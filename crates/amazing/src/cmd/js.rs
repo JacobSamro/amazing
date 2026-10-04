@@ -380,14 +380,11 @@ pub(crate) fn execute_page_scripts_lenient(
     if let Err(error) = scheduler.dispatch_dom_event(0, "DOMContentLoaded") {
         errors.push(format!("DOMContentLoaded listener: {}", error.describe()));
     }
-    if let Err(error) = scheduler.dispatch_dom_event(0, "load") {
-        errors.push(format!("load listener: {}", error.describe()));
+    if let Err(error) = scheduler.dispatch_load_blocking_iframe_loads(amazing_dom::NodeIdx(0)) {
+        errors.push(format!("child load listener: {}", error.describe()));
     }
-    let body = host.borrow_mut().query_selector("body");
-    if let Some(body) = body
-        && let Err(error) = scheduler.dispatch_dom_event(body, "load")
-    {
-        errors.push(format!("body load listener: {}", error.describe()));
+    if let Err(error) = scheduler.dispatch_document_load(amazing_dom::NodeIdx(0)) {
+        errors.push(format!("load listener: {}", error.describe()));
     }
     // Keep the page's timers/rAF bounded and deterministic for headless runs.
     for _ in 0..16 {
@@ -484,13 +481,10 @@ pub(crate) fn prepare_page_scripts(
     }
     scheduler.dispatch_dom_event(0, "DOMContentLoaded")
         .map_err(|error| format!("DOMContentLoaded listener failed: {}", error.describe()))?;
-    scheduler.dispatch_dom_event(0, "load")
+    scheduler.dispatch_load_blocking_iframe_loads(amazing_dom::NodeIdx(0))
+        .map_err(|error| format!("child load listener failed: {}", error.describe()))?;
+    scheduler.dispatch_document_load(amazing_dom::NodeIdx(0))
         .map_err(|error| format!("load listener failed: {}", error.describe()))?;
-    let body = host.borrow_mut().query_selector("body");
-    if let Some(body) = body {
-        scheduler.dispatch_dom_event(body, "load")
-            .map_err(|error| format!("body load listener failed: {}", error.describe()))?;
-    }
     Ok(Some(scheduler))
 }
 
