@@ -1,0 +1,277 @@
+{
+  "schema": 1,
+  "raw_comparison": {
+    "before_files": 277,
+    "after_files": 277,
+    "before_passing_assertions": 4758,
+    "after_passing_assertions": 4725,
+    "lost_assertions": 33,
+    "raw_gained_assertions": 0,
+    "completed_page_gains": 0,
+    "uncredited_partial_gains": 0,
+    "lost_passing_files": [],
+    "lost_details": [
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <meta><span>light</span> with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "ShadowRoot.getHTML() on <meta> with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "ShadowRoot.getHTML() on <meta><span>light</span> with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <meter> with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <meter><span>light</span> with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "ShadowRoot.getHTML() on <meter> with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "ShadowRoot.getHTML() on <meter><span>light</span> with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=false, serializable=undefined, clonable=false, with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=false, serializable=undefined, clonable=false, without shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=false, serializable=false, clonable=false, with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=false, serializable=false, clonable=false, without shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=false, serializable=true, clonable=false, with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=false, serializable=true, clonable=false, without shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=false, serializable=undefined, clonable=true, with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=false, serializable=undefined, clonable=true, without shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=false, serializable=false, clonable=true, with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=false, serializable=false, clonable=true, without shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=false, serializable=true, clonable=true, with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=false, serializable=true, clonable=true, without shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=true, serializable=undefined, clonable=false, with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=true, serializable=undefined, clonable=false, without shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=true, serializable=false, clonable=false, with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=true, serializable=false, clonable=false, without shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=true, serializable=true, clonable=false, with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=true, serializable=true, clonable=false, without shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=true, serializable=undefined, clonable=true, with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=true, serializable=undefined, clonable=true, without shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=true, serializable=false, clonable=true, with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=true, serializable=false, clonable=true, without shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=true, serializable=true, clonable=true, with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with imperative shadow, mode=open, delegatesFocus=true, serializable=true, clonable=true, without shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with declarative shadow, mode=open, delegatesFocus=false, serializable=undefined, clonable=false, with shadow tree contents."
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/declarative/gethtml.html",
+          "Element.getHTML() on <nav>, with declarative shadow, mode=open, delegatesFocus=false, serializable=undefined, clonable=false, without shadow tree contents."
+        ],
+        1
+      ]
+    ],
+    "raw_before_sha256": "84d83ff2eff3cc2bac7461fa875d1e7d0e23a98abd2c473153a3a799fe7c0908",
+    "raw_after_sha256": "7d852ea4baf71b0bad8ee28e89a676cade37bad0aeba8fd05614ff98e3cfcf9b",
+    "same_selection": true
+  },
+  "classification": "Unfinished getHTML timing/progress loss. Preserved unchanged; one root-authorized matched whole277 rerun retained every name/file.",
+  "historical_shadow_guard": {
+    "accepted_count": 3941,
+    "lost_assertions": 2,
+    "lost_hashes": [
+      [
+        [
+          "shadow-dom/declarative/declarative-shadow-dom-opt-in.html",
+          "f00879e65b06de297312baf8b8f2f9e874093f97c51446053b496c92b3b55625"
+        ],
+        1
+      ],
+      [
+        [
+          "shadow-dom/untriaged/events/event-dispatch/test-003.html",
+          "8992458a935df0665df32fac41638735b8af33a8a546a3b10eff15311f6f14bd"
+        ],
+        1
+      ]
+    ],
+    "lost_passing_files": [
+      "shadow-dom/untriaged/events/event-dispatch/test-003.html"
+    ],
+    "baseline_raw_sha256": "7f8fd35c80cded01fa1a1517376dbbdb8abd0563cc1781100457563f038000b2",
+    "baseline_compact_sha256": "36970a64c2e711cb5c793d31b1ec4458f26e7f5b3aa931f329f97697f2542900"
+  },
+  "historical_scope_note": "Two earlier accepted names were absent on the current recorded source; fresh base-to-candidate comparison has no loss. No historical all-source zero-loss claim."
+}

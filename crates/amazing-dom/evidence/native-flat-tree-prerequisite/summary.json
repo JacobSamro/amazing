@@ -1,0 +1,136 @@
+{
+  "state": "READY",
+  "base": "2f80eb4d224c2a2d5236987df104154e73b83730",
+  "original_qualified_source": "0ef97ec6abf6f24df814b92826fa157cbcca4ecc",
+  "api": "Dom::flat_tree_parent(NodeIdx) -> Result<Option<NodeIdx>, DomError>",
+  "historical_proof": {
+    "native": {
+      "after": 4058,
+      "before": 4054,
+      "doctests_after": 4,
+      "doctests_before": 4,
+      "new_native_groups": 4,
+      "skipped": 17
+    },
+    "prior_window": {
+      "accepted_passes": 92797,
+      "gained_names": 0,
+      "lost_names": 0,
+      "lost_pass_files": 0,
+      "pages": 888
+    },
+    "shadow": {
+      "after_fail": 2352,
+      "after_pass": 3941,
+      "before_fail": 2343,
+      "before_pass": 3929,
+      "credited_wpt_gains": 0,
+      "lost_names": 0,
+      "lost_pass_files": 0,
+      "pages": 277,
+      "uncredited_partial_timeout_names": 12
+    },
+    "syntax72": {
+      "error": 1,
+      "fail": 5,
+      "gained_names": 0,
+      "lost_names": 0,
+      "pass": 2703,
+      "raw_sha256": "222c31bfc4a141ca2257ad1b5455f655e850940c16532578d0b5c79bdf3ae337"
+    },
+    "wpt_pin": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "raw_archive_sha256": "11d9b7b29899e58e8d9efb5d2983f41006589c66ce147e9e1385eb23bf14c7f1",
+    "shadow_raw_sha256": "c922b8855a53d6d9c43401737d2acb136cdbf83da037fdeb9ebf8dbe6430919b"
+  },
+  "limits": [
+    "Historical measured numbers apply only to old fixed source, not new base.",
+    "Fresh workspace/doctests/16-shardTest262/ownWPT gate required for current ready declaration.",
+    "Unfinished getHTML partial progress is uncredited; activity/connectivity are separate driver checks.",
+    "Caller validates saved native generation."
+  ],
+  "no_raw_logs_committed": true,
+  "fresh_gate": {
+    "tested_commit": "b45fb17744e8bf5f9756e287a2c2a4d8bc7a4ba8",
+    "base": "2f80eb4d224c2a2d5236987df104154e73b83730",
+    "workspace_before": 4325,
+    "workspace_after": 4329,
+    "skipped_each": 17,
+    "doctests_each": 4,
+    "suites": {
+      "core888": {
+        "before_files": 888,
+        "after_files": 888,
+        "before_passing_assertions": 92820,
+        "after_passing_assertions": 92820,
+        "lost_assertions": 0,
+        "raw_gained_assertions": 0,
+        "completed_page_gains": 0,
+        "uncredited_partial_gains": 0,
+        "lost_passing_files": [],
+        "lost_details": [],
+        "raw_before_sha256": "72091b51068f635cedba8ef176363c8ea0bc9226b9a65b0e1467ca8779acd53e",
+        "raw_after_sha256": "47a1343fe11854875c05e46ae78c8f59c7bcecd74629ea3e557ea1f2cd94be55",
+        "same_selection": true
+      },
+      "shadow277": {
+        "before_files": 277,
+        "after_files": 277,
+        "before_passing_assertions": 5676,
+        "after_passing_assertions": 5676,
+        "lost_assertions": 0,
+        "raw_gained_assertions": 0,
+        "completed_page_gains": 0,
+        "uncredited_partial_gains": 0,
+        "lost_passing_files": [],
+        "lost_details": [],
+        "raw_before_sha256": "b6173e25e1d00e362030bb2613af9f49e3f0f5a06c533c62f753792e2112ece8",
+        "raw_after_sha256": "764b9c859541fcc5b946b10432f15a8caccacb1c38f9f961993420b2da477212",
+        "same_selection": true
+      },
+      "syntax72": {
+        "before_files": 72,
+        "after_files": 72,
+        "before_passing_assertions": 2706,
+        "after_passing_assertions": 2706,
+        "lost_assertions": 0,
+        "raw_gained_assertions": 0,
+        "completed_page_gains": 0,
+        "uncredited_partial_gains": 0,
+        "lost_passing_files": [],
+        "lost_details": [],
+        "raw_before_sha256": "e1c419354db9510949f2c51d5d60962d3f34069d0abeab965744a67074088ff2",
+        "raw_after_sha256": "e1c419354db9510949f2c51d5d60962d3f34069d0abeab965744a67074088ff2",
+        "same_selection": true
+      }
+    },
+    "native_before_sha256": "b3feb59b79cb1d848d018cc3ef0bc105f30d963f2ec7acd696318ea848866070",
+    "native_after_sha256": "537bedadd8f65cd2015c90dc0eb52b3d529f09cefbdfe933901afb9eeb87cac3",
+    "docs_before_sha256": "6ee6dc312f8f86eb89363155d5a40e813cb38225da8c2047dc740958ac774b76",
+    "docs_after_sha256": "202bf96678d3990bb9395ca5d485816cf08c7de0eaf4bbde5eb83a936b848b86",
+    "binary_before_sha256": "fe54b063ad90c0f666f1afbd2bcf912bc0abda3a239cfc79547aab55db65f113",
+    "binary_after_sha256": "9cd3a943e5af161193492298f9c6005d829fef86fc9bf70a42eebe339ba6190c",
+    "zero_lost_names_multiplicities_and_passing_files": true,
+    "raw_home": "~/amazing/out/dom-bindings/native-flat-tree-{before,after}",
+    "sandbox": "bx_na7t27mn",
+    "observed_wrapper_shape": "large (requested default; root notified)",
+    "timeouts_ms": {
+      "core_ordinary": 25000,
+      "core_heavy": 150000,
+      "shadow_ordinary": 25000,
+      "shadow_actual_meta_long_clean": 600000,
+      "shadow_heavy": 150000
+    },
+    "actual_exits": {
+      "before_bulk": 0,
+      "after_engine_and_corpus": 0,
+      "before_clean_shadow": 0,
+      "after_clean_shadow": 0,
+      "corrected_comparison": 0
+    },
+    "reader_diagnostic": "Outer after wrappers returned 1 only because summary reader compared suffix jsonl without leading dot; engine/corpus commands completed. Corrected against existing raw without engine rerun."
+  },
+  "engine_files_sha256": {
+    "crates/amazing-dom/src/flat_tree.rs": "86b2a03b0f78dce3822363caa324084cae590a7ac500ffac8f5fc007bad99261",
+    "crates/amazing-dom/src/flat_tree_tests.rs": "d7be796fcecd600f4c0148c0ac3aa0a5cc7a00cf7b604a5f832f4d797646e488"
+  }
+}

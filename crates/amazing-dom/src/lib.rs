@@ -31,6 +31,7 @@ pub mod xml_serializer;
 pub mod event_loop;
 pub mod mutation;
 pub mod shadow;
+mod flat_tree;
 pub mod custom_elements;
 pub mod forms;
 mod template;
