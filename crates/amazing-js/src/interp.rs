@@ -1831,3 +1831,4 @@ include!("runtime_native_task_tests.rs");
 #[cfg(test)]
 #[path = "interp_for_in_head_tests.rs"]
 mod for_in_head_tests;
+include!("function_bind_tests.rs");

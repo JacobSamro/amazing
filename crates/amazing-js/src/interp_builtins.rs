@@ -1002,48 +1002,7 @@ fn native_function_apply(
     i.call_value(&this, receiver, arguments)
 }
 
-fn native_function_bind(
-    i: &mut Interpreter,
-    this: JsValue,
-    args: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    if callable_function(&this).is_none() {
-        return Err(Throw::type_error(
-            "Function.prototype.bind receiver is not callable",
-        ));
-    }
-    let bound_count = args.len().saturating_sub(1);
-    let target_has_length = matches!(&this, JsValue::Object(object) if object.borrow().own_prop("length").is_some());
-    let target_length = if target_has_length { i.get_prop(&this, "length")? } else { JsValue::Undefined };
-    let target_length = match target_length {
-        JsValue::Num(number) if number.is_finite() => number.trunc().max(0.0),
-        JsValue::Num(number) if number.is_infinite() && number.is_sign_positive() => f64::INFINITY,
-        _ => 0.0,
-    };
-    let target_name = i.get_prop(&this, "name")?;
-    let target_name = match target_name { JsValue::Str(name) => name.to_utf8_lossy(), _ => String::new() };
-    let target_constructible = matches!(&this, JsValue::Object(object) if object.borrow().constructible);
-    let data = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
-    data.borrow_mut().set_own("target", this.clone());
-    data.borrow_mut()
-        .set_own("this", args.first().cloned().unwrap_or(JsValue::Undefined));
-    data.borrow_mut()
-        .set_own("args", array_values(i, args.into_iter().skip(1).collect())?);
-    let bound = Interpreter::native("bound", native_bound, &i.function_proto);
-    if let JsValue::Object(function) = &bound {
-        let mut function = function.borrow_mut();
-        if let JsValue::Object(target) = &this {
-            function.proto = target.borrow().proto.clone();
-            function.realm = target.borrow().realm;
-        }
-        function.func.as_mut().unwrap().home = Some(data);
-        function.constructible = target_constructible;
-        function.delete_own("prototype");
-        function.define("name", Property { accessor: false, value: JsValue::str(format!("bound {target_name}")), writable: false, enumerable: false, configurable: true, getter: None, setter: None }).unwrap();
-        function.define("length", Property { accessor: false, value: JsValue::num((target_length - bound_count as f64).max(0.0)), writable: false, enumerable: false, configurable: true, getter: None, setter: None }).unwrap();
-    }
-    Ok(bound)
-}
+include!("interp_function_bind.rs");
 
 fn native_bound(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let function = i.native_stack.last().cloned().map(JsValue::Object)
