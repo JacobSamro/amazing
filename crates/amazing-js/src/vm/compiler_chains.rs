@@ -3,12 +3,13 @@
 // @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Portions ported from boa-dev/boa (core/engine/src/bytecompiler/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: optional-chain reference
-// preservation, link short-circuiting and final-link deletion.
+// preservation, link short-circuiting, final-link deletion and whole call
+// lowering (::call): grouped receivers and contextual eval after arguments.
 use super::*;
 
 enum Link<'a> {
     Member(&'a ast::MemberProp, bool),
-    Call(&'a [Expr], bool),
+    Call(&'a [Expr], bool, bool),
 }
 
 pub(super) fn is_chain_expression(expression: &Expr) -> bool {
@@ -66,12 +67,12 @@ impl Compiler {
                     links.push(Link::Member(prop, *optional));
                     base = obj;
                 }
-                // Direct eval and super calls keep their existing contextual
-                // lowering. Optional eval calls are ordinary indirect calls.
+                // Super construction retains its own lowering. A direct eval
+                // candidate retains its captured value until arguments finish.
                 ExprKind::Call { callee, args, optional }
-                    if *optional || (!matches!(&callee.kind, ExprKind::Super)
-                        && !matches!(&callee.kind, ExprKind::Ident(name) if name.name == "eval")) => {
-                    links.push(Link::Call(args, *optional));
+                    if *optional || !matches!(&callee.kind, ExprKind::Super) => {
+                    let direct = !*optional && super::super::super::event_handler::identifier_name(callee) == Some("eval");
+                    links.push(Link::Call(args, *optional, direct));
                     base = callee;
                 }
                 _ => break,
@@ -104,7 +105,7 @@ impl Compiler {
         let mut jumps = Vec::new();
         let mut deleted = false;
         for (index, link) in links.iter().enumerate() {
-            let optional = match link { Link::Member(_, optional) | Link::Call(_, optional) => *optional };
+            let optional = match link { Link::Member(_, optional) | Link::Call(_, optional, _) => *optional };
             if optional { jumps.push(self.emit(Instruction::Branch(value, Condition::Nullish, 0))); }
             match link {
                 Link::Member(prop, _) => {
@@ -146,9 +147,10 @@ impl Compiler {
                         self.emit(Instruction::GetMemberReceiver(value, object, key, receiver));
                     }
                 }
-                Link::Call(args, _) => {
+                Link::Call(args, _, direct) => {
                     let arguments = self.call_arguments(args)?;
-                    self.emit(Instruction::Call(value, value, receiver, arguments));
+                    self.emit(if *direct { Instruction::CallEval(value, value, receiver, arguments) }
+                        else { Instruction::Call(value, value, receiver, arguments) });
                     self.emit(Instruction::Move(receiver, 0));
                 }
             }

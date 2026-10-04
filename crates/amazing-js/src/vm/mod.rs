@@ -29,6 +29,8 @@ mod tests_classes;
 #[cfg(test)]
 mod tests_sync_realms;
 #[cfg(test)]
+mod tests_calls;
+#[cfg(test)]
 mod tests_chains;
 #[cfg(test)]
 mod tests_super_reads;
@@ -267,6 +269,7 @@ enum Instruction {
     ClassAppendElement(usize, usize, Option<KeyOperand>),
     ClassFinish(Register, usize),
     Call(Register, Register, Register, Vec<CallArgument>),
+    CallEval(Register, Register, Register, Vec<CallArgument>),
     Construct(Register, Register, Vec<CallArgument>),
     Throw(Register),
     RejectCallTarget,
@@ -1315,6 +1318,11 @@ impl Program {
                         let args = expand_arguments(&registers, spreads, arguments)?;
                         registers[*dst] =
                             i.call_value(&registers[*callee], registers[*this].clone(), args)?;
+                    }
+                    Instruction::CallEval(dst, callee, this, arguments) => {
+                        let args = expand_arguments(&registers, spreads, arguments)?;
+                        registers[*dst] = i.invoke_evaluated_expression_call(true,
+                            registers[*callee].clone(), registers[*this].clone(), args, &env)?;
                     }
                     Instruction::Construct(dst, callee, arguments) => {
                         let args = expand_arguments(&registers, spreads, arguments)?;

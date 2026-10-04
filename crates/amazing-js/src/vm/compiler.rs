@@ -1,3 +1,6 @@
+// Portions ported from boa-dev/boa (core/engine/src/bytecompiler/mod.rs::call)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: whole call-reference,
+// grouped receiver and contextual eval lowering onto rooted registers.
 use super::{
     CallArgument, ClassCode, ClassMethodCode, ClassSuper, CompileError, CompiledFunction, Condition, FunctionCode, HoistedFunction,
     Instruction, KeyOperand, Program, Register,
@@ -1402,7 +1405,9 @@ impl Compiler {
                 optional: false,
             } => {
                 let object = self.expression(obj)?;
-                let key = self.member_key(object, prop, false)?;
+                // GetValue rejects a nullish base before coercing a raw
+                // computed key, after that key expression has evaluated.
+                let key = self.member_key(object, prop, true)?;
                 self.emit(Instruction::GetMember(dst, object, key));
             }
             ExprKind::Paren(inner) => return self.expression(inner),
@@ -1460,54 +1465,8 @@ impl Compiler {
                 args,
                 optional: false,
             } => {
-                if matches!(&callee.kind,
-                    ExprKind::Ident(name) if name.name == "eval") {
-                    return Err(self.error(expression.span, "direct eval"));
-                }
-                let (callee, this) = match &callee.kind {
-                    ExprKind::Member {
-                        obj,
-                        prop: ast::MemberProp::Private(name),
-                        optional: false,
-                    } => {
-                        let object = self.expression(obj)?;
-                        let function = self.register(callee.span)?;
-                        self.emit(Instruction::GetPrivateField(function, object, name.name.clone()));
-                        (function, object)
-                    }
-                    ExprKind::Member {
-                        obj,
-                        prop,
-                        optional: false,
-                    } => {
-                        let object = self.expression(obj)?;
-                        let key = self.member_key(object, prop, false)?;
-                        let function = self.register(callee.span)?;
-                        self.emit(Instruction::GetMember(function, object, key));
-                        let this = if matches!(&obj.kind, ExprKind::Super) {
-                            // `super.method(...)`: the property lookup starts
-                            // at [[HomeObject]].[[GetPrototypeOf]]() (already
-                            // in `object`), but the call receiver is the
-                            // actual `this`, matching the tree walker.
-                            let this = self.register(callee.span)?;
-                            self.emit(Instruction::LoadThis(this));
-                            this
-                        } else {
-                            object
-                        };
-                        (function, this)
-                    }
-                    _ if super::super::event_handler::identifier_name(callee).is_some() => {
-                        let name = super::super::event_handler::identifier_name(callee).unwrap();
-                        let function = self.register(callee.span)?;
-                        let receiver = self.register(callee.span)?;
-                        self.emit(Instruction::LoadCallName(function, receiver, name.to_owned()));
-                        (function, receiver)
-                    }
-                    _ => (self.expression(callee)?, 0),
-                };
-                let arguments = self.call_arguments(args)?;
-                self.emit(Instruction::Call(dst, callee, this, arguments));
+                let (value, _) = self.chain_reference(expression, false)?;
+                self.emit(Instruction::Move(dst, value));
             }
             ExprKind::New { callee, args } => {
                 let callee = self.expression(callee)?;
@@ -1940,3 +1899,7 @@ fn unsupported_expression(kind: &ExprKind) -> &'static str {
         _ => "expression kind",
     }
 }
+
+#[cfg(test)]
+#[path = "tests_reference_reads.rs"]
+mod tests_reference_reads;

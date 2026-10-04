@@ -1299,45 +1299,12 @@ impl Interpreter {
                 let a = self.eval_args(args, env)?;
                 self.construct(&f, a)
             }
-            ExprKind::Member { obj, .. } if matches!(obj.kind, ExprKind::Super) => {
+            ExprKind::Member { .. } => {
+                // All property reads consume the same reference path. The raw
+                // computed expression runs before GetValue checks the base;
+                // nullish rejection precedes ToPropertyKey and property Get.
                 let reference = self.eval_chain_reference(e, env)?;
                 self.chain_value(reference)
-            }
-            ExprKind::Member {
-                obj,
-                prop,
-                optional,
-            } => {
-                let o = self.eval_expr(obj, env)?;
-                if *optional && (o.is_null() || o.is_undefined()) {
-                    Ok(JsValue::Undefined)
-                } else if let MemberProp::Private(identifier) = prop {
-                    let name = env.resolve_private(&identifier.name).ok_or_else(|| {
-                        Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
-                    })?;
-                    private_field_get(self, &o, &name)
-                } else {
-                    // The key expression evaluates (and may have side effects, for a computed
-                    // `obj[expr]`) before base-nullishness is checked (13.3.2.1), but a
-                    // non-optional `.`/`[]` read on a null/undefined base must still throw here
-                    // -- `get_prop`/`get_prop_receiver` is also used internally for prototype
-                    // walks and primitive boxing where returning `undefined` for a nullish
-                    // receiver is the right internal behavior, so the throw belongs at this
-                    // call site, not inside `get_prop` itself (matching `resolve_reference`'s
-                    // assignment-target Member arm below, which already has this check).
-                    // Found via a JS-19 regression test (a strict function's identity leaking
-                    // null through a sloppy function's own `.caller` relies on exactly this:
-                    // `null.throwTypeError` must throw) and confirmed against the corpus:
-                    // built-ins/Function/15.3.5.4_2-94gs.js already failed on this in the
-                    // pre-JS-18 baseline with the identical "no exception thrown at all"
-                    // diagnostic -- a pre-existing gap, not a regression.
-                    let k = self.member_key(prop, env)?;
-                    if o.is_null() || o.is_undefined() {
-                        Err(Throw::type_error("cannot access a property on nullish value"))
-                    } else {
-                        self.get_prop(&o, &k)
-                    }
-                }
             }
             ExprKind::Yield { argument, delegate } => {
                 let value = match argument {
@@ -1980,9 +1947,14 @@ impl Interpreter {
 
     fn invoke_expression_call(&mut self, c: &ast::Expr, args: &[ast::Expr], optional: bool, f: JsValue, this: JsValue, e: &EnvHandle) -> Result<JsValue, Throw> {
         let argv = self.eval_args(args, e)?;
+        let direct = !optional && event_handler::identifier_name(c) == Some("eval");
+        self.invoke_evaluated_expression_call(direct, f, this, argv, e)
+    }
+
+    fn invoke_evaluated_expression_call(&mut self, direct: bool, f: JsValue, this: JsValue, argv: Vec<JsValue>, e: &EnvHandle) -> Result<JsValue, Throw> {
         let previous_direct_eval = self.direct_eval_call;
         let previous_direct_eval_env = self.direct_eval_env.take();
-        self.direct_eval_call = !optional && matches!(&c.kind, ExprKind::Ident(name) if name.name == "eval") && self.is_intrinsic_eval(&f);
+        self.direct_eval_call = direct && self.is_intrinsic_eval(&f);
         self.direct_eval_env = self.direct_eval_call.then(|| e.clone());
         let result = self.call_value(&f, this, argv);
         self.direct_eval_call = previous_direct_eval;
@@ -3377,3 +3349,7 @@ impl Interpreter {
         self.exec_loop_body(body, iteration_env)
     }
 }
+
+#[cfg(test)]
+#[path = "interp_reference_read_tests.rs"]
+mod reference_read_tests;

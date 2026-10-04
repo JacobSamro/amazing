@@ -409,6 +409,11 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
+    #[cfg(test)]
+    pub(crate) fn test_force_ast_callables(&mut self, value: bool) {
+        self.force_ast_callables = value;
+    }
+
     pub fn new() -> Self {
         let object_proto = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
         let function_proto = Obj(Rc::new(RefCell::new({

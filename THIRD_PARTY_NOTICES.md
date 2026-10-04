@@ -169,3 +169,4 @@ reproduced in the table row for that upstream.
 - boa-dev/boa @ 39cd11214ecb366200157dab96b3919e61e9a391 — MIT; Copyright (c) 2019 Jason Williams. ForIn head initializer ordering from `core/engine/src/bytecompiler/statement/loop.rs::compile_for_in_loop` adapted in `crates/amazing-js/src/interp_stmt.rs` and `crates/amazing-js/src/vm/compiler_patterns.rs`.
 
 - boa-dev/boa @ 39cd11214ecb366200157dab96b3919e61e9a391 — MIT, Copyright (c) 2019 Jason Williams; Function.prototype.bind/BoundFunctionCreate (core/engine/src/builtins/function/{mod,bound}.rs), adapted in crates/amazing-js/src/interp_function_bind.rs.
+- boa-dev/boa @ 39cd11214ecb366200157dab96b3919e61e9a391 — MIT; Copyright (c) 2019 Jason Williams. Whole call-reference/receiver and direct-eval argument lowering from `core/engine/src/bytecompiler/mod.rs::call` adapted in `crates/amazing-js/src/vm/compiler.rs` and `crates/amazing-js/src/vm/compiler_chains.rs`.
