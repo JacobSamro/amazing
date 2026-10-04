@@ -304,7 +304,7 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     }
     let required = match operation {
         O::CreateText | O::CreateCDATASection | O::CreateComment | O::AppendChild | O::RemoveChild
-        | O::Contains | O::NodeLookupNamespaceURI | O::NodeIsDefaultNamespace | O::NodeIsSameNode
+        | O::Contains | O::NodeLookupNamespaceURI | O::NodeLookupPrefix | O::NodeIsDefaultNamespace | O::NodeIsSameNode
         | O::NodeIsEqualNode | O::NodeCompareDocumentPosition => 1,
         O::InsertBefore | O::ReplaceChild | O::MoveBefore => 2,
         _ => 0,
@@ -366,10 +366,9 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
         None
     };
     let deep = operation == O::CloneNode && args.first().is_some_and(|v| host.to_boolean(v));
-    let namespace_argument = if matches!(operation, O::NodeLookupNamespaceURI | O::NodeIsDefaultNamespace) {
+    let namespace_argument = if matches!(operation, O::NodeLookupNamespaceURI | O::NodeLookupPrefix | O::NodeIsDefaultNamespace) {
         if host.is_nullish(&args[0]) { None } else {
-            let units = host.to_dom_string(&args[0])?;
-            Some(String::from_utf16(&units).map_err(|_| host.type_error("Invalid namespace string"))?)
+            Some(host.to_dom_string(&args[0])?)
         }
     } else { None };
     let same_node = if matches!(operation, O::NodeIsSameNode | O::NodeIsEqualNode) {
@@ -576,9 +575,11 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
                 }
                 R::Boolean(dom.contains(target, argument_node))
             }
-            O::NodeLookupNamespaceURI => dom.lookup_namespace_uri(target, namespace_argument.as_deref())?
-                .map_or(R::Null, |uri| R::String(uri.encode_utf16().collect())),
-            O::NodeIsDefaultNamespace => R::Boolean(dom.is_default_namespace(target, namespace_argument.as_deref())?),
+            O::NodeLookupNamespaceURI => dom.lookup_namespace_uri_units(target, namespace_argument.as_deref())?
+                .map_or(R::Null, R::String),
+            O::NodeLookupPrefix => dom.lookup_prefix_units(target, namespace_argument.as_deref())?
+                .map_or(R::Null, R::String),
+            O::NodeIsDefaultNamespace => R::Boolean(dom.is_default_namespace_units(target, namespace_argument.as_deref())?),
             O::NodeNormalize => { dom.normalize(target)?; R::Undefined },
             O::NodeIsSameNode => R::Boolean(same_node == Some(target)),
             O::NodeIsEqualNode => R::Boolean(same_node.is_some_and(|other| dom.is_equal_node(target, other))),

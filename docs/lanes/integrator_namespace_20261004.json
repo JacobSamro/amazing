@@ -1,0 +1,674 @@
+{
+  "ticket": "node-namespace-lookup",
+  "base": "7b5a62c10ea9d2588356d83be982a8792eba639c",
+  "tested_source": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+  "workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4499,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_details": [
+      {
+        "command": [
+          "cargo",
+          "nextest",
+          "run",
+          "--workspace",
+          "--locked",
+          "--no-fail-fast",
+          "--status-level",
+          "skip"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "        PASS [   0.002s] (4490/4499) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+          "        PASS [   0.002s] (4491/4499) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+          "        PASS [   0.005s] (4492/4499) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+          "        PASS [   0.008s] (4493/4499) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+          "        PASS [   0.005s] (4494/4499) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+          "        PASS [   0.003s] (4495/4499) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+          "        PASS [   0.012s] (4496/4499) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+          "        PASS [   0.020s] (4497/4499) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+          "        PASS [   8.005s] (4498/4499) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+          "        PASS [  21.283s] (4499/4499) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+          "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+          "     Summary [ 126.279s] 4499 tests run: 4499 passed (1 slow), 17 skipped"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-5cm2bp06/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78-nextest.log",
+            "durable": {
+              "bytes": 627608,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78-nextest.log",
+              "sha256": "c005a2de46829d1a5b42b9dc4847599cadc751c65840545962ff5a1adf02acdf"
+            },
+            "native": {
+              "bytes": 627608,
+              "path": "/tmp/amazing-gate-command-5cm2bp06/output.log",
+              "sha256": "c005a2de46829d1a5b42b9dc4847599cadc751c65840545962ff5a1adf02acdf"
+            },
+            "source": "/tmp/amazing-gate-command-5cm2bp06/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "nextest",
+        "raw_native": {
+          "bytes": 627608,
+          "path": "/tmp/amazing-gate-command-5cm2bp06/output.log",
+          "sha256": "c005a2de46829d1a5b42b9dc4847599cadc751c65840545962ff5a1adf02acdf"
+        },
+        "schema": 1,
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--workspace",
+          "--locked",
+          "--doc"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "   Doc-tests amazing_webrtc_codecs",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "",
+          "   Doc-tests amazing_webrtc_crypto",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          ""
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-8l59ccpk/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78-doctests.log",
+            "durable": {
+              "bytes": 16669,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78-doctests.log",
+              "sha256": "5c67ded6fb98d4736948a84233610f7412853c452221c2a43d2c27f010c9014d"
+            },
+            "native": {
+              "bytes": 16669,
+              "path": "/tmp/amazing-gate-command-8l59ccpk/output.log",
+              "sha256": "5c67ded6fb98d4736948a84233610f7412853c452221c2a43d2c27f010c9014d"
+            },
+            "source": "/tmp/amazing-gate-command-8l59ccpk/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "doctests",
+        "raw_native": {
+          "bytes": 16669,
+          "path": "/tmp/amazing-gate-command-8l59ccpk/output.log",
+          "sha256": "5c67ded6fb98d4736948a84233610f7412853c452221c2a43d2c27f010c9014d"
+        },
+        "schema": 1,
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "wrapper_exit": 0
+      }
+    ],
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 627608,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78-nextest.log",
+        "sha256": "c005a2de46829d1a5b42b9dc4847599cadc751c65840545962ff5a1adf02acdf"
+      },
+      {
+        "bytes": 16669,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78-doctests.log",
+        "sha256": "5c67ded6fb98d4736948a84233610f7412853c452221c2a43d2c27f010c9014d"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+    "summary_lines": [
+      "Summary [ 126.279s] 4499 tests run: 4499 passed (1 slow), 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "test262": {
+    "provenance": {
+      "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    "summary": {
+      "files": {
+        "fail": 786,
+        "pass": 52620,
+        "skipped": 294,
+        "timeout": 1,
+        "unsupported": 171
+      },
+      "variants": {
+        "fail": 1475,
+        "pass": 101101,
+        "timeout": 2,
+        "unsupported": 340
+      }
+    },
+    "lost_files": 0,
+    "lost_variants": 0,
+    "gained_files": 0,
+    "catalog_sha256": "629cc5b629e4a7287005351583930625c0da9448aa0d097006127d7691653ff6",
+    "shards": [
+      {
+        "classification_sha256": "1a86f6c24fb5e0f574816990bed9c627128b8142c2d0631694bf6781f4116e4b",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "0/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 43,
+            "pass": 3291,
+            "skipped": 17,
+            "unsupported": 16
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "5d76d78d9cf2e2f69767952643a9b177ebe5004855a6c9a4de4c9b7c2110a4a4",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "1/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 52,
+            "pass": 3285,
+            "skipped": 17,
+            "unsupported": 13
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "ba003eb0cbf497614254be8afe864667e917860cd7ddffa4246215188ba50bee",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "2/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 50,
+            "pass": 3289,
+            "skipped": 19,
+            "unsupported": 9
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "768762671b99ee9bb587f531df56c068b7776ddaf8c50f5b64b2f824a3372bb1",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "3/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 46,
+            "pass": 3290,
+            "skipped": 17,
+            "timeout": 1,
+            "unsupported": 13
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "ecffb42fab36a2d2626e80229619b858eaefac41fab779e8b285406313c6adaf",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "4/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 45,
+            "pass": 3295,
+            "skipped": 18,
+            "unsupported": 9
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "336d2e9259f686983494233f5de9131c26f87b3267a7dfdd2b096e7aa8f1100c",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "5/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 45,
+            "pass": 3293,
+            "skipped": 19,
+            "unsupported": 11
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "5a70b906229759b365a3cffbfac07235a8c7df3363d68cd5cb80d6842580a58b",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "6/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 47,
+            "pass": 3292,
+            "skipped": 19,
+            "unsupported": 8
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "3eb8e689849d651ec1a0ec1ef98b0ed21ce63ae7848c125288a8e4c96884047c",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "7/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 50,
+            "pass": 3291,
+            "skipped": 19,
+            "unsupported": 7
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "c9711d124a5f6c7603b31636e4873e4ac19e32dab49944dcbabbe5bbbaecc57b",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "8/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 47,
+            "pass": 3297,
+            "skipped": 17,
+            "unsupported": 7
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "b7b4863f84e302778601f8fb4b8ceb8a375cab34b2ba26e4dc6ea5e0b12cbe47",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "9/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 57,
+            "pass": 3284,
+            "skipped": 15,
+            "unsupported": 11
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "6cf6ca3acfee732eca03f762d24b5ae20cd68e55452d763aed6639f6d199066e",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "10/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 48,
+            "pass": 3289,
+            "skipped": 20,
+            "unsupported": 8
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "c4cc040a220084bed19ae389f829560a4dfd99e3a20ca8ecd7dee5da346ebea1",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "11/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 54,
+            "pass": 3285,
+            "skipped": 17,
+            "unsupported": 12
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "01eba2f4748f32b613beb57fa9d67fca2379adc768bb10f8cf5f4dc4c4a55b3f",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "12/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 51,
+            "pass": 3286,
+            "skipped": 18,
+            "unsupported": 11
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "d4635c302a17711e771c1458d0218e73d97936f3a1c0634ac636f569a1c368fc",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "13/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 36,
+            "pass": 3297,
+            "skipped": 21,
+            "unsupported": 13
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "e86d13aee10cda6300c84cd71e326f35e8d33f1fb9db4430c50fe01a0559704c",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "14/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 56,
+            "pass": 3282,
+            "skipped": 19,
+            "unsupported": 11
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      },
+      {
+        "classification_sha256": "4092f56b9aee947687fc00a8cf13d45291bea5f9998d6325a87779c52c57bf31",
+        "discovered": 53872,
+        "host_sha256": "e89c08b51fffe077a419fb9286ad208571fa14980efc0b0253e4d70903fd175c",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "job_exit": 0,
+        "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+        "phase_exits": {
+          "build": 0,
+          "packaging": 0,
+          "runner": 1
+        },
+        "runner_exit": 1,
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "schema": 2,
+        "shard": "15/16",
+        "source_commit": "f7e0f1ed48ceee272bb6b4c4ab735fde3091cb78",
+        "summary": {
+          "files": {
+            "fail": 59,
+            "pass": 3274,
+            "skipped": 22,
+            "unsupported": 12
+          }
+        },
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "timeout_seconds": 60.0
+      }
+    ]
+  },
+  "owner_ready": "3d38b3ccdbe8f055d1cef446f9bb4253de09ec63",
+  "owner_evidence_sha256": "c807b148140409fc63a31c53b1cf524df56d60c0d1fe4494abe4f01e6e730183",
+  "tooling": {
+    "first_controller_exit": 3,
+    "failed_shard": 2,
+    "phase": "rsync",
+    "phase_actual_exit": 255,
+    "clean_reruns": 1,
+    "rerun_controller_exit": 0
+  },
+  "raw_policy": "Raw output remains on Boat; compact receipts only are local."
+}

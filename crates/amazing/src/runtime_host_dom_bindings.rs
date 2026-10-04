@@ -2358,3 +2358,7 @@ impl RuntimeBindingHost<'_> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "runtime_host_dom_bindings/namespace_lookup.rs"]
+mod namespace_lookup;

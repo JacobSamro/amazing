@@ -1,0 +1,13 @@
+# Whole Node namespace lookup
+
+Fixed published base: 6eec0d0015cbcfcea60882e1502f2f96497787e6. Qualified shipping source: d06acd8f1d8bf580d8458ccbc113e92527f56966. Paired Linux gate exited 0 on both sides.
+
+The whole Node namespace lookup area includes lookupPrefix, lookupNamespaceURI and isDefaultNamespace. The current primary DOM algorithms select the actual receiver Element, Document element, attached Attr owner or CharacterData parent Element. DocumentType and DocumentFragment (including ShadowRoot) do not cross to a host. Prefix lookup uses own non-null prefix, first matching prefixed declaration in attribute order, then the parent Element; it neither invents reserved/default prefixes nor applies an older ancestor-prefix validity rule.
+
+Bindings retain exact nullable DOMString input and native declared namespace output. Empty input normalizes to null where prescribed; unpaired units are valid strings and compare without replacement-character aliases. Existing UTF8 native signatures remain compatibility projections; Range's exact namespace output API remains intact. The new exact-unit APIs read existing actual Attr values rather than create a parallel namespace store. Malformed native ancestry is bounded and reports InvalidStateError without mutation.
+
+Three native groups and four installed groups cover own/ordered/ancestor declarations, exact lone-unit values and FFFD distinction, all receiver kinds and detached Attr/Fragment/shadow boundaries, null/empty/reserved semantics, live mutation and reentrant coercion, abrupt identity with committed author changes, wrong brands and required arguments. Primary reviewed 2026-10-05: https://dom.spec.whatwg.org/#dom-node-lookupprefix . No copied upstream code or dependency.
+
+Gate: fixed before/after workspace nextest + doctests + whole core888/shadow277 (actual META-long600s)/syntax72/XMLserialization. Original tests unchanged. Node-lookupPrefix.xhtml is included by the existing selection but remains explicitly unsupported by the current classic-HTML-only harness; installed native coverage does not relabel it as a WPT gain. Existing native String namespace/name representation boundaries remain separate; no schema or XML parser changes.
+
+Qualification: workspace 4,459 → 4,466 passed, 17 skipped; four doctests each side. Core888 92,824, shadow277 5,681, syntax72 2,707 and XML serialization 112 passing assertions on both sides. Exact named multiplicities and passing-file losses are zero. Compact proof: `crates/amazing-dom/evidence/node-namespace-lookup/summary.json`; raw stays under Boat HOME `/home/user/amazing/out/dom-bindings`.

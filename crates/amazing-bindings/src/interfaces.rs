@@ -70,6 +70,7 @@ const NODE: &[Member] = &[
     method("cloneNode", O::CloneNode, 0),
     method("getRootNode", O::GetRootNode, 0),
     method("lookupNamespaceURI", O::NodeLookupNamespaceURI, 1),
+    method("lookupPrefix", O::NodeLookupPrefix, 1),
     method("isDefaultNamespace", O::NodeIsDefaultNamespace, 1),
     method("normalize", O::NodeNormalize, 0),
     method("isSameNode", O::NodeIsSameNode, 1),

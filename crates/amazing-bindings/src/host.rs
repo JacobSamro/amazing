@@ -600,6 +600,7 @@ pub enum Operation {
     NodeType,
     NodeName,
     NodeLookupNamespaceURI,
+    NodeLookupPrefix,
     NodeIsDefaultNamespace,
     NodeNormalize,
     NodeIsSameNode,

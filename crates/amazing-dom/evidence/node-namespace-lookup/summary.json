@@ -1,0 +1,130 @@
+{
+  "schema": 1,
+  "base": "6eec0d0015cbcfcea60882e1502f2f96497787e6",
+  "source": "d06acd8f1d8bf580d8458ccbc113e92527f56966",
+  "suites": {
+    "core": {
+      "before_files": 888,
+      "after_files": 888,
+      "same_selection": true,
+      "before_passing_assertions": 92824,
+      "after_passing_assertions": 92824,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [],
+      "raw_before_sha256": "0d85f9fb24e95104acda5d687bf933cd7903e98aa3cdf9759dafb821c878c7e1",
+      "raw_after_sha256": "8fc25a534aa55c8cf2a8b2fd830522444c63ebdf01ca347b059806ef6bbd9656"
+    },
+    "shadow": {
+      "before_files": 277,
+      "after_files": 277,
+      "same_selection": true,
+      "before_passing_assertions": 5681,
+      "after_passing_assertions": 5681,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [],
+      "raw_before_sha256": "82bd8c9c7ea5b108c86a0028672cfabe44bf5713850bc71ec136c970ab3d6423",
+      "raw_after_sha256": "eedf744247b312e99bd73255586f7d63b44175f9a037b3381eb0cc071ed56d70"
+    },
+    "xml": {
+      "before_files": 1,
+      "after_files": 1,
+      "same_selection": true,
+      "before_passing_assertions": 112,
+      "after_passing_assertions": 112,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [],
+      "raw_before_sha256": "e40d95e3830427256cb2a6f943ffd92510afac62f34e2edf341bcf1af05abe57",
+      "raw_after_sha256": "312d46a93a16eaa59af94add8a636bf5f8513d365b1410220744c8214eddd876"
+    },
+    "syntax72": {
+      "before_files": 72,
+      "after_files": 72,
+      "same_selection": true,
+      "before_passing_assertions": 2707,
+      "after_passing_assertions": 2707,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [],
+      "raw_before_sha256": "644ce622ac7e005292254036a657fab0bba63dbfcc20586850aef62848918aec",
+      "raw_after_sha256": "644ce622ac7e005292254036a657fab0bba63dbfcc20586850aef62848918aec"
+    }
+  },
+  "raw_location": "/home/user/amazing/out/dom-bindings",
+  "before": {
+    "native_summary": [
+      "     Summary [ 130.889s] 4459 tests run: 4459 passed (1 slow), 17 skipped"
+    ],
+    "raw_hashes": {
+      "native.log": "186df53817c8111a063595feb9702a4ac66da79e926b15547e29e49814dc26de",
+      "docs.log": "c56c3856633147098e80f91375b707ae2d526b648d6409f333b04b59da9bfdfa",
+      "syntax72.jsonl": "644ce622ac7e005292254036a657fab0bba63dbfcc20586850aef62848918aec",
+      "raw.sha256": "b44d6a748d947f959fa80d12b16b309511313933cb370eb31818353c4197c664"
+    },
+    "doctests_passed": 4
+  },
+  "after": {
+    "native_summary": [
+      "     Summary [ 125.880s] 4466 tests run: 4466 passed (1 slow), 17 skipped"
+    ],
+    "raw_hashes": {
+      "native.log": "4aa8fe9b8c5a5eaab11f85bc35d1595d236b0b60c05c92741cd7c807b62c8e32",
+      "docs.log": "f652e00d759506bae6cb9213b2a8d3d54cfa694013c1b8295ae5a15e2cb32c75",
+      "syntax72.jsonl": "644ce622ac7e005292254036a657fab0bba63dbfcc20586850aef62848918aec",
+      "raw.sha256": "0e0c253d3a8aaf6ca4b56066efe297f9763aa4d4ebfd791afd8f701e74819cfd"
+    },
+    "doctests_passed": 4
+  },
+  "zero_loss": true,
+  "actual_exit": {
+    "before": 0,
+    "after": 0,
+    "comparison": 0
+  },
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "runner_sha256": "80b9f7dc10a8034b84567c3c53aff8bf50546e20b2a2322f619e654f38a85984",
+  "binary_sha256": {
+    "before": "b2287e44fb522c5932cf3598793cdf43eb8c62b607f558e56661da90d08a0f8d",
+    "after": "20306d81c67e92b878d72f610ee2d778af8368fd5bfe54b5d5da40675c721059"
+  },
+  "profiles": {
+    "core888": {
+      "ordinary_seconds": 25,
+      "heavy_seconds": 150,
+      "jobs": 4,
+      "heavy_jobs": 1
+    },
+    "shadow277": {
+      "ordinary_seconds": 25,
+      "actual_meta_long_seconds": 600,
+      "jobs": 4,
+      "heavy_seconds": 150,
+      "heavy_jobs": 1
+    },
+    "syntax72": {
+      "ordinary_seconds": 10,
+      "heavy_seconds": 60,
+      "jobs": 4
+    },
+    "xml": {
+      "ordinary_seconds": 25,
+      "heavy_seconds": 150,
+      "jobs": 4,
+      "heavy_jobs": 1
+    }
+  },
+  "limitations": [
+    "Node-lookupPrefix.xhtml remains unsupported by the classic-HTML-only WPT harness; no WPT gain claimed.",
+    "Native String namespace/name construction boundaries remain separate; exact declared Attr values and DOMString comparisons are covered."
+  ]
+}
