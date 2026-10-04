@@ -1,0 +1,1017 @@
+{
+  "schema": 1,
+  "ticket": "public-bootstrap-render-tooling",
+  "engine_before": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+  "engine_after": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+  "qualified_tooling_commit": "7db5aeeddefb17ed61340dce1c07a3a052c64b15",
+  "alias": "public-render-proof-20261005",
+  "box": "bx_zxyagf6x",
+  "owner_session": 72843,
+  "wrapper_exit": 0,
+  "attempts": 1,
+  "metadata_fixtures": 17,
+  "scope": "tooling qualification only; eight representative static css/css-backgrounds cases; no layout/full-browser gains",
+  "sides": {
+    "before": {
+      "workspace_docs": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 4
+        },
+        "nextest": {
+          "failed": 0,
+          "passed": 4458,
+          "skipped": 17
+        }
+      },
+      "phase_exits": {
+        "build": 0,
+        "css-css-backgrounds": 0,
+        "doctests": 0,
+        "ensure-wpt": 0,
+        "nextest": 0
+      },
+      "phase_details": [
+        {
+          "command": [
+            "cargo",
+            "nextest",
+            "run",
+            "--workspace",
+            "--locked",
+            "--no-fail-fast",
+            "--status-level",
+            "skip"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "        PASS [   0.002s] (4449/4458) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+            "        PASS [   0.002s] (4450/4458) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+            "        PASS [   0.004s] (4451/4458) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+            "        PASS [   0.005s] (4452/4458) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+            "        PASS [   0.005s] (4453/4458) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+            "        PASS [   0.002s] (4454/4458) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+            "        PASS [   0.014s] (4455/4458) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+            "        PASS [   0.021s] (4456/4458) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+            "        PASS [   8.453s] (4457/4458) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+            "        PASS [  24.209s] (4458/4458) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+            "     Summary [ 128.085s] 4458 tests run: 4458 passed (1 slow), 17 skipped"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-gvqshg9u/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/nextest.log",
+              "durable": {
+                "bytes": 619100,
+                "path": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/nextest.log",
+                "sha256": "8ded362c9538223ff7d31257b3a033b7d6de6f3b994b03677ff6c33a1e944391"
+              },
+              "native": {
+                "bytes": 619100,
+                "path": "/tmp/amazing-gate-command-gvqshg9u/output.log",
+                "sha256": "8ded362c9538223ff7d31257b3a033b7d6de6f3b994b03677ff6c33a1e944391"
+              },
+              "source": "/tmp/amazing-gate-command-gvqshg9u/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "nextest",
+          "raw_native": {
+            "bytes": 619100,
+            "path": "/tmp/amazing-gate-command-gvqshg9u/output.log",
+            "sha256": "8ded362c9538223ff7d31257b3a033b7d6de6f3b994b03677ff6c33a1e944391"
+          },
+          "schema": 1,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--workspace",
+            "--locked",
+            "--doc"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "   Doc-tests amazing_webrtc_codecs",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "",
+            "   Doc-tests amazing_webrtc_crypto",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            ""
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-i680iz6d/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/doctests.log",
+              "durable": {
+                "bytes": 16669,
+                "path": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/doctests.log",
+                "sha256": "b14a2788a47dabd31d54710a38e9de4d2fa1369acda35c8b24dc082940b16b98"
+              },
+              "native": {
+                "bytes": 16669,
+                "path": "/tmp/amazing-gate-command-i680iz6d/output.log",
+                "sha256": "b14a2788a47dabd31d54710a38e9de4d2fa1369acda35c8b24dc082940b16b98"
+              },
+              "source": "/tmp/amazing-gate-command-i680iz6d/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "doctests",
+          "raw_native": {
+            "bytes": 16669,
+            "path": "/tmp/amazing-gate-command-i680iz6d/output.log",
+            "sha256": "b14a2788a47dabd31d54710a38e9de4d2fa1369acda35c8b24dc082940b16b98"
+          },
+          "schema": 1,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "bash",
+            "scripts/ensure-wpt.sh"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "/home/user/corpora/wpt"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-ozst5xt0/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/ensure-wpt.log",
+              "durable": {
+                "bytes": 23,
+                "path": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/ensure-wpt.log",
+                "sha256": "bbad706af3e2ae6446dc23042db1738f1e3b142cc60a5b3cb50235f655d9f5de"
+              },
+              "native": {
+                "bytes": 23,
+                "path": "/tmp/amazing-gate-command-ozst5xt0/output.log",
+                "sha256": "bbad706af3e2ae6446dc23042db1738f1e3b142cc60a5b3cb50235f655d9f5de"
+              },
+              "source": "/tmp/amazing-gate-command-ozst5xt0/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "ensure-wpt",
+          "raw_native": {
+            "bytes": 23,
+            "path": "/tmp/amazing-gate-command-ozst5xt0/output.log",
+            "sha256": "bbad706af3e2ae6446dc23042db1738f1e3b142cc60a5b3cb50235f655d9f5de"
+          },
+          "schema": 1,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "build",
+            "-p",
+            "amazing",
+            "--locked",
+            "--release"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "463 |                     object.borrow_mut().define(name.clone(), property.clone());",
+            "    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+            "    |",
+            "    = note: this `Result` may be an `Err` variant, which should be handled",
+            "    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default",
+            "help: use `let _ = ...` to ignore the resulting value",
+            "    |",
+            "463 |                     let _ = object.borrow_mut().define(name.clone(), property.clone());",
+            "    |                     +++++++",
+            "",
+            "warning: `amazing` (bin \"amazing\") generated 57 warnings (run `cargo fix --bin \"amazing\" -p amazing` to apply 9 suggestions)",
+            "    Finished `release` profile [optimized] target(s) in 2m 29s"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-k81ylxoy/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/build.log",
+              "durable": {
+                "bytes": 47736,
+                "path": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/build.log",
+                "sha256": "ae235b3e07c793299ace77e1455b62a086842bb07374d6a5029f14eedd9323a9"
+              },
+              "native": {
+                "bytes": 47736,
+                "path": "/tmp/amazing-gate-command-k81ylxoy/output.log",
+                "sha256": "ae235b3e07c793299ace77e1455b62a086842bb07374d6a5029f14eedd9323a9"
+              },
+              "source": "/tmp/amazing-gate-command-k81ylxoy/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "build",
+          "raw_native": {
+            "bytes": 47736,
+            "path": "/tmp/amazing-gate-command-k81ylxoy/output.log",
+            "sha256": "ae235b3e07c793299ace77e1455b62a086842bb07374d6a5029f14eedd9323a9"
+          },
+          "schema": 1,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "/usr/bin/python3",
+            "scripts/wpt_render_compare.py",
+            "--wpt-root",
+            "/home/user/corpora/wpt",
+            "--subdir",
+            "css/css-backgrounds",
+            "--exe",
+            "/tmp/amazing-native-target-public-render-proof-20261005/release/amazing",
+            "--out",
+            "/tmp/amazing-render-gate-zc15dq71/css-css-backgrounds",
+            "--width",
+            "800",
+            "--height",
+            "600",
+            "--timeout",
+            "20",
+            "--jobs",
+            "4",
+            "--limit",
+            "8",
+            "--compact"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "MISMATCH   css__css-backgrounds__background-clip__clip-border-area-on-body-propagated-to-root.html",
+            "PASS       css__css-backgrounds__border-radius-horizontal-value-is-zero.html",
+            "MISMATCH   css__css-backgrounds__box-shadow-041.html",
+            "PASS       css__css-backgrounds__background-clip-006.html",
+            "PASS       css__css-backgrounds__background-color-clip.html",
+            "MISMATCH   css__css-backgrounds__border-bottom-width-medium.html",
+            "MISMATCH   css__css-backgrounds__border-right-width-thick.html",
+            "PASS       css__css-backgrounds__background-color-body-propagation-010.html",
+            "Report: /tmp/amazing-render-gate-zc15dq71/css-css-backgrounds/run-20261004T191737Z-64516/report.json",
+            "Counts: pass=4 mismatch=4 error=0 timeout=0 unsupported=0 crash=0",
+            "Compact: /tmp/amazing-render-gate-zc15dq71/css-css-backgrounds/run-20261004T191737Z-64516/compact.json"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-ibho118y/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/css-css-backgrounds.log",
+              "durable": {
+                "bytes": 821,
+                "path": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/css-css-backgrounds.log",
+                "sha256": "93181040263566f614894c6037fc7685e2764839f7842a34fcf48e64e419adc5"
+              },
+              "native": {
+                "bytes": 821,
+                "path": "/tmp/amazing-gate-command-ibho118y/output.log",
+                "sha256": "93181040263566f614894c6037fc7685e2764839f7842a34fcf48e64e419adc5"
+              },
+              "source": "/tmp/amazing-gate-command-ibho118y/output.log"
+            },
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/css-css-backgrounds.compact.json",
+              "durable": {
+                "bytes": 1136,
+                "path": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/css-css-backgrounds.compact.json",
+                "sha256": "2fca39a6027b1f465b57282374d2a98209e5e4ff26ed141ee6809f9741bac5ba"
+              },
+              "native": {
+                "bytes": 1136,
+                "path": "/tmp/amazing-render-gate-zc15dq71/css-css-backgrounds/compact.json",
+                "sha256": "2fca39a6027b1f465b57282374d2a98209e5e4ff26ed141ee6809f9741bac5ba"
+              },
+              "source": "/tmp/amazing-render-gate-zc15dq71/css-css-backgrounds/compact.json"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "css-css-backgrounds",
+          "raw_native": {
+            "bytes": 821,
+            "path": "/tmp/amazing-gate-command-ibho118y/output.log",
+            "sha256": "93181040263566f614894c6037fc7685e2764839f7842a34fcf48e64e419adc5"
+          },
+          "schema": 1,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "wrapper_exit": 0
+        }
+      ],
+      "tooling": {
+        "gate-command.py": {
+          "bytes": 4909,
+          "path": "/tmp/amazing-render-tools.UWo3bM/gate-command.py",
+          "sha256": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b"
+        },
+        "gate-summary.py": {
+          "bytes": 6347,
+          "path": "/tmp/amazing-render-tools.UWo3bM/gate-summary.py",
+          "sha256": "3e26631cb492c2e77808c7bc9a3354ab248d0e83cf8762b933892647fd7ce0f0"
+        },
+        "render-gate.py": {
+          "bytes": 4848,
+          "path": "/tmp/amazing-render-tools.UWo3bM/render-gate.py",
+          "sha256": "c4cb1eecc149ffbab383624b3feb13969597beb9d3af662dbdaffad71aa4bcf7"
+        }
+      },
+      "render": {
+        "schema": 1,
+        "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "subdir": "css/css-backgrounds",
+        "viewport": {
+          "width": 800,
+          "height": 600,
+          "device_scale": 1
+        },
+        "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+        "host": "box-node-18834476a69d1b4c",
+        "generated": "2026-10-04T19:17:39Z",
+        "counts": {
+          "pass": 4,
+          "mismatch": 4,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "tests": {
+          "css__css-backgrounds__box-shadow-041.html": "mismatch",
+          "css__css-backgrounds__border-radius-horizontal-value-is-zero.html": "pass",
+          "css__css-backgrounds__background-clip__clip-border-area-on-body-propagated-to-root.html": "mismatch",
+          "css__css-backgrounds__background-clip-006.html": "pass",
+          "css__css-backgrounds__background-color-clip.html": "pass",
+          "css__css-backgrounds__border-bottom-width-medium.html": "mismatch",
+          "css__css-backgrounds__border-right-width-thick.html": "mismatch",
+          "css__css-backgrounds__background-color-body-propagation-010.html": "pass"
+        }
+      },
+      "bootstrap": [
+        {
+          "schema": 1,
+          "phase": "bootstrap.environment-copy",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.VrrF2B/environment-copy.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        },
+        {
+          "schema": 1,
+          "phase": "bootstrap.environment-load",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.VrrF2B/environment-load.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        },
+        {
+          "schema": 1,
+          "phase": "bootstrap.native-corpora-link",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.VrrF2B/native-corpora-link.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        },
+        {
+          "schema": 1,
+          "phase": "bootstrap.native-nextest",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.VrrF2B/native-nextest.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        },
+        {
+          "schema": 1,
+          "phase": "bootstrap.native-source-directory",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.VrrF2B/native-source-directory.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        },
+        {
+          "schema": 1,
+          "phase": "bootstrap.native-source-sync",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.VrrF2B/native-source-sync.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        },
+        {
+          "schema": 1,
+          "phase": "bootstrap.native-tools-directory",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.VrrF2B/native-tools-directory.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        }
+      ]
+    },
+    "after": {
+      "workspace_docs": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 4
+        },
+        "nextest": {
+          "failed": 0,
+          "passed": 4458,
+          "skipped": 17
+        }
+      },
+      "phase_exits": {
+        "build": 0,
+        "css-css-backgrounds": 0,
+        "doctests": 0,
+        "ensure-wpt": 0,
+        "nextest": 0
+      },
+      "phase_details": [
+        {
+          "command": [
+            "cargo",
+            "nextest",
+            "run",
+            "--workspace",
+            "--locked",
+            "--no-fail-fast",
+            "--status-level",
+            "skip"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "        PASS [   0.002s] (4449/4458) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+            "        PASS [   0.005s] (4450/4458) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+            "        PASS [   0.006s] (4451/4458) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+            "        PASS [   0.010s] (4452/4458) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+            "        PASS [   0.012s] (4453/4458) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+            "        PASS [   0.004s] (4454/4458) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+            "        PASS [   0.018s] (4455/4458) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+            "        PASS [   0.015s] (4456/4458) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+            "        PASS [   8.921s] (4457/4458) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+            "        PASS [  26.701s] (4458/4458) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+            "     Summary [ 136.903s] 4458 tests run: 4458 passed (1 slow), 17 skipped"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-qmnh05t9/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/nextest.log",
+              "durable": {
+                "bytes": 607357,
+                "path": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/nextest.log",
+                "sha256": "5c85a4ecb400948e5c2bc6303f4d4145e1910f9fcb33fa546312c5228fe1c04a"
+              },
+              "native": {
+                "bytes": 607357,
+                "path": "/tmp/amazing-gate-command-qmnh05t9/output.log",
+                "sha256": "5c85a4ecb400948e5c2bc6303f4d4145e1910f9fcb33fa546312c5228fe1c04a"
+              },
+              "source": "/tmp/amazing-gate-command-qmnh05t9/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "nextest",
+          "raw_native": {
+            "bytes": 607357,
+            "path": "/tmp/amazing-gate-command-qmnh05t9/output.log",
+            "sha256": "5c85a4ecb400948e5c2bc6303f4d4145e1910f9fcb33fa546312c5228fe1c04a"
+          },
+          "schema": 1,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--workspace",
+            "--locked",
+            "--doc"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "   Doc-tests amazing_webrtc_codecs",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "",
+            "   Doc-tests amazing_webrtc_crypto",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            ""
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-a_4u3qc6/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/doctests.log",
+              "durable": {
+                "bytes": 16669,
+                "path": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/doctests.log",
+                "sha256": "6ab4e6392139f6eff030d1a9d1a458d01170aa2df45c64f130de2e614d0cc88c"
+              },
+              "native": {
+                "bytes": 16669,
+                "path": "/tmp/amazing-gate-command-a_4u3qc6/output.log",
+                "sha256": "6ab4e6392139f6eff030d1a9d1a458d01170aa2df45c64f130de2e614d0cc88c"
+              },
+              "source": "/tmp/amazing-gate-command-a_4u3qc6/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "doctests",
+          "raw_native": {
+            "bytes": 16669,
+            "path": "/tmp/amazing-gate-command-a_4u3qc6/output.log",
+            "sha256": "6ab4e6392139f6eff030d1a9d1a458d01170aa2df45c64f130de2e614d0cc88c"
+          },
+          "schema": 1,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "bash",
+            "scripts/ensure-wpt.sh"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "/home/user/corpora/wpt"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-nkwdaonu/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/ensure-wpt.log",
+              "durable": {
+                "bytes": 23,
+                "path": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/ensure-wpt.log",
+                "sha256": "bbad706af3e2ae6446dc23042db1738f1e3b142cc60a5b3cb50235f655d9f5de"
+              },
+              "native": {
+                "bytes": 23,
+                "path": "/tmp/amazing-gate-command-nkwdaonu/output.log",
+                "sha256": "bbad706af3e2ae6446dc23042db1738f1e3b142cc60a5b3cb50235f655d9f5de"
+              },
+              "source": "/tmp/amazing-gate-command-nkwdaonu/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "ensure-wpt",
+          "raw_native": {
+            "bytes": 23,
+            "path": "/tmp/amazing-gate-command-nkwdaonu/output.log",
+            "sha256": "bbad706af3e2ae6446dc23042db1738f1e3b142cc60a5b3cb50235f655d9f5de"
+          },
+          "schema": 1,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "build",
+            "-p",
+            "amazing",
+            "--locked",
+            "--release"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "463 |                     object.borrow_mut().define(name.clone(), property.clone());",
+            "    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+            "    |",
+            "    = note: this `Result` may be an `Err` variant, which should be handled",
+            "    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default",
+            "help: use `let _ = ...` to ignore the resulting value",
+            "    |",
+            "463 |                     let _ = object.borrow_mut().define(name.clone(), property.clone());",
+            "    |                     +++++++",
+            "",
+            "warning: `amazing` (bin \"amazing\") generated 57 warnings (run `cargo fix --bin \"amazing\" -p amazing` to apply 9 suggestions)",
+            "    Finished `release` profile [optimized] target(s) in 0.16s"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-9qk00afu/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/build.log",
+              "durable": {
+                "bytes": 36101,
+                "path": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/build.log",
+                "sha256": "c14412155bea746699f6cdba89b3dd74b5ee7e6d74a050f9018359011e548828"
+              },
+              "native": {
+                "bytes": 36101,
+                "path": "/tmp/amazing-gate-command-9qk00afu/output.log",
+                "sha256": "c14412155bea746699f6cdba89b3dd74b5ee7e6d74a050f9018359011e548828"
+              },
+              "source": "/tmp/amazing-gate-command-9qk00afu/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "build",
+          "raw_native": {
+            "bytes": 36101,
+            "path": "/tmp/amazing-gate-command-9qk00afu/output.log",
+            "sha256": "c14412155bea746699f6cdba89b3dd74b5ee7e6d74a050f9018359011e548828"
+          },
+          "schema": 1,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "/usr/bin/python3",
+            "scripts/wpt_render_compare.py",
+            "--wpt-root",
+            "/home/user/corpora/wpt",
+            "--subdir",
+            "css/css-backgrounds",
+            "--exe",
+            "/tmp/amazing-native-target-public-render-proof-20261005/release/amazing",
+            "--out",
+            "/tmp/amazing-render-gate-mpzacww0/css-css-backgrounds",
+            "--width",
+            "800",
+            "--height",
+            "600",
+            "--timeout",
+            "20",
+            "--jobs",
+            "4",
+            "--limit",
+            "8",
+            "--compact",
+            "--baseline",
+            "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/css-css-backgrounds.compact.json"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "MISMATCH   css__css-backgrounds__background-clip__clip-border-area-on-body-propagated-to-root.html",
+            "PASS       css__css-backgrounds__border-radius-horizontal-value-is-zero.html",
+            "PASS       css__css-backgrounds__background-clip-006.html",
+            "MISMATCH   css__css-backgrounds__box-shadow-041.html",
+            "PASS       css__css-backgrounds__background-color-clip.html",
+            "MISMATCH   css__css-backgrounds__border-bottom-width-medium.html",
+            "PASS       css__css-backgrounds__background-color-body-propagation-010.html",
+            "MISMATCH   css__css-backgrounds__border-right-width-thick.html",
+            "Baseline compare (css/css-backgrounds): gained=0 lost=0 changed=0 unchanged=8 new=0 removed=0",
+            "Report: /tmp/amazing-render-gate-mpzacww0/css-css-backgrounds/run-20261004T192055Z-87181/report.json",
+            "Counts: pass=4 mismatch=4 error=0 timeout=0 unsupported=0 crash=0",
+            "Compact: /tmp/amazing-render-gate-mpzacww0/css-css-backgrounds/run-20261004T192055Z-87181/compact.json"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-jt55w4ll/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/css-css-backgrounds.log",
+              "durable": {
+                "bytes": 915,
+                "path": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/css-css-backgrounds.log",
+                "sha256": "993f9287f0ccac63c8f0f0c1e537bf185e01eace9a1979114958049d1b46c552"
+              },
+              "native": {
+                "bytes": 915,
+                "path": "/tmp/amazing-gate-command-jt55w4ll/output.log",
+                "sha256": "993f9287f0ccac63c8f0f0c1e537bf185e01eace9a1979114958049d1b46c552"
+              },
+              "source": "/tmp/amazing-gate-command-jt55w4ll/output.log"
+            },
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/css-css-backgrounds.compact.json",
+              "durable": {
+                "bytes": 1992,
+                "path": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/css-css-backgrounds.compact.json",
+                "sha256": "a0544ce8917a80258dc9119bfab6c84550457f8242fbfb62dfae1bc184056849"
+              },
+              "native": {
+                "bytes": 1992,
+                "path": "/tmp/amazing-render-gate-mpzacww0/css-css-backgrounds/compact.json",
+                "sha256": "a0544ce8917a80258dc9119bfab6c84550457f8242fbfb62dfae1bc184056849"
+              },
+              "source": "/tmp/amazing-render-gate-mpzacww0/css-css-backgrounds/compact.json"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "css-css-backgrounds",
+          "raw_native": {
+            "bytes": 915,
+            "path": "/tmp/amazing-gate-command-jt55w4ll/output.log",
+            "sha256": "993f9287f0ccac63c8f0f0c1e537bf185e01eace9a1979114958049d1b46c552"
+          },
+          "schema": 1,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "wrapper_exit": 0
+        }
+      ],
+      "tooling": {
+        "gate-command.py": {
+          "bytes": 4909,
+          "path": "/tmp/amazing-render-tools.FeowAT/gate-command.py",
+          "sha256": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b"
+        },
+        "gate-summary.py": {
+          "bytes": 6347,
+          "path": "/tmp/amazing-render-tools.FeowAT/gate-summary.py",
+          "sha256": "3e26631cb492c2e77808c7bc9a3354ab248d0e83cf8762b933892647fd7ce0f0"
+        },
+        "render-gate.py": {
+          "bytes": 4848,
+          "path": "/tmp/amazing-render-tools.FeowAT/render-gate.py",
+          "sha256": "c4cb1eecc149ffbab383624b3feb13969597beb9d3af662dbdaffad71aa4bcf7"
+        }
+      },
+      "render": {
+        "schema": 1,
+        "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "subdir": "css/css-backgrounds",
+        "viewport": {
+          "width": 800,
+          "height": 600,
+          "device_scale": 1
+        },
+        "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+        "host": "box-node-18834476a69d1b4c",
+        "generated": "2026-10-04T19:20:56Z",
+        "counts": {
+          "pass": 4,
+          "mismatch": 4,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "tests": {
+          "css__css-backgrounds__box-shadow-041.html": "mismatch",
+          "css__css-backgrounds__border-radius-horizontal-value-is-zero.html": "pass",
+          "css__css-backgrounds__background-clip__clip-border-area-on-body-propagated-to-root.html": "mismatch",
+          "css__css-backgrounds__background-clip-006.html": "pass",
+          "css__css-backgrounds__background-color-clip.html": "pass",
+          "css__css-backgrounds__border-bottom-width-medium.html": "mismatch",
+          "css__css-backgrounds__border-right-width-thick.html": "mismatch",
+          "css__css-backgrounds__background-color-body-propagation-010.html": "pass"
+        },
+        "baseline_compare": {
+          "baseline": "/home/user/amazing/out/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/css-css-backgrounds.compact.json",
+          "gained": [],
+          "lost": [],
+          "changed": [],
+          "unchanged": [
+            "css__css-backgrounds__background-clip-006.html",
+            "css__css-backgrounds__background-clip__clip-border-area-on-body-propagated-to-root.html",
+            "css__css-backgrounds__background-color-body-propagation-010.html",
+            "css__css-backgrounds__background-color-clip.html",
+            "css__css-backgrounds__border-bottom-width-medium.html",
+            "css__css-backgrounds__border-radius-horizontal-value-is-zero.html",
+            "css__css-backgrounds__border-right-width-thick.html",
+            "css__css-backgrounds__box-shadow-041.html"
+          ],
+          "new": [],
+          "removed": []
+        }
+      },
+      "bootstrap": [
+        {
+          "schema": 1,
+          "phase": "bootstrap.environment-copy",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.Sc8uIf/environment-copy.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        },
+        {
+          "schema": 1,
+          "phase": "bootstrap.environment-load",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.Sc8uIf/environment-load.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        },
+        {
+          "schema": 1,
+          "phase": "bootstrap.native-corpora-link",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.Sc8uIf/native-corpora-link.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        },
+        {
+          "schema": 1,
+          "phase": "bootstrap.native-nextest",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.Sc8uIf/native-nextest.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        },
+        {
+          "schema": 1,
+          "phase": "bootstrap.native-source-directory",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.Sc8uIf/native-source-directory.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        },
+        {
+          "schema": 1,
+          "phase": "bootstrap.native-source-sync",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.Sc8uIf/native-source-sync.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        },
+        {
+          "schema": 1,
+          "phase": "bootstrap.native-tools-directory",
+          "actual_exit": 0,
+          "source_commit": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+          "raw": {
+            "path": "/tmp/amazing-bootstrap.Sc8uIf/native-tools-directory.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "diagnostic_tail": []
+        }
+      ]
+    }
+  },
+  "compact_receipt_catalog": [
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-after/bootstrap-environment-copy.manifest.json",
+      "bytes": 300,
+      "sha256": "41b531a4312ab74544f67677aab13fd527bbbeff01504fadc4f68f9a41b1bd96"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-after/bootstrap-environment-load.manifest.json",
+      "bytes": 300,
+      "sha256": "b4c19fb81e7a627fc03036fa6e75a91e97cc5a362331f74c8b35114893144061"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-after/bootstrap-native-corpora-link.manifest.json",
+      "bytes": 306,
+      "sha256": "4ef11583975ad452e315a89ec13ce5acd4dafad6846c17eea324c5884114ea27"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-after/bootstrap-native-nextest.manifest.json",
+      "bytes": 296,
+      "sha256": "ff2a01c4b93ef1f000e7e7a7f7e745b332e7dc56410619a7983ff40bcfe37013"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-after/bootstrap-native-source-directory.manifest.json",
+      "bytes": 314,
+      "sha256": "de76fd5a6b1fd10717f29841f12e2c4281645b6ef9044f14a2d7fda333ed10cd"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-after/bootstrap-native-source-sync.manifest.json",
+      "bytes": 304,
+      "sha256": "f960a930c79fc00d7fb10a25f0d29319a51a81ca87dc04d35bea0609362aef84"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-after/bootstrap-native-tools-directory.manifest.json",
+      "bytes": 312,
+      "sha256": "8b0d4fcf255af4b95af983a734c4a15a47e70547589b92485ec1ac8412325aff"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-before/bootstrap-environment-copy.manifest.json",
+      "bytes": 300,
+      "sha256": "a4da39ba4e77a23fe588a6642fd3852eea93799e9c90b60b627c921ca884b109"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-before/bootstrap-environment-load.manifest.json",
+      "bytes": 300,
+      "sha256": "7e6f7273214646bb60d4380600677897b21f76bfd93e0360387df93679ef150a"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-before/bootstrap-native-corpora-link.manifest.json",
+      "bytes": 306,
+      "sha256": "f359091bd913d73dc94906ad82d22ab01dcb83b09d91cafdf696515b6984067d"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-before/bootstrap-native-nextest.manifest.json",
+      "bytes": 296,
+      "sha256": "99b6331d82124c901dbf9b8ed95bc6adf9a031e146322373a5ec580819d1745d"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-before/bootstrap-native-source-directory.manifest.json",
+      "bytes": 314,
+      "sha256": "4c9c030958236d8538b64b0a37e6e774c9ddbf6a76202c3319532c7c6c227010"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-before/bootstrap-native-source-sync.manifest.json",
+      "bytes": 304,
+      "sha256": "9288bf71764d7f95fa4673bb6f7350229a91fe8926f6269c119005185a5c92a8"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/bootstrap-before/bootstrap-native-tools-directory.manifest.json",
+      "bytes": 312,
+      "sha256": "a6f323340fd81975c281fcebfa355c3d28dbc455664b571c5a086dc3d3cf9cb0"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/css-css-backgrounds.compact.json",
+      "bytes": 1992,
+      "sha256": "a0544ce8917a80258dc9119bfab6c84550457f8242fbfb62dfae1bc184056849"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/render-gate/tooling-20261005-after/1710e4d39a460d0208f7ed2ffda33c4995458fa0/gate.summary.json",
+      "bytes": 12376,
+      "sha256": "7970b13547fde41d625953df4b2a3f5bffd632ddc103056e74b3e84eda8ab1f8"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/css-css-backgrounds.compact.json",
+      "bytes": 1136,
+      "sha256": "2fca39a6027b1f465b57282374d2a98209e5e4ff26ed141ee6809f9741bac5ba"
+    },
+    {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/public-render-proof-20261005/render-gate/tooling-20261005-before/1710e4d39a460d0208f7ed2ffda33c4995458fa0/gate.summary.json",
+      "bytes": 11395,
+      "sha256": "b377deab1263b9f589151dfd2e439f90ce3cedfecf96949f63ab7170dd81dc07"
+    }
+  ],
+  "compact_bytes": 31163,
+  "classifications_equal": true,
+  "lost": [],
+  "gained": []
+}

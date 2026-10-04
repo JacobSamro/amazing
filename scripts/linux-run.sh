@@ -198,7 +198,7 @@ if [ "$HOST" = boat ]; then
     else how=ensure; fi
     read -r BOAT_HOST BOAT_PORT BOAT_ID BOAT_POOL BOAT_TARGET < <("$MAIN/scripts/boat-lane.py" "$how" "$LANE") || continue
     [ "$attempt" = 1 ] && echo "linux-run[$LANE]: boat sandbox $BOAT_ID ($BOAT_POOL)" >&2
-    BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ServerAliveInterval=30 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"
+    BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=2 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"
     # Drop the lease if we exit before the remote command's own trap takes
     # over (failed or interrupted sync); a stale lease keeps the sandbox billed.
     trap '$BSSH "$BOAT_HOST" "rm -f $LEASE" 2>/dev/null; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"' EXIT
@@ -220,11 +220,11 @@ if [ "$HOST" = boat ]; then
       break
     fi
     setup_phase=remote-mkdir
-    $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE"
+    $BSSH "$BOAT_HOST" "timeout --kill-after=5 60 bash -c 'mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE'"
     setup_rc=$?
     if [ "$setup_rc" = 0 ]; then
       setup_phase=rsync
-      rsync -rlpDz --checksum --delete --exclude .git --exclude /target --exclude '/target-*' --exclude /out --exclude /corpora \
+      rsync -rlpDz --timeout=120 --checksum --delete --exclude .git --exclude /target --exclude '/target-*' --exclude /out --exclude /corpora \
         --exclude /.agents --exclude /.opencode --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/wt/$LANE/"
       setup_rc=$?
     fi
@@ -238,35 +238,27 @@ if [ "$HOST" = boat ]; then
     fi
   done
   [ "$ok" = 1 ] || { echo "linux-run: could not sync to Boat for $LANE after the allowed setup attempts" >&2; exit 3; }
-  REMOTE="trap 'rm -f ~/$LEASE' EXIT
-. ~/.amazing-env
-export CARGO_TARGET_DIR=\$HOME/$BOAT_TARGET JOBS=\$(nproc) CARGO_BUILD_JOBS=\$(nproc)
+  BOOTSTRAP_B64="$(base64 < "$REPO/scripts/linux-bootstrap.sh" | tr -d '\n')"
+  REMOTE="trap 'timeout --kill-after=5 15 rm -f ~/$LEASE' EXIT
+export LANE='$LANE' COMMIT='${COMMIT:-working-tree}' OUT=\$HOME/amazing/out/$LANE
+bootstrap=\$(mktemp /tmp/amazing-bootstrap-script.XXXXXX) || exit 3
+printf '%s' '$BOOTSTRAP_B64' | base64 -d > \"\$bootstrap\" || exit 3
+. \"\$bootstrap\"
+rm -f \"\$bootstrap\"
+env_native=\$BOOTSTRAP_NATIVE/environment
+bootstrap_stage environment-copy 30 cp ~/.amazing-env \"\$env_native\"
+bootstrap_stage environment-load 30 bash -c '. \"\$1\" && export -p > \"\$2\"' bash \"\$env_native\" \"\$env_native.exports\"
+. \"\$env_native.exports\" || exit 3
+export JOBS=\$(nproc) CARGO_BUILD_JOBS=\$(nproc)
 export TEST262_ROOT=\$HOME/corpora/test262 RUSTUP_TOOLCHAIN=1.97.1 OUT=\$HOME/amazing/out/$LANE
 if [ -n '${NATIVE_MISSION_DIR:-}' ]; then
   cd '${NATIVE_MISSION_DIR:-}' || exit 3
 else
 cd ~/amazing/wt/$LANE || exit 3
-ln -sfn ~/corpora ~/amazing/wt/$LANE/corpora
-# Snapshot-backed HOME produces stale/missing rlibs and failed append writes.
-# Keep synced source and compilation on the VM's native filesystem.
-mkdir -p /tmp/amazing-native-src-$LANE || exit 3
-rsync -a --delete --exclude /target --exclude '/target-*' --exclude /out --exclude /corpora ./ /tmp/amazing-native-src-$LANE/ || exit 3
-ln -sfn \$HOME/corpora /tmp/amazing-native-src-$LANE/corpora
-cd /tmp/amazing-native-src-$LANE || exit 3
+bootstrap_native_setup
 fi
+bootstrap_native_tools
 export CARGO_TARGET_DIR=/tmp/amazing-native-target-$LANE CARGO_INCREMENTAL=0
-# nextest is also snapshot-backed in HOME. A late mmap fault can kill its
-# controller after every test passes; execute a native copy instead.
-# Publish atomically so sibling lanes never truncate a running executable.
-mkdir -p /tmp/amazing-native-tools || exit 3
-if [ ! -x /tmp/amazing-native-tools/cargo-nextest ]; then
-  nextest_source=\$(command -v cargo-nextest) || exit 3
-  nextest_copy=\$(mktemp /tmp/amazing-native-tools/.cargo-nextest.XXXXXX) || exit 3
-  cp \"\$nextest_source\" \"\$nextest_copy\" && chmod +x \"\$nextest_copy\" &&
-    mv -f \"\$nextest_copy\" /tmp/amazing-native-tools/cargo-nextest || { rm -f \"\$nextest_copy\"; exit 3; }
-fi
-export PATH=/tmp/amazing-native-tools:\$PATH
-# Preserve gate outputs and binaries. Space reclamation requires an owner-verified closed receipt.
 $CMD"
   ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"
   T0=$(date +%s)
