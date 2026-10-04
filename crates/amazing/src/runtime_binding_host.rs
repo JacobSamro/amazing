@@ -146,6 +146,7 @@ struct BindingState {
     legacy_elements: HashMap<u32, JsValue>,
     constructed_documents: HashSet<(NodeIdx, u64)>,
     abort_timeouts: Vec<(AbortSignalId, u64)>,
+    abort_creation_realms: HashMap<AbortSignalId, RealmHandle>,
     document_url: Option<String>,
     document_character_set: Option<String>,
     document_content_type: Option<String>,
@@ -291,7 +292,10 @@ impl RuntimeBindings {
     }
 
     pub(crate) fn fire_abort_timeout(&self, js: &mut Interpreter, id: AbortSignalId) -> Result<(), Throw> {
-        fire_abort_timeout(&mut RuntimeBindingHost { js, state: self.state.clone() }, id)
+        let realm = RuntimeBindingHost { js, state: self.state.clone() }.dom_abort_realm(id)?;
+        let state = self.state.clone();
+        js.binding_with_realm(realm, |js|
+            fire_abort_timeout(&mut RuntimeBindingHost { js, state }, id))
     }
     pub(crate) fn dispatch_event(&self, js: &mut Interpreter, node: u32, name: &str) -> Result<(), Throw> {
         let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
@@ -831,6 +835,7 @@ pub(crate) fn install(
         legacy_elements: HashMap::new(),
         constructed_documents: HashSet::new(),
         abort_timeouts: Vec::new(),
+        abort_creation_realms: HashMap::new(),
         document_url: None,
         document_character_set: None,
         document_content_type: None,
@@ -1200,6 +1205,17 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 }
             }
         }
+        if matches!(brand, InterfaceBrand::ABORT_CONTROLLER | InterfaceBrand::ABORT_SIGNAL) {
+            if key.arena != self.state.borrow().arena || key.generation != 1 {
+                return Err(Throw::type_error("Invalid AbortSignal wrapper"));
+            }
+            let realm = self.dom_abort_realm(AbortSignalId(key.slot as usize))?;
+            if realm != self.js.binding_current_realm() {
+                let state = self.state.clone();
+                return self.js.binding_with_realm(realm, |js|
+                    RuntimeBindingHost { js, state }.wrap_platform_object(key, brand));
+            }
+        }
         let interface = self.interface_for(key, brand)?;
         let prototype = self
             .prototype(interface)
@@ -1308,6 +1324,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
     fn sequence_message_ports(&mut self, value: &JsValue) -> Result<Vec<JsValue>, Throw> {
         self.dom_message_ports(value)
+    }
+    fn abort_signal_created(&mut self, signal: AbortSignalId) -> Result<(), Throw> {
+        self.dom_register_abort(signal)
     }
     fn node_platform_key(&self, node: NodeIdx) -> PlatformKey {
         PlatformKey {
@@ -2223,6 +2242,12 @@ impl SelectorEngine for RuntimeBindingHost<'_> {
 }
 
 impl AbortHost for RuntimeBindingHost<'_> {
+    fn sequence_abort_signals(&mut self, value: &JsValue) -> Result<Vec<AbortSignalId>, Throw> {
+        self.dom_abort_sequence(value)
+    }
+    fn dispatch_abort_event(&mut self, signal: AbortSignalId) -> Result<(), Throw> {
+        self.dom_fire_abort(signal)
+    }
     fn schedule_abort_timeout(&mut self, signal: AbortSignalId, milliseconds: u64) -> Result<(), Throw> {
         self.state.borrow_mut().abort_timeouts.push((signal, milliseconds));
         Ok(())

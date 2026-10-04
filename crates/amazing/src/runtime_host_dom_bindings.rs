@@ -1,6 +1,8 @@
 //! DOM bindings driver additions owned by the dom-bindings lane.
 use super::*;
 use amazing_dom::events::{EventClass, EventId};
+#[path = "runtime_host_dom_bindings/abort_interface.rs"]
+mod abort_interface;
 
 impl RuntimeBindingHost<'_> {
     /// Register actual allocation context before importing or exposing nodes.
@@ -207,7 +209,8 @@ impl RuntimeBindingHost<'_> {
     }
 
     pub(super) fn dom_uses_inherited_accessors(brand: InterfaceBrand) -> bool {
-        matches!(brand, InterfaceBrand::DOM_EXCEPTION | InterfaceBrand::DOM_STRING_MAP
+        matches!(brand, InterfaceBrand::ABORT_CONTROLLER | InterfaceBrand::ABORT_SIGNAL
+            | InterfaceBrand::DOM_EXCEPTION | InterfaceBrand::DOM_STRING_MAP
             | InterfaceBrand::COLLECTION | InterfaceBrand::FORM_CONTROLS
             | InterfaceBrand::OPTIONS | InterfaceBrand::RADIO_NODE_LIST
             | InterfaceBrand::NODE_LIST | InterfaceBrand::STATIC_NODE_LIST

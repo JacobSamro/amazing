@@ -949,6 +949,16 @@ pub trait SelectorEngine: BindingHost {
 /// Driver schedules timeouts and runs native fetch/XHR abort subscribers after
 /// the DOM borrow is released. It calls `fire_abort_timeout` at timer expiry.
 pub trait AbortHost: BindingHost {
+    /// WebIDL sequence<AbortSignal>, with real iterator conversion and closing.
+    fn sequence_abort_signals(&mut self, _value: &Self::Value)
+        -> Result<Vec<amazing_dom::abort::AbortSignalId>, Self::Error> {
+        self.with_dom(|_| Err(DomError::NotSupportedError))
+    }
+    /// Embeddings enter the signal's immutable relevant realm before firing.
+    fn dispatch_abort_event(&mut self, signal: amazing_dom::abort::AbortSignalId)
+        -> Result<(), Self::Error> where Self: Sized {
+        crate::event_bindings::dispatch_abort_event(self, signal)
+    }
     fn schedule_abort_timeout(&mut self, signal: amazing_dom::abort::AbortSignalId, milliseconds: u64)
         -> Result<(), Self::Error>;
     fn run_abort_algorithm(&mut self, algorithm: u64, reason: &Self::Value)
@@ -1186,6 +1196,9 @@ pub trait BindingHost: Sized {
     /// Validate private wrapper identity, realm and liveness before returning a slot.
     fn external_event_target_slot(&self, _value: &Self::Value) -> Option<u64> { None }
     fn external_event_target_value(&self, _slot: u64) -> Option<Self::Value> { None }
+    /// Called only at a genuine native signal allocation, before exposure.
+    fn abort_signal_created(&mut self, _signal: amazing_dom::abort::AbortSignalId)
+        -> Result<(), Self::Error> { Ok(()) }
     fn is_message_port(&self, _value: &Self::Value) -> bool { false }
     /// Immutable creation realm registration at genuine MessageEvent allocation.
     /// Existing event boundary/target changes never change this association.

@@ -542,6 +542,11 @@ impl BindingHost for Host {
     }
 }
 impl AbortHost for Host {
+    fn sequence_abort_signals(&mut self, value: &V)
+        -> Result<Vec<amazing_dom::abort::AbortSignalId>, String> {
+        let V::Array(values) = value else { return Err("TypeError: Expected iterable".into()); };
+        values.iter().map(|value| crate::abort_bindings::signal(self, value, InterfaceBrand::ABORT_SIGNAL)).collect()
+    }
     fn schedule_abort_timeout(&mut self, signal: amazing_dom::abort::AbortSignalId,
         milliseconds: u64) -> Result<(), String> {
         assert!(!self.arena_borrowed);

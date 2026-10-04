@@ -25,7 +25,6 @@ struct Signal {
     dependent: bool,
     dependents: Vec<AbortSignalId>,
     algorithms: Vec<AbortAlgorithm>,
-    onabort: Option<CallbackId>,
 }
 
 #[derive(Debug, Default)]
@@ -37,7 +36,7 @@ impl Dom {
         let target = self.create_event_target();
         self.abort_signals.signals.push(Signal {
             target, reason: None, sources: Vec::new(), dependent: false,
-            dependents: Vec::new(), algorithms: Vec::new(), onabort: None,
+            dependents: Vec::new(), algorithms: Vec::new(),
         });
         id
     }
@@ -79,12 +78,13 @@ impl Dom {
         Ok(self.abort_signals.signals.get(id.0).ok_or(DomError::InvalidStateError)?.target)
     }
     pub fn abort_event_handler(&self, id: AbortSignalId) -> Result<Option<CallbackId>, DomError> {
-        Ok(self.abort_signals.signals.get(id.0).ok_or(DomError::InvalidStateError)?.onabort)
+        let target = self.abort_signal_target(id)?;
+        Ok(self.events().event_handler(EventTarget::External(target), "abort"))
     }
     pub fn set_abort_event_handler(&mut self, id: AbortSignalId, handler: Option<CallbackId>)
         -> Result<Option<CallbackId>, DomError> {
-        let signal = self.abort_signals.signals.get_mut(id.0).ok_or(DomError::InvalidStateError)?;
-        Ok(std::mem::replace(&mut signal.onabort, handler))
+        let target = self.abort_signal_target(id)?;
+        Ok(self.events_mut().set_event_handler(EventTarget::External(target), "abort", handler))
     }
     pub fn abort_signal_for_target(&self, target: u64) -> Option<AbortSignalId> {
         self.abort_signals.signals.iter().position(|signal| signal.target == target).map(AbortSignalId)
@@ -192,4 +192,37 @@ mod tests {
         assert_eq!(dom.abort_signal_reason(nested).unwrap(), Some(reason));
         assert_eq!(dom.create_dependent_abort_signal(&[a]).and_then(|id| dom.abort_signal_reason(id)), Ok(Some(reason)));
     }
+    #[test]
+    fn abort_handler_replacement_preserves_native_listener_position() {
+        use crate::events::{DispatchOrigin, Event, EventInit};
+        let mut dom = Dom::new();
+        let signal = dom.create_abort_signal();
+        let target = EventTarget::External(dom.abort_signal_target(signal).unwrap());
+        dom.add_event_listener(target, "abort", Some(CallbackId(1)), ListenerOptions::default());
+        assert_eq!(dom.set_abort_event_handler(signal, Some(CallbackId(2))), Ok(None));
+        dom.add_event_listener(target, "abort", Some(CallbackId(3)), ListenerOptions::default());
+        assert_eq!(dom.set_abort_event_handler(signal, Some(CallbackId(4))), Ok(Some(CallbackId(2))));
+        assert_eq!(dom.abort_event_handler(signal), Ok(Some(CallbackId(4))));
+        assert_eq!(dom.events().event_handler(target, "abort"), Some(CallbackId(4)));
+        let event = dom.events_mut().create_event(Event::new("abort", EventInit::default(), std::time::Duration::ZERO));
+        let mut dispatch = dom.begin_event_dispatch(target, event, DispatchOrigin::Script).unwrap();
+        let mut order = Vec::new();
+        while let Some(invocation) = dom.events_mut().next_listener(&mut dispatch) {
+            order.push((invocation.callback, invocation.handler));
+        }
+        assert_eq!(order, [(CallbackId(1), false), (CallbackId(4), true), (CallbackId(3), false)]);
+        assert_eq!(dom.set_abort_event_handler(signal, None), Ok(Some(CallbackId(4))));
+        dom.set_abort_event_handler(signal, Some(CallbackId(5))).unwrap();
+        let event = dom.events_mut().create_event(Event::new("abort", EventInit::default(), std::time::Duration::ZERO));
+        let mut dispatch = dom.begin_event_dispatch(target, event, DispatchOrigin::Script).unwrap();
+        let mut order = Vec::new();
+        while let Some(invocation) = dom.events_mut().next_listener(&mut dispatch) {
+            order.push(invocation.callback);
+        }
+        assert_eq!(order, [CallbackId(1), CallbackId(3), CallbackId(5)]);
+        let invalid = AbortSignalId(signal.0 + 1);
+        assert_eq!(dom.set_abort_event_handler(invalid, None), Err(DomError::InvalidStateError));
+        assert_eq!(dom.abort_event_handler(signal), Ok(Some(CallbackId(5))));
+    }
+
 }

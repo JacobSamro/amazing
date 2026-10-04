@@ -698,6 +698,7 @@ fn request<H: FetchHost>(host: &mut H, args: &[H::Value])
         Some(source) => dom.create_dependent_abort_signal(&[source]),
         None => Ok(dom.create_abort_signal()),
     })?;
+    host.abort_signal_created(signal)?;
     init.signal_aborted = Some(host.with_dom(|dom| dom.abort_signal_reason(signal))?.is_some());
     let request = if let Some(record) = record {
         let borrow = record.borrow();
@@ -948,6 +949,7 @@ pub fn invoke<H: FetchHost>(
                 O::RequestClone => {
                     let value = request.clone_request().map_err(|e| error(host, e))?;
                     let signal = host.with_dom(|dom| dom.create_dependent_abort_signal(&[*signal]))?;
+                    host.abort_signal_created(signal)?;
                     host.fetch_allocate(FetchInterface::Request, FetchObject::Request(value, signal))
                 }
                 O::RequestMethod => string(host, request.method()),

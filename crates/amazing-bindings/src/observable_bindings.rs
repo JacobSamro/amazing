@@ -293,6 +293,7 @@ fn flat_map_spawn<H: AbortHost>(host: &mut H, target: ObservableId, mapper: Call
         }
     }
     let inner_signal = host.with_dom(|dom| Ok(dom.create_abort_signal()))?;
+    host.abort_signal_created(inner_signal)?;
     host.with_dom(|dom| dom.observable_push_teardown(target, Teardown::AbortSignal(inner_signal)))?;
     if is_switch {
         host.with_dom(|dom| dom.observable_swap_switch_inner(target, Some(inner_signal)))?;
@@ -465,6 +466,7 @@ fn subscribe_internal<H: AbortHost>(host: &mut H, id: ObservableId, sink: Sink, 
         }
     }
     let (is_first, call_id, run_signal, generation) = host.with_dom(|dom| dom.observable_subscribe(id, sink))?;
+    if is_first { host.abort_signal_created(run_signal)?; }
     if let Some(signal) = own_signal {
         let token = pack_unsub(id, call_id);
         host.with_dom(|dom| dom.add_abort_algorithm(signal, token))?;
@@ -477,6 +479,7 @@ fn subscribe_internal<H: AbortHost>(host: &mut H, id: ObservableId, sink: Sink, 
 
 fn start_relay<H: AbortHost>(host: &mut H, id: ObservableId, source: ObservableId, kind: RelayKind) -> Result<(), H::Error> {
     let relay_signal = host.with_dom(|dom| Ok(dom.create_abort_signal()))?;
+    host.abort_signal_created(relay_signal)?;
     host.with_dom(|dom| dom.observable_push_teardown(id, Teardown::AbortSignal(relay_signal)))?;
     subscribe_internal(host, source, Sink::Relay(id, kind), Some(relay_signal))
 }

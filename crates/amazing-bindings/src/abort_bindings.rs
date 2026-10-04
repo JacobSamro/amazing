@@ -1,5 +1,5 @@
 use crate::host::{AbortHost, BindingHost, InterfaceBrand, Operation as O, PlatformKey};
-use amazing_dom::{abort::{AbortAlgorithm, AbortSignalId}, events::{EventTarget, ListenerOptions}, DomError};
+use amazing_dom::{abort::{AbortAlgorithm, AbortSignalId}, DomError};
 
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::AbortControllerConstructor | O::AbortControllerSignal | O::AbortControllerAbort
@@ -47,7 +47,7 @@ pub(crate) fn propagate<H: AbortHost>(host: &mut H, id: AbortSignalId, value: H:
                 }
             }
         }
-        crate::event_bindings::dispatch_abort_event(host, delivery.signal)?;
+        host.dispatch_abort_event(delivery.signal)?;
     }
     Ok(())
 }
@@ -61,6 +61,7 @@ pub(crate) fn invoke<H: AbortHost>(host: &mut H, op: O, receiver: H::Value,
     args: &[H::Value]) -> Result<H::Value, H::Error> {
     if op == O::AbortControllerConstructor {
         let id = host.with_dom(|dom| Ok(dom.create_abort_signal()))?;
+        host.abort_signal_created(id)?;
         return host.wrap_platform_object(key(host, id), InterfaceBrand::ABORT_CONTROLLER);
     }
     if op == O::AbortSignalAbort {
@@ -70,32 +71,25 @@ pub(crate) fn invoke<H: AbortHost>(host: &mut H, op: O, receiver: H::Value,
             let id = dom.create_abort_signal();
             dom.abort_signal(id, root).map(|_| id)
         })?;
+        host.abort_signal_created(id)?;
         return host.wrap_platform_object(key(host, id), InterfaceBrand::ABORT_SIGNAL);
     }
     if op == O::AbortSignalAny {
         let source = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
-        let length = host.get_property(source, "length")?;
-        let number = host.to_number(&length)?;
-        if !number.is_finite() || number < 0. || number > 1_000_000. {
-            return Err(host.type_error("Invalid AbortSignal sequence length"));
-        }
-        let count = number.trunc() as usize;
-        let mut sources = Vec::with_capacity(count);
-        for index in 0..count {
-            let value = host.get_property(source, &index.to_string())?;
-            sources.push(signal(host, &value, InterfaceBrand::ABORT_SIGNAL)?);
-        }
+        let sources = host.sequence_abort_signals(source)?;
         let id = host.with_dom(|dom| dom.create_dependent_abort_signal(&sources))?;
+        host.abort_signal_created(id)?;
         return host.wrap_platform_object(key(host, id), InterfaceBrand::ABORT_SIGNAL);
     }
     if op == O::AbortSignalTimeout {
         let arg = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
-        let number = host.to_number(arg)?;
+        let number = host.to_number(arg)?.trunc();
         if !number.is_finite() || number < 0. || number >= 18_446_744_073_709_551_616. {
             return Err(host.type_error("AbortSignal.timeout requires an unsigned long long"));
         }
         let milliseconds = number.trunc() as u64;
         let id = host.with_dom(|dom| Ok(dom.create_abort_signal()))?;
+        host.abort_signal_created(id)?;
         host.schedule_abort_timeout(id, milliseconds)?;
         return host.wrap_platform_object(key(host, id), InterfaceBrand::ABORT_SIGNAL);
     }
@@ -108,16 +102,11 @@ pub(crate) fn invoke<H: AbortHost>(host: &mut H, op: O, receiver: H::Value,
     }
     if op == O::AbortSignalSetOnAbort {
         let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
-        let handler = if host.is_callable(value) { Some(host.retain_value(value.clone())) } else { None };
-        let old = host.with_dom(|dom| {
-            let target = EventTarget::External(dom.abort_signal_target(id)?);
-            let old = dom.set_abort_event_handler(id, handler)?;
-            if let Some(old) = old { dom.events_mut().remove_listener(target, "abort", Some(old), false); }
-            if let Some(handler) = handler {
-                dom.add_event_listener(target, "abort", Some(handler), ListenerOptions::default());
-            }
-            Ok(old)
-        })?;
+        let handler = if host.is_object_value(value)? { Some(host.retain_value(value.clone())) } else { None };
+        let old = match host.with_dom(|dom| dom.set_abort_event_handler(id, handler)) {
+            Ok(old) => old,
+            Err(error) => { if let Some(handler) = handler { host.release_value(handler); } return Err(error); }
+        };
         if let Some(old) = old { host.release_value(old); }
         return Ok(host.undefined());
     }
