@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "ticket": "for-in-head",
+  "qualified": false,
+  "before": {
+    "source": "8c7cf54dc19ffa053e0e28d1e32349901688659d",
+    "counts": {
+      "passed": 4460,
+      "failed": 6,
+      "skipped": 17
+    },
+    "failed": [
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::abrupt_head_steps_preserve_identity_and_stop_later_steps"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::anonymous_initializers_receive_binding_names_and_class_inner_names"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::enumeration_mutation_labels_and_completion_controls_keep_existing_contract"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::head_reference_is_captured_without_get_before_initializer"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::initializer_and_rhs_suspension_preserve_captured_binding_in_all_callable_kinds"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::initializer_runs_once_before_rhs_even_when_enumeration_is_empty"
+      ]
+    ],
+    "raw": {
+      "path": "/tmp/for-in-head-before-8c7cf54d-nextest.log",
+      "bytes": 625567,
+      "sha256": "d1af911cf220febcb61fae6bf23d94fbcf58a21496f1b4164ecdd5b2ce8e5c9b"
+    },
+    "receipt_sha256": "23679ffc47caaa224733c54b5acd7aa1233bd503936c1d4a02cce865893f335c"
+  },
+  "after": {
+    "source": "886135b924f756f3bfb89f2adc032ac3af800de5",
+    "counts": {
+      "passed": 4464,
+      "failed": 2,
+      "skipped": 17
+    },
+    "failed": [
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::anonymous_initializers_receive_binding_names_and_class_inner_names"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::enumeration_mutation_labels_and_completion_controls_keep_existing_contract"
+      ]
+    ],
+    "raw": {
+      "path": "/tmp/for-in-head-after-886135b9-nextest.log",
+      "bytes": 610745,
+      "sha256": "6ce9db474119183c0b8248858d85b8d0bb0c7b3ab13b532827b1fd30f1cd6d21"
+    },
+    "receipt_sha256": "b0811d61f0c544d3ceb3ec43c80a7ec1b96cbf394b7c11beb64233a0537fdef1"
+  },
+  "diagnosis": [
+    "Anonymous class NamedEvaluation has inferred name but no inner class binding; original expectation corrected with explicit-named positive control.",
+    "AST ForIn lacked full attached label-set handling; genuine labeled continue propagated out of function."
+  ],
+  "after_corpus": "not run: strict workspace guard stopped on two authored failures",
+  "legacy_pass_skip_losses": []
+}

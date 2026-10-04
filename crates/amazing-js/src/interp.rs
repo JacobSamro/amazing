@@ -1827,3 +1827,7 @@ include!("interp_decorator_tests.rs");
 
 include!("interp_realm_tests.rs");
 include!("runtime_native_task_tests.rs");
+
+#[cfg(test)]
+#[path = "interp_for_in_head_tests.rs"]
+mod for_in_head_tests;

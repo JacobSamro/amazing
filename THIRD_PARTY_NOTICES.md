@@ -165,3 +165,5 @@ reproduced in the table row for that upstream.
 - lucid-softworks/lumen @ f6c9860d44fa52249cfd647122edea184d32c863 — MIT; Copyright (c) 2026 Lucid Softworks limited. Super Reference/GetValue evaluation order from crates/lumen/src/eval.rs adapted in crates/amazing-js/src/interp_optional_chain.rs and the first-super-link lowering in crates/amazing-js/src/vm/compiler_chains.rs.
 
 | boa-dev/boa @ 39cd11214ecb366200157dab96b3919e61e9a391, core/engine/src/builtins/array/mod.rs | MIT | Copyright (c) 2019 Jason Williams | Whole Array.prototype.join ordered generic receiver/length/separator/element protocol adapted to UTF-16 accumulation in crates/amazing-js/src/interp_builtins.rs; existing identity-cycle guard retained |
+
+- boa-dev/boa @ 39cd11214ecb366200157dab96b3919e61e9a391 — MIT; Copyright (c) 2019 Jason Williams. ForIn head initializer ordering from `core/engine/src/bytecompiler/statement/loop.rs::compile_for_in_loop` adapted in `crates/amazing-js/src/interp_stmt.rs` and `crates/amazing-js/src/vm/compiler_patterns.rs`.

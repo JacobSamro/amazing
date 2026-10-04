@@ -896,6 +896,7 @@ impl Compiler {
                 let labels = std::mem::take(&mut self.pending_labels);
                 self.push_loop(labels, true);
                 self.emit(Instruction::Complete(0));
+                self.for_in_initializer(left)?;
                 let source = self.for_head_right(left, right)?;
                 let slot = self.program.for_in_slots;
                 self.program.for_in_slots += 1;
@@ -1776,6 +1777,10 @@ impl Compiler {
 /// `LoopCtx` (enabling `continue label`) rather than pushing a separate,
 /// `continue`-blind break-only wrapper.
 fn is_loop_statement(kind: &StmtKind) -> bool {
+    // Contiguous labels all target the same terminal iteration statement.
+    if let StmtKind::Labeled { body, .. } = kind {
+        return is_loop_statement(&body.kind);
+    }
     matches!(
         kind,
         StmtKind::While { .. }

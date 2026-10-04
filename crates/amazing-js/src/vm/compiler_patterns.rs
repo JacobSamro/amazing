@@ -1,3 +1,6 @@
+// ForIn head initializer ordering adapted from boa-dev/boa
+// (core/engine/src/bytecompiler/statement/loop.rs::compile_for_in_loop)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 //! Destructuring is lowered to ordinary resumable instructions. Iterator state
 //! belongs to the VM frame, so defaults and computed targets may yield or await.
 use super::*;
@@ -12,6 +15,20 @@ impl Compiler {
         for name in super::super::super::binding_names(binding) {
             self.emit(Instruction::ReserveBinding(name, mutable));
         }
+    }
+
+    pub(super) fn for_in_initializer(&mut self, left: &ast::ForLeft) -> Result<(), CompileError> {
+        let ast::ForLeft::Decl(declaration) = left else { return Ok(()); };
+        if declaration.kind != VarKind::Var { return Ok(()); }
+        let Some(item) = declaration.decls.first() else { return Ok(()); };
+        let (Binding::Ident(name), Some(initializer)) = (&item.binding, &item.init) else { return Ok(()); };
+        let slot = self.program.references;
+        self.program.references += 1;
+        self.emit(Instruction::ResolveWriteName(slot, name.name.clone()));
+        let value = self.named_class_expression(initializer, KeyOperand::Static(name.name.as_str().into()))?;
+        self.emit(Instruction::NamedEvaluation(value, Rc::new(initializer.clone()), name.name.clone()));
+        self.emit(Instruction::StoreReference(slot, value));
+        Ok(())
     }
 
     pub(super) fn for_head_right(&mut self, left: &ast::ForLeft, right: &Expr) -> Result<Register, CompileError> {

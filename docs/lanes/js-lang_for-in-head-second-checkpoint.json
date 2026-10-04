@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "qualified": false,
+  "after_corpus": "not run: native factory eligibility assertion stopped candidate",
+  "diagnosis": "Both new contiguous-label groups asserted actual Bytecode, but nested Labeled classification rejected continue to outer attached label. No original eight group failed. Corrected loop classifier follows label chain; unchanged controls.",
+  "before": {
+    "counts": {
+      "passed": 4460,
+      "failed": 8,
+      "skipped": 17
+    },
+    "failed": [
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::abrupt_head_steps_preserve_identity_and_stop_later_steps"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::all_attached_for_in_labels_route_continue_break_and_finally"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::anonymous_initializers_receive_binding_names_and_class_inner_names"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::attached_labels_survive_generator_async_and_async_generator_body_suspension"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::enumeration_mutation_labels_and_completion_controls_keep_existing_contract"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::head_reference_is_captured_without_get_before_initializer"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::initializer_and_rhs_suspension_preserve_captured_binding_in_all_callable_kinds"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::initializer_runs_once_before_rhs_even_when_enumeration_is_empty"
+      ]
+    ],
+    "raw": {
+      "path": "/tmp/for-in-head-before-b85711db-nextest.log",
+      "bytes": 616969,
+      "sha256": "3625dfb08f1a08ac63eaa8908359c8d739589fbfa3fa7568634a60c594a67c73"
+    },
+    "receipt_sha256": "599f4c95b9dcca8d7c3f89dcd8fb65c39ebc9997f478cbc037fb51375ca8afce"
+  },
+  "after": {
+    "counts": {
+      "passed": 4466,
+      "failed": 2,
+      "skipped": 17
+    },
+    "failed": [
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::all_attached_for_in_labels_route_continue_break_and_finally"
+      ],
+      [
+        "amazing-js",
+        "interp::for_in_head_tests::attached_labels_survive_generator_async_and_async_generator_body_suspension"
+      ]
+    ],
+    "raw": {
+      "path": "/tmp/for-in-head-after-9b888725-nextest.log",
+      "bytes": 610940,
+      "sha256": "16c7687034ef7d707c4945ad5d578ce4c6b7b4fccb91a65bb01a48e27ae87741"
+    },
+    "receipt_sha256": "3d6e739b6e96863c09e3f90852705d02cbc491bab0f4b108e9f823e3c8c718f2"
+  },
+  "legacy_pass_skip_losses": []
+}

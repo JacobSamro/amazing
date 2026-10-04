@@ -1,3 +1,6 @@
+// ForIn head initializer ordering adapted from boa-dev/boa
+// (core/engine/src/bytecompiler/statement/loop.rs::compile_for_in_loop)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // Synchronous ForIn/OfBodyEvaluation adapted from lucid-softworks/lumen
 // (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/error/{mod,aggregate,type}.rs)
@@ -315,33 +318,7 @@ impl Interpreter {
                     None,
                 )
             }
-            StmtKind::ForIn { left, right, body } => {
-                self.completion = Some(JsValue::Undefined);
-                let v = self.eval_for_head_right(left, right, env)?;
-                let object = match v {
-                    JsValue::Null | JsValue::Undefined => None,
-                    other => match array_receiver(self, other)? {
-                        JsValue::Object(object) => Some(object),
-                        _ => None,
-                    },
-                };
-                let mut iterator = ForInState {
-                    object,
-                    object_was_visited: false,
-                    visited_keys: HashSet::new(),
-                    remaining_keys: VecDeque::new(),
-                };
-                while let Some(k) = self.next_for_in_key(&mut iterator)? {
-                    let iteration_env = for_iteration_env(left, env);
-                    self.bind_for(left, JsValue::str(k), &iteration_env)?;
-                    match self.exec_loop_body(body, &iteration_env)? {
-                        Flow::Normal | Flow::Continue(None) => {}
-                        Flow::Break(None) => break,
-                        x => return Ok(x),
-                    }
-                }
-                Ok(Flow::Normal)
-            }
+            StmtKind::ForIn { left, right, body } => self.exec_for_in(left, right, body, env, &[]),
             StmtKind::ForOf { left, right, body } => {
                 self.completion = Some(JsValue::Undefined);
                 let v = self.eval_for_head_right(left, right, env)?;
@@ -415,7 +392,19 @@ impl Interpreter {
             StmtKind::Continue { label: l } => {
                 Ok(Flow::Continue(l.as_ref().map(|x| x.name.clone())))
             }
-            StmtKind::Labeled { label, body } => match &body.kind {
+            StmtKind::Labeled { label, body } => {
+                // Every directly attached label belongs to this iteration statement.
+                // Keep the full set so an outer alias can be a continue target.
+                let mut labels = vec![label.name.clone()];
+                let mut iteration = body.as_ref();
+                while let StmtKind::Labeled { label, body } = &iteration.kind {
+                    labels.push(label.name.clone());
+                    iteration = body.as_ref();
+                }
+                if let StmtKind::ForIn { left, right, body } = &iteration.kind {
+                    return self.exec_for_in(left, right, body, env, &labels);
+                }
+                match &body.kind {
                 StmtKind::While { test, body } => {
                     self.loop_while(test, body, env, Some(&label.name))
                 }
@@ -439,6 +428,7 @@ impl Interpreter {
                     Flow::Break(Some(x)) if x == label.name => Ok(Flow::Normal),
                     x => Ok(x),
                 },
+                }
             },
             StmtKind::Return(e) => {
                 let value = match e {
@@ -878,6 +868,54 @@ impl Interpreter {
         }
         Ok(Flow::Normal)
     }
+    fn exec_for_in(&mut self, left: &ForLeft, right: &ast::Expr, body: &ast::Stmt,
+        env: &EnvHandle, labels: &[String]) -> Result<Flow, Throw>
+    {
+        self.completion = Some(JsValue::Undefined);
+        self.eval_for_in_initializer(left, env)?;
+        let v = self.eval_for_head_right(left, right, env)?;
+        let object = match v {
+            JsValue::Null | JsValue::Undefined => None,
+            other => match array_receiver(self, other)? {
+                JsValue::Object(object) => Some(object),
+                _ => None,
+            },
+        };
+        let mut iterator = ForInState {
+            object,
+            object_was_visited: false,
+            visited_keys: HashSet::new(),
+            remaining_keys: VecDeque::new(),
+        };
+        while let Some(k) = self.next_for_in_key(&mut iterator)? {
+            let iteration_env = for_iteration_env(left, env);
+            self.bind_for(left, JsValue::str(k), &iteration_env)?;
+            match self.exec_loop_body(body, &iteration_env)? {
+                Flow::Normal | Flow::Continue(None) => {}
+                Flow::Continue(Some(name)) if labels.contains(&name) => {}
+                Flow::Break(None) => break,
+                Flow::Break(Some(name)) if labels.contains(&name) => break,
+                x => return Ok(x),
+            }
+        }
+        Ok(Flow::Normal)
+    }
+
+    // Annex B ForIn head evaluation resolves the var binding before evaluating
+    // its initializer, and stores once before the right-hand expression. A With
+    // environment can change during that initializer; retain the actual reference.
+    fn eval_for_in_initializer(&mut self, left: &ForLeft, env: &EnvHandle) -> Result<(), Throw> {
+        let ForLeft::Decl(declaration) = left else { return Ok(()); };
+        if declaration.kind != ast::VarKind::Var { return Ok(()); }
+        let Some(item) = declaration.decls.first() else { return Ok(()); };
+        let (Binding::Ident(name), Some(initializer)) = (&item.binding, &item.init) else { return Ok(()); };
+        let target = ast::Expr::new(ExprKind::Ident(name.clone()), name.span);
+        let reference = self.capture_reference(&target, env)?;
+        let mut value = self.eval_named_class_expr(initializer, env, &Self::class_binding_name(&name.name))?;
+        self.named_evaluation(initializer, &mut value, &name.name);
+        self.put_reference(reference, value, env)
+    }
+
     /// ForIn/OfHeadEvaluation (14.7.5.1): for a `let`/`const`/`using`/`await using` ForDeclaration,
     /// the loop's bound names already exist -- UNINITIALIZED, i.e. in TDZ -- in the environment
     /// `expr` (the head's right-hand side) is evaluated in, so a self-referencing right side
