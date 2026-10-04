@@ -1,0 +1,294 @@
+{
+  "ticket": "FLEX-USED-MARGINS-CROSS-ALIGNMENT",
+  "state": "qualified; one origin-based ready squash",
+  "base": "dcee3e6202fa31b8543c2ef83a28cafe73f13dc1",
+  "native_source": "dfbb134b3178ecec225a1875e55d889f8ea0d050",
+  "rendered_source": "3e064abd4911c4a0e392ac7287dd602b2e1c9215",
+  "packaging_observed_origin": "601d78162b8075b5f0b40682cf245c472e4a8bc8",
+  "owned_source_drift_from_fixed_base": false,
+  "host_box": "bx_ncen6t35",
+  "alias": "layout/pool-layout",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "baseline_nextest": {
+    "failed": 0,
+    "passed": 4517,
+    "skipped": 17
+  },
+  "candidate_nextest": {
+    "passed": 4527,
+    "failed": 0,
+    "skipped": 17
+  },
+  "baseline_doctests": {
+    "failed": 0,
+    "ignored": 0,
+    "passed": 4
+  },
+  "candidate_doctests": {
+    "passed": 4,
+    "failed": 0,
+    "ignored": 0
+  },
+  "renders": [
+    {
+      "directory": "css-css-contain",
+      "before": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 74,
+        "pass": 155,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 74,
+        "pass": 155,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": [],
+      "unchanged_count": 229
+    },
+    {
+      "directory": "css-css-display",
+      "before": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 7,
+        "pass": 28,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 7,
+        "pass": 28,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": [],
+      "unchanged_count": 35
+    },
+    {
+      "directory": "css-css-flexbox",
+      "before": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 185,
+        "pass": 338,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 174,
+        "pass": 349,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [
+        "css__css-flexbox__flex-lines__multi-line-wrap-reverse-row-reverse.html",
+        "css__css-flexbox__flexbox-column-row-gap-001.html",
+        "css__css-flexbox__flexbox-column-row-gap-003.html",
+        "css__css-flexbox__flexbox-overflow-horiz-001.html",
+        "css__css-flexbox__flexbox-overflow-horiz-002.html",
+        "css__css-flexbox__flexbox-overflow-vert-001.html",
+        "css__css-flexbox__flexbox-safe-overflow-position-001.html",
+        "css__css-flexbox__gap-003-lr.html",
+        "css__css-flexbox__gap-003-rl.html",
+        "css__css-flexbox__gap-006-rl.html",
+        "css__css-flexbox__gap-007-rtl.html"
+      ],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": [],
+      "unchanged_count": 512
+    },
+    {
+      "directory": "css-css-grid",
+      "before": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 532,
+        "pass": 413,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 532,
+        "pass": 413,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": [],
+      "unchanged_count": 945
+    },
+    {
+      "directory": "css-css-overflow",
+      "before": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 260,
+        "pass": 83,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 260,
+        "pass": 83,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": [],
+      "unchanged_count": 343
+    },
+    {
+      "directory": "css-css-position",
+      "before": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 9,
+        "pass": 45,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 9,
+        "pass": 45,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": [],
+      "unchanged_count": 54
+    },
+    {
+      "directory": "css-css-sizing",
+      "before": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 39,
+        "pass": 99,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "after": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 39,
+        "pass": 99,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "changed": [],
+      "new": [],
+      "removed": [],
+      "unchanged_count": 138
+    }
+  ],
+  "render_total": 2267,
+  "render_before_pass": 1161,
+  "render_after_pass": 1172,
+  "render_gained": 11,
+  "render_lost": 0,
+  "render_other_classification_changes": 0,
+  "qualification_boundary": "Full workspace/doctests and seven complete static pinned WPT directories. No external decoded42/geometry4/Test262 qualification claim. Root owns combined gates.",
+  "fixture_correction": {
+    "failed_new_groups": 4,
+    "prior_native_passed": 4523,
+    "prior_native_failed": 4,
+    "production_changed": false,
+    "cause": "Higher-specificity section>div helper defaults overrode authored div width/height120/60. Defaults now section>*; all original expected geometry assertions preserved; actual size guards added.",
+    "preserved_new_groups": 10
+  },
+  "production_flex_sha256": "6ba05c354ea5f16fa39f4545ce736f8adaf9bbd817ddb41ca7a84395499594f0",
+  "remote_before_summary": "/home/user/amazing/out/layout/render-gate/render-20261004T202849-97744-before/dcee3e6202fa31b8543c2ef83a28cafe73f13dc1/gate.summary.json",
+  "remote_after_summary": "/home/user/amazing/out/layout/render-gate/render-20261004T202849-97744-after/3e064abd4911c4a0e392ac7287dd602b2e1c9215/gate.summary.json",
+  "raw_before_summary_sha256": "e354f4c6c628a8a27d610a062c4c12b155ba6f8e3b393ca0c125673ed4cc0059",
+  "raw_after_summary_sha256": "188f64e6b21a4ce8771e9a1180e75256c79a71f0f257daaa020fc3244b260077",
+  "raw_policy": "Logs/reports/pixels remain remote; committed packet contains only compact classifications/counts/IDs/source and custody metadata.",
+  "native_final_log": {
+    "path": "/home/user/amazing/out/layout/flex-margin-final-nextest.log",
+    "sha256": "ed9cf92dfe1a290e4e808f0061e52dc8720b078c2acdd192ab2db8a4c850e361",
+    "actual_exit": 0
+  },
+  "doctest_final_log": {
+    "path": "/home/user/amazing/out/layout/flex-margin-final-docs.log",
+    "sha256": "3e2574bab323293fbb9c67d637548a058002f61db8dd294282d4699b824bbc53",
+    "actual_exit": 0
+  },
+  "raw_archives": [
+    {
+      "side": "before",
+      "path": "/home/user/amazing/out/layout/flex-margin-before-raw.tgz",
+      "sha256": "3a086fc7f9400475251ce3e7c50d61d86a5c9d1cea8f2674a2e44c39de129f81",
+      "gzip_verified": true,
+      "member_counts": {
+        "actual_ppm": 2267,
+        "reference_ppm": 2267,
+        "report_json": 14
+      }
+    },
+    {
+      "side": "after",
+      "path": "/home/user/amazing/out/layout/flex-margin-after-raw.tgz",
+      "sha256": "d055ccdb44e5ca59fd4439c88f3e756db25ff5d73ebae8999d346dbe345d1a0f",
+      "gzip_verified": true,
+      "member_counts": {
+        "actual_ppm": 2267,
+        "reference_ppm": 2267,
+        "report_json": 14
+      }
+    }
+  ],
+  "renderer": {
+    "source": "3e064abd4911c4a0e392ac7287dd602b2e1c9215",
+    "path": "/tmp/amazing-native-target-layout/release/amazing",
+    "sha256": "374fc1a58f0a6ba69bf0a7fa1428602197719830c238714b923c1539a1cf1e2d",
+    "baseline_binary_custody": "not separately saved by public paired wrapper; actual before source/bootstrap/build/report receipts retained",
+    "durable_gzip": {
+      "path": "/home/user/amazing/out/layout/flex-margin-renderer.gz",
+      "sha256": "fd99c58aaf8f6113979768f78dbd67480d846d0cfff5b4e30a88464193bc3731",
+      "gzip_verified": true
+    }
+  },
+  "host_native": "box-node-90aa1d075c43b0e4",
+  "ready_owned_src_equals_native_dfbb": true
+}

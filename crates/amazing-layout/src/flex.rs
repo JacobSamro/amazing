@@ -1,3 +1,5 @@
+// Portions ported and adapted from DioxusLabs/taffy (src/compute/flexbox.rs)
+// @ 2c81b8e09d172c2e4d7747be2b1e5a03e0f30bf0, MIT.
 //! Flexbox layout (css-flexbox-1 subset): flex containers resolve their
 //! items along a main axis with grow/shrink/basis distribution, wrap into
 //! lines, and align on the cross axis.
@@ -92,7 +94,8 @@ fn justify_pair(mode: Pack, free: f32, n: usize) -> (f32, f32) {
     match mode {
         Pack::End => (free, 0.0),
         Pack::Center => (free / 2.0, 0.0),
-        Pack::SpaceBetween => (0.0, free / (nf - 1.0)),
+        Pack::SpaceBetween if n > 1 => (0.0, free.max(0.0) / (nf - 1.0)),
+        Pack::SpaceBetween => (0.0, 0.0),
         Pack::SpaceAround => (free / nf / 2.0, free / nf),
         Pack::SpaceEvenly => (free / (nf + 1.0), free / (nf + 1.0)),
         _ => (0.0, 0.0),
@@ -105,8 +108,10 @@ struct ContainerSpec {
     direction: Direction,
     wrap: bool,
     wrap_reverse: bool,
+    cross_flow_reversed: bool,
     justify: Pack,
     align_items: Pack,
+    align_safe: bool,
     align_content: Pack,
     row_gap: f32,
     col_gap: f32,
@@ -156,8 +161,10 @@ impl ContainerSpec {
             direction,
             wrap,
             wrap_reverse,
+            cross_flow_reversed: cross_reversed,
             justify,
             align_items,
+            align_safe: style.get("align-items").is_some_and(|v| v.starts_with("safe ")),
             align_content,
             row_gap,
             col_gap,
@@ -430,6 +437,60 @@ fn h_chrome(it: &LayoutBox) -> f32 {
 /// Vertical padding + border chrome.
 fn v_chrome(it: &LayoutBox) -> f32 {
     it.padding.top + it.padding.bottom + it.border.top + it.border.bottom
+}
+
+// Portions adapted from DioxusLabs/taffy src/compute/flexbox.rs
+// @ 2c81b8e09d172c2e4d7747be2b1e5a03e0f30bf0, MIT.
+// Auto margins are used geometry, never changes to the computed declaration.
+fn reset_used_margins(item: &mut LayoutBox, basis: f32) {
+    item.margin = values::resolve_margins(&item.style, item.font_size, basis);
+    item.margin.left = Some(item.margin.left.unwrap_or(0.0));
+    item.margin.right = Some(item.margin.right.unwrap_or(0.0));
+    item.margin.top = Some(item.margin.top.unwrap_or(0.0));
+    item.margin.bottom = Some(item.margin.bottom.unwrap_or(0.0));
+}
+
+fn cross_offset(item: &mut LayoutBox, line: f32, row: bool, reverse: bool, flow_reversed: bool, align: Pack, safe: bool) -> f32 {
+    let (start, end, size, mut before, mut after) = if row {
+        ("top", "bottom", item.border_box.h, item.margin.top.unwrap_or(0.0), item.margin.bottom.unwrap_or(0.0))
+    } else {
+        ("left", "right", item.border_box.w, item.margin.left.unwrap_or(0.0), item.margin.right.unwrap_or(0.0))
+    };
+    let auto_before = margin_is_auto(&item.style, start);
+    let auto_after = margin_is_auto(&item.style, end);
+    if auto_before { before = 0.0; }
+    if auto_after { after = 0.0; }
+    let free = line - size - before - after;
+    if auto_before || auto_after {
+        if free > 0.0 {
+            let share = free / (usize::from(auto_before) + usize::from(auto_after)) as f32;
+            if auto_before { before = share; }
+            if auto_after { after = share; }
+        } else {
+            // Overflow keeps the actual block/inline-start margin, whose
+            // physical side follows writing-mode/direction, NOT wrap-reverse.
+            if flow_reversed {
+                if auto_after { after = 0.0; }
+                before = line - size - after;
+            } else {
+                if auto_before { before = 0.0; }
+                after = line - size - before;
+            }
+        }
+        if row { item.margin.top = Some(before); item.margin.bottom = Some(after); }
+        else { item.margin.left = Some(before); item.margin.right = Some(after); }
+        // The public solver reflects cross coordinates once after placement.
+        return if reverse { line - size - before } else { before };
+    }
+    let cross_start = if reverse { after } else { before };
+    let safe = item.style.get("align-self").filter(|v| *v != "auto")
+        .map_or(safe, |v| v.starts_with("safe "));
+    let align = if safe && free < 0.0 { Pack::Start } else { align };
+    cross_start + match align {
+        Pack::End => free,
+        Pack::Center => free / 2.0,
+        _ => 0.0,
+    }
 }
 
 /// CSS Sizing 4 / Flexbox 1 §9.2.3 rule B "transferred size suggestion": a
@@ -731,26 +792,16 @@ fn layout_row(
                 auto_sides += 1;
             }
         }
-        let mut justify_free = free.max(0.0);
-        if auto_sides > 0 && free > 0.0 {
-            let share = free / auto_sides as f32;
-            for &i in line {
-                for side in ["left", "right"] {
-                    if margin_is_auto(&items[i].style, side) {
-                        items[i]
-                            .style
-                            .set(&format!("margin-{side}"), &format!("{share}px"));
-                    }
-                }
-                resolve_model(&mut items[i], content_w);
-            }
-            justify_free = 0.0;
-        }
+        let auto_share = if auto_sides > 0 && free > 0.0 { free / auto_sides as f32 } else { 0.0 };
+        let justify_free = if auto_share > 0.0 { 0.0 } else { free.max(0.0) };
 
-        // Lay out at final content widths (origin 0,0; translated below).
+        // Lay out with authentic declarations, then install used flex margins.
         for &i in line {
             crate::block::layout_block_with_used_content_size(&mut items[i],0.0,0.0,content_w,fonts,None,
                 crate::UsedContentSize{width:Some(base[i].max(0.0)),height:None});
+            reset_used_margins(&mut items[i], content_w);
+            if margin_is_auto(&items[i].style, "left") { items[i].margin.left = Some(auto_share); }
+            if margin_is_auto(&items[i].style, "right") { items[i].margin.right = Some(auto_share); }
         }
 
         // Line cross size, then stretch items whose cross size is auto.
@@ -783,9 +834,9 @@ fn layout_row(
         // A single-line flex container's line fills its definite cross size
         // regardless of align-content. That property distributes *lines* in
         // multi-line containers; align-items positions items within this line.
-        if lines.len() == 1 {
+        if !spec.wrap {
             if let Some(def_h) = spec.definite_height {
-                line_cross = line_cross.max(def_h);
+                line_cross = def_h;
             }
         }
         for &i in line {
@@ -802,15 +853,10 @@ fn layout_row(
                 let target = line_cross
                     - items[i].margin.top.unwrap_or(0.0)
                     - items[i].margin.bottom.unwrap_or(0.0);
-                if target > items[i].border_box.h {
-                    stretch_height(&mut items[i], target);
-                }
+                stretch_height(&mut items[i], target, spec.definite_height.unwrap_or(0.0));
             }
         }
-        line_cross = line
-            .iter()
-            .map(|&i| outer_cross(items, i))
-            .fold(line_cross, f32::max);
+
 
         // Main-axis placement: leading offset + extra between-item space.
         // Margins are resolved fresh from the style after auto-margin
@@ -818,17 +864,7 @@ fn layout_row(
         // carry; the solver's constraints above intentionally still saw auto
         // margins as zero, and `layout_block` re-solves the model's margins,
         // so the struct field is not authoritative here.
-        let finals: Vec<f32> = line
-            .iter()
-            .map(|&i| {
-                let margin =
-                    values::resolve_margins(&items[i].style, items[i].font_size, content_w);
-                base[i]
-                    + h_chrome(&items[i])
-                    + margin.left.unwrap_or(0.0)
-                    + margin.right.unwrap_or(0.0)
-            })
-            .collect();
+        let finals: Vec<f32> = line.iter().map(|&i| outer_main(items, i, base[i])).collect();
         let (lead, between) = justify_pair(spec.justify, justify_free, n);
         let mut cursor = if reverse {
             content_x + content_w - lead
@@ -848,31 +884,20 @@ fn layout_row(
             // Block layout solves CSS2 horizontal constraints and may fill
             // an auto opposite margin. Flex placement uses the item's
             // authored/resolved margins instead.
-            let margin = values::resolve_margins(&it.style, it.font_size, content_w);
-            let ml = margin.left.unwrap_or(0.0);
-            let mr = margin.right.unwrap_or(0.0);
+            let ml = it.margin.left.unwrap_or(0.0);
+            let mr = it.margin.right.unwrap_or(0.0);
             let bx = if reverse {
                 cursor - mr - h_chrome(it) - base[i]
             } else {
                 cursor + ml
             };
             let align = props[i].align_self.unwrap_or(spec.align_items);
-            let bh = it.border_box.h;
-            let vc = v_chrome(it);
-            let by = if align == Pack::Baseline {
-                if let Some((ascent, _)) = baseline_metrics {
-                    line_top + ascent - (first_baseline(it) - it.border_box.y)
-                } else {
-                    line_top + it.margin.top.unwrap_or(0.0)
-                }
+            let by = if align == Pack::Baseline
+                && !margin_is_auto(&it.style, "top") && !margin_is_auto(&it.style, "bottom") {
+                line_top + baseline_metrics.map_or(it.margin.top.unwrap_or(0.0), |(ascent, _)|
+                    ascent - (first_baseline(it) - it.border_box.y))
             } else {
-                line_top
-                    + it.margin.top.unwrap_or(0.0)
-                    + match align {
-                        Pack::End => line_cross - bh - vc,
-                        Pack::Center => (line_cross - bh - vc) / 2.0,
-                        _ => 0.0,
-                    }
+                line_top + cross_offset(it, line_cross, true, spec.wrap_reverse, spec.cross_flow_reversed, align, spec.align_safe)
             };
             translate(it, bx - it.border_box.x, by - it.border_box.y);
             if reverse {
@@ -887,6 +912,7 @@ fn layout_row(
         line_crosses.push(line_cross);
     }
 
+    content_height += spec.row_gap * lines.len().saturating_sub(1) as f32;
     // align-content: distribute spare cross space against a definite
     // container height by shifting whole lines down.
     if let Some(def_h) = spec.definite_height {
@@ -899,14 +925,12 @@ fn layout_row(
                 let mut shift = 0.0;
                 for (line_index, line) in lines.iter().enumerate() {
                     for &item_index in line {
-                        if shift > 0.0 {
-                            translate(&mut items[item_index], 0.0, shift);
-                        }
                         let align = props[item_index].align_self.unwrap_or(spec.align_items);
                         let height_auto = matches!(
                             crate::used_size::extent(&items[item_index],"height",0.0),
                             MaybeLen::Auto
                         );
+                        let old_offset = cross_offset(&mut items[item_index], line_crosses[line_index], true, spec.wrap_reverse, spec.cross_flow_reversed, align, spec.align_safe);
                         if align == Pack::Stretch
                             && height_auto
                             && !margin_is_auto(&items[item_index].style, "top")
@@ -916,8 +940,14 @@ fn layout_row(
                                 + extra
                                 - items[item_index].margin.top.unwrap_or(0.0)
                                 - items[item_index].margin.bottom.unwrap_or(0.0);
-                            stretch_height(&mut items[item_index], target.max(0.0));
+                            stretch_height(&mut items[item_index], target.max(0.0), spec.definite_height.unwrap_or(0.0));
                         }
+                        let item = &mut items[item_index];
+                        let new_offset = cross_offset(item, line_crosses[line_index] + extra, true, spec.wrap_reverse, spec.cross_flow_reversed, align, spec.align_safe);
+                        let adjustment = if align == Pack::Baseline
+                            && !margin_is_auto(&item.style, "top") && !margin_is_auto(&item.style, "bottom") { 0.0 }
+                            else { new_offset - old_offset };
+                        translate(item, 0.0, shift + adjustment);
                     }
                     line_crosses[line_index] += extra;
                     shift += extra;
@@ -999,7 +1029,9 @@ fn layout_wrapped_column(
         for width in &mut widths { *width += extra; }
     }
     let mut owned = std::mem::take(items).into_iter().map(Some).collect::<Vec<_>>();
-    let mut x = content_x;
+    let spare = content_w - widths.iter().sum::<f32>() - spec.col_gap * widths.len().saturating_sub(1) as f32;
+    let (lead, between) = justify_pair(spec.align_content, spare.max(0.0), widths.len());
+    let mut x = content_x + lead;
     for (line, width) in lines.iter().zip(widths) {
         let mut group = line.iter().map(|&index| owned[index].take().unwrap()).collect::<Vec<_>>();
         let group_props = line.iter().map(|&index| props[index]).collect::<Vec<_>>();
@@ -1007,7 +1039,7 @@ fn layout_wrapped_column(
         let line_spec = ContainerSpec { wrap: false, ..*spec };
         layout_column(&mut group, &group_props, &group_order, &line_spec, x, content_y, width, fonts);
         for (&index, item) in line.iter().zip(group) { owned[index] = Some(item); }
-        x += width + spec.col_gap;
+        x += width + spec.col_gap + between;
     }
     *items = owned.into_iter().map(Option::unwrap).collect();
     height
@@ -1046,6 +1078,7 @@ fn layout_column(
             line_cross = line_cross.max(outer_w);
         }
     }
+    if !spec.wrap { line_cross = content_w; }
     // §9.2 step 3: an auto-height item's flex base size is measured using
     // its own cross size if definite, otherwise the *container's* inner
     // cross size -- not the flex line's (possibly wider) cross size, which
@@ -1067,7 +1100,7 @@ fn layout_column(
                 avail
             },
             _ => match crate::used_size::extent(&it,"width",avail_for) {
-                MaybeLen::Px(v) => v.min(avail),
+                MaybeLen::Px(v) => v.max(0.0),
                 MaybeLen::Auto => (max_content_width(it, fonts)-h_chrome(it)).max(0.0).min(avail),
             },
         }
@@ -1144,6 +1177,7 @@ fn layout_column(
     for (position, &i) in order.iter().enumerate() {
         crate::block::layout_block_with_used_content_size(&mut items[i],0.0,0.0,content_w,fonts,None,
             crate::UsedContentSize{width:Some(layout_widths[i]),height:Some(base[position].max(0.0))});
+        reset_used_margins(&mut items[i], content_w);
     }
 
     // Main-axis placement (justify-content along the vertical axis).
@@ -1176,29 +1210,18 @@ fn layout_column(
             for &i in order {
                 for side in ["top", "bottom"] {
                     if margin_is_auto(&items[i].style, side) {
-                        items[i]
-                            .style
-                            .set(&format!("margin-{side}"), &format!("{share}px"));
+                        if side == "top" { items[i].margin.top = Some(share); }
+                        else { items[i].margin.bottom = Some(share); }
                     }
                 }
-                resolve_model(&mut items[i], content_w);
             }
             justify_free = 0.0;
         }
     }
     // Placement steps by post-absorption outer sizes, resolved fresh from
     // the style for the same reason as the row path.
-    let finals: Vec<f32> = order
-        .iter()
-        .enumerate()
-        .map(|(position, &i)| {
-            let margin = values::resolve_margins(&items[i].style, items[i].font_size, content_w);
-            base[position]
-                + v_chrome(&items[i])
-                + margin.top.unwrap_or(0.0)
-                + margin.bottom.unwrap_or(0.0)
-        })
-        .collect();
+    let finals: Vec<f32> = order.iter().enumerate().map(|(position, &i)|
+        base[position] + v_chrome(&items[i]) + items[i].margin.top.unwrap_or(0.0) + items[i].margin.bottom.unwrap_or(0.0)).collect();
     let (lead, between) = justify_pair(spec.justify, justify_free, n);
 
     let reverse = spec.direction == Direction::ColumnReverse;
@@ -1219,8 +1242,7 @@ fn layout_column(
             }
         }
         let it = &mut items[i];
-        let margin = values::resolve_margins(&it.style, it.font_size, content_w);
-        let mt = margin.top.unwrap_or(0.0);
+        let mt = it.margin.top.unwrap_or(0.0);
         let outer = finals[pos];
         let by = if reverse {
             cursor -= outer;
@@ -1229,16 +1251,7 @@ fn layout_column(
             cursor + mt
         };
         let align = props[i].align_self.unwrap_or(spec.align_items);
-        let bw = it.border_box.w;
-        let ml = margin.left.unwrap_or(0.0);
-        let mr = margin.right.unwrap_or(0.0);
-        let bx = content_x
-            + ml
-            + match align {
-                Pack::End => content_w - bw - ml - mr,
-                Pack::Center => (content_w - bw - ml - mr) / 2.0,
-                _ => 0.0,
-            };
+        let bx = content_x + cross_offset(it, line_cross, false, spec.wrap_reverse, spec.cross_flow_reversed, align, spec.align_safe);
         translate(it, bx - it.border_box.x, by - it.border_box.y);
         if !reverse {
             cursor += outer;
@@ -1254,14 +1267,13 @@ fn layout_column(
 
 /// Extends a box's height without reflowing children (top-anchored
 /// content) — cross-axis stretch and column flexing.
-fn stretch_height(it: &mut LayoutBox, target_border_h: f32) {
-    let delta = target_border_h - it.border_box.h;
-    if delta <= 0.0 {
-        return;
-    }
-    it.used_content_size.height=Some((target_border_h-v_chrome(it)).max(0.0));
-    it.border_box.h += delta;
-    it.content_box.h += delta;
+fn stretch_height(it: &mut LayoutBox, target_border_h: f32, basis: f32) {
+    let min = match crate::used_size::extent(it, "min-height", basis) { MaybeLen::Px(v) => v, MaybeLen::Auto => 0.0 };
+    let max = match crate::used_size::extent(it, "max-height", basis) { MaybeLen::Px(v) => v.max(min), MaybeLen::Auto => f32::INFINITY };
+    let content = (target_border_h - v_chrome(it)).max(0.0).clamp(min, max);
+    it.used_content_size.height = Some(content);
+    it.border_box.h = content + v_chrome(it);
+    it.content_box.h = content;
 }
 
 /// Shifts a laid-out subtree by (`dx`, `dy`) — border/content boxes, line
@@ -1569,6 +1581,10 @@ fn inline_run_width(items: &[crate::InlineNode], fonts: &FontSource) -> f32 {
     }
     max_width.max(line_width)
 }
+
+#[cfg(test)]
+#[path = "flex_margin_tests.rs"]
+mod margin_tests;
 
 #[cfg(test)]
 mod tests {
