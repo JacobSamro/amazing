@@ -249,6 +249,7 @@ env_native=\$BOOTSTRAP_NATIVE/environment
 bootstrap_stage environment-copy 30 cp ~/.amazing-env \"\$env_native\"
 bootstrap_stage environment-load 30 bash -c '. \"\$1\" && export -p > \"\$2\"' bash \"\$env_native\" \"\$env_native.exports\"
 . \"\$env_native.exports\" || exit 3
+bootstrap_native_cargo
 export JOBS=\$(nproc) CARGO_BUILD_JOBS=\$(nproc)
 export TEST262_ROOT=\$HOME/corpora/test262 RUSTUP_TOOLCHAIN=1.97.1 OUT=\$HOME/amazing/out/$LANE
 if [ -n '${NATIVE_MISSION_DIR:-}' ]; then

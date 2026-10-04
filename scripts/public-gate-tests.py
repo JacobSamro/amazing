@@ -28,6 +28,20 @@ class Bootstrap(unittest.TestCase):
   for label in ('environment-copy','environment-load'):self.assertIn('bootstrap_stage '+label+' 30',run)
   self.assertIn('bootstrap_stage native-source-sync 600',text)
   self.assertIn('timeout --signal=TERM --kill-after=5',text)
+ def test_cargo_dependencies_use_native_storage(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=pathlib.Path(d);out=root/'out';out.mkdir()
+   env=dict(os.environ,OUT=str(out),COMMIT='fixture',LANE='fixture-'+root.name,CARGO_HOME=str(root/'lazy-home'),VPX_VERSION='1.16.0',PKG_CONFIG='pkg-config',CMAKE='cmake')
+   r=subprocess.run(['bash','-c',f'. "{S}/linux-bootstrap.sh"; bootstrap_native_cargo; python3 -c \'import json,os;print(json.dumps({{k:os.environ[k] for k in ("CARGO_HOME","VPX_VERSION","PKG_CONFIG","CMAKE")}}))\''],env=env,capture_output=True,text=True)
+   self.assertEqual(r.returncode,0,r.stderr)
+   facts=json.loads(r.stdout.splitlines()[-1]);native=pathlib.Path(facts['CARGO_HOME'])
+   try:
+    self.assertTrue(str(native).startswith('/tmp/amazing-native-cargo-'))
+    self.assertNotEqual(facts['CARGO_HOME'],env['CARGO_HOME'])
+    self.assertEqual(native.stat().st_dev,pathlib.Path('/tmp').stat().st_dev)
+    for key in ('VPX_VERSION','PKG_CONFIG','CMAKE'):self.assertEqual(facts[key],env[key])
+   finally:native.rmdir()
+   self.assertIn('bootstrap_native_cargo',(S/'linux-run.sh').read_text())
 
 class Render(unittest.TestCase):
  def fixture(self,workspace_exit=0,baseline=True):

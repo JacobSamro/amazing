@@ -1,0 +1,24 @@
+{
+  "ticket": "linux-native-registry",
+  "qualified_source": "01b17fe2703bb8f2363ac278123c66cd430a5768",
+  "recorded_base": "14853c4e935bdd10194aa0bd3cb7db1b686da261",
+  "box": "bx_yyjrxkuc",
+  "owner_handle": 4394,
+  "owner_exit": 0,
+  "public_tooling_tests": 9,
+  "registry_package_manifests_verified": 318,
+  "phase_exits": {
+    "public-tooling": 0,
+    "metadata": 0,
+    "native-libraries": 0
+  },
+  "compact_bytes": 36216,
+  "compact_sha256": "ae2537f5e9ec893d384f1794e45e5d76cea1f68db8f449af3a264f671b93efae",
+  "diagnosis": {
+    "original_raw_bytes": 93128,
+    "original_raw_sha256": "e5de690a6913656fe1ee63660e3612e39f2e91fd6f1ff10214ed3db9e851e457",
+    "actual_errors": "OpenH264 source/header ENOTCONN; Opus CMake source under HOME Cargo registry",
+    "observed_flag": "OpenH264 upstream flag_if_supported, not evidence of environment contamination"
+  },
+  "raw_policy": "Raw logs remain on Boat; this is tooling qualification only, no product gate claim"
+}

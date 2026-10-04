@@ -42,3 +42,24 @@ bootstrap_stage native-nextest 120 bash -c '
 '
 export PATH=/tmp/amazing-native-tools:$PATH
 }
+
+bootstrap_native_cargo() {
+# Native targets alone are insufficient: C/C++ build scripts also read their
+# registry sources. Snapshot-backed HOME registry reads have failed with
+# ENOTCONN during OpenH264 and Opus compilation. Let Cargo download and unpack
+# locked packages directly on the native filesystem; never copy the lazy tree.
+local cargo_native="/tmp/amazing-native-cargo-$LANE"
+bootstrap_stage native-cargo-directory 30 python3 - "$cargo_native" <<'PY'
+import os,pathlib,sys
+p=pathlib.Path(sys.argv[1])
+p.mkdir(exist_ok=True)
+if p.is_symlink() or p.resolve()!=p or p.stat().st_dev!=pathlib.Path('/tmp').stat().st_dev:
+ raise SystemExit('Cargo home must be an actual native directory')
+for name in ('registry','git'):
+ q=p/name
+ if q.exists() and (q.is_symlink() or q.stat().st_dev!=p.stat().st_dev):
+  raise SystemExit('Cargo dependency storage must remain native')
+print(str(p))
+PY
+export CARGO_HOME="$cargo_native"
+}
