@@ -1,0 +1,1805 @@
+{
+  "ticket": "typed-array-integrity",
+  "qualification": "fresh complete own paired Linux gate; root merge gate separate",
+  "base": "fc48838bba9e664746147e4d70437be09b785a4e",
+  "tested_source": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+  "whole_candidate_exit": 0,
+  "profile": {
+    "lane": "js-runtime",
+    "pool": "pool-js-a",
+    "queried_at_epoch": 1791136271.8622231,
+    "sandbox": {
+      "archiveAfter": "2026-10-04T19:44:59.591Z",
+      "health": "ok",
+      "id": "bx_bq7wyr6x",
+      "lastSnapshotStatus": "completed",
+      "machineProvider": "baremetal",
+      "memoryGB": 16,
+      "state": "idle",
+      "type": "large",
+      "vcpu": 8
+    },
+    "root_allocation_actual_exit": 0,
+    "clean_candidate_rerun_authorized": true,
+    "candidate": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+    "baseline": "fc48838bba9e664746147e4d70437be09b785a4e",
+    "updated": "2026-10-04T17:51:11.869877+00:00"
+  },
+  "before_native": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4426,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_details": [],
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 612363,
+        "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/workspace.log",
+        "sha256": "b28602bd98ca28d7a61f61b02a4946a616e22620d7824f2f38098732829de393"
+      },
+      {
+        "bytes": 16398,
+        "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/docs.log",
+        "sha256": "700bc7184ffb34fea3c48776afda140ce98713c7eff2fe2d167a39e937d9f24a"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "fc48838bba9e664746147e4d70437be09b785a4e",
+    "summary_lines": [
+      "Summary [  75.695s] 4426 tests run: 4426 passed (1 slow), 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "after_native": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4429,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_details": [
+      {
+        "command": [
+          "cargo",
+          "nextest",
+          "run",
+          "--workspace",
+          "--locked",
+          "--no-fail-fast",
+          "--status-level",
+          "skip"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "        PASS [   0.007s] (4421/4429) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+          "        PASS [   0.008s] (4422/4429) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+          "        PASS [   0.012s] (4423/4429) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+          "        PASS [   0.023s] (4424/4429) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+          "        PASS [   1.839s] (4425/4429) amazing-paint::collapsed_table_wpt collapsed_empty_rows_have_only_the_known_unresolved_layout_gaps",
+          "        PASS [   8.357s] (4426/4429) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+          "        PASS [  49.780s] (4427/4429) amazing-compositor::parallel_tile_pages ia_oracle_pages_and_long_article_scroll_trace",
+          "        PASS [  23.884s] (4428/4429) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+          "        SLOW [> 60.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500) amazing-compositor::paint_view_pages real_page_frame_time_report",
+          "        PASS [  61.809s] (4429/4429) amazing-compositor::paint_view_pages real_page_frame_time_report",
+          "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+          "     Summary [  77.317s] 4429 tests run: 4429 passed (1 slow), 17 skipped"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-v9zbp2os/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/workspace.log",
+            "durable": {
+              "bytes": 612862,
+              "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/workspace.log",
+              "sha256": "89756ac9bd9955e8c6e0889a0b017586bcc4b937c18778a383f0e70100c83313"
+            },
+            "native": {
+              "bytes": 612862,
+              "path": "/tmp/amazing-gate-command-v9zbp2os/output.log",
+              "sha256": "89756ac9bd9955e8c6e0889a0b017586bcc4b937c18778a383f0e70100c83313"
+            },
+            "source": "/tmp/amazing-gate-command-v9zbp2os/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "nextest",
+        "raw_native": {
+          "bytes": 612862,
+          "path": "/tmp/amazing-gate-command-v9zbp2os/output.log",
+          "sha256": "89756ac9bd9955e8c6e0889a0b017586bcc4b937c18778a383f0e70100c83313"
+        },
+        "schema": 1,
+        "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--workspace",
+          "--locked",
+          "--doc"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "   Doc-tests amazing_webrtc_codecs",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "",
+          "   Doc-tests amazing_webrtc_crypto",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          ""
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-xbnh_iod/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/docs.log",
+            "durable": {
+              "bytes": 16398,
+              "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/docs.log",
+              "sha256": "e2b64abdba6889a067d45597b64ffd58b39583fa22f154689e107a80518421f8"
+            },
+            "native": {
+              "bytes": 16398,
+              "path": "/tmp/amazing-gate-command-xbnh_iod/output.log",
+              "sha256": "e2b64abdba6889a067d45597b64ffd58b39583fa22f154689e107a80518421f8"
+            },
+            "source": "/tmp/amazing-gate-command-xbnh_iod/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "doctests",
+        "raw_native": {
+          "bytes": 16398,
+          "path": "/tmp/amazing-gate-command-xbnh_iod/output.log",
+          "sha256": "e2b64abdba6889a067d45597b64ffd58b39583fa22f154689e107a80518421f8"
+        },
+        "schema": 1,
+        "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+        "wrapper_exit": 0
+      }
+    ],
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 612862,
+        "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/workspace.log",
+        "sha256": "89756ac9bd9955e8c6e0889a0b017586bcc4b937c18778a383f0e70100c83313"
+      },
+      {
+        "bytes": 16398,
+        "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/docs.log",
+        "sha256": "e2b64abdba6889a067d45597b64ffd58b39583fa22f154689e107a80518421f8"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+    "summary_lines": [
+      "Summary [  77.317s] 4429 tests run: 4429 passed (1 slow), 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "before_build": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 0
+      },
+      "nextest": null
+    },
+    "job_exit": 0,
+    "phase_details": [],
+    "phase_exits": {
+      "build": 0
+    },
+    "raw": [
+      {
+        "bytes": 8711,
+        "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/build.log",
+        "sha256": "5537b47eef33915965c0bdbae3f0803ca5b08203ff386cb5ae9282485718c2f3"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "fc48838bba9e664746147e4d70437be09b785a4e",
+    "summary_lines": []
+  },
+  "after_build": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 0
+      },
+      "nextest": null
+    },
+    "job_exit": 0,
+    "phase_details": [],
+    "phase_exits": {
+      "build": 0
+    },
+    "raw": [
+      {
+        "bytes": 8711,
+        "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/build.log",
+        "sha256": "e90da3cfe6de10b4f7e00a60930579f2b2bcc6d2668a42b70c5d28a4eca86064"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+    "summary_lines": []
+  },
+  "comparison": {
+    "base": "fc48838bba9e664746147e4d70437be09b785a4e",
+    "source": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+    "modes": {
+      "default": {
+        "selected": 32406,
+        "before_files": {
+          "pass": 31941,
+          "fail": 155,
+          "unsupported": 27,
+          "skipped": 283
+        },
+        "after_files": {
+          "pass": 31944,
+          "fail": 152,
+          "unsupported": 27,
+          "skipped": 283
+        },
+        "before_variants": {
+          "pass": 60020,
+          "fail": 240,
+          "unsupported": 54
+        },
+        "after_variants": {
+          "pass": 60026,
+          "fail": 234,
+          "unsupported": 54
+        },
+        "lost_files": [],
+        "gained_files": [
+          "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+          "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js"
+        ],
+        "lost_variants": [],
+        "gained_variants": [
+          [
+            "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "non-strict"
+          ],
+          [
+            "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "strict"
+          ],
+          [
+            "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+            "non-strict"
+          ],
+          [
+            "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+            "strict"
+          ],
+          [
+            "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "non-strict"
+          ],
+          [
+            "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "strict"
+          ]
+        ],
+        "raw": [
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/default-built-ins-Error.json",
+            "sha256": "a0cbd0bbe041d8c43bdfbe8fb8dfd235ceeb3001d31f23dce109250cf5805120",
+            "bytes": 7665695,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Error.json",
+            "sha256": "49f7d734f5dcfcc4feb717d95d977be2f14529061fa428a657f6320e81eaf180",
+            "bytes": 7665695,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/default-built-ins-Function.json",
+            "sha256": "8640560a89d51c502a9c4e66f68e6136dba3513402dab525672a9c8bee2544b4",
+            "bytes": 7719364,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Function.json",
+            "sha256": "49cf043d9655537a3f8acc55b9efa89a55add0e3913182d96976f3c333665444",
+            "bytes": 7719364,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/default-built-ins-Object.json",
+            "sha256": "3f62aab4c27b9e77523e6ef2ac4bb23f5b78204057a6d5127100b9ee5f9c9275",
+            "bytes": 8117212,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Object.json",
+            "sha256": "84a99023f6420fbd0fa92a94822c017284a789f19de675d29f45cbc0b8dea84b",
+            "bytes": 8116332,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/default-built-ins-Proxy.json",
+            "sha256": "9816b01cbc3425cb0356c34c64e795a53053359bd368bf30337652a7be66a819",
+            "bytes": 7704387,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Proxy.json",
+            "sha256": "c125c6decdf407470aa41233c7151cbcbc3ac31bf1c3d5162757104feaf40182",
+            "bytes": 7704387,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/default-built-ins-Reflect.json",
+            "sha256": "f3aef2bc61db37df656b050397df84fca8422e2fd9dc2dd03e29064feb5a8500",
+            "bytes": 7672690,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Reflect.json",
+            "sha256": "827759be9307dcb58180ae2dc8083beabce90dc3547a91c2a94fbaca974eef98",
+            "bytes": 7672191,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/default-built-ins-Promise.json",
+            "sha256": "ac245d47ed8d92ac48814f247f7850e6c51878a194317edf51b1701045a71739",
+            "bytes": 7779697,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Promise.json",
+            "sha256": "31204cc4f1c7d1d59299243b36296a518a72bfbffdbc27077a16cd772cd7d85c",
+            "bytes": 7779697,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/default-language.json",
+            "sha256": "a764c7cde1ca01a5438d6608c8e572b7b46833f31ce4fdcf11375dc43dda4d8c",
+            "bytes": 14487665,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-language.json",
+            "sha256": "3c1ede77bf259b6aa8a650c32933d40c2302516b07fe44ea97a050f5f10a41d9",
+            "bytes": 14487665,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/default-built-ins-ArrayBuffer.json",
+            "sha256": "8cbf61a0dc13f1c0b634c5ed9dd07754c66f1ab1d4b20e8e86e1883439d547d0",
+            "bytes": 7694269,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-ArrayBuffer.json",
+            "sha256": "0ff907b94758e59659e83bb9ff2002df7da7fe6674db0907eb7e5ba9b2ed6dde",
+            "bytes": 7694270,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/default-built-ins-SharedArrayBuffer.json",
+            "sha256": "072b8ce5cb8322dd9a510b4c7ab282c6aaf7b64d3b64fe4d812545a0154d3638",
+            "bytes": 7667365,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-SharedArrayBuffer.json",
+            "sha256": "728f963ac249697db12abf6b313ea1967982d19016cd325a583d24cb5900cf46",
+            "bytes": 7667366,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/default-built-ins-DataView.json",
+            "sha256": "53ea45d4d6f092d291f52b6a6eb53409b0619ab361fa8631533d873978e27667",
+            "bytes": 7760203,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-DataView.json",
+            "sha256": "e73bb652b9934e866e0d7ac20d8443249993703be7081386d8e491144f4bcaf9",
+            "bytes": 7760203,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/default-built-ins-TypedArray.json",
+            "sha256": "6feffd3e4b53388cac863721e533e6d0db9da80a57fafa086599566d748668dd",
+            "bytes": 8024993,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-TypedArray.json",
+            "sha256": "563c7140b33d67b80e1af01421778343d48ff5755d7963ce1a3a2ab8c425484c",
+            "bytes": 8024993,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          }
+        ],
+        "provenance": {
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 60.0,
+          "jobs": 8,
+          "limit": 0,
+          "shard": "0/1",
+          "capabilities": {
+            "protocol": 2,
+            "script_source_context": true,
+            "module": true,
+            "async": true,
+            "can_block": true,
+            "createRealm": true,
+            "detachArrayBuffer": true,
+            "gc": false,
+            "agent": false,
+            "IsHTMLDDA": false,
+            "AbstractModuleSource": false,
+            "evalScript": true,
+            "global": true,
+            "print": true,
+            "intl402": true
+          },
+          "pyyaml": "6.0.3",
+          "python": "3.12.3 (main, Jun 19 2026, 12:46:00) [GCC 13.3.0]"
+        }
+      },
+      "bytecode": {
+        "selected": 32406,
+        "before_files": {
+          "pass": 31941,
+          "fail": 155,
+          "unsupported": 27,
+          "skipped": 283
+        },
+        "after_files": {
+          "pass": 31944,
+          "fail": 152,
+          "unsupported": 27,
+          "skipped": 283
+        },
+        "before_variants": {
+          "pass": 60020,
+          "fail": 240,
+          "unsupported": 54
+        },
+        "after_variants": {
+          "pass": 60026,
+          "fail": 234,
+          "unsupported": 54
+        },
+        "lost_files": [],
+        "gained_files": [
+          "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+          "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js"
+        ],
+        "lost_variants": [],
+        "gained_variants": [
+          [
+            "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "non-strict"
+          ],
+          [
+            "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "strict"
+          ],
+          [
+            "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+            "non-strict"
+          ],
+          [
+            "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+            "strict"
+          ],
+          [
+            "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "non-strict"
+          ],
+          [
+            "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "strict"
+          ]
+        ],
+        "raw": [
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/bytecode-built-ins-Error.json",
+            "sha256": "1d9c08c05de5b97fce30b04351a960bbb7e8c9cf037bcb70db0d4ce5e1ed2da9",
+            "bytes": 7665695,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Error.json",
+            "sha256": "4b90113f2672f3c3ffdbb81fb749ef8e2e91ac2cb14d3df1337f9da6e4f3cd93",
+            "bytes": 7665695,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/bytecode-built-ins-Function.json",
+            "sha256": "bdc953a5a618dd2a8cc869dfe75cbb203e0fdcc43da913b78f7cd1092cf9c70b",
+            "bytes": 7719364,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Function.json",
+            "sha256": "3de36acd5325f7c57523c97989830e5a397e21574b15a20864af2afac078af07",
+            "bytes": 7719364,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/bytecode-built-ins-Object.json",
+            "sha256": "0efedd695049c8603eaff46b0856e192f983f4d12249d3a27c6eb7201378abf3",
+            "bytes": 8117212,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Object.json",
+            "sha256": "a101459dc642bd980101b5423bddd098eaf6f494045c390b5f92572b316e4062",
+            "bytes": 8116333,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/bytecode-built-ins-Proxy.json",
+            "sha256": "d9ccf298e4e9d75aeccf8a8194faecc5aed22fec055fcee0ce70c144bf476cc3",
+            "bytes": 7704387,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Proxy.json",
+            "sha256": "d1f71192a645ea6ddae180d682df3f83fe2499e889d8f9983d31e6c288a72c2d",
+            "bytes": 7704387,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/bytecode-built-ins-Reflect.json",
+            "sha256": "5552b0daac184444a8428542c9e3c57ccd3697304afae9d84c18fbdc19046d7e",
+            "bytes": 7672690,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Reflect.json",
+            "sha256": "f6bece5b791eeb3b85cef01f48384cc8f600f6ede3e6c9d93c2b87429aa6d2be",
+            "bytes": 7672192,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/bytecode-built-ins-Promise.json",
+            "sha256": "09e73f6c9cf9808337d541af932b6f70909c3d842f677553114e33658164b5d0",
+            "bytes": 7779697,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Promise.json",
+            "sha256": "e3922a71f88da47576be9303edf2cac857cf1d0b3da41ad71702340f771ba970",
+            "bytes": 7779696,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/bytecode-language.json",
+            "sha256": "c7836ff736d9e68c6d130d325f6ca55bac994c722170b6934640398ac421e831",
+            "bytes": 14487665,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-language.json",
+            "sha256": "8c85b37ae25e460a8f91205bf224f2d2fc0837a72292dd639aa0417ed6db225d",
+            "bytes": 14487665,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/bytecode-built-ins-ArrayBuffer.json",
+            "sha256": "fa7c8d4b28631cafed4ac29f855748f5b7258e6f9271afaf4be6ea338d4cdc64",
+            "bytes": 7694270,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-ArrayBuffer.json",
+            "sha256": "231a0506b1bbaaddec4e9a659c2f2f6a069b85b814381f889ce20705682ef289",
+            "bytes": 7694270,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/bytecode-built-ins-SharedArrayBuffer.json",
+            "sha256": "b66aa3ab5084cfdc632ae9351909042d4e6c663b39c3133d1fca42a496015727",
+            "bytes": 7667366,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-SharedArrayBuffer.json",
+            "sha256": "3f4fa601d3c8a0669c38d95374bff657feb8960bb974394344a7ebe6c7bc0506",
+            "bytes": 7667366,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/bytecode-built-ins-DataView.json",
+            "sha256": "fb897e8bbfc27b89438310a5e25977fca730adca116e958de93f0fedac266442",
+            "bytes": 7760203,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-DataView.json",
+            "sha256": "4a3c8a183b64f9b83bfb1e2047caa72c53676c7f58a7ab695f467191f648a4c0",
+            "bytes": 7760203,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-before-fc4883/bytecode-built-ins-TypedArray.json",
+            "sha256": "9478f2219fafda2470578046610617604f0ccc00486118616c6ee16f238aa017",
+            "bytes": 8024993,
+            "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-TypedArray.json",
+            "sha256": "55997c8bb7ace9de1e4ace762aae1e951b71b5345ef55c957448c70dcc69e19d",
+            "bytes": 8024992,
+            "host_sha256": "e03f2dab6a234f3a1288fdb009cff20f62ef369e7cbbd9744670f81aac595681"
+          }
+        ],
+        "provenance": {
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 60.0,
+          "jobs": 8,
+          "limit": 0,
+          "shard": "0/1",
+          "capabilities": {
+            "protocol": 2,
+            "script_source_context": true,
+            "module": true,
+            "async": true,
+            "can_block": true,
+            "createRealm": true,
+            "detachArrayBuffer": true,
+            "gc": false,
+            "agent": false,
+            "IsHTMLDDA": false,
+            "AbstractModuleSource": false,
+            "evalScript": true,
+            "global": true,
+            "print": true,
+            "intl402": true
+          },
+          "pyyaml": "6.0.3",
+          "python": "3.12.3 (main, Jun 19 2026, 12:46:00) [GCC 13.3.0]"
+        }
+      }
+    },
+    "comparison": "Whole original eleven areas; both backends; zero lost passing files and variants"
+  },
+  "preserved_first_candidate_incident": {
+    "actual_exit": 110,
+    "phase": "nextest",
+    "phase_detail": null,
+    "raw": [
+      {
+        "bytes": 601547,
+        "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c/workspace.log",
+        "sha256": "e8764a3feac3e8740be82603f729ae96700903703e2d6ccc5a5ff7524facf2bf"
+      }
+    ],
+    "schema": 1,
+    "shard": "typed-integrity-after",
+    "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+    "wrapper_exit": null
+  },
+  "source_hashes": {
+    "crates/amazing-js/src/builtins_binary.rs": {
+      "sha256": "2b005c5f4569961cd88ad5345a7397114003eae515fd2fdecfe4071b547950cb",
+      "bytes": 101560
+    },
+    "crates/amazing-js/src/interp_object_extra.rs": {
+      "sha256": "4e11411f83cf489c660d3aa4972cbf86ea7ec847ddb8ed43c39cd5f0cf23d2de",
+      "bytes": 58848
+    },
+    "crates/amazing-js/src/interp_proxy.rs": {
+      "sha256": "1b59d8fb2078daa403b63fcfb71b3cc72cf1c373c1145208b21ea0d46ecbc275",
+      "bytes": 46211
+    },
+    "crates/amazing-js/src/runtime_binary_integrity.rs": {
+      "sha256": "2819e42d811b771b4cdebd000964b9c11fecb177bd8a843bbd9ef77b831002c5",
+      "bytes": 693
+    },
+    "crates/amazing-js/src/runtime_binary_integrity_tests.rs": {
+      "sha256": "805a1e899d9bee7c3c8dd28f1f1a3180594783809cfc8f9ee753b0ae018d4d7d",
+      "bytes": 10448
+    }
+  },
+  "comparison_custody": {
+    "path": "amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/comparison.summary.json",
+    "sha256": "dfe61ee4e1855115474ee96bba4bdbd4c8d5eb803c7c25d17d7ccd41ea0370e3"
+  },
+  "all22_controller_receipts": [
+    {
+      "phase": "bytecode-built-ins-ArrayBuffer",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-1ri905h_/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-1ri905h_/output.log",
+        "bytes": 9743,
+        "sha256": "80f35bae39e067c1ce3307c4ac1ea2a143a86595769ee44e6fecf2c704b99e8c"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-1ri905h_/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-ArrayBuffer.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-1ri905h_/output.log",
+            "bytes": 9743,
+            "sha256": "80f35bae39e067c1ce3307c4ac1ea2a143a86595769ee44e6fecf2c704b99e8c"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-ArrayBuffer.log",
+            "bytes": 9743,
+            "sha256": "80f35bae39e067c1ce3307c4ac1ea2a143a86595769ee44e6fecf2c704b99e8c"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-ArrayBuffer.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-ArrayBuffer.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-ArrayBuffer.json",
+            "bytes": 7694270,
+            "sha256": "231a0506b1bbaaddec4e9a659c2f2f6a069b85b814381f889ce20705682ef289"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-ArrayBuffer.json",
+            "bytes": 7694270,
+            "sha256": "231a0506b1bbaaddec4e9a659c2f2f6a069b85b814381f889ce20705682ef289"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "bytecode-built-ins-DataView",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-aagbteyx/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-aagbteyx/output.log",
+        "bytes": 9741,
+        "sha256": "795aae3c58db7643d268401424d615835797775bedb276cee5dd90838f905b59"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-aagbteyx/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-DataView.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-aagbteyx/output.log",
+            "bytes": 9741,
+            "sha256": "795aae3c58db7643d268401424d615835797775bedb276cee5dd90838f905b59"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-DataView.log",
+            "bytes": 9741,
+            "sha256": "795aae3c58db7643d268401424d615835797775bedb276cee5dd90838f905b59"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-DataView.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-DataView.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-DataView.json",
+            "bytes": 7760203,
+            "sha256": "4a3c8a183b64f9b83bfb1e2047caa72c53676c7f58a7ab695f467191f648a4c0"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-DataView.json",
+            "bytes": 7760203,
+            "sha256": "4a3c8a183b64f9b83bfb1e2047caa72c53676c7f58a7ab695f467191f648a4c0"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "bytecode-built-ins-Error",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-8n2dm63k/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-8n2dm63k/output.log",
+        "bytes": 9685,
+        "sha256": "8597208ea8917906ee731a8ff9e7d5c999312521b59df9a0bb1c273a834d6933"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-8n2dm63k/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Error.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-8n2dm63k/output.log",
+            "bytes": 9685,
+            "sha256": "8597208ea8917906ee731a8ff9e7d5c999312521b59df9a0bb1c273a834d6933"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Error.log",
+            "bytes": 9685,
+            "sha256": "8597208ea8917906ee731a8ff9e7d5c999312521b59df9a0bb1c273a834d6933"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-Error.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Error.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-Error.json",
+            "bytes": 7665695,
+            "sha256": "4b90113f2672f3c3ffdbb81fb749ef8e2e91ac2cb14d3df1337f9da6e4f3cd93"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Error.json",
+            "bytes": 7665695,
+            "sha256": "4b90113f2672f3c3ffdbb81fb749ef8e2e91ac2cb14d3df1337f9da6e4f3cd93"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "bytecode-built-ins-Function",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-h_dlt6g4/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-h_dlt6g4/output.log",
+        "bytes": 9770,
+        "sha256": "77be30579616ba8b71e0c5b41c71d8b80b51d0eed4bce1fcb1c8e40fc8b3f5fd"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-h_dlt6g4/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Function.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-h_dlt6g4/output.log",
+            "bytes": 9770,
+            "sha256": "77be30579616ba8b71e0c5b41c71d8b80b51d0eed4bce1fcb1c8e40fc8b3f5fd"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Function.log",
+            "bytes": 9770,
+            "sha256": "77be30579616ba8b71e0c5b41c71d8b80b51d0eed4bce1fcb1c8e40fc8b3f5fd"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-Function.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Function.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-Function.json",
+            "bytes": 7719364,
+            "sha256": "3de36acd5325f7c57523c97989830e5a397e21574b15a20864af2afac078af07"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Function.json",
+            "bytes": 7719364,
+            "sha256": "3de36acd5325f7c57523c97989830e5a397e21574b15a20864af2afac078af07"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "bytecode-built-ins-Object",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 0,
+      "wrapper_exit": 0,
+      "native_receipt": "/tmp/amazing-gate-command-94_q11q5/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-94_q11q5/output.log",
+        "bytes": 9776,
+        "sha256": "c54dd0c3cd81911d0d8f2a13cd05767755653e67babddbe034a460e2be9bfca5"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-94_q11q5/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Object.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-94_q11q5/output.log",
+            "bytes": 9776,
+            "sha256": "c54dd0c3cd81911d0d8f2a13cd05767755653e67babddbe034a460e2be9bfca5"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Object.log",
+            "bytes": 9776,
+            "sha256": "c54dd0c3cd81911d0d8f2a13cd05767755653e67babddbe034a460e2be9bfca5"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-Object.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Object.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-Object.json",
+            "bytes": 8116333,
+            "sha256": "a101459dc642bd980101b5423bddd098eaf6f494045c390b5f92572b316e4062"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Object.json",
+            "bytes": 8116333,
+            "sha256": "a101459dc642bd980101b5423bddd098eaf6f494045c390b5f92572b316e4062"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "bytecode-built-ins-Promise",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 0,
+      "wrapper_exit": 0,
+      "native_receipt": "/tmp/amazing-gate-command-rdm9nyg2/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-rdm9nyg2/output.log",
+        "bytes": 9672,
+        "sha256": "f841e498741089df33eabec99ad079023a9f2810b83dcd4b7c2dead1b9cf0f1b"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-rdm9nyg2/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Promise.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-rdm9nyg2/output.log",
+            "bytes": 9672,
+            "sha256": "f841e498741089df33eabec99ad079023a9f2810b83dcd4b7c2dead1b9cf0f1b"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Promise.log",
+            "bytes": 9672,
+            "sha256": "f841e498741089df33eabec99ad079023a9f2810b83dcd4b7c2dead1b9cf0f1b"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-Promise.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Promise.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-Promise.json",
+            "bytes": 7779696,
+            "sha256": "e3922a71f88da47576be9303edf2cac857cf1d0b3da41ad71702340f771ba970"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Promise.json",
+            "bytes": 7779696,
+            "sha256": "e3922a71f88da47576be9303edf2cac857cf1d0b3da41ad71702340f771ba970"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "bytecode-built-ins-Proxy",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 0,
+      "wrapper_exit": 0,
+      "native_receipt": "/tmp/amazing-gate-command-boh059ia/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-boh059ia/output.log",
+        "bytes": 9786,
+        "sha256": "0d72f6406924e4f1fa146a29dccd247f058c924028dc63ce416db992e57bf0d2"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-boh059ia/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Proxy.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-boh059ia/output.log",
+            "bytes": 9786,
+            "sha256": "0d72f6406924e4f1fa146a29dccd247f058c924028dc63ce416db992e57bf0d2"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Proxy.log",
+            "bytes": 9786,
+            "sha256": "0d72f6406924e4f1fa146a29dccd247f058c924028dc63ce416db992e57bf0d2"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-Proxy.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Proxy.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-Proxy.json",
+            "bytes": 7704387,
+            "sha256": "d1f71192a645ea6ddae180d682df3f83fe2499e889d8f9983d31e6c288a72c2d"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Proxy.json",
+            "bytes": 7704387,
+            "sha256": "d1f71192a645ea6ddae180d682df3f83fe2499e889d8f9983d31e6c288a72c2d"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "bytecode-built-ins-Reflect",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 0,
+      "wrapper_exit": 0,
+      "native_receipt": "/tmp/amazing-gate-command-gayoniua/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-gayoniua/output.log",
+        "bytes": 9669,
+        "sha256": "99c9d20f209be9aaca574fc8abde6ec132f7d949f74d59283750208e7e56cf09"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-gayoniua/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Reflect.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-gayoniua/output.log",
+            "bytes": 9669,
+            "sha256": "99c9d20f209be9aaca574fc8abde6ec132f7d949f74d59283750208e7e56cf09"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Reflect.log",
+            "bytes": 9669,
+            "sha256": "99c9d20f209be9aaca574fc8abde6ec132f7d949f74d59283750208e7e56cf09"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-Reflect.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Reflect.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-Reflect.json",
+            "bytes": 7672192,
+            "sha256": "f6bece5b791eeb3b85cef01f48384cc8f600f6ede3e6c9d93c2b87429aa6d2be"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-Reflect.json",
+            "bytes": 7672192,
+            "sha256": "f6bece5b791eeb3b85cef01f48384cc8f600f6ede3e6c9d93c2b87429aa6d2be"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "bytecode-built-ins-SharedArrayBuffer",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-opzrwwpj/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-opzrwwpj/output.log",
+        "bytes": 9722,
+        "sha256": "72fb9747803f079e3ec5033df3f6f626e3329db4c7d6d57b36cea1416d292e4e"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-opzrwwpj/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-SharedArrayBuffer.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-opzrwwpj/output.log",
+            "bytes": 9722,
+            "sha256": "72fb9747803f079e3ec5033df3f6f626e3329db4c7d6d57b36cea1416d292e4e"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-SharedArrayBuffer.log",
+            "bytes": 9722,
+            "sha256": "72fb9747803f079e3ec5033df3f6f626e3329db4c7d6d57b36cea1416d292e4e"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-SharedArrayBuffer.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-SharedArrayBuffer.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-SharedArrayBuffer.json",
+            "bytes": 7667366,
+            "sha256": "3f4fa601d3c8a0669c38d95374bff657feb8960bb974394344a7ebe6c7bc0506"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-SharedArrayBuffer.json",
+            "bytes": 7667366,
+            "sha256": "3f4fa601d3c8a0669c38d95374bff657feb8960bb974394344a7ebe6c7bc0506"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "bytecode-built-ins-TypedArray",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-j8jajfxr/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-j8jajfxr/output.log",
+        "bytes": 9847,
+        "sha256": "2bf31bcb1602d8e0c9903d099d13f8091779f60e695a0d886b57756548ed94ef"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-j8jajfxr/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-TypedArray.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-j8jajfxr/output.log",
+            "bytes": 9847,
+            "sha256": "2bf31bcb1602d8e0c9903d099d13f8091779f60e695a0d886b57756548ed94ef"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-TypedArray.log",
+            "bytes": 9847,
+            "sha256": "2bf31bcb1602d8e0c9903d099d13f8091779f60e695a0d886b57756548ed94ef"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-TypedArray.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-TypedArray.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-built-ins-TypedArray.json",
+            "bytes": 8024992,
+            "sha256": "55997c8bb7ace9de1e4ace762aae1e951b71b5345ef55c957448c70dcc69e19d"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-built-ins-TypedArray.json",
+            "bytes": 8024992,
+            "sha256": "55997c8bb7ace9de1e4ace762aae1e951b71b5345ef55c957448c70dcc69e19d"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "bytecode-language",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-zr0msb7d/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-zr0msb7d/output.log",
+        "bytes": 10323,
+        "sha256": "2f9db2b388f9ddda4fcd58c235ef4f362cc0546761dede06d26a798f1cfb5cc6"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-zr0msb7d/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-language.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-zr0msb7d/output.log",
+            "bytes": 10323,
+            "sha256": "2f9db2b388f9ddda4fcd58c235ef4f362cc0546761dede06d26a798f1cfb5cc6"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-language.log",
+            "bytes": 10323,
+            "sha256": "2f9db2b388f9ddda4fcd58c235ef4f362cc0546761dede06d26a798f1cfb5cc6"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-language.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-language.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/bytecode-language.json",
+            "bytes": 14487665,
+            "sha256": "8c85b37ae25e460a8f91205bf224f2d2fc0837a72292dd639aa0417ed6db225d"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/bytecode-language.json",
+            "bytes": 14487665,
+            "sha256": "8c85b37ae25e460a8f91205bf224f2d2fc0837a72292dd639aa0417ed6db225d"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "default-built-ins-ArrayBuffer",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-mnsexlr9/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-mnsexlr9/output.log",
+        "bytes": 9743,
+        "sha256": "f4e65b533ac911dcf1c7440f194d30d3388963b048b41fa48149ba378face2c6"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-mnsexlr9/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-ArrayBuffer.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-mnsexlr9/output.log",
+            "bytes": 9743,
+            "sha256": "f4e65b533ac911dcf1c7440f194d30d3388963b048b41fa48149ba378face2c6"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-ArrayBuffer.log",
+            "bytes": 9743,
+            "sha256": "f4e65b533ac911dcf1c7440f194d30d3388963b048b41fa48149ba378face2c6"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-ArrayBuffer.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-ArrayBuffer.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-ArrayBuffer.json",
+            "bytes": 7694270,
+            "sha256": "0ff907b94758e59659e83bb9ff2002df7da7fe6674db0907eb7e5ba9b2ed6dde"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-ArrayBuffer.json",
+            "bytes": 7694270,
+            "sha256": "0ff907b94758e59659e83bb9ff2002df7da7fe6674db0907eb7e5ba9b2ed6dde"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "default-built-ins-DataView",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-n6ldjy1i/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-n6ldjy1i/output.log",
+        "bytes": 9741,
+        "sha256": "569b725b96b933da4eefe39b5a1dc9ad8bbfab12cbf901e8340bc2380e7a54c4"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-n6ldjy1i/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-DataView.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-n6ldjy1i/output.log",
+            "bytes": 9741,
+            "sha256": "569b725b96b933da4eefe39b5a1dc9ad8bbfab12cbf901e8340bc2380e7a54c4"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-DataView.log",
+            "bytes": 9741,
+            "sha256": "569b725b96b933da4eefe39b5a1dc9ad8bbfab12cbf901e8340bc2380e7a54c4"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-DataView.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-DataView.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-DataView.json",
+            "bytes": 7760203,
+            "sha256": "e73bb652b9934e866e0d7ac20d8443249993703be7081386d8e491144f4bcaf9"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-DataView.json",
+            "bytes": 7760203,
+            "sha256": "e73bb652b9934e866e0d7ac20d8443249993703be7081386d8e491144f4bcaf9"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "default-built-ins-Error",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-chccvrps/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-chccvrps/output.log",
+        "bytes": 9684,
+        "sha256": "ce99eb2cc282c5a728fcc10e20573c7ef64416e8520cee29bb645d65692fbc16"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-chccvrps/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Error.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-chccvrps/output.log",
+            "bytes": 9684,
+            "sha256": "ce99eb2cc282c5a728fcc10e20573c7ef64416e8520cee29bb645d65692fbc16"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Error.log",
+            "bytes": 9684,
+            "sha256": "ce99eb2cc282c5a728fcc10e20573c7ef64416e8520cee29bb645d65692fbc16"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-Error.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Error.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-Error.json",
+            "bytes": 7665695,
+            "sha256": "49f7d734f5dcfcc4feb717d95d977be2f14529061fa428a657f6320e81eaf180"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Error.json",
+            "bytes": 7665695,
+            "sha256": "49f7d734f5dcfcc4feb717d95d977be2f14529061fa428a657f6320e81eaf180"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "default-built-ins-Function",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-q07zcrob/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-q07zcrob/output.log",
+        "bytes": 9769,
+        "sha256": "63c82b6a5276807c7656467710cb094772f673503f494dd89764946a9594de3a"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-q07zcrob/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Function.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-q07zcrob/output.log",
+            "bytes": 9769,
+            "sha256": "63c82b6a5276807c7656467710cb094772f673503f494dd89764946a9594de3a"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Function.log",
+            "bytes": 9769,
+            "sha256": "63c82b6a5276807c7656467710cb094772f673503f494dd89764946a9594de3a"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-Function.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Function.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-Function.json",
+            "bytes": 7719364,
+            "sha256": "49cf043d9655537a3f8acc55b9efa89a55add0e3913182d96976f3c333665444"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Function.json",
+            "bytes": 7719364,
+            "sha256": "49cf043d9655537a3f8acc55b9efa89a55add0e3913182d96976f3c333665444"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "default-built-ins-Object",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 0,
+      "wrapper_exit": 0,
+      "native_receipt": "/tmp/amazing-gate-command-nw65pe5_/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-nw65pe5_/output.log",
+        "bytes": 9775,
+        "sha256": "5856c7e44d80bdfc4c66990f18705f8d4e72692e481b0d88f0ab615eef25eaf8"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-nw65pe5_/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Object.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-nw65pe5_/output.log",
+            "bytes": 9775,
+            "sha256": "5856c7e44d80bdfc4c66990f18705f8d4e72692e481b0d88f0ab615eef25eaf8"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Object.log",
+            "bytes": 9775,
+            "sha256": "5856c7e44d80bdfc4c66990f18705f8d4e72692e481b0d88f0ab615eef25eaf8"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-Object.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Object.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-Object.json",
+            "bytes": 8116332,
+            "sha256": "84a99023f6420fbd0fa92a94822c017284a789f19de675d29f45cbc0b8dea84b"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Object.json",
+            "bytes": 8116332,
+            "sha256": "84a99023f6420fbd0fa92a94822c017284a789f19de675d29f45cbc0b8dea84b"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "default-built-ins-Promise",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 0,
+      "wrapper_exit": 0,
+      "native_receipt": "/tmp/amazing-gate-command-aoy_nunt/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-aoy_nunt/output.log",
+        "bytes": 9674,
+        "sha256": "d7fae6b7e9103d123328dfbeb9d1c83d37750e78897f6885344cb90e3aeab45b"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-aoy_nunt/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Promise.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-aoy_nunt/output.log",
+            "bytes": 9674,
+            "sha256": "d7fae6b7e9103d123328dfbeb9d1c83d37750e78897f6885344cb90e3aeab45b"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Promise.log",
+            "bytes": 9674,
+            "sha256": "d7fae6b7e9103d123328dfbeb9d1c83d37750e78897f6885344cb90e3aeab45b"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-Promise.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Promise.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-Promise.json",
+            "bytes": 7779697,
+            "sha256": "31204cc4f1c7d1d59299243b36296a518a72bfbffdbc27077a16cd772cd7d85c"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Promise.json",
+            "bytes": 7779697,
+            "sha256": "31204cc4f1c7d1d59299243b36296a518a72bfbffdbc27077a16cd772cd7d85c"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "default-built-ins-Proxy",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 0,
+      "wrapper_exit": 0,
+      "native_receipt": "/tmp/amazing-gate-command-o3w39kec/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-o3w39kec/output.log",
+        "bytes": 9786,
+        "sha256": "96c535eb92b11a241254087b059009aa38f9b889a0a6b009c7a0677a8da38d44"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-o3w39kec/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Proxy.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-o3w39kec/output.log",
+            "bytes": 9786,
+            "sha256": "96c535eb92b11a241254087b059009aa38f9b889a0a6b009c7a0677a8da38d44"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Proxy.log",
+            "bytes": 9786,
+            "sha256": "96c535eb92b11a241254087b059009aa38f9b889a0a6b009c7a0677a8da38d44"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-Proxy.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Proxy.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-Proxy.json",
+            "bytes": 7704387,
+            "sha256": "c125c6decdf407470aa41233c7151cbcbc3ac31bf1c3d5162757104feaf40182"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Proxy.json",
+            "bytes": 7704387,
+            "sha256": "c125c6decdf407470aa41233c7151cbcbc3ac31bf1c3d5162757104feaf40182"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "default-built-ins-Reflect",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 0,
+      "wrapper_exit": 0,
+      "native_receipt": "/tmp/amazing-gate-command-qnwdvu1f/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-qnwdvu1f/output.log",
+        "bytes": 9666,
+        "sha256": "05084a172f24b75e8b359932d064de1820bb30f26fbda9d3b48c328caaf0923e"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-qnwdvu1f/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Reflect.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-qnwdvu1f/output.log",
+            "bytes": 9666,
+            "sha256": "05084a172f24b75e8b359932d064de1820bb30f26fbda9d3b48c328caaf0923e"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Reflect.log",
+            "bytes": 9666,
+            "sha256": "05084a172f24b75e8b359932d064de1820bb30f26fbda9d3b48c328caaf0923e"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-Reflect.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Reflect.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-Reflect.json",
+            "bytes": 7672191,
+            "sha256": "827759be9307dcb58180ae2dc8083beabce90dc3547a91c2a94fbaca974eef98"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-Reflect.json",
+            "bytes": 7672191,
+            "sha256": "827759be9307dcb58180ae2dc8083beabce90dc3547a91c2a94fbaca974eef98"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "default-built-ins-SharedArrayBuffer",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-ifrr96ri/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-ifrr96ri/output.log",
+        "bytes": 9724,
+        "sha256": "b20a4dfafd43906399232358b8e8896a897d8e3b45d54b0ca3cd546a33c46cb4"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-ifrr96ri/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-SharedArrayBuffer.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-ifrr96ri/output.log",
+            "bytes": 9724,
+            "sha256": "b20a4dfafd43906399232358b8e8896a897d8e3b45d54b0ca3cd546a33c46cb4"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-SharedArrayBuffer.log",
+            "bytes": 9724,
+            "sha256": "b20a4dfafd43906399232358b8e8896a897d8e3b45d54b0ca3cd546a33c46cb4"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-SharedArrayBuffer.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-SharedArrayBuffer.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-SharedArrayBuffer.json",
+            "bytes": 7667366,
+            "sha256": "728f963ac249697db12abf6b313ea1967982d19016cd325a583d24cb5900cf46"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-SharedArrayBuffer.json",
+            "bytes": 7667366,
+            "sha256": "728f963ac249697db12abf6b313ea1967982d19016cd325a583d24cb5900cf46"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "default-built-ins-TypedArray",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-rgmpfsbb/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-rgmpfsbb/output.log",
+        "bytes": 9865,
+        "sha256": "e97b60aed287ac28c44a835c6aefa3b0a4498f2fa4b49d363d1ff64bbec97f7c"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-rgmpfsbb/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-TypedArray.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-rgmpfsbb/output.log",
+            "bytes": 9865,
+            "sha256": "e97b60aed287ac28c44a835c6aefa3b0a4498f2fa4b49d363d1ff64bbec97f7c"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-TypedArray.log",
+            "bytes": 9865,
+            "sha256": "e97b60aed287ac28c44a835c6aefa3b0a4498f2fa4b49d363d1ff64bbec97f7c"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-TypedArray.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-TypedArray.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-built-ins-TypedArray.json",
+            "bytes": 8024993,
+            "sha256": "563c7140b33d67b80e1af01421778343d48ff5755d7963ce1a3a2ab8c425484c"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-built-ins-TypedArray.json",
+            "bytes": 8024993,
+            "sha256": "563c7140b33d67b80e1af01421778343d48ff5755d7963ce1a3a2ab8c425484c"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    },
+    {
+      "phase": "default-language",
+      "source_commit": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+      "engine_exit": 1,
+      "wrapper_exit": 1,
+      "native_receipt": "/tmp/amazing-gate-command-0hnnzf2_/phase.manifest.json",
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-0hnnzf2_/output.log",
+        "bytes": 10323,
+        "sha256": "efce7cccef42118f1c5ca071f59eda209fff132bfa9f637a5fb556fb16338c7f"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-0hnnzf2_/output.log",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-language.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-0hnnzf2_/output.log",
+            "bytes": 10323,
+            "sha256": "efce7cccef42118f1c5ca071f59eda209fff132bfa9f637a5fb556fb16338c7f"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-language.log",
+            "bytes": 10323,
+            "sha256": "efce7cccef42118f1c5ca071f59eda209fff132bfa9f637a5fb556fb16338c7f"
+          }
+        },
+        {
+          "source": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-language.json",
+          "destination": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-language.json",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-typed-integrity-rerun1.8ch1Fm/default-language.json",
+            "bytes": 14487665,
+            "sha256": "3c1ede77bf259b6aa8a650c32933d40c2302516b07fe44ea97a050f5f10a41d9"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-runtime/typed-integrity-after-f7cf6c-rerun1/default-language.json",
+            "bytes": 14487665,
+            "sha256": "3c1ede77bf259b6aa8a650c32933d40c2302516b07fe44ea97a050f5f10a41d9"
+          }
+        }
+      ],
+      "output_copy_exit": 0
+    }
+  ]
+}

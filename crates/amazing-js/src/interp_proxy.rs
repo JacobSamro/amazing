@@ -1,3 +1,4 @@
+// Portions ported from boa-dev/boa (core/engine/src/builtins/typed_array/object.rs) @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: whole integer-indexed PreventExtensions gateway.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/proxy/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // Proxy exotic objects (ECMA-262 10.5) and their trap dispatch.
@@ -480,6 +481,7 @@ impl Interpreter {
         if let Some(result) = self.proxy_prevent_extensions(target) { return result; }
         if self.is_window_proxy(target) { return Ok(false); }
         if self.legacy_for(target).is_some() { return Ok(false); }
+        if binary_typed_array_fixed_length(target) == Some(false) { return Ok(false); }
         target.borrow_mut().extensible = false;
         Ok(true)
     }

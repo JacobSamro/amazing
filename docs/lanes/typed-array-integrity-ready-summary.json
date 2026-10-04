@@ -1,0 +1,128 @@
+{
+  "ticket": "typed-array-integrity",
+  "state": "READY: fresh paired own gate passed; root merge qualification separate",
+  "recorded_origin_dev": "fc48838bba9e664746147e4d70437be09b785a4e",
+  "historical_source": "c80cd7456f730f7d7e01c3ca1ea5656a3d709e0f",
+  "historical_proof": "cf94773fec0e5e9264af809187d403bc11d8a609",
+  "historical_proof_sha256": "096d2d70c1eaff9fe1ca6d35f111e67b509aa3640c2a45009e741a5f14554305",
+  "historical_native": {
+    "workspace_pass": 4253,
+    "workspace_skipped": 17,
+    "workspace_seconds": 122.325,
+    "doctests": 4,
+    "backends": [
+      "TreeWalk",
+      "Bytecode"
+    ],
+    "groups": [
+      "All12 typed kinds \u00d713 fixed/tracking/RAB/GSAB/OOB/detached states \u00d74 integrity operations; ordinary DataView/backing-store controls",
+      "Transparent/forwarded/lying/revoked Proxy trap order, abrupt identity, mutation atomicity, growth/shrink transitions",
+      "Genuine foreign native creation/error realm, borrowed calls/apply/bind/Proxy, poisoned TypeError global and caller/incumbent restoration"
+    ]
+  },
+  "historical_modes": {
+    "default": {
+      "selected": 32148,
+      "before_pass": 31941,
+      "after_pass": 31944,
+      "gained_files": [
+        "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+        "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+        "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        [
+          "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "non-strict"
+        ],
+        [
+          "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "strict"
+        ],
+        [
+          "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+          "non-strict"
+        ],
+        [
+          "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+          "strict"
+        ],
+        [
+          "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "non-strict"
+        ],
+        [
+          "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "strict"
+        ]
+      ],
+      "lost_variants": []
+    },
+    "bytecode": {
+      "selected": 32148,
+      "before_pass": 31941,
+      "after_pass": 31944,
+      "gained_files": [
+        "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+        "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+        "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        [
+          "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "non-strict"
+        ],
+        [
+          "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "strict"
+        ],
+        [
+          "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+          "non-strict"
+        ],
+        [
+          "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+          "strict"
+        ],
+        [
+          "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "non-strict"
+        ],
+        [
+          "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "strict"
+        ]
+      ],
+      "lost_variants": []
+    }
+  },
+  "original_file_hashes": {
+    "runtime_binary_integrity.rs": "2819e42d811b771b4cdebd000964b9c11fecb177bd8a843bbd9ef77b831002c5",
+    "runtime_binary_integrity_tests.rs": "805a1e899d9bee7c3c8dd28f1f1a3180594783809cfc8f9ee753b0ae018d4d7d"
+  },
+  "prerequisites": {
+    "binary_metadata": "Actual BinaryState::View length/kind and Buffer resizable/shared slots present",
+    "native_error_home": "Published f5db0fd1 NativeFIFO intrinsic constructor lookup present at recorded fc48838b; original foreign/poisoned assertions retained unchanged"
+  },
+  "attribution": "Exact original Boa MIT header and corresponding THIRD_PARTY_NOTICES row already present at recorded origin; no existing row changed or duplicate appended.",
+  "scope": "Whole TypedArray fixed-length query and default PreventExtensions/integrity protocol; ordinary DataView/buffer, detached/OOB/RAB/GSAB/fixed/tracking/all12 kinds, actual Proxy/foreign abrupt/order/state matrix. No new fields/schema. Generic integrity sequence retained.",
+  "new_gate": {
+    "state": "passed",
+    "base": "fc48838bba9e664746147e4d70437be09b785a4e",
+    "tested_source": "f7cf6c447faea349bdf9dfcf239c0feb1beba913",
+    "lane": "js-runtime",
+    "workspace_before": 4426,
+    "workspace_after": 4429,
+    "skipped": 17,
+    "doctests_before": 4,
+    "doctests_after": 4,
+    "actual_profile": "bx_bq7wyr6x baremetal large8CPU16GB, matched before/after, explicit temporary root grant",
+    "own_corpus_selectors": 11,
+    "controllers": 22,
+    "whole_gate_actual_exit": 0,
+    "proof": "docs/lanes/typed-array-integrity-current-proof.json",
+    "merge_gate": "Root full16 Test262/workspace/docs pending"
+  }
+}

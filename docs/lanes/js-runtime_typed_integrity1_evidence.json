@@ -1,0 +1,937 @@
+{
+  "ticket": "JSRT-TYPED-INTEGRITY-1",
+  "base_sha": "7375523f6123ada2003dfd30d7f7c5d6856d4bb3",
+  "production_sha": "c80cd7456f730f7d7e01c3ca1ea5656a3d709e0f",
+  "modes": {
+    "default": {
+      "configuration": "AMAZING_JS_VM unset: existing default execution policy",
+      "unique": {
+        "selected": 32148,
+        "before_pass": 31941,
+        "after_pass": 31944,
+        "gained_files": [
+          "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+          "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js"
+        ],
+        "lost_files": [],
+        "gained_variants": [
+          [
+            "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "non-strict"
+          ],
+          [
+            "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "strict"
+          ],
+          [
+            "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+            "non-strict"
+          ],
+          [
+            "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+            "strict"
+          ],
+          [
+            "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "non-strict"
+          ],
+          [
+            "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "strict"
+          ]
+        ],
+        "lost_variants": []
+      },
+      "selections": {
+        "built-ins-Error": {
+          "execution_mode": "default",
+          "selected": 93,
+          "before": {
+            "pass": 93,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53779
+          },
+          "after": {
+            "pass": 93,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53779
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 2.767,
+          "elapsed_after": 3.218,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Function": {
+          "execution_mode": "default",
+          "selected": 515,
+          "before": {
+            "pass": 508,
+            "fail": 7,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53357
+          },
+          "after": {
+            "pass": 508,
+            "fail": 7,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53357
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 5.409,
+          "elapsed_after": 4.956,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Object": {
+          "execution_mode": "default",
+          "selected": 3414,
+          "before": {
+            "pass": 3411,
+            "fail": 2,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50458
+          },
+          "after": {
+            "pass": 3413,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50458
+          },
+          "gained": [
+            "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js"
+          ],
+          "lost": [],
+          "elapsed_before": 10.332,
+          "elapsed_after": 12.929,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Proxy": {
+          "execution_mode": "default",
+          "selected": 311,
+          "before": {
+            "pass": 311,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53561
+          },
+          "after": {
+            "pass": 311,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53561
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 3.407,
+          "elapsed_after": 3.614,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Reflect": {
+          "execution_mode": "default",
+          "selected": 154,
+          "before": {
+            "pass": 153,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53718
+          },
+          "after": {
+            "pass": 154,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53718
+          },
+          "gained": [
+            "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js"
+          ],
+          "lost": [],
+          "elapsed_before": 2.988,
+          "elapsed_after": 3.22,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "language": {
+          "execution_mode": "default",
+          "selected": 24590,
+          "before": {
+            "pass": 24470,
+            "fail": 94,
+            "timeout": 0,
+            "unsupported": 26,
+            "skipped": 29282
+          },
+          "after": {
+            "pass": 24470,
+            "fail": 94,
+            "timeout": 0,
+            "unsupported": 26,
+            "skipped": 29282
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 56.214,
+          "elapsed_after": 68.509,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-ArrayBuffer": {
+          "execution_mode": "default",
+          "selected": 221,
+          "before": {
+            "pass": 218,
+            "fail": 3,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53651
+          },
+          "after": {
+            "pass": 218,
+            "fail": 3,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53651
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 8.759,
+          "elapsed_after": 8.574,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-SharedArrayBuffer": {
+          "execution_mode": "default",
+          "selected": 104,
+          "before": {
+            "pass": 103,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53768
+          },
+          "after": {
+            "pass": 103,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53768
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 3.8,
+          "elapsed_after": 4.051,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-DataView": {
+          "execution_mode": "default",
+          "selected": 561,
+          "before": {
+            "pass": 560,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53311
+          },
+          "after": {
+            "pass": 560,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53311
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 6.095,
+          "elapsed_after": 4.549,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-TypedArray": {
+          "execution_mode": "default",
+          "selected": 2185,
+          "before": {
+            "pass": 2114,
+            "fail": 70,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 51687
+          },
+          "after": {
+            "pass": 2114,
+            "fail": 70,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 51687
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 33.991,
+          "elapsed_after": 29.063,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        }
+      }
+    },
+    "bytecode": {
+      "configuration": "AMAZING_JS_VM=1: existing eligible top-level Program compilation with normal fallback",
+      "unique": {
+        "selected": 32148,
+        "before_pass": 31941,
+        "after_pass": 31944,
+        "gained_files": [
+          "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+          "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js"
+        ],
+        "lost_files": [],
+        "gained_variants": [
+          [
+            "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "non-strict"
+          ],
+          [
+            "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "strict"
+          ],
+          [
+            "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+            "non-strict"
+          ],
+          [
+            "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+            "strict"
+          ],
+          [
+            "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "non-strict"
+          ],
+          [
+            "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "strict"
+          ]
+        ],
+        "lost_variants": []
+      },
+      "selections": {
+        "built-ins-Error": {
+          "execution_mode": "bytecode",
+          "selected": 93,
+          "before": {
+            "pass": 93,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53779
+          },
+          "after": {
+            "pass": 93,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53779
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 2.631,
+          "elapsed_after": 3.615,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Function": {
+          "execution_mode": "bytecode",
+          "selected": 515,
+          "before": {
+            "pass": 508,
+            "fail": 7,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53357
+          },
+          "after": {
+            "pass": 508,
+            "fail": 7,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53357
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 4.396,
+          "elapsed_after": 4.944,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Object": {
+          "execution_mode": "bytecode",
+          "selected": 3414,
+          "before": {
+            "pass": 3411,
+            "fail": 2,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50458
+          },
+          "after": {
+            "pass": 3413,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 50458
+          },
+          "gained": [
+            "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+            "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js"
+          ],
+          "lost": [],
+          "elapsed_before": 10.626,
+          "elapsed_after": 13.42,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Proxy": {
+          "execution_mode": "bytecode",
+          "selected": 311,
+          "before": {
+            "pass": 311,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53561
+          },
+          "after": {
+            "pass": 311,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53561
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 3.083,
+          "elapsed_after": 4.139,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-Reflect": {
+          "execution_mode": "bytecode",
+          "selected": 154,
+          "before": {
+            "pass": 153,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53718
+          },
+          "after": {
+            "pass": 154,
+            "fail": 0,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53718
+          },
+          "gained": [
+            "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js"
+          ],
+          "lost": [],
+          "elapsed_before": 2.648,
+          "elapsed_after": 3.819,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "language": {
+          "execution_mode": "bytecode",
+          "selected": 24590,
+          "before": {
+            "pass": 24470,
+            "fail": 94,
+            "timeout": 0,
+            "unsupported": 26,
+            "skipped": 29282
+          },
+          "after": {
+            "pass": 24470,
+            "fail": 94,
+            "timeout": 0,
+            "unsupported": 26,
+            "skipped": 29282
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 57.596,
+          "elapsed_after": 74.58,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-ArrayBuffer": {
+          "execution_mode": "bytecode",
+          "selected": 221,
+          "before": {
+            "pass": 218,
+            "fail": 3,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53651
+          },
+          "after": {
+            "pass": 218,
+            "fail": 3,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53651
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 7.837,
+          "elapsed_after": 8.893,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-SharedArrayBuffer": {
+          "execution_mode": "bytecode",
+          "selected": 104,
+          "before": {
+            "pass": 103,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53768
+          },
+          "after": {
+            "pass": 103,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53768
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 3.139,
+          "elapsed_after": 3.456,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-DataView": {
+          "execution_mode": "bytecode",
+          "selected": 561,
+          "before": {
+            "pass": 560,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53311
+          },
+          "after": {
+            "pass": 560,
+            "fail": 1,
+            "timeout": 0,
+            "unsupported": 0,
+            "skipped": 53311
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 4.672,
+          "elapsed_after": 5.407,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        },
+        "built-ins-TypedArray": {
+          "execution_mode": "bytecode",
+          "selected": 2185,
+          "before": {
+            "pass": 2114,
+            "fail": 70,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 51687
+          },
+          "after": {
+            "pass": 2114,
+            "fail": 70,
+            "timeout": 0,
+            "unsupported": 1,
+            "skipped": 51687
+          },
+          "gained": [],
+          "lost": [],
+          "elapsed_before": 26.263,
+          "elapsed_after": 29.081,
+          "before_host_sha256": "bc8a3a65f41ccba49be4a9c64bea5824b7b046eeb67e5206e5eddbb2d3e56b56",
+          "after_host_sha256": "850674090007d4eabf7c390b6dee7b562e42d7f1d6b6b80bf15d086db2bf6bbb",
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 15.0,
+          "jobs": 4
+        }
+      }
+    }
+  },
+  "baseline_method": "Fresh binary4 baseline using preserved fixed81da host plus completed same-profile core6 primitive reports; strict pin/runner/input/settings required",
+  "upstream": "MIT boa-dev/boa core/engine/src/builtins/typed_array/object.rs @39cd11214ecb366200157dab96b3919e61e9a391, copyright2019JasonWilliams; exact file header and appended notice",
+  "spec": [
+    "https://tc39.es/ecma262/multipage/indexed-collections.html#sec-istypedarrayfixedlength",
+    "https://tc39.es/ecma262/multipage/indexed-collections.html#sec-integer-indexed-exotic-objects-preventextensions",
+    "https://tc39.es/ecma262/multipage/abstract-operations.html#sec-setintegritylevel"
+  ],
+  "native": {
+    "workspace_pass": 4253,
+    "workspace_skipped": 17,
+    "workspace_seconds": 122.325,
+    "doctests": 4,
+    "backends": [
+      "TreeWalk",
+      "Bytecode"
+    ],
+    "groups": [
+      "All12 typed kinds \u00d713 fixed/tracking/RAB/GSAB/OOB/detached states \u00d74 integrity operations; ordinary DataView/backing-store controls",
+      "Transparent/forwarded/lying/revoked Proxy trap order, abrupt identity, mutation atomicity, growth/shrink transitions",
+      "Genuine foreign native creation/error realm, borrowed calls/apply/bind/Proxy, poisoned TypeError global and caller/incumbent restoration"
+    ]
+  },
+  "controller": {
+    "before_underlying_exit": 0,
+    "final_underlying_exit": 0,
+    "recovery_underlying_exit": 0,
+    "native_exit_journals": 0
+  },
+  "profile": {
+    "box": "bx_bq7wyr6x",
+    "provider": "baremetal",
+    "size": "default",
+    "vcpus": 4,
+    "memory_gb": 8
+  },
+  "scope": {
+    "new_fields": 0,
+    "public_schema_changes": 0,
+    "dispatch_by_native_or_existing_metadata": true,
+    "algorithm": "IsTypedArrayFixedLength reads existing view.length and backing resizable/shared; complete integer-indexed PreventExtensions before ordinary extensibility mutation. Remove ad-hoc Object.freeze precheck so existing SetIntegrityLevel ordering governs fixed nonempty failure state."
+  },
+  "owned_source_chain": [
+    "c80cd7456f730f7d7e01c3ca1ea5656a3d709e0f"
+  ],
+  "native_archive_hashes": {
+    "jsrt-typed-integrity1-native-before.tar.gz": "f6f912214dcab093ef1265cf488c7a490a192203bb62e3417b4e0c71f0d2cfc4",
+    "jsrt-typed-integrity1-native-after.tar.gz": "30338bb8b3c48da72c86d66c2a28356f29af79e2ab24f4682f1604ef880f2dc0",
+    "jsrt-typed-integrity1-native-recovery.tar.gz": "78d09284a563df74ce77f2146b03d46ba017c5e78aa106c806636944ef3d018f"
+  },
+  "source_hashes": {
+    "crates/amazing-js/src/runtime_binary_integrity.rs": "2819e42d811b771b4cdebd000964b9c11fecb177bd8a843bbd9ef77b831002c5",
+    "crates/amazing-js/src/runtime_binary_integrity_tests.rs": "805a1e899d9bee7c3c8dd28f1f1a3180594783809cfc8f9ee753b0ae018d4d7d",
+    "crates/amazing-js/src/builtins_binary.rs": "2b005c5f4569961cd88ad5345a7397114003eae515fd2fdecfe4071b547950cb",
+    "crates/amazing-js/src/interp_proxy.rs": "1b59d8fb2078daa403b63fcfb71b3cc72cf1c373c1145208b21ea0d46ecbc275",
+    "crates/amazing-js/src/interp_object_extra.rs": "4e11411f83cf489c660d3aa4972cbf86ea7ec847ddb8ed43c39cd5f0cf23d2de",
+    "THIRD_PARTY_NOTICES.md": "96a13d76c0e2d19860b38af220e2e09876b27c13883fc7696789f74b28044e47"
+  },
+  "recovery": {
+    "initial_unique": {
+      "selected": 32148,
+      "before_pass": 31941,
+      "after_pass": 31940,
+      "gained_files": [
+        "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+        "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+        "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js"
+      ],
+      "lost_files": [
+        "language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-id-init-exhausted.js",
+        "language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-id-init-fn-name-arrow.js",
+        "language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-id-init-fn-name-class.js",
+        "language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-id-init-fn-name-cover.js"
+      ],
+      "gained_variants": [
+        [
+          "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "non-strict"
+        ],
+        [
+          "staging/built-ins/Object/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "strict"
+        ],
+        [
+          "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+          "non-strict"
+        ],
+        [
+          "staging/built-ins/Object/seal/seal-variable-length-typed-arrays.js",
+          "strict"
+        ],
+        [
+          "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "non-strict"
+        ],
+        [
+          "staging/built-ins/Reflect/preventExtensions/preventExtensions-variable-length-typed-arrays.js",
+          "strict"
+        ]
+      ],
+      "lost_variants": [
+        [
+          "language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-id-init-exhausted.js",
+          "non-strict"
+        ],
+        [
+          "language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-id-init-fn-name-arrow.js",
+          "non-strict"
+        ],
+        [
+          "language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-id-init-fn-name-class.js",
+          "non-strict"
+        ],
+        [
+          "language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-id-init-fn-name-cover.js",
+          "non-strict"
+        ]
+      ]
+    },
+    "raw_records": [
+      {
+        "path": "language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-id-init-exhausted.js",
+        "variants": [
+          {
+            "variant": "non-strict",
+            "status": "fail",
+            "reason": "host.abnormal-exit",
+            "exit_code": 1,
+            "detail": "Test262 host protocol: Transport endpoint is not connected (os error 107)\n"
+          },
+          {
+            "variant": "strict",
+            "status": "pass",
+            "reason": "completed"
+          }
+        ],
+        "metadata": {
+          "flags": [
+            "generated"
+          ],
+          "features": [
+            "class",
+            "class-static-methods-private",
+            "destructuring-binding",
+            "default-parameters"
+          ],
+          "esid": "sec-runtime-semantics-bindingclassdeclarationevaluation"
+        },
+        "status": "fail",
+        "reason": "host.abnormal-exit"
+      },
+      {
+        "path": "language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-id-init-fn-name-arrow.js",
+        "variants": [
+          {
+            "variant": "non-strict",
+            "status": "fail",
+            "reason": "host.abnormal-exit",
+            "exit_code": 1,
+            "detail": "Test262 host protocol: Transport endpoint is not connected (os error 107)\n"
+          },
+          {
+            "variant": "strict",
+            "status": "pass",
+            "reason": "completed"
+          }
+        ],
+        "metadata": {
+          "flags": [
+            "generated"
+          ],
+          "features": [
+            "class",
+            "class-static-methods-private",
+            "destructuring-binding",
+            "default-parameters"
+          ],
+          "esid": "sec-runtime-semantics-bindingclassdeclarationevaluation"
+        },
+        "status": "fail",
+        "reason": "host.abnormal-exit"
+      },
+      {
+        "path": "language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-id-init-fn-name-class.js",
+        "variants": [
+          {
+            "variant": "non-strict",
+            "status": "fail",
+            "reason": "host.abnormal-exit",
+            "exit_code": 1,
+            "detail": "Test262 host protocol: Transport endpoint is not connected (os error 107)\n"
+          },
+          {
+            "variant": "strict",
+            "status": "pass",
+            "reason": "completed"
+          }
+        ],
+        "metadata": {
+          "flags": [
+            "generated"
+          ],
+          "features": [
+            "class",
+            "class-static-methods-private",
+            "destructuring-binding",
+            "default-parameters"
+          ],
+          "esid": "sec-runtime-semantics-bindingclassdeclarationevaluation"
+        },
+        "status": "fail",
+        "reason": "host.abnormal-exit"
+      },
+      {
+        "path": "language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-id-init-fn-name-cover.js",
+        "variants": [
+          {
+            "variant": "non-strict",
+            "status": "fail",
+            "reason": "host.abnormal-exit",
+            "exit_code": 1,
+            "detail": "Test262 host protocol: Transport endpoint is not connected (os error 107)\n"
+          },
+          {
+            "variant": "strict",
+            "status": "pass",
+            "reason": "completed"
+          }
+        ],
+        "metadata": {
+          "flags": [
+            "generated"
+          ],
+          "features": [
+            "class",
+            "class-static-methods-private",
+            "destructuring-binding",
+            "default-parameters"
+          ],
+          "esid": "sec-runtime-semantics-bindingclassdeclarationevaluation"
+        },
+        "status": "fail",
+        "reason": "host.abnormal-exit"
+      }
+    ],
+    "method": "ONE whole bytecode language rerun after unexpected four host.abnormal-exit protocol os107 records; no source/binary/runner/settings change. Full pinned corpus274MB and runner copied to native/tmp with original inputSHA91109, revision3655, host85067409, runner8e473d3d guarded. No specific FUSE path cause asserted. All initial four nonstrict and strict sibling variants restored pass, entire before path/variant sets and all passing classifications match. Original20 after reports and initial comparison retained unchanged.",
+    "recovered_files": 4,
+    "additional_reports": 1
+  },
+  "raw_evidence": "Main .agents/js-runtime evidence/jsrt-primitive1-after reused core6before12; typed-integrity1-before8, after20 and recovery1 reports with logs/journals native SHA/fullJSON verified.40paired selected reports plus raw initial bytecode language retained.",
+  "disclosures": [
+    "No robustness claim: native transparent Error.prototype proxy stack overflow remains separate architecture boundary",
+    "String normalization complete tables remain HOLD awaiting explicit Unicode-data license decision",
+    "Three gained files are staging Object.preventExtensions/seal variable-length typed arrays and Reflect.preventExtensions counterpart; binary4 classifications unchanged"
+  ]
+}

@@ -1,0 +1,9 @@
+# Integer-indexed integrity
+
+The whole IsTypedArrayFixedLength predicate uses actual view/backing-store metadata. PreventExtensions refuses variable-length typed arrays, including fixed views of resizable ArrayBuffer, while fixed views of growable shared buffers remain eligible. Seal/freeze uses the existing ordinary sequence after this gate; nonempty indexed freeze failures retain the normative prior nonextensible state. DataView and backing buffers keep ordinary integrity behavior.
+
+All original matrices cover all12 typed kinds, fixed/tracking/RAB/GSAB/OOB/detached states, four integrity operations, Proxy traps/abrupt identity/transitions and genuine foreign borrowed-call error realm. No assertions removed. Boa MIT attribution/notice retained; original notice already exists on recorded origin.
+
+Historical complete qualification:4253 workspace passes/17skips,4doctests,+3 files/+6variants each mode, zero losses. Original interrupted-bytecode recovery retained explicitly in historical proof. These counts do not prove this new base.
+
+Recorded base: fc48838bba9e664746147e4d70437be09b785a4e. Published intrinsic native error lookup is present. Three original Rust groups each run both backends, preserving all six backend groups. Fresh paired Linux qualification passed on unchanged tested source f7cf6c447faea349bdf9dfcf239c0feb1beba913:4426→4429 workspace passes,17skips,4doctests both stages. Eleven whole selectors in both default/VM modes preserve all passing files/variants:31941→31944 files and60020→60026 variants per mode, zero losses. All22 corpus controllers completed normally with native/tmp output and verified durable copies. Before/after used the same actual root-authorized large8CPU/16GB baremetal profile. The first candidate nextest110 WRITE_OUTPUT_ERROR remains an explicit infrastructure incident in compact proof; the single unchanged clean rerun passed. Root full16 merge qualification remains separate.

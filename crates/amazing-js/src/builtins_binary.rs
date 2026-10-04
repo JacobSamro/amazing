@@ -1778,3 +1778,6 @@ mod binary_tests {
             5.960464477539063e-8);
     }
 }
+
+include!("runtime_binary_integrity.rs");
+include!("runtime_binary_integrity_tests.rs");

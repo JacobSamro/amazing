@@ -572,12 +572,6 @@ fn object_integrity(
     if i.is_window_proxy(object) || i.legacy_for(object).is_some() {
         return Err(Throw::type_error("cannot seal a legacy platform object"));
     }
-    if freeze && matches!(object.borrow().exotic, Exotic::TypedArray) {
-        let view = binary_view(&target)?;
-        if binary_length(&view) != 0 || view.buffer.borrow().resizable {
-            return Err(Throw::type_error("cannot freeze a TypedArray with indexed elements"));
-        }
-    }
     if !i.default_prevent_extensions(object)? {
         return Err(Throw::type_error("cannot prevent extensions on this object"));
     }
