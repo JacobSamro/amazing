@@ -1,6 +1,7 @@
 {
   "source_commit": "03443f1a90a1e02d053eacf8dc5ed3ccb212562a",
   "base_commit": "11087877b7cd9c2a752d01194d79e2f5e8ba7e19",
+  "comparison_scope": "cumulative against the recorded base, not an incremental per-batch delta",
   "summary": {
     "files": {
       "unsupported": 171,
