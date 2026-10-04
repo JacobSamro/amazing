@@ -140,6 +140,8 @@ def main() -> int:
     ap.add_argument("--scarce-idle-minutes", type=float, default=40)
     ap.add_argument("--poll", type=int, default=60)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--no-auto-extend", action="store_true",
+                    help="Keep finite mission TTLs unchanged; continue normal idle stopping")
     args = ap.parse_args()
 
     idle_since: dict[str, float] = {}
@@ -162,7 +164,7 @@ def main() -> int:
             busy = is_busy(sid)
             if busy is not False:
                 idle_since.pop(sid, None)
-                if busy is True and expires_soon(sb, now):
+                if busy is True and not args.no_auto_extend and expires_soon(sb, now):
                     log(f"EXTEND {sid}: active work, finite TTL {BUSY_TTL_SECONDS}s")
                     if not args.dry_run:
                         result = boat("extend", sid, "--ttl", str(BUSY_TTL_SECONDS))
