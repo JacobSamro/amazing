@@ -1,0 +1,2 @@
+# Preserve exact upstream input bytes, including original comment whitespace.
+*.txt -text whitespace=-blank-at-eol

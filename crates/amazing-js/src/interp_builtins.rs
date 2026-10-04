@@ -2656,58 +2656,28 @@ fn native_string_to_well_formed(i: &mut Interpreter, this: JsValue, _: Vec<JsVal
 fn native_string_locale_compare(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     intl_string_locale_compare(i, this, args)
 }
+mod runtime_string_normalization {
+    include!("runtime_string_normalization_impl.rs");
+}
+
 fn native_string_normalize(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let source = string_this_units(i, this)?;
-    let form = match args.first() { None | Some(JsValue::Undefined) => "NFC".to_string(), Some(v) => i.to_string(v)? };
+    let form = match args.first() {
+        None | Some(JsValue::Undefined) => "NFC".to_owned(),
+        Some(value) => i.to_string(value)?,
+    };
     if !matches!(form.as_str(), "NFC" | "NFD" | "NFKC" | "NFKD") {
-        let constructor = i.global_env.resolve("RangeError")
-            .ok_or_else(|| Throw::range_error("invalid normalization form"))?;
-        let error = i.construct(&constructor, vec![JsValue::str("invalid normalization form")])?;
-        return Err(Throw(error));
-    }
-    // Deliberately bounded table for common Latin compositions. Other units
-    // remain untouched; a complete Unicode table belongs to a later ticket.
-    const PAIRS: &[(u16, u16, u16)] = &[
-        (0x00c0, 0x0041, 0x0300), (0x00c1, 0x0041, 0x0301),
-        (0x00c4, 0x0041, 0x0308), (0x00c5, 0x0041, 0x030a),
-        (0x00c7, 0x0043, 0x0327), (0x00c8, 0x0045, 0x0300),
-        (0x00c9, 0x0045, 0x0301), (0x00d1, 0x004e, 0x0303),
-        (0x00d6, 0x004f, 0x0308), (0x00dc, 0x0055, 0x0308),
-        (0x00e0, 0x0061, 0x0300), (0x00e1, 0x0061, 0x0301),
-        (0x00e4, 0x0061, 0x0308), (0x00e5, 0x0061, 0x030a),
-        (0x00e7, 0x0063, 0x0327), (0x00e8, 0x0065, 0x0300),
-        (0x00e9, 0x0065, 0x0301), (0x00f1, 0x006e, 0x0303),
-        (0x00f6, 0x006f, 0x0308), (0x00fc, 0x0075, 0x0308),
-        (0x0100, 0x0041, 0x0304),
-    ];
-    let mut decomposed = Vec::with_capacity(source.len() + 4);
-    for &unit in source.units() {
-        if let Some(&(_, first, mark)) = PAIRS.iter().find(|(composed, _, _)| *composed == unit) {
-            decomposed.extend([first, mark]);
-        } else if unit == 0x212b && form.starts_with("NFK") {
-            decomposed.extend([0x0041, 0x030a]);
-        } else {
-            decomposed.push(unit);
+        // Allocate this fresh intrinsic error in the active builtin realm;
+        // the mutable global RangeError binding is not part of Normalize.
+        let error = Throw::range_error("invalid normalization form");
+        if let (JsValue::Object(object), Some((_, prototype))) =
+            (&error.0, i.intrinsic_constructors.get("RangeError"))
+        {
+            object.borrow_mut().proto = Some(prototype.clone());
         }
+        return Err(error);
     }
-    if matches!(form.as_str(), "NFD" | "NFKD") {
-        return Ok(JsValue::str_units(decomposed));
-    }
-    let mut composed = Vec::with_capacity(decomposed.len());
-    let mut at = 0;
-    while at < decomposed.len() {
-        if at + 1 < decomposed.len() {
-            if let Some(&(unit, _, _)) = PAIRS.iter().find(|(_, first, mark)|
-                *first == decomposed[at] && *mark == decomposed[at + 1]) {
-                composed.push(unit);
-                at += 2;
-                continue;
-            }
-        }
-        composed.push(decomposed[at]);
-        at += 1;
-    }
-    Ok(JsValue::str_units(composed))
+    Ok(JsValue::str_units(runtime_string_normalization::normalize_utf16(source.units(), &form)))
 }
 
 fn native_string_includes(
@@ -3171,3 +3141,4 @@ mod promise_constructor_allocation_tests {
         }
     }
 }
+include!("runtime_string_normalization_tests.rs");

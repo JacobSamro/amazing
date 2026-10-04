@@ -1,0 +1,43 @@
+{
+  "unicode_version": "17.0.0",
+  "license": "Unicode-3.0",
+  "algorithm_license": "MIT",
+  "algorithm_source": "lucid-softworks/lumen",
+  "algorithm_commit": "f6c9860d44fa52249cfd647122edea184d32c863",
+  "uax15": "https://www.unicode.org/reports/tr15/tr15-57.html",
+  "inputs": {
+    "UnicodeData.txt": {
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/UnicodeData.txt",
+      "sha256": "2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c",
+      "bytes": 2198209
+    },
+    "DerivedNormalizationProps.txt": {
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/DerivedNormalizationProps.txt",
+      "sha256": "71fd6a206a2c0cdd41feb6b7f656aa31091db45e9cedc926985d718397f9e488",
+      "bytes": 1377582
+    },
+    "CompositionExclusions.txt": {
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/CompositionExclusions.txt",
+      "sha256": "2f239196ef3b5b61db5cc476e9bd80f534d15aa1b74e1be1dea5d042a344c85f",
+      "bytes": 9007
+    },
+    "NormalizationTest.txt": {
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/NormalizationTest.txt",
+      "sha256": "5019ffd530751a741900c849c0e010332f142a3612234639bd200b82138a87db",
+      "bytes": 2827429
+    },
+    "ReadMe.txt": {
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/ReadMe.txt",
+      "sha256": "9fe1a90bd32659d7953616283dc2bffaa165518aae9ace026040c42c559ba606",
+      "bytes": 740
+    },
+    "LICENSE.txt": {
+      "url": "https://www.unicode.org/license.txt",
+      "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
+      "bytes": 1995
+    }
+  },
+  "algorithm_source_sha256": "ab319406157b4d742130d52006a9992b12f80b5c32a899090808b8819b623e13",
+  "algorithm_path": "crates/lumen/src/unicode_norm_impl.rs",
+  "algorithm_license_sha256": "791a94bdfe26fe7de9cfba209f6171587b434cd73f159ba4c5c18ddd0a52d378"
+}

@@ -1,0 +1,217 @@
+{
+  "schema": 1,
+  "recorded_base": "7d5c310f2c47f1b8829eba8f4862d985410cf567",
+  "gated_source_commit": "305ca035d878997850eff9d8299b56298101eff6",
+  "workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4390,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 595414,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-305ca035d878997850eff9d8299b56298101eff6-nextest.log",
+        "sha256": "21729b07d63e2e8dc5dd94b8a88c380e74d6458277b1e035c5c0ef04c07e761a"
+      },
+      {
+        "bytes": 16054,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-305ca035d878997850eff9d8299b56298101eff6-doctests.log",
+        "sha256": "a9eaee3a51ba162654f016b86113c977f63dd36cc7f6376ccd3d84f96303d52b"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "305ca035d878997850eff9d8299b56298101eff6",
+    "summary_lines": [
+      "Summary [ 124.699s] 4390 tests run: 4390 passed, 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "own_corpus": {
+    "source_commit": "7e375021f36bcd86022cf98ce8f5a19962cae532",
+    "engine_source_identical_in_integrated_candidate": true,
+    "job_exit": 0,
+    "modes": [
+      "tree",
+      "bytecode"
+    ],
+    "rows_per_mode": 20034,
+    "row_checks_per_mode": 400680,
+    "unlisted_points_per_mode": 1097026,
+    "failed_checks": 0,
+    "failed_unlisted_forms": 0,
+    "receipt": {
+      "counts": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 4
+        },
+        "nextest": {
+          "failed": 0,
+          "passed": 4331,
+          "skipped": 17
+        }
+      },
+      "job_exit": 0,
+      "phase_exits": {
+        "doctests": 0,
+        "nextest": 0,
+        "unicode": 0
+      },
+      "raw": [
+        {
+          "bytes": 584940,
+          "path": "/home/user/amazing/out/js-runtime/unicode17-7e375021-nextest.log",
+          "sha256": "86c5f4a591372c3868dcf69787d8294836d87280a9751f40629814308f7ab0f3"
+        },
+        {
+          "bytes": 16054,
+          "path": "/home/user/amazing/out/js-runtime/unicode17-7e375021-docs.log",
+          "sha256": "8f7b7886102800fd25e0b9243ce40b543abf2c380fd93823846a710bdbd96f7c"
+        },
+        {
+          "bytes": 8554,
+          "path": "/home/user/amazing/out/js-runtime/unicode17-7e375021-conformance.log",
+          "sha256": "19eb40445d392fa7b3c797dcd95b1bce16b493574b91cbcf4084697f2f610754"
+        }
+      ],
+      "schema": 1,
+      "source_commit": "7e375021f36bcd86022cf98ce8f5a19962cae532",
+      "summary_lines": [
+        "Summary [ 128.316s] 4331 tests run: 4331 passed (1 slow), 17 skipped",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    }
+  },
+  "test262": {
+    "job_exit": 0,
+    "shards": 16,
+    "summary": {
+      "files": {
+        "fail": 795,
+        "pass": 52611,
+        "skipped": 294,
+        "timeout": 1,
+        "unsupported": 171
+      },
+      "variants": {
+        "fail": 1490,
+        "pass": 101086,
+        "timeout": 2,
+        "unsupported": 340
+      }
+    },
+    "baseline_source_commit": "81564e31bdfd3ccc91b48aee4444b61e419dc7ee",
+    "baseline_summary_sha256": "99871d4937aa46723c395975d5b548059928b67a41bf1dc00278c012df0f682b",
+    "baseline_published_engine_commit": "5d4df766e735a941a3ab9d48214b43f6bab90751",
+    "lost_files": 0,
+    "lost_variants": 0,
+    "gained_files": 5,
+    "gained_passing_variants": 10,
+    "provenance": {
+      "host_sha256": "7954f6181fea4028772030b5262664fcf0129fa98d84ac9e15b654a041785fe9",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "source_commit": "305ca035d878997850eff9d8299b56298101eff6",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    "merged_summary_sha256": "53b5e92bede8f6480ce069b32e3b2fbcb11e1024588c328f921462d4a2c124f9",
+    "shard_sha256": {
+      "0": "70ec56c803a752fe8d392b1177078160899e7a0c5a7d43123380f28d1f07c167",
+      "1": "6e1f78c41ee18a431c993c663bc600350aadda98cfd9247865d5f983c88ec5b3",
+      "2": "2b1ca62d669f7665c56ce0a6481abfde1801b40e90020b63a452c8671bd212f7",
+      "3": "5e81bc2a3ebffafebdd925d71d5d6d189c54e71caa54eef374823b1e2d77ef15",
+      "4": "d94f41b320b3862f02a7b651c12daad53a4255902701b6f10a8af31f76ba9957",
+      "5": "c5be196058f18693ad02e4ed16d1dd9863f669800940fc90f3764fdc833f537d",
+      "6": "24f15bca7fc7a52bc9a67bb51f66d0f3e838293912bc78818b0390d15be95ef9",
+      "7": "d1fbfc477432be3cd9dea307917ce302efa30f3cf1db5798b847a14fc9b4fc71",
+      "8": "6704426ab43e074ffda60f7a49a416428a7b4aba05cd444b153e1b10c8f17fe6",
+      "9": "99f448cb971e68cf8208ad4d831a439c6d9f7857a1484d847f56e2912d3f169d",
+      "10": "20a3afbdb4dedd56f7f14b7419ed176422c423e962acc1c5b411873b0c8e2f56",
+      "11": "1288325e00ed778865bb148238c978df6f3afa74c4f8c074737bba47a4f786da",
+      "12": "6dd72fe04ae343fbaf5ebaed387789678ececffc9072827d81e8011d17fb6207",
+      "13": "a135d5006a5b9afd905939bd4fcac7e34f3184d795fb6db9a4ef74bdbe87a397",
+      "14": "7a46d6c717beed2492ff2042698d11b90c3cab4256fba0531f1a52ff4735a697",
+      "15": "238251c776a9220c7aa30506533a2e78f505439dbc2f4dfb3fe076bee8998e57"
+    }
+  },
+  "tooling_rerun": {
+    "first_corpus_attempt": "required output-path CLI argument omitted before corpus execution",
+    "clean_reruns": 1,
+    "algorithm_unchanged": true
+  }
+}

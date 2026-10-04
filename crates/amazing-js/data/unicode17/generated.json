@@ -1,0 +1,30 @@
+{
+  "unicode_version": "17.0.0",
+  "canonical_decompositions": 2081,
+  "compatibility_decompositions": 3833,
+  "combining_classes": 968,
+  "composition_pairs": 961,
+  "full_composition_exclusions": 1120,
+  "explicit_composition_exclusions": 81,
+  "normalization_test_rows": 20034,
+  "part1_single_code_points": 17086,
+  "unlisted_all_code_points": 1097026,
+  "public_conformance_row_checks_per_backend": 400680,
+  "generated": {
+    "runtime_string_normalization_data_canonical.rs": {
+      "sha256": "23b70158bcf46760c67ae2458cfb3923fe27892a92ec49afed968eafb0d3afd7",
+      "bytes": 78465,
+      "lines": 1531
+    },
+    "runtime_string_normalization_data_compatibility.rs": {
+      "sha256": "a08f44411c05e3e68044e2e2b8ef55db782eda9399a1d5bb373b5065f157749f",
+      "bytes": 98460,
+      "lines": 1924
+    },
+    "runtime_string_normalization_data_combining.rs": {
+      "sha256": "c42dcc90c9224dc684c917f0a1add0f1b9d293f740f85e66a9505b1a76013f4b",
+      "bytes": 16405,
+      "lines": 491
+    }
+  }
+}

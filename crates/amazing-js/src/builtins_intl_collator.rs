@@ -4,6 +4,7 @@
 struct IntlCollatorState {
     locale: String, usage: String, sensitivity: String, collation: String,
     numeric: bool, case_first: String, ignore_punctuation: bool,
+    bound_compare: Option<JsValue>,
 }
 
 impl Interpreter {
@@ -112,6 +113,7 @@ fn intl_collator_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
     let ignore_punctuation = if ignore_value.is_undefined() { ignore_default } else { ignore_value.to_boolean() };
     intl_register(&object, IntlState::Collator(IntlCollatorState {
         locale, usage, sensitivity, collation, numeric, case_first, ignore_punctuation,
+        bound_compare: None,
     }));
     Ok(JsValue::Object(object))
 }
@@ -152,12 +154,22 @@ fn intl_collator_state(this: &JsValue) -> Result<IntlCollatorState, Throw> {
 }
 
 fn intl_collator_compare_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let state = intl_collator_state(&this)?;
+    let JsValue::Object(collator) = &this else {
+        return Err(Throw::type_error("incompatible Collator receiver"));
+    };
+    let Some(IntlState::Collator(mut state)) = intl_state(collator) else {
+        return Err(Throw::type_error("incompatible Collator receiver"));
+    };
+    if let Some(function) = &state.bound_compare { return Ok(function.clone()); }
     let function = Interpreter::native_arity("", intl_collator_bound_compare, &i.function_proto, 2);
     let JsValue::Object(object) = &function else { unreachable!() };
     object.borrow_mut().constructible = false;
     object.borrow_mut().delete_own("prototype");
-    intl_register(object, IntlState::BoundCollator(state));
+    // The callable owns only an uncached state snapshot, so it does not
+    // retain its originating Collator or a reference to itself.
+    intl_register(object, IntlState::BoundCollator(state.clone()));
+    state.bound_compare = Some(function.clone());
+    intl_register(collator, IntlState::Collator(state));
     Ok(function)
 }
 
@@ -272,30 +284,14 @@ fn intl_compare_numeric(left: &str, right: &str) -> std::cmp::Ordering {
     }
 }
 
-fn intl_canonical_latin(text: &str) -> String {
-    let mut normalized = String::with_capacity(text.len());
-    for ch in text.chars() {
-        let pair = match ch {
-            'à' => Some(('a', '\u{300}')), 'á' => Some(('a', '\u{301}')),
-            'â' => Some(('a', '\u{302}')), 'ã' => Some(('a', '\u{303}')),
-            'ä' => Some(('a', '\u{308}')), 'å' => Some(('a', '\u{30a}')),
-            'ç' => Some(('c', '\u{327}')), 'è' => Some(('e', '\u{300}')),
-            'é' => Some(('e', '\u{301}')), 'ê' => Some(('e', '\u{302}')),
-            'ë' => Some(('e', '\u{308}')), 'ì' => Some(('i', '\u{300}')),
-            'í' => Some(('i', '\u{301}')), 'î' => Some(('i', '\u{302}')),
-            'ï' => Some(('i', '\u{308}')), 'ñ' => Some(('n', '\u{303}')),
-            'ò' => Some(('o', '\u{300}')), 'ó' => Some(('o', '\u{301}')),
-            'ô' => Some(('o', '\u{302}')), 'õ' => Some(('o', '\u{303}')),
-            'ö' => Some(('o', '\u{308}')), 'ù' => Some(('u', '\u{300}')),
-            'ú' => Some(('u', '\u{301}')), 'û' => Some(('u', '\u{302}')),
-            'ü' => Some(('u', '\u{308}')), 'ý' => Some(('y', '\u{301}')),
-            'ÿ' => Some(('y', '\u{308}')),
-            _ => None,
-        };
-        if let Some((base, mark)) = pair { normalized.push(base); normalized.push(mark); }
-        else { normalized.push(ch); }
-    }
-    normalized
+// Complete canonical normalization shares String.prototype.normalize's data.
+// Rust strings here already contain scalar values; this preserves the existing
+// collation input boundary and does not change locale weights/options.
+fn intl_canonical_form(text: &str, form: &str) -> String {
+    let points: Vec<u32> = text.chars().map(u32::from).collect();
+    runtime_string_normalization::normalize(&points, form).into_iter()
+        .map(|point| char::from_u32(point).expect("normalization preserves scalar values"))
+        .collect()
 }
 
 // Strips diacritics (via the same base-letter table as intl_primary_key)
@@ -316,6 +312,12 @@ fn intl_case_stripped(text: &str) -> String {
 
 fn intl_collate(state: &IntlCollatorState, left: &str, right: &str) -> std::cmp::Ordering {
     use std::cmp::Ordering;
+    // Canonically equivalent input reaches the same primary weights. NFC
+    // retains precomposed locale tailoring before later NFD accent ordering.
+    let left_normalized = intl_canonical_form(left, "NFC");
+    let right_normalized = intl_canonical_form(right, "NFC");
+    let left = left_normalized.as_str();
+    let right = right_normalized.as_str();
     let left_primary = intl_primary_key(state, left);
     let right_primary = intl_primary_key(state, right);
     let primary = if state.numeric { intl_compare_numeric(&left_primary, &right_primary) }
@@ -324,15 +326,15 @@ fn intl_collate(state: &IntlCollatorState, left: &str, right: &str) -> std::cmp:
     let left_clean = intl_strip_punctuation(state, left);
     let right_clean = intl_strip_punctuation(state, right);
     if ["accent", "variant"].contains(&state.sensitivity.as_str()) {
-        let accents = intl_canonical_latin(&left_clean.to_lowercase())
-            .cmp(&intl_canonical_latin(&right_clean.to_lowercase()));
+        let accents = intl_canonical_form(&left_clean.to_lowercase(), "NFD")
+            .cmp(&intl_canonical_form(&right_clean.to_lowercase(), "NFD"));
         if accents != Ordering::Equal { return accents; }
     }
     if ["case", "variant"].contains(&state.sensitivity.as_str()) {
         let (left_case, right_case) = if state.sensitivity == "case" {
             (intl_case_stripped(&left_clean), intl_case_stripped(&right_clean))
         } else {
-            (intl_canonical_latin(&left_clean), intl_canonical_latin(&right_clean))
+            (intl_canonical_form(&left_clean, "NFD"), intl_canonical_form(&right_clean, "NFD"))
         };
         let cases = match state.case_first.as_str() {
             "upper" => right_case.cmp(&left_case),
@@ -353,4 +355,58 @@ mod intl_collator_tests {
         let value = i.run_script("let n=new Intl.Collator('en',{numeric:true}).compare; let b=new Intl.Collator('de',{sensitivity:'base'}).compare; [n('a2','a10'),b('ä','a')].join(',')").unwrap();
         assert_eq!(i.to_string(&value).unwrap(), "-1,0");
     }
+    #[test]
+    fn complete_canonical_equivalence_preserves_options_and_locale_tailoring() {
+        let source = r#"
+          var failures=[];
+          var pairs=[['e\u0301','é'],['\u212b','Å'],['\u2126','Ω'],['\u1100\u1161\u11a8','각'],['\u1e0b\u0323','\u1e0d\u0307'],['\u0315\u0300','\u0300\u0315'],['a\u0306\u0301','ắ'],['\u0344','\u0308\u0301'],['\ud834\udd5e','\ud834\udd57\ud834\udd65']];
+          for(var locale of ['en','de','de-u-co-phonebk','sv','vi','ko']) {
+            for(var sensitivity of ['base','accent','case','variant']) {
+              var collator=new Intl.Collator(locale,{sensitivity:sensitivity});
+              var compare=collator.compare;
+              if(compare!==collator.compare)failures.push('bound compare identity:'+locale+':'+sensitivity);
+              for(var pair of pairs){var forward=compare(pair[0],pair[1]),reverse=compare(pair[1],pair[0]);if(forward!==0||reverse!==0)failures.push('canonical pair:'+locale+':'+sensitivity+':'+pair.join('|')+':'+forward+':'+reverse);}
+            }
+          }
+          var getter=Object.getOwnPropertyDescriptor(Intl.Collator.prototype,'compare').get;
+          var holder=new Intl.Collator('en'),cached=holder.compare;
+          for(var invalid of [cached,Intl.Collator.prototype,{},Object.create(Intl.Collator.prototype),new Intl.NumberFormat('en'),null,undefined]){
+            try{getter.call(invalid);failures.push('compare getter accepted incompatible brand');}catch(e){if(Object.getPrototypeOf(e)!==TypeError.prototype)failures.push('compare getter wrong brand error');}
+          }
+          if(getter.call(holder)!==cached||holder.compare!==cached||cached('a','b')>=0)failures.push('brand errors disturbed cached bound function');
+          var customError=new Error('custom compare input');Object.setPrototypeOf(customError,null);
+          try{cached({toString(){throw customError;}},'x');failures.push('compare swallowed custom throw');}catch(e){if(e!==customError||Object.getPrototypeOf(e)!==null)failures.push('compare changed custom throw');}
+          var phone=new Intl.Collator('de-u-co-phonebk',{sensitivity:'variant'}).compare;
+          var standard=new Intl.Collator('de',{sensitivity:'variant'}).compare;
+          var tailoring=[phone('äb','adb'),phone('a\u0308b','adb'),standard('äb','adb'),standard('a\u0308b','adb')];if(!(tailoring[0]>0&&tailoring[1]>0&&tailoring[2]<0&&tailoring[3]<0))failures.push('preserved tailoring:'+tailoring.join(','));
+          var numeric=new Intl.Collator('en',{numeric:true,ignorePunctuation:true}).compare;
+          var numbers=[numeric('é-2','e\u030110'),numeric('é-2','e\u0301 2')];if(!(numbers[0]<0&&numbers[1]===0))failures.push('numeric punctuation:'+numbers.join(','));
+          if(failures.length)throw failures.join(';');true;
+        "#;
+        for backend in [ExecutionBackend::TreeWalk,ExecutionBackend::Bytecode] {
+            let mut i=Interpreter::new();
+            assert_eq!(i.run_script_with_backend(source,backend).unwrap_or_else(|error|panic!("{backend:?}: {}",error.describe())),JsValue::Bool(true));
+            let caller=i.binding_current_realm();
+            let child=i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
+            for (name, expression) in [
+                ("foreignCompareGetter", "Object.getOwnPropertyDescriptor(Intl.Collator.prototype,'compare').get"),
+                ("foreignFunctionPrototype", "Function.prototype"),
+                ("foreignTypePrototype", "TypeError.prototype"),
+            ] {
+                let value=i.binding_with_realm(child,|i|i.run_script_with_backend(expression,backend)).unwrap();
+                i.global_env.declare_var(name,value).unwrap();
+            }
+            assert_eq!(i.run_script_with_backend(r#"
+              var fresh=new Intl.Collator('en');
+              var borrowed=foreignCompareGetter.call(fresh);
+              var realmOk=Object.getPrototypeOf(borrowed)===foreignFunctionPrototype && fresh.compare===borrowed;
+              var result=borrowed('e\u0301','é');realmOk=realmOk&&result===0&&borrowed.name===''&&borrowed.length===2;
+              try{foreignCompareGetter.call(borrowed);realmOk=false;}catch(e){realmOk=realmOk&&Object.getPrototypeOf(e)===foreignTypePrototype;}
+              realmOk&&fresh.compare===borrowed;
+            "#,backend).unwrap(),JsValue::Bool(true),"{backend:?}: cached compare creation realm");
+            assert_eq!(i.binding_current_realm(),caller);
+            assert_eq!(i.binding_incumbent_realm(),caller);
+        }
+    }
+
 }
