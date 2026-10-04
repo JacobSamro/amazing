@@ -992,12 +992,8 @@ impl Program {
                     }
                     Instruction::SpreadObject(target, source) => {
                         let source = registers[*source].clone();
-                        let JsValue::Object(target) = &registers[*target] else { unreachable!() };
-                        for key in i.enumerable_property_keys(&source)? {
-                            let value = i.get_prop(&source, &key)?;
-                            target.borrow_mut().define(&key, Property::data(value))
-                                .map_err(|_| Throw::type_error("could not define object property"))?;
-                        }
+                        let target = registers[*target].clone();
+                        i.copy_data_properties(&target, &source, &[])?;
                     }
                     Instruction::NewArray(dst) => {
                         let mut array = JsObject::array();

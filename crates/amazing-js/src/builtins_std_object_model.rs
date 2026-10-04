@@ -374,7 +374,7 @@ fn std_legacy_to_object(i: &mut Interpreter, this: JsValue) -> Result<JsValue, T
     if this.is_null() || this.is_undefined() {
         return Err(Throw::type_error("Object.prototype accessor called on null or undefined"));
     }
-    native_object(i, JsValue::Undefined, vec![this])
+    object_to_object(i, this)
 }
 
 // Annex B Object.prototype.__proto__: unlike Object.setPrototypeOf, an invalid

@@ -1,0 +1,1039 @@
+{
+  "ticket": "JS44",
+  "base_commit": "6d5d55b4d8497ae037d3f0ac440d0db34a6e033c",
+  "baseline_tests_commit": "e698595d41c709c785612be2f4e87879d7c1c40f",
+  "source_commit": "4abbefb6710652efeef96e3a73424f7798c14d6b",
+  "profile": "release",
+  "corpora": {
+    "default:language": {
+      "before": {
+        "files": {
+          "pass": 24481,
+          "fail": 83,
+          "timeout": 0,
+          "unsupported": 26,
+          "skipped": 29282
+        },
+        "variants": {
+          "pass": 45282,
+          "fail": 96,
+          "timeout": 0,
+          "unsupported": 52,
+          "skipped": 0
+        },
+        "variant_count": 45430
+      },
+      "after": {
+        "files": {
+          "pass": 24482,
+          "fail": 82,
+          "timeout": 0,
+          "unsupported": 26,
+          "skipped": 29282
+        },
+        "variants": {
+          "pass": 45284,
+          "fail": 94,
+          "timeout": 0,
+          "unsupported": 52,
+          "skipped": 0
+        },
+        "variant_count": 45430
+      },
+      "gained_files": [
+        "language/expressions/object/dstr/object-rest-proxy-gopd-not-called-on-excluded-keys.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        "language/expressions/object/dstr/object-rest-proxy-gopd-not-called-on-excluded-keys.js#non-strict",
+        "language/expressions/object/dstr/object-rest-proxy-gopd-not-called-on-excluded-keys.js#strict"
+      ],
+      "lost_variants": [],
+      "mode": "default",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "fe13da36dc19e82be5481a555ce35510f380c301befaef51694eeb319d2d0254",
+      "after_classification_sha256": "83f126424e00d16400b6b5cce4f0c0abd4d23069b7527da2ef85be0020c39bde",
+      "same_inventory": true
+    },
+    "default:built-ins-Function-": {
+      "before": {
+        "files": {
+          "pass": 507,
+          "fail": 8,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53357
+        },
+        "variants": {
+          "pass": 889,
+          "fail": 16,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 905
+      },
+      "after": {
+        "files": {
+          "pass": 507,
+          "fail": 8,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53357
+        },
+        "variants": {
+          "pass": 889,
+          "fail": 16,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 905
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "default",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "24dcbdc21d7149bdf33fea1fdcb49463351de6704745f12d2e5bef1a0217c46a",
+      "after_classification_sha256": "24dcbdc21d7149bdf33fea1fdcb49463351de6704745f12d2e5bef1a0217c46a",
+      "same_inventory": true
+    },
+    "default:built-ins-Object-": {
+      "before": {
+        "files": {
+          "pass": 3411,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50458
+        },
+        "variants": {
+          "pass": 6802,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        },
+        "variant_count": 6808
+      },
+      "after": {
+        "files": {
+          "pass": 3411,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50458
+        },
+        "variants": {
+          "pass": 6802,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        },
+        "variant_count": 6808
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "default",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "7bb1d7e2ff141aead0e67cbb93688505577a00f0a105647353fbbe14c0c46ee5",
+      "after_classification_sha256": "7bb1d7e2ff141aead0e67cbb93688505577a00f0a105647353fbbe14c0c46ee5",
+      "same_inventory": true
+    },
+    "default:built-ins-Proxy-": {
+      "before": {
+        "files": {
+          "pass": 311,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53561
+        },
+        "variants": {
+          "pass": 607,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 607
+      },
+      "after": {
+        "files": {
+          "pass": 311,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53561
+        },
+        "variants": {
+          "pass": 607,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 607
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "default",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "0b90cabd4d8c94a86db74fed5fb1473f04bb0273b56e77e30363754c5a44055a",
+      "after_classification_sha256": "0b90cabd4d8c94a86db74fed5fb1473f04bb0273b56e77e30363754c5a44055a",
+      "same_inventory": true
+    },
+    "default:built-ins-Promise-": {
+      "before": {
+        "files": {
+          "pass": 732,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53140
+        },
+        "variants": {
+          "pass": 1458,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 1458
+      },
+      "after": {
+        "files": {
+          "pass": 732,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53140
+        },
+        "variants": {
+          "pass": 1458,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 1458
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "default",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "875af274a3a8865fcea633cc615dca0e7c8b498138649820a30c764907fbc533",
+      "after_classification_sha256": "875af274a3a8865fcea633cc615dca0e7c8b498138649820a30c764907fbc533",
+      "same_inventory": true
+    },
+    "default:built-ins-AsyncFunction-": {
+      "before": {
+        "files": {
+          "pass": 18,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53854
+        },
+        "variants": {
+          "pass": 36,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 36
+      },
+      "after": {
+        "files": {
+          "pass": 18,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53854
+        },
+        "variants": {
+          "pass": 36,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 36
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "default",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "169dfba5de940eb8aa2e0f17270fc618992bf5bf1bced2a1c363ccac9f2117db",
+      "after_classification_sha256": "169dfba5de940eb8aa2e0f17270fc618992bf5bf1bced2a1c363ccac9f2117db",
+      "same_inventory": true
+    },
+    "default:built-ins-GeneratorFunction-": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 46
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 46
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "default",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f",
+      "after_classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f",
+      "same_inventory": true
+    },
+    "default:built-ins-AsyncGeneratorFunction-": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 46
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 46
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "default",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a",
+      "after_classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a",
+      "same_inventory": true
+    },
+    "vm:language": {
+      "before": {
+        "files": {
+          "pass": 24481,
+          "fail": 83,
+          "timeout": 0,
+          "unsupported": 26,
+          "skipped": 29282
+        },
+        "variants": {
+          "pass": 45282,
+          "fail": 96,
+          "timeout": 0,
+          "unsupported": 52,
+          "skipped": 0
+        },
+        "variant_count": 45430
+      },
+      "after": {
+        "files": {
+          "pass": 24482,
+          "fail": 82,
+          "timeout": 0,
+          "unsupported": 26,
+          "skipped": 29282
+        },
+        "variants": {
+          "pass": 45284,
+          "fail": 94,
+          "timeout": 0,
+          "unsupported": 52,
+          "skipped": 0
+        },
+        "variant_count": 45430
+      },
+      "gained_files": [
+        "language/expressions/object/dstr/object-rest-proxy-gopd-not-called-on-excluded-keys.js"
+      ],
+      "lost_files": [],
+      "gained_variants": [
+        "language/expressions/object/dstr/object-rest-proxy-gopd-not-called-on-excluded-keys.js#non-strict",
+        "language/expressions/object/dstr/object-rest-proxy-gopd-not-called-on-excluded-keys.js#strict"
+      ],
+      "lost_variants": [],
+      "mode": "vm",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "fe13da36dc19e82be5481a555ce35510f380c301befaef51694eeb319d2d0254",
+      "after_classification_sha256": "83f126424e00d16400b6b5cce4f0c0abd4d23069b7527da2ef85be0020c39bde",
+      "same_inventory": true
+    },
+    "vm:built-ins-Function-": {
+      "before": {
+        "files": {
+          "pass": 507,
+          "fail": 8,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53357
+        },
+        "variants": {
+          "pass": 889,
+          "fail": 16,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 905
+      },
+      "after": {
+        "files": {
+          "pass": 507,
+          "fail": 8,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53357
+        },
+        "variants": {
+          "pass": 889,
+          "fail": 16,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 905
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "vm",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "24dcbdc21d7149bdf33fea1fdcb49463351de6704745f12d2e5bef1a0217c46a",
+      "after_classification_sha256": "24dcbdc21d7149bdf33fea1fdcb49463351de6704745f12d2e5bef1a0217c46a",
+      "same_inventory": true
+    },
+    "vm:built-ins-Object-": {
+      "before": {
+        "files": {
+          "pass": 3411,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50458
+        },
+        "variants": {
+          "pass": 6802,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        },
+        "variant_count": 6808
+      },
+      "after": {
+        "files": {
+          "pass": 3411,
+          "fail": 2,
+          "timeout": 0,
+          "unsupported": 1,
+          "skipped": 50458
+        },
+        "variants": {
+          "pass": 6802,
+          "fail": 4,
+          "timeout": 0,
+          "unsupported": 2,
+          "skipped": 0
+        },
+        "variant_count": 6808
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "vm",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "7bb1d7e2ff141aead0e67cbb93688505577a00f0a105647353fbbe14c0c46ee5",
+      "after_classification_sha256": "7bb1d7e2ff141aead0e67cbb93688505577a00f0a105647353fbbe14c0c46ee5",
+      "same_inventory": true
+    },
+    "vm:built-ins-Proxy-": {
+      "before": {
+        "files": {
+          "pass": 311,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53561
+        },
+        "variants": {
+          "pass": 607,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 607
+      },
+      "after": {
+        "files": {
+          "pass": 311,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53561
+        },
+        "variants": {
+          "pass": 607,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 607
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "vm",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "0b90cabd4d8c94a86db74fed5fb1473f04bb0273b56e77e30363754c5a44055a",
+      "after_classification_sha256": "0b90cabd4d8c94a86db74fed5fb1473f04bb0273b56e77e30363754c5a44055a",
+      "same_inventory": true
+    },
+    "vm:built-ins-Promise-": {
+      "before": {
+        "files": {
+          "pass": 732,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53140
+        },
+        "variants": {
+          "pass": 1458,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 1458
+      },
+      "after": {
+        "files": {
+          "pass": 732,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53140
+        },
+        "variants": {
+          "pass": 1458,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 1458
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "vm",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "875af274a3a8865fcea633cc615dca0e7c8b498138649820a30c764907fbc533",
+      "after_classification_sha256": "875af274a3a8865fcea633cc615dca0e7c8b498138649820a30c764907fbc533",
+      "same_inventory": true
+    },
+    "vm:built-ins-AsyncFunction-": {
+      "before": {
+        "files": {
+          "pass": 18,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53854
+        },
+        "variants": {
+          "pass": 36,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 36
+      },
+      "after": {
+        "files": {
+          "pass": 18,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53854
+        },
+        "variants": {
+          "pass": 36,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 36
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "vm",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "169dfba5de940eb8aa2e0f17270fc618992bf5bf1bced2a1c363ccac9f2117db",
+      "after_classification_sha256": "169dfba5de940eb8aa2e0f17270fc618992bf5bf1bced2a1c363ccac9f2117db",
+      "same_inventory": true
+    },
+    "vm:built-ins-GeneratorFunction-": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 46
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 46
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "vm",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f",
+      "after_classification_sha256": "da55324c96a9181bab117279b86deb830ebf91c469debebcf8375f938d31b11f",
+      "same_inventory": true
+    },
+    "vm:built-ins-AsyncGeneratorFunction-": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 46
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 53849
+        },
+        "variants": {
+          "pass": 46,
+          "fail": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "variant_count": 46
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "mode": "vm",
+      "before_host_sha256": "55368db9ca5e08af9461238c94a4089f9e5f700a818fa970bfd11f4bde42bd26",
+      "after_host_sha256": "7b3c8c9ba1ac8898e7ea5b57540c8e329692e0f50399118268ed9731c0b3582e",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "before_classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a",
+      "after_classification_sha256": "22153d68e2e0b663ea07297fac7d112460662d9cf1f3aa0c7f3d898fbd43dc2a",
+      "same_inventory": true
+    }
+  },
+  "workspace": {
+    "before": {
+      "passed": 4368,
+      "failed": 6,
+      "skipped": 17
+    },
+    "after": {
+      "passed": 4374,
+      "failed": 0,
+      "skipped": 17
+    },
+    "new_grouped_tests": 12,
+    "doctests_before": 4,
+    "doctests_after": 4
+  },
+  "source_guard": {
+    "before": {
+      "sha256": "418b7b77602609368f7514eacd9e3a468478b16319e5aecfb780f0a596018e8c",
+      "files": 6671
+    },
+    "after": {
+      "sha256": "b6a1380b0da1dc704b3ad39661d1b7c6798fb5800a24414e8f76afbc8dcd6f02",
+      "files": 6673
+    }
+  },
+  "receipt_verification": {
+    "direct_native_fetch": true,
+    "remote_sha256_matches": 50,
+    "before_16_json_identical_to_ready43_after": true,
+    "nonpass_changes": 0
+  },
+  "after_native_receipts": {
+    "js44-after-final-default-built-ins-Promise-.log": {
+      "sha256": "ec10c6f96ac7d524ff5a4c9066a809473eda366790129d40b1e93d3b0c679f88",
+      "bytes": 9671
+    },
+    "js44-after-final-vm-built-ins-Function-.json": {
+      "sha256": "5226e83f3135da40bf99c242113a34ed5e5d0175fe9393df156d7bc877a5caa2",
+      "bytes": 7719361
+    },
+    "js44-after-final-default-built-ins-AsyncFunction-.log": {
+      "sha256": "1d5f2b415bedd096f0d06d84ed55659ab2b9655e9d271bc71b0484519a66b49e",
+      "bytes": 9634
+    },
+    "js44-after-final-default-built-ins-AsyncGeneratorFunction-.jsonl": {
+      "sha256": "990bccdcee1c803c1c8e004f8e641a7771a857556b48de616b1611f7961cafd9",
+      "bytes": 8006016
+    },
+    "js44-after-final-default-built-ins-GeneratorFunction-.log": {
+      "sha256": "e3035dcf88ac0cccbee57dd0fe864708f7249d204b227cdc1bf365541d449d3e",
+      "bytes": 9635
+    },
+    "js44-after-final-status.txt": {
+      "sha256": "a17138988e1387532b5cb0bd7a23f18a11d537123873e67154dada3c6359e53e",
+      "bytes": 6
+    },
+    "js44-after-final-vm-built-ins-Proxy-.jsonl": {
+      "sha256": "fee29f55039561c3f5b453297f0a802ccba085915c49c6c7b483563b1e178bd5",
+      "bytes": 8064170
+    },
+    "js44-after-final-vm-built-ins-GeneratorFunction-.log": {
+      "sha256": "3d70e98cb85561c97d06e20979c6118c4ee4f49f204bcb84a2bf0f1ede851dcf",
+      "bytes": 9635
+    },
+    "js44-after-final-default-built-ins-AsyncGeneratorFunction-.log": {
+      "sha256": "fc15dbaf2b3d5df743a1c608ded85b5070ba7c942752f3bb086cd7bf7886fa63",
+      "bytes": 9643
+    },
+    "js44-after-final-vm-built-ins-Object-.json": {
+      "sha256": "7f57449ff55bd0c9d2bed65b37d00e54f81f25149fc36fd3b30a9a8d84cbf0e1",
+      "bytes": 8117209
+    },
+    "js44-after-final-vm-built-ins-AsyncGeneratorFunction-.jsonl": {
+      "sha256": "0b24eabd3dcdd2057011489512236028c04d99b250d8c6ac95e05d1420cb55ba",
+      "bytes": 8006016
+    },
+    "js44-after-final-default-built-ins-Function-.json": {
+      "sha256": "e3b50ca2fdd445969c37c732c322fd719520a0986d8f5e44e9038d9f221973cf",
+      "bytes": 7719361
+    },
+    "js44-after-final-vm-built-ins-AsyncFunction-.json": {
+      "sha256": "2eaae6384368ba683a376b0e7e1777eb9c30e2c22b37e691636430439e7107ce",
+      "bytes": 7648939
+    },
+    "js44-after-final-default-built-ins-AsyncGeneratorFunction-.json": {
+      "sha256": "005b06cd2d6bf764d1eae25631a4c7aeeab49e0f8a57651bc8d0fa19923bf118",
+      "bytes": 7650588
+    },
+    "js44-after-final-default-language.log": {
+      "sha256": "a5d026c6d663ce266e14d3647ad43e8f26daa54b88d6cbb8455ccec7b099a8f0",
+      "bytes": 10319
+    },
+    "js44-after-final-default-built-ins-Proxy-.log": {
+      "sha256": "1afa8cc9dc633256f9de836fcdfd64379b0003af7b23693a3e86d143ef611947",
+      "bytes": 9783
+    },
+    "js44-after-final-vm-language.jsonl": {
+      "sha256": "f7311f86c7fa24a12337a5950d13f01238a291b6e1bffe761947a250a36751f1",
+      "bytes": 15379353
+    },
+    "js44-after-final-doc.log": {
+      "sha256": "cbcb13c790d1cea267658cefa703d3e2418894822f22f8bec0849b393ccbbb5f",
+      "bytes": 16790
+    },
+    "js44-after-final-vm-built-ins-GeneratorFunction-.json": {
+      "sha256": "9ed2fe4b81b35723c602196a391695d971fdb9728edf8f2301515be7348d2bdf",
+      "bytes": 7649937
+    },
+    "js44-after-final-vm-built-ins-Proxy-.json": {
+      "sha256": "806ff2312b4ca701adac3d3e000758a8e55ecc2affd0929b69e8752bcad32226",
+      "bytes": 7704384
+    },
+    "js44-after-final-vm-built-ins-GeneratorFunction-.jsonl": {
+      "sha256": "de379a0e6011039887df85622d05dbcb7057e1291079d962580d276cbf6ae874",
+      "bytes": 8005337
+    },
+    "js44-after-final-vm-built-ins-Object-.log": {
+      "sha256": "16c0b2f40b80a0e26c582070474f718cabfecd5bd17de91c77a1d3ddeb7740e3",
+      "bytes": 9826
+    },
+    "js44-after-final-default-built-ins-GeneratorFunction-.json": {
+      "sha256": "e8d89169af011666a5f1a9e485b144c08b6985249a6f47a35b464045297dbb1f",
+      "bytes": 7649937
+    },
+    "js44-after-final-vm-built-ins-Function-.jsonl": {
+      "sha256": "c4ca49b739b598b74dd9bfb5d553b441ae0c4804676f00d31fe9a4ae43a71f72",
+      "bytes": 8080588
+    },
+    "js44-after-final-vm-built-ins-Promise-.jsonl": {
+      "sha256": "3648dbbb947faf5630d7295d375cb0cfd89abcc5e2c0039c20b3ce37e523cd23",
+      "bytes": 8146823
+    },
+    "js44-after-final-default-built-ins-Object-.log": {
+      "sha256": "897f088e0165d1ca4c105990c9a482315d8388e4df50e44fbdb444be5a5a2827",
+      "bytes": 9826
+    },
+    "js44-after-final-build.log": {
+      "sha256": "e32362925799fcd10530d41ae9c587a78e631dd4ecd79108786cd6358ad2a45d",
+      "bytes": 9008
+    },
+    "js44-after-final-vm-built-ins-Proxy-.log": {
+      "sha256": "59da8bc3ebf9dbd6aafbeb7d56ae52d84375f2d130ce0f9ea245a78dd45f3854",
+      "bytes": 9782
+    },
+    "js44-after-final-default-built-ins-Proxy-.json": {
+      "sha256": "f458e7680894c2b69258bd3bcc030bd143f56083e766732f8cd3553681bec8f2",
+      "bytes": 7704384
+    },
+    "js44-after-final-vm-language.json": {
+      "sha256": "830843d7dce991f3556165c7c5ad1bbc444cba95d4e404dd113661ef52932610",
+      "bytes": 14490749
+    },
+    "js44-after-final-vm-built-ins-Promise-.json": {
+      "sha256": "5aef4893a41dfe730c75bd63d10ea6208b9c965184431bbffd173cac7a9a1fae",
+      "bytes": 7779694
+    },
+    "js44-after-final-default-built-ins-Function-.log": {
+      "sha256": "f4f44d5fa5980f46fe9a6b65d228fe23d2c283d51e5960917966ffb966e1bf9e",
+      "bytes": 9767
+    },
+    "js44-after-final-default-language.json": {
+      "sha256": "d0baae06878424d5df5ea9ea795f0a7d931e1797fe27eb50993c965b3ca1db4e",
+      "bytes": 14490749
+    },
+    "js44-after-final-default-built-ins-AsyncFunction-.jsonl": {
+      "sha256": "6fc8a013f8a9540d2a3db70f048626c3c0983c20b8c5373b0b4ac1a9bc9d1c1e",
+      "bytes": 8004247
+    },
+    "js44-after-final-vm-built-ins-Function-.log": {
+      "sha256": "d694b6acca82951d3793ccfa1e64b10ad930eda11a996518f1da44726ffb4b58",
+      "bytes": 9767
+    },
+    "js44-after-final-vm-built-ins-AsyncFunction-.jsonl": {
+      "sha256": "6e7c8a32d66489b57dee2a540265b56c00499e45670c2e89dd3d0d2dff2d5d02",
+      "bytes": 8004247
+    },
+    "js44-after-final-default-built-ins-GeneratorFunction-.jsonl": {
+      "sha256": "4466875103cb20bc6d2c5107f00642900e3f93e3d7d11ecf9f752c288a71b405",
+      "bytes": 8005337
+    },
+    "js44-after-final-default-built-ins-Promise-.json": {
+      "sha256": "89bd4f431d83e688caca39f60d37db8ef7a44e5a1816dd091e4825aee747e812",
+      "bytes": 7779694
+    },
+    "js44-after-final-default-built-ins-AsyncFunction-.json": {
+      "sha256": "6f2fc4af3dc27dbdaabe26e73f8bf0131588dbf71a3cd01ad3065bd6cc958aa0",
+      "bytes": 7648939
+    },
+    "js44-after-final-default-built-ins-Function-.jsonl": {
+      "sha256": "04390ba215e277c00b6f36de3449ec401a0f8efb50117a526e4bedf1f969e943",
+      "bytes": 8080588
+    },
+    "js44-after-final-vm-built-ins-Object-.jsonl": {
+      "sha256": "40e76e290cfeb28153a56f9c15546a6adb2564cb9204386331456cb1ed70f23f",
+      "bytes": 8518730
+    },
+    "js44-after-final-default-built-ins-Proxy-.jsonl": {
+      "sha256": "47ca037fde78ea45761666a0133e407f4863f5536e4696ce1a788aa4f66ba251",
+      "bytes": 8064170
+    },
+    "js44-after-final-default-built-ins-Object-.jsonl": {
+      "sha256": "60b8e05f6422cd124d17727d04355a96571473cdb04dbb7b5baaf7accaedfcf7",
+      "bytes": 8518730
+    },
+    "js44-after-final-default-built-ins-Promise-.jsonl": {
+      "sha256": "28c58ae08b5e69d4fd293f640c3809ec7efafc2602bf019c8cac54d248dba165",
+      "bytes": 8146823
+    },
+    "js44-after-final-default-language.jsonl": {
+      "sha256": "c1897ce61c75d23f3adecc71066f68915ef0dc2262566b463e7d40a12a64d969",
+      "bytes": 15379353
+    },
+    "js44-after-final-default-built-ins-Object-.json": {
+      "sha256": "776f6787a449a7c1a4b5d4f599f6d3be2253a824d0192d20583fa66f440091cb",
+      "bytes": 8117209
+    },
+    "js44-after-final-guard.json": {
+      "sha256": "d93a6ae1875855443a70a9e95224eff0e89658a238304e4329316224474c622c",
+      "bytes": 296
+    },
+    "js44-after-final-vm-built-ins-Promise-.log": {
+      "sha256": "8ffebaf6a6ae3275eb78fb1f8489c40b583f483d46ce0e2228bb125467d6c6c9",
+      "bytes": 9670
+    },
+    "js44-after-final-workspace.log": {
+      "sha256": "4831dfe17e561a9011b85dcb6c727b216d9e558a92f83a42b124dd37d7b934cd",
+      "bytes": 589815
+    },
+    "js44-after-final-vm-built-ins-AsyncGeneratorFunction-.json": {
+      "sha256": "d6cc7c4cba81cf05bc4a2095fc968ffac226982a36de61a4b0b883afe876634c",
+      "bytes": 7650588
+    },
+    "js44-after-final-vm-built-ins-AsyncFunction-.log": {
+      "sha256": "b4ba29de4d8170520cb7cb02c62bda02f9a5ef0952a39a2928d28ea0ac64c759",
+      "bytes": 9634
+    },
+    "js44-after-final-vm-built-ins-AsyncGeneratorFunction-.log": {
+      "sha256": "c2720f2af9ca3f462c6576969221f2425a2112b054729fe354cc1a795e9b4d96",
+      "bytes": 9643
+    },
+    "js44-after-final-vm-language.log": {
+      "sha256": "26ece12c715a4d3fabaef0d69c5ba0f8ae78043d2e9bcb64aa5c0589fe1853b2",
+      "bytes": 10319
+    }
+  },
+  "environment_recovery": {
+    "native_source_target_corpus_output": true,
+    "stale_mtime_before_v2_and_after13698_quarantined": true,
+    "tar_entries_current_mtime_then_touch_after_full_hash_guard": true,
+    "fresh_compile_three_option_errors_preserved_then_bulk_fixed": "4abbefb6710652efeef96e3a73424f7798c14d6b",
+    "no_lifecycle_or_kill_performed": true
+  }
+}

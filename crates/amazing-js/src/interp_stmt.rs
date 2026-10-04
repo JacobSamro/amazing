@@ -1105,10 +1105,7 @@ impl Interpreter {
                     match x {
                         ast::ObjElem::Spread(y) => {
                             let src = self.eval_expr(y, env)?;
-                            for k in self.enumerable_property_keys(&src)? {
-                                let v = self.get_prop(&src, &k)?;
-                                self.set_prop(&o, &k, v)?;
-                            }
+                            self.copy_data_properties(&o, &src, &[])?;
                         }
                         ast::ObjElem::Prop(p) => {
                             let k = match &p.key_utf16 {

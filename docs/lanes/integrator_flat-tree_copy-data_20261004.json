@@ -1,0 +1,130 @@
+{
+  "schema": 1,
+  "recorded_base": "c2080ec32bae98d93df569271b7fb0226a694293",
+  "tickets": [
+    "dom-flat-tree",
+    "js-CopyDataProperties"
+  ],
+  "workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4406,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 609149,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-5fa824bdec4e9760561187a7b8ecdf8d78150ec9-nextest.log",
+        "sha256": "174f83c23014036c3e5224f01454179da99708c234dc7858edbe8a20fa5654b1"
+      },
+      {
+        "bytes": 16398,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-5fa824bdec4e9760561187a7b8ecdf8d78150ec9-doctests.log",
+        "sha256": "e4f9d86e73f0c8fad042373116b5e00faf900970d57b6f9fccc089f69f81e114"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "5fa824bdec4e9760561187a7b8ecdf8d78150ec9",
+    "summary_lines": [
+      "Summary [ 131.656s] 4406 tests run: 4406 passed (1 slow), 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "test262": {
+    "job_exit": 0,
+    "shards": 16,
+    "source_commit": "8d33d6e2cb10d579643e0ca196adb5eff1477549",
+    "workspace_engine_source_identical": true,
+    "baseline_published_engine_commit": "923938ad1cd00df6203fd51206af6c4ca15af6a1",
+    "baseline_summary_sha256": "53b5e92bede8f6480ce069b32e3b2fbcb11e1024588c328f921462d4a2c124f9",
+    "summary": {
+      "files": {
+        "fail": 794,
+        "pass": 52612,
+        "skipped": 294,
+        "timeout": 1,
+        "unsupported": 171
+      },
+      "variants": {
+        "fail": 1488,
+        "pass": 101088,
+        "timeout": 2,
+        "unsupported": 340
+      }
+    },
+    "lost_files": 0,
+    "lost_variants": 0,
+    "gained_files": 1,
+    "gained_passing_variants": 2,
+    "provenance": {
+      "host_sha256": "cdaa8e49c55cdac955df64288084316526d60d2f4a7cb08b2860e93e17662e77",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "source_commit": "8d33d6e2cb10d579643e0ca196adb5eff1477549",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    "merged_summary_sha256": "356bdd0ce5b1435c90ae3fad2c8cc7178a9053329d7013863e04078f3a56b3f2",
+    "shard_sha256": {
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-0.json": "4a2d5832b3b21b6a509dab5742abfb0e795486287a041a190d4fbc012249caea",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-1.json": "2f3e076ec09320e684626ac766bee20b77938323c6038bdc643cfdc3c35266c5",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-10.json": "b975b7aa3c4a10a2bc2f12a9e382ff27ef86d4c9d542b88bd82214b32864345c",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-11.json": "1b413f43dcbb9bb7a4b83e40135333d21f6d577ebb7a908d74b279cb81fdb5ce",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-12.json": "4360e02374035719f360fb7023d2d1f718e2b241f04e4a354e7782335c412d7d",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-13.json": "ea2d5cdb0c50156eca9c2560ba28a76496c07141e6e432a1eef1cc7ef5c3341b",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-14.json": "c1aa4d93d95d1cb14ab53f95747b3566a08d7968de90bff51c0ecf3c7b12fa4f",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-15.json": "21897e65258c7eb7d850ed5a6bb0e3b1a66fa584ba8163747c253b8e2234f0b4",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-2.json": "fab90637c451638263c9cb9a9e0da6f7cbe1f79231174d99e0914c14b6120792",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-3.json": "f57ad22043a0c9e7e2891e40ecb9b5358be758fa7a7fcd80c22cbe1f4b6e8ca9",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-4.json": "6065a3f718a45e0a39c87cc882e6019f5927528a9e296af56537ad37bbe52070",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-5.json": "eabae8ce2030b9e7d33b25c9398a316155acbca7ab5a9a4adca0e58dd7b4f908",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-6.json": "4018f900c1f4918baecf4faf1240202027cb83a7ddd30be285a4b938495b8b3b",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-7.json": "cd4a1850b19f53ae623cec62eb1aa04a42604a564c44a0782161066bb5ffc08b",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-8.json": "9b81237afd5c2d724634eb634b966d99aad82ebc2d3b08e81e69384f5b2daf7a",
+      ".shard-8d33d6e2-flat-tree-copy-data-integration-9.json": "514f971ef7b92efe3298b354551a71371452f539a2288c9230d13df35cc0dc45"
+    }
+  },
+  "own_corpora": "Each ticket retains its owner compact zero-loss corpus evidence and hashes in this commit series."
+}

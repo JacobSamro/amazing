@@ -20,39 +20,47 @@ fn native_object(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<
                 if std::ptr::fn_addr_eq(*native, native_object as crate::value::NativeFn)));
         if is_object_constructor && new_target != JsValue::Object(active.clone()) { return Ok(this); }
     }
-    Ok(match a.into_iter().next() {
-        Some(value @ JsValue::Object(_)) => value,
-        Some(JsValue::Num(number)) => {
+    let value = a.into_iter().next().unwrap_or(JsValue::Undefined);
+    if value.is_null() || value.is_undefined() { return Ok(i.object_value()); }
+    object_to_object(i, value)
+}
+
+/// ToObject independent of Object's active constructor/NewTarget dispatch.
+/// Primitive wrappers retain the current realm's actual intrinsic prototypes.
+fn object_to_object(i: &Interpreter, value: JsValue) -> Result<JsValue, Throw> {
+    Ok(match value {
+        value @ JsValue::Object(_) => value,
+        JsValue::Num(number) => {
             let mut object = JsObject::ordinary();
-object.proto = Some(i.number_proto.clone());
+            object.proto = Some(i.number_proto.clone());
             object.boxed_primitive = Some(JsValue::Num(number));
             JsValue::object(object)
         }
-        Some(JsValue::Bool(boolean)) => {
+        JsValue::Bool(boolean) => {
             let mut object = JsObject::ordinary();
-object.proto = Some(i.boolean_proto.clone());
+            object.proto = Some(i.boolean_proto.clone());
             object.boxed_primitive = Some(JsValue::Bool(boolean));
             JsValue::object(object)
         }
-        Some(JsValue::Str(string)) => {
+        JsValue::Str(string) => {
             let mut object = JsObject::ordinary();
             object.proto = Some(i.string_proto.clone());
             object.initialize_string_data(string);
             JsValue::object(object)
         }
-        Some(JsValue::BigInt(value)) => {
+        JsValue::BigInt(value) => {
             let mut object = JsObject::ordinary();
-object.proto = Some(i.bigint_proto.clone());
+            object.proto = Some(i.bigint_proto.clone());
             object.boxed_primitive = Some(JsValue::BigInt(value));
             JsValue::object(object)
         }
-        Some(JsValue::Symbol(symbol)) => {
+        JsValue::Symbol(symbol) => {
             let mut object = JsObject::ordinary();
             object.proto = Some(i.symbol_proto.clone());
             object.exotic = Exotic::SymbolObject(symbol);
             JsValue::object(object)
         }
-        _ => i.object_value(),
+        JsValue::Null | JsValue::Undefined => return Err(Throw::type_error("cannot convert null or undefined to object")),
     })
 }
 

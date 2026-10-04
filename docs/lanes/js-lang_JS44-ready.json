@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "ticket": "copy-data-properties-ready",
+  "state": "LANE_QUALIFIED_CURRENT_FIXED_BASE_INTEGRATOR_FULL16_PENDING",
+  "recorded_origin_dev": "923938ad1cd00df6203fd51206af6c4ca15af6a1",
+  "original_measured_source": "4abbefb6710652efeef96e3a73424f7798c14d6b",
+  "original_measured_base": "6d5d55b4d8497ae037d3f0ac440d0db34a6e033c",
+  "original_evidence_sha256": "db95e959793f73ad7ac5de3785591a0549012f1b00db3f36f084fae293892343",
+  "new_helpers": [
+    "Interpreter::copy_data_properties",
+    "object_to_object"
+  ],
+  "unchanged_api_closure": {
+    "crates/amazing-js/src/interp_proxy.rs": "fn default_get_own_property",
+    "crates/amazing-js/src/interp_property_access.rs": "fn own_property_keys",
+    "crates/amazing-js/src/value.rs": "boxed_primitive"
+  },
+  "production_consumers": [
+    "object_rest",
+    "AST ObjElem::Spread",
+    "VM SpreadObject",
+    "legacy ToObject",
+    "native Object boxing"
+  ],
+  "introduced_schema_or_opcode": false,
+  "unpublished_frontend_template_module_source_dependencies": [],
+  "original_tests": {
+    "groups": 12,
+    "file": "crates/amazing-js/tests/copy_data_properties.rs",
+    "preserved": true
+  },
+  "gate_scope": "workspace nextest + doctests; whole language,Object,Proxy,Function,Promise and four callable directories in both release modes; integrator full16 zero-loss gate",
+  "license": {
+    "upstream": "lucid-softworks/lumen",
+    "path": "crates/lumen/src/eval.rs",
+    "commit": "f6c9860d44fa52249cfd647122edea184d32c863",
+    "license": "MIT",
+    "mandatory_header_and_appended_notice": true
+  },
+  "current_base_build_or_corpus_run": true,
+  "private_controller": false,
+  "tested_source": "b3049797867bfae54f2907166a1efdf806b5be1b",
+  "current_proof": "js-lang_JS44-current-gate.json",
+  "current_proof_sha256": "26df0dd92ee5b23719fe86e12fa191821d178adc08e993b2105ce34d5d8cbc26",
+  "results": {
+    "workspace": 4402,
+    "skipped": 17,
+    "doctests": 4,
+    "whole_selectors": 8,
+    "modes": 2,
+    "lost_files": 0,
+    "lost_variants": 0,
+    "gained_files_per_mode": 1,
+    "gained_variants_per_mode": 2
+  }
+}

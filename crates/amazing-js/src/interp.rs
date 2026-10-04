@@ -1528,12 +1528,7 @@ impl Interpreter {
 
     fn object_rest(&mut self, source: &JsValue, used: &[PropertyKey]) -> Result<JsValue, Throw> {
         let rest = self.object_value();
-        for key in self.enumerable_property_keys(source)? {
-            if !used.iter().any(|used_key| used_key == &key) {
-                let value = self.get_prop(source, &key)?;
-                self.set_prop(&rest, &key, value)?;
-            }
-        }
+        self.copy_data_properties(&rest, source, used)?;
         Ok(rest)
     }
 
@@ -1720,6 +1715,7 @@ include!("interp_module_namespace.rs");
 include!("interp_source_context.rs");
 include!("interp_proxy.rs");
 include!("interp_property_access.rs");
+include!("interp_copy_data_properties.rs");
 include!("interp_equality.rs");
 include!("interp_install.rs");
 include!("interp_symbol.rs");
