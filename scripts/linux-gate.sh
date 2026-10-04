@@ -8,11 +8,17 @@ REF="$(git -C "$MAIN" rev-parse "${1:-HEAD}^{commit}")"
 python3 "$REPO/scripts/merge-preflight.py" --base "${MERGE_BASE:-origin/dev}" --ref "$REF"
 HELPER="$(base64 < "$REPO/scripts/gate-summary.py" | tr -d '\n')"
 COMMAND_B64="$(base64 < "$REPO/scripts/gate-command.py" | tr -d '\n')"
+JOB_TAG="workspace-$(date -u +%Y%m%dT%H%M%S)-$$"
+DEST="$MAIN/.agents/integrator-primary/gates/$JOB_TAG/$REF"
+ENDPOINT="$DEST/endpoint.manifest.json"
+REMOTE_ROOT="amazing/out/integrator-primary/$JOB_TAG/$REF"
 set +e
-"$REPO/scripts/linux-run.sh" integrator-primary --ref "$REF" -- "
+"$REPO/scripts/linux-run.sh" integrator-primary --ref "$REF" --endpoint-receipt "$ENDPOINT" --compact-root "$REMOTE_ROOT" -- "
   set -uo pipefail
   unset AMAZING_JS_VM AMAZING_JS_VM_COMPILE_LOG AMAZING_JS_VM_REJECT_CONTEXT
   export CARGO_INCREMENTAL=0
+  export OUT=\"\$OUT/$JOB_TAG/$REF\"
+  mkdir -p \"\$OUT\" || exit 3
   receipt=\"\$OUT/workspace-$REF.manifest.json\"
   nextest=\"\$OUT/workspace-$REF-nextest.log\"
   docs=\"\$OUT/workspace-$REF-doctests.log\"
@@ -30,6 +36,6 @@ set +e
 rc=$?
 set -e
 # Wait above observes the actual SSH job exit, not the existence of a log.
-bash "$REPO/scripts/lane-fetch.sh" integrator-primary "$MAIN/.agents/integrator-primary/gates" \
-  "amazing/out/integrator-primary/workspace-$REF.manifest.json" || exit 3
+bash "$REPO/scripts/lane-fetch.sh" integrator-primary "$DEST" --endpoint-receipt "$ENDPOINT" --source "$REF" \
+  "$REMOTE_ROOT/workspace-$REF.manifest.json" || exit 3
 exit "$rc"

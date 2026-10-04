@@ -41,13 +41,14 @@ root=pathlib.Path(sys.argv[1])
 for name,data in json.loads(base64.b64decode(sys.argv[2])).items():(root/name).write_bytes(base64.b64decode(data))
 PY
  python3 \"\$tools/render-gate.py\" --source '$source' --tag '$side_tag' ${baseline:+--baseline-ref '$baseline' --baseline-tag '$TAG-before'} $argq"
- bash "$REPO/scripts/linux-run.sh" "$LANE" --ref "$source" --setup-summary "$MAIN/.agents/$LANE/render-gate/$side_tag/$source/setup.manifest.json" -- "$cmd"
+ local endpoint="$MAIN/.agents/$LANE/render-gate/$side_tag/$source/endpoint.manifest.json"
+ bash "$REPO/scripts/linux-run.sh" "$LANE" --ref "$source" --endpoint-receipt "$endpoint" --compact-root "amazing/out/$LANE/render-gate/$side_tag/$source" --setup-summary "$MAIN/.agents/$LANE/render-gate/$side_tag/$source/setup.manifest.json" -- "$cmd"
  rc=$?
  local dest="$MAIN/.agents/$LANE/render-gate/$side_tag/$source"
- bash "$REPO/scripts/lane-fetch.sh" "$LANE" "$dest" "amazing/out/$LANE/render-gate/$side_tag/$source/gate.summary.json" || fetchrc=3
+ bash "$REPO/scripts/lane-fetch.sh" "$LANE" "$dest" --endpoint-receipt "$endpoint" --source "$source" "amazing/out/$LANE/render-gate/$side_tag/$source/gate.summary.json" || fetchrc=3
  if [ "$fetchrc" = 0 ];then
   while IFS= read -r map;do
-   bash "$REPO/scripts/lane-fetch.sh" "$LANE" "$dest" "amazing/out/$LANE/render-gate/$side_tag/$source/$map" </dev/null || fetchrc=3
+   bash "$REPO/scripts/lane-fetch.sh" "$LANE" "$dest" --endpoint-receipt "$endpoint" --source "$source" "amazing/out/$LANE/render-gate/$side_tag/$source/$map" </dev/null || fetchrc=3
   done < <(python3 - "$dest/gate.summary.json" <<'PYMAP'
 import json,sys
 for slug,row in json.load(open(sys.argv[1]))['renders'].items():

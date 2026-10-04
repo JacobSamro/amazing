@@ -5,6 +5,13 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")"
 LANE="${1:?lane}"; DEST="${2:?destination}"; shift 2
+if [ "${1:-}" = --endpoint-receipt ]; then
+  RECEIPT="${2:?receipt}"; shift 2
+  [ "${1:-}" = --source ] || { echo 'lane-fetch: captured endpoint requires expected source' >&2; exit 2; }
+  SOURCE="${2:?source}"; shift 2
+  # This path intentionally makes no provider metadata request after the job.
+  exec python3 "$REPO/scripts/completed-job.py" fetch --receipt "$RECEIPT" --lane "$LANE" --source "$SOURCE" --destination "$DEST" "$@"
+fi
 [ "$#" -gt 0 ] || { echo 'lane-fetch: explicit compact paths required' >&2; exit 2; }
 # No globs/recursive pulls or raw artifact escape hatch.
 for src in "$@"; do

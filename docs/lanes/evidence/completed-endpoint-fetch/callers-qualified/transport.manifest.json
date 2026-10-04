@@ -1,0 +1,11 @@
+{
+  "source_commit": "3f678cd7a6ff94d08672fcd1e2fcb34e34f9b5b1",
+  "owner_handle": 77006,
+  "owner_exit": 0,
+  "provider_executable_available": false,
+  "provider_lookup_exit": 1,
+  "provider_lookup_stderr_sha256": "03e2a65576048a044c11cac1d5aee2e9c24eae48370af1c57aefb61a891bebba",
+  "captured_fetch_exit": 0,
+  "fetch_stdout": "{\"job_id\":\"ee13d41f0fd642e1abb672b05ae811ce\",\"source_commit\":\"3f678cd7a6ff94d08672fcd1e2fcb34e34f9b5b1\",\"files\":{\"amazing/out/integrator-primary/completed-fetch-callers-20261005-corrected-css/qualification.summary.json\":{\"bytes\":936,\"sha256\":\"b27ddfc9da801ad1056dea6a1e19a9059d69bce46e88b437064ac45e87307f0f\"}}}\n",
+  "fetch_stderr": ""
+}

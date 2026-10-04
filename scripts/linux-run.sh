@@ -23,6 +23,8 @@
 #   --existing-box
 #               guarded mission only: use its live endpoint without lifecycle changes
 #   --setup-summary PATH  compact local setup-failure receipt; no remote raw fetch
+#   --endpoint-receipt PATH --compact-root REMOTE_DIR
+#               capture one Boat job endpoint and its completed compact catalog
 #   --no-slot   skip the slot queue; for crate-scoped iterations only
 #
 # Environment on the host: CARGO_TARGET_DIR, JOBS (per-slot parallelism),
@@ -37,7 +39,7 @@ MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-
 
 LANE="${1:?usage: linux-run.sh <lane> [--host H] [--ref REF] [--no-slot] -- <command>}"
 shift
-HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0 SETUP_SUMMARY=""
+HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0 SETUP_SUMMARY="" ENDPOINT_RECEIPT="" COMPACT_ROOT=""
 if [ -e "$MAIN/.agents/.boat-only" ]; then HOST=boat; fi
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -47,6 +49,8 @@ while [ $# -gt 0 ]; do
     --mission-sha256) MISSION_SHA256="$2"; shift 2 ;;
     --existing-box) EXISTING_BOX=1; shift ;;
     --setup-summary) SETUP_SUMMARY="$2"; shift 2 ;;
+    --endpoint-receipt) ENDPOINT_RECEIPT="$2"; shift 2 ;;
+    --compact-root) COMPACT_ROOT="$2"; shift 2 ;;
     --no-slot) SLOT=0; shift ;;
     --which) WHICH=1; shift ;;
     --) shift; break ;;
@@ -59,6 +63,11 @@ if [ -e "$MAIN/.agents/.boat-only" ] && [ "$HOST" != boat ]; then
 fi
 [ $# -gt 0 ] || [ "${WHICH:-0}" = 1 ] || { echo "linux-run: no command given" >&2; exit 2; }
 CMD="$*"
+if [ -n "$ENDPOINT_RECEIPT$COMPACT_ROOT" ]; then
+  [ -n "$ENDPOINT_RECEIPT" ] && [ -n "$COMPACT_ROOT" ] && [ -n "$REF" ] && [ ! -e "$ENDPOINT_RECEIPT" ] || {
+    echo 'linux-run: endpoint capture requires a fresh receipt, exact ref and compact root' >&2; exit 2;
+  }
+fi
 
 # Lane homes. Since 2026-09-26 lanes run on pooled Boat sandboxes
 # (scripts/boat-lane.py: related lanes share one sandbox from the amazing-builder
@@ -105,6 +114,9 @@ case "$HOST" in
 esac
 # --which: print the ssh destination this lane runs on ("boat" for Boat), for copy-backs.
 [ "${WHICH:-0}" = 1 ] && { echo "$SSH"; exit 0; }
+if [ -n "$ENDPOINT_RECEIPT" ] && [ "$HOST" != boat ]; then
+  echo 'linux-run: completed endpoint capture is supported on Boat only' >&2; exit 2
+fi
 
 # A reviewed mission can carry its own exact source archives and byte guards.
 # Stage a hard link to its immutable transport instead of expanding a second
@@ -238,6 +250,13 @@ if [ "$HOST" = boat ]; then
     fi
   done
   [ "$ok" = 1 ] || { echo "linux-run: could not sync to Boat for $LANE after the allowed setup attempts" >&2; exit 3; }
+  JOB_COMMAND="$CMD"
+  if [ -n "$ENDPOINT_RECEIPT" ]; then
+    JOB_ROW=$(python3 "$REPO/scripts/completed-job.py" capture --receipt "$ENDPOINT_RECEIPT" --lane "$LANE" --source "$COMMIT" --box "$BOAT_ID" --host "$BOAT_HOST" --port "$BOAT_PORT" --root "$COMPACT_ROOT" --command "$CMD") || exit 3
+    JOB_CODE=$(base64 < "$REPO/scripts/completed-job.py" | tr -d '\n')
+    CMD_Q=$(printf '%q' "$CMD")
+    JOB_COMMAND="python3 -c \"\$(printf '%s' '$JOB_CODE' | base64 -d)\" run '$JOB_ROW' $CMD_Q"
+  fi
   BOOTSTRAP_B64="$(base64 < "$REPO/scripts/linux-bootstrap.sh" | tr -d '\n')"
   REMOTE="trap 'timeout --kill-after=5 15 rm -f ~/$LEASE' EXIT
 export LANE='$LANE' COMMIT='${COMMIT:-working-tree}' OUT=\$HOME/amazing/out/$LANE
@@ -260,7 +279,7 @@ bootstrap_native_setup
 fi
 bootstrap_native_tools
 export CARGO_TARGET_DIR=/tmp/amazing-native-target-$LANE CARGO_INCREMENTAL=0
-$CMD"
+$JOB_COMMAND"
   ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"
   T0=$(date +%s)
   $BSSH "$BOAT_HOST" "echo $ENCODED | base64 -d | bash"
