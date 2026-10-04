@@ -58,3 +58,19 @@ omitted bytes/count/path-list hash. There is no new gate protocol or retry loop.
 
 Shell syntax, Python AST and whitespace checks passed. Runtime verification
 belongs to the single supported clean rerun after the original gate terminates.
+
+## Activity reporting
+
+Reporting follow-up base: `fd9183a86c85f1dbcb3d6b2a62676354e9357052`.
+`pool-report` skips malformed/interleaved rows with an explicit ignored-row count,
+accepts legacy four-field records, and rejects nonfinite/reversed times and
+invalid lane/pool/exit metadata. `linux-run` writes through local `record-run`,
+which validates then locks and appends a complete row. A partial legacy last
+line is separated; an activity-write error cannot replace the remote job exit.
+
+The requested metadata-only checks passed: malformed row and overlap metrics,
+160 concurrent locked records after a partial historical row, and an exact-ref
+temporary Git fixture preserving literal includes, fixture/testdata/test
+inputs, compact evidence, source inputs and TSV bytes while omitting only three
+historical raw outputs. Command: `python3 scripts/gate-tooling-tests.py` (3
+checks passed). No engine builds, Boat calls, raw pulls or live gate changes.

@@ -24,12 +24,15 @@ Usage:
   boat-lane.py stop <lane>
   boat-lane.py list
   boat-lane.py pool-report [--hours 2]
+  boat-lane.py record-run <start> <end> <lane> <pool> <exit>  local activity only
 """
 
 from __future__ import annotations
 
 import fcntl
 import json
+import math
+import re
 import os
 import subprocess
 import sys
@@ -359,6 +362,9 @@ def main() -> int:
             except SystemExit as e:
                 print(f"{lane:<20} {sid} ? {e}")
         return 0
+    if cmd == "record-run":
+        append_run(*sys.argv[2:])
+        return 0
     if cmd == "pool-report":
         hours = float(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[2] == "--hours" else 2.0
         pool_report(hours)
@@ -367,17 +373,59 @@ def main() -> int:
     return 2
 
 
+def parse_run(line: str):
+    """Accept legacy four-field rows and current five-field activity records."""
+    fields = line.split()
+    if len(fields) not in (4, 5):
+        return None
+    try:
+        start, end = float(fields[0]), float(fields[1])
+        if not all(math.isfinite(t) and t >= 0 for t in (start, end)) or end < start:
+            return None
+        if not all(re.fullmatch(r'[a-z0-9-]+', value) for value in fields[2:4]):
+            return None
+        if len(fields) == 5 and (not fields[4].isdigit() or not 0 <= int(fields[4]) <= 255):
+            return None
+    except (ValueError, OverflowError):
+        return None
+    return start, end, fields[2], fields[3]
+
+
+def append_run(start, end, lane, pool, exit_code):
+    """Serialize the whole activity row; reporting never shares command stdout."""
+    row = f'{start} {end} {lane} {pool} {exit_code}\n'.encode()
+    if parse_run(row.decode()) is None:
+        raise ValueError('invalid activity record')
+    RUNS.parent.mkdir(parents=True, exist_ok=True)
+    with RUNS.open('a+b') as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        stream.seek(0, os.SEEK_END)
+        if stream.tell():
+            stream.seek(-1, os.SEEK_END)
+            if stream.read(1) != b'\n':
+                row = b'\n' + row
+        stream.write(row)
+        stream.flush()
+
+
 def pool_report(hours: float) -> None:
     """Busy and overlap per pool over the last `hours`, from linux-run.sh's log."""
-    since = time.time() - hours * 3600
+    if not math.isfinite(hours) or hours <= 0:
+        raise ValueError("hours must be finite and positive")
+    now = time.time()
+    since = now - hours * 3600
     runs: dict[str, list[tuple[float, float, str]]] = {}
-    for line in RUNS.read_text().splitlines() if RUNS.exists() else []:
-        f = line.split()
-        if len(f) < 4:
+    malformed = 0
+    for line in RUNS.read_text(errors='replace').splitlines() if RUNS.exists() else []:
+        parsed = parse_run(line)
+        if parsed is None:
+            malformed += 1
             continue
-        start, end, lane, pool = float(f[0]), float(f[1]), f[2], f[3]
-        if end >= since:
-            runs.setdefault(pool, []).append((max(start, since), end, lane))
+        start, end, lane, pool = parsed
+        if end >= since and start <= now:
+            runs.setdefault(pool, []).append((max(start, since), min(end, now), lane))
+    if malformed:
+        print(f'pool-report: ignored {malformed} malformed activity rows', file=sys.stderr)
     window = hours * 3600
     print(f"{'pool':<14} {'runs':>5} {'busy%':>6} {'overlap%':>9} {'maxpar':>6} {'avg s':>6}  lanes")
     for pool in sorted(runs):

@@ -259,7 +259,8 @@ $CMD"
   $BSSH "$BOAT_HOST" "echo $ENCODED | base64 -d | bash"
   rc=$?
   # Start/end per run, for `boat-lane.py pool-report` (busy and overlap per pool).
-  echo "$T0 $(date +%s) $LANE $BOAT_POOL $rc" >> "$MAIN/.agents/.boat-runs.log"
+  python3 "$REPO/scripts/boat-lane.py" record-run "$T0" "$(date +%s)" "$LANE" "$BOAT_POOL" "$rc" || \
+    echo "linux-run: activity recording failed; actual job exit remains $rc" >&2
   exit $rc
 fi
 
