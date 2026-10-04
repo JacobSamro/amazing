@@ -1,0 +1,157 @@
+{
+  "schema": 1,
+  "base": "7bc73204149e50b8875c0ab9d1b552cb4e1fe251",
+  "source": "2aa06dee8fc9d42fde5489ae1be78a19ca57d450",
+  "suites": {
+    "core": {
+      "before_files": 888,
+      "after_files": 888,
+      "same_selection": true,
+      "before_passing_assertions": 92824,
+      "after_passing_assertions": 92830,
+      "lost_assertions": 0,
+      "gained_assertions": 6,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [
+        {
+          "test": "domparsing/insert_adjacent_html.html",
+          "name_utf16_sha256": "2156a9d23cbcdf18ab59e2598576ce07f9b9606f0d7593e9e3e48e3551ad66d1",
+          "count": 1
+        },
+        {
+          "test": "domparsing/insert_adjacent_html.html",
+          "name_utf16_sha256": "b3d4669c5c8d9868212e63978e0049cb2d39e9cae0b62f9f51e3ff3d6b6a43a4",
+          "count": 1
+        },
+        {
+          "test": "domparsing/insert_adjacent_html.html",
+          "name_utf16_sha256": "bd42f54613b6ec630da93259b2b106d377160dddd97c0b37554e857cf9f1b2ad",
+          "count": 1
+        },
+        {
+          "test": "domparsing/insert_adjacent_html.html",
+          "name_utf16_sha256": "c4a88ff51e316dd7d03be4eee08f08e26b4d98953153a9fa2d4bc6d7b4b9eefd",
+          "count": 1
+        },
+        {
+          "test": "domparsing/insert_adjacent_html.html",
+          "name_utf16_sha256": "eb092d25f283fbcbf328dcbd4b3da53b59f4956b05e0b97b1edec3e1cf7e99ad",
+          "count": 1
+        },
+        {
+          "test": "domparsing/outerhtml-01.html",
+          "name_utf16_sha256": "b72cb8b528f4e9de132e839937c4280dfa0bfd541697fe5740a4da7383fbbac4",
+          "count": 1
+        }
+      ],
+      "raw_before_sha256": "98b423c5e8636525b32e833f7bc4ddd48ca0c2a662edeed7e7905790aa17263f",
+      "raw_after_sha256": "9502fbba04aab9beedad014025c1a87460226f8ad282202842eb8c1ecb692359"
+    },
+    "shadow": {
+      "before_files": 277,
+      "after_files": 277,
+      "same_selection": true,
+      "before_passing_assertions": 5681,
+      "after_passing_assertions": 5681,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [],
+      "raw_before_sha256": "3fed068a47711a69054179750d41f92b5b848942c9d4dfd098dd6359d37018b7",
+      "raw_after_sha256": "3b77f1d79e2bc65eec8d3d35774499bb8fc20f785fafabc16cf149bddb2da236"
+    },
+    "xml": {
+      "before_files": 1,
+      "after_files": 1,
+      "same_selection": true,
+      "before_passing_assertions": 112,
+      "after_passing_assertions": 112,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [],
+      "raw_before_sha256": "f60c86ec987e5c3f2dfe775d2047a58b8b6e356ae51d3e45e0711f3b9e82f691",
+      "raw_after_sha256": "12e20e08ca40901ab4f82693d466b74741c351c00c35c9de9246157c7a3cd034"
+    },
+    "syntax72": {
+      "before_files": 72,
+      "after_files": 72,
+      "same_selection": true,
+      "before_passing_assertions": 2707,
+      "after_passing_assertions": 2707,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "gained_details": [],
+      "raw_before_sha256": "644ce622ac7e005292254036a657fab0bba63dbfcc20586850aef62848918aec",
+      "raw_after_sha256": "644ce622ac7e005292254036a657fab0bba63dbfcc20586850aef62848918aec"
+    }
+  },
+  "raw_location": "/home/user/amazing/out/dom-bindings",
+  "before": {
+    "native_summary": [
+      "     Summary [ 125.386s] 4458 tests run: 4458 passed, 17 skipped"
+    ],
+    "raw_hashes": {
+      "native.log": "5739a2771cbd74f4c8dd898dc0152af5e905633f278acabf9414c9a56f5db25b",
+      "docs.log": "f55c31db446111d7e02b2c998ded0976123cb59d1b5292c20065920fb5d93812",
+      "syntax72.jsonl": "644ce622ac7e005292254036a657fab0bba63dbfcc20586850aef62848918aec",
+      "raw.sha256": "586820e029cb14f4de551e810ba64649e1b72d14a480f07fbc009e7a854d92e4"
+    },
+    "doctests_passed": 4,
+    "actual_exit": 0,
+    "binary_sha256": "0218f3eff28bb0f14acb7e51cad85f57aa35751138af0c59af5277305f559bad"
+  },
+  "after": {
+    "native_summary": [
+      "     Summary [ 122.676s] 4465 tests run: 4465 passed, 17 skipped"
+    ],
+    "raw_hashes": {
+      "native.log": "8e901e73a67380ba78b946d6e5d3bc8bfb3200afa4c1545b3da4c060e8de3229",
+      "docs.log": "9f54990d9c21ef23fc323ae5332aa2ea164313ecc18c104faca5170c6466ac8d",
+      "syntax72.jsonl": "644ce622ac7e005292254036a657fab0bba63dbfcc20586850aef62848918aec",
+      "raw.sha256": "4bb3ba07f7b391b2d181a104d95a414e1ca637b63dd79b5a7b3c0cace7c7d4b3"
+    },
+    "doctests_passed": 4,
+    "actual_exit": 0,
+    "binary_sha256": "0805b733a904e80c8ca7369f6cfc8768b867cc729507f1e6b1678520bb731d5f"
+  },
+  "zero_loss": true,
+  "ticket": "xml-markup-setters",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "sandbox": "bx_na7t27mn",
+  "pool": "pool-dom",
+  "runner_sha256": "80b9f7dc10a8034b84567c3c53aff8bf50546e20b2a2322f619e654f38a85984",
+  "profiles": {
+    "core": {
+      "ordinary_ms": 25000,
+      "heavy_ms": 150000,
+      "jobs": 4,
+      "heavy_jobs": 1
+    },
+    "shadow": {
+      "ordinary_ms": 25000,
+      "actual_meta_long_ms": 600000,
+      "jobs": 4
+    },
+    "syntax72": "unchanged pinned html48 syntax_sweep.py, jobs4",
+    "xml": "whole serializing-xml-fragments, ordinary25000ms/jobs4"
+  },
+  "original_failed_candidate": {
+    "source": "c4982805ccec6b0c59bbaf69e352271d179cac79",
+    "actual_exit": 100,
+    "native": {
+      "passed": 4464,
+      "failed": 1,
+      "skipped": 17
+    },
+    "raw_sha256": "065c88d2d3b8d3ac07bbf414652f5b87d01a7d0ffad6269e1d475f5f47de0adf",
+    "raw_path": "/home/user/amazing/out/dom-bindings/xml-setters-c498-failure/native.log",
+    "failure": "Obsolete mock expected detached outerHTML to throw; exact spec-correct return expectation and no-mutation guards authorized by integrator."
+  },
+  "qualification": "Owned Linux gate only; integrator sharded Test262 merge gate remains separate."
+}

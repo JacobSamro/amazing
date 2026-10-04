@@ -902,6 +902,14 @@ pub trait FragmentParser: BindingHost {
         -> Result<Dom, DomError> {
         Err(DomError::NotSupportedError)
     }
+    /// Ordinary markup setters call this with their actual imported fragment
+    /// before insertion. Embeddings with script execution must mark every
+    /// imported HTML/SVG script already started, including template contents.
+    /// This is not used by setHTMLUnsafe or HTML Range fragment parsing.
+    fn markup_fragment_imported(&mut self, _fragment: NodeIdx) -> Result<(), DomError> {
+        Ok(())
+    }
+
     /// `Element`/`ShadowRoot.setHTMLUnsafe` and `Document.parseHTML(Unsafe)`
     /// need declarative shadow roots enabled during fragment parsing (spec's
     /// "set and filter HTML" always parses with `allowDeclarativeShadowRoots

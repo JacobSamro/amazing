@@ -207,20 +207,24 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
                 Some(text)
             } else { None };
             let markup = required_string(host, args.get(if position.is_some() { 1 } else { 0 }))?;
-            let (parent, reference, parse_context, context_node) = host.with_dom(|dom| {
+            // String conversion can adopt or move the receiver. Capture the
+            // actual target and its Document only after conversion completes.
+            let snapshot = host.with_dom(|dom| {
                 let parent = dom.get(node).parent;
+                if op == O::ElementSetOuterHTML && parent.is_none() { return Ok(None); }
+                if (op == O::ElementSetOuterHTML || matches!(position.as_deref(), Some("beforebegin" | "afterend")))
+                    && parent.is_some_and(|parent| matches!(dom.get(parent).kind, NodeKind::Document)) {
+                    return Err(DomError::NoModificationAllowedError);
+                }
                 let (mut insertion_parent, reference) = match position.as_deref() {
                     Some("beforebegin") => (parent.ok_or(DomError::NoModificationAllowedError)?, Some(node)),
                     Some("afterend") => (parent.ok_or(DomError::NoModificationAllowedError)?, dom.get(node).next_sibling),
                     Some("afterbegin") => (node, dom.get(node).first_child),
                     Some("beforeend") => (node, None),
-                    None if op == O::ElementSetOuterHTML => (parent.ok_or(DomError::NoModificationAllowedError)?, Some(node)),
+                    None if op == O::ElementSetOuterHTML => (parent.unwrap(), Some(node)),
                     None => (node, None),
                     _ => unreachable!(),
                 };
-                // Select the actual target before parsing: template setters
-                // replace their persistent contents, whose document has no
-                // browsing context. Keep its host for tokenizer/insertion mode.
                 if matches!(op, O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe) && dom.is_html_template(node) {
                     insertion_parent = dom.ensure_template_contents(node)?;
                 }
@@ -229,22 +233,44 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
                 } else if let Some(template) = dom.template_of_contents(insertion_parent) {
                     if matches!(op, O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe) { template } else { insertion_parent }
                 } else { insertion_parent };
-                let context_document = dom.owner_document(insertion_parent).unwrap_or(insertion_parent);
+                let document = dom.owner_document(insertion_parent).ok_or(DomError::InvalidStateError)?;
                 let element = matches!(dom.get(context_node).kind, NodeKind::Element { .. }).then_some(context_node);
-                let context = crate::fragment_context::html(dom, element, context_document)?;
-                Ok((insertion_parent, reference, context, context_node))
+                Ok(Some((insertion_parent, reference, document, element, context_node)))
             })?;
-            // `setHTMLUnsafe` alone parses with declarative shadow roots
-            // enabled (spec's "set and filter HTML" always passes `true` for
-            // `allowDeclarativeShadowRoots`, but only `setHTMLUnsafe`/
-            // `parseHTML(Unsafe)` route through it) -- `innerHTML`/
-            // `outerHTML`/`insertAdjacentHTML` keep them off, unchanged.
-            let result = if op == O::ElementSetHTMLUnsafe {
-                host.parse_fragment_with_shadow_roots(parse_context, &markup)
+            let Some((parent, reference, document, mut element, context_node)) = snapshot else {
+                return Ok(host.undefined());
+            };
+            // setHTMLUnsafe explicitly uses HTML parsing, independent of the
+            // receiver Document. Ordinary markup setters use the real mode.
+            let html = op == O::ElementSetHTMLUnsafe || host.is_html_document(document);
+            if op == O::ElementInsertAdjacentHTML && html {
+                element = host.with_dom(|dom| Ok(element.filter(|element|
+                    !(dom.namespace_uri(*element) == Some("http://www.w3.org/1999/xhtml")
+                        && dom.local_name(*element) == Some("html")))))?;
+            }
+            let result = if html {
+                let context = host.with_dom(|dom| crate::fragment_context::html(dom, element, document))?;
+                if op == O::ElementSetHTMLUnsafe {
+                    host.parse_fragment_with_shadow_roots(context, &markup)
+                } else {
+                    host.parse_fragment(context, &markup)
+                }
             } else {
-                host.parse_fragment(parse_context, &markup)
+                let context = host.with_dom(|dom| crate::fragment_context::xml(dom, element))?;
+                host.parse_xml_fragment(context, &markup)
             };
             let mut parsed = seam_result(host, result)?;
+            if op != O::ElementSetHTMLUnsafe {
+                let fragment = host.with_dom(|dom| dom.import_fragment(&parsed, document))?;
+                let result = host.markup_fragment_imported(fragment);
+                seam_result(host, result)?;
+                host.with_dom(|dom| {
+                    if op == O::ElementSetInnerHTML { dom.replace_all(parent, Some(fragment)) }
+                    else if op == O::ElementSetOuterHTML { dom.replace(node, fragment, parent).map(|_| ()) }
+                    else { dom.pre_insert(fragment, parent, reference).map(|_| ()) }
+                })?;
+                return Ok(host.undefined());
+            }
             // Nested declarative shadow roots (a real ancestor already open
             // within the fragment's own markup) survive into `parsed`
             // already, fully formed, courtesy of `parse_fragment_with_

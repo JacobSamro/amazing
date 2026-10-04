@@ -1931,7 +1931,11 @@ fn markup_and_selector_seams_are_live_and_run_after_dom_borrow() {
     assert_eq!(call(&mut h, O::ElementInnerHTML, V::Node(root), &[]), str_value("<em>x</em><em>x</em>"));
     assert_eq!(call(&mut h, O::NodeListLength, list, &[]), V::Number(1.));
     assert_eq!(invoke(&mut h, O::ElementInsertAdjacentHTML, V::Node(b), &[str_value("beside"), str_value("x")]), Err("SyntaxError".into()));
-    assert_eq!(invoke(&mut h, O::ElementSetOuterHTML, V::Node(old), &[str_value("x")]), Err("NoModificationAllowedError".into()));
+    let detached_generation = h.dom.node_generation(old);
+    assert_eq!(invoke(&mut h, O::ElementSetOuterHTML, V::Node(old), &[str_value("x")]), Ok(V::Undefined));
+    assert_eq!(h.dom.get(old).parent, None);
+    assert_eq!(h.dom.node_generation(old), detached_generation);
+    assert_eq!(call(&mut h, O::ElementInnerHTML, V::Node(root), &[]), str_value("<em>x</em><em>x</em>"));
     assert_eq!(invoke(&mut h, O::ElementInsertAdjacentHTML, V::Node(old), &[str_value("beforebegin"), str_value("x")]), Err("NoModificationAllowedError".into()));
 }
 

@@ -2112,6 +2112,10 @@ fn html_fragment_context(context: FragmentContext) -> amazing_html::HtmlFragment
 }
 
 impl FragmentParser for RuntimeBindingHost<'_> {
+    fn markup_fragment_imported(&mut self, fragment: NodeIdx) -> Result<(), DomError> {
+        self.html_mark_markup_fragment_scripts(fragment)
+    }
+
     fn parse_fragment(&mut self, context: FragmentContext, markup: &[u16]) -> Result<Dom, DomError> {
         let markup = String::from_utf16(markup).map_err(|_| DomError::TypeError)?;
         amazing_html::parse_fragment_with_context(&html_fragment_context(context), &markup, false)

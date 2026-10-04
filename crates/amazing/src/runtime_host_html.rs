@@ -5,6 +5,8 @@
 //! wraps the same Document/Element prototypes as the top realm rather than a
 //! fully independent intrinsic set.
 use super::*;
+#[path = "runtime_host_html_fragment_scripts.rs"]
+mod fragment_scripts;
 #[path = "runtime_host_html/document_write.rs"]
 mod document_write;
 #[path = "runtime_host_html/document_dsd.rs"]

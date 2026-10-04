@@ -465,6 +465,10 @@ mod unsafe_document_origin;
 mod xml_markup_getters;
 
 #[cfg(test)]
+#[path = "runtime_host_dom_bindings/xml_markup_setters.rs"]
+mod xml_markup_setters;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
