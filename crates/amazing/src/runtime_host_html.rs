@@ -17,6 +17,8 @@ mod window_event_targets;
 mod resource_response;
 #[path = "runtime_host_html/history_context.rs"]
 mod history_context;
+#[path = "runtime_host_html/history_url.rs"]
+mod history_url;
 pub(crate) use history_context::{HtmlHistoryContext, HtmlNavigableHandle};
 pub(crate) use resource_response::{HtmlFrameResourceKind, HtmlFrameResourceLoader, HtmlFrameResourceRequest};
 #[path = "runtime_host_html/load_dependencies.rs"]

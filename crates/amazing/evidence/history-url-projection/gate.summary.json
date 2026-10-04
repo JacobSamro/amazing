@@ -1,0 +1,142 @@
+{
+  "fixed_base": "c0d1d108d04f6800417174a181fb6fced30e2976",
+  "gated_source": "91cfa28b78ffe210e82bd257bae8d8c9314d13d5",
+  "source_files": {
+    "crates/amazing/src/runtime_host_html.rs": "d13c47e136b630996f3f638ee89a0176f970b1c94dd38454a53cdb5345968ca4",
+    "crates/amazing/src/runtime_host_html/history_url.rs": "61594a720e70e2f65332f3e0695ca43e736877ad6934fa827d26251d651b391d"
+  },
+  "remote_alias": "js-date",
+  "profile": {
+    "ordinary_ms": 25000,
+    "serialized_heavy_ms": 150000,
+    "shadow_actual_META_long_ms": 600000,
+    "encoding_ordinary_ms": 10000,
+    "encoding_actual_META_long_ms": 60000,
+    "modules_ms": 5000
+  },
+  "wrapper_exits": {
+    "before": 0,
+    "after": 0
+  },
+  "command_sha256": {
+    "before": "8b25b3d5f773cd25d4f2e106a5f3c986ab0f9fbd9152ce1aef03eee39b0ca24c",
+    "after": "6dd7dea480ff5fff065af6998a90a67844748c0723ee07390375711403f84fdb"
+  },
+  "helper_sha256": "65f8dc911753794394b02bdda3193d4b0a141a0ced430ad665f6a02b4642ebc4",
+  "native": {
+    "before": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4473,
+        "skipped": 17
+      }
+    },
+    "after": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4474,
+        "skipped": 17
+      }
+    }
+  },
+  "corpora": {
+    "base-url": {
+      "after": 2,
+      "before": 2,
+      "files": 11
+    },
+    "core": {
+      "after": 92829,
+      "before": 92829,
+      "files": 888
+    },
+    "cssom": {
+      "after": 1772,
+      "before": 1772,
+      "files": 192
+    },
+    "encoding": {
+      "after": 12357,
+      "before": 12357,
+      "files": 194
+    },
+    "modules": {
+      "after": 145,
+      "before": 145,
+      "files": 111
+    },
+    "shadow": {
+      "after": 5681,
+      "before": 5681,
+      "files": 277
+    },
+    "syntax": {
+      "after": 3215,
+      "before": 3215,
+      "files": 220
+    },
+    "syntax72": {
+      "after": 2707,
+      "before": 2707,
+      "files": 72
+    },
+    "the-base-element": {
+      "after": 15,
+      "before": 15,
+      "files": 11
+    },
+    "the-history-interface": {
+      "after": 13,
+      "before": 13,
+      "files": 74
+    },
+    "the-iframe-element": {
+      "after": 24,
+      "before": 24,
+      "files": 150
+    },
+    "the-window-object": {
+      "after": 253,
+      "before": 253,
+      "files": 90
+    },
+    "the-windowproxy-exotic-object": {
+      "after": 14,
+      "before": 14,
+      "files": 8
+    },
+    "windows": {
+      "after": 4,
+      "before": 4,
+      "files": 53
+    }
+  },
+  "zero_passing_counter_and_file_losses": true,
+  "scope": "genuine native same-document URL projection; no History owner/security/session-store carrier",
+  "trees": {
+    "after_passed": 1930,
+    "before_passed": 1930,
+    "lost": [],
+    "raw_after": {
+      "bytes": 183082,
+      "path": "/home/user/amazing/out/js-date/html-history-url-after-91cfa28b78ffe210e82bd257bae8d8c9314d13d5/trees.json",
+      "sha256": "fd1ab07a655bb7814b181a310cf2a9d6d3cd9f12de3b6862b82257cd677cc888"
+    },
+    "raw_before": {
+      "bytes": 183082,
+      "path": "/home/user/amazing/out/js-date/html-history-url-before-c0d1d108d04f6800417174a181fb6fced30e2976/trees.json",
+      "sha256": "fd1ab07a655bb7814b181a310cf2a9d6d3cd9f12de3b6862b82257cd677cc888"
+    },
+    "unsupported": 6
+  }
+}
