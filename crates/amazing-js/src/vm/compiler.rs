@@ -1149,14 +1149,17 @@ impl Compiler {
 
     fn expression(&mut self, expression: &Expr) -> Result<Register, CompileError> {
         self.enter(expression.span)?;
-        if may_suspend(expression) && chains::is_chain_expression(expression) {
+        if may_suspend(expression)
+            && (chains::is_chain_expression(expression) || chains::is_super_read(expression)) {
             let result = self.suspended_chain(expression);
             self.depth -= 1;
             return result;
         }
         // Non-suspending chains retain the whole-expression adapter so
         // short-circuiting covers every link (`o?.b[f()]` must not call `f`).
-        // Suspended chains use the reference-preserving lowering above.
+        // Suspended optional and Super-read/call chains use the same rooted
+        // reference-preserving lowering above. Ordinary suspended consumers
+        // must not load a Super base before this or its raw computed key.
         // Super reference operations
         // also need the home object's prototype and the actual this receiver.
         // The class adapter owns immutable inner names, descriptor validation,

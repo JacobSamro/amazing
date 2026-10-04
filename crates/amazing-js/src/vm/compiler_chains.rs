@@ -1,3 +1,6 @@
+// Super-reference read portions adapted from lucid-softworks/lumen
+// (crates/lumen/src/eval.rs, super reference and member/index paths)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Portions ported from boa-dev/boa (core/engine/src/bytecompiler/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: optional-chain reference
 // preservation, link short-circuiting and final-link deletion.
@@ -11,6 +14,18 @@ enum Link<'a> {
 pub(super) fn is_chain_expression(expression: &Expr) -> bool {
     in_optional_chain(expression) || matches!(&expression.kind,
         ExprKind::Unary { op: UnOp::Delete, operand } if in_optional_chain(operand))
+}
+
+// Only reference-preserving read/call spines qualify. Arguments and other
+// value expressions do not inherit the callee's Reference; assignments,
+// updates, deletion and bare super construction retain their own consumers.
+pub(super) fn is_super_read(expression: &Expr) -> bool {
+    match &expression.kind {
+        ExprKind::Paren(inner) => is_super_read(inner),
+        ExprKind::Member { obj, .. } => matches!(obj.kind, ExprKind::Super) || is_super_read(obj),
+        ExprKind::Call { callee, .. } => is_super_read(callee),
+        _ => false,
+    }
 }
 
 impl Compiler {
@@ -75,7 +90,9 @@ impl Compiler {
                 self.emit(Instruction::Move(receiver, inner_receiver));
             }
             ExprKind::Super => {
-                self.emit(Instruction::LoadSuperHome(value));
+                // A Super Reference captures actual this before evaluating a
+                // raw computed key. Its HomeObject prototype is read only
+                // after that expression, including when it suspends.
                 self.emit(Instruction::LoadThis(receiver));
             }
             _ => {
@@ -92,7 +109,17 @@ impl Compiler {
             match link {
                 Link::Member(prop, _) => {
                     let object = self.register(expression.span)?;
-                    self.emit(Instruction::Move(object, value));
+                    let raw_super_key = if super_base {
+                        let raw = match prop {
+                            ast::MemberProp::Computed(key) => Some(self.expression(key)?),
+                            _ => None,
+                        };
+                        self.emit(Instruction::LoadSuperHome(object));
+                        raw
+                    } else {
+                        self.emit(Instruction::Move(object, value));
+                        None
+                    };
                     if !super_base { self.emit(Instruction::Move(receiver, object)); }
                     if delete && index + 1 == links.len() {
                         if super_base { return Err(self.error(expression.span, "delete super member")); }
@@ -111,7 +138,11 @@ impl Compiler {
                     } else if let ast::MemberProp::Private(name) = prop {
                         self.emit(Instruction::GetPrivateField(value, object, name.name.clone()));
                     } else {
-                        let key = self.member_key(object, prop, true)?;
+                        let key = if let Some(raw) = raw_super_key {
+                            self.emit(Instruction::RequireObjectCoercible(object));
+                            self.emit(Instruction::ToKey(raw));
+                            KeyOperand::Dynamic(raw)
+                        } else { self.member_key(object, prop, true)? };
                         self.emit(Instruction::GetMemberReceiver(value, object, key, receiver));
                     }
                 }

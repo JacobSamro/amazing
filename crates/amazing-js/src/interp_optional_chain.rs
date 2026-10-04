@@ -1,3 +1,5 @@
+// Super Reference/GetValue portions adapted from lucid-softworks/lumen
+// (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Portions ported from boa-dev/boa (core/engine/src/bytecompiler/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // Optional-chain control flow, receiver preservation and final-link deletion
@@ -55,6 +57,18 @@ impl Interpreter {
                     ChainEvaluation::ShortCircuit => ChainEvaluation::Value(JsValue::Undefined),
                     reference => reference,
                 })
+            }
+            ExprKind::Member { obj, optional: false, .. } if matches!(obj.kind, ExprKind::Super) => {
+                // SuperProperty evaluation captures actual this and the raw
+                // computed expression before reading the current HomeObject's
+                // prototype. GetValue then checks the base before ToPropertyKey.
+                let mut reference = self.capture_reference(expression, env)?;
+                self.coerce_reference_key(&mut reference)?;
+                let Reference::SuperProperty(base, key, receiver) = reference else {
+                    unreachable!("super member capture yields a super reference")
+                };
+                self.require_reference_base(&base)?;
+                Ok(ChainEvaluation::Property { base, receiver, key, super_reference: true })
             }
             ExprKind::Member { obj, prop, optional } => {
                 let reference = self.eval_chain_reference(obj, env)?;
