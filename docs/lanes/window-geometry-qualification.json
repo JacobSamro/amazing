@@ -1,0 +1,413 @@
+{
+  "schema": 1,
+  "ticket": "actual-window-geometry",
+  "base": "7bc73204149e50b8875c0ab9d1b552cb4e1fe251",
+  "qualified_source": "4e7223117365707bf6e86d71cecb4c46433549ad",
+  "box": "bx_4kvs8kew",
+  "lane": "product-proof-20261004",
+  "local_metadata_checks": {
+    "window_fixtures": 12,
+    "gate_fixtures": 9,
+    "shell_syntax": "pass",
+    "diff": "pass"
+  },
+  "runs": [
+    {
+      "session": 75574,
+      "exit": 1,
+      "cause": "SSH consumed image list stdin; no partial image published"
+    },
+    {
+      "session": 71422,
+      "exit": 0,
+      "shots": 10
+    },
+    {
+      "session": 13765,
+      "exit": 2,
+      "comparison": "news-home mismatch",
+      "absolute_error_pixels": 22338,
+      "capture_transfer": "passed"
+    }
+  ],
+  "proofs": [
+    {
+      "kind": "smoke",
+      "wrapper_exit": 0,
+      "manifest_path": "/Users/jMac/Projects/OpenSource/amazing/.agents/product-proof-20261004/captures/geometry-smoke-clean-20261004/geometry-smoke-clean-20261004.window.manifest.json",
+      "manifest_sha256": "4d69fc2db2015ace48792f9459be67cc596ca84554f066ee2b1efa54e4d8e6a3",
+      "proof_bytes": 768399,
+      "images": [
+        {
+          "path": "/home/user/amazing/out/product-proof-20261004/captures/geometry-smoke-clean-20261004/geometry-smoke-clean-20261004-00-launch.png",
+          "bytes": 101578,
+          "sha256": "7a73ed1139296a797684fe8c25b403075a5cad2862a3fd25e4be91ae41d2fc6f",
+          "pid": 39818,
+          "window": {
+            "id": "2097153",
+            "title": ""
+          },
+          "viewport": {
+            "display_size": [
+              1280,
+              800
+            ],
+            "window_size": [
+              1280,
+              800
+            ]
+          },
+          "fixture": "[] actions=crates/amazing-shell-gpui/smoke/product-smoke.actions shot=00-launch",
+          "captured_at": "2026-10-04T18:18:12.863151+00:00",
+          "geometry": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "exe": {
+            "path": "/tmp/amazing-shell-target-product-proof-20261004/debug/amazing-shell",
+            "sha256": "73b294a1d69399797d9d8a21a58d4414acf8ee622fa7950b2eb13710801645e0"
+          }
+        },
+        {
+          "path": "/home/user/amazing/out/product-proof-20261004/captures/geometry-smoke-clean-20261004/geometry-smoke-clean-20261004-01-address-bar-focused.png",
+          "bytes": 101802,
+          "sha256": "cd48539392e210bb0b027ec3058501a4f6a19cf98b81146e4e4fba49e73e8fce",
+          "pid": 39818,
+          "window": {
+            "id": "2097153",
+            "title": ""
+          },
+          "viewport": {
+            "display_size": [
+              1280,
+              800
+            ],
+            "window_size": [
+              1280,
+              800
+            ]
+          },
+          "fixture": "[] actions=crates/amazing-shell-gpui/smoke/product-smoke.actions shot=01-address-bar-focused",
+          "captured_at": "2026-10-04T18:18:14.172000+00:00",
+          "geometry": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "exe": {
+            "path": "/tmp/amazing-shell-target-product-proof-20261004/debug/amazing-shell",
+            "sha256": "73b294a1d69399797d9d8a21a58d4414acf8ee622fa7950b2eb13710801645e0"
+          }
+        },
+        {
+          "path": "/home/user/amazing/out/product-proof-20261004/captures/geometry-smoke-clean-20261004/geometry-smoke-clean-20261004-02-omnibox-navigated.png",
+          "bytes": 67787,
+          "sha256": "40e25438ffa8682addd6fbe1d9472f19b67761e7c9602151662111d45c16c968",
+          "pid": 39818,
+          "window": {
+            "id": "2097153",
+            "title": ""
+          },
+          "viewport": {
+            "display_size": [
+              1280,
+              800
+            ],
+            "window_size": [
+              1280,
+              800
+            ]
+          },
+          "fixture": "[] actions=crates/amazing-shell-gpui/smoke/product-smoke.actions shot=02-omnibox-navigated",
+          "captured_at": "2026-10-04T18:18:16.748024+00:00",
+          "geometry": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "exe": {
+            "path": "/tmp/amazing-shell-target-product-proof-20261004/debug/amazing-shell",
+            "sha256": "73b294a1d69399797d9d8a21a58d4414acf8ee622fa7950b2eb13710801645e0"
+          }
+        },
+        {
+          "path": "/home/user/amazing/out/product-proof-20261004/captures/geometry-smoke-clean-20261004/geometry-smoke-clean-20261004-03-navigated-back.png",
+          "bytes": 101582,
+          "sha256": "4fc8015504e80e51680a272b4e36344c9895ac44509ff251df1e82a546d8e153",
+          "pid": 39818,
+          "window": {
+            "id": "2097153",
+            "title": ""
+          },
+          "viewport": {
+            "display_size": [
+              1280,
+              800
+            ],
+            "window_size": [
+              1280,
+              800
+            ]
+          },
+          "fixture": "[] actions=crates/amazing-shell-gpui/smoke/product-smoke.actions shot=03-navigated-back",
+          "captured_at": "2026-10-04T18:18:18.045119+00:00",
+          "geometry": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "exe": {
+            "path": "/tmp/amazing-shell-target-product-proof-20261004/debug/amazing-shell",
+            "sha256": "73b294a1d69399797d9d8a21a58d4414acf8ee622fa7950b2eb13710801645e0"
+          }
+        },
+        {
+          "path": "/home/user/amazing/out/product-proof-20261004/captures/geometry-smoke-clean-20261004/geometry-smoke-clean-20261004-04-navigated-forward.png",
+          "bytes": 67787,
+          "sha256": "40e25438ffa8682addd6fbe1d9472f19b67761e7c9602151662111d45c16c968",
+          "pid": 39818,
+          "window": {
+            "id": "2097153",
+            "title": ""
+          },
+          "viewport": {
+            "display_size": [
+              1280,
+              800
+            ],
+            "window_size": [
+              1280,
+              800
+            ]
+          },
+          "fixture": "[] actions=crates/amazing-shell-gpui/smoke/product-smoke.actions shot=04-navigated-forward",
+          "captured_at": "2026-10-04T18:18:19.336904+00:00",
+          "geometry": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "exe": {
+            "path": "/tmp/amazing-shell-target-product-proof-20261004/debug/amazing-shell",
+            "sha256": "73b294a1d69399797d9d8a21a58d4414acf8ee622fa7950b2eb13710801645e0"
+          }
+        },
+        {
+          "path": "/home/user/amazing/out/product-proof-20261004/captures/geometry-smoke-clean-20261004/geometry-smoke-clean-20261004-05-find-in-page-opened.png",
+          "bytes": 67117,
+          "sha256": "4b3b6e8d06eaf7d635923c3dfac7ff1a9a855324a9340f0ac7361ec6a9de649b",
+          "pid": 39818,
+          "window": {
+            "id": "2097153",
+            "title": ""
+          },
+          "viewport": {
+            "display_size": [
+              1280,
+              800
+            ],
+            "window_size": [
+              1280,
+              800
+            ]
+          },
+          "fixture": "[] actions=crates/amazing-shell-gpui/smoke/product-smoke.actions shot=05-find-in-page-opened",
+          "captured_at": "2026-10-04T18:18:20.644367+00:00",
+          "geometry": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "exe": {
+            "path": "/tmp/amazing-shell-target-product-proof-20261004/debug/amazing-shell",
+            "sha256": "73b294a1d69399797d9d8a21a58d4414acf8ee622fa7950b2eb13710801645e0"
+          }
+        },
+        {
+          "path": "/home/user/amazing/out/product-proof-20261004/captures/geometry-smoke-clean-20261004/geometry-smoke-clean-20261004-06-find-in-page-query-typed.png",
+          "bytes": 67750,
+          "sha256": "ed5312e8640d8965dede71261a5afb4300333fd2bd4a3d36fc968be93b4408ee",
+          "pid": 39818,
+          "window": {
+            "id": "2097153",
+            "title": ""
+          },
+          "viewport": {
+            "display_size": [
+              1280,
+              800
+            ],
+            "window_size": [
+              1280,
+              800
+            ]
+          },
+          "fixture": "[] actions=crates/amazing-shell-gpui/smoke/product-smoke.actions shot=06-find-in-page-query-typed",
+          "captured_at": "2026-10-04T18:18:22.039942+00:00",
+          "geometry": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "exe": {
+            "path": "/tmp/amazing-shell-target-product-proof-20261004/debug/amazing-shell",
+            "sha256": "73b294a1d69399797d9d8a21a58d4414acf8ee622fa7950b2eb13710801645e0"
+          }
+        },
+        {
+          "path": "/home/user/amazing/out/product-proof-20261004/captures/geometry-smoke-clean-20261004/geometry-smoke-clean-20261004-07-find-in-page-closed.png",
+          "bytes": 67787,
+          "sha256": "40e25438ffa8682addd6fbe1d9472f19b67761e7c9602151662111d45c16c968",
+          "pid": 39818,
+          "window": {
+            "id": "2097153",
+            "title": ""
+          },
+          "viewport": {
+            "display_size": [
+              1280,
+              800
+            ],
+            "window_size": [
+              1280,
+              800
+            ]
+          },
+          "fixture": "[] actions=crates/amazing-shell-gpui/smoke/product-smoke.actions shot=07-find-in-page-closed",
+          "captured_at": "2026-10-04T18:18:23.323195+00:00",
+          "geometry": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "exe": {
+            "path": "/tmp/amazing-shell-target-product-proof-20261004/debug/amazing-shell",
+            "sha256": "73b294a1d69399797d9d8a21a58d4414acf8ee622fa7950b2eb13710801645e0"
+          }
+        },
+        {
+          "path": "/home/user/amazing/out/product-proof-20261004/captures/geometry-smoke-clean-20261004/geometry-smoke-clean-20261004-08-new-tab-opened.png",
+          "bytes": 67787,
+          "sha256": "c91382620cdadc74a7dab07022570835b51795088b405cbe59b52c1e6c876244",
+          "pid": 39818,
+          "window": {
+            "id": "2097153",
+            "title": ""
+          },
+          "viewport": {
+            "display_size": [
+              1280,
+              800
+            ],
+            "window_size": [
+              1280,
+              800
+            ]
+          },
+          "fixture": "[] actions=crates/amazing-shell-gpui/smoke/product-smoke.actions shot=08-new-tab-opened",
+          "captured_at": "2026-10-04T18:18:24.618590+00:00",
+          "geometry": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "exe": {
+            "path": "/tmp/amazing-shell-target-product-proof-20261004/debug/amazing-shell",
+            "sha256": "73b294a1d69399797d9d8a21a58d4414acf8ee622fa7950b2eb13710801645e0"
+          }
+        },
+        {
+          "path": "/home/user/amazing/out/product-proof-20261004/captures/geometry-smoke-clean-20261004/geometry-smoke-clean-20261004-09-tab-closed.png",
+          "bytes": 43796,
+          "sha256": "cf7a9fca2652cdb0891f80b495ea7c7277f7e2c63e7d4a0ee5def406b749bc84",
+          "pid": 39818,
+          "window": {
+            "id": "2097153",
+            "title": ""
+          },
+          "viewport": {
+            "display_size": [
+              1280,
+              800
+            ],
+            "window_size": [
+              1280,
+              800
+            ]
+          },
+          "fixture": "[] actions=crates/amazing-shell-gpui/smoke/product-smoke.actions shot=09-tab-closed",
+          "captured_at": "2026-10-04T18:18:25.916581+00:00",
+          "geometry": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "exe": {
+            "path": "/tmp/amazing-shell-target-product-proof-20261004/debug/amazing-shell",
+            "sha256": "73b294a1d69399797d9d8a21a58d4414acf8ee622fa7950b2eb13710801645e0"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "news",
+      "wrapper_exit": 2,
+      "manifest_path": "/Users/jMac/Projects/OpenSource/amazing/.agents/product-proof-20261004/real-pages/geometry-news-home-20261004/geometry-news-home-20261004.window.manifest.json",
+      "manifest_sha256": "6bc0a460d34a589fa5266d810cde29cf1699c37ecb37e86cb42d3b199afe2fa4",
+      "proof_bytes": 70744,
+      "images": [
+        {
+          "path": "/home/user/amazing/out/product-proof-20261004/real-pages/geometry-news-home-20261004/news-home.png",
+          "bytes": 69343,
+          "sha256": "45f2296127a96cead2e00fab3462637bc3e9af7e916e32defd4fd301d8e59e13",
+          "pid": 43890,
+          "window": {
+            "id": "2097153",
+            "title": ""
+          },
+          "viewport": {
+            "display_size": [
+              1280,
+              800
+            ],
+            "window_size": [
+              1280,
+              800
+            ]
+          },
+          "fixture": "file:///tmp/amazing-native-src-product-proof-20261004/tests/real-pages/pages/news-home.html",
+          "captured_at": "2026-10-04T18:23:53.067262+00:00",
+          "geometry": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "exe": {
+            "path": "/tmp/amazing-shell-target-product-proof-20261004/debug/amazing-shell",
+            "sha256": "73b294a1d69399797d9d8a21a58d4414acf8ee622fa7950b2eb13710801645e0"
+          }
+        }
+      ]
+    }
+  ],
+  "combined_visual_proof_bytes": 839143,
+  "limits": {
+    "per_png_bytes": 524288,
+    "total_bytes": 2097152
+  },
+  "engine_changes": false,
+  "conformance_gain_claim": false,
+  "visual_inspection": "all eleven actual window PNGs inspected"
+}

@@ -29,12 +29,16 @@ start_shell() {
   sleep "$WAIT"
   WID=$(xdotool search --pid "$APID" 2>/dev/null | tail -1) || true
   [ -n "$WID" ] || { echo "no actual Amazing window; raw log remains $OUTDIR/shell.log" >&2; return 5; }
+  # Configure the genuine X window to the requested product viewport, then
+  # place it wholly on this dedicated display. ImageMagick clips off-screen
+  # window pixels, so a centered/outside window cannot certify a full shot.
+  xdotool windowsize --sync "$WID" "${SIZE%x*}" "${SIZE#*x}"
+  xdotool windowmove --sync "$WID" 0 0
 }
 shot() {
   [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]] || { echo 'invalid shot name' >&2; return 2; }
   [ ! -e "$OUTDIR/$1.png" ] || { echo 'duplicate shot' >&2; return 2; }
-  import -window "$WID" "$OUTDIR/$1.png"
-  python3 "$PROOF_TOOL" record --lane "$LANE" --manifest "$MANIFEST" --image "$OUTDIR/$1.png" \
+  python3 "$PROOF_TOOL" capture --lane "$LANE" --manifest "$MANIFEST" --image "$OUTDIR/$1.png" \
     --exe "$EXE" --window "$WID" --pid "$APID" --source-commit "$SOURCE" --fixture "$2" --size "$SIZE"
 }
 if [ "$REAL_PAGES" = 1 ]; then

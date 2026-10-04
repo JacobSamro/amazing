@@ -16,16 +16,16 @@ python3 "$REPO/scripts/window-proof.py" validate "$LOCAL" "$LANE" > "$TMP/images
 HOST="$(bash "$REPO/scripts/linux-run.sh" "$LANE" --which)"
 if [ "$HOST" = boat ]; then
   read -r HOST PORT _ < <("$MAIN/scripts/boat-lane.py" endpoint "$LANE")
-  SSH=(ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i "$HOME/.ssh/ascii_box_ed25519" -p "$PORT" "$HOST")
+  SSH=(ssh -n -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i "$HOME/.ssh/ascii_box_ed25519" -p "$PORT" "$HOST")
   SCP=(scp -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i "$HOME/.ssh/ascii_box_ed25519" -P "$PORT")
 else
-  SSH=(ssh -o BatchMode=yes -o ControlPath=none "$HOST")
+  SSH=(ssh -n -o BatchMode=yes -o ControlPath=none "$HOST")
   SCP=(scp -q -o ControlPath=none)
 fi
 while read -r hash bytes path; do
-  facts="$("${SSH[@]}" "test -f '$path' && test \$(stat -c %s '$path') -le 524288 && sha256sum '$path' && stat -c %s '$path'")"
+  facts="$("${SSH[@]}" "test -f '$path' && test \$(stat -c %s '$path') -le 524288 && sha256sum '$path' && stat -c %s '$path'" < /dev/null)"
   [ "${facts%% *}" = "$hash" ] && [ "${facts##*$'\n'}" = "$bytes" ] || { echo 'remote window image differs from manifest' >&2; exit 3; }
-  "${SCP[@]}" "$HOST:$path" "$TMP/$(basename "$path")"
+  "${SCP[@]}" "$HOST:$path" "$TMP/$(basename "$path")" < /dev/null
 done < "$TMP/images"
 python3 "$REPO/scripts/window-proof.py" verify "$LOCAL" "$LANE" "$TMP"
 # Reject collisions before publishing any image; prior proof bytes stay intact.

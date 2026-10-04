@@ -6,6 +6,7 @@ import importlib.util
 import pathlib
 import struct
 import tempfile
+import types
 import unittest
 from unittest import mock
 
@@ -24,6 +25,10 @@ class WindowProof(unittest.TestCase):
                  'source_commit':'b'*40,'fixture':'file:///fixture.html',
                  'viewport':{'display_size':[800,600],'window_size':[800,600]},
                  'captured_at':'2026-10-04T12:00:00+00:00'}
+        observed={'exe':image['exe'],'pid':123,'window_id':'456','geometry':[0,0,800,600],'display_size':[800,600]}
+        image['capture']={'backend':'ImageMagick import +frame +border -window',
+                          'before':copy.deepcopy(observed),'after':copy.deepcopy(observed),
+                          'began_at':'2026-10-04T12:00:00+00:00'}
         return {'schema':1,'kind':'actual-window-proof','lane':'js-date','images':[image]},raw
 
     def test_valid_exact_window_metadata_and_bytes(self):
@@ -67,6 +72,96 @@ class WindowProof(unittest.TestCase):
             with self.subTest(field=field),self.assertRaises(ValueError):proof.validate(manifest,'js-date')
         manifest,_=self.fixture();manifest['images'].append(copy.deepcopy(manifest['images'][0]))
         with self.assertRaisesRegex(ValueError,'duplicate'):proof.validate(manifest,'js-date')
+
+    def test_whole_window_geometry_requires_visible_stable_bounds(self):
+        proof.check_geometry([0,0,800,600],[800,600],[800,600])
+        proof.check_geometry([10,20,300,200],[800,600],[800,600])
+        for bounds in [[-1,0,800,600],[0,-1,800,600],[1,0,800,600],[0,1,800,600],[0,0,801,600],[0,0,0,600]]:
+            with self.subTest(bounds=bounds),self.assertRaises(ValueError):proof.check_geometry(bounds,[800,600],[800,600])
+        with self.assertRaisesRegex(ValueError,'actual display'):
+            proof.check_geometry([0,0,800,600],[1024,768],[800,600])
+        manifest,_=self.fixture();manifest['images'][0]['capture']['after']['geometry'][0]=1
+        with self.assertRaisesRegex(ValueError,'unstable'):proof.validate(manifest,'js-date')
+
+    def test_snapshot_requires_actual_process_and_window_identity(self):
+        with tempfile.TemporaryDirectory() as d:
+            exe=pathlib.Path(d)/'amazing-shell';exe.write_bytes(b'fixture executable')
+            args=types.SimpleNamespace(pid=123,exe=str(exe),window='456')
+            original_readlink=proof.os.readlink
+            def readlink(path,*args,**kwargs):
+                return str(exe.resolve()) if str(path)=='/proc/123/exe' else original_readlink(path,*args,**kwargs)
+            def observed(command,text=True):
+                if command[1]=='getwindowpid':return '123'
+                if command[1]=='getdisplaygeometry':return '800 600'
+                return 'WINDOW=456\nX=0\nY=0\nWIDTH=800\nHEIGHT=600\nSCREEN=0\n'
+            with mock.patch.object(proof.os,'readlink',side_effect=readlink),mock.patch.object(proof.subprocess,'check_output',side_effect=observed):
+                state=proof.snapshot(args)
+                self.assertEqual(state['geometry'],[0,0,800,600])
+                self.assertEqual(state['exe']['sha256'],proof.digest(exe))
+            with mock.patch.object(proof.os,'readlink',side_effect=readlink),mock.patch.object(proof.subprocess,'check_output',return_value='124'):
+                with self.assertRaisesRegex(ValueError,'actual shell PID'):proof.snapshot(args)
+            with mock.patch.object(proof.os,'readlink',side_effect=readlink),mock.patch.object(proof.subprocess,'check_output',side_effect=['123','WINDOW=457\n']):
+                with self.assertRaisesRegex(ValueError,'another window'):proof.snapshot(args)
+
+    def test_backend_records_all_ten_action_shots_before_and_after(self):
+        manifest,raw=self.fixture();observed=manifest['images'][0]['capture']['before']
+        with tempfile.TemporaryDirectory() as d:
+            out=pathlib.Path(d);stored=out/'proof.window.manifest.json'
+            def imported(command,check):
+                self.assertEqual(command[:5],['import','-silent','+frame','+border','-window'])
+                pathlib.Path(command[-1]).write_bytes(raw)
+            with mock.patch.object(proof,'exact_path',side_effect=lambda path,lane:path),mock.patch.object(proof,'snapshot',return_value=observed),mock.patch.object(proof.subprocess,'run',side_effect=imported),mock.patch.object(proof.subprocess,'check_output',return_value='Amazing'):
+                for n in range(10):
+                    args=types.SimpleNamespace(image=str(out/f'shot-{n}.png'),lane='js-date',size='800x600',window='456',pid=123,source_commit='b'*40,fixture=f'original-actions shot={n}',manifest=str(stored))
+                    proof.capture(args)
+            recorded=__import__('json').loads(stored.read_text())
+            self.assertEqual(len(recorded['images']),10)
+            self.assertTrue(all(i['capture']['before']==i['capture']['after'] for i in recorded['images']))
+            for image in recorded['images']:proof.verify_image(image,out/pathlib.Path(image['path']).name)
+
+    def test_backend_rejects_crop_geometry_change_or_pid_change(self):
+        manifest,raw=self.fixture();observed=manifest['images'][0]['capture']['before']
+        for mode in ['cropped','moved','pid']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as d:
+                out=pathlib.Path(d);args=types.SimpleNamespace(image=str(out/'shot.png'),lane='js-date',size='800x600',window='456',pid=123,source_commit='b'*40,fixture='actions',manifest=str(out/'proof.window.manifest.json'))
+                after=copy.deepcopy(observed)
+                if mode=='moved':after['geometry'][0]=1
+                if mode=='pid':after['pid']=124
+                pixels=raw if mode!='cropped' else raw[:16]+struct.pack('>II',799,600)
+                with mock.patch.object(proof,'exact_path',side_effect=lambda path,lane:path),mock.patch.object(proof,'snapshot',side_effect=[observed,after]),mock.patch.object(proof.subprocess,'run',side_effect=lambda command,check:pathlib.Path(command[-1]).write_bytes(pixels)):
+                    with self.assertRaises(ValueError):proof.capture(args)
+                self.assertFalse(pathlib.Path(args.manifest).exists())
+
+    def test_explicit_transfer_publishes_all_ten_without_stdin_consumption(self):
+        import subprocess, json
+        scripts=pathlib.Path(__file__).parent
+        manifest,raw=self.fixture()
+        manifest['images']=[copy.deepcopy(manifest['images'][0]) for _ in range(10)]
+        for n,image in enumerate(manifest['images']):image['path']=image['path'].replace('run.png',f'shot-{n}.png')
+        with tempfile.TemporaryDirectory() as d:
+            root=pathlib.Path(d);target=root/'scripts';target.mkdir();fake=root/'bin';fake.mkdir();server=root/'server';server.mkdir()
+            subprocess.run(['git','init','-q',d],check=True)
+            for name in ('lane-fetch-window.sh','window-proof.py'):(target/name).write_bytes((scripts/name).read_bytes())
+            for image in manifest['images']:(server/pathlib.Path(image['path']).name).write_bytes(raw)
+            (server/'run.window.manifest.json').write_text(json.dumps(manifest))
+            (target/'linux-run.sh').write_text('#!/bin/bash\necho fixture-host\n')
+            (target/'lane-fetch.sh').write_text('#!/bin/bash\ncp "'+str(server/'run.window.manifest.json')+'" "$2/$(basename "$3")"\n')
+            (fake/'ssh').write_text("""#!/usr/bin/env python3
+import sys,hashlib,pathlib,shlex
+assert not sys.stdin.read(), 'SSH consumed remaining manifest image list'
+p=shlex.split(sys.argv[-1])[2]
+f=pathlib.Path(SERVER_ROOT)/pathlib.Path(p).name
+print(hashlib.sha256(f.read_bytes()).hexdigest()+'  '+p)
+print(f.stat().st_size)
+""".replace('SERVER_ROOT',repr(str(server))))
+            (fake/'scp').write_text('#!/usr/bin/env python3\nimport sys,pathlib,shutil\nassert not sys.stdin.read(), "SCP consumed manifest image list"\nsrc=pathlib.Path('+repr(str(server))+')/pathlib.Path(sys.argv[-2]).name\nshutil.copyfile(src,sys.argv[-1])\n')
+            for tool in fake.iterdir():tool.chmod(0o755)
+            env=__import__('os').environ.copy();env['PATH']=str(fake)+':'+env['PATH']
+            dest=root/'received'
+            result=subprocess.run(['bash',str(target/'lane-fetch-window.sh'),'js-date',str(dest),'amazing/out/js-date/captures/run/run.window.manifest.json'],env=env,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(len(list(dest.glob('*.png'))),10)
+            for image in manifest['images']:proof.verify_image(image,dest/pathlib.Path(image['path']).name)
 
     def test_capture_assembly_preserves_remote_variables_on_host_bash(self):
         import subprocess
