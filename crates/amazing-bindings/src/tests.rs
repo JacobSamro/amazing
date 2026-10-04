@@ -53,6 +53,7 @@ struct Host {
     conversions: Vec<&'static str>,
     property_reads: Vec<String>,
     arena_borrowed: bool,
+    inert_shadow_policies: Vec<bool>,
     callbacks: Vec<Option<V>>,
     calls: Vec<u64>,
     call_receivers: Vec<(V, Vec<V>)>,
@@ -111,6 +112,16 @@ impl BindingHost for Host {
         parsed.create_element_ns(NodeIdx(0),
             Some(if html { "http://www.w3.org/1999/xhtml" } else { "urn:test" }), name)?;
         self.dom.import_inert_document(&parsed, url, content_type, charset.unwrap_or("UTF-8"))
+    }
+    fn create_inert_document_with_declarative_shadow_roots(&mut self, bytes: &[u8],
+        content_type: &str, url: &str, charset: Option<&str>, allow: bool)
+        -> Result<NodeIdx, DomError> {
+        // This invocation mock has no HTML tree builder. Record selection
+        // before invoking its parser stub; real tree-policy tests are driver-owned.
+        self.inert_shadow_policies.push(allow);
+        let document = self.create_inert_document(bytes, content_type, url, charset)?;
+        self.dom.set_document_allows_declarative_shadow_roots(document, allow)?;
+        Ok(document)
     }
     fn global_object(&mut self) -> Result<V, String> {
         Err("installation capability unused by this invocation mock".into())
@@ -1240,10 +1251,7 @@ fn dom_parser_creates_inert_documents_and_xml_error_document() {
         &[str_value("x"), str_value("text/plain")]), Err("TypeError: Unsupported DOMParser content type".into()));
 }
 
-/// `Document.parseHTMLUnsafe` is static and routes through the same
-/// `create_inert_document("text/html", ...)` primitive `DOMParser.
-/// parseFromString` already uses -- see `parser_bindings.rs`'s doc comment
-/// for why this needed no new parser support, unlike `ElementSetHTMLUnsafe`.
+/// Static unsafe parsing selects explicit policy before the parser hook.
 #[test]
 fn document_parse_html_unsafe_creates_an_inert_html_document() {
     let mut h = Host::default();
@@ -1252,6 +1260,14 @@ fn document_parse_html_unsafe_creates_an_inert_html_document() {
     let metadata = h.dom.document_metadata(document).unwrap().unwrap();
     assert_eq!(metadata.content_type, "text/html");
     assert_eq!(h.dom.local_name(h.dom.document_element(document).unwrap().unwrap()), Some("html"));
+    assert_eq!(h.inert_shadow_policies, vec![true]);
+    assert!(h.dom.document_allows_declarative_shadow_roots(document).unwrap());
+    assert!(!h.dom.document_scripting_enabled(document).unwrap());
+    let parser = call(&mut h, O::DOMParserConstructor, V::Undefined, &[]);
+    let ordinary = node(call(&mut h, O::DOMParserParseFromString, parser,
+        &[str_value("<div></div>"), str_value("text/html")]));
+    assert!(!h.dom.document_allows_declarative_shadow_roots(ordinary).unwrap());
+    assert_eq!(h.inert_shadow_policies, vec![true]);
     assert_eq!(invoke(&mut h, O::DocumentParseHTMLUnsafe, V::Undefined, &[]),
         Err("TypeError: Not enough arguments".into()));
 }

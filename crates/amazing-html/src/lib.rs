@@ -107,6 +107,12 @@ pub fn parse(src: &str) -> Dom {
 
 /// Parses decoded HTML with its document scripting mode.
 pub fn parse_with_scripting_mode(src: &str, scripting_mode: ScriptingMode) -> Dom {
+    parse_with_document_policy(src, scripting_mode, true)
+}
+
+/// Parses decoded HTML using explicit, independent document parser policies.
+/// Embeddings must obtain the shadow-root policy from the actual destination Document.
+pub fn parse_with_document_policy(src: &str, scripting_mode: ScriptingMode, allow_shadow_roots: bool) -> Dom {
     // Newline normalization (part of the spec's encoding step): CRLF and
     // lone CR become LF before tokenization, mirroring what browsers do
     // while decoding the byte stream.
@@ -117,7 +123,7 @@ pub fn parse_with_scripting_mode(src: &str, scripting_mode: ScriptingMode) -> Do
     } else {
         src
     };
-    tree::build_with_scripting_mode(src, scripting_mode)
+    tree::build_with_document_policy(src, scripting_mode, allow_shadow_roots)
 }
 
 /// Parses into a DOM with custom-element definitions installed before the

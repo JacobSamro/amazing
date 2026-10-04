@@ -469,9 +469,7 @@ pub enum Operation {
     /// shadow-dom-basic.html`) crashed with `TypeError: value is not
     /// callable` before running any of its assertions.
     ElementSetHTMLUnsafe,
-    /// Static `Document.parseHTMLUnsafe(html, options?)`. See
-    /// `parser_bindings.rs`'s handling for why this needs no new parser
-    /// support beyond `create_inert_document`, unlike `ElementSetHTMLUnsafe`.
+    /// Static unsafe parsing opts in to declarative roots before parsing.
     DocumentParseHTMLUnsafe,
     ElementOuterHTML,
     ElementSetOuterHTML,
@@ -1431,6 +1429,14 @@ pub trait BindingHost: Sized {
     }
     fn create_inert_document_for_parser(&mut self, _parser: &Self::Value, bytes: &[u8],
         content_type: &str, url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
+        self.create_inert_document(bytes, content_type, url, charset)
+    }
+    /// Explicit full-document parser policy. Embeddings with a parser must
+    /// override this and configure it before parsing; the compatibility
+    /// default delegates the legacy parser and cannot provide that policy.
+    fn create_inert_document_with_declarative_shadow_roots(&mut self, bytes: &[u8],
+        content_type: &str, url: &str, charset: Option<&str>, _allow_shadow_roots: bool)
+        -> Result<NodeIdx, DomError> {
         self.create_inert_document(bytes, content_type, url, charset)
     }
     fn dom_parser_relevant_document(&self, _parser: &Self::Value) -> Result<NodeIdx, Self::Error> {

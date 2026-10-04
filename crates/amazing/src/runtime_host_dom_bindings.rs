@@ -455,6 +455,10 @@ impl RuntimeBindingHost<'_> {
 }
 
 #[cfg(test)]
+#[path = "runtime_host_dom_bindings/unsafe_document_origin.rs"]
+mod unsafe_document_origin;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

@@ -1,0 +1,34 @@
+{
+  "state": "ready-for-independent-merge-queue",
+  "recorded_base": "fd9183a86c85f1dbcb3d6b2a62676354e9357052",
+  "engine_source_after": "01cee36475fcca7145c9f957077fcad1bdde311f",
+  "source_identity": "Only evidence changed after actual gated source; engine blobs unchanged",
+  "native_before": 4325,
+  "native_after": 4335,
+  "native_skipped": 17,
+  "doctests_before": 4,
+  "doctests_after": 4,
+  "whole_corpus_suites": 14,
+  "phase_exits": "All actual build/native/docs/corpus processes0; initial baseline compaction1/job100 retained, one artifact-only repack0",
+  "shadow_sufficient_profile": {
+    "before": 5676,
+    "after": 5680,
+    "selected": 277,
+    "lost_passing_names_multiplicities": 0,
+    "lost_passing_files": 0,
+    "ordinary_ms": 25000,
+    "actual_META_long_ms": 600000,
+    "heavy_ms": 150000
+  },
+  "original60_diagnostic": {
+    "passing_losses": 10,
+    "matched600_retains_original60_baseline": true,
+    "original_raw_and_deadlines_preserved": true
+  },
+  "encoding_duplicate_disposition": null,
+  "historical_evidence_retained_at": {
+    "local_archive_branch": "archive/html-foundation-dsd-diagnostic",
+    "commit": "b5061c6dcad608ffe9e0d482233adede06f22e0b"
+  },
+  "test262_16_shards": "Integrator qualification on replayed combined head; not claimed by this own XML/WPT gate"
+}

@@ -197,6 +197,8 @@ impl Dom {
     pub fn import_inert_document(&mut self, source: &Dom, url: &str, content_type: &str,
         character_set: &str) -> Result<NodeIdx, DomError> {
         let document = self.create_document();
+        self.set_document_allows_declarative_shadow_roots(document,
+            source.document_allows_declarative_shadow_roots(NodeIdx(0))?)?;
         for child in source.children(NodeIdx(0)) {
             self.import_node_into(source, child, document, document)?;
         }
@@ -626,7 +628,13 @@ impl IncrementalDocumentImport {
     /// validation without changing the destination's browsing context.
     pub fn reverse_sync(&mut self, source: &mut Dom, dest: &Dom) -> Result<(), DomError> {
         let pairs: Vec<(NodeIdx, NodeIdx)> = self.map.iter().map(|(&s, &d)| (s, d)).collect();
-        for &(s, d) in &pairs { Self::copy_node_values(source, s, dest, d)?; }
+        for &(s, d) in &pairs {
+            Self::copy_node_values(source, s, dest, d)?;
+            if matches!(dest.get(d).kind, NodeKind::Document) {
+                source.set_document_allows_declarative_shadow_roots(s,
+                    dest.document_allows_declarative_shadow_roots(d)?)?;
+            }
+        }
         // `dest`'s current shape was reached by some sequence of
         // individually-valid DOM mutations (a real `Dom` can never hold an
         // actual cycle), so *some* order exists in which replaying every
@@ -765,6 +773,8 @@ impl IncrementalDocumentImport {
             let document = source.create_document();
             source.set_document_quirks_mode(document, dest.document_quirks_mode(node)?)?;
             source.set_document_scripting_enabled(document, dest.document_scripting_enabled(node)?)?;
+            source.set_document_allows_declarative_shadow_roots(document,
+                dest.document_allows_declarative_shadow_roots(node)?)?;
             if let Some(metadata) = dest.document_metadata(node)? { source.set_document_metadata(document, metadata.clone())?; }
             self.record(document, node);
             return Ok(Some(document));

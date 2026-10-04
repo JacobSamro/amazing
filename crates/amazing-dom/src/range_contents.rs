@@ -48,6 +48,8 @@ impl Dom {
         let copy = self.alloc_unattached(self.get(node).kind.clone());
         self.node_creation_documents[copy.0 as usize] = self.node_creation_document(document)?;
         if matches!(self.get(node).kind, NodeKind::Document) {
+            self.set_document_allows_declarative_shadow_roots(copy,
+                self.document_allows_declarative_shadow_roots(node)?)?;
             if let Some(metadata) = self.document_metadata(node)?.cloned() {
                 self.set_document_metadata(copy, metadata)?;
             }

@@ -955,37 +955,11 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
     fn create_inert_document(&mut self, bytes: &[u8], content_type: &str,
         url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
-        self.current_document_for_nodes().map_err(|_| DomError::TypeError)?;
-        let mime = content_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
-        let (parsed, detected_encoding) = if mime == "text/html" {
-            let decoded = amazing_html::encoding::decode(bytes, charset);
-            (amazing_html::parse_bytes_with_scripting_mode(bytes, charset, amazing_html::ScriptingMode::Disabled), decoded.encoding)
-        } else if matches!(mime.as_str(), "text/xml" | "application/xml" | "application/xhtml+xml" | "image/svg+xml")
-            || mime.ends_with("+xml") {
-            let (source, encoding) = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
-                (String::from_utf8(bytes[3..].to_vec()).map_err(|_| DomError::SyntaxError)?,
-                    amazing_html::encoding::Encoding::Utf8)
-            } else if !bytes.starts_with(&[0xFE, 0xFF]) && !bytes.starts_with(&[0xFF, 0xFE])
-                && charset.is_none_or(|label| label.eq_ignore_ascii_case("UTF-8")) {
-                (String::from_utf8(bytes.to_vec()).map_err(|_| DomError::SyntaxError)?,
-                    amazing_html::encoding::Encoding::Utf8)
-            } else {
-                let decoded = amazing_html::encoding::decode(bytes, charset);
-                if charset.is_some() && !matches!(decoded.source,
-                    amazing_html::encoding::Source::Transport | amazing_html::encoding::Source::Bom) {
-                    return Err(DomError::SyntaxError);
-                }
-                (decoded.text, decoded.encoding)
-            };
-            (amazing_html::parse_xml(&source).map_err(|_| DomError::SyntaxError)?, encoding)
-        } else { return Err(DomError::NotSupportedError); };
-        let character_set = amazing_html::encoding::canonical_name(detected_encoding);
-        let host = self.state.borrow().host.clone();
-        let document = host.borrow_mut().dom.import_inert_document(&parsed, url, &mime,
-            character_set)?;
-        self.dom_register_document_realm(document, self.js.binding_current_realm())
-            .map_err(|_| DomError::TypeError)?;
-        Ok(document)
+        self.html_create_inert_document(bytes, content_type, url, charset, false)
+    }
+    fn create_inert_document_with_declarative_shadow_roots(&mut self, bytes: &[u8], content_type: &str,
+        url: &str, charset: Option<&str>, allow_shadow_roots: bool) -> Result<NodeIdx, DomError> {
+        self.html_create_inert_document(bytes, content_type, url, charset, allow_shadow_roots)
     }
 
     fn global_object(&mut self) -> Result<JsValue, Throw> {

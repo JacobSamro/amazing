@@ -7,6 +7,8 @@
 use super::*;
 #[path = "runtime_host_html/document_write.rs"]
 mod document_write;
+#[path = "runtime_host_html/document_dsd.rs"]
+mod document_dsd;
 #[path = "runtime_host_html/resource_response.rs"]
 mod resource_response;
 pub(crate) use resource_response::{HtmlFrameResourceKind, HtmlFrameResourceLoader, HtmlFrameResourceRequest};
@@ -1055,6 +1057,8 @@ impl RuntimeBindings {
                 // XML/XHTML and the synchronous initial about:blank document.
                 let enabled = !(sandbox.sandboxed && !sandbox.allow_scripts);
                 let _ = host.borrow_mut().dom.set_document_scripting_enabled(document, enabled);
+                // Navigation-created documents permit DSD regardless of sandbox scripting.
+                let _ = host.borrow_mut().dom.set_document_allows_declarative_shadow_roots(document, true);
                 if ParsedUrl::parse(&url).is_ok_and(|url| matches_about_url(&url, "blank")
                     || (matches_about_url(&url, "srcdoc") && url.query().is_none())) {
                     if let Some(generation) = host.borrow().dom.node_generation(document) {
@@ -1262,6 +1266,9 @@ impl RuntimeBindings {
         let can_run_scripts = !(sandbox.sandboxed && !sandbox.allow_scripts);
         let import = amazing_dom::markup::IncrementalDocumentImport::new(document);
         let mut parser = amazing_html::ResumableParser::new(Dom::new());
+        let allow_shadow_roots = host.borrow().dom.document_allows_declarative_shadow_roots(document)
+            .map_err(|error| Throw::type_error(format!("iframe shadow policy: {error:?}")))?;
+        parser.set_allow_declarative_shadow_roots(allow_shadow_roots);
         if child_url == "about:srcdoc" { parser.set_srcdoc(); }
         if !can_run_scripts { parser.set_scripting_mode(amazing_html::ScriptingMode::Disabled); }
         parser.push_source(html);
@@ -1826,6 +1833,9 @@ impl RuntimeBindingHost<'_> {
             let fetch_origin = HttpUrl::parse(&document_url).map(|url| url.origin().clone()).unwrap_or_else(|_| amazing_fetch::Origin::opaque());
             let document_generation = self.state.borrow().host.borrow().dom.node_generation(NodeIdx(0))
                 .ok_or_else(|| Throw::type_error("Missing root document"))?;
+            self.state.borrow().host.borrow_mut().dom.set_document_allows_declarative_shadow_roots(NodeIdx(0), true)
+                .map_err(|error| Throw::type_error(format!("Root document shadow policy: {error:?}")))?;
+
             self.state.borrow_mut().frames.contexts.insert(realm, WindowContext {
                 document: NodeIdx(0), document_generation, frame: None, global, parent: window.clone(), top: window.clone(), window,
                 origin: ParsedUrl::parse(&document_url).map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into()), fetch_origin, document_url, installed: false, indices: 0,

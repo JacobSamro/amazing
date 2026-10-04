@@ -267,15 +267,18 @@ impl RuntimeBindingHost<'_> {
         self.check_document_open_origin(document)?;
         self.update_open_document_url(document)?;
         let mut parser = amazing_html::ResumableParser::new(Dom::new());
-        let (generation, scripting_enabled, window_slot) = {
+        let (generation, scripting_enabled, allow_shadow_roots, window_slot) = {
             let state = self.state.borrow();
             let host = state.host.borrow();
             (host.dom.node_generation(document).ok_or_else(|| Throw::type_error("Stale Document"))?,
                 host.dom.document_scripting_enabled(document).unwrap_or(false),
+                host.dom.document_allows_declarative_shadow_roots(document)
+                    .map_err(|error| Throw::type_error(format!("Document shadow policy: {error:?}")))?,
                 state.frames.contexts.iter().find(|(realm, context)| context.document == document
                     && state.frames.live_context(context, **realm))
                     .and_then(|(_, context)| self.dom_window_event_target_slot(&context.window)))
         };
+        parser.set_allow_declarative_shadow_roots(allow_shadow_roots);
         if !scripting_enabled { parser.set_scripting_mode(amazing_html::ScriptingMode::Disabled); }
         self.with_dom(|dom| {
             for node in dom.shadow_including_tree_order(document) {

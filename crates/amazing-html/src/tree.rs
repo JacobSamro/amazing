@@ -327,6 +327,7 @@ impl TreeBuilder {
     pub fn new() -> Self {
         let mut dom = Dom::new();
         dom.set_document_scripting_enabled(NodeIdx(0), true).expect("parser root is a document");
+        dom.set_document_allows_declarative_shadow_roots(NodeIdx(0), true).expect("parser root is a document");
         Self {
             dom,
             custom_element_host: None,
@@ -369,6 +370,13 @@ impl TreeBuilder {
             .expect("parser root is a document");
     }
 
+    /// Explicit parser policy, separate from document scripting.
+    pub(crate) fn set_allow_declarative_shadow_roots(&mut self, allowed: bool) {
+        self.allow_declarative_shadow_roots = allowed;
+        self.dom.set_document_allows_declarative_shadow_roots(NodeIdx(0), allowed)
+            .expect("parser root is a document");
+    }
+
     pub(crate) fn set_scripting_mode(&mut self, mode: ScriptingMode) {
         self.scripting_mode = mode;
         self.dom.set_document_scripting_enabled(NodeIdx(0), mode == ScriptingMode::Enabled)
@@ -380,6 +388,7 @@ impl TreeBuilder {
         let mut builder = Self::new();
         builder.dom = dom;
         builder.set_scripting_mode(ScriptingMode::Enabled);
+        builder.set_allow_declarative_shadow_roots(true);
         builder.custom_element_host = Some(host);
         builder
     }
@@ -393,6 +402,7 @@ impl TreeBuilder {
         let mut builder = Self::new();
         builder.dom = dom;
         builder.set_scripting_mode(ScriptingMode::Enabled);
+        builder.set_allow_declarative_shadow_roots(true);
         builder
     }
 
@@ -2686,8 +2696,13 @@ pub fn build(src: &str) -> Dom {
 }
 
 pub(crate) fn build_with_scripting_mode(src: &str, scripting_mode: ScriptingMode) -> Dom {
+    build_with_document_policy(src, scripting_mode, true)
+}
+
+pub(crate) fn build_with_document_policy(src: &str, scripting_mode: ScriptingMode, allow_shadow_roots: bool) -> Dom {
     let mut builder = TreeBuilder::new();
     builder.set_scripting_mode(scripting_mode);
+    builder.set_allow_declarative_shadow_roots(allow_shadow_roots);
     let mut tokenizer = Tokenizer::new(src.chars().collect());
     loop {
         let tok = tokenizer.next_token();
@@ -2772,7 +2787,7 @@ pub(crate) fn build_fragment_with_scripting_mode(
 ) -> Dom {
     let mut builder = TreeBuilder::new();
     builder.set_scripting_mode(scripting_mode);
-    builder.allow_declarative_shadow_roots = allow_declarative_shadow_roots;
+    builder.set_allow_declarative_shadow_roots(allow_declarative_shadow_roots);
     builder.fragment = true;
     builder.fragment_context = Some(context.to_owned());
     builder.fragment_context_namespace = namespace;
@@ -2785,7 +2800,7 @@ pub(crate) fn build_fragment_with_context(
     let mut builder = TreeBuilder::new();
     let scripting_mode = if context.scripting_enabled { ScriptingMode::Enabled } else { ScriptingMode::Disabled };
     builder.set_scripting_mode(scripting_mode);
-    builder.allow_declarative_shadow_roots = allow_shadow_roots;
+    builder.set_allow_declarative_shadow_roots(allow_shadow_roots);
     builder.fragment = true;
     builder.fragment_actual_context = true;
     builder.fragment_context = Some(context.local_name.clone());

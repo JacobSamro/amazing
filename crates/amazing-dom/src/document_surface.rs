@@ -66,6 +66,23 @@ impl Dom {
         } else { self.document_scripting.push((document, generation, enabled)); }
         Ok(())
     }
+    /// Document policy, independent of scripting or browsing-context presence.
+    /// Fresh Documents default to false; navigation and unsafe parsing opt in.
+    pub fn document_allows_declarative_shadow_roots(&self, document: NodeIdx) -> Result<bool, DomError> {
+        self.document_checked(document)?;
+        let generation = self.node_generations[document.0 as usize];
+        Ok(self.document_declarative_shadow_roots.iter().find(|(node, version, _)|
+            *node == document && *version == generation).is_some_and(|(_, _, allowed)| *allowed))
+    }
+    pub fn set_document_allows_declarative_shadow_roots(&mut self, document: NodeIdx, allowed: bool)
+        -> Result<(), DomError> {
+        self.document_checked(document)?;
+        let generation = self.node_generations[document.0 as usize];
+        if let Some(entry) = self.document_declarative_shadow_roots.iter_mut().find(|(node, _, _)| *node == document) {
+            *entry = (document, generation, allowed);
+        } else { self.document_declarative_shadow_roots.push((document, generation, allowed)); }
+        Ok(())
+    }
     pub fn document_metadata(&self, document: NodeIdx) -> Result<Option<&DocumentMetadata>, DomError> {
         self.document_checked(document)?;
         Ok(self.document_metadata.iter().find(|(node, _)| *node == document).map(|(_, data)| data))
@@ -272,5 +289,85 @@ mod scripting_tests {
         let node = dom.create_element(doc,"div");
         assert_eq!(dom.set_document_scripting_enabled(node,true),Err(DomError::TypeError));
         assert!(dom.document_scripting_enabled(doc).unwrap());
+    }
+}
+
+#[cfg(test)]
+mod declarative_shadow_policy_tests {
+    use super::*;
+    use crate::markup::IncrementalDocumentImport;
+    #[test]
+    fn fresh_policy_is_independent_of_scripting_and_invalid_nodes_do_not_mutate() {
+        let mut dom = Dom::new(); let root = NodeIdx(0);
+        dom.set_document_scripting_enabled(root, true).unwrap();
+        assert!(!dom.document_allows_declarative_shadow_roots(root).unwrap());
+        dom.set_document_allows_declarative_shadow_roots(root, true).unwrap();
+        let element = dom.create_element(root, "div");
+        assert_eq!(dom.set_document_allows_declarative_shadow_roots(element, true), Err(DomError::TypeError));
+        assert_eq!(dom.document_allows_declarative_shadow_roots(element), Err(DomError::TypeError));
+        assert!(dom.set_document_allows_declarative_shadow_roots(NodeIdx(u32::MAX), true).is_err());
+        assert!(dom.document_allows_declarative_shadow_roots(root).unwrap());
+    }
+    #[test]
+    fn document_clone_copies_policy_but_not_active_scripting_context() {
+        let mut dom = Dom::new(); let root = NodeIdx(0);
+        dom.create_element(root, "div");
+        dom.set_document_scripting_enabled(root, true).unwrap();
+        for allowed in [true, false] {
+            dom.set_document_allows_declarative_shadow_roots(root, allowed).unwrap();
+            for deep in [false, true] {
+                let copy = dom.clone_node(root, deep).unwrap();
+                assert_eq!(dom.document_allows_declarative_shadow_roots(copy).unwrap(), allowed);
+                assert!(!dom.document_scripting_enabled(copy).unwrap());
+            }
+        }
+    }
+    #[test]
+    fn configured_parser_imports_preserve_false_and_unsafe_true_policy() {
+        let mut source = Dom::new(); let mut dest = Dom::new();
+        for allowed in [false, true, false] {
+            source.set_document_allows_declarative_shadow_roots(NodeIdx(0), allowed).unwrap();
+            let copy = dest.import_inert_document(&source, "about:blank", "text/html", "UTF-8").unwrap();
+            assert_eq!(dest.document_allows_declarative_shadow_roots(copy).unwrap(), allowed);
+            assert!(!dest.document_scripting_enabled(copy).unwrap());
+        }
+    }
+    #[test]
+    fn adoption_preserves_each_document_policy_and_recycled_slots_default_false() {
+        let mut dom = Dom::new(); let root = NodeIdx(0); let other = dom.create_document();
+        dom.set_document_allows_declarative_shadow_roots(root, true).unwrap();
+        let node = dom.create_element(root, "div"); dom.adopt(node, other).unwrap();
+        assert!(dom.document_allows_declarative_shadow_roots(root).unwrap());
+        assert!(!dom.document_allows_declarative_shadow_roots(other).unwrap());
+        dom.adopt(node, root).unwrap();
+        dom.set_document_allows_declarative_shadow_roots(other, true).unwrap();
+        let generation = dom.node_generation(other).unwrap();
+        dom.retire_unreachable_node(other).unwrap();
+        assert!(dom.document_allows_declarative_shadow_roots(other).is_err());
+        let recycled = dom.create_document(); assert_eq!(recycled, other);
+        assert_ne!(dom.node_generation(recycled).unwrap(), generation);
+        assert!(!dom.document_allows_declarative_shadow_roots(recycled).unwrap());
+    }
+    #[test]
+    fn incremental_forward_preserves_destination_and_reverse_copies_actual_policy() {
+        let mut source = Dom::new(); let mut dest = Dom::new(); let root = NodeIdx(0);
+        source.set_document_allows_declarative_shadow_roots(root, true).unwrap();
+        let child = source.create_element(root, "div");
+        let mut import = IncrementalDocumentImport::new(root);
+        import.sync(&mut dest, &source).unwrap();
+        assert!(!dest.document_allows_declarative_shadow_roots(root).unwrap());
+        import.reverse_sync(&mut source, &dest).unwrap();
+        assert!(!source.document_allows_declarative_shadow_roots(root).unwrap());
+        dest.set_document_allows_declarative_shadow_roots(root, true).unwrap();
+        let other = dest.create_document();
+        dest.set_document_allows_declarative_shadow_roots(other, true).unwrap();
+        // The private Document mirror follows actual external ancestry;
+        // detached owner-only changes are a separate importer boundary.
+        dest.pre_insert(import.imported(child).unwrap(), other, None).unwrap();
+        import.reverse_sync(&mut source, &dest).unwrap();
+        assert!(source.document_allows_declarative_shadow_roots(root).unwrap());
+        let mirrored = source.owner_document(child).unwrap();
+        assert_ne!(mirrored, root);
+        assert!(source.document_allows_declarative_shadow_roots(mirrored).unwrap());
     }
 }

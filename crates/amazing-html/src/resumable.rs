@@ -79,6 +79,13 @@ impl ResumableParser {
         self.builder.set_scripting_mode(mode);
     }
 
+    /// Sets declarative shadow parsing before feeding input. An embedding
+    /// reopening a Document passes that actual Document's preserved policy;
+    /// scripting permission is independent. The normal parser default stays on.
+    pub fn set_allow_declarative_shadow_roots(&mut self, allowed: bool) {
+        self.builder.set_allow_declarative_shadow_roots(allowed);
+    }
+
     /// Feeds the whole, already-decoded document source (newline-normalized
     /// exactly like `parse`). Call once, before the first `run`.
     pub fn push_source(&mut self, src: &str) {
@@ -383,4 +390,24 @@ mod tests {
             }
         }
     }
+    #[test]
+    fn declarative_shadow_permission_is_independent_of_scripting_and_srcdoc() {
+        for allowed in [false, true] {
+            for scripting in [crate::ScriptingMode::Disabled, crate::ScriptingMode::Enabled] {
+                for srcdoc in [false, true] {
+                    let mut parser = ResumableParser::new(Dom::new());
+                    parser.set_allow_declarative_shadow_roots(allowed);
+                    parser.set_scripting_mode(scripting);
+                    if srcdoc { parser.set_srcdoc(); }
+                    parser.push_source("<div><template shadowrootmode=open><span>shadow</span></template></div>");
+                    assert_eq!(parser.run(), ParseSignal::Eof);
+                    let dom = parser.dom();
+                    let host = dom.tree_order(NodeIdx(0)).into_iter().find(|&n| dom.name(n) == Some("div")).unwrap();
+                    assert_eq!(dom.shadow_root_of_host(host).is_some(), allowed);
+                    assert_eq!(dom.children(host).any(|n| dom.name(n) == Some("template")), !allowed);
+                }
+            }
+        }
+    }
+
 }
