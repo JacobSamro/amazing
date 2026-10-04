@@ -101,6 +101,18 @@ clone, and history is never rewritten, so every committed byte is permanent.
 - **Integrator:** check `git diff --stat <base> <lane-branch> -- '*/evidence/*' docs/lanes/`
   before every merge, and send back any branch that exceeds the limit.
 
+### Local disk hygiene
+
+- After creating a worktree, run `scripts/thin-worktree-evidence.py <worktree> --apply`.
+  It omits recoverable historical raw evidence while preserving modified files and Git history.
+- Keep builds and new raw gate output on Boat. The external mbx cache does not cover local
+  worktree copies or `.agents/` scratch automatically.
+- The integrator may use `scripts/externalize-agent-scratch.py` to move large scratch files
+  inactive for at least two hours to mounted external storage. Copies must be hash verified;
+  original paths remain symbolic links. Active outputs, source changes and branches are preserved.
+- Remove retired clean worktrees only after confirming they have no active owner; keep their
+  branches. Never delete a branch as part of disk cleanup without user approval.
+
 ## Porting from other engines (2026-09-27, user-approved, ADR 0013)
 
 Amazing stays our own architecture (value model, VM, bindings) and std-only in the engine cores,
