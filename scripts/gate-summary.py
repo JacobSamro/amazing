@@ -81,10 +81,12 @@ def main():
     t.add_argument('--source-commit', default=''); t.add_argument('source'); t.add_argument('destination'); t.add_argument('exit', type=int)
     f = sub.add_parser('failure')
     f.add_argument('--source-commit', required=True); f.add_argument('--shard', required=True)
+    f.add_argument('--phase-receipt')
     f.add_argument('--wrapper-exit', type=int, default=None)
     f.add_argument('destination'); f.add_argument('phase'); f.add_argument('exit', type=int)
     f.add_argument('files', nargs='*')
     m = sub.add_parser('manifest')
+    m.add_argument('--phase-receipt', action='append', default=[])
     m.add_argument('--source-commit', default=''); m.add_argument('--phase', action='append', default=[]); m.add_argument('destination'); m.add_argument('exit', type=int); m.add_argument('files', nargs='+')
     args = parser.parse_args()
     if args.command == 'test262':
@@ -95,17 +97,19 @@ def main():
         write(args.destination, {'schema': 1, 'source_commit': args.source_commit,
                                 'shard': args.shard, 'phase': args.phase, 'actual_exit': args.exit,
                                 'wrapper_exit': args.wrapper_exit,
+                                'phase_detail': json.loads(pathlib.Path(args.phase_receipt).read_text()) if args.phase_receipt and pathlib.Path(args.phase_receipt).is_file() else None,
                                 'raw': [raw(p) if pathlib.Path(p).is_file() else
                                         {'path': str(pathlib.Path(p).resolve()), 'missing': True}
                                         for p in args.files]})
     else:
         write(args.destination, {'schema': 1, 'source_commit': args.source_commit, 'job_exit': args.exit,
                                 'phase_exits': {name: int(code) for name, code in (p.split('=', 1) for p in args.phase)},
-                                'counts': log_counts(args.files),
+                                'counts': log_counts([p for p in args.files if pathlib.Path(p).is_file()]),
+                                'phase_details': [json.loads(pathlib.Path(p).read_text()) for p in args.phase_receipt if pathlib.Path(p).is_file()],
                                 'summary_lines': [line.strip() for p in args.files
-                                    for line in pathlib.Path(p).read_text(errors='replace').splitlines()
+                                    for line in (pathlib.Path(p).read_text(errors='replace').splitlines() if pathlib.Path(p).is_file() else [])
                                     if 'Summary' in line or line.startswith('test result:')],
-                                'raw': [raw(p) for p in args.files]})
+                                'raw': [raw(p) if pathlib.Path(p).is_file() else {'path': str(pathlib.Path(p).resolve()), 'missing': True} for p in args.files]})
 
 
 if __name__ == '__main__':

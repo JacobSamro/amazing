@@ -41,6 +41,7 @@ else
 fi
 
 COMPACT_B64="$(base64 < "$REPO/scripts/gate-summary.py" | tr -d '\n')"
+COMMAND_B64="$(base64 < "$REPO/scripts/gate-command.py" | tr -d '\n')"
 pids=()
 for K in $(seq 0 $((N - 1))); do
   LANE="$LANE_PREFIX-$K"
@@ -49,31 +50,35 @@ for K in $(seq 0 $((N - 1))); do
     if "$REPO/scripts/linux-run.sh" "$LANE" --ref "$COMMIT" --setup-summary "$setup_receipt" -- "
       set -euo pipefail
       echo $COMPACT_B64 | base64 -d > /tmp/t262compact-$K.py
+      echo $COMMAND_B64 | base64 -d > /tmp/t262command-$K.py
       phase=setup
-      trap 'rc=\$?; trap - EXIT; if [ \$rc -ne 0 ]; then python3 /tmp/t262compact-$K.py failure --source-commit $COMMIT --shard $K/$N \"\$OUT/shard-$SHA-$TAG.failure.manifest.json\" \"\$phase\" \$rc \"\$OUT/shard-$SHA-$TAG-build.log\" /tmp/shard-$SHA-$TAG-$K-runner.log /tmp/shard-$SHA-$TAG-$K.json \"\$OUT/shard-$SHA-$TAG-packaging.log\" || echo compact-failure-manifest-unavailable; fi; exit \$rc' EXIT
+      phase_receipt=
+      trap 'rc=\$?; trap - EXIT; if [ \$rc -ne 0 ]; then python3 /tmp/t262compact-$K.py failure --source-commit $COMMIT --shard $K/$N --phase-receipt \"\$phase_receipt\" \"\$OUT/shard-$SHA-$TAG.failure.manifest.json\" \"\$phase\" \$rc \"\$OUT/shard-$SHA-$TAG-build.log\" \"\$OUT/shard-$SHA-$TAG-runner.log\" /tmp/shard-$SHA-$TAG-$K.json \"\$OUT/shard-$SHA-$TAG-packaging.log\" || echo compact-failure-manifest-unavailable; fi; exit \$rc' EXIT
       export CARGO_TARGET_DIR=/tmp/amazing-target-t262-shard-$K CARGO_INCREMENTAL=0
       mkdir -p /tmp/amazing-src-t262-shard-$K
       rsync -a --delete --exclude /target --exclude '/target-*' --exclude /corpora --exclude /out ./ /tmp/amazing-src-t262-shard-$K/
       ln -sfn \"\$HOME/corpora\" /tmp/amazing-src-t262-shard-$K/corpora
       cd /tmp/amazing-src-t262-shard-$K
       phase=build
+      phase_receipt=\"\$OUT/shard-$SHA-$TAG-build.phase.manifest.json\"
       set +e
-      cargo build -p amazing-js --example test262_host --release --locked >\"\$OUT/shard-$SHA-$TAG-build.log\" 2>&1
+      python3 /tmp/t262command-$K.py --phase build --source-commit $COMMIT --output \"\$OUT/shard-$SHA-$TAG-build.log\" --receipt \"\$phase_receipt\" -- cargo build -p amazing-js --example test262_host --release --locked
       build_rc=\$?
       set -e
       [ \$build_rc = 0 ] || exit \$build_rc
       echo $RUNNER_B64 | base64 -d > /tmp/t262runner.py
       phase=runner
+      phase_receipt=\"\$OUT/shard-$SHA-$TAG-runner.phase.manifest.json\"
       set +e
-      python3 /tmp/t262runner.py \"\$TEST262_ROOT\" --binary \"\$CARGO_TARGET_DIR/release/examples/test262_host\" \
-        --jobs \$JOBS --timeout 60 --shard $K/$N --output /tmp/shard-$SHA-$TAG-$K.json >/tmp/shard-$SHA-$TAG-$K-runner.log 2>&1
+      python3 /tmp/t262command-$K.py --phase runner --source-commit $COMMIT --output \"\$OUT/shard-$SHA-$TAG-runner.log\" --receipt \"\$phase_receipt\" --copy /tmp/shard-$SHA-$TAG-$K.json=\"\$OUT/shard-$SHA-$TAG.json\" -- python3 /tmp/t262runner.py \"\$TEST262_ROOT\" --binary \"\$CARGO_TARGET_DIR/release/examples/test262_host\" \
+        --jobs \$JOBS --timeout 60 --shard $K/$N --output /tmp/shard-$SHA-$TAG-$K.json
       result=\$?
       set -e
       [ \$result = 0 ] || [ \$result = 1 ] || exit \$result
+      python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d[\"output_copy_exit\"] == 0 and not d.get(\"receipt_copy_error\")' \"\$phase_receipt\"
       phase=packaging
-      cp /tmp/shard-$SHA-$TAG-$K.json \"\$OUT/shard-$SHA-$TAG.json\"
-      cp /tmp/shard-$SHA-$TAG-$K-runner.log \"\$OUT/shard-$SHA-$TAG-runner.log\"
-      python3 /tmp/t262compact-$K.py test262 --source-commit $COMMIT \"\$OUT/shard-$SHA-$TAG.json\" \"\$OUT/shard-$SHA-$TAG.compact.json\" \$result >\"\$OUT/shard-$SHA-$TAG-packaging.log\" 2>&1
+      phase_receipt=\"\$OUT/shard-$SHA-$TAG-packaging.phase.manifest.json\"
+      python3 /tmp/t262command-$K.py --phase packaging --source-commit $COMMIT --output \"\$OUT/shard-$SHA-$TAG-packaging.log\" --receipt \"\$phase_receipt\" -- python3 /tmp/t262compact-$K.py test262 --source-commit $COMMIT \"\$OUT/shard-$SHA-$TAG.json\" \"\$OUT/shard-$SHA-$TAG.compact.json\" \$result
       echo shard-$K-exit=\$result
       :" > "$OUTDIR/.shard-$SHA-$TAG-$K.log" 2>&1; then
       : # SSH job completed successfully; only now collect the compact receipt.

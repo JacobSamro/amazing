@@ -7,6 +7,7 @@ MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-
 REF="$(git -C "$MAIN" rev-parse "${1:-HEAD}^{commit}")"
 python3 "$REPO/scripts/merge-preflight.py" --base "${MERGE_BASE:-origin/dev}" --ref "$REF"
 HELPER="$(base64 < "$REPO/scripts/gate-summary.py" | tr -d '\n')"
+COMMAND_B64="$(base64 < "$REPO/scripts/gate-command.py" | tr -d '\n')"
 set +e
 "$REPO/scripts/linux-run.sh" integrator-primary --ref "$REF" -- "
   set -uo pipefail
@@ -15,13 +16,14 @@ set +e
   receipt=\"\$OUT/workspace-$REF.manifest.json\"
   nextest=\"\$OUT/workspace-$REF-nextest.log\"
   docs=\"\$OUT/workspace-$REF-doctests.log\"
-  cargo nextest run --workspace --locked --no-fail-fast --status-level skip >\"\$nextest\" 2>&1
+  echo $COMMAND_B64 | base64 -d > /tmp/amazing-gate-command.py
+  python3 /tmp/amazing-gate-command.py --phase nextest --source-commit $REF --output \"\$nextest\" --receipt \"\$OUT/workspace-$REF-nextest.phase.manifest.json\" -- cargo nextest run --workspace --locked --no-fail-fast --status-level skip
   native_rc=\$?
-  cargo test --workspace --locked --doc >\"\$docs\" 2>&1
+  python3 /tmp/amazing-gate-command.py --phase doctests --source-commit $REF --output \"\$docs\" --receipt \"\$OUT/workspace-$REF-doctests.phase.manifest.json\" -- cargo test --workspace --locked --doc
   docs_rc=\$?
   rc=0; [ \$native_rc = 0 ] && [ \$docs_rc = 0 ] || rc=1
   echo $HELPER | base64 -d > /tmp/amazing-gate-summary.py
-  python3 /tmp/amazing-gate-summary.py manifest --source-commit $REF --phase nextest=\$native_rc --phase doctests=\$docs_rc \"\$receipt\" \$rc \"\$nextest\" \"\$docs\" || exit 3
+  python3 /tmp/amazing-gate-summary.py manifest --phase-receipt \"\$OUT/workspace-$REF-nextest.phase.manifest.json\" --phase-receipt \"\$OUT/workspace-$REF-doctests.phase.manifest.json\" --source-commit $REF --phase nextest=\$native_rc --phase doctests=\$docs_rc \"\$receipt\" \$rc \"\$nextest\" \"\$docs\" || exit 3
   grep -E 'Summary|test result:' \"\$nextest\" \"\$docs\" || true
   echo workspace_exit=\$native_rc doctests_exit=\$docs_rc
   exit \$rc"

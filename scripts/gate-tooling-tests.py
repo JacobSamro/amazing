@@ -77,6 +77,69 @@ class SetupReceipt(unittest.TestCase):
             self.assertEqual(receipt['raw'], [])
 
 
+class CommandDiagnostics(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location('gate_command', SCRIPTS / 'gate-command.py')
+        cls.helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.helper)
+
+    def test_failing_command_preserves_actual_exit_and_tail(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            result = self.helper.run([sys.executable, '-c', 'print("actionable failure"); raise SystemExit(37)'],
+                                     'build', 'fixture', root / 'log', root / 'phase.manifest.json')
+            self.assertEqual(result['command_exit'], 37)
+            self.assertEqual(result['engine_exit'], 37)
+            self.assertEqual(result['wrapper_exit'], 37)
+            self.assertEqual(result['output_copy_exit'], 0)
+            self.assertIn('actionable failure', result['diagnostic_tail'])
+            self.assertEqual(json.loads((root / 'phase.manifest.json').read_text())['engine_exit'], 37)
+
+    def test_missing_and_truncated_copy_are_failures(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d); source = root / 'source'; destination = root / 'dest'
+            missing = self.helper.copy_output(source, destination)
+            self.assertEqual(missing['copy_exit'], 1)
+            self.assertEqual(missing['error']['errno'], 2)
+            source.write_bytes(b'complete output')
+            def truncate(a, b): pathlib.Path(b).write_bytes(b'partial')
+            with mock.patch.object(self.helper.shutil, 'copyfile', side_effect=truncate):
+                truncated = self.helper.copy_output(source, destination)
+            self.assertEqual(truncated['copy_exit'], 1)
+            self.assertNotEqual(truncated['native']['sha256'], truncated['durable']['sha256'])
+
+    def test_copy_failure_does_not_rewrite_engine_exit(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            for code in (0, 37):
+                result = self.helper.run([sys.executable, '-c', f'print("output"); raise SystemExit({code})'],
+                                         'runner', 'fixture', root / 'missing-parent' / 'log', root / 'phase.manifest.json')
+                self.assertEqual(result['engine_exit'], code)
+                self.assertEqual(result['wrapper_exit'], code or 3)
+                self.assertEqual(result['output_copy_exit'], 1)
+                self.assertTrue(pathlib.Path(result['raw_native']['path']).is_file())
+
+    def test_cli_keeps_literal_failure_exit(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            process = subprocess.run([sys.executable, str(SCRIPTS / 'gate-command.py'),
+                '--phase', 'runner', '--source-commit', 'fixture', '--output', str(root / 'log'),
+                '--receipt', str(root / 'phase.manifest.json'), '--', sys.executable, '-c',
+                'raise SystemExit(37)'], capture_output=True, text=True)
+            self.assertEqual(process.returncode, 37)
+            self.assertEqual(json.loads(process.stdout)['engine_exit'], 37)
+
+    def test_signal_return_is_preserved_separately_from_shell_exit(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            result = self.helper.run([sys.executable, '-c', 'import os,signal; os.kill(os.getpid(),signal.SIGTERM)'],
+                                     'runner', 'fixture', root / 'log', root / 'phase.manifest.json')
+            self.assertEqual(result['command_exit'], -15)
+            self.assertEqual(result['engine_exit'], 143)
+            self.assertEqual(result['wrapper_exit'], 143)
+
+
 class SourceFilter(unittest.TestCase):
     def test_exact_ref_keeps_includes_fixtures_tsv_and_source(self):
         with tempfile.TemporaryDirectory() as d:

@@ -105,3 +105,26 @@ That narrows the repeated runner failures toward cleanup/output I/O; it does
 not prove their exact storage error. No third engine rerun, raw pull, lifecycle
 command or other active-gate intervention occurred. The unresolved cause is
 filed in lane questions for a separate justified repair.
+
+## Native command diagnostics
+
+Diagnostics ticket base: `00e6045c9d506762781392037132880869a9f58f`.
+`gate-command.py` waits for the actual command exit, capturing stdout/stderr
+in a fresh native `/tmp` directory. After terminal exit it copies output to
+HOME and checks size/hash equality. Command/signal exit, output-copy failure
+and receipt-publication failure are distinct fields; a copy failure cannot
+rewrite the original engine exit. Native raw output and a compact receipt
+remain available when the HOME copy fails. The compact receipt includes a
+bounded diagnostic tail; raw output is never fetched to the Mac.
+
+Workspace nextest/doctests and Test262 build/runner/packaging use this helper.
+Shard failure manifests embed its phase receipt. Test262 result copies are
+checked separately from the measured runner exit; output-copy failure blocks
+qualification even when the runner returned the usual conformance code 1.
+No selectors, timeout policy, baseline classifications or retry budget changed.
+
+Nine metadata-only checks passed, including failing-command exit/tail,
+missing/truncated output, output-copy failure, signal status and literal CLI
+exit. No engine build/test, Boat allocation or exhausted-run retry occurred.
+This improves future diagnostics; it does not establish a cause for the old
+warning-only Cargo101 log or Python120 failures.
