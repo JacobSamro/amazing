@@ -528,6 +528,8 @@ fn iframe_loads_xml_document_before_its_element_load_event() {
          frame.contentDocument.documentElement.textContent"
     ).unwrap(), JsValue::str("application/xml|child text"));
     scheduler.dispatch_pending_iframe_loads().unwrap();
+    assert_eq!(scheduler.run_script("order.join(',')").unwrap(), JsValue::str(""));
+    scheduler.pump_at(std::time::Duration::ZERO, false).unwrap();
     assert_eq!(scheduler.run_script("order.join(',')").unwrap(), JsValue::str("child,frame"));
     assert_eq!(navigations.borrow().len(), 1);
     assert_eq!(navigations.borrow()[0].committed_url, "https://example.test/child.xml");

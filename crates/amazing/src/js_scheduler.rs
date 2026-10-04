@@ -11,8 +11,10 @@ use crate::dom_host::BrowserDomHost;
 pub(crate) const GLOBAL: GlobalId = GlobalId(1);
 pub(crate) const JS_CAPACITY: usize = 4096;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum Payload {
+    ParserLifecycle(crate::runtime_binding_host::html::HtmlParserTask),
+    ParserScript(crate::runtime_binding_host::html::HtmlReadyParserScript),
     Job(SchedulingToken),
     Callback(SchedulingToken),
     Mutation,
@@ -36,6 +38,11 @@ pub(crate) struct DriverScheduler {
     timers: BTreeMap<u32, TimerRegistration>,
     frames: BTreeMap<u32, (AnimationFrameId, CallbackId)>,
     next_callback: u64,
+    parser_globals: std::collections::HashMap<amazing_js::interp::RealmHandle, (GlobalId, amazing_dom::NodeIdx, u64)>,
+    next_parser_global: u64,
+    root_realm: amazing_js::interp::RealmHandle,
+    parser_task_pending: VecDeque<crate::runtime_binding_host::html::HtmlParserTask>,
+    parser_script_pending: VecDeque<crate::runtime_binding_host::html::HtmlReadyParserScript>,
     started: Instant,
     now: Duration,
     trace: Vec<String>,
@@ -49,11 +56,12 @@ impl DriverScheduler {
         let mut js = Interpreter::new_with_external_scheduler(js_capacity)?;
         js.set_dom_host(host.clone());
         let bindings = crate::runtime_binding_host::install(&mut js, host.clone())?;
+        let root_realm = js.binding_current_realm();
         let mut loop_ = EventLoop::new();
         loop_.register_global(GLOBAL).map_err(loop_error)?;
         Ok(Self {
             js, host, bindings, loop_, pending: VecDeque::new(), payloads: BTreeMap::new(),
-            timers: BTreeMap::new(), frames: BTreeMap::new(), next_callback: 1,
+            timers: BTreeMap::new(), frames: BTreeMap::new(), next_callback: 1, parser_globals: std::collections::HashMap::new(), next_parser_global: 2, root_realm, parser_task_pending: VecDeque::new(), parser_script_pending: VecDeque::new(),
             started: Instant::now(), now: Duration::ZERO, trace: Vec::new(),
             pending_resize: false, pending_scroll: Vec::new(), render_hook: None,
         })
@@ -141,39 +149,35 @@ impl DriverScheduler {
     }
     fn dispatch_iframe_loads(&mut self, owner: Option<amazing_dom::NodeIdx>) -> Result<(), Throw> {
         while let Some(load) = self.bindings.take_next_iframe_load(owner) {
-            let frame = load.frame;
-            let document = load.document;
-            let fire_load_events = load.fire_load_events;
-            if let Some(document) = document {
-                // HTML-29: brackets the child document's own top-level
-                // script phase (`setup_iframe_window` narrows the point per
-                // script) so `document.write` from one of its scripts
-                // inserts at the parser's insertion point instead of always
-                // implicitly reopening the document; ended once its load
-                // event has fired, matching a real parser.
+            if !load.fire_load_events {
+                // The synchronous initial about:blank is already fully built
+                // and Complete. A false entry is otherwise only a Location
+                // wakeup: commit that actual pending navigation, whose new
+                // load entry carries its own captured event/dependency policy.
+                // Neither case is a parser session or a synthetic load event.
+                self.refresh_parser_browsing_contexts()?;
+                continue;
+            }
+            if let Some(document) = load.document {
+                let session = self.begin_parser_session(document)?;
+                self.bindings.set_parser_embedding(document, load.clone());
                 self.bindings.begin_document_parsing(document);
                 let bindings = self.bindings.clone();
-                self.enter(|js| bindings.setup_iframe_window(js, frame, document))?;
-                if fire_load_events && self.bindings.iframe_load_is_current(&load) {
-                    self.dispatch_dom_event(document.0, "DOMContentLoaded")?;
-                    // A child load waits for newly discovered dependent frames.
-                    // Their own Window load precedes this Document's Window load.
+                self.enter(|js| bindings.setup_iframe_window(js, load.frame, document))?;
+                if self.bindings.parser_session_current(session) { self.bindings.end_document_parsing(document); }
+                if self.bindings.parser_session_current(session)
+                    && load.fire_load_events && self.bindings.iframe_load_is_current(&load) {
+                    self.parser_eof(document)?;
+                    self.bindings.finish_parser_document(document)?;
                     self.dispatch_load_blocking_iframe_loads(document)?;
-                    if self.bindings.iframe_load_is_current(&load) {
-                        self.dispatch_document_load(document)?;
-                    }
                 }
-                self.bindings.end_document_parsing(document);
-            }
-            if fire_load_events && self.bindings.iframe_load_is_current(&load) {
-                // HTML fires the embedding element's load separately, with
-                // default flags; it must not bubble into its owner Document.
-                self.dispatch_user_agent_payload(amazing_dom::events::EventTarget::Node(frame),
+            } else if load.fire_load_events && self.bindings.iframe_load_is_current(&load) {
+                self.dispatch_user_agent_payload(amazing_dom::events::EventTarget::Node(load.frame),
                     amazing_dom::events::Event::new("load", amazing_dom::events::EventInit::default(),
                         std::time::Duration::ZERO))?;
             }
         }
-        Ok(())
+        self.drain_outbox()
     }
     /// HTML-29: see `RuntimeBindings::begin_document_parsing`.
     pub(crate) fn begin_document_parsing(&mut self, document: u32) {
@@ -299,6 +303,27 @@ impl DriverScheduler {
         for (signal, delay_ms) in self.bindings.take_abort_timeouts() {
             self.register_abort_timeout(signal, delay_ms)?;
         }
+        self.sync_parser_globals()?;
+        self.parser_script_pending.extend(self.bindings.take_ready_parser_scripts());
+        while let Some(script) = self.parser_script_pending.front().cloned() {
+            let global = self.parser_task_global(script.record.session)?;
+            let callback = self.own(Payload::ParserScript(script))?;
+            if let Err(error) = self.loop_.queue_task(TaskSource::Networking, Some(global), callback) {
+                self.payloads.remove(&callback.0);
+                return Err(loop_error(error));
+            }
+            self.parser_script_pending.pop_front();
+        }
+        self.parser_task_pending.extend(self.bindings.take_parser_tasks());
+        while let Some(task) = self.parser_task_pending.front().copied() {
+            let global = self.parser_task_global(task.session)?;
+            let callback = self.own(Payload::ParserLifecycle(task))?;
+            if let Err(error) = self.loop_.queue_task(TaskSource::DomManipulation, Some(global), callback) {
+                self.payloads.remove(&callback.0);
+                return Err(loop_error(error));
+            }
+            self.parser_task_pending.pop_front();
+        }
         for node in self.bindings.take_form_selection_events() {
             let callback = self.own(Payload::FormSelection(node.0))?;
             self.loop_.queue_task(TaskSource::UserInteraction, Some(GLOBAL), callback)
@@ -384,9 +409,19 @@ impl DriverScheduler {
     }
 
     fn invoke(&mut self, callback: CallbackId, timestamp: Option<Duration>) -> Result<(), Throw> {
-        let payload = self.payloads.get(&callback.0).copied()
+        let payload = self.payloads.get(&callback.0).cloned()
             .ok_or_else(|| Throw::type_error("unknown driver callback"))?;
         match payload {
+            Payload::ParserLifecycle(task) => {
+                self.payloads.remove(&callback.0);
+                let bindings = self.bindings.clone();
+                self.enter(|js| bindings.run_parser_task(js, task))
+            }
+            Payload::ParserScript(task) => {
+                self.payloads.remove(&callback.0);
+                let bindings = self.bindings.clone();
+                self.enter(|js| bindings.run_ready_parser_script(js, task))
+            }
             Payload::Job(token) => {
                 self.payloads.remove(&callback.0);
                 self.enter(|js| js.invoke_one_job(token))
@@ -468,10 +503,19 @@ impl DriverScheduler {
         &mut self,
         now: Duration,
         render: bool,
-        mut on_render: impl FnMut(RenderPhase, Duration),
+        on_render: impl FnMut(RenderPhase, Duration),
     ) -> Result<bool, Throw> {
         self.drain_outbox()?;
         self.dispatch_pending_iframe_loads()?;
+        self.pump_admitted_at_with_render(now, render, on_render)
+    }
+
+    fn pump_admitted_at_with_render(
+        &mut self,
+        now: Duration,
+        render: bool,
+        mut on_render: impl FnMut(RenderPhase, Duration),
+    ) -> Result<bool, Throw> {
         self.now = self.now.max(now);
         self.loop_.advance_to(self.now).map_err(loop_error)?;
         // Update rendering follows the task and microtask checkpoint for this
@@ -481,6 +525,7 @@ impl DriverScheduler {
         let mut first_error = None;
         let mut rendering_queued = !render;
         for _ in 0..10_000 {
+            self.sync_parser_globals()?;
             let step = match self.loop_.step().map_err(loop_error)? {
                 Some(step) => step,
                 None if !rendering_queued => {
@@ -517,6 +562,14 @@ impl DriverScheduler {
 
     pub(crate) fn pump_now(&mut self, render: bool) -> Result<bool, Throw> {
         self.pump_at(self.started.elapsed(), render)
+    }
+
+    /// Preserve tests' explicit blocking-child/pending-child preparation phases.
+    /// The production pump always prepares pending iframes before stepping.
+    #[cfg(test)]
+    pub(crate) fn test_pump_admitted_at(&mut self, now: Duration) -> Result<bool, Throw> {
+        self.drain_outbox()?;
+        self.pump_admitted_at_with_render(now, false, |_, _| {})
     }
 
     /// Test hook for lane-owned bindings tests (see `runtime_host_messaging`).
@@ -777,6 +830,73 @@ mod tests {
     }
 }
 
+impl DriverScheduler {
+    fn sync_parser_globals(&mut self) -> Result<(), Throw> {
+        let root = self.root_realm;
+        for (id, _, _) in self.parser_globals.values() {
+            self.loop_.set_active(*id, false).map_err(loop_error)?;
+        }
+        for (realm, document, generation, active) in self.bindings.parser_global_associations() {
+            let id = if let Some((id, saved, saved_generation)) = self.parser_globals.get(&realm) {
+                if *saved != document || *saved_generation != generation {
+                    return Err(Throw::type_error("WindowGlobal Document association changed"));
+                }
+                *id
+            } else {
+                let id = if realm == root { GLOBAL } else {
+                    let id = GlobalId(self.next_parser_global);
+                    self.next_parser_global = self.next_parser_global.checked_add(1)
+                        .ok_or_else(|| Throw::range_error("WindowGlobal task IDs exhausted"))?;
+                    self.loop_.register_global(id).map_err(loop_error)?;
+                    self.loop_.set_renderable(id, false).map_err(loop_error)?;
+                    id
+                };
+                self.parser_globals.insert(realm, (id, document, generation));
+                id
+            };
+            self.loop_.set_active(id, active).map_err(loop_error)?;
+        }
+        Ok(())
+    }
+    fn parser_task_global(&self, session: crate::runtime_binding_host::html::HtmlParserSession)
+        -> Result<GlobalId, Throw> {
+        self.parser_globals.get(&session.realm).filter(|(_, document, generation)|
+            *document == session.global_document && *generation == session.global_generation)
+            .map(|(id, _, _)| *id).ok_or_else(|| Throw::type_error("Parser task global is not registered"))
+    }
+    pub(crate) fn begin_parser_session(&mut self, document: amazing_dom::NodeIdx)
+        -> Result<crate::runtime_binding_host::html::HtmlParserSession, Throw> {
+        self.bindings.begin_parser_session(&mut self.js, document)
+    }
+    pub(crate) fn parser_session_current(&self, session: crate::runtime_binding_host::html::HtmlParserSession) -> bool {
+        self.bindings.parser_session_current(session)
+    }
+    pub(crate) fn parser_eof(&mut self, document: amazing_dom::NodeIdx) -> Result<(), Throw> {
+        self.bindings.parser_eof(&mut self.js, document)
+    }
+    pub(crate) fn finish_parser_document(&mut self, document: amazing_dom::NodeIdx) -> Result<(), Throw> {
+        self.bindings.finish_parser_document(document)?;
+        self.dispatch_load_blocking_iframe_loads(document)?;
+        self.drain_outbox()
+    }
+    pub(crate) fn run_parser_script(&mut self, script: &crate::cmd::js::HtmlParserScript,
+        source: &str, url: &str) -> Result<JsValue, Throw> {
+        if !self.bindings.parser_session_current(script.session) { return Ok(JsValue::Undefined); }
+        if script.mode == amazing_html::ScriptMode::Async {
+            self.bindings.queue_ready_parser_script(script.clone(), source, url)?;
+            self.drain_outbox()?;
+            Ok(JsValue::Undefined)
+        } else { self.run_page_script(script, source, url) }
+    }
+}
+
+#[cfg(test)]
+impl DriverScheduler {
+    pub(crate) fn test_parser_global(&self, realm: amazing_js::interp::RealmHandle)
+        -> Option<(GlobalId, amazing_dom::NodeIdx, u64)> {
+        self.parser_globals.get(&realm).copied()
+    }
+}
 #[cfg(test)]
 #[path = "runtime_native_selection_task_tests.rs"]
 mod native_selection_task_tests;

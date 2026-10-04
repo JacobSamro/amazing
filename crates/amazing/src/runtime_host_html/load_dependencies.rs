@@ -15,6 +15,12 @@ pub(crate) struct PendingFrameLoad {
     lazy: bool,
 }
 
+impl PendingFrameLoad {
+    pub(super) fn blocks_owner(&self, dom: &Dom, frames: &FrameRuntime, owner: NodeIdx) -> bool {
+        self.owner == owner && self.fire_load_events && !self.lazy && frames.frame_load_is_current(dom, self)
+    }
+}
+
 impl FrameRuntime {
     pub(super) fn enqueue_frame_load(&mut self, dom: &Dom, frame: NodeIdx,
         document: Option<NodeIdx>, fire_load_events: bool, lazy: bool) {
@@ -69,12 +75,34 @@ mod tests {
         let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
         scheduler.set_location_url("https://example.test/root");
         scheduler.run_script("var trace=[]; window.addEventListener('load',()=>trace.push('root')); document.getElementById('e').addEventListener('load',()=>trace.push('eager')); document.getElementById('l').addEventListener('load',()=>trace.push('lazy')); document.getElementById('l').setAttribute('loading','eager');").unwrap();
-        scheduler.dispatch_load_blocking_iframe_loads(NodeIdx(0)).unwrap();
-        scheduler.dispatch_document_load(NodeIdx(0)).unwrap();
+        scheduler.begin_parser_session(NodeIdx(0)).unwrap();
+        scheduler.parser_eof(NodeIdx(0)).unwrap();
+        scheduler.finish_parser_document(NodeIdx(0)).unwrap();
+        scheduler.test_pump_admitted_at(std::time::Duration::ZERO).unwrap();
         scheduler.run_script("if(trace.join(',')!=='eager,root') throw Error(trace.join(','));").unwrap();
         scheduler.dispatch_pending_iframe_loads().unwrap();
+        scheduler.test_pump_admitted_at(std::time::Duration::ZERO).unwrap();
         scheduler.run_script("if(trace.join(',')!=='eager,root,lazy') throw Error(trace.join(','));").unwrap();
         scheduler.dispatch_pending_iframe_loads().unwrap();
+        scheduler.run_script("if(trace.length!==3) throw Error('duplicate');").unwrap();
+    }
+
+    #[test]
+    fn production_pump_preserves_admission_order_for_resumed_lazy_navigation() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(
+            "<!doctype html><iframe id=e srcdoc='<p>eager</p>'></iframe><iframe id=l loading=lazy srcdoc='<p>resumed</p>'></iframe>"), native_forwarded: false }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/root");
+        scheduler.run_script("var trace=[]; window.addEventListener('load',()=>trace.push('root')); document.getElementById('e').addEventListener('load',()=>trace.push('eager')); document.getElementById('l').addEventListener('load',()=>trace.push('lazy')); document.getElementById('l').setAttribute('loading','eager');").unwrap();
+        scheduler.begin_parser_session(NodeIdx(0)).unwrap();
+        scheduler.parser_eof(NodeIdx(0)).unwrap();
+        scheduler.finish_parser_document(NodeIdx(0)).unwrap();
+        // Both child completion tasks are now prepared by the actual general
+        // pump. Lazy does not block the owner, but its already-admitted task
+        // is not reordered behind the newly released owner completion.
+        scheduler.pump_at(std::time::Duration::ZERO, false).unwrap();
+        scheduler.run_script("if(trace.join(',')!=='eager,lazy,root') throw Error(trace.join(','));").unwrap();
+        scheduler.pump_at(std::time::Duration::ZERO, false).unwrap();
         scheduler.run_script("if(trace.length!==3) throw Error('duplicate');").unwrap();
     }
 
@@ -108,7 +136,10 @@ mod tests {
             assert!(state.frames.pending_loads.iter().any(|load| load.owner == parent.document && load.lazy));
             assert!(!state.frames.pending_loads.iter().any(|load| load.owner == parent.document && !load.lazy));
         }
-        scheduler.dispatch_document_load(NodeIdx(0)).unwrap();
+        scheduler.begin_parser_session(NodeIdx(0)).unwrap();
+        scheduler.parser_eof(NodeIdx(0)).unwrap();
+        scheduler.finish_parser_document(NodeIdx(0)).unwrap();
+        scheduler.test_pump_admitted_at(std::time::Duration::ZERO).unwrap();
         scheduler.run_script("if(trace.join(',')!=='parent,root') throw Error(trace.join(',')); document.getElementById('l').remove();").unwrap();
         scheduler.dispatch_pending_iframe_loads().unwrap();
         assert!(state.borrow().frames.pending_loads.is_empty());

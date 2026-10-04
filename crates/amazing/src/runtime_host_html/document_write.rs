@@ -5,6 +5,7 @@ use amazing_dom::events::{EventInit, EventTarget};
 #[derive(Default)]
 pub(super) struct DocumentWriteSession {
     generation: u64,
+    lifecycle: Option<HtmlParserSession>,
     script_depth: usize,
     close_pending: bool,
     trailing_cr: bool,
@@ -117,26 +118,37 @@ impl RuntimeBindingHost<'_> {
 
     fn graft_document_parser(&mut self, document: NodeIdx,
         parser: &Rc<RefCell<amazing_html::ResumableParser>>, reverse: bool) -> Result<(), Throw> {
-        let state = self.state.borrow();
-        let mut host = state.host.borrow_mut();
-        let mut parser = parser.borrow_mut();
-        if let Some(import) = state.frames.parser_imports.get(&document) {
-            if reverse {
-                import.borrow_mut().reverse_sync(parser.dom_mut(), &host.dom)
-                    .map_err(|error| Throw::type_error(format!("Document parser reverse graft: {error:?}")))?;
-            } else {
-                import.borrow_mut().sync(&mut host.dom, parser.dom())
-                    .map_err(|error| Throw::type_error(format!("Document parser graft: {error:?}")))?;
-                let mode = parser.dom().document_quirks_mode(NodeIdx(0))
-                    .map_err(|error| Throw::type_error(format!("Document parser mode: {error:?}")))?;
-                host.dom.set_document_quirks_mode(document, mode)
-                    .map_err(|error| Throw::type_error(format!("Document mode: {error:?}")))?;
-            }
-        } else { parser.swap_dom(&mut host.dom); }
-        Ok(())
+        let graft = (|| {
+            let state = self.state.borrow();
+            let mut host = state.host.borrow_mut();
+            let mut parser = parser.borrow_mut();
+            if let Some(import) = state.frames.parser_imports.get(&document) {
+                if reverse {
+                    import.borrow_mut().reverse_sync(parser.dom_mut(), &host.dom)
+                        .map_err(|error| Throw::type_error(format!("Document parser reverse graft: {error:?}")))?;
+                } else {
+                    import.borrow_mut().sync(&mut host.dom, parser.dom())
+                        .map_err(|error| Throw::type_error(format!("Document parser graft: {error:?}")))?;
+                    let mode = parser.dom().document_quirks_mode(NodeIdx(0))
+                        .map_err(|error| Throw::type_error(format!("Document parser mode: {error:?}")))?;
+                    host.dom.set_document_quirks_mode(document, mode)
+                        .map_err(|error| Throw::type_error(format!("Document mode: {error:?}")))?;
+                }
+            } else { parser.swap_dom(&mut host.dom); }
+            Ok(())
+        })();
+        // Import can commit mutations before reporting an error. Admit their
+        // notifications after all native borrows end, before author execution.
+        let emitted = RuntimeBindings { state: self.state.clone() }
+            .emit_native_selection_tasks(self.js);
+        graft.and(emitted)
     }
 
     fn run_written_script(&mut self, document: NodeIdx, source_node: NodeIdx) -> Result<(), Throw> {
+        self.run_written_script_with_mode(document, source_node, amazing_html::ScriptMode::Blocking)
+    }
+    fn run_written_script_with_mode(&mut self, document: NodeIdx, source_node: NodeIdx,
+        mode: amazing_html::ScriptMode) -> Result<(), Throw> {
         let (node, script) = {
             let state = self.state.borrow();
             let host = state.host.borrow();
@@ -161,10 +173,16 @@ impl RuntimeBindingHost<'_> {
             None => base.clone(),
         };
         let bindings = RuntimeBindings { state: self.state.clone() };
+        let lifecycle = bindings.parser_session(document)
+            .ok_or_else(|| Throw::type_error("Written script has no actual parser session"))?;
         let resolver = self.state.borrow().frames.resolver.clone();
-        if let Some(session) = self.state.borrow_mut().frames.document_write_sessions.get_mut(&document) {
-            session.script_depth += 1;
-        }
+        let entered_session = {
+            let mut state = self.state.borrow_mut();
+            state.frames.document_write_sessions.get_mut(&document).map(|session| {
+                session.script_depth += 1;
+                (session.generation, session.lifecycle)
+            })
+        };
         let realm = {
             let state = self.state.borrow();
             state.frames.contexts.iter().find(|(realm, context)| context.document == document
@@ -177,7 +195,12 @@ impl RuntimeBindingHost<'_> {
                     bindings.load_module_source(js, &script_url).ok().map(|text| (text, script_url.clone()))
                 } else { bindings.fetch_document_classic_script(js, document, node, src, &base, resolver.as_ref()) },
             };
+            if !bindings.parser_session_current(lifecycle) { return Ok(()); }
             match payload {
+                Some((text, final_url)) if mode == amazing_html::ScriptMode::Async => {
+                    bindings.queue_ready_parser_script(crate::cmd::js::HtmlParserScript {
+                        script: script.clone(), mode, session: lifecycle }, &text, &final_url)
+                }
                 Some((text, final_url)) => bindings.execute_document_script(js, &script, &text, &final_url),
                 None if script.kind == crate::cmd::js::ScriptKind::Module =>
                     bindings.finish_module_script(js, &script, None, &script_url, false),
@@ -188,7 +211,9 @@ impl RuntimeBindingHost<'_> {
             Some(realm) => self.js.binding_with_realm(realm, execute),
             None => execute(self.js),
         };
-        if let Some(session) = self.state.borrow_mut().frames.document_write_sessions.get_mut(&document) {
+        if let Some(entered) = entered_session
+            && let Some(session) = self.state.borrow_mut().frames.document_write_sessions.get_mut(&document)
+            && (session.generation, session.lifecycle) == entered {
             session.script_depth -= 1;
         }
         result
@@ -290,19 +315,23 @@ impl RuntimeBindingHost<'_> {
             dom.set_document_ready_state(document, ReadyState::Loading)?;
             Ok(())
         })?;
+        let lifecycle = RuntimeBindings { state: self.state.clone() }.begin_parser_session(self.js, document)?;
         let parser = Rc::new(RefCell::new(parser));
         register_active_parser_state(&self.state, document, parser);
         let mut state = self.state.borrow_mut();
         state.frames.parser_imports.insert(document,
             Rc::new(RefCell::new(amazing_dom::markup::IncrementalDocumentImport::new(document))));
         state.frames.document_write_sessions.insert(document,
-            DocumentWriteSession { generation, ..Default::default() });
+            DocumentWriteSession { generation, lifecycle: Some(lifecycle), ..Default::default() });
         Ok(())
     }
 
     fn finish_document_stream(&mut self, document: NodeIdx) -> Result<(), Throw> {
         let parser = self.state.borrow().active_parsers.get(&document).cloned();
         let Some(parser) = parser else { return Ok(()); };
+        let lifecycle = self.state.borrow().frames.document_write_sessions.get(&document)
+            .and_then(|session| session.lifecycle);
+        let Some(lifecycle) = lifecycle else { return Ok(()); };
         let valid = {
             let state = self.state.borrow();
             let host = state.host.borrow();
@@ -310,7 +339,9 @@ impl RuntimeBindingHost<'_> {
                 .is_some_and(|session| host.dom.node_generation(document) == Some(session.generation))
         };
         if !valid { return Err(Throw::type_error("Stale Document parser")); }
+        let bindings = RuntimeBindings { state: self.state.clone() };
         loop {
+            if !bindings.parser_session_current(lifecycle) { return Ok(()); }
             self.graft_document_parser(document, &parser, true)?;
             let signal = parser.borrow_mut().run();
             self.graft_document_parser(document, &parser, false)?;
@@ -319,14 +350,15 @@ impl RuntimeBindingHost<'_> {
                 amazing_html::ParseSignal::Script(node) => self.run_written_script(document, node)?,
             }
         }
+        if !bindings.parser_session_current(lifecycle) { return Ok(()); }
         // The tree builder's deferred ids belong to its private arena. Capture
         // actual imported nodes before retiring this parser, then run them with
         // no parser script-nesting level: deferred/module scripts can reopen.
         let deferred = parser.borrow_mut().take_deferred_or_async();
         let deferred: Vec<_> = {
             let state = self.state.borrow();
-            deferred.into_iter().filter_map(|(node, _)| state.frames.parser_imports.get(&document)
-                .and_then(|import| import.borrow().imported(node))).collect()
+            deferred.into_iter().filter_map(|(node, mode)| state.frames.parser_imports.get(&document)
+                .and_then(|import| import.borrow().imported(node)).map(|node| (node, mode))).collect()
         };
         unregister_active_parser_state(&self.state, document);
         {
@@ -334,19 +366,13 @@ impl RuntimeBindingHost<'_> {
             state.frames.parser_imports.remove(&document);
             state.frames.document_write_sessions.remove(&document);
         }
-        self.with_dom(|dom| dom.set_document_ready_state(document, ReadyState::Interactive))?;
-        for node in deferred {
-            self.run_written_script(document, node)?;
-            if self.state.borrow().frames.document_write_sessions.contains_key(&document) { return Ok(()); }
+        if !bindings.parser_session_current(lifecycle) { return Ok(()); }
+        bindings.parser_eof(self.js, document)?;
+        for (node, mode) in deferred {
+            if !bindings.parser_session_current(lifecycle) { return Ok(()); }
+            self.run_written_script_with_mode(document, node, mode)?;
         }
-        let init = EventInit { bubbles: false, cancelable: false, composed: false };
-        amazing_bindings::dispatch_user_agent_event(self, EventTarget::Node(document), "readystatechange", init)?;
-        if self.state.borrow().frames.document_write_sessions.contains_key(&document) { return Ok(()); }
-        amazing_bindings::dispatch_user_agent_event(self, EventTarget::Node(document), "DOMContentLoaded",
-            EventInit { bubbles: true, ..init })?;
-        if self.state.borrow().frames.document_write_sessions.contains_key(&document) { return Ok(()); }
-        self.with_dom(|dom| dom.set_document_ready_state(document, ReadyState::Complete))?;
-        amazing_bindings::dispatch_user_agent_event(self, EventTarget::Node(document), "readystatechange", init)?;
+        if bindings.parser_session_current(lifecycle) { bindings.finish_parser_document(document)?; }
         Ok(())
     }
 }
@@ -379,7 +405,10 @@ mod tests {
             [document===original,document.doctype.name,document.compatMode,document.title,
              document.getElementById('written').textContent,document.readyState,document.body.firstChild.data,
              document.getElementById('lines').textContent].join('|')
-        "#).unwrap(), JsValue::str("true|html|CSS1Compat|A&B|a&b|complete|comment|x\ny"));
+        "#).unwrap(), JsValue::str("true|html|CSS1Compat|A&B|a&b|interactive|comment|x\ny"));
+        scheduler.pump_at(Duration::ZERO, false).unwrap();
+        assert_eq!(scheduler.run_script("[document===original,document.doctype.name,document.compatMode,document.title,document.getElementById('written').textContent,document.readyState,document.body.firstChild.data,document.getElementById('lines').textContent].join('|')").unwrap(),
+            JsValue::str("true|html|CSS1Compat|A&B|a&b|complete|comment|x\ny"));
     }
 
     #[test]
@@ -404,7 +433,9 @@ mod tests {
             document.close(); document.close();
             [seen,document.getElementById('discarded')===null,document.getElementById('kept')===null,
              document.getElementById('final').textContent,document.compatMode,states.join(',')].join('|')
-        "#).unwrap(), JsValue::str("0|true|true|three|BackCompat|interactive,dom,complete"));
+        "#).unwrap(), JsValue::str("0|true|true|three|BackCompat|interactive"));
+        scheduler.pump_at(Duration::ZERO, false).unwrap();
+        assert_eq!(scheduler.run_script("states.join(',')").unwrap(), JsValue::str("interactive,dom,complete"));
     }
 
     #[test]
@@ -415,7 +446,10 @@ mod tests {
             document.write('<!doctype html><body><script>order.push("outer");document.open();document.write("<b id=inner>inner</b>");document.close();order.push("done");<\/script><i id=tail>tail</i>');
             [order.join(','),document.getElementById('inner').textContent,document.getElementById('inner').nextSibling.id,
              document.readyState,document.doctype.name].join('|')
-        "#).unwrap(), JsValue::str("outer,done|inner|tail|complete|html"));
+        "#).unwrap(), JsValue::str("outer,done|inner|tail|interactive|html"));
+        scheduler.pump_at(Duration::ZERO, false).unwrap();
+        assert_eq!(scheduler.run_script("[order.join(','),document.getElementById('inner').textContent,document.getElementById('inner').nextSibling.id,document.readyState,document.doctype.name].join('|')").unwrap(),
+            JsValue::str("outer,done|inner|tail|complete|html"));
     }
 
     #[test]
@@ -427,7 +461,10 @@ mod tests {
             if(typeof moduleValue!=='undefined') throw new Error('module ran before close');
             document.close();
             [moduleValue,moduleCurrent===null,document.readyState,document.body.lastChild.textContent].join('|')
-        "#).unwrap(), JsValue::str("42|true|complete|tail"));
+        "#).unwrap(), JsValue::str("42|true|interactive|tail"));
+        scheduler.pump_at(Duration::ZERO, false).unwrap();
+        assert_eq!(scheduler.run_script("[moduleValue,moduleCurrent===null,document.readyState,document.body.lastChild.textContent].join('|')").unwrap(),
+            JsValue::str("42|true|complete|tail"));
     }
 
     #[test]
@@ -504,5 +541,76 @@ mod tests {
              child.getElementById('c').textContent,typeof inertRan,inert.getElementById('n').textContent,errors.join(',')].join('|')
             } catch(error) { checkpoint+"|"+error.name+"|"+error.message; }
         "#).unwrap(), JsValue::str("true|true|true|child|undefined|inert|InvalidStateError,InvalidStateError,InvalidStateError"));
+    }
+}
+
+#[cfg(test)]
+mod selection_checkpoints {
+    use super::*;
+    use amazing_js::interp::SchedulingRequest;
+
+    fn setup() -> (Interpreter, RuntimeBindings, Rc<RefCell<BrowserDomHost>>) {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body><p>abc</p></body>"), native_forwarded: false,
+        }));
+        let mut js = Interpreter::new_with_external_scheduler(64).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = crate::runtime_binding_host::install(&mut js, host.clone()).unwrap();
+        bindings.set_document_url(&mut js, "https://example.test/stream-selection");
+        (js, bindings, host)
+    }
+    fn clear_requests(js: &mut Interpreter, bindings: &RuntimeBindings) {
+        for request in js.take_scheduling_requests() {
+            if let SchedulingRequest::NativeTask { token } = request {
+                bindings.discard_native_selection_task(token).unwrap();
+            }
+        }
+    }
+    fn order(js: &mut Interpreter) -> Vec<&'static str> {
+        js.take_scheduling_requests().into_iter().filter_map(|request| match request {
+            SchedulingRequest::NativeTask { .. } => Some("selection"),
+            SchedulingRequest::Timer { .. } => Some("timer"),
+            _ => None,
+        }).collect()
+    }
+    #[test]
+    fn open_and_reentrant_written_script_emit_before_author_continuation() {
+        for timer_first in [false, true] {
+            let (mut js, bindings, host) = setup();
+            js.run_script("getSelection().setPosition(document.querySelector('p').firstChild,3)").unwrap();
+            clear_requests(&mut js, &bindings);
+            let generation = host.borrow().dom.node_generation(NodeIdx(0)).unwrap();
+            let old = bindings.begin_parser_session(&mut js, NodeIdx(0)).unwrap();
+            // No active parser registration: this is a real reopening, not the
+            // normative ignored open() from inside a parser-blocking script.
+            let timer = "setTimeout(()=>{},0);";
+            let open = "document.open();document.write('<body><p>abc</p><scr'+'ipt>getSelection().setPosition(document.querySelector(\"p\").firstChild,1)</scr'+'ipt>');document.close();";
+            js.run_script(&if timer_first { format!("{timer}{open}") } else { format!("{open}{timer}") }).unwrap();
+            assert_eq!(order(&mut js), if timer_first { vec!["timer", "selection"] } else { vec!["selection", "timer"] });
+            let new = bindings.parser_session(NodeIdx(0)).unwrap();
+            assert_ne!(new, old);
+            assert_eq!(host.borrow().dom.node_generation(NodeIdx(0)), Some(generation));
+            assert!(!bindings.parser_session_current(old));
+            assert_eq!(js.run_script("getSelection().anchorOffset===1").unwrap(), JsValue::Bool(true));
+        }
+    }
+    #[test]
+    fn forward_graft_range_adjustment_enters_same_fifo_before_next_author_timer() {
+        for timer_first in [false, true] {
+            let (mut js, bindings, host) = setup();
+            js.run_script("document.open();document.write('<body><p>abc</p>');getSelection().setPosition(document.querySelector('p').firstChild,3)").unwrap();
+            clear_requests(&mut js, &bindings);
+            if timer_first { js.run_script("setTimeout(()=>{},0)").unwrap(); }
+            let parser = bindings.state.borrow().active_parsers[&NodeIdx(0)].clone();
+            let text = parser.borrow().dom().tree_order(NodeIdx(0)).into_iter()
+                .find(|node| matches!(parser.borrow().dom().get(*node).kind, NodeKind::Text { .. })).unwrap();
+            parser.borrow_mut().dom_mut().set_character_data(text, "a".into()).unwrap();
+            let mut adapter = RuntimeBindingHost { js: &mut js, state: bindings.state.clone() };
+            adapter.graft_document_parser(NodeIdx(0), &parser, false).unwrap();
+            assert!(host.borrow().dom.pending_selection_change_tasks().is_empty());
+            if !timer_first { js.run_script("setTimeout(()=>{},0)").unwrap(); }
+            assert_eq!(order(&mut js), if timer_first { vec!["timer", "selection"] } else { vec!["selection", "timer"] });
+            assert_eq!(js.run_script("getSelection().anchorOffset===1").unwrap(), JsValue::Bool(true));
+        }
     }
 }

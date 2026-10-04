@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc, process::ExitCode, time::{Duration, Instant}};
 use amazing_js::DomHost;
 use crate::dom_host::BrowserDomHost;
 use super::parse::read_source;
+#[derive(Clone)]
 pub(crate) struct PageScript {
     pub(crate) kind: ScriptKind,
     /// HTML-29: the script element's own tree position, so a top-level
@@ -130,9 +131,9 @@ pub(crate) fn collect_script_text(
 /// `defer`/`async`/module scripts never pause construction; this returns
 /// them, as `PageScript`s, in document order, once the whole document
 /// reaches EOF, for the caller to run after (deferred: in order, before
-/// `DOMContentLoaded`; this driver has no real concurrent fetch to race an
-/// async script against, so it runs those the same way, immediately after
-/// deferred ones, still ahead of `DOMContentLoaded`).
+/// `DOMContentLoaded`). Async records retain their distinct classification;
+/// their actual fetched source is admitted as a networking task by the caller.
+/// This driver does not introduce concurrent fetching here.
 ///
 /// `run_script` returning `Err` stops the interleaved parse early (the
 /// remaining source is left unparsed, like `document.close()` truncating a
@@ -140,12 +141,24 @@ pub(crate) fn collect_script_text(
 /// caller that wants to keep going after a script error (the lenient
 /// real-page path) should swallow its own errors inside `run_script` and
 /// always return `Ok(())`.
+#[derive(Clone)]
+pub(crate) struct HtmlParserScript {
+    pub(crate) script: PageScript,
+    pub(crate) mode: amazing_html::ScriptMode,
+    pub(crate) session: crate::runtime_binding_host::html::HtmlParserSession,
+}
+impl std::ops::Deref for HtmlParserScript {
+    type Target = PageScript;
+    fn deref(&self) -> &PageScript { &self.script }
+}
+
 pub(crate) fn run_interleaved_parse(
     host: &Rc<RefCell<BrowserDomHost>>,
     scheduler: &mut crate::js_scheduler::DriverScheduler,
     html: &str,
     mut run_script: impl FnMut(&mut crate::js_scheduler::DriverScheduler, &PageScript) -> Result<(), String>,
-) -> Result<Vec<PageScript>, String> {
+) -> Result<Vec<HtmlParserScript>, String> {
+    let session = scheduler.begin_parser_session(amazing_dom::NodeIdx(0)).map_err(|error| error.describe())?;
     let taken = std::mem::take(&mut host.borrow_mut().dom);
     let parser = Rc::new(RefCell::new(amazing_html::ResumableParser::new(taken)));
     parser.borrow_mut().push_source(html);
@@ -161,11 +174,17 @@ pub(crate) fn run_interleaved_parse(
                 let script = script_source_from_node(&host.borrow().dom, node);
                 let result = scheduler.refresh_parser_browsing_contexts()
                     .map_err(|error| error.describe()).and_then(|_| match script {
+                    _ if !scheduler.parser_session_current(session) => Ok(()),
                     Some(script) => run_script(scheduler, &script),
                     // Slipped past `tree.rs`'s own classic/module MIME check
                     // some other way (defensive; not expected in practice).
                     None => Ok(()),
                 });
+                // A callback may retire this parser. The installed arena and
+                // active-parser entry then belong to the replacement session.
+                if !scheduler.parser_session_current(session) {
+                    return result.map(|_| Vec::new());
+                }
                 parser.borrow_mut().swap_dom(&mut host.borrow_mut().dom);
                 if let Err(error) = result {
                     break Err(error);
@@ -178,13 +197,19 @@ pub(crate) fn run_interleaved_parse(
     // hands the final (or, on an early error, partial) tree back to
     // `host.dom` exactly once, whichever way the loop exited.
     parser.borrow_mut().swap_dom(&mut host.borrow_mut().dom);
-    scheduler.unregister_active_parser(0);
+    if scheduler.parser_session_current(session) {
+        scheduler.unregister_active_parser(0);
+    }
     outcome?;
     scheduler.refresh_parser_browsing_contexts().map_err(|error| error.describe())?;
+    if !scheduler.parser_session_current(session) { return Ok(Vec::new()); }
+    scheduler.parser_eof(amazing_dom::NodeIdx(0)).map_err(|error| error.describe())?;
+    if !scheduler.parser_session_current(session) { return Ok(Vec::new()); }
     let dom_ref = host.borrow();
     Ok(deferred_events
         .into_iter()
-        .filter_map(|(node, _mode)| script_source_from_node(&dom_ref.dom, node))
+        .filter_map(|(node, mode)| script_source_from_node(&dom_ref.dom, node)
+            .map(|script| HtmlParserScript { script, mode, session }))
         .collect())
 }
 
@@ -341,6 +366,7 @@ pub(crate) fn execute_page_scripts_lenient(
     }
     if !budget_exceeded {
         for script in &deferred {
+        if !scheduler.parser_session_current(script.session) { continue; }
             let source = match &script.src {
                 Some(src) if script.kind == ScriptKind::Module => match scheduler.load_module_source(&scheduler.page_script_url(page, script)) {
                     Ok(source) => source,
@@ -365,11 +391,11 @@ pub(crate) fn execute_page_scripts_lenient(
                 None => script.body.clone(),
             };
             let script_url = scheduler.page_script_url(page, script);
-            let result = scheduler.run_page_script(script, &source, &script_url);
+            let result = scheduler.run_parser_script(script, &source, &script_url);
             if let Err(error) = &result {
                 errors.push(format!("page script: {}", error.describe()));
             }
-            if script.kind == ScriptKind::Module
+            if script.mode != amazing_html::ScriptMode::Async && script.kind == ScriptKind::Module
                 && let Err(error) = scheduler.finish_module_script(script, result.as_ref().err(), &script_url, true) { errors.push(error.describe()); }
         }
     }
@@ -377,14 +403,8 @@ pub(crate) fn execute_page_scripts_lenient(
         errors.push("skipped DOMContentLoaded/load dispatch and the event loop: script phase budget already exceeded".to_owned());
         return LenientScriptResult { errors, probe: probe_lines };
     }
-    if let Err(error) = scheduler.dispatch_dom_event(0, "DOMContentLoaded") {
-        errors.push(format!("DOMContentLoaded listener: {}", error.describe()));
-    }
-    if let Err(error) = scheduler.dispatch_load_blocking_iframe_loads(amazing_dom::NodeIdx(0)) {
-        errors.push(format!("child load listener: {}", error.describe()));
-    }
-    if let Err(error) = scheduler.dispatch_document_load(amazing_dom::NodeIdx(0)) {
-        errors.push(format!("load listener: {}", error.describe()));
+    if let Err(error) = scheduler.finish_parser_document(amazing_dom::NodeIdx(0)) {
+        errors.push(format!("parser completion: {}", error.describe()));
     }
     // Keep the page's timers/rAF bounded and deterministic for headless runs.
     for _ in 0..16 {
@@ -458,6 +478,7 @@ pub(crate) fn prepare_page_scripts(
             .map_err(|error| format!("inline handler failed: {}", error.describe()))?;
     }
     for script in &deferred {
+        if !scheduler.parser_session_current(script.session) { continue; }
         let source = match &script.src {
             Some(_) if script.kind == ScriptKind::Module => scheduler.load_module_source(&scheduler.page_script_url(page, script))?,
             Some(src) => {
@@ -472,19 +493,15 @@ pub(crate) fn prepare_page_scripts(
             None => script.body.clone(),
         };
         let script_url = scheduler.page_script_url(page, script);
-        scheduler.run_page_script(script, &source, &script_url)
+        scheduler.run_parser_script(script, &source, &script_url)
             .map_err(|error| format!("page script failed: {}", error.describe()))?;
-        if script.kind == ScriptKind::Module {
+        if script.mode != amazing_html::ScriptMode::Async && script.kind == ScriptKind::Module {
             scheduler.finish_module_script(script, None, &script_url, true)
                 .map_err(|error| format!("module load handler failed: {}", error.describe()))?;
         }
     }
-    scheduler.dispatch_dom_event(0, "DOMContentLoaded")
-        .map_err(|error| format!("DOMContentLoaded listener failed: {}", error.describe()))?;
-    scheduler.dispatch_load_blocking_iframe_loads(amazing_dom::NodeIdx(0))
-        .map_err(|error| format!("child load listener failed: {}", error.describe()))?;
-    scheduler.dispatch_document_load(amazing_dom::NodeIdx(0))
-        .map_err(|error| format!("load listener failed: {}", error.describe()))?;
+    scheduler.finish_parser_document(amazing_dom::NodeIdx(0))
+        .map_err(|error| format!("parser completion failed: {}", error.describe()))?;
     Ok(Some(scheduler))
 }
 

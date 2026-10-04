@@ -1346,8 +1346,19 @@ impl PageOwner {
                 self.record_load_error(format!("inline {event} handler on node {node}: {}", thrown.describe()));
             }
         }
+        let parser_session = match self.scheduler.begin_parser_session(amazing_dom::NodeIdx(0)) {
+            Ok(session) => session,
+            Err(thrown) => {
+                self.record_load_error(format!("parser session: {}", thrown.describe()));
+                return;
+            }
+        };
+        if let Err(thrown) = self.scheduler.parser_eof(amazing_dom::NodeIdx(0)) {
+            self.record_load_error(format!("parser EOF: {}", thrown.describe()));
+        }
         scripts.sort_by_key(|script| script.kind == crate::cmd::js::ScriptKind::Module);
         for script in scripts {
+            if !self.scheduler.parser_session_current(parser_session) { break; }
             let (source, url) = match &script.src {
                 Some(src) => {
                     let script_url = crate::cmd::js::resolve_script_url(&self.url, &src);
@@ -1364,14 +1375,9 @@ impl PageOwner {
                 self.record_load_error(format!("page script: {}", thrown.describe()));
             }
         }
-        if let Err(thrown) = self.scheduler.dispatch_dom_event(0, "DOMContentLoaded") {
-            self.record_load_error(format!("DOMContentLoaded listener: {}", thrown.describe()));
-        }
-        if let Err(thrown) = self.scheduler.dispatch_load_blocking_iframe_loads(amazing_dom::NodeIdx(0)) {
-            self.record_load_error(format!("child load listener: {}", thrown.describe()));
-        }
-        if let Err(thrown) = self.scheduler.dispatch_document_load(amazing_dom::NodeIdx(0)) {
-            self.record_load_error(format!("load listener: {}", thrown.describe()));
+        if self.scheduler.parser_session_current(parser_session)
+            && let Err(thrown) = self.scheduler.finish_parser_document(amazing_dom::NodeIdx(0)) {
+            self.record_load_error(format!("parser completion: {}", thrown.describe()));
         }
         for _ in 0..16 {
             match self.scheduler.pump_at(std::time::Duration::from_millis(16), true) {

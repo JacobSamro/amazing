@@ -13,6 +13,9 @@ mod document_write;
 mod document_dsd;
 #[path = "runtime_host_html/window_event_targets.rs"]
 mod window_event_targets;
+#[path = "runtime_host_html/parser_lifecycle.rs"]
+mod parser_lifecycle;
+pub(crate) use parser_lifecycle::{HtmlParserSession, HtmlParserTask, HtmlReadyParserScript};
 #[path = "runtime_host_html/resource_response.rs"]
 mod resource_response;
 #[path = "runtime_host_html/history_context.rs"]
@@ -131,6 +134,7 @@ impl SandboxFlags {
 
 #[derive(Default)]
 pub(super) struct FrameRuntime {
+    parser_lifecycle: parser_lifecycle::ParserLifecycle,
     documents: HashMap<NodeIdx, FrameDocument>,
     contexts: HashMap<RealmHandle, WindowContext>,
     cross_origin_descriptors: HashMap<(RealmHandle, RealmHandle, String), Property>,
@@ -1199,6 +1203,9 @@ impl RuntimeBindings {
             Some(realm) => realm,
             None => self.ensure_realm(js, frame, document, &child_url, sandbox, None)?,
         };
+        if self.parser_session(document).is_none() { self.begin_parser_session(js, document)?; }
+        let lifecycle = self.parser_session(document)
+            .ok_or_else(|| Throw::type_error("Child setup has no actual parser session"))?;
         let state = self.state.clone();
         // HTML-34: `document_url` is one field shared by the whole host,
         // not realm-scoped (`fetch_base`/`storage_key`/... all read it
@@ -1238,6 +1245,7 @@ impl RuntimeBindings {
                 let resolver = state.borrow().frames.resolver.clone();
                 js.binding_with_realm(realm, |i| {
                     for script in &scripts {
+                        if !self.parser_session_current(lifecycle) { break; }
                         // HTML-29: narrows the child document's write
                         // insertion point to right after this script (its
                         // own tree position) before running it, matching
@@ -1254,6 +1262,7 @@ impl RuntimeBindings {
                                 let text = if script.kind == crate::cmd::js::ScriptKind::Module {
                                     self.load_module_source(i, &url).ok().map(|text| (text, url))
                                 } else { self.fetch_document_classic_script(i, document, script.node, src, &child_url, resolver.as_ref()) };
+                                if !self.parser_session_current(lifecycle) { break; }
                                 if let Some((text, final_url)) = text {
                                     self.execute_document_script(i, script, &text, &final_url)?;
                                 }
@@ -1308,6 +1317,8 @@ impl RuntimeBindings {
     /// path's own behavior for that case.
     fn run_interleaved_iframe_parse(&self, js: &mut Interpreter, realm: RealmHandle, document: NodeIdx,
         child_url: &str, sandbox: SandboxFlags, html: &str) -> Result<(), Throw> {
+        let lifecycle = self.parser_session(document)
+            .ok_or_else(|| Throw::type_error("Child parser has no actual session"))?;
         let state = self.state.clone();
         let host = state.borrow().host.clone();
         let resolver = state.borrow().frames.resolver.clone();
@@ -1331,7 +1342,8 @@ impl RuntimeBindings {
         // exactly like `cmd/js.rs::run_interleaved_parse` for the top level.
         let run_one = |js: &mut Interpreter, host: &Rc<RefCell<BrowserDomHost>>, source_node: NodeIdx,
             import: &IncrementalImportRef, child_url: &str,
-            resolver: Option<&FrameResourceResolver>| -> Result<(), Throw> {
+            resolver: Option<&FrameResourceResolver>, mode: amazing_html::ScriptMode| -> Result<(), Throw> {
+            if !self.parser_session_current(lifecycle) { return Ok(()); }
             let Some(dest_node) = import.borrow().imported(source_node) else {
                 // The graft right before this call always maps the node a
                 // pause/deferred signal just named; defensive only.
@@ -1340,8 +1352,15 @@ impl RuntimeBindings {
             let script = { let host = host.borrow(); crate::cmd::js::script_source_from_node(&host.dom, dest_node) };
             let Some(script) = script else { return Ok(()) };
             let script_url = js.binding_with_realm(realm, |i| Ok(self.page_script_url(i, &script, child_url)))?;
+            let execute = |js: &mut Interpreter, source: &str, url: &str| {
+                if !self.parser_session_current(lifecycle) { return Ok(()); }
+                if mode == amazing_html::ScriptMode::Async {
+                    self.queue_ready_parser_script(crate::cmd::js::HtmlParserScript {
+                        script: script.clone(), mode, session: lifecycle }, source, url)
+                } else { js.binding_with_realm(realm, |i| self.execute_document_script(i, &script, source, url)) }
+            };
             match &script.src {
-                None => js.binding_with_realm(realm, |i| self.execute_document_script(i, &script, &script.body, &script_url)),
+                None => execute(js, &script.body, &script_url),
                 Some(src) => {
                     let url = script_url;
                     let text = if script.kind == crate::cmd::js::ScriptKind::Module {
@@ -1349,8 +1368,9 @@ impl RuntimeBindings {
                             .map(|text| (text, url.clone()))
                     } else { self.fetch_document_classic_script(js, document, script.node, src, child_url, resolver) };
                     if let Some((text, final_url)) = text {
-                        js.binding_with_realm(realm, |i| self.execute_document_script(i, &script, &text, &final_url))
-                    } else if script.kind == crate::cmd::js::ScriptKind::Module {
+                        execute(js, &text, &final_url)
+                    } else if script.kind == crate::cmd::js::ScriptKind::Module
+                        && self.parser_session_current(lifecycle) {
                         js.binding_with_realm(realm, |i| self.finish_module_script(i, &script, None, &url, false))
                     } else { Ok(()) }
                 }
@@ -1359,9 +1379,10 @@ impl RuntimeBindings {
         let import = Rc::new(RefCell::new(import));
         state.borrow_mut().frames.parser_imports.insert(document, import.clone());
         let outcome: Result<(), Throw> = loop {
+            if !self.parser_session_current(lifecycle) { return Ok(()); }
             let signal = parser.borrow_mut().run();
             deferred_events.extend(parser.borrow_mut().take_deferred_or_async());
-            {
+            let graft = (|| {
                 let mut host_ref = host.borrow_mut();
                 import.borrow_mut().sync(&mut host_ref.dom, parser.borrow().dom())
                     .map_err(|error| Throw::type_error(format!("iframe graft: {error:?}")))?;
@@ -1371,7 +1392,10 @@ impl RuntimeBindings {
                     .map_err(|error| Throw::type_error(format!("iframe document mode: {error:?}")))?;
                 host_ref.dom.set_document_scripting_enabled(document, can_run_scripts)
                     .map_err(|error| Throw::type_error(format!("iframe scripting context: {error:?}")))?;
-            }
+                Ok(())
+            })();
+            let emitted = self.emit_native_selection_tasks(js);
+            if let Err(error) = graft.and(emitted) { break Err(error); }
             // Connected parser-created frames need genuine child contexts
             // before this document's scripts can observe contentWindow.
             // Navigation only queues loads; their dispatch remains deferred.
@@ -1380,9 +1404,10 @@ impl RuntimeBindings {
                 amazing_html::ParseSignal::Eof => break Ok(()),
                 amazing_html::ParseSignal::Script(source_node) => {
                     if !can_run_scripts { continue; }
-                    if let Err(error) = run_one(js, &host, source_node, &import, child_url, resolver.as_ref()) {
+                    if let Err(error) = run_one(js, &host, source_node, &import, child_url, resolver.as_ref(), amazing_html::ScriptMode::Blocking) {
                         break Err(error);
                     }
+                    if !self.parser_session_current(lifecycle) { return Ok(()); }
                     // HTML-40: the script just ran directly against the
                     // shared, already-grafted subtree in `host.dom` (`sync`,
                     // above, only ever copies forward INTO it) -- reflect
@@ -1402,15 +1427,16 @@ impl RuntimeBindings {
                 }
             }
         };
+        if !self.parser_session_current(lifecycle) { return outcome; }
         state.borrow_mut().frames.parser_imports.remove(&document);
         self.unregister_active_parser(document);
         outcome?;
+        self.parser_eof(js, document)?;
         if can_run_scripts {
-            for (source_node, _mode) in deferred_events {
-                run_one(js, &host, source_node, &import, child_url, resolver.as_ref())?;
+            for (source_node, mode) in deferred_events {
+                run_one(js, &host, source_node, &import, child_url, resolver.as_ref(), mode)?;
             }
         }
-        let _ = host.borrow_mut().dom.set_document_ready_state(document, ReadyState::Complete);
         Ok(())
     }
 

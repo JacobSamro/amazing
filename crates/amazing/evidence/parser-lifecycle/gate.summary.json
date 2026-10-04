@@ -1,0 +1,162 @@
+{
+  "fixed_base": "77dc7773da9844588922cb8f3712135a4c72ac9a",
+  "gated_source": "30e7f57bfd96fdf63696599df5ba312307ec56ce",
+  "source_files": {
+    "crates/amazing/src/cmd/js.rs": "d616fc6ee86a674a0ae8e9cc6e17e6feac4b23e90212fa50b164b059dbe83391",
+    "crates/amazing/src/cmd/wpt_harness.rs": "a702b15313d0ac6a4ebda441d51e800143ed004dc7cbff41a82e8eaff3c0ecf7",
+    "crates/amazing/src/gui.rs": "16e6a999d20f567de7bfe68dedcb3fdf959af041a373859497ac37f4c714de5f",
+    "crates/amazing/src/js_scheduler.rs": "1bf952bca016edc8937e707e151b6b0b459d61c38c984208cef8133b2f476ddb",
+    "crates/amazing/src/runtime_host_devtools.rs": "276f1ed036bfd7868b9583cdd0b7a85cc09f39c824841814426795a4bd7caa64",
+    "crates/amazing/src/runtime_host_html.rs": "b7c5ea291a6aa64385101834f53814c7011d7bbb92db85cf7448ebfdedc38be8",
+    "crates/amazing/src/runtime_host_html/document_write.rs": "5fbe644e13e1c7bde5d60e5d38a560eba0a21d4cfa166a9b7ca7d74c36ff710f",
+    "crates/amazing/src/runtime_host_html/load_dependencies.rs": "deab3f1e3d593e72d6e912fcde9828aea743b34942c9e21644921a0c4054c172",
+    "crates/amazing/src/runtime_host_html/parser_lifecycle.rs": "b1421859e9ec5a7c9d4c35e78b9b11884c8f7bbe10cc708b276e1419bf643973",
+    "crates/amazing/src/runtime_host_html/tests.rs": "2757756e0f0c3db2928f7abb2f17cf545cb2b7f9220818a9f77a703e5e491416",
+    "crates/amazing/src/runtime_host_html/window_event_targets.rs": "59822b17bd670238edf7271c51300ff99f96277a511966ed5221c81121c6e0f6",
+    "crates/amazing/src/runtime_host_modules.rs": "c6a3c9395b5d9644ecefde8b08ba0adfbce9f576e070041db46a984867075271"
+  },
+  "remote_alias": "js-date",
+  "profile": {
+    "ordinary_ms": 25000,
+    "serialized_heavy_ms": 150000,
+    "shadow_actual_META_long_ms": 600000,
+    "encoding_ordinary_ms": 10000,
+    "encoding_actual_META_long_ms": 60000,
+    "modules_ms": 5000
+  },
+  "wrapper_exits": {
+    "before": 0,
+    "after": 0
+  },
+  "command_sha256": {
+    "before": "8539e03f2a2d9865541bb5085bff8e4139a80efb03f8a89f11eb52be16e08375",
+    "after": "148be498614b7e9eb61b06512c7a92aba7f881c751e74502d46e0e6190f12b66"
+  },
+  "helper_sha256": "65f8dc911753794394b02bdda3193d4b0a141a0ced430ad665f6a02b4642ebc4",
+  "native": {
+    "before": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4500,
+        "skipped": 17
+      }
+    },
+    "after": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4512,
+        "skipped": 17
+      }
+    }
+  },
+  "corpora": {
+    "base-url": {
+      "after": 2,
+      "before": 2,
+      "files": 11
+    },
+    "core": {
+      "after": 92838,
+      "before": 92829,
+      "files": 888
+    },
+    "cssom": {
+      "after": 1772,
+      "before": 1772,
+      "files": 192
+    },
+    "encoding": {
+      "after": 12357,
+      "before": 12357,
+      "files": 194
+    },
+    "modules": {
+      "after": 145,
+      "before": 145,
+      "files": 111
+    },
+    "shadow": {
+      "after": 5681,
+      "before": 5681,
+      "files": 277
+    },
+    "syntax": {
+      "after": 3216,
+      "before": 3215,
+      "files": 220
+    },
+    "syntax72": {
+      "after": 2708,
+      "before": 2707,
+      "files": 72
+    },
+    "the-base-element": {
+      "after": 15,
+      "before": 15,
+      "files": 11
+    },
+    "the-history-interface": {
+      "after": 13,
+      "before": 13,
+      "files": 74
+    },
+    "the-iframe-element": {
+      "after": 28,
+      "before": 24,
+      "files": 150
+    },
+    "the-window-object": {
+      "after": 253,
+      "before": 253,
+      "files": 90
+    },
+    "the-windowproxy-exotic-object": {
+      "after": 14,
+      "before": 14,
+      "files": 8
+    },
+    "windows": {
+      "after": 4,
+      "before": 4,
+      "files": 53
+    }
+  },
+  "zero_passing_counter_and_file_losses": true,
+  "scope": "complete original HTML80 parser lifecycle with published genuine activity/Window/DSD/FIFO prerequisites; no staged child/chronology/History carrier",
+  "trees": {
+    "after_passed": 1930,
+    "before_passed": 1930,
+    "lost": [],
+    "raw_after": {
+      "bytes": 183082,
+      "path": "/home/user/amazing/out/js-date/html-parser-lifecycle-after-30e7f57bfd96fdf63696599df5ba312307ec56ce/trees.json",
+      "sha256": "fd1ab07a655bb7814b181a310cf2a9d6d3cd9f12de3b6862b82257cd677cc888"
+    },
+    "raw_before": {
+      "bytes": 183082,
+      "path": "/home/user/amazing/out/js-date/html-parser-lifecycle-before-77dc7773da9844588922cb8f3712135a4c72ac9a/trees.json",
+      "sha256": "fd1ab07a655bb7814b181a310cf2a9d6d3cd9f12de3b6862b82257cd677cc888"
+    },
+    "unsupported": 6
+  },
+  "published_base": "dcee3e6202fa31b8543c2ef83a28cafe73f13dc1",
+  "baseline_composition": "c6764e0ea526a04b4193ce0db92a3489b103e3cb plus precisely qualified pure74; published pure74 and all HTML80 source path bytes identical; subsequent radius/bind changes outside owned source",
+  "original_first_compile_diagnostic": {
+    "source": "36e1765d618b5a20adb50bf46cc07e0eeffaf2eb",
+    "native_compile_exit": 101,
+    "error": "E0599 missing genuine html_commit_history_url API",
+    "compiler_raw_sha256": "da942d023e648cc6aa6d9ca18f27f8a6935e886570fe83b07a361eb82dba9ab1",
+    "fresh_complete_api_native_exit": 0
+  },
+  "original_15_gained_passing_ids_retained": true
+}

@@ -1298,12 +1298,11 @@ fn execute_page(
     for (node, event, body) in handlers {
         scheduler.install_inline_handler(node, &event, &body).map_err(|e| e.describe())?;
     }
-    // `defer`/module and `async` scripts never pause tree construction (see
-    // `amazing_html::ScriptMode`); run them, in document order, once the
-    // whole document is parsed -- before `DOMContentLoaded`, matching
-    // deferred timing. This driver has no real concurrent fetch to race an
-    // async script's execution against, so it runs those the same way.
+    // Preserve actual parser scheduling modes. Finished-parsing scripts run
+    // in order; an async script's actual fetched source is admitted separately
+    // as a networking task and remains a genuine load dependency.
     for script in &deferred {
+        if !scheduler.parser_session_current(script.session) { continue; }
         let script_url = scheduler.page_script_url(&url, script);
         let (text, label) = match &script.src {
             Some(src) if script.kind == crate::cmd::js::ScriptKind::Module => {
@@ -1339,8 +1338,8 @@ fn execute_page(
             }
             None => (script.body.clone(), "inline deferred/async script".into()),
         };
-        let result = scheduler.run_page_script(script, &text, &script_url);
-        if script.kind == crate::cmd::js::ScriptKind::Module {
+        let result = scheduler.run_parser_script(script, &text, &script_url);
+        if script.mode != amazing_html::ScriptMode::Async && script.kind == crate::cmd::js::ScriptKind::Module {
             scheduler.finish_module_script(script, result.as_ref().err(), &script_url, true).map_err(|e| e.describe())?;
         } else { result.map_err(|e| format!("{label}: {}", e.describe()))?; }
     }
@@ -1357,9 +1356,7 @@ fn execute_page(
     scheduler.set_location_url(&url);
     // DOMContentLoaded is a Document event; the Window's load waits for
     // dependent child documents and uses the root Document as its legacy target.
-    scheduler.dispatch_dom_event(0, "DOMContentLoaded").map_err(|e| e.describe())?;
-    scheduler.dispatch_load_blocking_iframe_loads(amazing_dom::NodeIdx(0)).map_err(|e| e.describe())?;
-    scheduler.dispatch_document_load(amazing_dom::NodeIdx(0)).map_err(|e| e.describe())?;
+    scheduler.finish_parser_document(amazing_dom::NodeIdx(0)).map_err(|e| e.describe())?;
     // WPT runs against a deterministic 60 Hz virtual display. Each completed
     // turn gets one rendering opportunity, including a stable rAF timestamp.
     let mut clock = IoAwareClock::default();

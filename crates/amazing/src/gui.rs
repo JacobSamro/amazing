@@ -1061,6 +1061,8 @@ mod windows {
         if let Some(content_type) = content_type.as_deref() {
             js.set_document_content_type(content_type);
         }
+        let parser_session = js.begin_parser_session(NodeIdx(0)).map_err(|error| error.describe())?;
+        js.parser_eof(NodeIdx(0)).map_err(|error| error.describe())?;
         js.js.set_viewport_size(width, 700);
         let handlers = {
             let host_ref = host.borrow();
@@ -1073,6 +1075,7 @@ mod windows {
                 .map_err(|error| format!("inline onclick failed: {}", error.describe()))?;
         }
         for script in scripts {
+            if !js.parser_session_current(parser_session) { break; }
             let source = match script.src {
                 Some(src) => {
                     let script_url = resolve_script_url(input, &src);
@@ -1092,17 +1095,16 @@ mod windows {
                     format!("page script failed: {} ({name:?}, {message:?})", error.describe())
                 })?;
         }
-        js.dispatch_dom_event(0, "DOMContentLoaded")
-            .map_err(|error| format!("DOMContentLoaded listener failed: {}", error.describe()))?;
+
         let mut font_sheets = Vec::new();
         {
             let host_ref = host.borrow();
             collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut font_sheets)?;
         }
-        js.dispatch_load_blocking_iframe_loads(amazing_dom::NodeIdx(0))
-            .map_err(|error| format!("child load listener failed: {}", error.describe()))?;
-        js.dispatch_document_load(NodeIdx(0))
-            .map_err(|error| format!("load listener failed: {}", error.describe()))?;
+        if js.parser_session_current(parser_session) {
+            js.finish_parser_document(NodeIdx(0))
+                .map_err(|error| format!("parser completion failed: {}", error.describe()))?;
+        }
         js.pump_at(std::time::Duration::from_millis(16), true)
             .map_err(|error| format!("page event loop failed: {}", error.describe()))?;
         font_sheets.clear();

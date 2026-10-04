@@ -135,9 +135,10 @@ mod load_tests {
         "#).unwrap();
         let body = host.borrow().dom.document_body(NodeIdx(0)).unwrap().unwrap();
         scheduler.install_inline_handler(body.0,"load","trace.push('rootBody:'+(this===window)+':'+(event.target===document))").unwrap();
-        scheduler.dispatch_dom_event(0,"DOMContentLoaded").unwrap();
-        scheduler.dispatch_pending_iframe_loads().unwrap();
-        scheduler.dispatch_document_load(NodeIdx(0)).unwrap();
+        scheduler.begin_parser_session(NodeIdx(0)).unwrap();
+        scheduler.parser_eof(NodeIdx(0)).unwrap();
+        scheduler.finish_parser_document(NodeIdx(0)).unwrap();
+        scheduler.pump_at(std::time::Duration::ZERO, false).unwrap();
         // Draining again must not manufacture a second child or iframe load.
         scheduler.dispatch_pending_iframe_loads().unwrap();
         assert_eq!(scheduler.run_script("trace.join('|')").unwrap(),JsValue::str(

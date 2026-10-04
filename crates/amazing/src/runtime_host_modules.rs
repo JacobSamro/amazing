@@ -794,6 +794,8 @@ mod tests {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut scheduler = crate::cmd::js::prepare_page_scripts(&host, "https://example.test/page.html",
             "<script>var order=[];window.addEventListener('DOMContentLoaded',()=>order.push('ready'));</script><script type=module>order.push('module');</script><script nomodule>throw 'fallback';</script><script>order.push('classic');</script>", true).unwrap().unwrap();
+        assert!(matches!(scheduler.run_script("order.join(',')==='classic,module'").unwrap(), JsValue::Bool(true)));
+        scheduler.pump_at(std::time::Duration::ZERO, false).unwrap();
         assert!(matches!(scheduler.run_script("order.join(',')==='classic,module,ready'").unwrap(), JsValue::Bool(true)));
     }
     #[test]
