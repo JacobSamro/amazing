@@ -218,6 +218,9 @@ impl ComputedStyle {
                 .find_map(|(key, value)| (key == name).then_some(value));
         }
         let name = name.to_ascii_lowercase();
+        if name == "border-radius" {
+            return border_radius::shorthand(self);
+        }
         if name == "font" {
             return crate::font_shorthand::computed(self);
         }

@@ -542,6 +542,9 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         let canonical = crate::text_properties::canonical(property, css)?;
         return Some(if property == "white-space" { WhiteSpace::parse(&canonical).map(V::WhiteSpace).unwrap_or(V::Unparsed) } else { V::Unparsed });
     }
+    if crate::computed::border_radius::supported(property) {
+        return crate::computed::border_radius::valid(property, css).then_some(V::Unparsed);
+    }
     if property == "clip-path" {
         return crate::effects::parse_clip_path(css).map(V::ClipPath);
     }

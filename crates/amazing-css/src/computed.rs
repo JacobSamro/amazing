@@ -41,6 +41,8 @@ mod font_variant_policy;
 mod border_image_policy;
 #[path = "position_values.rs"]
 pub(crate) mod position_values;
+#[path = "border_radius.rs"]
+pub(crate) mod border_radius;
 #[path = "computed_cssom.rs"]
 pub(crate) mod cssom;
 // CSS-29: `box-shadow`'s `<shadow>` list grammar moved out too, for the same
@@ -404,6 +406,10 @@ impl ComputedStyle {
             let expanded = if longhand.starts_with("animation-") || longhand.starts_with("transition-") {
                 let Some(canonical) = crate::animation::canonical(&longhand, &expanded) else { continue };
                 canonical
+            } else { expanded };
+            let expanded = if border_radius::CORNERS.contains(&longhand.as_str()) {
+                let font = self.get("font-size").and_then(|s| s.strip_suffix("px")).and_then(|s| s.parse().ok());
+                border_radius::computed_pair(&expanded, font, self.root_font_px).unwrap_or(expanded)
             } else { expanded };
             let typed = values::parse(&longhand, &expanded).unwrap_or(ComputedValue::Unparsed);
             self.typed.insert(longhand.clone(), typed);
@@ -2134,26 +2140,7 @@ fn valid_radius_pair(value: &str) -> bool {
 }
 
 fn radius_component(tokens: &[Token]) -> Option<String> {
-    match trim_tokens(tokens) {
-        [Token::Number(value)] if value.is_finite() && *value == 0.0 => Some("0".into()),
-        [Token::Percentage(value)] if value.is_finite() && *value >= 0.0 => Some(serialize(tokens)),
-        [Token::Dimension(value, unit)] => {
-            (value.is_finite() && *value >= 0.0 && unit.eq_ignore_ascii_case("px"))
-                .then(|| serialize(tokens))
-        }
-        _ => {
-            let text = serialize(tokens);
-            if crate::math::length_percentage(&text, true) {
-                if let Some(inside) = text.trim().strip_prefix("calc(").and_then(|s| s.strip_suffix(')')) {
-                    if let Some(pixels) = inside.strip_suffix("px").and_then(|s| s.trim().parse::<f32>().ok()) {
-                        if pixels.is_finite() { return Some(format!("{}px", pixels.max(0.0))); }
-                    }
-                }
-                return Some(text);
-            }
-            None
-        },
-    }
+    border_radius::component(tokens)
 }
 
 // CSS-27: this used to accept only a bare `Token::Number`/`Token::Percentage`,
@@ -2736,6 +2723,7 @@ pub(crate) fn resolve_with_tree_environment(
     let border_image_root = if parent.is_none() { style.props.get("font-size").and_then(|css|css.strip_suffix("px")).and_then(|n|n.parse().ok()).unwrap_or(style.root_font_px) } else { style.root_font_px };
     crate::border_image::resolve_properties(&mut style.props, border_image_root);
     position_values::resolve(&mut style.props, border_image_root);
+    border_radius::resolve(&mut style.props, border_image_root);
     let image_font=style.props.get("font-size").and_then(|s|s.strip_suffix("px")).and_then(|s|s.parse().ok()).unwrap_or(16.0);
     for property in ["background-image", "list-style-image", "border-image-source"] {
         if let Some(css)=style.props.get_mut(property) {

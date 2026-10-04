@@ -1,0 +1,55 @@
+{
+  "base": "6eec0d0015cbcfcea60882e1502f2f96497787e6",
+  "tested_source": "017dff9717eb0f5469103632b6e146ab058f4036",
+  "profile": {
+    "provider": "baremetal",
+    "cpu": 4,
+    "memory_gib": 8,
+    "lane": "js-lang",
+    "box": "bx_2n57r7zz"
+  },
+  "native": {
+    "before": 4459,
+    "after": 4466,
+    "skipped": 17,
+    "failed": 0,
+    "doctests": 4
+  },
+  "parsing": {
+    "before": 4312,
+    "after": 4323,
+    "total": 5126,
+    "gained": {
+      "/home/user/corpora/wpt/css/css-backgrounds/parsing/border-radius-invalid.html: invalid border-radius: \"-1px\" unexpectedly parsed": 1,
+      "/home/user/corpora/wpt/css/css-backgrounds/parsing/border-radius-invalid.html: invalid border-radius: \"1em /\" unexpectedly parsed": 1,
+      "/home/user/corpora/wpt/css/css-backgrounds/parsing/border-radius-invalid.html: invalid border-radius: \"1px -2px\" unexpectedly parsed": 1,
+      "/home/user/corpora/wpt/css/css-backgrounds/parsing/border-radius-invalid.html: invalid border-radius: \"1px / 2px / 3px\" unexpectedly parsed": 1,
+      "/home/user/corpora/wpt/css/css-backgrounds/parsing/border-radius-invalid.html: invalid border-radius: \"1px 2px 3px 4px 5px\" unexpectedly parsed": 1,
+      "/home/user/corpora/wpt/css/css-backgrounds/parsing/border-radius-invalid.html: invalid border-radius: \"1px 5em 2% 5em 3px 5em 4% 5em\" unexpectedly parsed": 1,
+      "/home/user/corpora/wpt/css/css-backgrounds/parsing/border-radius-invalid.html: invalid border-radius: \"4 / 5\" unexpectedly parsed": 1,
+      "/home/user/corpora/wpt/css/css-backgrounds/parsing/border-radius-invalid.html: invalid border-radius: \"5em 1px 5em 2% 5em 3px 5em 4%\" unexpectedly parsed": 1,
+      "/home/user/corpora/wpt/css/css-backgrounds/parsing/border-radius-invalid.html: invalid border-radius: \"auto\" unexpectedly parsed": 1,
+      "/home/user/corpora/wpt/css/css-backgrounds/parsing/border-radius-invalid.html: invalid border-radius: \"none\" unexpectedly parsed": 1,
+      "/home/user/corpora/wpt/css/css-backgrounds/parsing/border-radius-invalid.html: invalid border-top-left-radius: \"10px 20px 30px\" unexpectedly parsed": 1
+    },
+    "lost": {}
+  },
+  "render": {
+    "directories": 20,
+    "before_pass": 1327,
+    "after_pass": 1327,
+    "gained": 0,
+    "lost": 0,
+    "classification_changes": 0
+  },
+  "owner_exit": 0,
+  "pin": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": [
+    800,
+    600
+  ],
+  "density": 1,
+  "timeout_seconds": 20,
+  "jobs": 4,
+  "raw_policy": "Raw logs and pixels remain on Boat. Compact files include their actual paths and SHA256."
+}
