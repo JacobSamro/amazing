@@ -88,7 +88,7 @@ fn traversable_steps_child_entries_same_document_and_forward_pruning() {
     assert!(h.traverse(push_step).is_err());
     assert!(h.active_entry(2).is_none());
     assert_ne!(next.document, first.document);
-    assert_eq!(h.document(next.document).unwrap().renderer, 41);
+    assert_eq!(h.document(next.document).unwrap().owner, amazing_process::history::HistoryDocumentOwner::Renderer(41));
     let reload = commit(
         &mut h,
         41,
@@ -461,7 +461,7 @@ fn navigation_freezes_outgoing_document_before_process_swap_and_restores_after_t
             HistorySnapshot::default(),
         )
         .unwrap();
-    assert_eq!(h.document(second.document).unwrap().renderer, 8);
+    assert_eq!(h.document(second.document).unwrap().owner, amazing_process::history::HistoryDocumentOwner::Renderer(8));
     assert!(h.restore_request(first.document, 7, 102).is_err());
     assert_eq!(h.traverse(first_step), Err(HistoryError::Order));
     let second_epoch = h.document(second.document).unwrap().epoch;

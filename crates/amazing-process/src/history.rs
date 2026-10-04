@@ -3,10 +3,13 @@ use crate::protocol::{
     HistoryAck, HistoryActivate, HistoryDiscard, HistoryFreeze, HistoryLifecycle,
     HistoryLifecycleEvent, HistoryReceiver, HistoryRestore,
 };
-use amazing_fetch::HttpUrl;
+use amazing_fetch::{HttpUrl, Origin};
+#[path="history_platform.rs"]
+mod platform;
+pub use platform::{HistoryDocumentOwner, PlatformDocumentIdentity, PlatformDocumentToken, PlatformCommitError, PlatformTraversalTicket, PlatformEntry, PlatformEntryStep, PlatformInitialChild, PlatformNavigationHandling, PlatformSameDocumentPlan, PlatformSameDocumentChange, PlatformOwnerEligibility, PlatformSnapshotUpdate, PlatformJointTraversal, PlatformTraversalEffect, PlatformNavigationAttempt};
 use amazing_ipc::{Connection, Error as IpcError};
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub const MAX_STATE_BYTES: usize = 1024 * 1024;
@@ -66,7 +69,7 @@ pub enum DocumentStatus {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocumentState {
     pub id: u64,
-    pub renderer: u64,
+    pub owner: HistoryDocumentOwner,
     pub origin: String,
     pub status: DocumentStatus,
     pub epoch: u64,
@@ -75,6 +78,8 @@ pub struct DocumentState {
     pub restore_pending: bool,
     pub memory_bytes: usize,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ScrollRestoration { #[default] Auto, Manual }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionHistoryEntry {
     pub id: u64,
@@ -84,6 +89,7 @@ pub struct SessionHistoryEntry {
     pub document: u64,
     pub url: String,
     pub snapshot: HistorySnapshot,
+    pub scroll_restoration: ScrollRestoration,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HistoryStep {
@@ -132,6 +138,7 @@ impl Eligibility {
 /// Only this browser-owned value mints entry, document, step and navigation IDs.
 /// Renderer requests must carry a ticket or an existing document token.
 pub struct SessionHistory {
+    instance_id:u64,
     tab: u64,
     root: u64,
     next_id: u64,
@@ -139,10 +146,15 @@ pub struct SessionHistory {
     parents: BTreeMap<u64, Option<u64>>,
     entries: BTreeMap<u64, SessionHistoryEntry>,
     documents: BTreeMap<u64, DocumentState>,
+    platform_origins: BTreeMap<u64, Origin>,
+    platform_initial_children: BTreeMap<u64, platform::InitialChildRecord>,
+    platform_parent_documents: BTreeMap<u64,u64>,
+    platform_initial_documents: BTreeSet<u64>,
     steps: Vec<HistoryStep>,
     current: Option<usize>,
     pending: Option<NavigationTicket>,
     queued_traversal: Option<u64>,
+    platform_traversal: Option<PlatformTraversalTicket>,
     orphaned: Vec<HistoryDiscard>,
 }
 impl SessionHistory {
@@ -150,7 +162,11 @@ impl SessionHistory {
         if tab == 0 || root_navigable == 0 {
             return Err(HistoryError::Invalid);
         }
+        static NEXT_INSTANCE:AtomicU64=AtomicU64::new(1);
+        let instance_id=NEXT_INSTANCE.fetch_update(Ordering::Relaxed,Ordering::Relaxed,|id|id.checked_add(1))
+            .map_err(|_|HistoryError::Limit)?;
         Ok(Self {
+            instance_id,
             tab,
             root: root_navigable,
             next_id: 1,
@@ -158,10 +174,15 @@ impl SessionHistory {
             parents: BTreeMap::from([(root_navigable, None)]),
             entries: BTreeMap::new(),
             documents: BTreeMap::new(),
+            platform_origins: BTreeMap::new(),
+            platform_initial_children: BTreeMap::new(),
+            platform_parent_documents: BTreeMap::new(),
+            platform_initial_documents: BTreeSet::new(),
             steps: Vec::new(),
             current: None,
             pending: None,
             queued_traversal: None,
+            platform_traversal: None,
             orphaned: Vec::new(),
         })
     }
@@ -222,7 +243,7 @@ impl SessionHistory {
             (Some(entry), Some(source))
                 if entry.document == source
                     && self.documents.get(&source).is_some_and(|d| {
-                        d.renderer == renderer
+                        d.owner == HistoryDocumentOwner::Renderer(renderer)
                             && (d.status == DocumentStatus::Active
                                 || (d.status == DocumentStatus::Discarded
                                     && matches!(kind, CommitKind::Navigate | CommitKind::Reload)))
@@ -305,7 +326,7 @@ impl SessionHistory {
                 id,
                 DocumentState {
                     id,
-                    renderer: destination_renderer,
+                    owner: HistoryDocumentOwner::Renderer(destination_renderer),
                     origin: parsed.origin().serialize(),
                     status: DocumentStatus::Active,
                     epoch: ticket.epoch,
@@ -317,7 +338,18 @@ impl SessionHistory {
             );
             id
         };
-        let step = if matches!(ticket.kind, CommitKind::Replace | CommitKind::Reload) {
+        let entry=self.insert_committed_entry(ticket.navigable,document,ticket.kind,url,snapshot)?;
+        self.pending=None;
+        Ok(entry)
+    }
+    fn insert_committed_entry(&mut self,navigable:u64,document:u64,kind:CommitKind,url:String,
+        snapshot:HistorySnapshot)->Result<SessionHistoryEntry,HistoryError> {
+        let scroll_restoration = if kind == CommitKind::Navigate {
+            ScrollRestoration::Auto
+        } else {
+            self.active_entry(navigable).map_or(ScrollRestoration::Auto, |entry|entry.scroll_restoration)
+        };
+        let step = if matches!(kind, CommitKind::Replace | CommitKind::Reload) {
             self.current_step().ok_or(HistoryError::Stale)?
         } else {
             self.mint()?
@@ -325,22 +357,23 @@ impl SessionHistory {
         let entry = SessionHistoryEntry {
             id: self.mint()?,
             step,
-            navigable: ticket.navigable,
-            parent_navigable: self.parents[&ticket.navigable],
+            navigable: navigable,
+            parent_navigable: self.parents[&navigable],
             document,
             url,
             snapshot,
+            scroll_restoration,
         };
-        if matches!(ticket.kind, CommitKind::Replace | CommitKind::Reload) {
+        if matches!(kind, CommitKind::Replace | CommitKind::Reload) {
             let index = self.current.ok_or(HistoryError::Stale)?;
-            self.steps[index].entries.insert(ticket.navigable, entry.id);
+            self.steps[index].entries.insert(navigable, entry.id);
         } else {
             let mut map = self
                 .current
                 .map(|i| self.steps[i].entries.clone())
                 .unwrap_or_default();
             // A cross-document navigation discards child navigables of the replaced tree.
-            if ticket.kind == CommitKind::Navigate {
+            if kind == CommitKind::Navigate {
                 let descendants: Vec<u64> = self
                     .parents
                     .keys()
@@ -348,7 +381,7 @@ impl SessionHistory {
                     .filter(|child| {
                         let mut cursor = *child;
                         while let Some(Some(parent)) = self.parents.get(&cursor) {
-                            if *parent == ticket.navigable {
+                            if *parent == navigable {
                                 return true;
                             }
                             cursor = *parent;
@@ -360,7 +393,7 @@ impl SessionHistory {
                     map.remove(&child);
                 }
             }
-            map.insert(ticket.navigable, entry.id);
+            map.insert(navigable, entry.id);
             if let Some(index) = self.current {
                 self.steps.truncate(index + 1);
             }
@@ -371,7 +404,7 @@ impl SessionHistory {
             self.current = Some(self.steps.len() - 1);
         }
         self.entries.insert(entry.id, entry.clone());
-        self.pending = None;
+
         self.prune_unreachable();
         Ok(entry)
     }
@@ -382,7 +415,8 @@ impl SessionHistory {
             .flat_map(|s| s.entries.values().copied())
             .collect();
         self.entries.retain(|id, _| referenced.contains(id));
-        let documents: BTreeSet<u64> = self.entries.values().map(|e| e.document).collect();
+        let documents: BTreeSet<u64> = self.entries.values().map(|e| e.document)
+            .chain(self.platform_initial_children.values().filter(|child|!child.attached).flat_map(|child|[child.entry.document,child.attachment_entry.document])).collect();
         let orphaned: Vec<u64> = self
             .documents
             .keys()
@@ -391,10 +425,12 @@ impl SessionHistory {
             .collect();
         for id in orphaned {
             let state = self.documents.remove(&id).unwrap();
-            self.orphaned.push(HistoryDiscard {
-                document: id,
-                epoch: state.epoch,
-            });
+            self.platform_origins.remove(&id);
+            self.platform_parent_documents.remove(&id);
+            self.platform_initial_documents.remove(&id);
+            if matches!(state.owner,HistoryDocumentOwner::Renderer(_)) {
+                self.orphaned.push(HistoryDiscard {document:id,epoch:state.epoch});
+            }
         }
     }
     /// Browser sends these to their renderer after a replace or forward prune.
@@ -412,7 +448,7 @@ impl SessionHistory {
             .documents
             .get(&document)
             .ok_or(HistoryError::NotFound)?;
-        if state.renderer != renderer || state.status != DocumentStatus::Active {
+        if state.owner != HistoryDocumentOwner::Renderer(renderer) || state.status != DocumentStatus::Active {
             return Err(HistoryError::Stale);
         }
         let entry = self
@@ -541,7 +577,7 @@ impl SessionHistory {
             .documents
             .get_mut(&document)
             .ok_or(HistoryError::NotFound)?;
-        if state.renderer != renderer
+        if state.owner != HistoryDocumentOwner::Renderer(renderer)
             || state.epoch != epoch
             || state.status != DocumentStatus::Active
         {
@@ -562,7 +598,7 @@ impl SessionHistory {
             .documents
             .get_mut(&ack.document)
             .ok_or(HistoryError::NotFound)?;
-        if state.epoch != ack.epoch || state.status != DocumentStatus::FreezePending {
+        if !matches!(state.owner,HistoryDocumentOwner::Renderer(_)) || state.epoch != ack.epoch || state.status != DocumentStatus::FreezePending {
             return Err(HistoryError::Stale);
         }
         if state
@@ -600,7 +636,7 @@ impl SessionHistory {
             .documents
             .get(&document)
             .ok_or(HistoryError::NotFound)?;
-        if state.renderer != renderer || state.status != DocumentStatus::Frozen {
+        if state.owner != HistoryDocumentOwner::Renderer(renderer) || state.status != DocumentStatus::Frozen {
             return Err(HistoryError::Stale);
         }
         if state.restore_pending {
@@ -630,7 +666,7 @@ impl SessionHistory {
             .documents
             .get_mut(&ack.document)
             .ok_or(HistoryError::NotFound)?;
-        if state.epoch != ack.epoch
+        if !matches!(state.owner,HistoryDocumentOwner::Renderer(_)) || state.epoch != ack.epoch
             || state.status != DocumentStatus::Frozen
             || !state.restore_pending
         {
@@ -657,6 +693,7 @@ impl SessionHistory {
             .documents
             .get_mut(&document)
             .ok_or(HistoryError::NotFound)?;
+        if !matches!(state.owner,HistoryDocumentOwner::Renderer(_)) {return Err(HistoryError::Invalid);}
         state.status = DocumentStatus::Discarded;
         state.frozen_at_ms = None;
         state.freeze_deadline_ms = None;
@@ -706,7 +743,7 @@ impl SessionHistory {
         for state in self
             .documents
             .values_mut()
-            .filter(|d| d.renderer == renderer)
+            .filter(|d| d.owner == HistoryDocumentOwner::Renderer(renderer))
         {
             state.status = DocumentStatus::Discarded;
             state.frozen_at_ms = None;

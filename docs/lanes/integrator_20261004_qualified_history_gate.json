@@ -1,0 +1,130 @@
+{
+  "schema": 1,
+  "recorded_base": "fd9183a86c85f1dbcb3d6b2a62676354e9357052",
+  "gated_source_commit": "81564e31bdfd3ccc91b48aee4444b61e419dc7ee",
+  "engine_source_identical_after_tooling_only_rebase": true,
+  "workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4384,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 605524,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-81564e31bdfd3ccc91b48aee4444b61e419dc7ee-nextest.log",
+        "sha256": "54bb3141476dce375b53e01ad8c8f431087444ee48869bc601a86834c9bfe860"
+      },
+      {
+        "bytes": 16054,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-81564e31bdfd3ccc91b48aee4444b61e419dc7ee-doctests.log",
+        "sha256": "7272f30a9fd2a8800a74211ee87fde369d152dc1ae790028d7e21a4b3af12f96"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "81564e31bdfd3ccc91b48aee4444b61e419dc7ee",
+    "summary_lines": [
+      "Summary [ 121.387s] 4384 tests run: 4384 passed, 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "test262": {
+    "job_exit": 0,
+    "shards": 16,
+    "summary": {
+      "files": {
+        "fail": 800,
+        "pass": 52606,
+        "skipped": 294,
+        "timeout": 1,
+        "unsupported": 171
+      },
+      "variants": {
+        "fail": 1500,
+        "pass": 101076,
+        "timeout": 2,
+        "unsupported": 340
+      }
+    },
+    "lost_files": 0,
+    "lost_variants": 0,
+    "gained_files": 0,
+    "provenance": {
+      "host_sha256": "82d554ec1e785825e00e65440ea4ec3692af81e0530cc363a1ab3357d106f27f",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "source_commit": "81564e31bdfd3ccc91b48aee4444b61e419dc7ee",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    "merged_summary_sha256": "99871d4937aa46723c395975d5b548059928b67a41bf1dc00278c012df0f682b",
+    "shard_sha256": {
+      "0": "8aeb24c944cdc745de7decb93c64654603618694cc8f768aefa93d049a60dca6",
+      "1": "6f263c3f2a167eee64a3e59e7c619fb045c0a47156bbf61f9c2c2a977815c7d1",
+      "2": "1f00fca002e5a9144dd8a912001d8b2185935871b0f63aaeb98c0c189e626bf6",
+      "3": "45e525779c9657e25291a00658dcbd126a0e1eb22fff79a3fa82eafd41ac962a",
+      "4": "af3d80f5559ff3f2e38f130c984e49c92c99fcc345d319c248e7adfa12b2520f",
+      "5": "61877f109f9ad896e0ed5a59a2f4650f73acdf3137d3f878598cc76020e13475",
+      "6": "57101f3c09bf6f2b954ccce3ad6ff3d28d233496abf744744d7bdd70542666c3",
+      "7": "8ed17ea51f0dd8cf76fe8eadb9a0daf68748f7741567e420d1c10aede1f7e68f",
+      "8": "3c201685f12886f88778dc55d2f4dc63960cc6ed35a6a469a020c4fd9450638a",
+      "9": "934316e705f73365e1384784ce55b7c6b79868495766515b2e0cc88337a3b2f8",
+      "10": "78ae06ca0436063ec581431a1b564f2602b7d3ba927468fe30c8847de8bfd71b",
+      "11": "c5bc3e11a81522eab5cff600ecf49c426f425c5296414bb53730f5caddce2c2a",
+      "12": "6f476cb6c97cadccf99f76c5055810d4a1cb944b41147345d3f5baa3144aa337",
+      "13": "b10da0b85dce9f185b49eddeb7ca9607f184e3ddb143e2744ceeb7084c1cd336",
+      "14": "747fd808dfee9650920c8fb6f2621934ea09c7256d6e81502197b60f680b904a",
+      "15": "be8343223c9ef3116ee28052e876d13ad9026c5010bba0e55f5bdc6af94c7097"
+    },
+    "baseline_source_commit": "03443f1a",
+    "baseline_sha256": "c5314f485a926e5d4fb80aeec221de71f97191b874721927d885315e92f55a1a"
+  },
+  "own_corpus": {
+    "scope": "complete amazing-process and amazing-ipc suites included in workspace nextest",
+    "lost_passing_tests": 0
+  },
+  "first_attempt": "tooling failure; rejected",
+  "clean_reruns": 1
+}
