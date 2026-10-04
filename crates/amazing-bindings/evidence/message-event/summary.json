@@ -1,0 +1,167 @@
+{
+  "schema": 1,
+  "ticket": "canonical-message-event",
+  "fixed_origin": "7b5a62c10ea9d2588356d83be982a8792eba639c",
+  "before_source": "fac447c2726365ec30b9d572ad36c60845465324",
+  "tested_after_source": "d5e52ab61b3e8e43bb8bf48d762316e21f8c1e25",
+  "dependency": {
+    "ready_source": "a8e716e4eb6bcb1cdfc8e69b0fe512e0bbc386ae",
+    "paired_identical_source": "fac447c2726365ec30b9d572ad36c60845465324",
+    "boundary": "Runtime semantic PropertyKey Get; production/tests identical"
+  },
+  "actual_exit": {
+    "before": 0,
+    "after": 0
+  },
+  "linux": {
+    "alias": "dom-bindings",
+    "pool": "pool-dom",
+    "sandbox": "bx_na7t27mn",
+    "vcpu": 4,
+    "memory_gib": 8
+  },
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "comparison": "Exact UTF16LE assertion-name SHA Counter multiplicities and passing files; no excluded assertions",
+  "zero_loss": true,
+  "suites": {
+    "messaging": {
+      "before_files": 136,
+      "after_files": 136,
+      "same_selection": true,
+      "before_passing_assertions": 107,
+      "after_passing_assertions": 111,
+      "lost_assertions": 0,
+      "gained_assertions": 4,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "raw_before_sha256": "9aeb1703c0dc9027584cf05c2e1faac917a8b7d7109f3fea7da9cb98ae0207ee",
+      "raw_after_sha256": "3c3c4df6f50dca4642d049b8894d7556c63d894c384b082585be571781e41918",
+      "gained_by_file": {
+        "webmessaging/Channel_postMessage_target_source.any.js": 1,
+        "webmessaging/MessageEvent-trusted.window.js": 1,
+        "webmessaging/broadcastchannel/basics.any.js": 2
+      }
+    },
+    "core": {
+      "before_files": 888,
+      "after_files": 888,
+      "same_selection": true,
+      "before_passing_assertions": 91277,
+      "after_passing_assertions": 92833,
+      "lost_assertions": 0,
+      "gained_assertions": 1556,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "raw_before_sha256": "279da70bbfbd2318ad9fc898d5667ff35eeb802d2d4ed12b23cc13fe168d26f1",
+      "raw_after_sha256": "17fe710fe0cba0aa57608884dfe8225aec434e7ac415b3067797414faaf5a265",
+      "gained_by_file": {
+        "dom/nodes/Document-createEvent.https.html": 3,
+        "dom/ranges/Range-compareBoundaryPoints.html": 1553
+      }
+    },
+    "shadow": {
+      "before_files": 277,
+      "after_files": 277,
+      "same_selection": true,
+      "before_passing_assertions": 5681,
+      "after_passing_assertions": 5681,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "raw_before_sha256": "315b6ab0752526b59b5a7e22460092377c5710af1828e52f2903eeba06ba03c0",
+      "raw_after_sha256": "664011b63ad5957d943086b6d86779aeeff20ca09cdcb9ca5719f9ac2fa6fac3",
+      "gained_by_file": {}
+    },
+    "xml": {
+      "before_files": 1,
+      "after_files": 1,
+      "same_selection": true,
+      "before_passing_assertions": 112,
+      "after_passing_assertions": 112,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "raw_before_sha256": "520e85f577dbc62f26778392222468ab409b3d427e993a3b1f32e9cbedbf2eaf",
+      "raw_after_sha256": "d62429047df8e80f62f281b0bcad77d913ccd06d0dbd8d5b0a06500e09771ae5",
+      "gained_by_file": {}
+    },
+    "syntax72": {
+      "before_files": 72,
+      "after_files": 72,
+      "same_selection": true,
+      "before_passing_assertions": 2707,
+      "after_passing_assertions": 2707,
+      "lost_assertions": 0,
+      "gained_assertions": 0,
+      "lost_passing_files": [],
+      "lost_details": [],
+      "raw_before_sha256": "644ce622ac7e005292254036a657fab0bba63dbfcc20586850aef62848918aec",
+      "raw_after_sha256": "644ce622ac7e005292254036a657fab0bba63dbfcc20586850aef62848918aec",
+      "gained_by_file": {}
+    }
+  },
+  "native": {
+    "before": {
+      "passed": 4495,
+      "failed": 0,
+      "skipped": 17,
+      "docs_passed": 4,
+      "raw_hashes": {
+        "native.log": "1e0d2b366b2831489f8b97592cfde8e6db3dd9337c85ed3a0291838c2cb4d288",
+        "docs.log": "766bc0a385e7b78194e57169536a8ab98b0262255eff01ef2fd575bb9c32a0d5",
+        "syntax72.jsonl": "644ce622ac7e005292254036a657fab0bba63dbfcc20586850aef62848918aec",
+        "raw.sha256": "e33f9479edbf9dc70500ccd2e3d5221ce236aa0d8c9b99a813c1628e907f8826"
+      },
+      "binary_sha256": "92541824f1c27a7764300da9cc03322c75868adaf1e549905c6bcd138e8ba34c"
+    },
+    "after": {
+      "passed": 4504,
+      "failed": 0,
+      "skipped": 17,
+      "docs_passed": 4,
+      "raw_hashes": {
+        "native.log": "4ed9f174bb6d3f74a0e7bfb4732aa0a5934e14ad1d5da604d9e8f2e5d30b10a6",
+        "docs.log": "30b66c18043c82b89e9653811a715f03c269188738b192b7c9ec3dd9158716f2",
+        "syntax72.jsonl": "644ce622ac7e005292254036a657fab0bba63dbfcc20586850aef62848918aec",
+        "raw.sha256": "60eb5d0e72378a6f3b06d1e96c33647ec9e53ee6ac7fe10f0c68c9d539d6a8e4"
+      },
+      "binary_sha256": "7e08f928f6cdf960ed331dcce44f6e8633782889102717dede057b3dd993cbe9"
+    }
+  },
+  "raw_home": "/home/user/amazing/out/dom-bindings",
+  "raw_summary_sha256": "41e6c40bbb52cc34c0a644a52402d1a6361fa56f433921e5d7109fe0910d9b31",
+  "profiles": {
+    "ordinary_ms": 25000,
+    "heavy_ms": 150000,
+    "jobs": 4,
+    "heavy_jobs": 1,
+    "shadow_actual_meta_long_ms": 600000,
+    "syntax72": "unchanged entire syntax_sweep.py 10s/60s jobs4"
+  },
+  "first_failed_candidate": {
+    "source": "6d0c406856d170b22b1173d9857b008c47aa3218",
+    "actual_exit": 100,
+    "passed": 4500,
+    "failed": 4,
+    "skipped": 17,
+    "raw_native_sha256": "7f9e6a13ebe1515f943bde93a62da0ae945e1fec111f22a78d35588a67beeb97",
+    "raw_native_path": "/home/user/amazing/out/dom-bindings/message-event-after/native.log"
+  },
+  "gain_classification": {
+    "feature": {
+      "messaging": 4,
+      "Document-createEvent.https.html": 3
+    },
+    "timing_only_uncredited": {
+      "dom/ranges/Range-compareBoundaryPoints.html": 1553
+    },
+    "timing_reason": "BEFORE timed out; corrected AFTER completes PASS. No MessageEvent feature credit for these assertions."
+  },
+  "scope_limits": [
+    "Existing router/clone/transfer/checkpoint admission remains unchanged; cross-window postMessage targeting and global scheduling remain incomplete.",
+    "WebSocket canonical allocation caller corrected; its manual dispatch and scheduling remain unchanged.",
+    "EventTarget creation-realm registration applies only genuine generic constructor allocations; no Window/AbortSignal/Node wrapper migration."
+  ]
+}

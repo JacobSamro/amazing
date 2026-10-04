@@ -2362,3 +2362,8 @@ impl RuntimeBindingHost<'_> {
 #[cfg(test)]
 #[path = "runtime_host_dom_bindings/namespace_lookup.rs"]
 mod namespace_lookup;
+#[path = "runtime_host_dom_bindings/message_event_adapter.rs"]
+mod message_event_adapter;
+#[cfg(test)]
+#[path = "runtime_host_dom_bindings/message_events.rs"]
+mod message_events;

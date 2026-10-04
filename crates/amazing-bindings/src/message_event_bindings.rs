@@ -45,6 +45,10 @@ fn create<H: BindingHost>(host: &mut H, kind: Vec<u16>, init: EventInit,
     let data = root(host, payload)?;
     let result = host.with_dom(|dom| Ok(dom.events_mut().create_event(
         Event::new_message_utf16(&kind, init, Duration::ZERO, data.clone()))));
+    let result = result.and_then(|event| {
+        host.message_event_created(event)?;
+        Ok(event)
+    });
     if result.is_err() { release(host, data); }
     result
 }
@@ -62,6 +66,7 @@ pub(crate) fn create_legacy<H: BindingHost>(host: &mut H) -> Result<H::Value, H:
         event.mark_uninitialized();
         Ok(dom.events_mut().create_event(event))
     })?;
+    host.message_event_created(id)?;
     host.wrap_platform_object(key(host, id.slot() as u64), InterfaceBrand::EVENT)
 }
 fn member<H: BindingHost>(host: &mut H, dictionary: Option<&H::Value>, name: &str) -> Result<H::Value, H::Error> {

@@ -1182,6 +1182,24 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 });
             }
         }
+        if brand == InterfaceBrand::EVENT_TARGET {
+            if let Some(realm) = self.messaging_generic_target_realm(key)? {
+                if realm != self.js.binding_current_realm() {
+                    let state = self.state.clone();
+                    return self.js.binding_with_realm(realm, |js|
+                        RuntimeBindingHost { js, state }.wrap_platform_object(key, brand));
+                }
+            }
+        }
+        if brand == InterfaceBrand::EVENT {
+            if let Some(realm) = self.messaging_event_realm(key)? {
+                if realm != self.js.binding_current_realm() {
+                    let state=self.state.clone();
+                    return self.js.binding_with_realm(realm, |js|
+                        RuntimeBindingHost { js, state }.wrap_platform_object(key,brand));
+                }
+            }
+        }
         let interface = self.interface_for(key, brand)?;
         let prototype = self
             .prototype(interface)
@@ -1197,6 +1215,8 @@ impl BindingHost for RuntimeBindingHost<'_> {
         )?;
         if brand == InterfaceBrand::LOCATION {
             self.materialize_location_unforgeables(&value)?;
+        } else if interface == Interface::MessageEvent {
+            self.dom_materialize_message_event(&value)?;
         } else if !Self::dom_uses_inherited_accessors(brand) {
             self.materialize_accessors(&value);
         }
@@ -1272,6 +1292,22 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
     fn window_event_target_value(&self, slot: u64) -> Option<JsValue> {
         self.dom_window_event_target_value(slot)
+    }
+    fn external_event_target_slot(&self, value: &JsValue) -> Option<u64> {
+        self.messaging_event_target_slot(value)
+    }
+    fn external_event_target_value(&self, slot: u64) -> Option<JsValue> {
+        self.messaging_event_target_value(slot)
+    }
+    fn is_message_port(&self, value: &JsValue) -> bool { self.messaging_is_port(value) }
+    fn event_target_created(&mut self, slot: u64) -> Result<(), Throw> {
+        self.messaging_register_generic_target(slot)
+    }
+    fn message_event_created(&mut self, event: amazing_dom::events::EventId) -> Result<(), Throw> {
+        self.messaging_register_event(event)
+    }
+    fn sequence_message_ports(&mut self, value: &JsValue) -> Result<Vec<JsValue>, Throw> {
+        self.dom_message_ports(value)
     }
     fn node_platform_key(&self, node: NodeIdx) -> PlatformKey {
         PlatformKey {

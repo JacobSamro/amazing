@@ -17,14 +17,12 @@ use std::rc::{Rc, Weak};
 pub(crate) const MESSAGING_BRAND_BASE: u64 = 200;
 pub(crate) const KIND_PORT: u64 = 0;
 pub(crate) const KIND_CHANNEL: u64 = 1;
-pub(crate) const KIND_MESSAGE_EVENT: u64 = 2;
 pub(crate) const KIND_MESSAGE_CHANNEL: u64 = 3;
 
 const MAX_INBOX: usize = 1024;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum MessagingOp {
-    MessageEventConstructor,
     MessageChannelConstructor,
     BroadcastChannelConstructor,
     ChannelPort1,
@@ -33,9 +31,6 @@ pub(crate) enum MessagingOp {
     PortPost,
     PortStart,
     PortClose,
-    AddEventListener,
-    RemoveEventListener,
-    DispatchEvent,
     OnMessageGet,
     OnMessageSet,
     OnMessageErrorGet,
@@ -43,27 +38,16 @@ pub(crate) enum MessagingOp {
     WindowPostMessage,
 }
 
-#[derive(Clone)]
-pub(crate) struct Listener {
-    kind: String,
-    callback: JsValue,
-    once: bool,
-}
-
 enum MsgObject {
     Port {
         id: PortId,
         started: bool,
         closed: bool,
-        handlers: HashMap<String, JsValue>,
-        listeners: Vec<Listener>,
     },
     Channel {
         name: String,
         router_client: u64,
         closed: bool,
-        handlers: HashMap<String, JsValue>,
-        listeners: Vec<Listener>,
     },
 }
 
@@ -79,13 +63,19 @@ pub(crate) struct QueuedMessage {
     payload: Vec<u8>,
     origin: String,
     ports: Vec<PortId>,
+    window_context: Option<(RealmHandle, u64)>,
 }
 
 pub(crate) struct MessagingRealm {
     client: ClientId,
     objects: Vec<MsgObject>,
     ports: HashMap<PortId, usize>,
-    classes: HashMap<u64, (JsValue, JsValue)>,
+    classes: HashMap<(RealmHandle, u64), (JsValue, JsValue)>,
+    targets: Vec<(RealmHandle, u64)>,
+    root_realm: RealmHandle,
+    event_realms: HashMap<usize, RealmHandle>,
+    generic_target_realms: HashMap<u64, RealmHandle>,
+    trusted_getters: HashMap<RealmHandle, JsValue>,
     inbox: VecDeque<QueuedMessage>,
     globals: HashMap<String, JsValue>,
 }
@@ -124,12 +114,14 @@ impl RuntimeBindings {
     /// Test hook: enqueue a raw wire payload as if a peer had sent it.
     pub(crate) fn queue_raw_message(&self, target: DeliveryTarget, payload: Vec<u8>) {
         let mut state = self.state.borrow_mut();
+        let window_slot = state.window_event_target_slot;
         if let Some(realm) = state.messaging.as_mut() {
             realm.inbox.push_back(QueuedMessage {
                 target,
                 payload,
                 origin: String::new(),
                 ports: Vec::new(),
+                window_context: Some((realm.root_realm, window_slot)),
             });
         }
     }
@@ -157,6 +149,11 @@ impl RuntimeBindingHost<'_> {
             objects: Vec::new(),
             ports: HashMap::new(),
             classes: HashMap::new(),
+            targets: Vec::new(),
+            root_realm: self.js.binding_current_realm(),
+            event_realms: HashMap::new(),
+            generic_target_realms: HashMap::new(),
+            trusted_getters: HashMap::new(),
             inbox: VecDeque::new(),
             globals: HashMap::new(),
         });
@@ -202,7 +199,7 @@ impl RuntimeBindingHost<'_> {
 
     fn messaging_set_class(&self, kind: u64, prototype: JsValue, constructor: JsValue) {
         if let Some(realm) = self.state.borrow_mut().messaging.as_mut() {
-            realm.classes.insert(kind, (prototype, constructor));
+            realm.classes.insert((self.js.binding_current_realm(), kind), (prototype, constructor));
         }
     }
 
@@ -211,7 +208,7 @@ impl RuntimeBindingHost<'_> {
             .borrow()
             .messaging
             .as_ref()
-            .and_then(|realm| realm.classes.get(&kind))
+            .and_then(|realm| realm.classes.get(&(self.js.binding_current_realm(), kind)))
             .map(|pair| pair.0.clone())
     }
 
@@ -219,12 +216,15 @@ impl RuntimeBindingHost<'_> {
         self.messaging_ensure()?;
         let prototype = self
             .messaging_class(kind)
-            .unwrap_or_else(|| self.js.binding_object_prototype());
+            .ok_or_else(|| Throw::type_error("Messaging prototype missing in allocation realm"))?;
+        let allocation_realm = self.js.binding_current_realm();
+        let event_target = self.with_dom(|dom| Ok(dom.create_event_target()))?;
         let slot = {
             let mut state = self.state.borrow_mut();
             let realm = state.messaging.as_mut().unwrap();
             let slot = realm.objects.len();
             realm.objects.push(object);
+            realm.targets.push((allocation_realm, event_target));
             if let MsgObject::Port { id, .. } = &realm.objects[slot] {
                 realm.ports.insert(*id, slot);
             }
@@ -259,12 +259,9 @@ impl RuntimeBindingHost<'_> {
             return Err(Throw::type_error("Stale messaging receiver"));
         }
         let slot = handle.slot as usize;
-        if self
-            .state
-            .borrow()
-            .messaging
-            .as_ref()
-            .is_none_or(|realm| slot >= realm.objects.len())
+        if self.state.borrow().messaging.as_ref().is_none_or(|realm|
+            !matches!((kind, realm.objects.get(slot)),
+                (KIND_PORT, Some(MsgObject::Port { .. })) | (KIND_CHANNEL, Some(MsgObject::Channel { .. }))))
         {
             return Err(Throw::type_error("Invalid messaging slot"));
         }
@@ -325,16 +322,8 @@ impl RuntimeBindingHost<'_> {
     }
 
     fn messaging_port_id(&self, value: &JsValue) -> Option<PortId> {
-        let handle = self
-            .js
-            .binding_host_handle(value, MESSAGING_BRAND_BASE + KIND_PORT)?;
-        let slot = handle.slot as usize;
-        let state = self.state.borrow();
-        let realm = state.messaging.as_ref()?;
-        match realm.objects.get(slot) {
-            Some(MsgObject::Port { id, .. }) => Some(*id),
-            _ => None,
-        }
+        self.messaging_receiver(value, KIND_PORT).ok()
+            .and_then(|slot| self.messaging_object_port_id(slot))
     }
 
     fn messaging_serialize(
@@ -361,6 +350,10 @@ impl RuntimeBindingHost<'_> {
         ports: Vec<PortId>,
     ) {
         let origin = self.messaging_origin();
+        let window_context = if matches!(target, DeliveryTarget::Window) {
+            self.dom_window_event_target_slot(&self.js.binding_global_object())
+                .map(|slot| (self.js.binding_current_realm(), slot))
+        } else { None };
         let realm = BROWSER.with(|browser| {
             browser
                 .borrow()
@@ -376,6 +369,7 @@ impl RuntimeBindingHost<'_> {
                         payload,
                         origin,
                         ports,
+                        window_context,
                     });
                 }
             }
@@ -419,6 +413,22 @@ impl RuntimeBindingHost<'_> {
     }
 
     fn messaging_deliver(&mut self, message: QueuedMessage) -> Result<(), Throw> {
+        let context = match &message.target {
+            DeliveryTarget::Port(id) => {
+                let state = self.state.borrow();
+                state.messaging.as_ref().and_then(|m| m.ports.get(id)
+                    .and_then(|slot| m.targets.get(*slot))).copied()
+            }
+            DeliveryTarget::ChannelSlot(slot) => self.state.borrow().messaging.as_ref()
+                .and_then(|m| m.targets.get(*slot)).copied(),
+            DeliveryTarget::Window => message.window_context,
+        };
+        let Some((realm, native_target)) = context else { return Ok(()) };
+        if realm != self.js.binding_current_realm() {
+            let state = self.state.clone();
+            return self.js.binding_with_realm(realm, |js|
+                RuntimeBindingHost { js, state }.messaging_deliver(message));
+        }
         let origin = message.origin.clone();
         let target = message.target.clone();
         let data = match state_wire::decode(&message.payload) {
@@ -428,399 +438,85 @@ impl RuntimeBindingHost<'_> {
         match data {
             Some(data) => {
                 let ports = self.messaging_wrap_ports(&target, &message.ports);
-                self.messaging_dispatch(target, data, &origin, ports)
+                self.dom_fire_message_event(native_target, "message", data, &origin, ports)
             }
             // A malformed or unserializable payload must not abort the
             // event-loop turn: a peer process can send arbitrary bytes. Per
             // HTML, fire `messageerror` at the target and keep going.
-            None => self.messaging_dispatch_error(target, &origin),
+            None => self.dom_fire_message_event(native_target, "messageerror", JsValue::Null, &origin, Vec::new()),
         }
     }
 
-    fn messaging_dispatch(
-        &mut self,
-        target: DeliveryTarget,
-        data: JsValue,
-        origin: &str,
-        ports: JsValue,
-    ) -> Result<(), Throw> {
-        match target {
-            DeliveryTarget::Port(id) => {
-                let event = self.messaging_make_event("message", data, origin, ports)?;
-                self.messaging_dispatch_port("message", id, event)
-            }
-            DeliveryTarget::ChannelSlot(slot) => {
-                let event = self.messaging_make_event("message", data, origin, ports)?;
-                self.messaging_dispatch_channel("message", slot, event)
-            }
-            DeliveryTarget::Window => {
-                self.messaging_dispatch_window("message", data, origin, ports)
-            }
+    fn messaging_wrap_ports(&mut self, _target: &DeliveryTarget, ports: &[PortId]) -> Vec<JsValue> {
+        let state = self.state.borrow();
+        let values = ports.iter().filter_map(|id| {
+            let m = state.messaging.as_ref()?;
+            let slot = m.ports.get(id)?;
+            m.globals.get(&format!("{KIND_PORT}:{slot}")).cloned()
+        }).collect();
+        values
+    }
+    pub(super) fn messaging_trusted_getter(&mut self) -> Result<JsValue, Throw> {
+        self.messaging_ensure()?;
+        let realm=self.js.binding_current_realm();
+        if let Some(getter)=self.state.borrow().messaging.as_ref().unwrap().trusted_getters.get(&realm) {
+            return Ok(getter.clone());
         }
+        let getter=self.native("get isTrusted",0,NativeEntry::Operation(Operation::EventIsTrusted),HostCallPolicy::CallOnly);
+        self.state.borrow_mut().messaging.as_mut().unwrap().trusted_getters.insert(realm,getter.clone());
+        Ok(getter)
     }
-
-    fn messaging_dispatch_error(
-        &mut self,
-        target: DeliveryTarget,
-        origin: &str,
-    ) -> Result<(), Throw> {
-        let ports = self.js.binding_create_array(Vec::new())?;
-        match target {
-            DeliveryTarget::Port(id) => {
-                let event =
-                    self.messaging_make_event("messageerror", JsValue::Null, origin, ports)?;
-                self.messaging_dispatch_port("messageerror", id, event)
-            }
-            DeliveryTarget::ChannelSlot(slot) => {
-                let event =
-                    self.messaging_make_event("messageerror", JsValue::Null, origin, ports)?;
-                self.messaging_dispatch_channel("messageerror", slot, event)
-            }
-            DeliveryTarget::Window => {
-                self.messaging_dispatch_window("messageerror", JsValue::Null, origin, ports)
-            }
-        }
-    }
-
-    fn messaging_wrap_ports(&mut self, _target: &DeliveryTarget, ports: &[PortId]) -> JsValue {
-        if ports.is_empty() {
-            return JsValue::Undefined;
-        }
-        let mut values = Vec::new();
-        for id in ports {
-            let slot = {
-                let state = self.state.borrow();
-                state
-                    .messaging
-                    .as_ref()
-                    .and_then(|realm| realm.ports.get(id))
-                    .copied()
-            };
-            let Some(slot) = slot else { continue };
-            let wrapper = {
-                let state = self.state.borrow();
-                state
-                    .messaging
-                    .as_ref()
-                    .and_then(|realm| realm.globals.get(&format!("{KIND_PORT}:{slot}")).cloned())
-            };
-            if let Some(wrapper) = wrapper {
-                values.push(wrapper);
-            }
-        }
-        self.js
-            .binding_create_array(values)
-            .unwrap_or(JsValue::Undefined)
-    }
-
-    fn messaging_make_event(
-        &mut self,
-        kind: &str,
-        data: JsValue,
-        origin: &str,
-        ports: JsValue,
-    ) -> Result<JsValue, Throw> {
-        let prototype = self
-            .messaging_class(KIND_MESSAGE_EVENT)
-            .unwrap_or_else(|| self.js.binding_object_prototype());
-        let event = self.js.binding_create_object(Some(&prototype))?;
-        let flags = BindingPropertyFlags::METHOD;
-        self.js
-            .binding_define_data_property(&event, "type", JsValue::str(kind), flags)?;
-        self.js
-            .binding_define_data_property(&event, "data", data, flags)?;
-        self.js
-            .binding_define_data_property(&event, "origin", JsValue::str(origin), flags)?;
-        self.js
-            .binding_define_data_property(&event, "lastEventId", JsValue::str(""), flags)?;
-        self.js
-            .binding_define_data_property(&event, "source", JsValue::Null, flags)?;
-        self.js
-            .binding_define_data_property(&event, "ports", ports, flags)?;
-        self.js
-            .binding_define_data_property(&event, "bubbles", JsValue::Bool(false), flags)?;
-        self.js
-            .binding_define_data_property(&event, "cancelable", JsValue::Bool(false), flags)?;
-        self.js
-            .binding_define_data_property(&event, "isTrusted", JsValue::Bool(true), flags)?;
-        Ok(event)
-    }
-
-    fn messaging_dispatch_port(
-        &mut self,
-        kind: &str,
-        id: PortId,
-        event: JsValue,
-    ) -> Result<(), Throw> {
-        let (slot, this) = {
-            let state = self.state.borrow();
-            let Some(realm) = state.messaging.as_ref() else {
-                return Ok(());
-            };
-            let Some(slot) = realm.ports.get(&id).copied() else {
-                return Ok(());
-            };
-            let this = realm.globals.get(&format!("{KIND_PORT}:{slot}")).cloned();
-            (slot, this)
-        };
-        let Some(this) = this else { return Ok(()) };
-        self.messaging_fire(slot, kind, this, event)
-    }
-
-    fn messaging_dispatch_channel(
-        &mut self,
-        kind: &str,
-        slot: usize,
-        event: JsValue,
-    ) -> Result<(), Throw> {
-        let this = {
-            let state = self.state.borrow();
-            let Some(realm) = state.messaging.as_ref() else {
-                return Ok(());
-            };
-            realm.globals.get(&format!("{KIND_CHANNEL}:{slot}")).cloned()
-        };
-        let Some(this) = this else { return Ok(()) };
-        self.messaging_fire(slot, kind, this, event)
-    }
-
-    fn messaging_dispatch_window(
-        &mut self,
-        kind: &str,
-        data: JsValue,
-        origin: &str,
-        ports: JsValue,
-    ) -> Result<(), Throw> {
-        let window = self.js.binding_global_object();
-        let flags = BindingPropertyFlags::METHOD;
-        let event = invoke(
-            self,
-            Operation::EventConstructor,
-            JsValue::Undefined,
-            &[JsValue::str(kind)],
-        )?;
-        // `MessageEvent.ports` is always a sequence, never `undefined`.
-        let ports = if matches!(ports, JsValue::Undefined) {
-            self.js.binding_create_array(Vec::new())?
-        } else {
-            ports
-        };
-        self.js
-            .binding_define_data_property(&event, "data", data, flags)?;
-        self.js.binding_define_data_property(
-            &event,
-            "origin",
-            JsValue::str(origin),
-            flags,
-        )?;
-        self.js
-            .binding_define_data_property(&event, "ports", ports, flags)?;
-        invoke(self, Operation::DispatchEvent, window.clone(), &[event.clone()])?;
-        let handler = self.messaging_window_handler(kind);
-        if self.js.binding_is_callable(&handler) {
-            let _ = self.js.binding_call(&handler, window, vec![event]);
-        }
+    pub(super) fn messaging_register_event(&mut self, event: amazing_dom::events::EventId) -> Result<(), Throw> {
+        self.with_dom(|dom| match dom.events().event_checked(event) {
+            Some(event) if event.class() == amazing_dom::events::EventClass::Message => Ok(()),
+            _ => Err(DomError::InvalidStateError),
+        })?;
+        self.messaging_ensure()?;
+        let realm=self.js.binding_current_realm();
+        self.state.borrow_mut().messaging.as_mut().unwrap().event_realms.entry(event.slot()).or_insert(realm);
         Ok(())
     }
-
-    fn messaging_fire(
-        &mut self,
-        slot: usize,
-        kind: &str,
-        this: JsValue,
-        event: JsValue,
-    ) -> Result<(), Throw> {
-        let (listeners, handler) = {
-            let state = self.state.borrow();
-            let Some(realm) = state.messaging.as_ref() else {
-                return Ok(());
-            };
-            let Some(object) = realm.objects.get(slot) else {
-                return Ok(());
-            };
-            let (listeners, handlers) = match object {
-                MsgObject::Port {
-                    listeners, handlers, ..
-                }
-                | MsgObject::Channel {
-                    listeners, handlers, ..
-                } => (listeners.clone(), handlers.clone()),
-            };
-            (listeners, handlers.get(kind).cloned())
-        };
-        let mut remaining = Vec::new();
-        for listener in listeners {
-            if listener.kind == kind && self.js.binding_is_callable(&listener.callback) {
-                let _ = self
-                    .js
-                    .binding_call(&listener.callback, this.clone(), vec![event.clone()]);
-            }
-            if !listener.once {
-                remaining.push(listener);
-            }
-        }
-        if !remaining.is_empty() {
-            let mut state = self.state.borrow_mut();
-            if let Some(realm) = state.messaging.as_mut() {
-                if let Some(object) = realm.objects.get_mut(slot) {
-                    let target = match object {
-                        MsgObject::Port { listeners, .. } | MsgObject::Channel { listeners, .. } => {
-                            listeners
-                        }
-                    };
-                    *target = remaining;
-                }
-            }
-        }
-        if let Some(handler) = handler {
-            if self.js.binding_is_callable(&handler) {
-                let _ = self.js.binding_call(&handler, this, vec![event]);
-            }
-        }
+    pub(super) fn messaging_register_generic_target(&mut self, slot: u64) -> Result<(), Throw> {
+        self.with_dom(|dom| if dom.has_event_target(slot) { Ok(()) }
+            else { Err(DomError::InvalidStateError) })?;
+        self.messaging_ensure()?;
+        let realm = self.js.binding_current_realm();
+        self.state.borrow_mut().messaging.as_mut().unwrap()
+            .generic_target_realms.entry(slot).or_insert(realm);
         Ok(())
     }
-
-    fn messaging_handler(&self, slot: usize, key: &str) -> JsValue {
-        self.state
-            .borrow()
-            .messaging
-            .as_ref()
-            .and_then(|realm| realm.objects.get(slot))
-            .and_then(|object| match object {
-                MsgObject::Port { handlers, .. } | MsgObject::Channel { handlers, .. } => {
-                    handlers.get(key).cloned()
-                }
-            })
-            .unwrap_or(JsValue::Null)
-    }
-
-    fn messaging_window_handler(&self, key: &str) -> JsValue {
-        self.state
-            .borrow()
-            .messaging
-            .as_ref()
-            .and_then(|realm| realm.globals.get(&format!("window:{key}")).cloned())
-            .unwrap_or(JsValue::Null)
-    }
-
-    fn messaging_set_handler(&self, slot: usize, key: &str, value: JsValue) {
-        if let Some(realm) = self.state.borrow_mut().messaging.as_mut() {
-            if let Some(object) = realm.objects.get_mut(slot) {
-                let handlers = match object {
-                    MsgObject::Port { handlers, .. } | MsgObject::Channel { handlers, .. } => handlers,
-                };
-                if value.is_undefined() {
-                    handlers.remove(key);
-                } else {
-                    handlers.insert(key.to_owned(), value);
-                }
-            }
+    pub(super) fn messaging_generic_target_realm(&self, key: PlatformKey)
+        -> Result<Option<RealmHandle>, Throw> {
+        let state = self.state.borrow();
+        if key.arena != state.arena || key.generation != 1 {
+            return Err(Throw::type_error("Invalid EventTarget"));
         }
+        Ok(state.messaging.as_ref()
+            .and_then(|m| m.generic_target_realms.get(&key.slot)).copied())
     }
-
-    fn messaging_store_global(&self, key: &str, value: JsValue) {
-        if let Some(realm) = self.state.borrow_mut().messaging.as_mut() {
-            realm.globals.insert(key.to_owned(), value);
+    pub(super) fn messaging_event_realm(&self, key: PlatformKey) -> Result<Option<RealmHandle>, Throw> {
+        let state=self.state.borrow();
+        if key.arena != state.arena || key.generation != 1 {
+            return Err(Throw::type_error("Invalid Event"));
         }
+        let event=amazing_dom::events::EventId::from_slot(key.slot as usize);
+        Ok(state.messaging.as_ref().and_then(|m| m.event_realms.get(&event.slot())).copied())
     }
-
-    fn messaging_add_listener(
-        &mut self,
-        slot: usize,
-        args: &[JsValue],
-    ) -> Result<JsValue, Throw> {
-        let kind = self
-            .js
-            .binding_to_dom_string(args.first().unwrap_or(&JsValue::Undefined))
-            .map(|units| String::from_utf16_lossy(&units))
-            .unwrap_or_default();
-        let callback = args.get(1).cloned().unwrap_or(JsValue::Undefined);
-        let once = args
-            .get(2)
-            .map(|options| {
-                if self.js.binding_to_boolean(options) {
-                    true
-                } else {
-                    self.js
-                        .binding_get_property(options, "once")
-                        .map(|value| self.js.binding_to_boolean(&value))
-                        .unwrap_or(false)
-                }
-            })
-            .unwrap_or(false);
-        if !self.js.binding_is_callable(&callback) {
-            return Ok(JsValue::Undefined);
-        }
-        if let Some(realm) = self.state.borrow_mut().messaging.as_mut() {
-            if let Some(object) = realm.objects.get_mut(slot) {
-                let listeners = match object {
-                    MsgObject::Port { listeners, .. } | MsgObject::Channel { listeners, .. } => {
-                        listeners
-                    }
-                };
-                listeners.push(Listener {
-                    kind,
-                    callback,
-                    once,
-                });
-            }
-        }
-        Ok(JsValue::Undefined)
+    pub(super) fn messaging_event_target_slot(&self, value: &JsValue) -> Option<u64> {
+        let slot = self.messaging_receiver(value, KIND_PORT)
+            .or_else(|_| self.messaging_receiver(value, KIND_CHANNEL)).ok()?;
+        self.state.borrow().messaging.as_ref()?.targets.get(slot).map(|(_, target)| *target)
     }
-
-    fn messaging_remove_listener(&mut self, slot: usize, args: &[JsValue]) -> JsValue {
-        let kind = self
-            .js
-            .binding_to_dom_string(args.first().unwrap_or(&JsValue::Undefined))
-            .map(|units| String::from_utf16_lossy(&units))
-            .unwrap_or_default();
-        let callback = args.get(1).cloned().unwrap_or(JsValue::Undefined);
-        if let Some(realm) = self.state.borrow_mut().messaging.as_mut() {
-            if let Some(object) = realm.objects.get_mut(slot) {
-                let listeners = match object {
-                    MsgObject::Port { listeners, .. } | MsgObject::Channel { listeners, .. } => {
-                        listeners
-                    }
-                };
-                listeners.retain(|listener| {
-                    !(listener.kind == kind && self.js.binding_same_value(&listener.callback, &callback))
-                });
-            }
-        }
-        JsValue::Undefined
+    pub(super) fn messaging_event_target_value(&self, target: u64) -> Option<JsValue> {
+        let state = self.state.borrow();
+        let m = state.messaging.as_ref()?;
+        let slot = m.targets.iter().position(|(_, candidate)| *candidate == target)?;
+        let kind = match m.objects.get(slot)? { MsgObject::Port { .. } => KIND_PORT,
+            MsgObject::Channel { .. } => KIND_CHANNEL };
+        m.globals.get(&format!("{kind}:{slot}")).cloned()
     }
-
-    fn messaging_dispatch_event(&mut self, slot: usize, args: &[JsValue]) -> Result<JsValue, Throw> {
-        let event = args.first().cloned().unwrap_or(JsValue::Undefined);
-        let kind = self
-            .js
-            .binding_get_property(&event, "type")
-            .map(|value| self.js.binding_to_dom_string(&value).ok())
-            .ok()
-            .flatten()
-            .map(|units| String::from_utf16_lossy(&units))
-            .unwrap_or_default();
-        let this = {
-            let state = self.state.borrow();
-            let kind_brand = if state
-                .messaging
-                .as_ref()
-                .and_then(|realm| realm.objects.get(slot))
-                .is_some_and(|object| matches!(object, MsgObject::Port { .. }))
-            {
-                KIND_PORT
-            } else {
-                KIND_CHANNEL
-            };
-            state
-                .messaging
-                .as_ref()
-                .and_then(|realm| realm.globals.get(&format!("{kind_brand}:{slot}")).cloned())
-        };
-        if let Some(this) = this {
-            self.messaging_fire(slot, &kind, this, event)?;
-        }
-        Ok(JsValue::Bool(true))
+    pub(super) fn messaging_is_port(&self, value: &JsValue) -> bool {
+        self.messaging_receiver(value, KIND_PORT).is_ok()
     }
 
     /// Native entry point for every messaging op.
@@ -831,69 +527,6 @@ impl RuntimeBindingHost<'_> {
         args: &[JsValue],
     ) -> Result<JsValue, Throw> {
         match op {
-            MessagingOp::MessageEventConstructor => {
-                let prototype = self
-                    .messaging_class(KIND_MESSAGE_EVENT)
-                    .unwrap_or_else(|| self.js.binding_object_prototype());
-                let event = self.js.binding_create_object(Some(&prototype))?;
-                let init = args.first().cloned().unwrap_or(JsValue::Undefined);
-                let flags = BindingPropertyFlags::METHOD;
-                let read = |adapter: &mut Self, name: &str| -> Result<JsValue, Throw> {
-                    if adapter.js.binding_is_nullish(&init) {
-                        return Ok(JsValue::Undefined);
-                    }
-                    adapter.js.binding_get_property(&init, name)
-                };
-                let data = read(self, "data")?;
-                let origin = read(self, "origin")?;
-                let last_event_id = read(self, "lastEventId")?;
-                let source = read(self, "source")?;
-                let ports = read(self, "ports")?;
-                self.js
-                    .binding_define_data_property(&event, "type", JsValue::str("message"), flags)?;
-                self.js
-                    .binding_define_data_property(&event, "data", data, flags)?;
-                self.js.binding_define_data_property(
-                    &event,
-                    "origin",
-                    if origin.is_undefined() {
-                        JsValue::str("")
-                    } else {
-                        origin
-                    },
-                    flags,
-                )?;
-                self.js.binding_define_data_property(
-                    &event,
-                    "lastEventId",
-                    if last_event_id.is_undefined() {
-                        JsValue::str("")
-                    } else {
-                        last_event_id
-                    },
-                    flags,
-                )?;
-                self.js.binding_define_data_property(
-                    &event,
-                    "source",
-                    if source.is_undefined() {
-                        JsValue::Null
-                    } else {
-                        source
-                    },
-                    flags,
-                )?;
-                let ports_value = if ports.is_undefined() {
-                    self.js.binding_create_array(Vec::new())?
-                } else {
-                    ports
-                };
-                self.js
-                    .binding_define_data_property(&event, "ports", ports_value, flags)?;
-                self.js
-                    .binding_define_data_property(&event, "isTrusted", JsValue::Bool(false), flags)?;
-                Ok(event)
-            }
             MessagingOp::MessageChannelConstructor => {
                 let client = self.messaging_client();
                 let (a, b) = BROWSER.with(|browser| {
@@ -909,8 +542,6 @@ impl RuntimeBindingHost<'_> {
                         id: a,
                         started: false,
                         closed: false,
-                        handlers: HashMap::new(),
-                        listeners: Vec::new(),
                     },
                 )?;
                 let port_b = self.messaging_allocate(
@@ -919,13 +550,11 @@ impl RuntimeBindingHost<'_> {
                         id: b,
                         started: false,
                         closed: false,
-                        handlers: HashMap::new(),
-                        listeners: Vec::new(),
                     },
                 )?;
                 let prototype = self
                     .messaging_class(KIND_MESSAGE_CHANNEL)
-                    .unwrap_or_else(|| self.js.binding_object_prototype());
+                    .ok_or_else(|| Throw::type_error("Messaging prototype missing in allocation realm"))?;
                 let channel = self.js.binding_create_object(Some(&prototype))?;
                 let flags = BindingPropertyFlags::METHOD;
                 self.js
@@ -949,8 +578,6 @@ impl RuntimeBindingHost<'_> {
                         name: name.clone(),
                         router_client: 0,
                         closed: false,
-                        handlers: HashMap::new(),
-                        listeners: Vec::new(),
                     },
                 )?;
                 let slot = self.messaging_receiver(&value, KIND_CHANNEL)?;
@@ -1024,60 +651,19 @@ impl RuntimeBindingHost<'_> {
                 }
                 Ok(JsValue::Undefined)
             }
-            MessagingOp::AddEventListener => {
-                let slot = self
-                    .messaging_receiver(&this, KIND_PORT)
-                    .or_else(|_| self.messaging_receiver(&this, KIND_CHANNEL))?;
-                self.messaging_add_listener(slot, args)
-            }
-            MessagingOp::RemoveEventListener => {
-                let slot = self
-                    .messaging_receiver(&this, KIND_PORT)
-                    .or_else(|_| self.messaging_receiver(&this, KIND_CHANNEL))?;
-                Ok(self.messaging_remove_listener(slot, args))
-            }
-            MessagingOp::DispatchEvent => {
-                let slot = self
-                    .messaging_receiver(&this, KIND_PORT)
-                    .or_else(|_| self.messaging_receiver(&this, KIND_CHANNEL))?;
-                self.messaging_dispatch_event(slot, args)
-            }
-            MessagingOp::OnMessageGet | MessagingOp::OnMessageErrorGet => {
-                let key = if matches!(op, MessagingOp::OnMessageGet) {
-                    "message"
-                } else {
-                    "messageerror"
-                };
-                if let Ok(slot) = self
-                    .messaging_receiver(&this, KIND_PORT)
-                    .or_else(|_| self.messaging_receiver(&this, KIND_CHANNEL))
-                {
-                    return Ok(self.messaging_handler(slot, key));
-                }
-                Ok(self.messaging_window_handler(key))
-            }
+            MessagingOp::OnMessageGet | MessagingOp::OnMessageErrorGet |
             MessagingOp::OnMessageSet | MessagingOp::OnMessageErrorSet => {
-                let key = if matches!(op, MessagingOp::OnMessageSet) {
+                let name = if matches!(op, MessagingOp::OnMessageGet | MessagingOp::OnMessageSet) {
                     "message"
-                } else {
-                    "messageerror"
-                };
-                let value = args.first().cloned().unwrap_or(JsValue::Undefined);
-                if let Ok(slot) = self
-                    .messaging_receiver(&this, KIND_PORT)
-                    .or_else(|_| self.messaging_receiver(&this, KIND_CHANNEL))
-                {
-                    self.messaging_set_handler(slot, key, value);
-                    // Setting `onmessage` on a port implicitly starts it.
-                    if key == "message"
-                        && self.messaging_receiver(&this, KIND_PORT).is_ok()
-                    {
+                } else { "messageerror" };
+                let setter = matches!(op, MessagingOp::OnMessageSet | MessagingOp::OnMessageErrorSet);
+                let result = self.dom_message_handler(&this, name, setter, args.first())?;
+                if setter && name == "message" {
+                    if let Ok(slot) = self.messaging_receiver(&this, KIND_PORT) {
                         self.messaging_start_port(slot)?;
                     }
-                } else {
-                    self.messaging_store_global(&format!("window:{key}"), value);
                 }
-                Ok(JsValue::Undefined)
+                Ok(result)
             }
             MessagingOp::WindowPostMessage => self.messaging_window_post(args),
         }
@@ -1324,24 +910,31 @@ impl RuntimeBindingHost<'_> {
         Ok(JsValue::Undefined)
     }
 
+    fn messaging_finish_class(&mut self, prototype:&JsValue, constructor:&JsValue,
+        name:&str,parent:Option<Interface>)->Result<(),Throw> {
+        self.js.binding_define_symbol_data_property(prototype,
+            amazing_js::value::WellKnownSymbol::ToStringTag.symbol(),JsValue::str(name),
+            BindingPropertyFlags {writable:false,enumerable:false,configurable:true})?;
+        if let Some(parent)=parent {
+            let parent=self.constructor(parent).ok_or_else(|| Throw::type_error("Messaging parent interface missing"))?;
+            if let (JsValue::Object(constructor),JsValue::Object(parent))=(constructor,parent) {
+                constructor.borrow_mut().proto=Some(parent);
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn install_messaging(&mut self) -> Result<(), Throw> {
         self.messaging_ensure()?;
         let global = self.js.binding_global_object();
         let object_proto = self.js.binding_object_prototype();
         let flags = BindingPropertyFlags::METHOD;
 
-        // MessageEvent
-        let prototype = self.js.binding_create_object(Some(&object_proto))?;
-        let constructor = self.native(
-            "MessageEvent",
-            0,
-            NativeEntry::Messaging(MessagingOp::MessageEventConstructor),
-            HostCallPolicy::ConstructOnly,
-        );
-        self.define_data_property(&constructor, "prototype", prototype.clone(), false, false, false)?;
-        self.define_data_property(&prototype, "constructor", constructor.clone(), true, false, true)?;
-        self.define_data_property(&global, "MessageEvent", constructor.clone(), true, false, true)?;
-        self.messaging_set_class(KIND_MESSAGE_EVENT, prototype, constructor);
+        let message_prototype=self.prototype(Interface::MessageEvent)
+            .ok_or_else(|| Throw::type_error("MessageEvent prototype missing"))?;
+        let message_constructor=self.constructor(Interface::MessageEvent)
+            .ok_or_else(|| Throw::type_error("MessageEvent constructor missing"))?;
+        self.messaging_finish_class(&message_prototype,&message_constructor,"MessageEvent",Some(Interface::Event))?;
 
         // MessageChannel
         let prototype = self.js.binding_create_object(Some(&object_proto))?;
@@ -1361,11 +954,14 @@ impl RuntimeBindingHost<'_> {
             self.define_accessor_property(&prototype, name, Some(getter), None, true, true)?;
         }
         self.define_data_property(&global, "MessageChannel", constructor.clone(), true, false, true)?;
+        self.messaging_finish_class(&prototype,&constructor,"MessageChannel",None)?;
         self.messaging_set_class(KIND_MESSAGE_CHANNEL, prototype, constructor);
 
         // MessagePort (no public constructor)
-        let prototype = self.js.binding_create_object(Some(&object_proto))?;
-        self.install_messaging_ops(&prototype)?;
+        let event_target_proto = self.prototype(Interface::EventTarget)
+            .ok_or_else(|| Throw::type_error("Missing EventTarget prototype"))?;
+        let prototype = self.js.binding_create_object(Some(&event_target_proto))?;
+        self.install_messaging_ops(&prototype, true)?;
         let port_constructor = self.native(
             "MessagePort",
             0,
@@ -1382,10 +978,11 @@ impl RuntimeBindingHost<'_> {
             false,
             true,
         )?;
+        self.messaging_finish_class(&prototype,&port_constructor,"MessagePort",Some(Interface::EventTarget))?;
         self.messaging_set_class(KIND_PORT, prototype, port_constructor);
 
         // BroadcastChannel
-        let prototype = self.js.binding_create_object(Some(&object_proto))?;
+        let prototype = self.js.binding_create_object(Some(&event_target_proto))?;
         let constructor = self.native(
             "BroadcastChannel",
             1,
@@ -1401,7 +998,7 @@ impl RuntimeBindingHost<'_> {
             HostCallPolicy::CallOnly,
         );
         self.define_accessor_property(&prototype, "name", Some(getter), None, true, true)?;
-        self.install_messaging_ops(&prototype)?;
+        self.install_messaging_ops(&prototype, false)?;
         self.define_data_property(
             &global,
             "BroadcastChannel",
@@ -1410,6 +1007,7 @@ impl RuntimeBindingHost<'_> {
             false,
             true,
         )?;
+        self.messaging_finish_class(&prototype,&constructor,"BroadcastChannel",Some(Interface::EventTarget))?;
         self.messaging_set_class(KIND_CHANNEL, prototype, constructor);
 
         // window.postMessage and the two message handler attributes.
@@ -1440,15 +1038,13 @@ impl RuntimeBindingHost<'_> {
         Ok(())
     }
 
-    fn install_messaging_ops(&mut self, prototype: &JsValue) -> Result<(), Throw> {
+    fn install_messaging_ops(&mut self, prototype: &JsValue, port: bool) -> Result<(), Throw> {
         for (name, length, op) in [
             ("postMessage", 2u8, MessagingOp::PortPost),
             ("start", 0, MessagingOp::PortStart),
             ("close", 0, MessagingOp::PortClose),
-            ("addEventListener", 2, MessagingOp::AddEventListener),
-            ("removeEventListener", 2, MessagingOp::RemoveEventListener),
-            ("dispatchEvent", 1, MessagingOp::DispatchEvent),
         ] {
+            if !port && matches!(op, MessagingOp::PortStart) { continue; }
             let function = self.native(
                 name,
                 length,

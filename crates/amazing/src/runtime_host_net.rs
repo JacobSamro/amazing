@@ -836,14 +836,10 @@ impl RuntimeBindingHost<'_> {
             }
             WsEvent::Close(_) => return Ok(()), // never surfaced through Message.
         };
-        // The installed global `MessageEvent` constructor is messaging's own
-        // hand-rolled `MessagingOp::MessageEventConstructor` (see
-        // runtime_host_messaging.rs), which takes a single init-dictionary
-        // argument (no separate `type`) and hardcodes `type: "message"`.
-        let ctor = self.js.binding_get_property(&self.js.binding_global_object(), "MessageEvent")?;
         let init = self.js.binding_create_object(None)?;
         self.js.binding_define_data_property(&init, "data", data, BindingPropertyFlags::METHOD)?;
-        let event = self.js.binding_construct(&ctor, vec![init])?;
+        let event = amazing_bindings::invoke(self, Operation::MessageEventConstructor,
+            JsValue::Undefined, &[JsValue::str("message"), init])?;
         self.websocket_dispatch(slot, "message", event)
     }
     fn websocket_make_close_event(&mut self, code: u16, reason: &str, was_clean: bool) -> Result<JsValue, Throw> {

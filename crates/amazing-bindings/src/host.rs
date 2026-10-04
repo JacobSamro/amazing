@@ -1187,6 +1187,11 @@ pub trait BindingHost: Sized {
     fn external_event_target_slot(&self, _value: &Self::Value) -> Option<u64> { None }
     fn external_event_target_value(&self, _slot: u64) -> Option<Self::Value> { None }
     fn is_message_port(&self, _value: &Self::Value) -> bool { false }
+    /// Immutable creation realm registration at genuine MessageEvent allocation.
+    /// Existing event boundary/target changes never change this association.
+    fn message_event_created(&mut self, _event: amazing_dom::events::EventId) -> Result<(), Self::Error> { Ok(()) }
+    /// Record the immutable allocation realm of a genuine generic EventTarget.
+    fn event_target_created(&mut self, _slot: u64) -> Result<(), Self::Error> { Ok(()) }
     fn is_message_event_source(&self, value: &Self::Value) -> bool {
         !self.is_nullish(value) && (self.window_event_target_slot(value).is_some()
             || self.is_message_port(value))

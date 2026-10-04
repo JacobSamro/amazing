@@ -325,6 +325,7 @@ pub(crate) fn invoke<H: BindingHost>(
     }
     if op == O::EventTargetConstructor {
         let slot = host.with_dom(|dom| Ok(dom.create_event_target()))?;
+        host.event_target_created(slot)?;
         return host.wrap_platform_object(key(host, slot), InterfaceBrand::EVENT_TARGET);
     }
     if matches!(op, O::EventConstructor | O::CustomEventConstructor | O::CreateEvent)
