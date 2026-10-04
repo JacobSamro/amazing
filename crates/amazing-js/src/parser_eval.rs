@@ -21,7 +21,12 @@ pub struct EvalContext {
 /// arrows inherit them. Strictness and private-name visibility follow existing
 /// function and nested-class parsing rules.
 pub fn parse_eval(src: &str, context: &EvalContext) -> Result<Program, SyntaxError> {
-    let mut parser = Parser::new(src);
+    parse_eval_utf16(&src.encode_utf16().collect::<Vec<_>>(), context)
+}
+
+/// Parse eval from exact UTF-16 source with the same inherited grammar context.
+pub fn parse_eval_utf16(src: &[u16], context: &EvalContext) -> Result<Program, SyntaxError> {
+    let mut parser = Parser::new_utf16(src);
     parser.strict_script = context.strict;
     parser.in_new_target = usize::from(context.allow_new_target);
     parser.super_property_allowed = context.allow_super_property;

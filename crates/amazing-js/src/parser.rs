@@ -68,22 +68,36 @@ mod event_handler;
 pub use event_handler::parse_event_handler;
 #[path = "parser_eval.rs"]
 mod eval;
-pub use eval::{parse_eval, EvalContext};
+pub use eval::{parse_eval, parse_eval_utf16, EvalContext};
 
 /// Parses a full script; static imports and exports require [`parse_module`].
 pub fn parse_script(src: &str) -> Result<Program, SyntaxError> {
-    Parser::new(src).parse_program()
+    parse_script_utf16(&src.encode_utf16().collect::<Vec<_>>())
+}
+
+/// Parses exact UTF-16 source without replacing lone surrogate code points.
+pub fn parse_script_utf16(src: &[u16]) -> Result<Program, SyntaxError> {
+    Parser::new_utf16(src).parse_program()
 }
 
 pub(crate) fn parse_script_strict(src: &str) -> Result<Program, SyntaxError> {
-    let mut parser = Parser::new(src);
+    parse_script_strict_utf16(&src.encode_utf16().collect::<Vec<_>>())
+}
+
+pub(crate) fn parse_script_strict_utf16(src: &[u16]) -> Result<Program, SyntaxError> {
+    let mut parser = Parser::new_utf16(src);
     parser.strict_script = true;
     parser.parse_program()
 }
 
 /// Parses source under the Module grammar goal (always strict).
 pub fn parse_module(src: &str) -> Result<Module, SyntaxError> {
-    let mut parser = Parser::new(src);
+    parse_module_utf16(&src.encode_utf16().collect::<Vec<_>>())
+}
+
+/// Parses exact UTF-16 source under the always-strict Module grammar goal.
+pub fn parse_module_utf16(src: &[u16]) -> Result<Module, SyntaxError> {
+    let mut parser = Parser::new_utf16(src);
     parser.strict_script = true;
     parser.module_goal = true;
     parser.tokens.borrow_mut().set_module_goal();
@@ -371,9 +385,13 @@ struct Parser {
 
 impl Parser {
     fn new(src: &str) -> Self {
+        Self::new_utf16(&src.encode_utf16().collect::<Vec<_>>())
+    }
+
+    fn new_utf16(src: &[u16]) -> Self {
         let last_end = SourceLocation::new(1, 1);
         Parser {
-            tokens: std::cell::RefCell::new(crate::token_stream::TokenStream::new(src)),
+            tokens: std::cell::RefCell::new(crate::token_stream::TokenStream::new_utf16(src)),
             pos: 0,
             last_end,
             no_in: false,

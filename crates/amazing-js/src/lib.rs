@@ -42,6 +42,7 @@ pub mod env;
 pub mod errors;
 pub mod interp;
 pub mod lexer;
+mod lexer_source;
 pub mod module;
 pub mod parser;
 #[cfg(test)]
@@ -55,7 +56,7 @@ pub use errors::SyntaxError;
 pub use interp::{DomHost, HostResponse, Interpreter};
 pub use interp::{SerializedAtom, SerializedBoxKind, SerializedHostValue,
     SerializedNode, SerializedValue, StructuredCloneHost};
-pub use parser::{parse_module, parse_script};
+pub use parser::{parse_module, parse_script, parse_module_utf16, parse_script_utf16};
 
 #[cfg(test)]
 mod tests {

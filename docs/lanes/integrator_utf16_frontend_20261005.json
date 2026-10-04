@@ -1,0 +1,758 @@
+{
+  "ticket": "utf16-frontend",
+  "published_base": "d1919c42a290f7bb0a5ef518165c5521ef545285",
+  "tested_source": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+  "owner_ready": "b544d34385f4591ca2fc9b8ee1a363bd2519360a",
+  "owner_review": {
+    "owner_ready": "b544d34385f4591ca2fc9b8ee1a363bd2519360a",
+    "tested_source": "1219085dc07f59264b07ad13147c71a351ba6a92",
+    "compact_receipts_authenticated": 40,
+    "whole_pairs_authenticated": 20,
+    "zero_losses": true,
+    "passsets_sha256": "f64ea8b87f98b4b64cc1c110b03136d0fb2e1768983f30f833f3d4e40f00884e",
+    "shipping_files_identical_to_owner_test": 11,
+    "root_candidate": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e"
+  },
+  "workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4618,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_details": [
+      {
+        "command": [
+          "cargo",
+          "nextest",
+          "run",
+          "--workspace",
+          "--locked",
+          "--no-fail-fast",
+          "--status-level",
+          "skip"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "        PASS [   0.002s] (4609/4618) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+          "        PASS [   0.003s] (4610/4618) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+          "        PASS [   0.008s] (4611/4618) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+          "        PASS [   0.009s] (4612/4618) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+          "        PASS [   0.008s] (4613/4618) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+          "        PASS [   0.003s] (4614/4618) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+          "        PASS [   0.016s] (4615/4618) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+          "        PASS [   0.016s] (4616/4618) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+          "        PASS [   8.652s] (4617/4618) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+          "        PASS [  24.556s] (4618/4618) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+          "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+          "     Summary [ 141.367s] 4618 tests run: 4618 passed (1 slow), 17 skipped"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-c0ta41_z/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e-nextest.log",
+            "durable": {
+              "bytes": 636973,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e-nextest.log",
+              "sha256": "423901e311c8495d57f81c656fd6a06d02d3bd109d457990eefd2b626f1cda39"
+            },
+            "native": {
+              "bytes": 636973,
+              "path": "/tmp/amazing-gate-command-c0ta41_z/output.log",
+              "sha256": "423901e311c8495d57f81c656fd6a06d02d3bd109d457990eefd2b626f1cda39"
+            },
+            "source": "/tmp/amazing-gate-command-c0ta41_z/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "nextest",
+        "raw_native": {
+          "bytes": 636973,
+          "path": "/tmp/amazing-gate-command-c0ta41_z/output.log",
+          "sha256": "423901e311c8495d57f81c656fd6a06d02d3bd109d457990eefd2b626f1cda39"
+        },
+        "schema": 1,
+        "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--workspace",
+          "--locked",
+          "--doc"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "   Doc-tests amazing_webrtc_codecs",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "",
+          "   Doc-tests amazing_webrtc_crypto",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          ""
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-su2auql5/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e-doctests.log",
+            "durable": {
+              "bytes": 18472,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e-doctests.log",
+              "sha256": "87e35c8b8ae254d58897f9ff63f53a65f0f9ce408394c4bcb17f20f3f487a3a6"
+            },
+            "native": {
+              "bytes": 18472,
+              "path": "/tmp/amazing-gate-command-su2auql5/output.log",
+              "sha256": "87e35c8b8ae254d58897f9ff63f53a65f0f9ce408394c4bcb17f20f3f487a3a6"
+            },
+            "source": "/tmp/amazing-gate-command-su2auql5/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "doctests",
+        "raw_native": {
+          "bytes": 18472,
+          "path": "/tmp/amazing-gate-command-su2auql5/output.log",
+          "sha256": "87e35c8b8ae254d58897f9ff63f53a65f0f9ce408394c4bcb17f20f3f487a3a6"
+        },
+        "schema": 1,
+        "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+        "wrapper_exit": 0
+      }
+    ],
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 636973,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e-nextest.log",
+        "sha256": "423901e311c8495d57f81c656fd6a06d02d3bd109d457990eefd2b626f1cda39"
+      },
+      {
+        "bytes": 18472,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e-doctests.log",
+        "sha256": "87e35c8b8ae254d58897f9ff63f53a65f0f9ce408394c4bcb17f20f3f487a3a6"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+    "summary_lines": [
+      "Summary [ 141.367s] 4618 tests run: 4618 passed (1 slow), 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "test262": {
+    "gained_files": 0,
+    "lost_files": [],
+    "lost_variants": [],
+    "provenance": {
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    "schema": 2,
+    "summary": {
+      "files": {
+        "fail": 783,
+        "pass": 52623,
+        "skipped": 294,
+        "timeout": 1,
+        "unsupported": 171
+      },
+      "variants": {
+        "fail": 1469,
+        "pass": 101107,
+        "timeout": 2,
+        "unsupported": 340
+      }
+    }
+  },
+  "shard_receipts": [
+    {
+      "classification_sha256": "1a86f6c24fb5e0f574816990bed9c627128b8142c2d0631694bf6781f4116e4b",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8444129,
+        "path": "/home/user/amazing/out/t262-gate6-0/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "92aa017dc38bad52baa010089d5028af40a6e817d6f911985a23b0dc4057021c"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "0/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 43,
+          "pass": 3291,
+          "skipped": 17,
+          "unsupported": 16
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "6ef7de8ebcb781bb97ecc3a0cb09d974dc3be06b6e4ad339494287701226b8e8",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8446665,
+        "path": "/home/user/amazing/out/t262-gate6-1/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "4eff6bb909de90d53191629370655da874706308e8dd7b0f56deed1c16f0a7f6"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "1/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 51,
+          "pass": 3286,
+          "skipped": 17,
+          "unsupported": 13
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "ba003eb0cbf497614254be8afe864667e917860cd7ddffa4246215188ba50bee",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8462274,
+        "path": "/home/user/amazing/out/t262-gate6-2/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "6058ea4db1361ec1a3db99e16fddf4a69623a9c0e6c12115ec220122a88fed01"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "2/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 50,
+          "pass": 3289,
+          "skipped": 19,
+          "unsupported": 9
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "768762671b99ee9bb587f531df56c068b7776ddaf8c50f5b64b2f824a3372bb1",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8451998,
+        "path": "/home/user/amazing/out/t262-gate6-3/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "0f4bd38677a4dec265492f9663a7eb86ec31c8b5ac164348688ce3f4766e04a7"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "3/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 46,
+          "pass": 3290,
+          "skipped": 17,
+          "timeout": 1,
+          "unsupported": 13
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "ecffb42fab36a2d2626e80229619b858eaefac41fab779e8b285406313c6adaf",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8445853,
+        "path": "/home/user/amazing/out/t262-gate6-4/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "b8f3b84cf4f6380619d5dbff5cb2b6179d0aeda3984fab0a840928547135672e"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "4/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 45,
+          "pass": 3295,
+          "skipped": 18,
+          "unsupported": 9
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "336d2e9259f686983494233f5de9131c26f87b3267a7dfdd2b096e7aa8f1100c",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8444965,
+        "path": "/home/user/amazing/out/t262-gate6-5/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "992f62c18673e443862bd48377d4f85be28cb4ea959697c5ecda6270bb8d0ca3"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "5/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 45,
+          "pass": 3293,
+          "skipped": 19,
+          "unsupported": 11
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "5a70b906229759b365a3cffbfac07235a8c7df3363d68cd5cb80d6842580a58b",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8443718,
+        "path": "/home/user/amazing/out/t262-gate6-6/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "5772b7389afcfc2762185d450a34fbbbfa007e17563762e16b58f3ab27dc6027"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "6/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 47,
+          "pass": 3292,
+          "skipped": 19,
+          "unsupported": 8
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "3eb8e689849d651ec1a0ec1ef98b0ed21ce63ae7848c125288a8e4c96884047c",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8453674,
+        "path": "/home/user/amazing/out/t262-gate6-7/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "9e8548da064ea2e9b74fca30db9a8aaa9cb7d8d12dac8f54ed6e8decb362a85e"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "7/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 50,
+          "pass": 3291,
+          "skipped": 19,
+          "unsupported": 7
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "c9711d124a5f6c7603b31636e4873e4ac19e32dab49944dcbabbe5bbbaecc57b",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8444530,
+        "path": "/home/user/amazing/out/t262-gate6-8/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "f39c986aa00683cab61cbcbffbaf50ab454ee97235134f53fa3ff2fe33dd8beb"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "8/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 47,
+          "pass": 3297,
+          "skipped": 17,
+          "unsupported": 7
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "d006d3adee28bd8a31663bddbcf8a6cf74876a29536da9a43e3010485c85b504",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8460920,
+        "path": "/home/user/amazing/out/t262-gate6-9/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "d789ce2816bc07b748c40820e8e5626c8d7c7d4c01da9bd3feaf2ffd8fdcd332"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "9/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 56,
+          "pass": 3285,
+          "skipped": 15,
+          "unsupported": 11
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "6cf6ca3acfee732eca03f762d24b5ae20cd68e55452d763aed6639f6d199066e",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8443888,
+        "path": "/home/user/amazing/out/t262-gate6-10/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "f4ab9db413f4491005c18cf95c1f6591270c57c4f11453dd1c7a20d3bdb9d4ba"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "10/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 48,
+          "pass": 3289,
+          "skipped": 20,
+          "unsupported": 8
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "c4cc040a220084bed19ae389f829560a4dfd99e3a20ca8ecd7dee5da346ebea1",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8451043,
+        "path": "/home/user/amazing/out/t262-gate6-11/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "e3dc2551847f59486d375e49604446cbd5e240b7b9dd965cfadf6cf5c03049e8"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "11/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 54,
+          "pass": 3285,
+          "skipped": 17,
+          "unsupported": 12
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "01eba2f4748f32b613beb57fa9d67fca2379adc768bb10f8cf5f4dc4c4a55b3f",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8453014,
+        "path": "/home/user/amazing/out/t262-gate6-12/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "086e751b8b1f90a3ec0afe78964428e5d1a0ab9c5985d87825e4017e059f3e8b"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "12/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 51,
+          "pass": 3286,
+          "skipped": 18,
+          "unsupported": 11
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "0dc7e13749f5d63f4e7b5b9bbeee08cd003c1a0a6d5a5323bf04b28e4ebe9c2c",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8434696,
+        "path": "/home/user/amazing/out/t262-gate6-13/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "fd219f959bb27864ed9f591a10fc3f8c23b7a4b613f27c332eb0b4568ea8905e"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "13/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 35,
+          "pass": 3298,
+          "skipped": 21,
+          "unsupported": 13
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "e86d13aee10cda6300c84cd71e326f35e8d33f1fb9db4430c50fe01a0559704c",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8460514,
+        "path": "/home/user/amazing/out/t262-gate6-14/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "8e26dd5dc9efce32753e83955e020c9d4ae7b7a7dc24e80134b40dfeaacb47e2"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "14/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 56,
+          "pass": 3282,
+          "skipped": 19,
+          "unsupported": 11
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    {
+      "classification_sha256": "4092f56b9aee947687fc00a8cf13d45291bea5f9998d6325a87779c52c57bf31",
+      "discovered": 53872,
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "job_exit": 0,
+      "paths_sha256": "2f7a43625c8b46b92e796ed0a22ce78645c9facde7f7827f90ab0e721752e6a8",
+      "phase_exits": {
+        "build": 0,
+        "packaging": 0,
+        "runner": 1
+      },
+      "raw": {
+        "bytes": 8443956,
+        "path": "/home/user/amazing/out/t262-gate6-15/shard-2b237912-utf16-frontend-integration.json",
+        "sha256": "7a6f0689c37a2bc72148d4ae10d8114498be1d930e0665c4fc9be721d968a696"
+      },
+      "runner_exit": 1,
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "schema": 2,
+      "shard": "15/16",
+      "source_commit": "2b237912a8d7f60cd4fcb2aee1b848fffa3d1c3e",
+      "summary": {
+        "files": {
+          "fail": 59,
+          "pass": 3274,
+          "skipped": 22,
+          "unsupported": 12
+        }
+      },
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    }
+  ],
+  "native_shard_phases_authenticated": 48,
+  "actual_workspace_exit": 0,
+  "actual_full16_exit": 0,
+  "raw_policy": "Raw stays on Boat; compact receipts only local."
+}

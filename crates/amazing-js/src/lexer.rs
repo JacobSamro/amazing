@@ -1,3 +1,5 @@
+// Portions ported from boa-dev/boa (core/parser/src/source/utf16.rs and core/parser/src/lexer/{cursor,string,template}.rs)
+// @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: lossless SourceCharacter scanning.
 // NumericLiteral scanning adapted from lucid-softworks/lumen
 // (crates/lumen/src/lexer.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // String escape decoding portions adapted from lucid-softworks/lumen
@@ -6,8 +8,8 @@
 //!
 //! Implemented:
 //! - Panic-free entry point [`tokenize`] returning every token (terminated
-//!   by [`TokenKind::Eof`]) or a [`SyntaxError`]; CRLF and lone CR inputs
-//!   are normalized to LF up front (mirroring `amazing_html`).
+//!   by [`TokenKind::Eof`]) or a [`SyntaxError`]. Original source units remain
+//!   exact; line terminators are normalized only within template values.
 //! - Whitespace including NBSP (`U+00A0`) and ZWNBSP/BOM (`U+FEFF`);
 //!   `//` and `/* */` comments (block comments set `newline_before` when
 //!   they contain a line terminator, as ASI requires).
@@ -51,21 +53,12 @@ use crate::tokens::{
 /// Tokenizes a whole script. Never panics; all failures are [`SyntaxError`]
 /// positioned at the first offending character.
 pub fn tokenize(src: &str) -> Result<Vec<Token>, SyntaxError> {
-    // Newline normalization (the decoding step browsers do): CRLF and lone
-    // CR become LF before scanning.
-    let normalized;
-    let src = if src.contains('\r') {
-        normalized = src.replace("\r\n", "\n").replace('\r', "\n");
-        normalized.as_str()
-    } else {
-        src
-    };
     Lexer::new(src).run()
 }
 
 #[derive(Clone)]
 pub(crate) struct Lexer {
-    chars: std::rc::Rc<[char]>,
+    source: crate::lexer_source::LexerSource,
     pending: std::collections::VecDeque<Token>,
     idx: usize,
     line: u32,
@@ -81,10 +74,12 @@ pub(crate) struct Lexer {
 
 impl Lexer {
     pub(crate) fn new(src: &str) -> Self {
-        let normalized = src.replace("\r\n", "\n").replace('\r', "\n");
-        let src = normalized.as_str();
+        Self::new_utf16(&src.encode_utf16().collect::<Vec<_>>())
+    }
+
+    pub(crate) fn new_utf16(src: &[u16]) -> Self {
         Lexer {
-            chars: src.chars().collect::<Vec<_>>().into(),
+            source: crate::lexer_source::LexerSource::utf16(src),
             pending: std::collections::VecDeque::new(),
             idx: 0,
             line: 1,
@@ -125,7 +120,10 @@ impl Lexer {
             return Ok(self.mk(TokenKind::Eof, start, newline_before));
         }
         let mut tokens = Vec::new();
-        match self.cur().expect("not at end") {
+        let Some(current) = self.cur() else {
+            return Err(syntax_error("surrogate code point outside literal or comment", start));
+        };
+        match current {
             '\'' | '"' => tokens.push(self.string_token(start, newline_before)?),
             '`' => self.template_open(start, newline_before, &mut tokens)?,
             '}' => self.rbrace_token(start, newline_before, &mut tokens)?,
@@ -163,42 +161,32 @@ impl Lexer {
             return Err(syntax_error("expected RegExp literal", start));
         }
         self.advance();
-        let mut pattern = String::new();
+        let mut pattern_utf16 = Vec::new();
         let mut in_class = false;
         loop {
-            let Some(c) = self.cur() else {
+            let Some(point) = self.source.point(self.idx) else {
                 return Err(syntax_error("unterminated RegExp literal", start));
             };
-            if matches!(c, '\n' | '\r' | '\u{2028}' | '\u{2029}') {
-                return Err(syntax_error(
-                    "line terminator in RegExp literal",
-                    self.loc(),
-                ));
+            if matches!(point, 0x0a | 0x0d | 0x2028 | 0x2029) {
+                return Err(syntax_error("line terminator in RegExp literal", self.loc()));
             }
-            if c == '/' && !in_class {
+            if point == '/' as u32 && !in_class { self.advance(); break; }
+            if point == '\\' as u32 {
+                pattern_utf16.push(0x5c);
                 self.advance();
-                break;
-            }
-            if c == '\\' {
-                pattern.push(c);
-                self.advance();
-                let Some(escaped) = self.cur() else {
+                let Some(escaped) = self.source.point(self.idx) else {
                     return Err(syntax_error("unterminated RegExp escape", start));
                 };
-                if matches!(escaped, '\n' | '\r' | '\u{2028}' | '\u{2029}') {
+                if matches!(escaped, 0x0a | 0x0d | 0x2028 | 0x2029) {
                     return Err(syntax_error("line terminator in RegExp escape", self.loc()));
                 }
-                pattern.push(escaped);
+                push_code_point(&mut pattern_utf16, escaped, self.loc())?;
                 self.advance();
                 continue;
             }
-            if c == '[' {
-                in_class = true;
-            }
-            if c == ']' {
-                in_class = false;
-            }
-            pattern.push(c);
+            if point == '[' as u32 { in_class = true; }
+            if point == ']' as u32 { in_class = false; }
+            push_code_point(&mut pattern_utf16, point, self.loc())?;
             self.advance();
         }
         let mut flags = String::new();
@@ -206,7 +194,10 @@ impl Lexer {
             flags.push(self.cur().unwrap());
             self.advance();
         }
-        Ok(self.mk(TokenKind::RegExp { pattern, flags }, start, newline_before))
+        let pattern = String::from_utf16_lossy(&pattern_utf16); // compatibility display only
+        let mut token = self.mk(TokenKind::RegExp { pattern, flags }, start, newline_before);
+        token.regexp_utf16 = Some(pattern_utf16);
+        Ok(token)
     }
 
     // ----- cursor helpers -------------------------------------------------
@@ -216,7 +207,7 @@ impl Lexer {
     }
 
     fn at_end(&self) -> bool {
-        self.idx >= self.chars.len()
+        self.idx >= self.source.len()
     }
 
     fn cur(&self) -> Option<char> {
@@ -224,16 +215,19 @@ impl Lexer {
     }
 
     fn peek(&self, n: usize) -> Option<char> {
-        self.chars.get(self.idx + n).copied()
+        self.source.scalar(self.idx + n)
     }
 
     fn advance(&mut self) {
         if self.at_end() {
             return;
         }
-        let c = self.chars[self.idx];
+        let c = self.source.point(self.idx).expect("source position");
+        let previous = self.idx.checked_sub(1).and_then(|index| self.source.point(index));
         self.idx += 1;
-        if c == '\n' {
+        if c == 0x0a && previous == Some(0x0d) {
+            // CRLF is one line terminator, but both original units are retained.
+        } else if matches!(c, 0x0a | 0x0d | 0x2028 | 0x2029) {
             self.line += 1;
             self.col = 1;
         } else {
@@ -270,7 +264,7 @@ impl Lexer {
         loop {
             match self.cur() {
                 Some(c) if is_js_whitespace(c) => self.advance(),
-                Some('\n') | Some('\u{2028}') | Some('\u{2029}') => {
+                Some('\r') | Some('\n') | Some('\u{2028}') | Some('\u{2029}') => {
                     newline = true;
                     self.line_has_code = false;
                     self.advance();
@@ -302,7 +296,7 @@ impl Lexer {
                     let mut closed = false;
                     while !self.at_end() {
                         match self.cur() {
-                            Some('\n') | Some('\u{2028}') | Some('\u{2029}') => {
+                            Some('\r') | Some('\n') | Some('\u{2028}') | Some('\u{2029}') => {
                                 newline = true;
                                 self.line_has_code = false;
                                 self.advance();
@@ -338,8 +332,13 @@ impl Lexer {
         let mut legacy_escape = false;
         let mut string_has_escape = false;
         loop {
+            if let Some(point @ 0xd800..=0xdfff) = self.source.point(self.idx) {
+                units.push(point as u16);
+                self.advance();
+                continue;
+            }
             match self.cur() {
-                None | Some('\n') => {
+                None | Some('\r') | Some('\n') => {
                     return Err(syntax_error("unterminated string literal", start));
                 }
                 Some(c) if c == quote => {
@@ -434,6 +433,11 @@ impl Lexer {
         let mut cooked_utf16 = Vec::new();
         let mut valid = true;
         loop {
+            if let Some(point @ 0xd800..=0xdfff) = self.source.point(self.idx) {
+                cooked_utf16.push(point as u16);
+                self.advance();
+                continue;
+            }
             match self.cur() {
                 None => return Err(syntax_error("unterminated template literal", self.loc())),
                 Some('`') => {
@@ -465,6 +469,11 @@ impl Lexer {
                         Err(_) => valid = false,
                     }
                 }
+                Some('\r') => {
+                    cooked_utf16.push(10);
+                    self.advance();
+                    if self.cur() == Some('\n') { self.advance(); }
+                }
                 Some(c) => {
                     push_char(&mut cooked_utf16, c);
                     self.advance();
@@ -474,16 +483,26 @@ impl Lexer {
     }
 
     fn raw_template_units(&self, start: usize) -> Vec<u16> {
-        self.chars[start..self.idx]
-            .iter()
-            .collect::<String>()
-            .encode_utf16()
-            .collect()
+        let source = self.source.units(start, self.idx);
+        let mut result = Vec::with_capacity(source.len());
+        let mut index = 0;
+        while let Some(&unit) = source.get(index) {
+            index += 1;
+            if unit == 13 {
+                result.push(10);
+                if source.get(index) == Some(&10) { index += 1; }
+            } else { result.push(unit); }
+        }
+        result
     }
 
     /// Reads the character(s) after a `\`. `Ok(None)` = escape sequence
     /// producing nothing (line continuation). Caller has consumed the `\`.
     fn read_escape(&mut self) -> Result<Option<u32>, SyntaxError> {
+        if let Some(point @ 0xd800..=0xdfff) = self.source.point(self.idx) {
+            self.advance();
+            return Ok(Some(point));
+        }
         let c = match self.cur() {
             Some(c) => c,
             None => return Err(syntax_error("unterminated escape sequence", self.loc())),
@@ -521,8 +540,8 @@ impl Lexer {
                     return Ok(Some(v));
                 }
             }
-            // Line continuation: backslash-newline yields nothing. Lone CR
-            // cannot occur (normalized up front).
+            // Line continuation retains source units but contributes no cooked unit.
+            '\r' => { if self.cur() == Some('\n') { self.advance(); } return Ok(None); }
             '\n' | '\u{2028}' | '\u{2029}' => return Ok(None),
             // Non-octal decimal and unknown escapes retain their character.
             other => other,
@@ -620,7 +639,7 @@ impl Lexer {
         let integer_start = self.idx;
         let mut raw = self.digit_run(10)?;
         if raw.starts_with('0') && raw.len() > 1
-            && self.chars[integer_start..self.idx].contains(&'_') {
+            && self.source.contains(integer_start, self.idx, '_' as u32) {
             return Err(syntax_error("numeric separator after a leading zero", self.loc()));
         }
         // LegacyOctalIntegerLiteral ends at its final octal digit: a later

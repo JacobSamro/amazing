@@ -154,6 +154,8 @@ pub struct Token {
     pub cooked_utf16: Option<Vec<u16>>,
     /// Source spelling of a template chunk, excluding its delimiters.
     pub raw_utf16: Option<Vec<u16>>,
+    /// Exact RegExp pattern source units; the string in TokenKind is descriptive only.
+    pub regexp_utf16: Option<Vec<u16>>,
     /// A template chunk beginning at a substitution's closing brace.
     pub template_continuation: bool,
 }
@@ -169,6 +171,7 @@ impl Token {
             string_has_escape: false,
             cooked_utf16: None,
             raw_utf16: None,
+            regexp_utf16: None,
             template_continuation: false,
         }
     }

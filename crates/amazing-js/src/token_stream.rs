@@ -11,8 +11,11 @@ pub(crate) struct TokenStream {
 }
 impl TokenStream {
     pub(crate) fn new(source: &str) -> Self {
+        Self::new_utf16(&source.encode_utf16().collect::<Vec<_>>())
+    }
+    pub(crate) fn new_utf16(source: &[u16]) -> Self {
         Self {
-            lexer: Lexer::new(source),
+            lexer: Lexer::new_utf16(source),
             tokens: Vec::new(),
             before: Vec::new(),
         }

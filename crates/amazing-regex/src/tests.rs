@@ -184,6 +184,23 @@ fn utf16_pattern_preserves_lone_surrogates() {
 }
 #[test]
 fn utf16_pattern_unicode_modes_combine_pairs_but_preserve_lone_units() {
+    for units in [vec![0xd800], vec![0xdbff], vec![0xdc00], vec![0xdfff],
+        vec![0xd83d, 0xde00], vec![0xdbff, 0xdfff]] {
+        let identity: Vec<_> = std::iter::once(0x5c).chain(units.iter().copied()).collect();
+        let class: Vec<_> = std::iter::once(0x5b).chain(units.iter().copied()).chain([0x5d]).collect();
+        let class_identity: Vec<_> = std::iter::once(0x5b).chain(identity.iter().copied()).chain([0x5d]).collect();
+        for flags in ["", "u", "v"] {
+            assert!(Regex::new_utf16(&units, flags).is_ok());
+            assert!(Regex::new_utf16(&class, flags).is_ok());
+            if flags.is_empty() {
+                assert!(Regex::new_utf16(&identity, flags).is_ok());
+                assert!(Regex::new_utf16(&class_identity, flags).is_ok());
+            } else {
+                assert!(Regex::new_utf16(&identity, flags).is_err());
+                assert!(Regex::new_utf16(&class_identity, flags).is_err());
+            }
+        }
+    }
     for flags in ["u", "v"] {
         let pair = Regex::new_utf16(&[0xD83D, 0xDE00], flags).unwrap();
         assert_eq!(pair.pattern_utf16(), &[0xD83D, 0xDE00]);

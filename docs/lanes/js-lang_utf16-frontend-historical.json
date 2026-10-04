@@ -1,0 +1,25 @@
+{
+  "scope": "historical qualification only; fresh current-origin gate pending",
+  "qualified_commit": "a9e7882189d4baa9a40cb95681c5b384fa977fa4",
+  "historical_evidence_git_object": "a9e78821:docs/lanes/js-lang_JS45-evidence.json",
+  "historical_evidence_sha256": "aea748bbe4bc3acd48d691611c85bb5a0f1d990e41474362325bf8e97776be1d",
+  "current_recorded_base": "601d78162b8075b5f0b40682cf245c472e4a8bc8",
+  "original_groups": 11,
+  "original_group_file_sha256": "440eaa9413a6fb1756ecef7ef915aa7213431627215f1f4790522f16ffa4d9b7",
+  "historical_workspace": {
+    "before_pass": 4378,
+    "before_new_fail": 7,
+    "after_pass": 4385,
+    "skip": 17,
+    "docs": 4
+  },
+  "historical_corpus": {
+    "paired_selectors": 20,
+    "pass_files_per_mode": 32769,
+    "pass_variants_per_mode": 61687,
+    "lost_files": 0,
+    "lost_variants": 0
+  },
+  "fresh_qualification": "not run",
+  "prerequisite": "genuine TemplateSite/cache published as 15068194 on the fixed base"
+}

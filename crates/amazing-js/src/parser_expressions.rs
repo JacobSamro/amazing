@@ -585,7 +585,9 @@ impl Parser {
         }
         match self.cur().kind.clone() {
             TokenKind::RegExp { pattern, flags } => {
-                let compiled = amazing_regex::Regex::new(&pattern, &flags)
+                let token = self.cur();
+                let units = token.regexp_utf16.unwrap_or_else(|| pattern.encode_utf16().collect());
+                let compiled = amazing_regex::Regex::new_utf16(&units, &flags)
                     .map_err(|e| self.err(e.to_string()))?;
                 self.bump();
                 Ok(Expr::new(

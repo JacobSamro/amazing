@@ -1085,6 +1085,11 @@ impl Parser {
             {
                 self.error("invalid identity escape in Unicode pattern")
             }
+            // Unicode IdentityEscape admits only SyntaxCharacter or `/`.
+            // A lone surrogate is a real SourceCharacter, but neither one.
+            None if self.flags.unicode_mode() => {
+                self.error("invalid identity escape in Unicode pattern")
+            }
             _ => Ok(Node::Char(c)),
         }
     }

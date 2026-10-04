@@ -1,0 +1,1314 @@
+{
+  "schema": 1,
+  "ticket": "utf16-frontend-ready",
+  "before": "774526b36b400a9af8491fd58af8e542c35bbf8b",
+  "after": "1219085dc07f59264b07ad13147c71a351ba6a92",
+  "selectors": {
+    "default:language-": {
+      "before": {
+        "files": {
+          "fail": 81,
+          "pass": 24465,
+          "skipped": 294,
+          "unsupported": 26
+        }
+      },
+      "after": {
+        "files": {
+          "fail": 81,
+          "pass": 24465,
+          "skipped": 294,
+          "unsupported": 26
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 45249,
+        "fail": 93,
+        "unsupported": 52
+      },
+      "after_variant_statuses": {
+        "pass": 45249,
+        "fail": 93,
+        "unsupported": 52
+      },
+      "before_receipt_sha256": "285a9dfa7dd9d57cbd7efbd056c82eb8b566ca8ea2d4b89e6e8e195ec3d4eced",
+      "after_receipt_sha256": "96d47f9295df023ff6d8678463c9601fa64ddcbe4c78997cf102ed3808da6cfb",
+      "before_raw": {
+        "bytes": 14487069,
+        "path": "/tmp/utf16-frontend-before-774526b3-default-language-.json",
+        "sha256": "1c79e39747e3d643d24f8ae6ce0aadaad6427a7e303185a99d89132029e84845"
+      },
+      "after_raw": {
+        "bytes": 14487065,
+        "path": "/tmp/utf16-frontend-after-1219085d-default-language-.json",
+        "sha256": "4a490a14c7ddbeb1cb894590171084ee98df4b8d9090b6beea428d695001a369"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "default:built-ins-String-": {
+      "before": {
+        "files": {
+          "pass": 1328,
+          "skipped": 294,
+          "unsupported": 6
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 1328,
+          "skipped": 294,
+          "unsupported": 6
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 2653,
+        "unsupported": 12
+      },
+      "after_variant_statuses": {
+        "pass": 2653,
+        "unsupported": 12
+      },
+      "before_receipt_sha256": "3ea4a4d939e391e8cc70e630ffabf90ae139a3f6734c53b39f291c33f564133f",
+      "after_receipt_sha256": "96365fb8aa18edb80008e338a60cdb59278fc3cacbdae9d89a9dc730fe2306bd",
+      "before_raw": {
+        "bytes": 7844591,
+        "path": "/tmp/utf16-frontend-before-774526b3-default-built-ins-String-.json",
+        "sha256": "74c203ae801503810175a17d5d4a2a647e9bb59f568989385351cea633309b7b"
+      },
+      "after_raw": {
+        "bytes": 7844591,
+        "path": "/tmp/utf16-frontend-after-1219085d-default-built-ins-String-.json",
+        "sha256": "3b5539a82a77e54e52daac2efd41e99817f552776b0b680a9c96eb53bd7692be"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "default:built-ins-RegExp-": {
+      "before": {
+        "files": {
+          "fail": 7,
+          "pass": 1938,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "fail": 7,
+          "pass": 1938,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 3874,
+        "fail": 14
+      },
+      "after_variant_statuses": {
+        "pass": 3874,
+        "fail": 14
+      },
+      "before_receipt_sha256": "68f7b47bb86db0e2082297ca84130efc5b6cabaee2ac5256fd9ec080650d343c",
+      "after_receipt_sha256": "adfb837a8d815225c6a56af3e239c764ea37096226654324de922bdfcb0446fb",
+      "before_raw": {
+        "bytes": 8085336,
+        "path": "/tmp/utf16-frontend-before-774526b3-default-built-ins-RegExp-.json",
+        "sha256": "5e6cd9a749001d00ad47b3ce4f2fce896b5c2da2804a9c263d62129474bc3422"
+      },
+      "after_raw": {
+        "bytes": 8085336,
+        "path": "/tmp/utf16-frontend-after-1219085d-default-built-ins-RegExp-.json",
+        "sha256": "b6785fb684410e70f193931258a0c02c2bd4105204a4aa6f3a39d96d1524b2ab"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "default:built-ins-Function-": {
+      "before": {
+        "files": {
+          "fail": 8,
+          "pass": 507,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "fail": 8,
+          "pass": 507,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 889,
+        "fail": 16
+      },
+      "after_variant_statuses": {
+        "pass": 889,
+        "fail": 16
+      },
+      "before_receipt_sha256": "44ce07c33538cef28ac89e94f5cf8336efe3c4f50743fe50caa764007ada64e0",
+      "after_receipt_sha256": "9aa2a87c744ba8458e614213861d556d66f6ce2acacbed7975eabffc849f66db",
+      "before_raw": {
+        "bytes": 7719364,
+        "path": "/tmp/utf16-frontend-before-774526b3-default-built-ins-Function-.json",
+        "sha256": "06b327b004faa19e2de4b126b752bee5f4d10333a2fbe1c50a2ec2ac43d882a8"
+      },
+      "after_raw": {
+        "bytes": 7719363,
+        "path": "/tmp/utf16-frontend-after-1219085d-default-built-ins-Function-.json",
+        "sha256": "aebb2e0496daddfded020a302dc4318ce38e54f7ee88a9523605bb6f2c9758fd"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "default:built-ins-Object-": {
+      "before": {
+        "files": {
+          "pass": 3413,
+          "skipped": 294,
+          "unsupported": 1
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 3413,
+          "skipped": 294,
+          "unsupported": 1
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "unsupported": 2,
+        "pass": 6806
+      },
+      "after_variant_statuses": {
+        "unsupported": 2,
+        "pass": 6806
+      },
+      "before_receipt_sha256": "9b78ddaad37585bf64b13252238b93c4e6ab647032d8b803df999f57f71d2b85",
+      "after_receipt_sha256": "70f5dd9c772f9d327cfff2f2e2503aa8003efd956bf1cdfaf546fa850c35484b",
+      "before_raw": {
+        "bytes": 8116334,
+        "path": "/tmp/utf16-frontend-before-774526b3-default-built-ins-Object-.json",
+        "sha256": "8b652c79794d811f9968d8c2694850d6080ffacd074a9e135086f32b272b6a74"
+      },
+      "after_raw": {
+        "bytes": 8116334,
+        "path": "/tmp/utf16-frontend-after-1219085d-default-built-ins-Object-.json",
+        "sha256": "f5e66e638357e6ea9aa00bd3405a0f8ddaf4fbc0e6e1b68d1bf94009d812730b"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "default:built-ins-Proxy-": {
+      "before": {
+        "files": {
+          "pass": 311,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 311,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 607
+      },
+      "after_variant_statuses": {
+        "pass": 607
+      },
+      "before_receipt_sha256": "6df0610ca4b64a0b405af1d89bbe9d7dbca22bd629d3d86e46190c569a6f6b47",
+      "after_receipt_sha256": "b1e117570a0b3fa82c92667eb16523373ee4f9f69d306f7f8fc81290949625f3",
+      "before_raw": {
+        "bytes": 7704387,
+        "path": "/tmp/utf16-frontend-before-774526b3-default-built-ins-Proxy-.json",
+        "sha256": "94ed861636571772eb04bd34371a90e61d48371ed128a4f629d9c9347182a004"
+      },
+      "after_raw": {
+        "bytes": 7704387,
+        "path": "/tmp/utf16-frontend-after-1219085d-default-built-ins-Proxy-.json",
+        "sha256": "6ff4c961a3e8f3cfc1d5472c82dec5ac92008073e678083bc7d2d91b6044eb6f"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "default:built-ins-Promise-": {
+      "before": {
+        "files": {
+          "pass": 732,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 732,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 1458
+      },
+      "after_variant_statuses": {
+        "pass": 1458
+      },
+      "before_receipt_sha256": "cc914c98ec5781145bfd1e1cc134e7977d93056e1d84490da79b2392be3956d8",
+      "after_receipt_sha256": "841a61af533c3a739e363db321949501709a1850e4d897ce0c4a1e0eec7d2f22",
+      "before_raw": {
+        "bytes": 7779697,
+        "path": "/tmp/utf16-frontend-before-774526b3-default-built-ins-Promise-.json",
+        "sha256": "1deff2c77b0aec72e11dc27200c8f15ddfb1c0aa183edef412cf34df9c0494aa"
+      },
+      "after_raw": {
+        "bytes": 7779698,
+        "path": "/tmp/utf16-frontend-after-1219085d-default-built-ins-Promise-.json",
+        "sha256": "d4b401521545ac06a4086e6d01f5e020d3a380123df330b3fe32b1b9168ba3e8"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "default:built-ins-AsyncFunction-": {
+      "before": {
+        "files": {
+          "pass": 18,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 18,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 36
+      },
+      "after_variant_statuses": {
+        "pass": 36
+      },
+      "before_receipt_sha256": "fa6509e7470afa3c22429a0f5abf7cfed01977152d7219c2c165685e1bb53df3",
+      "after_receipt_sha256": "43788065cb6142b747b272dde58b0faafb8c21a5dcae6bafaaaceaa6327bbb11",
+      "before_raw": {
+        "bytes": 7648942,
+        "path": "/tmp/utf16-frontend-before-774526b3-default-built-ins-AsyncFunction-.json",
+        "sha256": "224acffc8372a77e2d7f94b58986953da3bf21dd73ddf2396c82a2a7f09d242f"
+      },
+      "after_raw": {
+        "bytes": 7648942,
+        "path": "/tmp/utf16-frontend-after-1219085d-default-built-ins-AsyncFunction-.json",
+        "sha256": "9282e095649855ffdf716eb2ae3294d29172033de9ae52a10b3a59b036545ba9"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "default:built-ins-GeneratorFunction-": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 46
+      },
+      "after_variant_statuses": {
+        "pass": 46
+      },
+      "before_receipt_sha256": "494301e7d9c3283df06c8e2d0e08bb7066a7b71972c4d13f4ea2521f4c748dd2",
+      "after_receipt_sha256": "1a1b740887dd69fe0f7bdbdcf33ce99bafe05362d5870463940d33fcae35d0d2",
+      "before_raw": {
+        "bytes": 7649940,
+        "path": "/tmp/utf16-frontend-before-774526b3-default-built-ins-GeneratorFunction-.json",
+        "sha256": "61c066c6ba2c52996f1d505e0d39cc030a3d6dea520eb72572ec5e99efacc263"
+      },
+      "after_raw": {
+        "bytes": 7649940,
+        "path": "/tmp/utf16-frontend-after-1219085d-default-built-ins-GeneratorFunction-.json",
+        "sha256": "57a1fe205b13d6610b9a4e953ffb52a84d7d1d6ad3427be8eeaf16678dfe383b"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "default:built-ins-AsyncGeneratorFunction-": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 46
+      },
+      "after_variant_statuses": {
+        "pass": 46
+      },
+      "before_receipt_sha256": "b21fa03a0fb8ea9739af39d751873cdc0074a6767a18fe5eb1c8488fd637dcb5",
+      "after_receipt_sha256": "1b4567792cfd872a17e6fbfa230fa813e55079358171d385defb63827648af87",
+      "before_raw": {
+        "bytes": 7650591,
+        "path": "/tmp/utf16-frontend-before-774526b3-default-built-ins-AsyncGeneratorFunction-.json",
+        "sha256": "12417a450171ecc76a8d7daee4b0613060b6c9772bd5929e8bda4c83d43c23a2"
+      },
+      "after_raw": {
+        "bytes": 7650591,
+        "path": "/tmp/utf16-frontend-after-1219085d-default-built-ins-AsyncGeneratorFunction-.json",
+        "sha256": "52dbfd5394bee17a07655840d3a8efc1aa2a66d243419fe12c9eef9155fe03d4"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "vm:language-": {
+      "before": {
+        "files": {
+          "fail": 81,
+          "pass": 24465,
+          "skipped": 294,
+          "unsupported": 26
+        }
+      },
+      "after": {
+        "files": {
+          "fail": 81,
+          "pass": 24465,
+          "skipped": 294,
+          "unsupported": 26
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 45249,
+        "fail": 93,
+        "unsupported": 52
+      },
+      "after_variant_statuses": {
+        "pass": 45249,
+        "fail": 93,
+        "unsupported": 52
+      },
+      "before_receipt_sha256": "0d8b6f7c208fc4c8330aa624755e95c586917fbd49351ab267eae57782963761",
+      "after_receipt_sha256": "7575b51e86ddab64657b3254333e8802873fc2bef1e3a1d4c9059e8934c6f65c",
+      "before_raw": {
+        "bytes": 14487069,
+        "path": "/tmp/utf16-frontend-before-774526b3-vm-language-.json",
+        "sha256": "04d3b9b06652bdb45e7b2f26043471c96cca293dc663a2a28ef62d442fd9cc05"
+      },
+      "after_raw": {
+        "bytes": 14487066,
+        "path": "/tmp/utf16-frontend-after-1219085d-vm-language-.json",
+        "sha256": "c59f6b837907bdfb529c790a4a2d0f9c97ac8f65ca51859002c2a88936272cd5"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "vm:built-ins-String-": {
+      "before": {
+        "files": {
+          "pass": 1328,
+          "skipped": 294,
+          "unsupported": 6
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 1328,
+          "skipped": 294,
+          "unsupported": 6
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 2653,
+        "unsupported": 12
+      },
+      "after_variant_statuses": {
+        "pass": 2653,
+        "unsupported": 12
+      },
+      "before_receipt_sha256": "a2d0f3258666c380d61b904f75139b9cd17605b5b13ea90505bd0c84ff3558c6",
+      "after_receipt_sha256": "c14fe92e4f025af8b434a4cd72379f35636371e3a6c2161f2dbcff0361f065ff",
+      "before_raw": {
+        "bytes": 7844592,
+        "path": "/tmp/utf16-frontend-before-774526b3-vm-built-ins-String-.json",
+        "sha256": "a6ec83c07abf896e30ddb022f4ea94f4daefec8050cbad405ed5e5896d07d789"
+      },
+      "after_raw": {
+        "bytes": 7844591,
+        "path": "/tmp/utf16-frontend-after-1219085d-vm-built-ins-String-.json",
+        "sha256": "8bc9b8f1e91650e8aef3d03626abb640ca2140a6087b60ca78dd4c3223da7961"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "vm:built-ins-RegExp-": {
+      "before": {
+        "files": {
+          "fail": 7,
+          "pass": 1938,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "fail": 7,
+          "pass": 1938,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 3874,
+        "fail": 14
+      },
+      "after_variant_statuses": {
+        "pass": 3874,
+        "fail": 14
+      },
+      "before_receipt_sha256": "b9d9b84c557b739eb0e9275dc15cb2f96bc4f818172d45cf9855c20a4c497361",
+      "after_receipt_sha256": "92a4c6eb5a2879af05564b7e6f0f4587d42f28dc83cda6e3e4dba756cc273b88",
+      "before_raw": {
+        "bytes": 8085337,
+        "path": "/tmp/utf16-frontend-before-774526b3-vm-built-ins-RegExp-.json",
+        "sha256": "ebb3dd972f62be31fcb3dfa65549016ac137665fd5c267d48752a67d390ba5cc"
+      },
+      "after_raw": {
+        "bytes": 8085336,
+        "path": "/tmp/utf16-frontend-after-1219085d-vm-built-ins-RegExp-.json",
+        "sha256": "03036aef66417f36b4cbc036a054866dbe946333032c4ef8031c122be92093c2"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "vm:built-ins-Function-": {
+      "before": {
+        "files": {
+          "fail": 8,
+          "pass": 507,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "fail": 8,
+          "pass": 507,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 889,
+        "fail": 16
+      },
+      "after_variant_statuses": {
+        "pass": 889,
+        "fail": 16
+      },
+      "before_receipt_sha256": "b08e41f5e91f4f21b874fc0aee530daae7d86267cb0e8f92b88e8f47ce044b37",
+      "after_receipt_sha256": "28d6145df615dabba61b82b8d618fb7e5f3be1cf356262dc336735d263f30928",
+      "before_raw": {
+        "bytes": 7719364,
+        "path": "/tmp/utf16-frontend-before-774526b3-vm-built-ins-Function-.json",
+        "sha256": "00a2f3c075a513435d5b4b496f4e94dd98881dabb5e903284a4db684d08094cf"
+      },
+      "after_raw": {
+        "bytes": 7719364,
+        "path": "/tmp/utf16-frontend-after-1219085d-vm-built-ins-Function-.json",
+        "sha256": "aa7a8832d5d59a8105e2b4b01df1efff4cfba2057d21dfa312cdde3cbc6c2531"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "vm:built-ins-Object-": {
+      "before": {
+        "files": {
+          "pass": 3413,
+          "skipped": 294,
+          "unsupported": 1
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 3413,
+          "skipped": 294,
+          "unsupported": 1
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "unsupported": 2,
+        "pass": 6806
+      },
+      "after_variant_statuses": {
+        "unsupported": 2,
+        "pass": 6806
+      },
+      "before_receipt_sha256": "f5c35d3f37e8007fe24ede56c236b4debb107fabb5cf01cdfe7c4cd86e81f27d",
+      "after_receipt_sha256": "a79efbb52c62ea6b6d64dfb45d92f5ff438109cc41e786723980bcee66feeca2",
+      "before_raw": {
+        "bytes": 8116334,
+        "path": "/tmp/utf16-frontend-before-774526b3-vm-built-ins-Object-.json",
+        "sha256": "b1c2b7d805f0a1bc0ed927d938ceb560b60d399e43958d6cae560efb97b0056c"
+      },
+      "after_raw": {
+        "bytes": 8116334,
+        "path": "/tmp/utf16-frontend-after-1219085d-vm-built-ins-Object-.json",
+        "sha256": "902ac1c847e26f2a36dbd78e8d47b30456208f40aa65248a69f5dbfa733d0490"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "vm:built-ins-Proxy-": {
+      "before": {
+        "files": {
+          "pass": 311,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 311,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 607
+      },
+      "after_variant_statuses": {
+        "pass": 607
+      },
+      "before_receipt_sha256": "267fdb942b89a552ade34e80596a0c45181db87edcf2ea5f125c794831d316fe",
+      "after_receipt_sha256": "60282187dbfc8d47565592508eab52a4adb3279105407077ac0159232631a569",
+      "before_raw": {
+        "bytes": 7704387,
+        "path": "/tmp/utf16-frontend-before-774526b3-vm-built-ins-Proxy-.json",
+        "sha256": "40d81858120b257d9756e8111745b34fdc37ec184c1c7dd405e4ebe73228f176"
+      },
+      "after_raw": {
+        "bytes": 7704387,
+        "path": "/tmp/utf16-frontend-after-1219085d-vm-built-ins-Proxy-.json",
+        "sha256": "58bdf7a6cec9ba6448da0eacdfe47b44f60e31396a92f0f32a77fb7d35f72b95"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "vm:built-ins-Promise-": {
+      "before": {
+        "files": {
+          "pass": 732,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 732,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 1458
+      },
+      "after_variant_statuses": {
+        "pass": 1458
+      },
+      "before_receipt_sha256": "c786c27a40f6d0a500714ae1ebf78a236fb46b6e24bc754cb11aa7264247ae44",
+      "after_receipt_sha256": "e1f0d032458f79c57c03f579e66a32b5a0a9249b86133bd42f2953edf232972b",
+      "before_raw": {
+        "bytes": 7779697,
+        "path": "/tmp/utf16-frontend-before-774526b3-vm-built-ins-Promise-.json",
+        "sha256": "2b9f531b3a69ceab348b9210a08deebb89f392914d3ba3aa66f122abb1e80852"
+      },
+      "after_raw": {
+        "bytes": 7779697,
+        "path": "/tmp/utf16-frontend-after-1219085d-vm-built-ins-Promise-.json",
+        "sha256": "de4d3f355df13493cbed5590b31a9033218425c20963b09f9708b6f30b40c8b0"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "vm:built-ins-AsyncFunction-": {
+      "before": {
+        "files": {
+          "pass": 18,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 18,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 36
+      },
+      "after_variant_statuses": {
+        "pass": 36
+      },
+      "before_receipt_sha256": "45b8fe68008956a93f21bb15e2e6bd3ea1876246955dd78e7926b9216e797efb",
+      "after_receipt_sha256": "f8e370d86d40241538f24cd88b9681099d2282f6156cc872dddeb1acf75f3fc2",
+      "before_raw": {
+        "bytes": 7648942,
+        "path": "/tmp/utf16-frontend-before-774526b3-vm-built-ins-AsyncFunction-.json",
+        "sha256": "d3387eb15150e61133f4057e8f6951931502b151c87010465f06f34aa937e42d"
+      },
+      "after_raw": {
+        "bytes": 7648942,
+        "path": "/tmp/utf16-frontend-after-1219085d-vm-built-ins-AsyncFunction-.json",
+        "sha256": "960fd1771d49493897a4bfed67eb268a1407b043bb9751720487c451e2e970b6"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "vm:built-ins-GeneratorFunction-": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 46
+      },
+      "after_variant_statuses": {
+        "pass": 46
+      },
+      "before_receipt_sha256": "86a5d8bca4cce08e0250201e4019e2f4b2acae5af83fc06f259a8d3d8694ed19",
+      "after_receipt_sha256": "17fcb25635dd9c16ebd4e6a644b864340b8874f59aa4430a2e7a984b47f55231",
+      "before_raw": {
+        "bytes": 7649940,
+        "path": "/tmp/utf16-frontend-before-774526b3-vm-built-ins-GeneratorFunction-.json",
+        "sha256": "f9ba45bc6a93762d197091ca03e951055252bcb60a8ca95a6b278d70979792f0"
+      },
+      "after_raw": {
+        "bytes": 7649940,
+        "path": "/tmp/utf16-frontend-after-1219085d-vm-built-ins-GeneratorFunction-.json",
+        "sha256": "cc1dc35ffcec0b933bf97e1014092a0266e639e9dad77ec2d8abc0564ed12463"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    },
+    "vm:built-ins-AsyncGeneratorFunction-": {
+      "before": {
+        "files": {
+          "pass": 23,
+          "skipped": 294
+        }
+      },
+      "after": {
+        "files": {
+          "pass": 23,
+          "skipped": 294
+        }
+      },
+      "gained_files": [],
+      "lost_files": [],
+      "gained_variants": [],
+      "lost_variants": [],
+      "before_variant_statuses": {
+        "pass": 46
+      },
+      "after_variant_statuses": {
+        "pass": 46
+      },
+      "before_receipt_sha256": "171e0026a5750aeb7e7291b8afef8932fa231bdf39bfc419e99a10ab0454e170",
+      "after_receipt_sha256": "3fc70dbe574ee6e80528e2bbf389712a5908700e6667c2beff39ecf6ebeed77a",
+      "before_raw": {
+        "bytes": 7650591,
+        "path": "/tmp/utf16-frontend-before-774526b3-vm-built-ins-AsyncGeneratorFunction-.json",
+        "sha256": "bdaddb34b3fb4f2cf8d14b364fba03eefedc7bcec12a3236fe677189f7c2721c"
+      },
+      "after_raw": {
+        "bytes": 7650591,
+        "path": "/tmp/utf16-frontend-after-1219085d-vm-built-ins-AsyncGeneratorFunction-.json",
+        "sha256": "b362f87d508ae1bebb61a0fd9a1de23dabb5c8fcf9e4bd73e4adf77b05e9791e"
+      },
+      "before_host_sha256": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+      "after_host_sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc"
+    }
+  },
+  "profile": {
+    "lane": "js-vm",
+    "pool": "pool-js-vm",
+    "queried_at_epoch": 1791147497.0743659,
+    "sandbox": {
+      "archiveAfter": "2026-10-04T22:57:26.766Z",
+      "health": "ok",
+      "id": "bx_e32kqbvv",
+      "lastSnapshotStatus": "completed",
+      "machineProvider": "baremetal",
+      "memoryGB": 8,
+      "state": "idle",
+      "type": "default",
+      "vcpu": 4
+    }
+  },
+  "raw_location": "Boat assigned pool-js-vm; raw paths and hashes in each receipt",
+  "commands_sha256": {
+    "after-command-rerun.sh": "806df7425443e175af706e6e1a9ecbf00c17fa40e5e11cd75bf46eef778ab029",
+    "after-command-failed-shipping.sh": "539ff9c840518ff63d0b08c32050d5d0fabe2a498b9e2c93af4bf6d324d12d55",
+    "after-command.sh": "539ff9c840518ff63d0b08c32050d5d0fabe2a498b9e2c93af4bf6d324d12d55",
+    "before-command.sh": "fe374cc8dfc20f076dff1728154a0349fceba230b6a5d5fdb9895c05ac1d6087"
+  },
+  "source_only_original_proof": "Complete original11 frontend groups and pureRegex control on published601d with genuine TemplateSite; baseline uses explicitly test-only actual preexisting lossy string goals",
+  "after_profile": {
+    "lane": "js-vm",
+    "pool": "pool-js-vm",
+    "queried_at_epoch": 1791150735.7876039,
+    "sandbox": {
+      "archiveAfter": "2026-10-04T23:50:05.776Z",
+      "health": "ok",
+      "id": "bx_e32kqbvv",
+      "lastSnapshotStatus": "completed",
+      "machineProvider": "baremetal",
+      "memoryGB": 8,
+      "state": "idle",
+      "type": "default",
+      "vcpu": 4
+    }
+  },
+  "before_workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 8,
+        "passed": 4564,
+        "skipped": 17
+      }
+    },
+    "job_exit": 100,
+    "phase_details": [],
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 100
+    },
+    "raw": [
+      {
+        "bytes": 638742,
+        "path": "/home/user/amazing/out/js-vm/utf16-frontend-before-774526b3-nextest.log",
+        "sha256": "e0eb9cd9778436bde9a8d9e1f306a3eab3f5f3457d89f4bee6fac53dd81707b1"
+      },
+      {
+        "bytes": 17372,
+        "path": "/home/user/amazing/out/js-vm/utf16-frontend-before-774526b3-docs.log",
+        "sha256": "3b072b8ef08ce2086870d2ab4d61376794d66c16ff9ac4bd70be28bca5695d38"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "774526b36b400a9af8491fd58af8e542c35bbf8b",
+    "summary_lines": [
+      "Summary [ 241.825s] 4572 tests run: 4564 passed (3 slow), 8 failed, 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "before_release": {
+    "schema": 1,
+    "phase": "release",
+    "source_commit": "774526b36b400a9af8491fd58af8e542c35bbf8b",
+    "command": [
+      "cargo",
+      "build",
+      "-p",
+      "amazing-js",
+      "--example",
+      "test262_host",
+      "--release",
+      "--locked"
+    ],
+    "command_exit": 0,
+    "engine_exit": 0,
+    "wrapper_exit": 0,
+    "native_receipt": "/tmp/amazing-gate-command-mpxvep2o/phase.manifest.json",
+    "raw_native": {
+      "path": "/tmp/amazing-gate-command-mpxvep2o/output.log",
+      "bytes": 9317,
+      "sha256": "173374f9f19b6aef8026735703e49ba3ba8b0aca266f8961cf886f133e92727b"
+    },
+    "diagnostic_tail": [
+      "  | ---------------- method in this implementation",
+      "8 |     pub(super) fn binding_iterator_step(&mut self, iterator: &JsValue, next: &JsValue)",
+      "  |                   ^^^^^^^^^^^^^^^^^^^^^",
+      "",
+      "warning: function `parse_script_strict` is never used",
+      "  --> crates/amazing-js/src/parser.rs:78:15",
+      "   |",
+      "78 | pub(crate) fn parse_script_strict(src: &str) -> Result<Program, SyntaxError> {",
+      "   |               ^^^^^^^^^^^^^^^^^^^",
+      "",
+      "warning: `amazing-js` (lib) generated 29 warnings (run `cargo fix --lib -p amazing-js` to apply 8 suggestions)",
+      "    Finished `release` profile [optimized] target(s) in 1m 05s"
+    ],
+    "output_copies": [
+      {
+        "source": "/tmp/amazing-gate-command-mpxvep2o/output.log",
+        "destination": "/home/user/amazing/out/js-vm/utf16-frontend-before-774526b3-release.log",
+        "copy_exit": 0,
+        "native": {
+          "path": "/tmp/amazing-gate-command-mpxvep2o/output.log",
+          "bytes": 9317,
+          "sha256": "173374f9f19b6aef8026735703e49ba3ba8b0aca266f8961cf886f133e92727b"
+        },
+        "durable": {
+          "path": "/home/user/amazing/out/js-vm/utf16-frontend-before-774526b3-release.log",
+          "bytes": 9317,
+          "sha256": "173374f9f19b6aef8026735703e49ba3ba8b0aca266f8961cf886f133e92727b"
+        }
+      }
+    ],
+    "output_copy_exit": 0
+  },
+  "after_workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4572,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_details": [],
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 629063,
+        "path": "/home/user/amazing/out/js-vm/utf16-frontend-after-1219085d-nextest.log",
+        "sha256": "f19098fc362e2567d4d1f4eaa354f8cde2480c4dd0ba0130f62110e964d0dbfe"
+      },
+      {
+        "bytes": 17891,
+        "path": "/home/user/amazing/out/js-vm/utf16-frontend-after-1219085d-docs.log",
+        "sha256": "1116afe27cdd16ec0aea7db3c3a4fa4e757cae2b9a2fccc6e89e27d29779c74d"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "1219085dc07f59264b07ad13147c71a351ba6a92",
+    "summary_lines": [
+      "Summary [ 152.704s] 4572 tests run: 4572 passed (1 slow), 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "after_release": {
+    "schema": 1,
+    "phase": "release",
+    "source_commit": "1219085dc07f59264b07ad13147c71a351ba6a92",
+    "command": [
+      "cargo",
+      "build",
+      "-p",
+      "amazing-js",
+      "--example",
+      "test262_host",
+      "--release",
+      "--locked"
+    ],
+    "command_exit": 0,
+    "engine_exit": 0,
+    "wrapper_exit": 0,
+    "native_receipt": "/tmp/amazing-gate-command-s836fs8m/phase.manifest.json",
+    "raw_native": {
+      "path": "/tmp/amazing-gate-command-s836fs8m/output.log",
+      "bytes": 9923,
+      "sha256": "70cc3d87c27998d0614ee7760d7618d61b6d7e0a23de3d933cb60a5e77307cc1"
+    },
+    "diagnostic_tail": [
+      "   |               ^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "",
+      "warning: associated function `new` is never used",
+      "  --> crates/amazing-js/src/token_stream.rs:13:19",
+      "   |",
+      "12 | impl TokenStream {",
+      "   | ---------------- associated function in this implementation",
+      "13 |     pub(crate) fn new(source: &str) -> Self {",
+      "   |                   ^^^",
+      "",
+      "warning: `amazing-js` (lib) generated 31 warnings (run `cargo fix --lib -p amazing-js` to apply 8 suggestions)",
+      "    Finished `release` profile [optimized] target(s) in 51.57s"
+    ],
+    "output_copies": [
+      {
+        "source": "/tmp/amazing-gate-command-s836fs8m/output.log",
+        "destination": "/home/user/amazing/out/js-vm/utf16-frontend-after-1219085d-release.log",
+        "copy_exit": 0,
+        "native": {
+          "path": "/tmp/amazing-gate-command-s836fs8m/output.log",
+          "bytes": 9923,
+          "sha256": "70cc3d87c27998d0614ee7760d7618d61b6d7e0a23de3d933cb60a5e77307cc1"
+        },
+        "durable": {
+          "path": "/home/user/amazing/out/js-vm/utf16-frontend-after-1219085d-release.log",
+          "bytes": 9923,
+          "sha256": "70cc3d87c27998d0614ee7760d7618d61b6d7e0a23de3d933cb60a5e77307cc1"
+        }
+      },
+      {
+        "source": "/tmp/amazing-native-target-js-vm/release/examples/test262_host",
+        "destination": "/home/user/amazing/out/js-vm/utf16-frontend-after-1219085d-test262_host",
+        "copy_exit": 0,
+        "native": {
+          "path": "/tmp/amazing-native-target-js-vm/release/examples/test262_host",
+          "bytes": 13294744,
+          "sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833"
+        },
+        "durable": {
+          "path": "/home/user/amazing/out/js-vm/utf16-frontend-after-1219085d-test262_host",
+          "bytes": 13294744,
+          "sha256": "f9faa12f41e9cc256510d72ebb817bbd6e68b8b13470b2af33e8ab0862910833"
+        }
+      }
+    ],
+    "output_copy_exit": 0
+  },
+  "before_native_identities": {
+    "counts": {
+      "passed": 4564,
+      "failed": 8,
+      "skipped": 17
+    },
+    "raw": {
+      "path": "/home/user/amazing/out/js-vm/utf16-frontend-before-774526b3-nextest.log",
+      "bytes": 638742,
+      "sha256": "e0eb9cd9778436bde9a8d9e1f306a3eab3f5f3457d89f4bee6fac53dd81707b1"
+    },
+    "failed": [
+      [
+        "amazing-js::source_text_utf16",
+        "cloned_template_sites_keep_identity_while_fresh_parses_and_realms_are_distinct"
+      ],
+      [
+        "amazing-js::source_text_utf16",
+        "coroutine_workers_keep_exact_literal_and_template_site_units"
+      ],
+      [
+        "amazing-js::source_text_utf16",
+        "literal_units_distinguish_surrogates_replacement_and_private_use_code_points"
+      ],
+      [
+        "amazing-js::source_text_utf16",
+        "escaped_and_literal_units_are_equivalent_without_rewriting_the_source"
+      ],
+      [
+        "amazing-js::source_text_utf16",
+        "regex_goal_rewind_compiles_exact_raw_and_escaped_pattern_units"
+      ],
+      [
+        "amazing-js::source_text_utf16",
+        "template_raw_and_cooked_units_normalize_only_literal_line_terminators"
+      ],
+      [
+        "amazing-js::source_text_utf16",
+        "comments_hashbang_and_asi_accept_real_source_characters_and_keep_lines"
+      ],
+      [
+        "amazing-regex",
+        "tests::utf16_pattern_unicode_modes_combine_pairs_but_preserve_lone_units"
+      ]
+    ],
+    "receipt_sha256": "f72c9e4659558f754cc607d0c1154b2dc22c91c095c5542377b3a56f1f68db10"
+  },
+  "after_native_identities": {
+    "counts": {
+      "passed": 4572,
+      "failed": 0,
+      "skipped": 17
+    },
+    "raw": {
+      "path": "/home/user/amazing/out/js-vm/utf16-frontend-after-1219085d-nextest.log",
+      "bytes": 629063,
+      "sha256": "f19098fc362e2567d4d1f4eaa354f8cde2480c4dd0ba0130f62110e964d0dbfe"
+    },
+    "failed": [],
+    "receipt_sha256": "cf109a684e4942ae64904c9f42d195602a170e43b8b61ae75d68708d71032f80"
+  },
+  "workspace_pass_skip_identity_losses": [],
+  "authored_baseline_observed_failures": [
+    [
+      "amazing-js::source_text_utf16",
+      "cloned_template_sites_keep_identity_while_fresh_parses_and_realms_are_distinct"
+    ],
+    [
+      "amazing-js::source_text_utf16",
+      "coroutine_workers_keep_exact_literal_and_template_site_units"
+    ],
+    [
+      "amazing-js::source_text_utf16",
+      "literal_units_distinguish_surrogates_replacement_and_private_use_code_points"
+    ],
+    [
+      "amazing-js::source_text_utf16",
+      "escaped_and_literal_units_are_equivalent_without_rewriting_the_source"
+    ],
+    [
+      "amazing-js::source_text_utf16",
+      "regex_goal_rewind_compiles_exact_raw_and_escaped_pattern_units"
+    ],
+    [
+      "amazing-js::source_text_utf16",
+      "template_raw_and_cooked_units_normalize_only_literal_line_terminators"
+    ],
+    [
+      "amazing-js::source_text_utf16",
+      "comments_hashbang_and_asi_accept_real_source_characters_and_keep_lines"
+    ],
+    [
+      "amazing-regex",
+      "tests::utf16_pattern_unicode_modes_combine_pairs_but_preserve_lone_units"
+    ]
+  ],
+  "authored_after_failures": [],
+  "before_corpus_reuse": null,
+  "unique_union_per_mode": {
+    "default": {
+      "before": {
+        "selected_files": 33181,
+        "pass_files": 32758,
+        "pass_variants": 61664
+      },
+      "after": {
+        "selected_files": 33181,
+        "pass_files": 32758,
+        "pass_variants": 61664
+      }
+    },
+    "vm": {
+      "before": {
+        "selected_files": 33181,
+        "pass_files": 32758,
+        "pass_variants": 61664
+      },
+      "after": {
+        "selected_files": 33181,
+        "pass_files": 32758,
+        "pass_variants": 61664
+      }
+    }
+  },
+  "exact_passsets_artifact": {
+    "filename": "js-lang_utf16-frontend-current-passsets.json",
+    "sha256": "f64ea8b87f98b4b64cc1c110b03136d0fb2e1768983f30f833f3d4e40f00884e",
+    "bytes": 217358,
+    "inventory_sha256": "6913d43364d8997f5f052e475c88e768fd0b26d01e55befcf4f859fb74dd5280"
+  },
+  "lost_files": 0,
+  "lost_variants": 0,
+  "gained_files_per_mode": {
+    "default": 0,
+    "vm": 0
+  },
+  "gained_variants_per_mode": {
+    "default": 0,
+    "vm": 0
+  },
+  "zero_loss": true,
+  "tooling_attempt": {
+    "failed_owner": 23694,
+    "actual_exit": 3,
+    "phase": "pre-engine baseline shipping checksum guard",
+    "diagnosis": "prepared stale checksum; actual native ELF and all20 baseline controller hashes agree on034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+    "failed_log": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/js-lang/utf16-frontend-current/after-launch.log",
+      "sha256": "6904abcf59a9b39db7d09b5781be58cfa73457f15ad48d27cd2d89e3866e817b",
+      "bytes": 2690
+    },
+    "clean_rerun_owner": 56467,
+    "clean_rerun_actual_exit": 0,
+    "change": "one shipping checksum literal; production/input/deadlines/settings unchanged"
+  }
+}
