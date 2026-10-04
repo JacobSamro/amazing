@@ -36,6 +36,7 @@ mod flat_tree;
 pub mod custom_elements;
 pub mod forms;
 mod template;
+mod template_patching;
 #[cfg(test)] mod template_tests;
 mod namespace;
 mod processing_instruction;
@@ -114,6 +115,7 @@ pub struct Node {
     attribute_order: Vec<namespace::AttributeKey>,
     character_data_units: Option<Vec<u16>>,
     processing_instruction_attributes: Option<processing_instruction::Attributes>,
+    template_insertion: Option<template_patching::Insertion>,
     prefix: Option<String>,
     /// HTMLScriptElement's "force async" flag (HTML SS4.5.6, HTML-35). Initially
     /// `true` only for a script element created via `Document.createElement`/
@@ -278,6 +280,7 @@ impl Dom {
             attribute_order: Vec::new(),
             character_data_units: None,
             processing_instruction_attributes: None,
+            template_insertion: None,
             prefix: None,
             force_async: false,
             kind: NodeKind::Document,
@@ -319,6 +322,7 @@ impl Dom {
             attribute_order,
             character_data_units: None,
             processing_instruction_attributes: None,
+            template_insertion: None,
             prefix: None,
             force_async: false,
             kind,

@@ -462,3 +462,145 @@ fn incremental_character_data_and_special_containers_keep_raw_units() {
     import.reverse_sync(&mut source,&dest).unwrap();
     for node in nodes {assert_eq!(source.character_data_utf16(node).unwrap(),vec![89,0xd800]);}
 }
+
+#[test]
+fn incremental_template_patching_preserves_detached_stack_identity_and_clear() {
+    let mut source = Dom::new();
+    let html = source.create_element(NodeIdx(0), "html");
+    let body = source.create_element(html, "body");
+    let start = source.create_processing_instruction_in(NodeIdx(0), "start", &"name=\"x\"".encode_utf16().collect::<Vec<_>>()).unwrap();
+    let end = source.create_processing_instruction_in(NodeIdx(0), "end", &"".encode_utf16().collect::<Vec<_>>()).unwrap();
+    source.pre_insert(start, body, None).unwrap();
+    source.pre_insert(end, body, None).unwrap();
+    let template = source.create_element(body, "template");
+    source.detach(template);
+    source.set_template_insertion(template, Some((body, start, Some(end)))).unwrap();
+    let mut dest = Dom::new();
+    let document = dest.create_document();
+    let mut import = IncrementalDocumentImport::new(document);
+    import.sync(&mut dest, &source).unwrap();
+    let mapped = import.imported(template).unwrap();
+    let state = (import.imported(body).unwrap(), import.imported(start).unwrap(), Some(import.imported(end).unwrap()));
+    assert_eq!(dest.template_insertion(mapped), Some(state));
+    assert_eq!(dest.get(mapped).parent, None);
+    import.sync(&mut dest, &source).unwrap();
+    assert_eq!(import.imported(template), Some(mapped));
+    assert_eq!(dest.template_insertion(mapped), Some(state));
+    source.set_template_insertion(template, None).unwrap();
+    import.sync(&mut dest, &source).unwrap();
+    assert_eq!(dest.template_insertion(mapped), None);
+    let foreign = source.create_document();
+    let fragment = source.create_document_fragment(foreign).unwrap();
+    let detached = source.create_processing_instruction_in(foreign, "marker", &"".encode_utf16().collect::<Vec<_>>()).unwrap();
+    source.set_template_insertion(template, Some((fragment, detached, None))).unwrap();
+    import.sync(&mut dest, &source).unwrap();
+    let (target, marker, end) = dest.template_insertion(mapped).unwrap();
+    assert_eq!(target, import.imported(fragment).unwrap());
+    assert_eq!(marker, import.imported(detached).unwrap());
+    assert_eq!(end, None);
+    assert_eq!(dest.owner_document(target), import.imported(foreign));
+    assert_eq!(dest.get(target).parent, None);
+    let parent = source.create_element(foreign, "div");
+    let first = source.create_text(parent, "before");
+    let attached = source.create_processing_instruction_in(foreign, "marker", &"".encode_utf16().collect::<Vec<_>>()).unwrap();
+    source.pre_insert(attached, parent, None).unwrap();
+    let last = source.create_text(parent, "after");
+    source.set_template_insertion(template, Some((parent, attached, Some(attached)))).unwrap();
+    import.sync(&mut dest, &source).unwrap();
+    let actual_parent = import.imported(parent).unwrap();
+    assert_eq!(dest.get(actual_parent).parent, import.imported(foreign));
+    assert_eq!(dest.children(import.imported(foreign).unwrap()).collect::<Vec<_>>(), [actual_parent]);
+    assert_eq!((0..dest.node_count()).filter(|index| dest.local_name(NodeIdx(*index as u32)) == Some("div")).count(), 1);
+    assert_eq!(dest.get(import.imported(attached).unwrap()).parent, Some(actual_parent));
+    assert_eq!(dest.children(actual_parent).collect::<Vec<_>>(),
+        [import.imported(first).unwrap(), import.imported(attached).unwrap(), import.imported(last).unwrap()]);
+}
+
+#[test]
+fn incremental_template_patching_reverse_mirrors_actual_detached_foreign_markers() {
+    let mut source = Dom::new();
+    let html = source.create_element(NodeIdx(0), "html");
+    let template = source.create_element(html, "template");
+    let mut dest = Dom::new();
+    let document = dest.create_document();
+    let mut import = IncrementalDocumentImport::new(document);
+    import.sync(&mut dest, &source).unwrap();
+    let foreign = dest.create_document();
+    let target = dest.create_document_fragment(foreign).unwrap();
+    let start = dest.create_processing_instruction_in(foreign, "start", &"".encode_utf16().collect::<Vec<_>>()).unwrap();
+    let end = dest.create_processing_instruction_in(foreign, "end", &"".encode_utf16().collect::<Vec<_>>()).unwrap();
+    dest.set_template_insertion(import.imported(template).unwrap(), Some((target, start, Some(end)))).unwrap();
+    import.reverse_sync(&mut source, &dest).unwrap();
+    let (mirrored_target, mirrored_start, mirrored_end) = source.template_insertion(template).unwrap();
+    assert_eq!(source.get(mirrored_target).parent, None);
+    assert_eq!(source.get(mirrored_start).parent, None);
+    assert_eq!(import.imported(mirrored_target), Some(target));
+    assert_eq!(import.imported(mirrored_start), Some(start));
+    assert_eq!(import.imported(mirrored_end.unwrap()), Some(end));
+    assert_ne!(source.owner_document(mirrored_target), Some(NodeIdx(0)));
+    import.sync(&mut dest, &source).unwrap();
+    assert_eq!(dest.template_insertion(import.imported(template).unwrap()), Some((target, start, Some(end))));
+    dest.set_template_insertion(import.imported(template).unwrap(), None).unwrap();
+    import.reverse_sync(&mut source, &dest).unwrap();
+    assert_eq!(source.template_insertion(template), None);
+}
+
+#[test]
+fn incremental_template_patching_mirrors_independently_stale_end() {
+    let mut source = Dom::new();
+    let html = source.create_element(NodeIdx(0), "html");
+    let template = source.create_element(html, "template");
+    let start = source.create_processing_instruction_in(NodeIdx(0), "start", &"".encode_utf16().collect::<Vec<_>>()).unwrap();
+    let end = source.create_processing_instruction_in(NodeIdx(0), "end", &"".encode_utf16().collect::<Vec<_>>()).unwrap();
+    source.set_template_insertion(template, Some((html, start, Some(end)))).unwrap();
+    source.retire_unreachable_node(end).unwrap();
+    let mut dest = Dom::new();
+    let document = dest.create_document();
+    let mut import = IncrementalDocumentImport::new(document);
+    import.sync(&mut dest, &source).unwrap();
+    let mapped = import.imported(template).unwrap();
+    assert_eq!(dest.template_insertion(mapped), Some((import.imported(html).unwrap(), import.imported(start).unwrap(), None)));
+}
+
+#[test]
+fn incremental_template_patching_rejects_recycled_mapping_before_any_copy() {
+    use crate::DomError;
+    for reverse in [false, true] {
+        for which in 0..3 {
+            let mut source = Dom::new();
+            let template = source.create_element(NodeIdx(0), "template");
+            source.detach(template);
+            let target = source.create_document_fragment(NodeIdx(0)).unwrap();
+            let start = source.create_processing_instruction_in(NodeIdx(0), "marker", &"old".encode_utf16().collect::<Vec<_>>()).unwrap();
+            source.set_template_insertion(template, Some((target, start, Some(start)))).unwrap();
+            let mut dest = Dom::new();
+            let document = dest.create_document();
+            let mut import = IncrementalDocumentImport::new(document);
+            import.sync(&mut dest, &source).unwrap();
+            let ids = [template, target, start];
+            let mapped = ids.map(|id| import.imported(id).unwrap());
+            let old_source = source.template_insertion(template);
+            let old_dest = dest.template_insertion(mapped[0]);
+            let arena = if reverse { &mut dest } else { &mut source };
+            let node = if reverse { mapped[which] } else { ids[which] };
+            arena.retire_unreachable_node(node).unwrap();
+            let document = if reverse { document } else { NodeIdx(0) };
+            let replacement = match which {
+                0 => { let n = arena.create_element(document, "template"); arena.detach(n); n },
+                1 => arena.create_document_fragment(document).unwrap(),
+                _ => arena.create_processing_instruction_in(document, "marker", &"new".encode_utf16().collect::<Vec<_>>()).unwrap(),
+            };
+            assert_eq!(replacement, node, "actual slot reuse diagnostic");
+            let count = if reverse { source.node_count() } else { dest.node_count() };
+            if reverse {
+                assert_eq!(import.reverse_sync(&mut source, &dest), Err(DomError::InvalidStateError));
+                assert_eq!(source.template_insertion(template), old_source);
+                assert_eq!(source.node_count(), count);
+            } else {
+                assert_eq!(import.sync(&mut dest, &source), Err(DomError::InvalidStateError));
+                assert_eq!(dest.template_insertion(mapped[0]), old_dest);
+                assert_eq!(dest.node_count(), count);
+            }
+        }
+    }
+}

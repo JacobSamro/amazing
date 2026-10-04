@@ -131,3 +131,19 @@ fn navigator_clipboard_is_a_stable_singleton_round_tripping_in_memory_text() {
     // A receiver that isn't the Clipboard singleton is rejected.
     assert!(invoke(&mut h, O::ClipboardReadText, V::Undefined, &[]).is_err());
 }
+
+#[test]
+fn template_html_for_reflects_the_actual_attribute_and_exact_domstring_units() {
+    let mut h=Host::default();
+    let template=h.dom.create_element(NodeIdx(0),"template");
+    let get=O::LegacyReflectGet(Interface::HTMLTemplateElement,"for",crate::host::LegacyReflectionKind::String);
+    let set=O::LegacyReflectSet(Interface::HTMLTemplateElement,"for",crate::host::LegacyReflectionKind::String);
+    assert_eq!(call(&mut h,get,V::Node(template),&[]),str_value(""));
+    for units in [vec![0xd800],vec![0xfffd],vec![],"target".encode_utf16().collect()] {
+        call(&mut h,set,V::Node(template),&[V::String(units.clone())]);
+        assert_eq!(h.dom.attribute_utf16(template,"for"),Some(units.clone()));
+        assert_eq!(call(&mut h,get,V::Node(template),&[]),V::String(units));
+    }
+    h.dom.remove_attribute(template,"for").unwrap();
+    assert_eq!(call(&mut h,get,V::Node(template),&[]),str_value(""));
+}

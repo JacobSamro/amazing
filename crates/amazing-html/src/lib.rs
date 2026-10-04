@@ -72,6 +72,8 @@ mod actual_fragment_tests;
 #[cfg(test)]
 mod template_tests;
 #[cfg(test)]
+mod template_patching_tests;
+#[cfg(test)]
 mod custom_element_tests;
 #[cfg(test)]
 mod declarative_shadow_tests;

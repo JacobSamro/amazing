@@ -37,6 +37,7 @@ mod doctype;
 mod noscript;
 mod in_table;
 mod form;
+mod template_patching;
 
 /// Elements whose start tags never take children (void + obsolete empties).
 // `in_body_start_tag`'s "area" | "br" | "embed" | "img" | "keygen" | "wbr"
@@ -465,17 +466,17 @@ impl TreeBuilder {
             return;
         }
         if let Token::ProcessingInstruction { target, data } = &tok {
-            let parent = match self.mode {
+            let (parent, before) = match self.mode {
                 Mode::Initial
                 | Mode::BeforeHtml
                 | Mode::AfterAfterBody
-                | Mode::AfterAfterFrameset => NodeIdx(0),
+                | Mode::AfterAfterFrameset => (NodeIdx(0), None),
                 Mode::AfterBody | Mode::AfterFrameset => {
-                    self.open.first().copied().unwrap_or(NodeIdx(0))
+                    (self.open.first().copied().unwrap_or(NodeIdx(0)), None)
                 },
-                _ => self.insertion_place().0,
+                _ => self.insertion_place(),
             };
-            self.processing_instruction_into(parent, target, data);
+            self.processing_instruction_into(parent, before, target, data);
             return;
         }
         if self.should_process_in_foreign_content(&tok) {
@@ -967,9 +968,7 @@ impl TreeBuilder {
                 };
                 if template_more_recent {
                     let template = self.open[last_template_pos.expect("checked above")];
-                    if let Some(contents) = self.dom.template_contents(template) {
-                        return (contents, None);
-                    }
+                    return self.template_insertion_place(template);
                 }
                 if let Some(table_pos) = last_table_pos {
                     let table = self.open[table_pos];
@@ -987,19 +986,14 @@ impl TreeBuilder {
                 }
             }
         }
-        let target = self.shadow_templates.iter().find(|(template, _)| *template == target)
-            .map(|(_, root)| *root).or_else(|| self.dom.template_contents(target)).unwrap_or(target);
-        (target, None)
+        self.template_insertion_place(target)
     }
 
     fn insertion_place(&self) -> (NodeIdx, Option<NodeIdx>) {
         let Some(&target) = self.open.last() else {
             return (NodeIdx(0), None);
         };
-        let (parent, before) = self.adjusted_insertion_place_for(target);
-        let parent = self.shadow_templates.iter().find(|(template, _)| *template == parent)
-            .map(|(_, root)| *root).or_else(|| self.dom.template_contents(parent)).unwrap_or(parent);
-        (parent, before)
+        self.adjusted_insertion_place_for(target)
     }
 
     fn alloc_element(&mut self, name: &str, attrs: Vec<(String, String)>, document: NodeIdx) -> NodeIdx {
@@ -1017,6 +1011,10 @@ impl TreeBuilder {
         name: &str,
         attrs: Vec<(String, String)>,
     ) -> NodeIdx {
+        self.create_parser_element(name, attrs, true)
+    }
+
+    fn create_parser_element(&mut self, name: &str, attrs: Vec<(String, String)>, insert: bool) -> NodeIdx {
         let (parent, before) = self.insertion_place();
         let document = self.dom.owner_document(parent).unwrap_or(NodeIdx(0));
         let is_name = attrs.iter().find(|(name, _)| name == "is").map(|(_, value)| value.clone());
@@ -1050,7 +1048,7 @@ impl TreeBuilder {
             // both precede insertion of the token's children.
             let _ = self.dom.finish_custom_element_upgrade(idx, definition, constructed);
         }
-        self.insert_parser_element(parent, before, idx);
+        if insert { self.insert_parser_element(parent, before, idx); }
         // With no host, a preexisting definition remains eligible for a
         // later DOM-14 upgrade. With no definition this is a no-op.
         if construction.is_none() { self.dom.queue_custom_element_upgrade(idx); }
@@ -1118,6 +1116,7 @@ impl TreeBuilder {
     fn processing_instruction_into(
         &mut self,
         parent: NodeIdx,
+        before: Option<NodeIdx>,
         target: &str,
         data: &str,
     ) {
@@ -1127,7 +1126,7 @@ impl TreeBuilder {
                 data: data.to_owned(),
             },
         );
-        self.dom.attach_last(parent, instruction);
+        self.dom.attach_before(parent, before, instruction);
     }
 
     /// Merges `new_attrs` into an existing element; first occurrence wins.
@@ -1806,6 +1805,21 @@ impl TreeBuilder {
             self.open.push(template);
             self.shadow_templates.push((template, root));
             template
+        } else if attrs.iter().any(|(name, _)| name == "for") {
+            let (scope, _) = self.insertion_place();
+            let scope = if self.dom.owner_document(scope).and_then(|document|
+                self.dom.document_body(document).ok().flatten()) == Some(scope) {
+                self.dom.get(scope).parent.unwrap_or(scope)
+            } else { scope };
+            let template = self.create_parser_element("template", attrs, false);
+            self.open.push(template);
+            if !self.prepare_content_patching(scope, template) {
+                self.open.pop();
+                let (parent, before) = self.insertion_place();
+                self.insert_parser_element(parent, before, template);
+                self.open.push(template);
+            }
+            template
         } else {
             self.insert_and_push("template", attrs)
         };
@@ -1818,7 +1832,11 @@ impl TreeBuilder {
 
     fn close_template(&mut self) {
         if !self.stack_has("template") { return; }
-        self.generate_implied_end_tags(None);
+        self.generate_template_implied_end_tags();
+        let template = self.open.iter().rev().copied()
+            .find(|node| self.dom.namespace(*node) == Some(Namespace::Html)
+                && self.dom.name(*node) == Some("template")).expect("template stack");
+        self.finish_content_patching(template);
         self.pop_until("template");
         self.clear_fmt_to_marker();
         self.template_modes.pop();

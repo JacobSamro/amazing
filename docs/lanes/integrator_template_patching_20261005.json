@@ -1,0 +1,669 @@
+{
+  "ticket": "template-content-patching",
+  "published_base": "02855a2b4cd9ca54e0210dff9df117a5da235323",
+  "tested_source": "c2e830cf003fb9fe10a32e368a7477c9e994e52e",
+  "owner_ready": "bca9cc2ce3a231cff8ac36e1089f7dee85aa1e45",
+  "owner_review": {
+    "ready": "bca9cc2ce3a231cff8ac36e1089f7dee85aa1e45",
+    "tested": "878ca8a76e66f85a0f8d1fa0e3331ef436836ffc",
+    "base": "8de1d70abea03528a2483b58bc7bfbd8a1a6d3bd",
+    "source_bytes_identical": [
+      "crates/amazing-bindings/src/interfaces.rs",
+      "crates/amazing-bindings/src/tests_dom_b_reflect.rs",
+      "crates/amazing-dom/src/lib.rs",
+      "crates/amazing-dom/src/markup.rs",
+      "crates/amazing-dom/src/markup_tests.rs",
+      "crates/amazing-dom/src/template_patching.rs",
+      "crates/amazing-html/src/lib.rs",
+      "crates/amazing-html/src/template_patching_tests.rs",
+      "crates/amazing-html/src/tree.rs",
+      "crates/amazing-html/src/tree/template_patching.rs"
+    ],
+    "summary_sha256": "6185d4dcd21badb2de4db09b5d06f4f9e52969af93907be492101e656fe9f19e",
+    "summary_bytes": 93175,
+    "native": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4651,
+        "skipped": 17
+      }
+    },
+    "assertion_gain": 379,
+    "zero_losses": true,
+    "authored_file_lines": {
+      "crates/amazing-bindings/src/interfaces.rs": 1850,
+      "crates/amazing-bindings/src/tests_dom_b_reflect.rs": 149,
+      "crates/amazing-dom/src/lib.rs": 768,
+      "crates/amazing-dom/src/markup.rs": 1027,
+      "crates/amazing-dom/src/markup_tests.rs": 606,
+      "crates/amazing-dom/src/template_patching.rs": 226,
+      "crates/amazing-html/src/lib.rs": 417,
+      "crates/amazing-html/src/template_patching_tests.rs": 144,
+      "crates/amazing-html/src/tree.rs": 3531,
+      "crates/amazing-html/src/tree/template_patching.rs": 90
+    },
+    "root_candidate": "c2e830cf003fb9fe10a32e368a7477c9e994e52e",
+    "root_source_bytes_identical": true
+  },
+  "workspace": {
+    "manifest": ".agents/integrator-primary/gates/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e.manifest.json",
+    "bytes": 7985,
+    "sha256": "7def0d1e2e609e3378dc6372ff2d077604997d19b9c60bf989704fca3ad2961f",
+    "actual_workspace_exit": 0,
+    "receipt": {
+      "counts": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 4
+        },
+        "nextest": {
+          "failed": 0,
+          "passed": 4651,
+          "skipped": 17
+        }
+      },
+      "job_exit": 0,
+      "phase_details": [
+        {
+          "command": [
+            "cargo",
+            "nextest",
+            "run",
+            "--workspace",
+            "--locked",
+            "--no-fail-fast",
+            "--status-level",
+            "skip"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "        PASS [   0.002s] (4642/4651) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+            "        PASS [   0.002s] (4643/4651) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+            "        PASS [   0.007s] (4644/4651) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+            "        PASS [   0.008s] (4645/4651) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+            "        PASS [   0.011s] (4646/4651) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+            "        PASS [   0.015s] (4647/4651) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+            "        PASS [   0.008s] (4648/4651) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+            "        PASS [   0.016s] (4649/4651) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+            "        PASS [   8.330s] (4650/4651) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+            "        PASS [  26.803s] (4651/4651) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+            "     Summary [ 142.904s] 4651 tests run: 4651 passed (1 slow), 17 skipped"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-u_renq6b/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-nextest.log",
+              "durable": {
+                "bytes": 642799,
+                "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-nextest.log",
+                "sha256": "a7c9be08fdb94d152b4f871b9fbda39a48f236d2a6e05f3ee28ffa774423f0fe"
+              },
+              "native": {
+                "bytes": 642799,
+                "path": "/tmp/amazing-gate-command-u_renq6b/output.log",
+                "sha256": "a7c9be08fdb94d152b4f871b9fbda39a48f236d2a6e05f3ee28ffa774423f0fe"
+              },
+              "source": "/tmp/amazing-gate-command-u_renq6b/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "nextest",
+          "raw_native": {
+            "bytes": 642799,
+            "path": "/tmp/amazing-gate-command-u_renq6b/output.log",
+            "sha256": "a7c9be08fdb94d152b4f871b9fbda39a48f236d2a6e05f3ee28ffa774423f0fe"
+          },
+          "schema": 1,
+          "source_commit": "c2e830cf003fb9fe10a32e368a7477c9e994e52e",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--workspace",
+            "--locked",
+            "--doc"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "   Doc-tests amazing_webrtc_codecs",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "",
+            "   Doc-tests amazing_webrtc_crypto",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            ""
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-praiy9sb/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-doctests.log",
+              "durable": {
+                "bytes": 18472,
+                "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-doctests.log",
+                "sha256": "470e2b1ac8164be7788c5daffdd6a2a3323ebce085c9a4f53a08a81196284c72"
+              },
+              "native": {
+                "bytes": 18472,
+                "path": "/tmp/amazing-gate-command-praiy9sb/output.log",
+                "sha256": "470e2b1ac8164be7788c5daffdd6a2a3323ebce085c9a4f53a08a81196284c72"
+              },
+              "source": "/tmp/amazing-gate-command-praiy9sb/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "doctests",
+          "raw_native": {
+            "bytes": 18472,
+            "path": "/tmp/amazing-gate-command-praiy9sb/output.log",
+            "sha256": "470e2b1ac8164be7788c5daffdd6a2a3323ebce085c9a4f53a08a81196284c72"
+          },
+          "schema": 1,
+          "source_commit": "c2e830cf003fb9fe10a32e368a7477c9e994e52e",
+          "wrapper_exit": 0
+        }
+      ],
+      "phase_exits": {
+        "doctests": 0,
+        "nextest": 0
+      },
+      "raw": [
+        {
+          "bytes": 642799,
+          "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-nextest.log",
+          "sha256": "a7c9be08fdb94d152b4f871b9fbda39a48f236d2a6e05f3ee28ffa774423f0fe"
+        },
+        {
+          "bytes": 18472,
+          "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-doctests.log",
+          "sha256": "470e2b1ac8164be7788c5daffdd6a2a3323ebce085c9a4f53a08a81196284c72"
+        }
+      ],
+      "schema": 1,
+      "source_commit": "c2e830cf003fb9fe10a32e368a7477c9e994e52e",
+      "summary_lines": [
+        "Summary [ 142.904s] 4651 tests run: 4651 passed (1 slow), 17 skipped",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    }
+  },
+  "test262": {
+    "gained_files": 0,
+    "lost_files": [],
+    "lost_variants": [],
+    "provenance": {
+      "host_sha256": "23d0a36268fd024a14a2ca9173a27b75caef757fa4269633586fa3f740407316",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "source_commit": "c2e830cf003fb9fe10a32e368a7477c9e994e52e",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    "schema": 2,
+    "shard_sha256": {
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-0.json": "a1e28e7933b4e8ca3c6cb1f4e1582bc733126d31b7ce3c543a10f3da2ca057b1",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-1.json": "cbc348e2a51fe47758205150859ce0c0f1a1d9cb11c35c07441e58cb8b3a398a",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-10.json": "946e1aec527d9313248e898f4c10560d0e003df1aeca0740bfc4dabd568d1c27",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-11.json": "6b39970275911947df4f1076d3b8783bd13482fd583eeca7571543f2b9d1e97a",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-12.json": "b41ba185c5cd63d0f95d6c596aef004b73d61b3ea0e30eb2de2743e340ed1999",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-13.json": "f4f5b74bed5813cdfeb96848d043ca5d7c6629d80c2f77ba59c926f63c1054e0",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-14.json": "31911956eff688b0cd262153743c11ddb0ec8bbc8e403cc0fa0a5a86797cd9c3",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-15.json": "e4da04104422d164c694df2d004fa5652b9dce2b881f03206db2320af3b8b336",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-2.json": "b7467f8bfaa04d362fdd18ab070dbe645743bb83da5cd484e997fd08401ba582",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-3.json": "e43b69804cf87c22f263fd433f04d7401b4443255c792977224c871db2d0c572",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-4.json": "c8d981687b060c2087aa5189970fce81890cef110cb39200f51d2f6375b82bf8",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-5.json": "d561bbe3c645eb75fa8c625e4b10bd4d555c58c812038de9f61832222eee7bdc",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-6.json": "516e9db8be39d13a8de6b562c187babebe57cde81d4c271776412aff01e56ff6",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-7.json": "f6d57c0e0751c432cdf0dba21e1640aa86dfac66f301c7965fe515cdb3f59c4b",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-8.json": "c8665505e6a18b64da3ea43db0032bb176915c97bb696e99481cb17a2ba8b941",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-9.json": "be899e0ffb7fe35bf81350f5e7bc5e44fc9fa6994b53b49477e812999a2fd108"
+    },
+    "shards": [
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-0.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-1.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-2.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-3.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-4.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-5.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-6.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-7.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-8.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-9.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-10.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-11.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-12.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-13.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-14.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c2e830cf-template-patching-15.json"
+    ],
+    "summary": {
+      "files": {
+        "fail": 783,
+        "pass": 52623,
+        "skipped": 294,
+        "timeout": 1,
+        "unsupported": 171
+      },
+      "variants": {
+        "fail": 1469,
+        "pass": 101107,
+        "timeout": 2,
+        "unsupported": 340
+      }
+    }
+  },
+  "shard_receipts": [
+    {
+      "shard": 0,
+      "bytes": 50561,
+      "sha256": "a1e28e7933b4e8ca3c6cb1f4e1582bc733126d31b7ce3c543a10f3da2ca057b1",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "6fffdb1c00a214febb27810871e45a718d7ef18a402729a4344c264715aea2b2",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "0515deaa8ff13cd46d81f106b7ec6c4ad89880a5896bc1c36b12f403e2db23fc",
+          "raw_bytes": 10406
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 1,
+      "bytes": 50353,
+      "sha256": "cbc348e2a51fe47758205150859ce0c0f1a1d9cb11c35c07441e58cb8b3a398a",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "5af831b3cbd568af73b7c20e3f5956219e44b3b0edbdaa5652b8d94ec1ca787d",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "372f34750178477a71335d75eeea5168c236a52684c12c728edff645796d205f",
+          "raw_bytes": 10432
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 2,
+      "bytes": 50524,
+      "sha256": "b7467f8bfaa04d362fdd18ab070dbe645743bb83da5cd484e997fd08401ba582",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "b5a7c1ae95c88b51f38d6564d729f8ab9b7f6b6b2421d862cd8c4a0db18dfcd5",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "f5cbb965edcad8bd6b5de72dd9ba51bfd6c46878c94468e38259c024826af110",
+          "raw_bytes": 10366
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 3,
+      "bytes": 50917,
+      "sha256": "e43b69804cf87c22f263fd433f04d7401b4443255c792977224c871db2d0c572",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "d6537d2202858b848c2613cef6ca446147865bbe5a584d42d7f2bd2cde6a18fd",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "3f69b96212e04d00c88c816add0c3bd83ce5d8e41678130d0ad99c8bad27f27e",
+          "raw_bytes": 10489
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 4,
+      "bytes": 50704,
+      "sha256": "c8d981687b060c2087aa5189970fce81890cef110cb39200f51d2f6375b82bf8",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "d6537d2202858b848c2613cef6ca446147865bbe5a584d42d7f2bd2cde6a18fd",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "cee06ef9f6842b832785e3a931ba1cca56a663d127d127e9deb1170e4c924d6d",
+          "raw_bytes": 10384
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 5,
+      "bytes": 50877,
+      "sha256": "d561bbe3c645eb75fa8c625e4b10bd4d555c58c812038de9f61832222eee7bdc",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "910c722edb2e4297c7e936484e8629d1e309bb4d3c364128eb1cd71d3e3261c9",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "762f98046a7d7972cfcb940d87ce7d3e901685905fb9e629002d3aeab37afb40",
+          "raw_bytes": 10415
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 6,
+      "bytes": 50976,
+      "sha256": "516e9db8be39d13a8de6b562c187babebe57cde81d4c271776412aff01e56ff6",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "d6537d2202858b848c2613cef6ca446147865bbe5a584d42d7f2bd2cde6a18fd",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "cd59c9d942843a2ec448dc988163828aed31b9fc97b40ab705454c6e318a5e43",
+          "raw_bytes": 10389
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 7,
+      "bytes": 51076,
+      "sha256": "f6d57c0e0751c432cdf0dba21e1640aa86dfac66f301c7965fe515cdb3f59c4b",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "6fffdb1c00a214febb27810871e45a718d7ef18a402729a4344c264715aea2b2",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "2c8ebb251d2db40d28c7c5ebdd0351023c642eab6a97dbf54465fef0e5bd9886",
+          "raw_bytes": 10329
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 8,
+      "bytes": 50736,
+      "sha256": "c8665505e6a18b64da3ea43db0032bb176915c97bb696e99481cb17a2ba8b941",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "8bbd585add9178d05869638049175e4c6029afa457bfaa33d4ccdab807044462",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "ec0bc14b02d6858a4f696bd84c0c380956c03122f8203e532e0f7e7d822f1ca8",
+          "raw_bytes": 10364
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 9,
+      "bytes": 50729,
+      "sha256": "be899e0ffb7fe35bf81350f5e7bc5e44fc9fa6994b53b49477e812999a2fd108",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "37182e6a874fd7ecd12969d48cd577c64e10a0f1e5ef30c9dbee28918874afad",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "344939677fd40bda037c950c883575bbb74c2a7083a43fe7c3131b592bda3221",
+          "raw_bytes": 10397
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 10,
+      "bytes": 50934,
+      "sha256": "946e1aec527d9313248e898f4c10560d0e003df1aeca0740bfc4dabd568d1c27",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "4efbd7295e6e098d2fb013c89fd37e956d96e2e45dede969de7cec09207009ac",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "43a43bca628561366a5b5db3e8ccce86328ab44a848991db5afd098622e8188c",
+          "raw_bytes": 10400
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 11,
+      "bytes": 50523,
+      "sha256": "6b39970275911947df4f1076d3b8783bd13482fd583eeca7571543f2b9d1e97a",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "6fffdb1c00a214febb27810871e45a718d7ef18a402729a4344c264715aea2b2",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "3aff9eef1d2bfa06bb175f70aedb393aaf7bdcf5e7e12dd526938d0f86ca8492",
+          "raw_bytes": 10388
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 12,
+      "bytes": 50519,
+      "sha256": "b41ba185c5cd63d0f95d6c596aef004b73d61b3ea0e30eb2de2743e340ed1999",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "3e191611f9a102cbb23fb6ed5e9c33c00d7104f4ce0943f329514d6cc5d5db0e",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "a8e4dae464dd943834518de227125f853ea46353c4eda90392cb9458c01b19f5",
+          "raw_bytes": 10415
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 13,
+      "bytes": 50671,
+      "sha256": "f4f5b74bed5813cdfeb96848d043ca5d7c6629d80c2f77ba59c926f63c1054e0",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "3e191611f9a102cbb23fb6ed5e9c33c00d7104f4ce0943f329514d6cc5d5db0e",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "8d04a06cd821617b48d7345de4491113f70014046168361a95c63ca8bfb0931b",
+          "raw_bytes": 10240
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 14,
+      "bytes": 50887,
+      "sha256": "31911956eff688b0cd262153743c11ddb0ec8bbc8e403cc0fa0a5a86797cd9c3",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "6fffdb1c00a214febb27810871e45a718d7ef18a402729a4344c264715aea2b2",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "a0d025954f576443382778366adbd8ce0e7a5bf36d91379492841683deda6ed9",
+          "raw_bytes": 10443
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 15,
+      "bytes": 50759,
+      "sha256": "e4da04104422d164c694df2d004fa5652b9dce2b881f03206db2320af3b8b336",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "986a31f2723386fdaf3acd5a03794f30f2daf92774644306b6fefbc9ffb0f8fb",
+          "raw_bytes": 9754
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "482acb7386da813aa65edce4355ed78502485049b2646c4e84155ba2c0537b7a",
+          "raw_bytes": 10407
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    }
+  ],
+  "native_shard_phases_authenticated": 48,
+  "independent_passset_comparison": {
+    "inventory": 53872,
+    "pass_files": 52623,
+    "pass_variants": 101107,
+    "lost_files": 0,
+    "lost_variants": 0,
+    "gained_files": 0,
+    "gained_variants": 0
+  },
+  "actual_workspace_exit": 0,
+  "actual_full16_exit": 0,
+  "raw_policy": "Raw remains in sandbox HOME; compact evidence only. Independent template candidate on current published base; raw stays HOME."
+}

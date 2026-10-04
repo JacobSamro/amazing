@@ -1366,6 +1366,8 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLScriptElement, name: "HTMLScriptElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_SCRIPT },
     D { interface: I::HTMLTemplateElement, name: "HTMLTemplateElement", parent: Some(I::HTMLElement), constructor: None, members: &[
         getter("content", O::TemplateContent),
+        getter("htmlFor", O::LegacyReflectGet(I::HTMLTemplateElement, "for", LR::String)),
+        setter("htmlFor", O::LegacyReflectSet(I::HTMLTemplateElement, "for", LR::String)),
         // DOM-18 follow-up: declarative shadow DOM's four reflected IDL
         // attributes on <template> (HTML SS4.12.4). shadowRootMode is a
         // "limited to only known values" DOMString (getter-only limiting,

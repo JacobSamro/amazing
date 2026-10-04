@@ -314,6 +314,7 @@ pub struct IncrementalDocumentImport {
     /// needs the other direction, so both maps are maintained together
     /// rather than rebuilding one from the other on every call.
     rev: HashMap<NodeIdx, NodeIdx>,
+    generations: HashMap<NodeIdx, (u64, u64)>,
 }
 
 impl IncrementalDocumentImport {
@@ -326,13 +327,36 @@ impl IncrementalDocumentImport {
         map.insert(NodeIdx(0), dest_document);
         let mut rev = HashMap::new();
         rev.insert(dest_document, NodeIdx(0));
-        Self { dest_document, map, rev }
+        Self { dest_document, map, rev, generations: HashMap::new() }
     }
 
     /// Records a newly-copied pair in both directions.
-    fn record(&mut self, source_node: NodeIdx, dest_node: NodeIdx) {
+    fn record(&mut self, source: &Dom, dest: &Dom, source_node: NodeIdx, dest_node: NodeIdx) {
+        self.generations.insert(source_node, (source.node_generation(source_node).expect("live source mirror"),
+            dest.node_generation(dest_node).expect("live destination mirror")));
         self.map.insert(source_node, dest_node);
         self.rev.insert(dest_node, source_node);
+    }
+
+    // A parser mapping is an identity relation, never permission to redirect a
+    // recycled arena slot. Validate the complete existing relation before any
+    // value/tree/state write in either direction. The root pair is captured on
+    // the first use, because new() intentionally receives no arena references.
+    fn validate_mappings(&mut self, source: &Dom, dest: &Dom) -> Result<(), DomError> {
+        for (&s, &d) in &self.map {
+            let current = (source.node_generation(s).ok_or(DomError::InvalidStateError)?,
+                dest.node_generation(d).ok_or(DomError::InvalidStateError)?);
+            if let Some(saved) = self.generations.get(&s) {
+                if *saved != current { return Err(DomError::InvalidStateError); }
+            } else if s != NodeIdx(0) || d != self.dest_document {
+                return Err(DomError::InvalidStateError);
+            }
+        }
+        if !self.generations.contains_key(&NodeIdx(0)) {
+            self.generations.insert(NodeIdx(0), (source.node_generation(NodeIdx(0)).unwrap(),
+                dest.node_generation(self.dest_document).unwrap()));
+        }
+        Ok(())
     }
 
     /// The destination document node passed to `new`.
@@ -350,6 +374,7 @@ impl IncrementalDocumentImport {
     /// call repeatedly (at every parser pause, and once more after `Eof`);
     /// unchanged values do not produce repeated mutations.
     pub fn sync(&mut self, dest: &mut Dom, source: &Dom) -> Result<(), DomError> {
+        self.validate_mappings(source, dest)?;
         self.sync_values(dest, source)?;
         self.sync_positions(dest, source)?;
         // Open parser nodes may have been adopted into another document or a
@@ -361,6 +386,60 @@ impl IncrementalDocumentImport {
             self.sync_special_containers(dest, source, s)?;
         }
         self.sync_positions(dest, source)?;
+        self.sync_template_insertions(dest, source)?;
+        self.sync_positions(dest, source)?;
+        Ok(())
+    }
+
+    // Unlike clone/import, parser mirrors retain the SAME template's live
+    // insertion identities. Open patching templates can be detached and exist
+    // only on the parser stack, so include their actual native state explicitly.
+    fn sync_template_insertions(&mut self, dest: &mut Dom, source: &Dom) -> Result<(), DomError> {
+        let templates: Vec<_> = source.nodes.iter().enumerate()
+            .filter_map(|(index, node)| {
+                let id = NodeIdx(index as u32);
+                (source.node_generation(id).is_some() && source.is_html_template(id) && (node.template_insertion.is_some()
+                    || self.map.contains_key(&id))).then_some(id)
+            }).collect();
+        for template in templates {
+            let mapped = self.ensure_source_node(dest, source, template)?;
+            let insertion = match source.template_insertion(template) {
+                Some((target, start, end)) => {
+                    let target = self.ensure_source_node(dest, source, target)?;
+                    let start = self.ensure_source_node(dest, source, start)?;
+                    let end = end.map(|node| self.ensure_source_node(dest, source, node)).transpose()?;
+                    Some((target, start, end))
+                }
+                None => None,
+            };
+            dest.set_template_insertion(mapped, insertion)?;
+        }
+        Ok(())
+    }
+
+    fn reverse_template_insertions(&mut self, source: &mut Dom, dest: &Dom) -> Result<(), DomError> {
+        let templates: Vec<_> = dest.nodes.iter().enumerate()
+            .filter_map(|(index, node)| {
+                let id = NodeIdx(index as u32);
+                (dest.node_generation(id).is_some() && dest.is_html_template(id) && (node.template_insertion.is_some()
+                    || self.rev.contains_key(&id))).then_some(id)
+            }).collect();
+        for template in templates {
+            let Some(mapped) = self.mirror_dest_node(source, dest, template)? else { continue; };
+            let insertion = match dest.template_insertion(template) {
+                Some((target, start, end)) => {
+                    let target = self.mirror_dest_node(source, dest, target)?;
+                    let start = self.mirror_dest_node(source, dest, start)?;
+                    let end = match end {
+                        Some(node) => self.mirror_dest_node(source, dest, node)?,
+                        None => None,
+                    };
+                    target.zip(start).map(|(target, start)| (target, start, end))
+                }
+                None => None,
+            };
+            source.set_template_insertion(mapped, insertion)?;
+        }
         Ok(())
     }
 
@@ -472,16 +551,43 @@ impl IncrementalDocumentImport {
             self.sync_special_containers(dest, source, data.host)?;
             return self.map.get(&node).copied().ok_or(DomError::InvalidNode);
         }
+        if matches!(source.get(node).kind, NodeKind::Document) {
+            let document = dest.create_document();
+            dest.set_document_quirks_mode(document, source.document_quirks_mode(node)?)?;
+            dest.set_document_scripting_enabled(document, source.document_scripting_enabled(node)?)?;
+            dest.set_document_allows_declarative_shadow_roots(document,
+                source.document_allows_declarative_shadow_roots(node)?)?;
+            if let Some(metadata) = source.document_metadata(node)? {
+                dest.set_document_metadata(document, metadata.clone())?;
+            }
+            self.record(source, dest, node, document);
+            self.sync_children(dest, source, node, document)?;
+            return Ok(document);
+        }
+        if matches!(source.get(node).kind, NodeKind::DocumentFragment) {
+            let document = self.ensure_source_node(dest, source,
+                source.owner_document(node).ok_or(DomError::InvalidNode)?)?;
+            if let Some(&mapped) = self.map.get(&node) { return Ok(mapped); }
+            let created = dest.create_document_fragment(document)?;
+            self.record(source, dest, node, created);
+            self.sync_children(dest, source, node, created)?;
+            return Ok(created);
+        }
         let source_parent = source.get(node).parent;
         let parent = if let Some(parent) = source_parent {
             self.ensure_source_node(dest, source, parent)?
         } else {
             self.ensure_source_node(dest, source, source.owner_document(node).ok_or(DomError::NotSupportedError)?)?
         };
+        // Resolving a new parent can synchronize its subtree and already
+        // record this exact child. Never allocate a second identity.
+        if let Some(&mapped) = self.map.get(&node) { return Ok(mapped); }
         // Allocate first; its placement is validated by the reconciliation
         // pass after old document children and ancestor relationships settle.
         let created = self.import_one(dest, source, node, parent, false)?;
-        self.record(node, created);
+        self.record(source, dest, node, created);
+        self.sync_children(dest, source, node, created)?;
+        self.sync_special_containers(dest, source, node)?;
         Ok(created)
     }
 
@@ -500,7 +606,7 @@ impl IncrementalDocumentImport {
                 Some(existing) => *existing,
                 None => {
                     let created = self.import_one(dest, source, child, dest_parent, true)?;
-                    self.record(child, created);
+                    self.record(source, dest, child, created);
                     created
                 }
             };
@@ -528,7 +634,7 @@ impl IncrementalDocumentImport {
                 copied.declarative = data.declarative;
                 copied.available_to_element_internals = data.available_to_element_internals;
                 copied.keep_custom_element_registry_null = data.keep_custom_element_registry_null;
-                self.record(root, created);
+                self.record(source, dest, root, created);
                 created
             };
             self.sync_children(dest, source, root, dest_root)?;
@@ -537,7 +643,7 @@ impl IncrementalDocumentImport {
             if let Some(contents) = source.template_contents(node) {
                 let dest_contents = if let Some(&mapped) = self.map.get(&contents) { mapped } else {
                     let created = dest.ensure_template_contents(self.map[&node])?;
-                    self.record(contents, created);
+                    self.record(source, dest, contents, created);
                     created
                 };
                 self.sync_children(dest, source, contents, dest_contents)?;
@@ -585,12 +691,12 @@ impl IncrementalDocumentImport {
             copied_data.declarative = source_data.declarative;
             copied_data.available_to_element_internals = source_data.available_to_element_internals;
             copied_data.keep_custom_element_registry_null = source_data.keep_custom_element_registry_null;
-            self.record(root, copied_root);
+            self.record(source, dest, root, copied_root);
         }
         if source.is_html_template(node) {
             let destination = dest.ensure_template_contents(created)?;
             if let Some(contents) = source.template_contents(node) {
-                self.record(contents, destination);
+                self.record(source, dest, contents, destination);
             }
         }
         Ok(created)
@@ -627,6 +733,7 @@ impl IncrementalDocumentImport {
     /// not Document.cloneNode: it must preserve active/inert context for parser
     /// validation without changing the destination's browsing context.
     pub fn reverse_sync(&mut self, source: &mut Dom, dest: &Dom) -> Result<(), DomError> {
+        self.validate_mappings(source, dest)?;
         let pairs: Vec<(NodeIdx, NodeIdx)> = self.map.iter().map(|(&s, &d)| (s, d)).collect();
         for &(s, d) in &pairs {
             Self::copy_node_values(source, s, dest, d)?;
@@ -699,6 +806,7 @@ impl IncrementalDocumentImport {
             self.reverse_sync_children(source, dest, *dest_node, *source_node)?;
             self.reverse_sync_special_containers(source, dest, *dest_node)?;
         }
+        self.reverse_template_insertions(source, dest)?;
         Ok(())
     }
 
@@ -760,13 +868,13 @@ impl IncrementalDocumentImport {
                     created
                 }
             };
-            self.record(source_root, node);
+            self.record(source, dest, source_root, node);
             return Ok(Some(source_root));
         }
         if let Some(template) = dest.template_of_contents(node) {
             let Some(source_template) = self.mirror_dest_node_rec(source, dest, template, resolving)? else { return Ok(None) };
             let source_contents = source.ensure_template_contents(source_template)?;
-            self.record(source_contents, node);
+            self.record(source, dest, source_contents, node);
             return Ok(Some(source_contents));
         }
         if matches!(dest.get(node).kind, NodeKind::Document) {
@@ -776,7 +884,7 @@ impl IncrementalDocumentImport {
             source.set_document_allows_declarative_shadow_roots(document,
                 dest.document_allows_declarative_shadow_roots(node)?)?;
             if let Some(metadata) = dest.document_metadata(node)? { source.set_document_metadata(document, metadata.clone())?; }
-            self.record(document, node);
+            self.record(source, dest, document, node);
             return Ok(Some(document));
         }
         let parent = dest.get(node).parent;
@@ -785,7 +893,7 @@ impl IncrementalDocumentImport {
         if matches!(dest.get(node).kind, NodeKind::DocumentFragment) {
             let document = source.owner_document(source_parent).unwrap_or(source_parent);
             let fragment = source.create_document_fragment(document)?;
-            self.record(fragment, node);
+            self.record(source, dest, fragment, node);
             return Ok(Some(fragment));
         }
         let created = self.reverse_import_one(source, dest, node, source_parent)?;
@@ -877,7 +985,7 @@ impl IncrementalDocumentImport {
         };
         Self::copy_node_values(source, created, dest, node)?;
         source.attach_before(source_parent, None, created);
-        self.record(created, node);
+        self.record(source, dest, created, node);
         Ok(Some(created))
     }
 }
