@@ -45,7 +45,8 @@ pids=()
 for K in $(seq 0 $((N - 1))); do
   LANE="$LANE_PREFIX-$K"
   (
-    if "$REPO/scripts/linux-run.sh" "$LANE" --ref "$COMMIT" -- "
+    setup_receipt="$OUTDIR/.shard-$SHA-$TAG-$K-$$.setup.manifest.json"
+    if "$REPO/scripts/linux-run.sh" "$LANE" --ref "$COMMIT" --setup-summary "$setup_receipt" -- "
       set -euo pipefail
       echo $COMPACT_B64 | base64 -d > /tmp/t262compact-$K.py
       phase=setup
@@ -79,6 +80,10 @@ for K in $(seq 0 $((N - 1))); do
     else
       job_rc=$?
       echo "test262-boat: shard $K job exit $job_rc; raw stays on Boat" >&2
+      if [ -f "$setup_receipt" ]; then
+        echo "test262-boat: shard $K failed before job start; compact setup receipt $setup_receipt" >&2
+        exit "$job_rc"
+      fi
       D="$(mktemp -d)"
       if bash "$REPO/scripts/lane-fetch.sh" "$LANE" "$D" "amazing/out/$LANE/shard-$SHA-$TAG.failure.manifest.json"; then
         mv "$D/shard-$SHA-$TAG.failure.manifest.json" "$OUTDIR/.shard-$SHA-$TAG-$K.failure.manifest.json"

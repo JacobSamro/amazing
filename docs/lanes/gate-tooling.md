@@ -74,3 +74,18 @@ temporary Git fixture preserving literal includes, fixture/testdata/test
 inputs, compact evidence, source inputs and TSV bytes while omitting only three
 historical raw outputs. Command: `python3 scripts/gate-tooling-tests.py` (3
 checks passed). No engine builds, Boat calls, raw pulls or live gate changes.
+
+## Pre-job transport diagnosis
+
+Base: `923938ad1cd00df6203fd51206af6c4ca15af6a1`. Shard 0 of the live
+Super-read gate failed during rsync, before its remote shard command installed
+the phase trap. The old wrapper exited 3 but did not record rsync's own exit;
+that value remains unknown. The compact incident file records the local
+688-byte diagnostic's hash and exact observed cause.
+
+`linux-run --setup-summary PATH` now records an actual remote-mkdir or rsync
+failure separately from wrapper exit 3. Test262 supplies a run-specific local
+manifest path and uses this receipt after the failed job status, avoiding an
+irrelevant remote phase fetch when no job started. This does not retry or
+recover a run. Four metadata checks pass, including distinct rsync/wrapper
+exit fields. The live run and Boat endpoints were untouched.

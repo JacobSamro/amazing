@@ -63,6 +63,20 @@ class Reporting(unittest.TestCase):
             self.assertEqual({boat_lane.parse_run(line)[2] for line in lines[1:]}, {f'lane-{n}' for n in range(4)})
 
 
+class SetupReceipt(unittest.TestCase):
+    def test_phase_exit_is_distinct_from_wrapper_exit(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = pathlib.Path(d) / 'setup.manifest.json'
+            subprocess.check_call([sys.executable, str(SCRIPTS / 'gate-summary.py'),
+                'failure', '--source-commit', 'fixture-source', '--shard', 'fixture-lane',
+                '--wrapper-exit', '3', str(path), 'rsync', '12'])
+            receipt = json.loads(path.read_text())
+            self.assertEqual(receipt['actual_exit'], 12)
+            self.assertEqual(receipt['wrapper_exit'], 3)
+            self.assertEqual(receipt['phase'], 'rsync')
+            self.assertEqual(receipt['raw'], [])
+
+
 class SourceFilter(unittest.TestCase):
     def test_exact_ref_keeps_includes_fixtures_tsv_and_source(self):
         with tempfile.TemporaryDirectory() as d:

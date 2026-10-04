@@ -81,6 +81,7 @@ def main():
     t.add_argument('--source-commit', default=''); t.add_argument('source'); t.add_argument('destination'); t.add_argument('exit', type=int)
     f = sub.add_parser('failure')
     f.add_argument('--source-commit', required=True); f.add_argument('--shard', required=True)
+    f.add_argument('--wrapper-exit', type=int, default=None)
     f.add_argument('destination'); f.add_argument('phase'); f.add_argument('exit', type=int)
     f.add_argument('files', nargs='*')
     m = sub.add_parser('manifest')
@@ -93,6 +94,7 @@ def main():
     elif args.command == 'failure':
         write(args.destination, {'schema': 1, 'source_commit': args.source_commit,
                                 'shard': args.shard, 'phase': args.phase, 'actual_exit': args.exit,
+                                'wrapper_exit': args.wrapper_exit,
                                 'raw': [raw(p) if pathlib.Path(p).is_file() else
                                         {'path': str(pathlib.Path(p).resolve()), 'missing': True}
                                         for p in args.files]})

@@ -22,6 +22,7 @@
 #               requires --ref matching plan.json and stages without unpacking locally
 #   --existing-box
 #               guarded mission only: use its live endpoint without lifecycle changes
+#   --setup-summary PATH  compact local setup-failure receipt; no remote raw fetch
 #   --no-slot   skip the slot queue; for crate-scoped iterations only
 #
 # Environment on the host: CARGO_TARGET_DIR, JOBS (per-slot parallelism),
@@ -36,7 +37,7 @@ MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-
 
 LANE="${1:?usage: linux-run.sh <lane> [--host H] [--ref REF] [--no-slot] -- <command>}"
 shift
-HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0
+HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0 SETUP_SUMMARY=""
 if [ -e "$MAIN/.agents/.boat-only" ]; then HOST=boat; fi
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -45,6 +46,7 @@ while [ $# -gt 0 ]; do
     --mission-package) MISSION_PACKAGE="$2"; shift 2 ;;
     --mission-sha256) MISSION_SHA256="$2"; shift 2 ;;
     --existing-box) EXISTING_BOX=1; shift ;;
+    --setup-summary) SETUP_SUMMARY="$2"; shift 2 ;;
     --no-slot) SLOT=0; shift ;;
     --which) WHICH=1; shift ;;
     --) shift; break ;;
@@ -217,11 +219,23 @@ if [ "$HOST" = boat ]; then
       echo "linux-run[$LANE]: native mission transport failed; no controller started" >&2
       break
     fi
-    $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE" &&
-    rsync -rlpDz --checksum --delete --exclude .git --exclude /target --exclude '/target-*' --exclude /out --exclude /corpora \
-      --exclude /.agents --exclude /.opencode --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/wt/$LANE/" &&
-    { ok=1; break; }
-    echo "linux-run[$LANE]: setup attempt $attempt on $BOAT_ID failed" >&2
+    setup_phase=remote-mkdir
+    $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE"
+    setup_rc=$?
+    if [ "$setup_rc" = 0 ]; then
+      setup_phase=rsync
+      rsync -rlpDz --checksum --delete --exclude .git --exclude /target --exclude '/target-*' --exclude /out --exclude /corpora \
+        --exclude /.agents --exclude /.opencode --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/wt/$LANE/"
+      setup_rc=$?
+    fi
+    if [ "$setup_rc" = 0 ]; then ok=1; break; fi
+    echo "linux-run[$LANE]: setup $setup_phase exited $setup_rc on $BOAT_ID; no job started" >&2
+    if [ -n "$SETUP_SUMMARY" ]; then
+      mkdir -p "$(dirname "$SETUP_SUMMARY")" &&
+        python3 "$REPO/scripts/gate-summary.py" failure --source-commit "${COMMIT:-working-tree}" \
+          --shard "$LANE" --wrapper-exit 3 "$SETUP_SUMMARY" "$setup_phase" "$setup_rc" || \
+          echo "linux-run: compact setup receipt could not be written" >&2
+    fi
   done
   [ "$ok" = 1 ] || { echo "linux-run: could not sync to Boat for $LANE after the allowed setup attempts" >&2; exit 3; }
   REMOTE="trap 'rm -f ~/$LEASE' EXIT
