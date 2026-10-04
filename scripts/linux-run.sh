@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Run a lane's build or test command on a Linux build host (venus-*).
+# Run a lane's build or test command on its configured Linux host.
 #
-# win-001 is the reference platform and the only place merge gates and render
-# sweeps count. Everything platform-independent -- crate and workspace nextest
-# while iterating, full Test262, the WPT dom/ harness, the net corpora -- runs
-# here instead, so it stops queueing behind win-001's three slots.
+# The current fleet is Boat-only (.agents/.boat-only), including final Linux
+# gates and render sweeps. Windows gates are deferred by AGENTS.md; if requested,
+# Windows-only work uses server@win-001. Legacy hosts below remain opt-in for
+# configurations without the Boat-only marker.
 #
 # The lane's working tree, including uncommitted edits, is rsynced to
 # ~/amazing/wt/<lane> on its host, and the command runs there with the lane's
@@ -17,6 +17,11 @@
 #     scripts/linux-run.sh js-lang -- 'cargo build -p amazing-js --example test262_host --release --locked &&
 #       python3 scripts/test262.py "$TEST262_ROOT" --binary "$CARGO_TARGET_DIR/release/examples/test262_host" --jobs "$JOBS" --timeout 60 --output ~/amazing/out/js-lang.json'
 #   --ref REF   sync that exact commit (git archive) instead of the working tree
+#   --mission-package PATH --mission-sha256 SHA256
+#               Boat-only reviewed mission transport with its own source guards;
+#               requires --ref matching plan.json and stages without unpacking locally
+#   --existing-box
+#               guarded mission only: use its live endpoint without lifecycle changes
 #   --no-slot   skip the slot queue; for crate-scoped iterations only
 #
 # Environment on the host: CARGO_TARGET_DIR, JOBS (per-slot parallelism),
@@ -31,12 +36,15 @@ MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-
 
 LANE="${1:?usage: linux-run.sh <lane> [--host H] [--ref REF] [--no-slot] -- <command>}"
 shift
-HOST="" REF="" SLOT=1
+HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0
 if [ -e "$MAIN/.agents/.boat-only" ]; then HOST=boat; fi
 while [ $# -gt 0 ]; do
   case "$1" in
     --host) HOST="$2"; shift 2 ;;
     --ref) REF="$2"; shift 2 ;;
+    --mission-package) MISSION_PACKAGE="$2"; shift 2 ;;
+    --mission-sha256) MISSION_SHA256="$2"; shift 2 ;;
+    --existing-box) EXISTING_BOX=1; shift ;;
     --no-slot) SLOT=0; shift ;;
     --which) WHICH=1; shift ;;
     --) shift; break ;;
@@ -96,6 +104,19 @@ esac
 # --which: print the ssh destination this lane runs on ("boat" for Boat), for copy-backs.
 [ "${WHICH:-0}" = 1 ] && { echo "$SSH"; exit 0; }
 
+# A reviewed mission can carry its own exact source archives and byte guards.
+# Stage a hard link to its immutable transport instead of expanding a second
+# full checkout on the Mac. The mission validates reconstructed sources before
+# building; this wrapper authenticates transport/ref before any billed setup.
+if [ -n "$MISSION_PACKAGE$MISSION_SHA256" ]; then
+  [ "$HOST" = boat ] && [ -n "$REF" ] && [ -n "$MISSION_PACKAGE" ] && [ -n "$MISSION_SHA256" ] || {
+    echo "linux-run: mission transport requires Boat, an explicit ref, package and SHA256" >&2; exit 2;
+  }
+fi
+if [ "$EXISTING_BOX" = 1 ] && [ -z "$MISSION_PACKAGE" ]; then
+  echo "linux-run: --existing-box requires guarded mission transport" >&2; exit 2
+fi
+
 # One run per lane tree at a time. Two runs of the same lane share the remote
 # tree and output paths; on 2026-09-24 a second comparison synced a different
 # commit into the tree mid-build and made a Test262 baseline measure the wrong
@@ -122,10 +143,31 @@ if [ -n "$REF" ]; then
       echo "linux-run: ambiguous ref $REF; use the explicit source commit SHA (HEAD belongs to the main worktree)" >&2
       exit 2 ;;
   esac
-  COMMIT="$(git -C "$MAIN" rev-parse "$REF")" || exit 2
+  COMMIT="$(git -C "$MAIN" rev-parse --verify "${REF}^{commit}")" || exit 2
   SRC="$(mktemp -d)"; SRC_TMP="$SRC"
   trap 'rm -rf "$SRC" "$LANE_LOCK"' EXIT
-  git -C "$MAIN" archive "$COMMIT" | tar x -C "$SRC"
+  if [ -n "$MISSION_PACKAGE" ]; then
+    python3 - "$MISSION_PACKAGE" "$MISSION_SHA256" "$COMMIT" <<'PY' || exit 2
+import hashlib, json, pathlib, sys, tarfile
+package, expected, commit = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+with package.open('rb') as stream:
+    if hashlib.file_digest(stream, 'sha256').hexdigest() != expected:
+        raise SystemExit('linux-run: mission package SHA256 mismatch')
+with tarfile.open(package) as archive:
+    plans = [m for m in archive.getmembers() if m.isfile() and m.name in ('plan.json', './plan.json')]
+    if len(plans) != 1:
+        raise SystemExit('linux-run: mission requires one top-level plan.json')
+    plan = json.load(archive.extractfile(plans[0]))
+    if commit not in (plan.get('before'), plan.get('after')):
+        raise SystemExit('linux-run: mission plan does not contain the exact ref')
+PY
+    ln "$MISSION_PACKAGE" "$SRC/mission.tar.gz" || {
+      echo "linux-run: cannot hard-link mission transport; no sandbox started" >&2; exit 2;
+    }
+    echo "linux-run[$LANE]: guarded mission transport $MISSION_SHA256" >&2
+  else
+    git -C "$MAIN" archive "$COMMIT" | tar x -C "$SRC" || exit 2
+  fi
   echo "linux-run[$LANE]: $HOST at $REF ($COMMIT)" >&2
 else
   if [ "$LANE" = integrator-primary ]; then SRC="$MAIN"; else SRC="$(dirname "$MAIN")/amazing-wt/$LANE"; fi
@@ -147,8 +189,12 @@ if [ "$HOST" = boat ]; then
   # linked another lane's stale artifacts).
   LEASE=".amazing-busy/$LANE.$$"
   ok=0
-  for attempt in 1 2 3; do
-    if [ "$attempt" = 1 ]; then how=ensure; else how=heal; sleep 10; fi
+  ATTEMPTS="1 2 3"
+  [ -n "$MISSION_PACKAGE" ] && ATTEMPTS="1"
+  for attempt in $ATTEMPTS; do
+    if [ "$EXISTING_BOX" = 1 ]; then how=endpoint
+    elif [ "$attempt" = 1 ]; then how=ensure
+    else how=heal; sleep 10; fi
     read -r BOAT_HOST BOAT_PORT BOAT_ID BOAT_POOL BOAT_TARGET < <("$MAIN/scripts/boat-lane.py" "$how" "$LANE") || continue
     [ "$attempt" = 1 ] && echo "linux-run[$LANE]: boat sandbox $BOAT_ID ($BOAT_POOL)" >&2
     BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ServerAliveInterval=30 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"
@@ -158,18 +204,35 @@ if [ "$HOST" = boat ]; then
     # Seed only from the canonical local source below. Snapshot-backed template
     # directories can change metadata during tar reads and fail fresh shard
     # setup; a partial template seed must never become build input.
+    if [ -n "$MISSION_PACKAGE" ]; then
+      # Large opaque packets must not traverse the lazy HOME filesystem.
+      # Upload directly to a run-private native directory; the source archives
+      # are reconstructed and guarded by the reviewed mission controller.
+      NATIVE_MISSION_DIR="/tmp/amazing-mission-transport-$LANE.$$"
+      $BSSH "$BOAT_HOST" "mkdir -p amazing/out/$LANE .amazing-busy $NATIVE_MISSION_DIR && touch $LEASE" &&
+      scp -O -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        -i "$HOME/.ssh/ascii_box_ed25519" -P "$BOAT_PORT" "$MISSION_PACKAGE" \
+        "$BOAT_HOST:$NATIVE_MISSION_DIR/mission.tar.gz" &&
+      $BSSH "$BOAT_HOST" "echo '$MISSION_SHA256  $NATIVE_MISSION_DIR/mission.tar.gz' | sha256sum -c -" &&
+      { ok=1; break; }
+      echo "linux-run[$LANE]: native mission transport failed; no controller started" >&2
+      break
+    fi
     $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE" &&
     rsync -rlpDz --checksum --delete --exclude .git --exclude /target --exclude '/target-*' --exclude /out --exclude /corpora \
       --exclude /.agents --exclude /.opencode --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/wt/$LANE/" &&
     { ok=1; break; }
     echo "linux-run[$LANE]: setup attempt $attempt on $BOAT_ID failed" >&2
   done
-  [ "$ok" = 1 ] || { echo "linux-run: could not sync to Boat for $LANE after 3 attempts" >&2; exit 3; }
+  [ "$ok" = 1 ] || { echo "linux-run: could not sync to Boat for $LANE after the allowed setup attempts" >&2; exit 3; }
   REMOTE="trap 'rm -f ~/$LEASE' EXIT
 . ~/.amazing-env
-cd ~/amazing/wt/$LANE || exit 3
 export CARGO_TARGET_DIR=\$HOME/$BOAT_TARGET JOBS=\$(nproc) CARGO_BUILD_JOBS=\$(nproc)
 export TEST262_ROOT=\$HOME/corpora/test262 RUSTUP_TOOLCHAIN=1.97.1 OUT=\$HOME/amazing/out/$LANE
+if [ -n '${NATIVE_MISSION_DIR:-}' ]; then
+  cd '${NATIVE_MISSION_DIR:-}' || exit 3
+else
+cd ~/amazing/wt/$LANE || exit 3
 ln -sfn ~/corpora ~/amazing/wt/$LANE/corpora
 # Snapshot-backed HOME produces stale/missing rlibs and failed append writes.
 # Keep synced source and compilation on the VM's native filesystem.
@@ -177,6 +240,7 @@ mkdir -p /tmp/amazing-native-src-$LANE || exit 3
 rsync -a --delete --exclude /target --exclude '/target-*' --exclude /out --exclude /corpora ./ /tmp/amazing-native-src-$LANE/ || exit 3
 ln -sfn \$HOME/corpora /tmp/amazing-native-src-$LANE/corpora
 cd /tmp/amazing-native-src-$LANE || exit 3
+fi
 export CARGO_TARGET_DIR=/tmp/amazing-native-target-$LANE CARGO_INCREMENTAL=0
 # nextest is also snapshot-backed in HOME. A late mmap fault can kill its
 # controller after every test passes; execute a native copy instead.
@@ -189,7 +253,7 @@ if [ ! -x /tmp/amazing-native-tools/cargo-nextest ]; then
     mv -f \"\$nextest_copy\" /tmp/amazing-native-tools/cargo-nextest || { rm -f \"\$nextest_copy\"; exit 3; }
 fi
 export PATH=/tmp/amazing-native-tools:\$PATH
-free=\$(df -Pk ~ | awk 'NR==2{print int(\$4/1048576)}'); if [ \"\$free\" -lt 10 ]; then rm -rf \"\$CARGO_TARGET_DIR\"/*/incremental; find \"\$OUT\" -type f -mmin +120 -size +1M -delete 2>/dev/null; echo \"linux-run: only \${free} GB free; cleared this lane's incremental cache and outputs older than 2 h\" >&2; fi
+# Preserve gate outputs and binaries. Space reclamation requires an owner-verified closed receipt.
 $CMD"
   ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"
   T0=$(date +%s)

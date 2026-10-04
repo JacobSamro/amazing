@@ -11,7 +11,10 @@ mkdir -p "$DEST"
 HOST="$("$MAIN/scripts/linux-run.sh" "$LANE" --which)"
 rc=0
 if [ "$HOST" = boat ]; then
-  read -r H P _ < <("$MAIN/scripts/boat-lane.py" ensure "$LANE")
+  # Fetching is read-only. Never resume, extend or resize a sandbox merely to
+  # discover its address; the orchestrator owns any recovery mission.
+  CONTACT="$("$MAIN/scripts/boat-lane.py" endpoint "$LANE")" || exit 3
+  read -r H P _ <<< "$CONTACT"
   for src in "$@"; do
     scp -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
       -i "$HOME/.ssh/ascii_box_ed25519" -P "$P" "$H:$src" "$DEST/" 2>/dev/null || rc=1

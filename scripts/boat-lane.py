@@ -18,6 +18,8 @@ moved to a larger type.
 
 Usage:
   boat-lane.py ensure <lane> [--type default]   print "<user@host> <port> <id> <pool> <target>"
+  boat-lane.py endpoint <lane>                 read-only live endpoint; never start or resize
+  boat-lane.py profile <lane>                  sanitized actual profile and expiry; read-only
   boat-lane.py heal <lane>                      restart it if its lazy filesystem died; print as ensure
   boat-lane.py stop <lane>
   boat-lane.py list
@@ -308,6 +310,30 @@ def main() -> int:
         print(__doc__)
         return 2
     cmd = sys.argv[1]
+    if cmd == "profile":
+        lane = sys.argv[2]
+        sid = load_map().get(pool_of(lane))
+        if not sid:
+            raise SystemExit(f"boat-lane: no recorded sandbox for {lane}; ask the orchestrator")
+        d = info(sid)
+        fields = ("id", "state", "type", "vcpu", "memoryGB", "machineProvider",
+                  "archiveAfter", "health", "lastSnapshotStatus")
+        print(json.dumps({"queried_at_epoch": time.time(), "lane": lane,
+                          "pool": pool_of(lane),
+                          "sandbox": {key: d.get(key) for key in fields}}, sort_keys=True))
+        return 0
+    if cmd == "endpoint":
+        lane = sys.argv[2]
+        sid = load_map().get(pool_of(lane))
+        if not sid:
+            raise SystemExit(f"boat-lane: no recorded sandbox for {lane}; ask the orchestrator")
+        d = info(sid)
+        address = endpoint(d)
+        if d.get("state") not in READY or not address:
+            raise SystemExit(f"boat-lane: {sid} is {d.get('state')}; artifact fetch will not start or resize it")
+        host, port = address.rsplit(":", 1)
+        print(f"user@{host} {port} {sid} {pool_of(lane)} {target_of(lane)}")
+        return 0
     if cmd == "ensure":
         lane = sys.argv[2]
         size = sys.argv[4] if len(sys.argv) > 4 and sys.argv[3] == "--type" else type_of(lane)
