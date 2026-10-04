@@ -33,6 +33,51 @@ Speed comes from doing a lot per cycle, not from many small cycles.
   licensed Rust engine, port the algorithm instead of re-deriving it. See "Porting from other
   engines" below.
 
+## Merge gate (2026-10-04, user-approved; overrides older merge procedures)
+
+Merge tickets independently. A completed ticket is a `lane/<ticket>-ready` branch with **one
+squashed commit on a recorded `origin/dev` base**, containing code and compact evidence only.
+Do not publish WIP commits, merge commits, or lane-to-lane dependency history. If a source
+prerequisite is missing, package it as a separate ready ticket first; record the dependency in
+`questions.md`. Do not merge `integrator/batch19-preview` as a batch.
+
+Only these requirements block an engine merge:
+
+- workspace `cargo nextest run --workspace --locked --no-fail-fast` plus
+  `cargo test --workspace --locked --doc` on Linux/Boat;
+- a **16-shard** pinned Test262 run with zero lost passing files and zero lost passing variants;
+- the ticket's own corpus (WPT, render, XML or geometry) with zero lost passes;
+- compact evidence within **512 KiB per file and 2 MiB per ticket**.
+
+The integrator cherry-picks one or a few independent ready commits onto recorded `origin/dev`,
+runs the required gate, and pushes the exact passing candidate. If a commit breaks the gate,
+prepare a new candidate without that commit, gate the remainder, and push it. Preserve the failed
+branch; do not delete work. Each subsequent gate records the previous published source as its
+base, so deltas chain rather than accumulating against an older batch.
+
+Censuses, repeated PID observations, read-only capture audits and other lane-invented custody
+checks may be notes, but **must not block a merge**. The integrator reviews the compact summaries
+and their hashes, not lane evidence scripts or raw archives. An actual lost pass remains a blocker.
+
+### Tooling failures and time use
+
+- A tooling failure gets **one clean rerun**. If tooling fails again, record the command, failure
+  and remote raw-output path in `questions.md`, then move to another ready ticket. Do not recover
+  raw files by hand during integration. A real test regression is an engine issue, not a tooling
+  failure to waive.
+- Gate-tooling repairs are a separate ticket owned by one lane. Wait for actual job exit status;
+  never infer completion from output files appearing. Keep raw output on the sandbox and pull
+  back only compact classifications, summaries and hash manifests.
+- Messages to each lane: at most once per 15 minutes, only for a decision, a merge result or a new
+  ticket. Read file reports for routine progress. Native Codex subagents are authorized; tmuxctl
+  remains the supported interface for existing tmux lanes.
+- Target at least **one engine-code push to `dev` every two hours while ready work exists**. If
+  missed, report the concrete reason to the user. Policy-only pushes do not satisfy this target.
+- Maintain a short current handoff for a fresh Codex session. Preserve stale branches until the
+  user explicitly approves their deletion.
+- `scripts/merge-preflight.py` rejects WIP titles, merge commits, oversized evidence files and
+  evidence totals over the ticket limit before remote gate allocation.
+
 ## Evidence policy (2026-10-04, user-approved)
 
 On 2026-10-03 lanes committed 174 MB of evidence in one day against about 10 MB of code, mostly
@@ -49,8 +94,8 @@ clone, and history is never rewritten, so every committed byte is permanent.
 - **Raw dumps stay on the build host,** under `$OUT`. This covers per-test `report.json`,
   `before/after.jsonl`, logs, renders, PPM/PNG diffs and full Test262 result JSON. Record their
   sha256 and host path in the compact file, so a gate can be re-checked without the bytes.
-- **Size limit: 512 KB per evidence file, 2 MB per ticket.** Anything larger needs a note in
-  `questions.md` saying why, and the integrator decides before merging.
+- **Size limit: 512 KiB per evidence file, 2 MiB per ticket.** Oversized evidence is rejected
+  by the gate; compact it before presenting a ready commit.
 - **Evidence never comes at the expense of honesty.** Smaller files must keep exact
   counts, every lost id, and enough hashes to prove which binary and corpus produced them.
 - **Integrator:** check `git diff --stat <base> <lane-branch> -- '*/evidence/*' docs/lanes/`
@@ -473,18 +518,17 @@ holds. The integrator owns everything no lane lists.
 
 ### How a lane works
 
-One ticket per commit series. After the report, a lane continues into the next
-item its brief lists (see "Work in bulk"); the integrator merges each series.
+One ticket per ready commit. Follow the Merge gate section above; older Windows/twice-gate
+procedures do not apply.
 
-1. The orchestrator writes a brief and delivers it with `tmuxctl.py brief`.
-2. The agent works **only** inside its worktree and its owned paths.
-3. It iterates with `cargo test -p <its crate>` on win-001, never a full
-   workspace build (the box sustains ~3 concurrent builds across six lanes).
-4. It records progress in `status.json` and `log.md` as it goes.
-5. Before opening a PR: rebase on `origin/dev`, full workspace green on
-   win-001, its gate run twice with stable hashes, measured before/after numbers
-   in the PR body, and its decision map under `docs/lanes/` updated.
-6. It writes `report.md` and stops. It does not start the next ticket.
+1. Work only in your isolated worktree and owned paths; use Boat for builds and tests.
+2. Write and test the whole area in bulk, preserving all existing passing corpus identities.
+3. Record progress in `status.json` and `log.md` without routine messages to the integrator.
+4. On a recorded `origin/dev` base, prepare `lane/<ticket>-ready` as one squashed commit with
+   code, compact before/after evidence and raw-result hashes/remote paths.
+5. Run `scripts/merge-preflight.py --base <recorded-base> --ref <ready-commit> --ready`.
+6. Write `report.md`, set status `done` with SHA and counts, then start the next independent
+   ticket. A missing prerequisite goes to `questions.md`; do not import its lane history.
 
 ### Escalation
 
@@ -568,8 +612,8 @@ widen the pane if the context budget matters for it.
 - **Stalls are detected, not waited on.** A lane whose tmux pane is busy while
   `status.json` has gone 20+ minutes stale is reported by `doctor`.
 - **win-001 is a single 16-core box.** It sustains ~3 concurrent builds, so it
-  is kept for final gates and Windows-only work. Agents iterate on the venus
-  hosts through `scripts/linux-run.sh` and send only final gates to win-001.
+  is kept for final gates and Windows-only work. All Linux work uses Boat through `scripts/linux-run.sh`.
+  Windows-only work uses `server@win-001`; Windows gates remain deferred.
 - **One ticket per commit series, then continue.** Report measured results,
   set status done so the integrator can merge, and carry on with the brief's
   next item on a new commit series. Stop only when the brief's list is empty.

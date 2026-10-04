@@ -4,6 +4,7 @@
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REF="${1:-HEAD}"
+python3 "$REPO/scripts/merge-preflight.py" --base "${MERGE_BASE:-origin/dev}" --ref "$REF"
 "$REPO/scripts/linux-run.sh" integrator-primary --ref "$REF" -- \
   'set -euo pipefail
    export CARGO_TARGET_DIR=/tmp/amazing-target-integrator-primary CARGO_INCREMENTAL=0

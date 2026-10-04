@@ -21,6 +21,7 @@ cd "$REPO"
 MAIN="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
 LOCK="$MAIN/.agents/.primary-gate.lock"
 REF="${1:-origin/dev}"
+python3 "$REPO/scripts/merge-preflight.py" --base "${MERGE_BASE:-origin/dev}" --ref "$REF" || exit $?
 HOST="${GATE_HOST:-win-002}"
 if [ -z "${GATE_HOST:-}" ] && ! ssh -o ConnectTimeout=8 -o BatchMode=yes win-002 'echo ok' >/dev/null 2>&1; then
   echo "primary-gate: win-002 unreachable, gating on win-001" >&2; HOST=win-001
