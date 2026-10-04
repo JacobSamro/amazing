@@ -6,6 +6,7 @@ import collections
 import hashlib
 import json
 import pathlib
+import re
 import zlib
 
 LIMIT = 512 * 1024
@@ -55,6 +56,24 @@ def compact(source, destination, exit_code, commit):
     write(destination, result)
 
 
+def log_counts(files):
+    """Read nextest's final Summary and doctest result rows, including slow notes."""
+    counts = {'nextest': None, 'doctests': {'passed': 0, 'failed': 0, 'ignored': 0}}
+    for path in files:
+        text = pathlib.Path(path).read_text(errors='replace')
+        for line in text.splitlines():
+            if 'Summary' in line and 'tests run:' in line:
+                tail = line.split('tests run:', 1)[1]
+                counts['nextest'] = {name: int(match.group(1)) if match else 0
+                    for name in ('passed', 'failed', 'skipped')
+                    for match in [re.search(r'(\d+)\s+' + name + r'\b', tail)]}
+            match = re.search(r'^test result: .*? (\d+) passed; (\d+) failed; (\d+) ignored;', line)
+            if match:
+                for key, value in zip(('passed', 'failed', 'ignored'), match.groups()):
+                    counts['doctests'][key] += int(value)
+    return counts
+
+
 def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest='command', required=True)
@@ -69,7 +88,8 @@ def main():
         compact(args.source, args.destination, args.exit, args.source_commit)
     else:
         write(args.destination, {'schema': 1, 'source_commit': args.source_commit, 'job_exit': args.exit,
-                                'phase_exits': dict(p.split('=', 1) for p in args.phase),
+                                'phase_exits': {name: int(code) for name, code in (p.split('=', 1) for p in args.phase)},
+                                'counts': log_counts(args.files),
                                 'summary_lines': [line.strip() for p in args.files
                                     for line in pathlib.Path(p).read_text(errors='replace').splitlines()
                                     if 'Summary' in line or line.startswith('test result:')],

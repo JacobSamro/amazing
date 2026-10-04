@@ -30,3 +30,11 @@ Validation so far: shell syntax, Python AST parsing and diff whitespace checks.
 No engine tests or Boat mission were run for this source preparation. The first
 supported integration gate supplies the runtime verification. The integrator
 owns packaging preflight hooks; this patch does not implement them.
+
+First supported runtime observation (History `17f1d043`): workspace 4,384 passed,
+17 skipped; doctests 4 passed; remote phase exits 0/0. Local wrapper exited 3
+because `lane-fetch.sh` had mode 0644. The correction records executable mode
+and invokes it through Bash from both supported callers, making invocation
+independent of checkout mode handling. Nextest counts accept the optional slow
+annotation. This observation does not qualify the failed gate; the owner will
+perform one clean rerun. The running Test262 job was not changed or restarted.

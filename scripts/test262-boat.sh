@@ -74,7 +74,7 @@ for K in $(seq 0 $((N - 1))); do
     fi
     rm -f "$OUTDIR/.shard-$SHA-$TAG-$K.json"
     D="$(mktemp -d)"
-    "$REPO/scripts/lane-fetch.sh" "$LANE" "$D" "amazing/out/$LANE/shard-$SHA-$TAG.compact.json" &&
+    bash "$REPO/scripts/lane-fetch.sh" "$LANE" "$D" "amazing/out/$LANE/shard-$SHA-$TAG.compact.json" &&
       python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["shard"] == sys.argv[2]; assert d["job_exit"] == 0 and d["compact_records"] and d["host_sha256"] and d["input_sha256"]' "$D/shard-$SHA-$TAG.compact.json" "$K/$N" &&
       mv "$D/shard-$SHA-$TAG.compact.json" "$OUTDIR/.shard-$SHA-$TAG-$K.json"
     if [ ! -s "$OUTDIR/.shard-$SHA-$TAG-$K.json" ]; then

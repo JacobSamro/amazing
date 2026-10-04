@@ -28,6 +28,6 @@ set +e
 rc=$?
 set -e
 # Wait above observes the actual SSH job exit, not the existence of a log.
-"$REPO/scripts/lane-fetch.sh" integrator-primary "$MAIN/.agents/integrator-primary/gates" \
+bash "$REPO/scripts/lane-fetch.sh" integrator-primary "$MAIN/.agents/integrator-primary/gates" \
   "amazing/out/integrator-primary/workspace-$REF.manifest.json" || exit 3
 exit "$rc"
