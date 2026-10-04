@@ -131,9 +131,15 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
             host.string(&units)
         }
         O::ElementInnerHTML | O::ElementOuterHTML => {
-            let units = host.with_dom(|dom| if op == O::ElementInnerHTML {
-                dom.serialize_children(node)
-            } else { dom.serialize_node(node) })?;
+            let document = host.with_dom(|dom| dom.owner_document(node)
+                .ok_or(DomError::InvalidStateError))?;
+            let html = host.is_html_document(document);
+            let units = host.with_dom(|dom| match (html, op == O::ElementInnerHTML) {
+                (true, true) => dom.serialize_children(node),
+                (true, false) => dom.serialize_node(node),
+                (false, true) => dom.serialize_xml_children(node),
+                (false, false) => dom.serialize_xml(node, true),
+            })?;
             host.string(&units)
         }
         O::ElementInnerText => {

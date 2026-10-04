@@ -1,0 +1,239 @@
+{
+  "schema": 1,
+  "recorded_base": "32581ff37f54f216d45af864194cab3c96786dbe",
+  "gated_source_commit": "885de701df5bc9e1bc170065928337a98d351286",
+  "workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4458,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_details": [
+      {
+        "command": [
+          "cargo",
+          "nextest",
+          "run",
+          "--workspace",
+          "--locked",
+          "--no-fail-fast",
+          "--status-level",
+          "skip"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "        PASS [   0.002s] (4449/4458) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+          "        PASS [   0.002s] (4450/4458) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+          "        PASS [   0.005s] (4451/4458) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+          "        PASS [   0.007s] (4452/4458) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+          "        PASS [   0.005s] (4453/4458) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+          "        PASS [   0.003s] (4454/4458) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+          "        PASS [   0.018s] (4455/4458) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+          "        PASS [   0.014s] (4456/4458) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+          "        PASS [   8.792s] (4457/4458) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+          "        PASS [  22.844s] (4458/4458) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+          "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+          "     Summary [ 132.058s] 4458 tests run: 4458 passed (1 slow), 17 skipped"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-pdg9ucvx/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-885de701df5bc9e1bc170065928337a98d351286-nextest.log",
+            "durable": {
+              "bytes": 618795,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-885de701df5bc9e1bc170065928337a98d351286-nextest.log",
+              "sha256": "9347d3b951016e30907597d4edf26b20925024cfc8ed00fbe58948f7c17c621b"
+            },
+            "native": {
+              "bytes": 618795,
+              "path": "/tmp/amazing-gate-command-pdg9ucvx/output.log",
+              "sha256": "9347d3b951016e30907597d4edf26b20925024cfc8ed00fbe58948f7c17c621b"
+            },
+            "source": "/tmp/amazing-gate-command-pdg9ucvx/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "nextest",
+        "raw_native": {
+          "bytes": 618795,
+          "path": "/tmp/amazing-gate-command-pdg9ucvx/output.log",
+          "sha256": "9347d3b951016e30907597d4edf26b20925024cfc8ed00fbe58948f7c17c621b"
+        },
+        "schema": 1,
+        "source_commit": "885de701df5bc9e1bc170065928337a98d351286",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--workspace",
+          "--locked",
+          "--doc"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "   Doc-tests amazing_webrtc_codecs",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "",
+          "   Doc-tests amazing_webrtc_crypto",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          ""
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-qsn3amio/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-885de701df5bc9e1bc170065928337a98d351286-doctests.log",
+            "durable": {
+              "bytes": 16669,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-885de701df5bc9e1bc170065928337a98d351286-doctests.log",
+              "sha256": "0173b9bc575fbf2fb7f8145eebfa2b67162365ebefe897ffced27c1130cb4066"
+            },
+            "native": {
+              "bytes": 16669,
+              "path": "/tmp/amazing-gate-command-qsn3amio/output.log",
+              "sha256": "0173b9bc575fbf2fb7f8145eebfa2b67162365ebefe897ffced27c1130cb4066"
+            },
+            "source": "/tmp/amazing-gate-command-qsn3amio/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "doctests",
+        "raw_native": {
+          "bytes": 16669,
+          "path": "/tmp/amazing-gate-command-qsn3amio/output.log",
+          "sha256": "0173b9bc575fbf2fb7f8145eebfa2b67162365ebefe897ffced27c1130cb4066"
+        },
+        "schema": 1,
+        "source_commit": "885de701df5bc9e1bc170065928337a98d351286",
+        "wrapper_exit": 0
+      }
+    ],
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 618795,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-885de701df5bc9e1bc170065928337a98d351286-nextest.log",
+        "sha256": "9347d3b951016e30907597d4edf26b20925024cfc8ed00fbe58948f7c17c621b"
+      },
+      {
+        "bytes": 16669,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-885de701df5bc9e1bc170065928337a98d351286-doctests.log",
+        "sha256": "0173b9bc575fbf2fb7f8145eebfa2b67162365ebefe897ffced27c1130cb4066"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "885de701df5bc9e1bc170065928337a98d351286",
+    "summary_lines": [
+      "Summary [ 132.058s] 4458 tests run: 4458 passed (1 slow), 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "test262": {
+    "job_exit": 0,
+    "shards": 16,
+    "baseline_published_engine_commit": "eb8e42d3",
+    "baseline_gated_source": "37e8c3c1098c0096fdba14615d58ae5642f06021",
+    "baseline_summary_sha256": "421754b719ab4046883fe95640ed1a24b6ad041a67c08e08cc765c4440ed4320",
+    "summary": {
+      "files": {
+        "fail": 794,
+        "pass": 52612,
+        "skipped": 294,
+        "timeout": 1,
+        "unsupported": 171
+      },
+      "variants": {
+        "fail": 1488,
+        "pass": 101088,
+        "timeout": 2,
+        "unsupported": 340
+      }
+    },
+    "lost_files": 0,
+    "lost_variants": 0,
+    "gained_files": 0,
+    "gained_passing_variants": 0,
+    "provenance": {
+      "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "source_commit": "885de701df5bc9e1bc170065928337a98d351286",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    "merged_summary_sha256": "d72abaca0efc22aa0c53e32aabf33ec61a8ee357b8421708c3346a4dabbcb0d1",
+    "shard_sha256": {
+      ".shard-885de701-xml-getter-integration-0.json": "cc087cfd46a913336b1fb29bb406fb38a693b976e0c4488da702b0e8ba4c0139",
+      ".shard-885de701-xml-getter-integration-1.json": "abeb2231a1ebec400ddb7f9b7d00d741455a90a5dec87746189cbd8214558b9b",
+      ".shard-885de701-xml-getter-integration-10.json": "ed0a60b026e74363460fa8ac9662f12e4e6078185ca76aac55e07f5e49d1d7df",
+      ".shard-885de701-xml-getter-integration-11.json": "582eb49a8e74fa9a874f05c8c479e3466fb418a7f756ae33221d8877616b7003",
+      ".shard-885de701-xml-getter-integration-12.json": "e666461bb913f1ab6c35dc26cff3a1963836f9de7e665a5b8951542043e8b148",
+      ".shard-885de701-xml-getter-integration-13.json": "413ba1ec71436251d485824bb724740fa0458f863ac20fc41b0562e9d7a3be7f",
+      ".shard-885de701-xml-getter-integration-14.json": "8ff9f77e0c9267cb5996a075736caaa7e454d985a94e99c86d303f56691add34",
+      ".shard-885de701-xml-getter-integration-15.json": "8ab42ef35dbef258b3c1e08307c42ddd82254cc8868c664356886ce29ca89300",
+      ".shard-885de701-xml-getter-integration-2.json": "bd3dc2f2bb0f223c8bacbb36342f8130d92f66547397a35c02d384dddc052adc",
+      ".shard-885de701-xml-getter-integration-3.json": "987dc7a3e5c78a14ba615a85e5e583f5a8d05bda639dbee3f6aac69093528261",
+      ".shard-885de701-xml-getter-integration-4.json": "1db1e7f2559b19979c480040a5df1c795f75ce55f501e5fc7a78037b91e38566",
+      ".shard-885de701-xml-getter-integration-5.json": "43afdbde848e85c8966f2e3abb4b3c79ae6f99908d67f2d803207d4c8b5ffe64",
+      ".shard-885de701-xml-getter-integration-6.json": "c8fb97ffdbd7585377dc702f997d32c09de7e972ff4c52381f4b15b7aa81fcd5",
+      ".shard-885de701-xml-getter-integration-7.json": "fd87b2d6232122a75e6f7ca0e5351c591f0e92dbd201b69dcb0549bdb76bac9e",
+      ".shard-885de701-xml-getter-integration-8.json": "f707747cc40cab0ecd23b3e5812e1f54d5105a0b7e8c6c28a78e925166603fef",
+      ".shard-885de701-xml-getter-integration-9.json": "e28982a8424da720a8238c24e60d1e8328e971c1b325905d87c5cad3f69fcfe3"
+    }
+  },
+  "own_corpus_summary": "crates/amazing-dom/evidence/xml-markup-getters-prerequisite/summary.json",
+  "own_corpus_summary_sha256": "cd6dba1c929001cd09ae795aada756f48c2c7da2008a6cc4c7922b5bdfb7b87f",
+  "source_conflict_resolution": "Both original driver native-test modules retain individual cfg(test) guards. Combined source tested."
+}

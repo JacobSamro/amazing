@@ -461,6 +461,10 @@ impl RuntimeBindingHost<'_> {
 mod unsafe_document_origin;
 
 #[cfg(test)]
+#[path = "runtime_host_dom_bindings/xml_markup_getters.rs"]
+mod xml_markup_getters;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

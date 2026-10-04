@@ -52,6 +52,25 @@ fn valid_local(name: &str) -> bool {
 }
 
 impl Dom {
+    /// XML fragment getter boundary: serialize actual children, with one
+    /// prefix counter shared across the fragment and no synthetic DOM node.
+    /// HTML template children are its actual template contents. Shadow trees
+    /// are traversed only when the receiver itself is that ShadowRoot.
+    pub fn serialize_xml_children(&self, parent: NodeIdx) -> Result<Vec<u16>, DomError> {
+        self.check_node(parent)?;
+        let map = HashMap::from([(Some(XML.into()), vec!["xml".into()])]);
+        let mut serializer = Serializer { dom: self, strict: true,
+            index: 1, path: HashSet::from([parent]) };
+        let children = self.template_contents(parent).unwrap_or(parent);
+        self.check_node(children)?;
+        if children != parent && !serializer.path.insert(children) {
+            return Err(DomError::InvalidStateError);
+        }
+        let mut out = Vec::new();
+        serializer.children(children, None, &map, &mut out)?;
+        Ok(out)
+    }
+
     /// XMLSerializer uses `require_well_formed = false`; XML inner/outerHTML
     /// can use true. Both preserve DOMString code units when validation is off.
     pub fn serialize_xml(&self, node: NodeIdx, require_well_formed: bool) -> Result<Vec<u16>, DomError> {
@@ -66,8 +85,12 @@ impl Dom {
 }
 struct Serializer<'a> { dom: &'a Dom, strict: bool, index: usize, path: HashSet<NodeIdx> }
 impl Serializer<'_> {
+    fn check_node(&self, node: NodeIdx) -> Result<(), DomError> {
+        self.dom.check_node(node).map_err(|error|
+            if self.strict { DomError::InvalidStateError } else { error })
+    }
     fn node(&mut self, node: NodeIdx, inherited: Option<String>, map: &PrefixMap, out: &mut Vec<u16>) -> Result<(), DomError> {
-        self.dom.check_node(node)?;
+        self.check_node(node)?;
         if !self.path.insert(node) { return Err(DomError::InvalidStateError); }
         match &self.dom.get(node).kind {
             NodeKind::Element { .. } => self.element(node, inherited, map, out)?,
@@ -77,7 +100,7 @@ impl Serializer<'_> {
                     let mut child = self.dom.get(node).first_child;
                     let mut has_element = false;
                     while let Some(child_node) = child {
-                        self.dom.check_node(child_node)?;
+                        self.check_node(child_node)?;
                         if !seen.insert(child_node) { return Err(DomError::InvalidStateError); }
                         if matches!(self.dom.get(child_node).kind, NodeKind::Element { .. }) {
                             has_element = true; break;
@@ -115,7 +138,12 @@ impl Serializer<'_> {
                 append(out,"<!DOCTYPE "); append(out,name);
                 if !public_id.is_empty() { append(out," PUBLIC \""); append(out,public_id); append(out,"\""); }
                 else if !system_id.is_empty() { append(out," SYSTEM"); }
-                if !system_id.is_empty() { append(out," \""); append(out,system_id); append(out,"\""); }
+                if !system_id.is_empty() {
+                    // Strict getters must use a legal SystemLiteral. Preserve
+                    // XMLSerializer's established permissive output policy.
+                    let quote = if self.strict && system_id.contains('"') { "'" } else { "\"" };
+                    append(out," "); append(out,quote); append(out,system_id); append(out,quote);
+                }
                 append(out,">");
             }
             NodeKind::Attr { .. } => (),
@@ -126,7 +154,7 @@ impl Serializer<'_> {
         let mut seen = HashSet::new();
         let mut child = self.dom.get(parent).first_child;
         while let Some(node) = child {
-            self.dom.check_node(node)?;
+            self.check_node(node)?;
             if !seen.insert(node) { return Err(DomError::InvalidStateError); }
             let next = self.dom.get(node).next_sibling;
             self.node(node,inherited.clone(),map,out)?;
@@ -187,7 +215,7 @@ impl Serializer<'_> {
                 if a.value == units(XML) || (a.prefix.is_none() && ignore_default)
                     || (a.prefix.is_some() && declarations.get(&a.local) != Some(&a.value)
                         && map.get(&normalized(&a.value)).is_some_and(|p| p.contains(&a.local))) { continue; }
-                if self.strict && (a.value == units(XMLNS) || a.value.is_empty()) { return Err(DomError::InvalidStateError); }
+                if self.strict && (a.value == units(XMLNS) || (a.prefix.is_some() && a.value.is_empty())) { return Err(DomError::InvalidStateError); }
                 if a.prefix.as_deref() == Some("xmlns") { candidate = Some("xmlns".into()); }
             } else if a.ns.is_some() && candidate.is_none() {
                 // Current DOM Parsing attribute-prefix policy: retain an
@@ -294,3 +322,7 @@ mod tests {
         assert_eq!(dom.serialize_xml(document,false),Err(DomError::InvalidStateError));
     }
 }
+
+#[cfg(test)]
+#[path = "xml_markup_getter_tests.rs"]
+mod getter_tests;
