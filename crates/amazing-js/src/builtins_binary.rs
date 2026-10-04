@@ -347,10 +347,8 @@ impl Interpreter {
                 } }
             };
             if let Some(name) = name {
-                if let Some(JsValue::Object(constructor)) = self.global_env.resolve(&name) {
-                    if let Some(JsValue::Object(prototype)) = constructor.borrow().get_own("prototype") {
-                        object.borrow_mut().proto = Some(prototype);
-                    }
+                if let Some((_, prototype)) = self.intrinsic_constructors.get(name.as_str()) {
+                    object.borrow_mut().proto = Some(prototype.clone());
                 }
             }
         }

@@ -113,8 +113,22 @@ pub struct NativeMicrotaskRequest {
     pub kind: NativeMicrotaskKind,
 }
 
-/// Ordered requests in the runtime's bounded outbox. The runtime retains all
-/// JS values; these requests contain only scalar metadata.
+/// Identity of a task whose payload and lifetime belong to the embedding.
+/// The owner identifies the actual host arena; slots must never be reused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct NativeTaskToken {
+    owner: u64,
+    slot: u64,
+}
+
+impl NativeTaskToken {
+    pub const fn new(owner: u64, slot: u64) -> Self { Self { owner, slot } }
+    pub const fn owner(self) -> u64 { self.owner }
+    pub const fn slot(self) -> u64 { self.slot }
+}
+
+/// Ordered scalar requests. JS requests have a recoverable quota; trusted,
+/// coalesced native tasks are memory-bound. JS callback roots stay in runtime.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SchedulingRequest {
     Timer { registration: u32, callback_token: SchedulingToken, delay_ms: i32, repeat: bool },
@@ -124,6 +138,8 @@ pub enum SchedulingRequest {
     Microtask { job_token: SchedulingToken },
     /// Native work retained and invoked by the embedding, ordered with JS jobs.
     NativeMicrotask { global: u64, kind: NativeMicrotaskKind },
+    /// Trusted, coalesced host task; payload custody remains with the embedding.
+    NativeTask { token: NativeTaskToken },
 }
 
 enum ScheduledTask {
@@ -879,16 +895,27 @@ impl Interpreter {
             .unwrap_or_default()
     }
 
+    /// Whether the embedding owns admission and delivery of scheduling requests.
+    pub fn external_scheduler_enabled(&self) -> bool { self.external_scheduling.is_some() }
+
     fn emit_scheduling(&mut self, request: SchedulingRequest) -> Result<(), Throw> {
         let external = self.external_scheduling.as_mut().expect("external scheduling");
-        let native = matches!(request, SchedulingRequest::NativeMicrotask { .. });
+        if matches!(request, SchedulingRequest::NativeTask { .. }) {
+            external.outbox.push_back(request);
+            return Ok(());
+        }
+        let native_microtask = matches!(request, SchedulingRequest::NativeMicrotask { .. });
         let used = external.outbox.iter().filter(|entry| {
-            matches!(entry, SchedulingRequest::NativeMicrotask { .. }) == native
+            if native_microtask {
+                matches!(entry, SchedulingRequest::NativeMicrotask { .. })
+            } else {
+                !matches!(entry, SchedulingRequest::NativeMicrotask { .. } | SchedulingRequest::NativeTask { .. })
+            }
         }).count();
-        if native && used == 1 {
+        if native_microtask && used == 1 {
             return Err(Throw::type_error("native microtask already queued for this agent"));
         }
-        if !native && used >= external.js_capacity {
+        if !native_microtask && used >= external.js_capacity {
             return Err(Throw::type_error("scheduler JS outbox is full"));
         }
         external.outbox.push_back(request);
@@ -941,6 +968,16 @@ impl Interpreter {
     pub fn enqueue_native_microtask(&mut self, global: u64, kind: NativeMicrotaskKind) -> Result<(), Throw> {
         if self.external_scheduling.is_some() {
             self.emit_scheduling(SchedulingRequest::NativeMicrotask { global, kind })
+        } else {
+            Err(Throw::type_error("external scheduler is not enabled"))
+        }
+    }
+
+    /// Append trusted, coalesced host-owned work at its actual enqueue point.
+    /// Native tasks are memory-bound independently of the recoverable JS quota.
+    pub fn enqueue_native_task(&mut self, token: NativeTaskToken) -> Result<(), Throw> {
+        if self.external_scheduler_enabled() {
+            self.emit_scheduling(SchedulingRequest::NativeTask { token })
         } else {
             Err(Throw::type_error("external scheduler is not enabled"))
         }
@@ -1789,3 +1826,4 @@ include!("interp_tests.rs");
 include!("interp_decorator_tests.rs");
 
 include!("interp_realm_tests.rs");
+include!("runtime_native_task_tests.rs");

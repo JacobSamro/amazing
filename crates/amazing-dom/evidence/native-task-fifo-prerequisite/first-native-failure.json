@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "source": "7de894fd74653b620a0332de9f4f82f7d22c2a19",
+  "actual_exit": 100,
+  "workspace": {
+    "pass": 4344,
+    "fail": 1,
+    "skip": 17
+  },
+  "failure": "amazing-js interp::native_task_fifo_tests::disabled_scheduler_native_error_uses_real_foreign_callee_intrinsic",
+  "assertion": "runtime_native_task_tests.rs155 expected true, actual false",
+  "native_raw_sha256": "d10741c4309e89c410af3d1fabf3436bc0936cb74f23ad00db31d95eb7c05056",
+  "raw_home": "/home/user/amazing/out/dom-bindings/native-task-fifo-after/native.log",
+  "later_scopes": "docs/release/corpus not executed",
+  "cause": "normalize_throw uses mutable global TypeError constructor instead of saved realm intrinsic prototype; original poisoned-global expectation unchanged"
+}

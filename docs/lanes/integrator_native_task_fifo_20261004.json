@@ -1,0 +1,213 @@
+{
+  "schema": 1,
+  "recorded_base": "00e6045c9d506762781392037132880869a9f58f",
+  "gated_source_commit": "d8019deb98e3dbdfbc933c5c2d942ef6f77d5b2b",
+  "workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4426,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 612604,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-d8019deb98e3dbdfbc933c5c2d942ef6f77d5b2b-nextest.log",
+        "sha256": "655b967961559895e7c87d4fbda6dc5727ca8422f1fc7a54184cf65a1974f517"
+      },
+      {
+        "bytes": 16398,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-d8019deb98e3dbdfbc933c5c2d942ef6f77d5b2b-doctests.log",
+        "sha256": "e327360446c983509b7305c7a622b582f4c33cd59d239f54e1b71d116a0ac956"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "d8019deb98e3dbdfbc933c5c2d942ef6f77d5b2b",
+    "summary_lines": [
+      "Summary [ 129.966s] 4426 tests run: 4426 passed (1 slow), 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "test262": {
+    "job_exit": 0,
+    "shards": 16,
+    "baseline_published_commit": "00e6045c9d506762781392037132880869a9f58f",
+    "baseline_gated_source": "8d33d6e2cb10d579643e0ca196adb5eff1477549",
+    "baseline_summary_sha256": "356bdd0ce5b1435c90ae3fad2c8cc7178a9053329d7013863e04078f3a56b3f2",
+    "summary": {
+      "files": {
+        "fail": 794,
+        "pass": 52612,
+        "skipped": 294,
+        "timeout": 1,
+        "unsupported": 171
+      },
+      "variants": {
+        "fail": 1488,
+        "pass": 101088,
+        "timeout": 2,
+        "unsupported": 340
+      }
+    },
+    "lost_files": 0,
+    "lost_variants": 0,
+    "gained_files": 0,
+    "gained_passing_variants": 0,
+    "provenance": {
+      "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "source_commit": "d8019deb98e3dbdfbc933c5c2d942ef6f77d5b2b",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    "merged_summary_sha256": "38111e7c7dc75d6770d5094c995d927dd8ca775b5afee6ba43c1a7b79e8be671",
+    "shard_sha256": {
+      ".shard-d8019deb-native-fifo-integration-0.json": "144ee49c8fe345735383b2e843a3bb01d332a301b276af6aedab366d253a3812",
+      ".shard-d8019deb-native-fifo-integration-1.json": "78cfd3ba5c1231a18d77fdfa8c62ae8f6958a07bb891d67fb0cecb75617be246",
+      ".shard-d8019deb-native-fifo-integration-10.json": "8185a1e8b98c80af95dfbb3637a116488a4e4ecb32ae20bfd1f2b530725eddbf",
+      ".shard-d8019deb-native-fifo-integration-11.json": "e450da1dedba2287460aaa7d679b3dc6b991782a3e945433fe9466cc4db4d58a",
+      ".shard-d8019deb-native-fifo-integration-12.json": "00a701229701bca91f23978c3642fb8ded0fa42d4e06b22e5fe543020f999398",
+      ".shard-d8019deb-native-fifo-integration-13.json": "d0c6f22a252cb5bc689ee350ae86680d86c9a12678e5ab5487c0deea47551e9a",
+      ".shard-d8019deb-native-fifo-integration-14.json": "d6a14e59862701f92f99e1992dbc40150e54637d81373c1187101a06a8382ae8",
+      ".shard-d8019deb-native-fifo-integration-15.json": "8cbedaf20d36fdf42905aaa5ae1ff8eba020173cdca9af2807ec68f851ff5faa",
+      ".shard-d8019deb-native-fifo-integration-2.json": "f43d9772a076a9fdfe2254742e01fcbd34b98173cb7193bc4742d9f95d4466cc",
+      ".shard-d8019deb-native-fifo-integration-3.json": "18cebe3d9d42439d4bcce51965c50db347ffa8a93d2250aeabc3f84fe755e5c4",
+      ".shard-d8019deb-native-fifo-integration-4.json": "e16bf291c87e125d1c542f3de2f0d4f1fdbd2de1eb9c38190403020a9bf74d22",
+      ".shard-d8019deb-native-fifo-integration-5.json": "68ded2f8b8e959acb8326dd7d0c03a41341d658da21a954631370fc43049590b",
+      ".shard-d8019deb-native-fifo-integration-6.json": "658a24df7f867e4424327efbc48253f95cfdfeeb738beaa13db77a0272b554e1",
+      ".shard-d8019deb-native-fifo-integration-7.json": "f5f3c06072c5278001ba777b0ce7c0bb0951e2bb38c1a213ae5af2329d3ee39e",
+      ".shard-d8019deb-native-fifo-integration-8.json": "b0a95475dff100206d3016cb0dab8e3d5f1ad9bfe39905938921ee93c2713186",
+      ".shard-d8019deb-native-fifo-integration-9.json": "92d9eb722ba55b3a9feeb0d1427fee899879c1cef1845bf8939cecbce8da2c51"
+    }
+  },
+  "own_corpus": {
+    "tested_commit": "ba5a40103d20fcaec8baca4e76f138e55e975fa8",
+    "base": "fd9183a86c85f1dbcb3d6b2a62676354e9357052",
+    "actual_exit": 0,
+    "workspace_before": 4325,
+    "workspace_after": 4345,
+    "skipped_each": 17,
+    "doctests_each": 4,
+    "suites": {
+      "core888": {
+        "before_files": 888,
+        "after_files": 888,
+        "before_passing_assertions": 92820,
+        "after_passing_assertions": 92820,
+        "lost_assertions": 0,
+        "raw_gained_assertions": 0,
+        "completed_page_gains": 0,
+        "uncredited_partial_gains": 0,
+        "lost_passing_files": [],
+        "lost_details": [],
+        "raw_before_sha256": "72091b51068f635cedba8ef176363c8ea0bc9226b9a65b0e1467ca8779acd53e",
+        "raw_after_sha256": "7c80f6ed568199c2da53c16edcd1d3fe99c92c9cb556c0760450fd55387c5fd7",
+        "same_selection": true
+      },
+      "shadow277": {
+        "before_files": 277,
+        "after_files": 277,
+        "before_passing_assertions": 5676,
+        "after_passing_assertions": 5676,
+        "lost_assertions": 0,
+        "raw_gained_assertions": 0,
+        "completed_page_gains": 0,
+        "uncredited_partial_gains": 0,
+        "lost_passing_files": [],
+        "lost_details": [],
+        "raw_before_sha256": "b6173e25e1d00e362030bb2613af9f49e3f0f5a06c533c62f753792e2112ece8",
+        "raw_after_sha256": "59f2d1361cb55ab5fc8fdf17aa1d0f0705b9314c82ca3b7afd6eec4eb0861a64",
+        "same_selection": true
+      },
+      "syntax72": {
+        "before_files": 72,
+        "after_files": 72,
+        "before_passing_assertions": 2706,
+        "after_passing_assertions": 2706,
+        "lost_assertions": 0,
+        "raw_gained_assertions": 0,
+        "completed_page_gains": 0,
+        "uncredited_partial_gains": 0,
+        "lost_passing_files": [],
+        "lost_details": [],
+        "raw_before_sha256": "e1c419354db9510949f2c51d5d60962d3f34069d0abeab965744a67074088ff2",
+        "raw_after_sha256": "e1c419354db9510949f2c51d5d60962d3f34069d0abeab965744a67074088ff2",
+        "same_selection": true
+      }
+    },
+    "zero_lost_names_multiplicities_and_passing_files": true,
+    "native_before_sha256": "b3feb59b79cb1d848d018cc3ef0bc105f30d963f2ec7acd696318ea848866070",
+    "native_after_sha256": "8e2bc238ea9a6b744908b2088047cc0857e6c0602af393eb1d5a567991fba29a",
+    "docs_before_sha256": "6ee6dc312f8f86eb89363155d5a40e813cb38225da8c2047dc740958ac774b76",
+    "docs_after_sha256": "cef994c60982b964a9b8983d8347cb9228a3472b261c4670f327565cb0920eee",
+    "binary_before_sha256": "fe54b063ad90c0f666f1afbd2bcf912bc0abda3a239cfc79547aab55db65f113",
+    "binary_after_sha256": "179b51379cf3401f39626568879d847e516b33afaf46c52a93ee60b114585023",
+    "raw_home": "baseline ~/amazing/out/dom-bindings/native-flat-tree-before; candidate ~/amazing/out/dom-bindings/native-task-fifo-corrected",
+    "sandbox": "bx_na7t27mn",
+    "candidate_shape": "default (wrapper resumed from large)",
+    "before_reuse": {
+      "original_tested_base": "2f80eb4d224c2a2d5236987df104154e73b83730",
+      "reason": "Git diff to fd918 changes only six tooling/docs files; every engine/workspace source and manifest is identical. Actual corpus runner/pin/selections/profiles reused exactly.",
+      "changed_paths": [
+        "docs/lanes/gate-tooling.md",
+        "scripts/gate-source.py",
+        "scripts/gate-summary.py",
+        "scripts/lane-fetch.sh",
+        "scripts/linux-run.sh",
+        "scripts/test262-boat.sh"
+      ],
+      "baseline_observed_shape": "large"
+    },
+    "profiles_ms": {
+      "core_ordinary": 25000,
+      "core_heavy": 150000,
+      "shadow_ordinary": 25000,
+      "shadow_actual_meta_long": 600000,
+      "shadow_heavy": 150000
+    },
+    "qualification_scope": "Workspace/docs and own WPT; integrator whole sharded Test262 remains its authoritative merge gate."
+  },
+  "original_native_failure_preserved": true
+}

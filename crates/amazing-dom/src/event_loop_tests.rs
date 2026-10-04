@@ -29,7 +29,7 @@ fn callback(a: Action) -> u64 {
 }
 
 #[test]
-fn source_queues_are_fair_and_fifo_within_each_source() {
+fn source_queues_preserve_admission_order_and_fifo_within_each_source() {
     let mut e = scheduler();
     for (source, id) in [
         (TaskSource::Networking, 1),
@@ -38,11 +38,143 @@ fn source_queues_are_fair_and_fifo_within_each_source() {
     ] {
         e.queue_task(source, Some(G), CallbackId(id)).unwrap();
     }
-    assert_eq!(callback(done(&mut e)), 3);
-    cleanup(&mut e);
     assert_eq!(callback(done(&mut e)), 1);
     cleanup(&mut e);
     assert_eq!(callback(done(&mut e)), 2);
+    cleanup(&mut e);
+    assert_eq!(callback(done(&mut e)), 3);
+    cleanup(&mut e);
+    assert!(e.step().unwrap().is_none());
+}
+
+#[test]
+fn every_source_and_documentless_tasks_follow_actual_admission() {
+    let mut e = scheduler();
+    for (index, source) in [TaskSource::Timer, TaskSource::Networking,
+        TaskSource::DomManipulation, TaskSource::Other(99), TaskSource::PostedMessage,
+        TaskSource::HistoryTraversal, TaskSource::UserInteraction, TaskSource::Rendering]
+        .into_iter().enumerate() {
+        e.queue_task(source, if index == 3 { None } else { Some(G) },
+            CallbackId(index as u64 + 1)).unwrap();
+    }
+    for expected in 1..=8 {
+        assert_eq!(callback(done(&mut e)), expected);
+        cleanup(&mut e);
+    }
+    assert!(e.step().unwrap().is_none());
+}
+
+#[test]
+fn dormant_front_tasks_keep_age_when_skipped_and_reactivated() {
+    let mut e = scheduler();
+    let dormant = GlobalId(2);
+    e.register_global(dormant).unwrap();
+    e.set_active(dormant, false).unwrap();
+    e.queue_task(TaskSource::Timer, Some(dormant), CallbackId(1)).unwrap();
+    e.queue_task(TaskSource::Networking, Some(G), CallbackId(2)).unwrap();
+    e.queue_task(TaskSource::Timer, Some(G), CallbackId(3)).unwrap();
+    assert_eq!(callback(done(&mut e)), 2);
+    cleanup(&mut e);
+    e.set_active(dormant, true).unwrap();
+    assert_eq!(callback(done(&mut e)), 1);
+    cleanup(&mut e);
+    assert_eq!(callback(done(&mut e)), 3);
+    cleanup(&mut e);
+    assert!(e.step().unwrap().is_none());
+}
+
+#[test]
+fn timer_registration_does_not_precede_earlier_admitted_tasks() {
+    let mut e = scheduler();
+    e.set_timer(G, CallbackId(1), 20, false).unwrap();
+    e.queue_task(TaskSource::Networking, Some(G), CallbackId(2)).unwrap();
+    e.set_timer(G, CallbackId(3), 0, false).unwrap();
+    e.queue_task(TaskSource::DomManipulation, Some(G), CallbackId(4)).unwrap();
+    for expected in [2, 3, 4] {
+        assert_eq!(callback(done(&mut e)), expected);
+        cleanup(&mut e);
+    }
+    e.queue_task(TaskSource::UserInteraction, Some(G), CallbackId(5)).unwrap();
+    e.advance_to(ms(20)).unwrap();
+    assert_eq!(callback(done(&mut e)), 5);
+    cleanup(&mut e);
+    assert_eq!(callback(done(&mut e)), 1);
+    cleanup(&mut e);
+    assert!(e.step().unwrap().is_none());
+}
+
+#[test]
+fn rendering_keeps_its_checkpoints_between_earlier_and_later_tasks() {
+    let mut e = scheduler();
+    e.request_animation_frame(G, CallbackId(2)).unwrap();
+    e.queue_task(TaskSource::Networking, Some(G), CallbackId(1)).unwrap();
+    e.rendering_opportunity(G, ms(16)).unwrap();
+    e.queue_task(TaskSource::DomManipulation, Some(G), CallbackId(3)).unwrap();
+    assert_eq!(callback(done(&mut e)), 1);
+    cleanup(&mut e);
+    assert_eq!(done(&mut e), Action::Render { global: G, timestamp: ms(16),
+        phase: RenderPhase::BeforeAnimationFrames });
+    cleanup(&mut e);
+    assert_eq!(callback(done(&mut e)), 2);
+    cleanup(&mut e);
+    assert_eq!(done(&mut e), Action::Render { global: G, timestamp: ms(16),
+        phase: RenderPhase::AfterAnimationFrames });
+    cleanup(&mut e);
+    assert_eq!(callback(done(&mut e)), 3);
+    cleanup(&mut e);
+    assert!(e.step().unwrap().is_none());
+}
+
+#[test]
+fn callback_admissions_do_not_interrupt_suspended_task_or_microtasks() {
+    let mut e = scheduler();
+    e.queue_task(TaskSource::Networking, Some(G), CallbackId(1)).unwrap();
+    e.queue_task(TaskSource::DomManipulation, Some(G), CallbackId(2)).unwrap();
+    let event = next(&mut e);
+    assert_eq!(callback(event.action), 1);
+    e.queue_task(TaskSource::UserInteraction, Some(G), CallbackId(3)).unwrap();
+    e.queue_microtask(G, CallbackId(4)).unwrap();
+    e.checkpoint_after_callback(event.id).unwrap();
+    assert_eq!(callback(done(&mut e)), 4);
+    cleanup(&mut e);
+    assert_eq!(e.pending_step(), Some(event.id));
+    assert_eq!(e.step(), Err(LoopError::Busy));
+    e.queue_task(TaskSource::Other(5), None, CallbackId(5)).unwrap();
+    e.complete(event.id).unwrap();
+    cleanup(&mut e);
+    for expected in [2, 3, 5] {
+        assert_eq!(callback(done(&mut e)), expected);
+        cleanup(&mut e);
+    }
+    assert!(e.step().unwrap().is_none());
+}
+
+#[test]
+fn exhausted_admission_counter_preserves_dormant_and_cancelled_queue_order() {
+    let mut e = scheduler();
+    let dormant = GlobalId(2);
+    e.register_global(dormant).unwrap();
+    e.set_active(dormant, false).unwrap();
+    e.task_admission = u128::MAX - 3;
+    e.queue_task(TaskSource::Networking, Some(dormant), CallbackId(1)).unwrap();
+    let cancelled = e.set_timer(G, CallbackId(2), 0, false).unwrap();
+    e.clear_timer(cancelled);
+    e.queue_task(TaskSource::UserInteraction, Some(G), CallbackId(3)).unwrap();
+    e.queue_task(TaskSource::DomManipulation, Some(G), CallbackId(4)).unwrap();
+    let ages: std::collections::BTreeSet<_> = e.queues.values()
+        .flat_map(|queue| queue.iter().map(|task| task.admission)).collect();
+    assert_eq!(ages.len(), 4, "renumbering never assigns colliding ordinals");
+    assert_eq!(callback(done(&mut e)), 3);
+    cleanup(&mut e);
+    e.set_active(dormant, true).unwrap();
+    assert_eq!(callback(done(&mut e)), 1);
+    cleanup(&mut e);
+    assert_eq!(callback(done(&mut e)), 4);
+    cleanup(&mut e);
+    assert!(e.step().unwrap().is_none());
+    e.task_admission = u128::MAX;
+    e.queue_task(TaskSource::Other(1), None, CallbackId(5)).unwrap();
+    assert_eq!(callback(done(&mut e)), 5);
     cleanup(&mut e);
     assert!(e.step().unwrap().is_none());
 }

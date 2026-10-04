@@ -97,6 +97,7 @@ enum Body {
     Render,
 }
 struct Task {
+    admission: u128,
     global: Option<GlobalId>,
     body: Body,
 }
@@ -130,9 +131,9 @@ enum Completion {
 pub struct EventLoop {
     now: Duration,
     sequence: u64,
+    task_admission: u128,
     globals: BTreeMap<GlobalId, Global>,
     queues: BTreeMap<TaskSource, VecDeque<Task>>,
-    last_source: Option<TaskSource>,
     microtasks: VecDeque<(GlobalId, CallbackId)>,
     timers: BTreeMap<TimerId, Timer>,
     phase: Phase,
@@ -152,9 +153,9 @@ impl EventLoop {
         Self {
             now: Duration::ZERO,
             sequence: 0,
+            task_admission: 0,
             globals: BTreeMap::new(),
             queues: BTreeMap::new(),
-            last_source: None,
             microtasks: VecDeque::new(),
             timers: BTreeMap::new(),
             phase: Phase::Idle,
@@ -241,10 +242,33 @@ impl EventLoop {
         Ok(())
     }
     fn push_task(&mut self, source: TaskSource, global: Option<GlobalId>, body: Body) {
+        let admission = self.admit_task();
         self.queues
             .entry(source)
             .or_default()
-            .push_back(Task { global, body });
+            .push_back(Task { admission, global, body });
+    }
+    fn admit_task(&mut self) -> u128 {
+        if let Some(next) = self.task_admission.checked_add(1) {
+            self.task_admission = next;
+        } else {
+            // Only queued tasks participate in selection. Renumber every queued
+            // task, including dormant globals and cancelled-timer placeholders,
+            // in its existing total order before admitting another task. This
+            // neither reorders a source queue nor revives an in-flight action.
+            let mut tasks: Vec<_> = self.queues.values_mut()
+                .flat_map(|queue| queue.iter_mut()).collect();
+            tasks.sort_unstable_by_key(|task| task.admission);
+            for (index, task) in tasks.iter_mut().enumerate() {
+                task.admission = (index as u128) + 1;
+            }
+            // A collection of non-zero-size Tasks in the address space cannot
+            // contain u128::MAX entries. Keep the counter checked nevertheless;
+            // saturation or wrapping would give different tasks the same age.
+            self.task_admission = (tasks.len() as u128).checked_add(1)
+                .expect("queued tasks fit the address space");
+        }
+        self.task_admission
     }
     pub fn queue_microtask(
         &mut self,
@@ -421,23 +445,13 @@ impl EventLoop {
         Ok(())
     }
     fn next_task(&mut self) -> Option<(TaskSource, Task)> {
-        let sources: Vec<_> = self.queues.keys().copied().collect();
-        let start = self
-            .last_source
-            .and_then(|last| sources.iter().position(|s| *s > last))
-            .unwrap_or(0);
-        for offset in 0..sources.len() {
-            let source = sources[(start + offset) % sources.len()];
-            let queue = self.queues.get_mut(&source).unwrap();
-            if let Some(index) = queue
+        let (source, index, _) = self.queues.iter().filter_map(|(&source, queue)| {
+            let index = queue
                 .iter()
-                .position(|task| task.global.is_none_or(|id| self.globals[&id].active))
-            {
-                self.last_source = Some(source);
-                return Some((source, queue.remove(index).unwrap()));
-            }
-        }
-        None
+                .position(|task| task.global.is_none_or(|id| self.globals[&id].active))?;
+            Some((source, index, queue[index].admission))
+        }).min_by_key(|(_, _, admission)| *admission)?;
+        Some((source, self.queues.get_mut(&source).unwrap().remove(index).unwrap()))
     }
     fn yield_step(
         &mut self,
@@ -449,8 +463,10 @@ impl EventLoop {
         Ok(Some(Step { id, action }))
     }
     /// Returns at most one owned action. Complete it before requesting the next.
-    /// Source queues use deterministic round-robin selection; within a source,
-    /// select the oldest runnable task, skipping inactive documents.
+    /// Select the oldest actually admitted runnable task across source queues,
+    /// considering each source's first runnable task and skipping inactive
+    /// documents. This is the queue-selection policy in ADR 0015, not a priority
+    /// assigned to any particular source or to a future callback's registration.
     pub fn step(&mut self) -> Result<Option<Step>, LoopError> {
         if self.in_flight.is_some() {
             return Err(LoopError::Busy);

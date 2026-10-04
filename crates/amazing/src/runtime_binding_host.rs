@@ -115,7 +115,11 @@ enum WebObject {
     FontFaceSet(NodeIdx, Option<JsValue>),
 }
 
+#[path = "runtime_host_native_tasks.rs"]
+mod native_tasks;
+
 struct BindingState {
+    native_tasks: native_tasks::NativeTaskRuntime,
     image_states: HashMap<NodeIdx, (ImageLoaderState, u64, u64, crate::runtime_host_replaced_content::ImageDecodeDecision)>,
     image_decodes: Vec<(NodeIdx, u64, Option<u64>, Option<Vec<u16>>, JsValue)>,
     canvas_text_system: Option<Rc<dyn amazing_text::TextSystem>>,
@@ -798,6 +802,7 @@ pub(crate) fn install(
         slot
     };
     let state = Rc::new(RefCell::new(BindingState {
+        native_tasks: native_tasks::NativeTaskRuntime::default(),
         image_states: HashMap::new(),
         image_decodes: Vec::new(),
         canvas_text_system: None,
@@ -2010,11 +2015,20 @@ impl BindingHost for RuntimeBindingHost<'_> {
         // Preserve the order in which script queues JS jobs and native DOM
         // mutations. Collecting only at the end of the script would move the
         // mutation checkpoint behind jobs queued after this operation.
-        let pending = host.borrow().pending_native_microtasks();
-        for request in pending {
-            self.js.enqueue_native_microtask(request.global, request.kind)?;
-            host.borrow_mut().acknowledge_native_microtask(request);
-        }
+        // A committed Selection mutation enters the shared FIFO before any
+        // later author registration, even when this operation returns an error.
+        let emitted = RuntimeBindings { state: self.state.clone() }.emit_native_selection_tasks(self.js);
+        let microtasks = (|| {
+            let pending = host.borrow().pending_native_microtasks();
+            for request in pending {
+                self.js.enqueue_native_microtask(request.global, request.kind)?;
+                host.borrow_mut().acknowledge_native_microtask(request);
+            }
+            Ok::<(), Throw>(())
+        })();
+        if result.is_ok() { emitted?; microtasks?; }
+        // Failed emissions remain pending for checkpoint retry. An earlier DOM
+        // error takes precedence over a later scheduling error.
         // HTML-35: named access on window (SS7.2.2.3). Every DOM-mutating
         // binding call passes through this one function, so this is the
         // single choke point that can keep window's named properties live

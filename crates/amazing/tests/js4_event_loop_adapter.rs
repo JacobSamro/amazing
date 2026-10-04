@@ -228,6 +228,9 @@ impl Adapter {
                     let callback = self.own(Payload::Job(job_token));
                     self.loop_.queue_microtask(GLOBAL, callback).unwrap();
                 }
+                SchedulingRequest::NativeTask { token } => {
+                    panic!("unexpected native task {token:?} in JS/MO-only adapter without native bindings");
+                }
                 SchedulingRequest::NativeMicrotask { global, kind } => {
                     assert_eq!(global, GLOBAL.0);
                     assert_eq!(kind, NativeMicrotaskKind::MutationObserver);

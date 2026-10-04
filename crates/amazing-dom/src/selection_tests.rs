@@ -178,3 +178,26 @@ fn connected_shadow_membership_is_actual_and_detached_owner_document_does_not_su
         assert_eq!(dom.selection_state(id).unwrap().range, None);
     }
 }
+
+#[test]
+fn selection_outbox_acknowledges_exact_task_across_real_document_slot_reuse() {
+    let mut dom = Dom::new();
+    let document = dom.create_document();
+    dom.selection_collapse(document, Some(BoundaryPoint::new(document, 0))).unwrap();
+    let old = dom.pending_selection_change_tasks()[0];
+    assert_eq!(dom.pending_selection_change_tasks(), &[old]);
+    // Peeking and failed downstream admission leave this exact event pending.
+    dom.retire_unreachable_node(document).unwrap();
+    let replacement = dom.create_document();
+    assert_eq!(replacement, document);
+    dom.selection_collapse(replacement, Some(BoundaryPoint::new(replacement, 0))).unwrap();
+    let new = *dom.pending_selection_change_tasks().last().unwrap();
+    assert_ne!(new.document_generation, old.document_generation);
+    assert!(dom.acknowledge_selection_change_task(old));
+    assert!(!dom.acknowledge_selection_change_task(old));
+    assert_eq!(dom.pending_selection_change_tasks(), &[new]);
+    assert!(!dom.begin_selection_change(old));
+    assert!(dom.begin_selection_change(new));
+    assert!(dom.acknowledge_selection_change_task(new));
+    assert!(dom.pending_selection_change_tasks().is_empty());
+}

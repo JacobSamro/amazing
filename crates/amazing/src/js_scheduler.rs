@@ -4,7 +4,7 @@ use std::{cell::RefCell, collections::{BTreeMap, VecDeque}, rc::Rc, time::{Durat
 
 use amazing_dom::event_loop::{Action, AnimationFrameId, CallbackId, EventLoop, GlobalId, RenderPhase, TaskSource, TimerId};
 use amazing_dom::abort::AbortSignalId;
-use amazing_js::{DomHost, interp::{Interpreter, NativeMicrotaskKind, SchedulingRequest, SchedulingToken}, value::{JsValue, Throw}};
+use amazing_js::{DomHost, interp::{Interpreter, NativeMicrotaskKind, NativeTaskToken, SchedulingRequest, SchedulingToken}, value::{JsValue, Throw}};
 
 use crate::dom_host::BrowserDomHost;
 
@@ -18,7 +18,7 @@ enum Payload {
     Mutation,
     AbortTimeout(AbortSignalId, u64),
     FormSelection(u32),
-    SelectionChange(amazing_dom::selection::SelectionChangeTask),
+    NativeSelection(NativeTaskToken),
 }
 struct TimerRegistration {
     core: TimerId,
@@ -252,6 +252,7 @@ impl DriverScheduler {
     }
 
     fn drain_outbox(&mut self) -> Result<(), Throw> {
+        self.bindings.emit_native_selection_tasks(&mut self.js)?;
         self.pending.extend(self.js.take_scheduling_requests());
         while let Some(request) = self.pending.front().copied() {
             self.admit(request)?;
@@ -270,11 +271,6 @@ impl DriverScheduler {
         }
         for (signal, delay_ms) in self.bindings.take_abort_timeouts() {
             self.register_abort_timeout(signal, delay_ms)?;
-        }
-        for task in self.bindings.take_selection_change_tasks() {
-            let callback = self.own(Payload::SelectionChange(task))?;
-            self.loop_.queue_task(TaskSource::UserInteraction, Some(GLOBAL), callback)
-                .map_err(loop_error)?;
         }
         for node in self.bindings.take_form_selection_events() {
             let callback = self.own(Payload::FormSelection(node.0))?;
@@ -332,6 +328,20 @@ impl DriverScheduler {
                     return Err(loop_error(error));
                 }
             }
+            SchedulingRequest::NativeTask { token } => {
+                if self.bindings.native_selection_task(token)?.is_none() {
+                    self.bindings.discard_native_selection_task(token)?;
+                } else {
+                    let callback = self.own(Payload::NativeSelection(token))?;
+                    if let Err(error) = self.loop_.queue_task(TaskSource::UserInteraction, Some(GLOBAL), callback) {
+                        self.payloads.remove(&callback.0);
+                        return Err(loop_error(error));
+                    }
+                    // Existing root scheduling-global policy remains explicit;
+                    // target Document generation and creation realm are independent.
+                    self.bindings.native_selection_admitted(token);
+                }
+            }
             SchedulingRequest::NativeMicrotask { global, kind } => {
                 if global != GLOBAL.0 || kind != NativeMicrotaskKind::MutationObserver {
                     return Err(Throw::type_error("unknown native microtask request"));
@@ -380,9 +390,10 @@ impl DriverScheduler {
                 let bindings = self.bindings.clone();
                 self.enter(|js| bindings.fire_abort_timeout(js, signal))
             }
-            Payload::SelectionChange(task) => {
+            Payload::NativeSelection(token) => {
                 self.payloads.remove(&callback.0);
                 let bindings = self.bindings.clone();
+                let task = bindings.release_native_selection_task(token)?;
                 self.enter(|js| bindings.fire_selection_change(js, task))
             }
             Payload::FormSelection(node) => {
@@ -495,6 +506,14 @@ impl DriverScheduler {
         on_render: impl FnMut(RenderPhase, Duration),
     ) -> Result<bool, Throw> {
         self.pump_at_with_render(self.started.elapsed(), render, on_render)
+    }
+}
+
+impl Drop for DriverScheduler {
+    fn drop(&mut self) {
+        // Do not rely on Rc teardown: retained platform wrappers may keep
+        // bindings alive after queued callbacks and the global are gone.
+        self.bindings.retire_native_selection_tasks();
     }
 }
 
@@ -730,3 +749,7 @@ mod tests {
         println!("TRACE mutation-batch: {}", driver.trace.join(","));
     }
 }
+
+#[cfg(test)]
+#[path = "runtime_native_selection_task_tests.rs"]
+mod native_selection_task_tests;

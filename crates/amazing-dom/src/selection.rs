@@ -22,7 +22,7 @@ pub struct SelectionState {
     observed: Option<AbstractRange>,
 }
 /// A pending document event, independent of Selection or Range wrapper identity.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SelectionChangeTask {
     pub document: NodeIdx,
     pub document_generation: u64,
@@ -68,6 +68,13 @@ impl Dom {
         let task = SelectionChangeTask { document, document_generation: generation, token: self.selections.next_token };
         self.selections.scheduled.push(task);
         self.selections.outbox.push(task);
+    }
+    /// Peek without transferring custody; acknowledge only after downstream admission succeeds.
+    pub fn pending_selection_change_tasks(&self) -> &[SelectionChangeTask] { &self.selections.outbox }
+    pub fn acknowledge_selection_change_task(&mut self, task: SelectionChangeTask) -> bool {
+        let Some(index) = self.selections.outbox.iter().position(|pending| *pending == task) else { return false; };
+        self.selections.outbox.remove(index);
+        true
     }
     pub fn drain_selection_change_tasks(&mut self) -> Vec<SelectionChangeTask> { std::mem::take(&mut self.selections.outbox) }
     /// Clear the document-owned flag BEFORE event listeners run. A reentrant change queues a fresh task.

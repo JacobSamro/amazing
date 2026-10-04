@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "state": "READY",
+  "base": "fd9183a86c85f1dbcb3d6b2a62676354e9357052",
+  "historical_qualification": {
+    "source": "9a739428a92283c5211ae6708d585b8d0894a186",
+    "base": "02011389245c6fe926f6d2ecfed6a693bb336049",
+    "workspace_before": 4607,
+    "workspace_after": 4613,
+    "docs_each": 4,
+    "accepted_named_assertions_lost": 0,
+    "passing_files_lost": 0,
+    "strong_shadow_names_retained": 3941,
+    "raw_after_sha256": "9eb924a560bc1d45317df29030b07fe2d0aef9ed9f4fdce5c837e70c4ef2d4ef"
+  },
+  "limits": [
+    "Historical qualification is not a gate on this recorded base.",
+    "Existing root scheduling-global routing remains scoped.",
+    "No Window/load/DSD/History or staged publication changes."
+  ],
+  "fresh_gate": {
+    "tested_commit": "ba5a40103d20fcaec8baca4e76f138e55e975fa8",
+    "base": "fd9183a86c85f1dbcb3d6b2a62676354e9357052",
+    "actual_exit": 0,
+    "workspace_before": 4325,
+    "workspace_after": 4345,
+    "skipped_each": 17,
+    "doctests_each": 4,
+    "suites": {
+      "core888": {
+        "before_files": 888,
+        "after_files": 888,
+        "before_passing_assertions": 92820,
+        "after_passing_assertions": 92820,
+        "lost_assertions": 0,
+        "raw_gained_assertions": 0,
+        "completed_page_gains": 0,
+        "uncredited_partial_gains": 0,
+        "lost_passing_files": [],
+        "lost_details": [],
+        "raw_before_sha256": "72091b51068f635cedba8ef176363c8ea0bc9226b9a65b0e1467ca8779acd53e",
+        "raw_after_sha256": "7c80f6ed568199c2da53c16edcd1d3fe99c92c9cb556c0760450fd55387c5fd7",
+        "same_selection": true
+      },
+      "shadow277": {
+        "before_files": 277,
+        "after_files": 277,
+        "before_passing_assertions": 5676,
+        "after_passing_assertions": 5676,
+        "lost_assertions": 0,
+        "raw_gained_assertions": 0,
+        "completed_page_gains": 0,
+        "uncredited_partial_gains": 0,
+        "lost_passing_files": [],
+        "lost_details": [],
+        "raw_before_sha256": "b6173e25e1d00e362030bb2613af9f49e3f0f5a06c533c62f753792e2112ece8",
+        "raw_after_sha256": "59f2d1361cb55ab5fc8fdf17aa1d0f0705b9314c82ca3b7afd6eec4eb0861a64",
+        "same_selection": true
+      },
+      "syntax72": {
+        "before_files": 72,
+        "after_files": 72,
+        "before_passing_assertions": 2706,
+        "after_passing_assertions": 2706,
+        "lost_assertions": 0,
+        "raw_gained_assertions": 0,
+        "completed_page_gains": 0,
+        "uncredited_partial_gains": 0,
+        "lost_passing_files": [],
+        "lost_details": [],
+        "raw_before_sha256": "e1c419354db9510949f2c51d5d60962d3f34069d0abeab965744a67074088ff2",
+        "raw_after_sha256": "e1c419354db9510949f2c51d5d60962d3f34069d0abeab965744a67074088ff2",
+        "same_selection": true
+      }
+    },
+    "zero_lost_names_multiplicities_and_passing_files": true,
+    "native_before_sha256": "b3feb59b79cb1d848d018cc3ef0bc105f30d963f2ec7acd696318ea848866070",
+    "native_after_sha256": "8e2bc238ea9a6b744908b2088047cc0857e6c0602af393eb1d5a567991fba29a",
+    "docs_before_sha256": "6ee6dc312f8f86eb89363155d5a40e813cb38225da8c2047dc740958ac774b76",
+    "docs_after_sha256": "cef994c60982b964a9b8983d8347cb9228a3472b261c4670f327565cb0920eee",
+    "binary_before_sha256": "fe54b063ad90c0f666f1afbd2bcf912bc0abda3a239cfc79547aab55db65f113",
+    "binary_after_sha256": "179b51379cf3401f39626568879d847e516b33afaf46c52a93ee60b114585023",
+    "raw_home": "baseline ~/amazing/out/dom-bindings/native-flat-tree-before; candidate ~/amazing/out/dom-bindings/native-task-fifo-corrected",
+    "sandbox": "bx_na7t27mn",
+    "candidate_shape": "default (wrapper resumed from large)",
+    "before_reuse": {
+      "original_tested_base": "2f80eb4d224c2a2d5236987df104154e73b83730",
+      "reason": "Git diff to fd918 changes only six tooling/docs files; every engine/workspace source and manifest is identical. Actual corpus runner/pin/selections/profiles reused exactly.",
+      "changed_paths": [
+        "docs/lanes/gate-tooling.md",
+        "scripts/gate-source.py",
+        "scripts/gate-summary.py",
+        "scripts/lane-fetch.sh",
+        "scripts/linux-run.sh",
+        "scripts/test262-boat.sh"
+      ],
+      "baseline_observed_shape": "large"
+    },
+    "profiles_ms": {
+      "core_ordinary": 25000,
+      "core_heavy": 150000,
+      "shadow_ordinary": 25000,
+      "shadow_actual_meta_long": 600000,
+      "shadow_heavy": 150000
+    },
+    "qualification_scope": "Workspace/docs and own WPT; integrator whole sharded Test262 remains its authoritative merge gate."
+  },
+  "engine_file_sha256": {
+    "crates/amazing-js/src/interp.rs": "1e2e323f3bad5c6b050f88c953fcf6c8e2fc9c37b73ae58eadc2f83da90716fc",
+    "crates/amazing-js/src/builtins_binary.rs": "c7bcf554e68ee33813583f39517393e05029d0a5129fec97d454d5a65cda0024",
+    "crates/amazing-dom/src/event_loop.rs": "fc707c5cee98ce4c821930f1c2e19f47b3e88556e127f4c950e85fddedd36c5b",
+    "crates/amazing/src/runtime_host_native_tasks.rs": "fe024bd83393a0a46efdd75aa83a45bd0347d2ca933b3f6c58f0a722aa9a2af2",
+    "crates/amazing/src/js_scheduler.rs": "d6096037c514e4153ed7ad714818fb4d386c835cf3a24a3d2f9c4534f04a9f85",
+    "crates/amazing/src/runtime_binding_host.rs": "eaa223ac2c30c1984f763e450aeda1a04a7167e6887f51d294bcd5664d5a907a"
+  }
+}
