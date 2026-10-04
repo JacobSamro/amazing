@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Full Test262 on N Boat sandboxes in parallel, merged and compared locally.
+# Full Test262 on 16 Boat shards; fetch compact classifications only.
 #
 # One default sandbox runs the whole suite in ~13.6 minutes; four shards take
 # ~3.5. Each shard is its own lane (t262-shard-K) so the runs never share a
-# tree; each shard stops its sandbox as soon as its result is copied back.
+# tree. Sandbox lifecycle remains with the orchestrator.
 #
 # Usage: scripts/test262-boat.sh <ref> <tag> [--shards N] [--baseline BASE.json]
-#                              [--resume] [--lane-prefix NAME] [--runner-ref REF]
+#                              [--lane-prefix NAME] [--runner-ref REF]
 #   Writes .agents/test262/t262-<shortsha>-<tag>.json (merged) and prints lost/gained
 #   against the baseline. Exit 1 when a baseline pass was lost.
 
@@ -14,19 +14,21 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")"
 REF="${1:?usage: test262-boat.sh <ref> <tag> [--shards N] [--baseline BASE.json]}"; TAG="${2:?tag}"; shift 2
-N=4 BASE="" RESUME=0 LANE_PREFIX=t262-shard RUNNER_REF=""
+N=16 BASE="" LANE_PREFIX=t262-shard RUNNER_REF=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --shards) N="$2"; shift 2 ;;
     --baseline) BASE="$2"; shift 2 ;;
-    --resume) RESUME=1; shift ;;
     --lane-prefix) LANE_PREFIX="$2"; shift 2 ;;
     --runner-ref) RUNNER_REF="$2"; shift 2 ;;
     *) echo "test262-boat: unknown option $1" >&2; exit 2 ;;
   esac
 done
+[[ "$N" =~ ^[1-9][0-9]*$ ]] && [ "$N" -le 16 ] || { echo "shards must be 1..16" >&2; exit 2; }
+[[ "$TAG" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "invalid tag" >&2; exit 2; }
 [[ "$LANE_PREFIX" =~ ^[a-z0-9-]+$ ]] || { echo "invalid lane prefix" >&2; exit 2; }
-SHA="$(git -C "$MAIN" rev-parse --short=8 "$REF")" || exit 2
+COMMIT="$(git -C "$MAIN" rev-parse "$REF^{commit}")" || exit 2
+SHA="${COMMIT:0:8}" || exit 2
 OUTDIR="$MAIN/.agents/test262"; mkdir -p "$OUTDIR"
 OUT="$OUTDIR/t262-$SHA-$TAG.json"
 T0=$(date +%s)
@@ -38,15 +40,12 @@ else
   RUNNER_B64="$(base64 < "$REPO/scripts/test262.py" | tr -d '\n')"
 fi
 
+COMPACT_B64="$(base64 < "$REPO/scripts/gate-summary.py" | tr -d '\n')"
 pids=()
 for K in $(seq 0 $((N - 1))); do
   LANE="$LANE_PREFIX-$K"
-  if [ "$RESUME" = 1 ] && [ -s "$OUTDIR/.shard-$SHA-$TAG-$K.json" ]; then
-    echo "test262-boat: retaining completed shard $K"
-    continue
-  fi
   (
-    "$REPO/scripts/linux-run.sh" "$LANE" --ref "$SHA" -- "
+    if "$REPO/scripts/linux-run.sh" "$LANE" --ref "$COMMIT" -- "
       set -euo pipefail
       export CARGO_TARGET_DIR=/tmp/amazing-target-t262-shard-$K CARGO_INCREMENTAL=0
       mkdir -p /tmp/amazing-src-t262-shard-$K
@@ -54,7 +53,7 @@ for K in $(seq 0 $((N - 1))); do
       ln -sfn \"\$HOME/corpora\" /tmp/amazing-src-t262-shard-$K/corpora
       cd /tmp/amazing-src-t262-shard-$K
       cargo build -p amazing-js --example test262_host --release --locked >\"\$OUT/shard-$SHA-$TAG-build.log\" 2>&1 || {
-        tail -40 \"\$OUT/shard-$SHA-$TAG-build.log\"; exit 1;
+        echo shard-$K-build-failed-raw-log-stays-under-OUT; exit 1;
       }
       echo $RUNNER_B64 | base64 -d > /tmp/t262runner.py
       set +e
@@ -62,38 +61,42 @@ for K in $(seq 0 $((N - 1))); do
         --jobs \$JOBS --timeout 60 --shard $K/$N --output /tmp/shard-$SHA-$TAG-$K.json >/tmp/shard-$SHA-$TAG-$K-runner.log 2>&1
       result=\$?
       set -e
-      echo shard-$K-exit=\$result
-      if ! test -s /tmp/shard-$SHA-$TAG-$K.json; then
-        tail -60 /tmp/shard-$SHA-$TAG-$K-runner.log
-        exit 1
-      fi
       cp /tmp/shard-$SHA-$TAG-$K.json \"\$OUT/shard-$SHA-$TAG.json\"
-      test -s \"\$OUT/shard-$SHA-$TAG.json\"" > "$OUTDIR/.shard-$SHA-$TAG-$K.log" 2>&1
+      cp /tmp/shard-$SHA-$TAG-$K-runner.log \"\$OUT/shard-$SHA-$TAG-runner.log\"
+      echo $COMPACT_B64 | base64 -d > /tmp/t262compact-$K.py
+      python3 /tmp/t262compact-$K.py test262 --source-commit $COMMIT \"\$OUT/shard-$SHA-$TAG.json\" \"\$OUT/shard-$SHA-$TAG.compact.json\" \$result
+      echo shard-$K-exit=\$result
+      :" > "$OUTDIR/.shard-$SHA-$TAG-$K.log" 2>&1; then
+      : # SSH job completed successfully; only now collect the compact receipt.
+    else
+      echo "test262-boat: shard $K job failed; raw stays on Boat" >&2
+      exit 3
+    fi
+    rm -f "$OUTDIR/.shard-$SHA-$TAG-$K.json"
     D="$(mktemp -d)"
-    "$MAIN/scripts/lane-fetch.sh" "$LANE" "$D" "amazing/out/$LANE/shard-$SHA-$TAG.json" &&
-      python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["shard"] == sys.argv[2]; assert d["records"] and d["host_sha256"] and d["input_sha256"]' "$D/shard-$SHA-$TAG.json" "$K/$N" &&
-      mv "$D/shard-$SHA-$TAG.json" "$OUTDIR/.shard-$SHA-$TAG-$K.json"
+    "$REPO/scripts/lane-fetch.sh" "$LANE" "$D" "amazing/out/$LANE/shard-$SHA-$TAG.compact.json" &&
+      python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["shard"] == sys.argv[2]; assert d["job_exit"] == 0 and d["compact_records"] and d["host_sha256"] and d["input_sha256"]' "$D/shard-$SHA-$TAG.compact.json" "$K/$N" &&
+      mv "$D/shard-$SHA-$TAG.compact.json" "$OUTDIR/.shard-$SHA-$TAG-$K.json"
     if [ ! -s "$OUTDIR/.shard-$SHA-$TAG-$K.json" ]; then
-      echo "test262-boat: shard $K fetch incomplete; keeping $LANE running for recovery" >&2
+      echo "test262-boat: shard $K compact fetch failed; raw remains on Boat" >&2
       rm -rf "$D"
       exit 1
     fi
     rm -rf "$D"
-    # Shards are single-use: stop now instead of billing 5 idle minutes.
-    # ...unless another run already holds this shard (its lane lock), which a
-    # stop would kill mid-run.
-    [ "$("$MAIN/scripts/linux-run.sh" "$LANE" --which)" = boat ] &&
-      [ ! -d "$MAIN/.agents/.remote-locks/linux-run-$LANE" ] &&
-      "$MAIN/scripts/boat-lane.py" stop "$LANE" >/dev/null 2>&1
   ) &
   pids+=($!)
 done
-for p in "${pids[@]}"; do wait "$p"; done
+failed=0
+for p in "${pids[@]}"; do wait "$p" || failed=1; done
+[ "$failed" = 0 ] || { echo "test262-boat: a shard failed; no stale output qualifies the run" >&2; exit 3; }
 
 SHARDS=()
+bytes=0
 for K in $(seq 0 $((N - 1))); do
   f="$OUTDIR/.shard-$SHA-$TAG-$K.json"
   [ -s "$f" ] || { echo "test262-boat: shard $K produced no output; see ${f%.json}.log" >&2; tail -5 "${f%.json}.log" >&2; exit 3; }
+  bytes=$((bytes + $(wc -c < "$f")))
+  [ "$bytes" -le 2000000 ] || { echo "test262-boat: compact shards exceed ticket budget" >&2; exit 3; }
   SHARDS+=("$f")
 done
 echo "test262-boat: $SHA $TAG, $N shards, $(( $(date +%s) - T0 ))s"

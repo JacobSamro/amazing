@@ -177,8 +177,8 @@ fi
 
 if [ "$HOST" = boat ]; then
   # Resumed sandboxes serve /home/user from a lazy FUSE filesystem that can die
-  # under load ("Transport endpoint is not connected"); retry the setup up to
-  # three times, restarting a broken sandbox in between (boat-lane.py heal).
+  # under load ("Transport endpoint is not connected"). Fail once; the caller
+  # may authorize one clean rerun. Never heal or restart as recovery.
   # A lease file marks the sandbox busy for boat-idle-reaper.py from before the
   # sync until the command exits; without it the reaper stopped a sandbox
   # mid-sync (low load, no cargo yet) and killed the run.
@@ -189,12 +189,11 @@ if [ "$HOST" = boat ]; then
   # linked another lane's stale artifacts).
   LEASE=".amazing-busy/$LANE.$$"
   ok=0
-  ATTEMPTS="1 2 3"
+  ATTEMPTS="1"
   [ -n "$MISSION_PACKAGE" ] && ATTEMPTS="1"
   for attempt in $ATTEMPTS; do
     if [ "$EXISTING_BOX" = 1 ]; then how=endpoint
-    elif [ "$attempt" = 1 ]; then how=ensure
-    else how=heal; sleep 10; fi
+    else how=ensure; fi
     read -r BOAT_HOST BOAT_PORT BOAT_ID BOAT_POOL BOAT_TARGET < <("$MAIN/scripts/boat-lane.py" "$how" "$LANE") || continue
     [ "$attempt" = 1 ] && echo "linux-run[$LANE]: boat sandbox $BOAT_ID ($BOAT_POOL)" >&2
     BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ServerAliveInterval=30 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"

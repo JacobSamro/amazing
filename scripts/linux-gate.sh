@@ -1,16 +1,33 @@
 #!/usr/bin/env bash
-# Integrator merge gate on Linux (Boat): workspace nextest + doctests at an exact ref.
-# Usage: scripts/linux-gate.sh <ref>
+# Exact-ref Boat workspace gate. Raw logs stay under $OUT; fetch only its receipt.
+# Usage: scripts/linux-gate.sh [ref]
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REF="${1:-HEAD}"
+MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")"
+REF="$(git -C "$MAIN" rev-parse "${1:-HEAD}^{commit}")"
 python3 "$REPO/scripts/merge-preflight.py" --base "${MERGE_BASE:-origin/dev}" --ref "$REF"
-"$REPO/scripts/linux-run.sh" integrator-primary --ref "$REF" -- \
-  'set -euo pipefail
-   export CARGO_TARGET_DIR=/tmp/amazing-target-integrator-primary CARGO_INCREMENTAL=0
-   mkdir -p /tmp/amazing-src-integrator-primary
-   rsync -a --delete --exclude /target --exclude "/target-*" --exclude /corpora --exclude /out ./ /tmp/amazing-src-integrator-primary/
-   ln -sfn "$HOME/corpora" /tmp/amazing-src-integrator-primary/corpora
-   cd /tmp/amazing-src-integrator-primary
-   cargo nextest run --workspace --locked --no-fail-fast 2>&1 | tee "$OUT/workspace-nextest.log"
-   cargo test --workspace --locked --doc 2>&1 | tee "$OUT/workspace-doctests.log"'
+HELPER="$(base64 < "$REPO/scripts/gate-summary.py" | tr -d '\n')"
+set +e
+"$REPO/scripts/linux-run.sh" integrator-primary --ref "$REF" -- "
+  set -uo pipefail
+  unset AMAZING_JS_VM AMAZING_JS_VM_COMPILE_LOG AMAZING_JS_VM_REJECT_CONTEXT
+  export CARGO_INCREMENTAL=0
+  receipt=\"\$OUT/workspace-$REF.manifest.json\"
+  nextest=\"\$OUT/workspace-$REF-nextest.log\"
+  docs=\"\$OUT/workspace-$REF-doctests.log\"
+  cargo nextest run --workspace --locked --no-fail-fast --status-level skip >\"\$nextest\" 2>&1
+  native_rc=\$?
+  cargo test --workspace --locked --doc >\"\$docs\" 2>&1
+  docs_rc=\$?
+  rc=0; [ \$native_rc = 0 ] && [ \$docs_rc = 0 ] || rc=1
+  echo $HELPER | base64 -d > /tmp/amazing-gate-summary.py
+  python3 /tmp/amazing-gate-summary.py manifest --source-commit $REF --phase nextest=\$native_rc --phase doctests=\$docs_rc \"\$receipt\" \$rc \"\$nextest\" \"\$docs\" || exit 3
+  grep -E 'Summary|test result:' \"\$nextest\" \"\$docs\" || true
+  echo workspace_exit=\$native_rc doctests_exit=\$docs_rc
+  exit \$rc"
+rc=$?
+set -e
+# Wait above observes the actual SSH job exit, not the existence of a log.
+"$REPO/scripts/lane-fetch.sh" integrator-primary "$MAIN/.agents/integrator-primary/gates" \
+  "amazing/out/integrator-primary/workspace-$REF.manifest.json" || exit 3
+exit "$rc"
