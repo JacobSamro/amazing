@@ -68,18 +68,38 @@ class WindowProof(unittest.TestCase):
         manifest,_=self.fixture();manifest['images'].append(copy.deepcopy(manifest['images'][0]))
         with self.assertRaisesRegex(ValueError,'duplicate'):proof.validate(manifest,'js-date')
 
+    def test_capture_assembly_preserves_remote_variables_on_host_bash(self):
+        import subprocess
+        scripts=pathlib.Path(__file__).parent
+        with tempfile.TemporaryDirectory() as d:
+            root=pathlib.Path(d); target=root/'scripts';target.mkdir()
+            subprocess.run(['git','init','-q',str(root)],check=True)
+            for name in ('linux-shell-capture.sh','linux-shell-capture-remote.sh','window-proof.py'):
+                (target/name).write_bytes((scripts/name).read_bytes())
+            (root/'fixture').write_text('source')
+            subprocess.run(['git','-C',d,'add','.'],check=True)
+            subprocess.run(['git','-C',d,'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-qm','fixture'],check=True)
+            # No network or engine: the wrapper only saves its command argument.
+            (target/'linux-run.sh').write_text('#!/bin/bash\nprintf "%s" "${@: -1}" > "'+str(root/'command')+'"\nexit 37\n')
+            (target/'lane-fetch-window.sh').write_text('#!/bin/bash\nexit 0\n')
+            result=subprocess.run(['bash',str(target/'linux-shell-capture.sh'),'js-date','--ref','HEAD','--actions','actions','--','--url','file:///a b.html'],capture_output=True,text=True)
+            self.assertEqual(result.returncode,37,result.stderr)
+            command=(root/'command').read_text()
+            self.assertIn('case "$verb"',command)
+            self.assertIn("'file:///a b.html'",command)
+
     def test_gate_fetch_remains_compact_only_and_all_capture_modes_use_window_proof(self):
         scripts=pathlib.Path(__file__).parent
         capture=(scripts/'linux-shell-capture.sh').read_text()
-        body=capture.split("REMOTE_BODY=\"$(cat <<'REMOTE'\n",1)[1].split('\nREMOTE\n',1)[0]
+        body=(scripts/'linux-shell-capture-remote.sh').read_text()
         import subprocess
         self.assertEqual(subprocess.run(['bash','-n'],input=body,text=True,capture_output=True).returncode,0)
         self.assertIn('lane-fetch-window.sh',capture)
         self.assertNotIn('lane-fetch.sh',capture)
         self.assertNotIn('*.png',capture)
-        self.assertIn('shot "$slug" "$url"',capture)
-        self.assertIn('shot "$NAME-$rest"',capture)
-        self.assertIn('shot "$NAME"',capture)
+        self.assertIn('shot "$slug" "$url"',body)
+        self.assertIn('shot "$NAME-$rest"',body)
+        self.assertIn('shot "$NAME"',body)
         # Existing gate interface rejects image inputs before any remote call.
         import subprocess
         result=subprocess.run(['bash',str(scripts/'lane-fetch.sh'),'js-date','/tmp/unused-window-proof','amazing/out/js-date/x.png'],capture_output=True,text=True)
