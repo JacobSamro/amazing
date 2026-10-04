@@ -1,0 +1,829 @@
+{
+  "ticket": "binding-property-key",
+  "base": "dcee3e6202fa31b8543c2ef83a28cafe73f13dc1",
+  "tested_source": "915c751b83883e72c0478c4b51ef8b36e3f824aa",
+  "whole_wrapper_exits": {
+    "before": 0,
+    "after": 0
+  },
+  "native": {
+    "before": {
+      "counts": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 4
+        },
+        "nextest": {
+          "failed": 0,
+          "passed": 4517,
+          "skipped": 17
+        }
+      },
+      "job_exit": 0,
+      "phase_details": [
+        {
+          "command": [
+            "cargo",
+            "nextest",
+            "run",
+            "--workspace",
+            "--locked",
+            "--no-fail-fast",
+            "--status-level",
+            "skip"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "        PASS [   0.002s] (4508/4517) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+            "        PASS [   0.003s] (4509/4517) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+            "        PASS [   0.014s] (4510/4517) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+            "        PASS [   0.017s] (4511/4517) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+            "        PASS [   0.009s] (4512/4517) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+            "        PASS [   0.004s] (4513/4517) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+            "        PASS [   0.014s] (4514/4517) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+            "        PASS [   0.012s] (4515/4517) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+            "        PASS [   8.786s] (4516/4517) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+            "        PASS [  24.875s] (4517/4517) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+            "     Summary [ 138.497s] 4517 tests run: 4517 passed (1 slow), 17 skipped"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-5q2sd7pf/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/workspace.log",
+              "durable": {
+                "bytes": 620921,
+                "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/workspace.log",
+                "sha256": "a1a83558ab51d75611e34463be5ec250931bc365d66e3e1a5357c56305f044e3"
+              },
+              "native": {
+                "bytes": 620921,
+                "path": "/tmp/amazing-gate-command-5q2sd7pf/output.log",
+                "sha256": "a1a83558ab51d75611e34463be5ec250931bc365d66e3e1a5357c56305f044e3"
+              },
+              "source": "/tmp/amazing-gate-command-5q2sd7pf/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "nextest",
+          "raw_native": {
+            "bytes": 620921,
+            "path": "/tmp/amazing-gate-command-5q2sd7pf/output.log",
+            "sha256": "a1a83558ab51d75611e34463be5ec250931bc365d66e3e1a5357c56305f044e3"
+          },
+          "schema": 1,
+          "source_commit": "dcee3e6202fa31b8543c2ef83a28cafe73f13dc1",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--workspace",
+            "--locked",
+            "--doc"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "   Doc-tests amazing_webrtc_codecs",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "",
+            "   Doc-tests amazing_webrtc_crypto",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            ""
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-q52hb84t/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/docs.log",
+              "durable": {
+                "bytes": 16669,
+                "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/docs.log",
+                "sha256": "c92471111401d58be00d3ee480d8f2365adac32db5c0ed0bbbd0e3764d0c4649"
+              },
+              "native": {
+                "bytes": 16669,
+                "path": "/tmp/amazing-gate-command-q52hb84t/output.log",
+                "sha256": "c92471111401d58be00d3ee480d8f2365adac32db5c0ed0bbbd0e3764d0c4649"
+              },
+              "source": "/tmp/amazing-gate-command-q52hb84t/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "doctests",
+          "raw_native": {
+            "bytes": 16669,
+            "path": "/tmp/amazing-gate-command-q52hb84t/output.log",
+            "sha256": "c92471111401d58be00d3ee480d8f2365adac32db5c0ed0bbbd0e3764d0c4649"
+          },
+          "schema": 1,
+          "source_commit": "dcee3e6202fa31b8543c2ef83a28cafe73f13dc1",
+          "wrapper_exit": 0
+        }
+      ],
+      "phase_exits": {
+        "doctests": 0,
+        "nextest": 0
+      },
+      "raw": [
+        {
+          "bytes": 620921,
+          "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/workspace.log",
+          "sha256": "a1a83558ab51d75611e34463be5ec250931bc365d66e3e1a5357c56305f044e3"
+        },
+        {
+          "bytes": 16669,
+          "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/docs.log",
+          "sha256": "c92471111401d58be00d3ee480d8f2365adac32db5c0ed0bbbd0e3764d0c4649"
+        }
+      ],
+      "schema": 1,
+      "source_commit": "dcee3e6202fa31b8543c2ef83a28cafe73f13dc1",
+      "summary_lines": [
+        "Summary [ 138.497s] 4517 tests run: 4517 passed (1 slow), 17 skipped",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    },
+    "after": {
+      "counts": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 4
+        },
+        "nextest": {
+          "failed": 0,
+          "passed": 4520,
+          "skipped": 17
+        }
+      },
+      "job_exit": 0,
+      "phase_details": [
+        {
+          "command": [
+            "cargo",
+            "nextest",
+            "run",
+            "--workspace",
+            "--locked",
+            "--no-fail-fast",
+            "--status-level",
+            "skip"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "        PASS [   0.002s] (4511/4520) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+            "        PASS [   0.007s] (4512/4520) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+            "        PASS [   0.006s] (4513/4520) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+            "        PASS [   0.006s] (4514/4520) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+            "        PASS [   0.007s] (4515/4520) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+            "        PASS [   0.007s] (4516/4520) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+            "        PASS [   0.013s] (4517/4520) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+            "        PASS [   0.027s] (4518/4520) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+            "        PASS [   8.619s] (4519/4520) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+            "        PASS [  23.579s] (4520/4520) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+            "     Summary [ 133.819s] 4520 tests run: 4520 passed (1 slow), 17 skipped"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-wloti05i/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/workspace.log",
+              "durable": {
+                "bytes": 620406,
+                "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/workspace.log",
+                "sha256": "bdd490fb53dcfd6c4257c5bcc771320c4b898a1a410f88bb9a58d45ef1225742"
+              },
+              "native": {
+                "bytes": 620406,
+                "path": "/tmp/amazing-gate-command-wloti05i/output.log",
+                "sha256": "bdd490fb53dcfd6c4257c5bcc771320c4b898a1a410f88bb9a58d45ef1225742"
+              },
+              "source": "/tmp/amazing-gate-command-wloti05i/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "nextest",
+          "raw_native": {
+            "bytes": 620406,
+            "path": "/tmp/amazing-gate-command-wloti05i/output.log",
+            "sha256": "bdd490fb53dcfd6c4257c5bcc771320c4b898a1a410f88bb9a58d45ef1225742"
+          },
+          "schema": 1,
+          "source_commit": "915c751b83883e72c0478c4b51ef8b36e3f824aa",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--workspace",
+            "--locked",
+            "--doc"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "   Doc-tests amazing_webrtc_codecs",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "",
+            "   Doc-tests amazing_webrtc_crypto",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            ""
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-0rrcq053/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/docs.log",
+              "durable": {
+                "bytes": 16669,
+                "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/docs.log",
+                "sha256": "55fd9116be84a9d505150b7b053f3bab0aa58fd5b4bf0886ef75a4140dc2eba2"
+              },
+              "native": {
+                "bytes": 16669,
+                "path": "/tmp/amazing-gate-command-0rrcq053/output.log",
+                "sha256": "55fd9116be84a9d505150b7b053f3bab0aa58fd5b4bf0886ef75a4140dc2eba2"
+              },
+              "source": "/tmp/amazing-gate-command-0rrcq053/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "doctests",
+          "raw_native": {
+            "bytes": 16669,
+            "path": "/tmp/amazing-gate-command-0rrcq053/output.log",
+            "sha256": "55fd9116be84a9d505150b7b053f3bab0aa58fd5b4bf0886ef75a4140dc2eba2"
+          },
+          "schema": 1,
+          "source_commit": "915c751b83883e72c0478c4b51ef8b36e3f824aa",
+          "wrapper_exit": 0
+        }
+      ],
+      "phase_exits": {
+        "doctests": 0,
+        "nextest": 0
+      },
+      "raw": [
+        {
+          "bytes": 620406,
+          "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/workspace.log",
+          "sha256": "bdd490fb53dcfd6c4257c5bcc771320c4b898a1a410f88bb9a58d45ef1225742"
+        },
+        {
+          "bytes": 16669,
+          "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/docs.log",
+          "sha256": "55fd9116be84a9d505150b7b053f3bab0aa58fd5b4bf0886ef75a4140dc2eba2"
+        }
+      ],
+      "schema": 1,
+      "source_commit": "915c751b83883e72c0478c4b51ef8b36e3f824aa",
+      "summary_lines": [
+        "Summary [ 133.819s] 4520 tests run: 4520 passed (1 slow), 17 skipped",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    }
+  },
+  "profile": {
+    "lane": "js-runtime",
+    "pool": "pool-js-a",
+    "queried_at_epoch": 1791144935.5209641,
+    "sandbox": {
+      "archiveAfter": "2026-10-04T22:11:30.071Z",
+      "health": "ok",
+      "id": "bx_bq7wyr6x",
+      "lastSnapshotStatus": "completed",
+      "machineProvider": "baremetal",
+      "memoryGB": 8,
+      "state": "idle",
+      "type": "default",
+      "vcpu": 4
+    }
+  },
+  "comparison": {
+    "base": "dcee3e6202fa31b8543c2ef83a28cafe73f13dc1",
+    "source": "915c751b83883e72c0478c4b51ef8b36e3f824aa",
+    "modes": {
+      "default": {
+        "selected": 30166,
+        "before_files": {
+          "pass": 29768,
+          "unsupported": 33,
+          "fail": 82,
+          "skipped": 283
+        },
+        "after_files": {
+          "pass": 29768,
+          "unsupported": 33,
+          "fail": 82,
+          "skipped": 283
+        },
+        "before_variants": {
+          "pass": 55813,
+          "unsupported": 66,
+          "fail": 95
+        },
+        "after_variants": {
+          "pass": 55813,
+          "unsupported": 66,
+          "fail": 95
+        },
+        "lost_files": [],
+        "gained_files": [],
+        "lost_variants": [],
+        "gained_variants": [],
+        "raw": [
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/default-built-ins-Symbol.json",
+            "sha256": "1494726c5b1f636403669aab2683c1622d0d56ffe3e9293a830e2815ddf30215",
+            "bytes": 7663917,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/default-built-ins-Symbol.json",
+            "sha256": "bd4047a4a99975a57b1ac8a0efea46971794d48ed7b397a13deca37b8b74f08b",
+            "bytes": 7663918,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/default-built-ins-String.json",
+            "sha256": "ff81b12ee63a304f2a285c0bb523bbb32eaa005ce82da1938b1a8a8e71928a20",
+            "bytes": 7844591,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/default-built-ins-String.json",
+            "sha256": "61d1679b73694f39c16397ea5c753dde5edcf223017be61fe4909e58ffc5d3e6",
+            "bytes": 7844591,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/default-built-ins-Object.json",
+            "sha256": "16c70dac89f5477c158f938710e2a4f5a90ffd33226d61709c385d93c2a74d09",
+            "bytes": 8116334,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/default-built-ins-Object.json",
+            "sha256": "74de95840f0d15d625f0a610ac3782e247e2756dc2f3eff79f2599373b060e5f",
+            "bytes": 8116334,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/default-built-ins-Proxy.json",
+            "sha256": "bceda4b3a1234744288bc4e80e5c650a5dda36334f0e45d745a584e3a4512024",
+            "bytes": 7704387,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/default-built-ins-Proxy.json",
+            "sha256": "99e7b9dc98eace3242f9b56336459581bf4a4211d6fbfd329a7c04d791adf1d4",
+            "bytes": 7704385,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/default-built-ins-Reflect.json",
+            "sha256": "b4dfb2dc5f54672639d845d80b6fa311252663de0054e3312f91bb363e2441f1",
+            "bytes": 7672192,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/default-built-ins-Reflect.json",
+            "sha256": "2a49acafdb8feb9a05033172bf9baf6c4f05930c239cc85ab53cb1b21664820e",
+            "bytes": 7672192,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/default-language.json",
+            "sha256": "933f8e69bcf52a9185a107c77f91d21ec984787b1ac7dc73e28f9f633c901eab",
+            "bytes": 14487394,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/default-language.json",
+            "sha256": "91ec43e451ea19636bb3845eed9bac84f33587793ae3ee738970cef6db0d0001",
+            "bytes": 14487394,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          }
+        ],
+        "provenance": {
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 60.0,
+          "jobs": 4,
+          "limit": 0,
+          "shard": "0/1",
+          "capabilities": {
+            "protocol": 2,
+            "script_source_context": true,
+            "module": true,
+            "async": true,
+            "can_block": true,
+            "createRealm": true,
+            "detachArrayBuffer": true,
+            "gc": false,
+            "agent": false,
+            "IsHTMLDDA": false,
+            "AbstractModuleSource": false,
+            "evalScript": true,
+            "global": true,
+            "print": true,
+            "intl402": true
+          },
+          "pyyaml": "6.0.3",
+          "python": "3.12.3 (main, Jun 19 2026, 12:46:00) [GCC 13.3.0]"
+        }
+      },
+      "bytecode": {
+        "selected": 30166,
+        "before_files": {
+          "pass": 29768,
+          "unsupported": 33,
+          "fail": 82,
+          "skipped": 283
+        },
+        "after_files": {
+          "pass": 29768,
+          "unsupported": 33,
+          "fail": 82,
+          "skipped": 283
+        },
+        "before_variants": {
+          "pass": 55813,
+          "unsupported": 66,
+          "fail": 95
+        },
+        "after_variants": {
+          "pass": 55813,
+          "unsupported": 66,
+          "fail": 95
+        },
+        "lost_files": [],
+        "gained_files": [],
+        "lost_variants": [],
+        "gained_variants": [],
+        "raw": [
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/bytecode-built-ins-Symbol.json",
+            "sha256": "9fe1933b6576963827db6b42c46f9c97fbd48641bdd2d0fa01bfd884beef243c",
+            "bytes": 7663917,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/bytecode-built-ins-Symbol.json",
+            "sha256": "2aa67b64599d2430ca55afe0cc681f7505da8de8b1c90d4c59db01c0b6ac1108",
+            "bytes": 7663918,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/bytecode-built-ins-String.json",
+            "sha256": "42ee72504fbe6604d99ac86e99f085df17c7772ae24c17102c667766fb0e0590",
+            "bytes": 7844591,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/bytecode-built-ins-String.json",
+            "sha256": "2acd7a2ddf0d6e6a7b1f7a04f628a46e4da64845cea78cebd2d4e56ae9192b41",
+            "bytes": 7844591,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/bytecode-built-ins-Object.json",
+            "sha256": "391cd18f1db0a06dec47780eeda6360189cfabd72078eb0217e77698b9bf52a1",
+            "bytes": 8116334,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/bytecode-built-ins-Object.json",
+            "sha256": "92c21b29399ad87ddbc14471d5d26c5e47adc64722b135376ba528269b8e454b",
+            "bytes": 8116333,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/bytecode-built-ins-Proxy.json",
+            "sha256": "528267140b65459f427a002a17f6cdf3fdaf92c97438bd3b752ae54d12b81a85",
+            "bytes": 7704387,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/bytecode-built-ins-Proxy.json",
+            "sha256": "14d1187b2bc8b677d1f3d49140a6c2584daf97721cc5d098335b867192fd1604",
+            "bytes": 7704387,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/bytecode-built-ins-Reflect.json",
+            "sha256": "51358087618603cfc5d11f9ab774f0d2466f6b0833b2893ed0f4fbe6404594a6",
+            "bytes": 7672192,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/bytecode-built-ins-Reflect.json",
+            "sha256": "6214784b99605e55109d99baa256003a8c8f0c51841fc03992b2e19cc1e9dc08",
+            "bytes": 7672192,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-before-dcee3e/bytecode-language.json",
+            "sha256": "a7da13f64544e6a88b4f09a85e0d9abbc034ffd1f18b61d921c5343c770379e7",
+            "bytes": 14487394,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          },
+          {
+            "path": "/home/user/amazing/out/js-runtime/binding-key-after-915c75/bytecode-language.json",
+            "sha256": "9806b55bb4a30da7295d65890ccc7064a0fa1ba824bb4796ff11b9e133ba305c",
+            "bytes": 14487394,
+            "host_sha256": "a7bac0cc7a6e61af89c21fb129b867a2fc5715a04da3090c21ac24335d9ee22d"
+          }
+        ],
+        "provenance": {
+          "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+          "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+          "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+          "timeout_seconds": 60.0,
+          "jobs": 4,
+          "limit": 0,
+          "shard": "0/1",
+          "capabilities": {
+            "protocol": 2,
+            "script_source_context": true,
+            "module": true,
+            "async": true,
+            "can_block": true,
+            "createRealm": true,
+            "detachArrayBuffer": true,
+            "gc": false,
+            "agent": false,
+            "IsHTMLDDA": false,
+            "AbstractModuleSource": false,
+            "evalScript": true,
+            "global": true,
+            "print": true,
+            "intl402": true
+          },
+          "pyyaml": "6.0.3",
+          "python": "3.12.3 (main, Jun 19 2026, 12:46:00) [GCC 13.3.0]"
+        }
+      }
+    },
+    "comparison": "Semantic Symbol-aware binding Get and five shared protocol areas; both backends; zero lost passing files and variants"
+  },
+  "controls": "Three grouped forced-AST and normal-callable factory controls: exact Symbol/UTF16 keys and existing primitive access; inherited/Proxy Get once and receiver; arbitrary abrupt/revocation/foreign getter home. Existing nullish host helper behavior preserved; no broader GetV claim.",
+  "compact_receipts": [
+    {
+      "side": "before",
+      "file": "build.manifest.json",
+      "bytes": 400,
+      "sha256": "c067e1f18f7ad20694b58d982a1149c9077976b708a3a1ec57d1bb09c3394345"
+    },
+    {
+      "side": "before",
+      "file": "bytecode-built-ins-Object.compact.json",
+      "bytes": 22722,
+      "sha256": "dea8dbaa4633aafb99e0660c28b4cf13635bbfba186d96af586fd37b61587650"
+    },
+    {
+      "side": "before",
+      "file": "bytecode-built-ins-Proxy.compact.json",
+      "bytes": 6900,
+      "sha256": "0255682c9af7ab698e821cb01fc1197059b8edce21485d71e566e25978ad92b9"
+    },
+    {
+      "side": "before",
+      "file": "bytecode-built-ins-Reflect.compact.json",
+      "bytes": 5574,
+      "sha256": "0a006979c17edd51c92e568f8bb7f518e0e914f1f74756231768e7807b3c403a"
+    },
+    {
+      "side": "before",
+      "file": "bytecode-built-ins-String.compact.json",
+      "bytes": 13878,
+      "sha256": "9e7efe8d0c2c4ba795e33e13c47d4fb464d201e2fb27090a203d00e1d2a8d3c6"
+    },
+    {
+      "side": "before",
+      "file": "bytecode-built-ins-Symbol.compact.json",
+      "bytes": 4924,
+      "sha256": "1b819df4f75e64a87dd220559f8e4f9fdfb7a87e101630761cc1819171299e24"
+    },
+    {
+      "side": "before",
+      "file": "bytecode-language.compact.json",
+      "bytes": 177723,
+      "sha256": "77b18fcb867c1a99972a9a747504928967ea2e07f7a07112cc2048be95916ca5"
+    },
+    {
+      "side": "before",
+      "file": "default-built-ins-Object.compact.json",
+      "bytes": 22721,
+      "sha256": "825a355dc16a3b6b564c82f12b71735adf09410977e5737cafff75389b180e46"
+    },
+    {
+      "side": "before",
+      "file": "default-built-ins-Proxy.compact.json",
+      "bytes": 6899,
+      "sha256": "5404d11e7f7e58a9376b6b8f89bcc27d445961aca2b8162d63614910f2535185"
+    },
+    {
+      "side": "before",
+      "file": "default-built-ins-Reflect.compact.json",
+      "bytes": 5573,
+      "sha256": "bd5eb25c3224190eeb6b88816ea9668542948a0167b9b2c60ef9b26e18373237"
+    },
+    {
+      "side": "before",
+      "file": "default-built-ins-String.compact.json",
+      "bytes": 13877,
+      "sha256": "a52c2ace420d210c7ae4e1c6554a4835108f4de2ac99cfb4d63b9ce64492d184"
+    },
+    {
+      "side": "before",
+      "file": "default-built-ins-Symbol.compact.json",
+      "bytes": 4923,
+      "sha256": "2ad29f4956ef6c43e7b41cab8e96bf4bff3582c0b3876acb667158585d999f38"
+    },
+    {
+      "side": "before",
+      "file": "default-language.compact.json",
+      "bytes": 177722,
+      "sha256": "8f6b7334b5a77610430e2324cddeb10783505633e518307ef67956f2094a2b5f"
+    },
+    {
+      "side": "before",
+      "file": "native.manifest.json",
+      "bytes": 7343,
+      "sha256": "77a1e7c790c65d1f787db28342e27329cd908d84d237d0e589bced79b6b6f9a2"
+    },
+    {
+      "side": "after",
+      "file": "build.manifest.json",
+      "bytes": 399,
+      "sha256": "0018d29c3e34a4da2d106ef64cbf17ea0fc6a52928d0a7cd8019bfe7f8c94b58"
+    },
+    {
+      "side": "after",
+      "file": "bytecode-built-ins-Object.compact.json",
+      "bytes": 22721,
+      "sha256": "c62d8d11ec0976d78449a42574f42cc9dec1525234c2f151d0bafc60a1d4224a"
+    },
+    {
+      "side": "after",
+      "file": "bytecode-built-ins-Proxy.compact.json",
+      "bytes": 6899,
+      "sha256": "794475f06763508e8a2ebd302ff91e0e988442bfcf344eca36628fb16466afab"
+    },
+    {
+      "side": "after",
+      "file": "bytecode-built-ins-Reflect.compact.json",
+      "bytes": 5573,
+      "sha256": "57dcbf1fc44269916aaa2df201e25c169ef80cc6cd1c9a96e82d6fc41bbad43c"
+    },
+    {
+      "side": "after",
+      "file": "bytecode-built-ins-String.compact.json",
+      "bytes": 13877,
+      "sha256": "896f580c284040f754930b2d15ec2ae0a751f3ed82dee4def096b8f817ab945f"
+    },
+    {
+      "side": "after",
+      "file": "bytecode-built-ins-Symbol.compact.json",
+      "bytes": 4923,
+      "sha256": "ea3e5147758dde46adad512d5888e9d961763f905e901c569a7bb3d36278fa70"
+    },
+    {
+      "side": "after",
+      "file": "bytecode-language.compact.json",
+      "bytes": 177722,
+      "sha256": "45d6e5e9111431353ee2951ba54d0c4a5486252be1157ca6513bfbd7c25942b5"
+    },
+    {
+      "side": "after",
+      "file": "comparison.summary.json",
+      "bytes": 11592,
+      "sha256": "fb6ef888f5953d5f6a3913cea60c9a816bb3bb9f3eb9cbbc3d6e10a961bbad08"
+    },
+    {
+      "side": "after",
+      "file": "default-built-ins-Object.compact.json",
+      "bytes": 22720,
+      "sha256": "23bef6cc7d2448f715e3ad94a70d6c96c4a87e0f1239f53fc238d962f7da9e1b"
+    },
+    {
+      "side": "after",
+      "file": "default-built-ins-Proxy.compact.json",
+      "bytes": 6898,
+      "sha256": "bbcbf4bc73838acf9c397fda6e1a7b5977bf03547643469739020e775c676992"
+    },
+    {
+      "side": "after",
+      "file": "default-built-ins-Reflect.compact.json",
+      "bytes": 5572,
+      "sha256": "631828bec6a2a39a5d9b225f332161aee590b285886dd93b556ca9f2017e41b3"
+    },
+    {
+      "side": "after",
+      "file": "default-built-ins-String.compact.json",
+      "bytes": 13876,
+      "sha256": "ac155059ad481a8da1e004cb3a1e323da2f3d9a5bd97b1896f4b8ee56f47faff"
+    },
+    {
+      "side": "after",
+      "file": "default-built-ins-Symbol.compact.json",
+      "bytes": 4922,
+      "sha256": "2603b0095750b964510f78a1e457557ad2d550f3b529d9834a194ac92c02206a"
+    },
+    {
+      "side": "after",
+      "file": "default-language.compact.json",
+      "bytes": 177721,
+      "sha256": "4f74625559d809ccdc6d3357332a7b3a70080e5e54920ac15f7b07f8df3cc61f"
+    },
+    {
+      "side": "after",
+      "file": "native.manifest.json",
+      "bytes": 7337,
+      "sha256": "ebefde68659793ec6b79cff9b64b8a4c6fa92746aa16bd7d2022290357754394"
+    }
+  ]
+}

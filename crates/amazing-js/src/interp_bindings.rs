@@ -322,6 +322,12 @@ impl Interpreter {
         self.get_prop(object, name)
     }
 
+    /// Semantic Get with an already converted string or Symbol key. The
+    /// original value is the receiver; accessors and Proxy traps remain observable.
+    pub fn binding_get_property_key(&mut self, object: &JsValue, key: PropertyKey) -> Result<JsValue, Throw> {
+        self.get_prop(object, key)
+    }
+
     pub fn binding_get_own_property(&mut self, object: &JsValue, name: &str) -> Result<Option<Property>, Throw> {
         let owner = Self::binding_owner(object)?;
         if let Some(result) = self.window_proxy_own_property(&owner, &name.into()) { return result; }
@@ -950,3 +956,7 @@ mod host_native_creation_realm_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "binding_property_key_tests.rs"]
+mod property_key_tests;
