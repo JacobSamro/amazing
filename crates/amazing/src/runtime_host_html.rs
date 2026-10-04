@@ -13,6 +13,9 @@ mod document_dsd;
 mod window_event_targets;
 #[path = "runtime_host_html/resource_response.rs"]
 mod resource_response;
+#[path = "runtime_host_html/history_context.rs"]
+mod history_context;
+pub(crate) use history_context::{HtmlHistoryContext, HtmlNavigableHandle};
 pub(crate) use resource_response::{HtmlFrameResourceKind, HtmlFrameResourceLoader, HtmlFrameResourceRequest};
 #[path = "runtime_host_html/load_dependencies.rs"]
 mod load_dependencies;
@@ -170,6 +173,7 @@ struct WindowContext {
     document: NodeIdx,
     document_generation: u64,
     frame: Option<NodeIdx>,
+    frame_generation: Option<u64>,
     global: JsValue,
     window: JsValue,
     parent: JsValue,
@@ -721,6 +725,8 @@ impl RuntimeBindings {
             .unwrap_or_else(|| (proxy.clone(), proxy.clone()));
         let document_generation = self.state.borrow().host.borrow().dom.node_generation(document)
             .ok_or_else(|| Throw::type_error("Missing frame document"))?;
+        let frame_generation = self.state.borrow().host.borrow().dom.node_generation(frame)
+            .ok_or_else(|| Throw::type_error("Missing frame container"))?;
         let event_target_slot = {
             let host = self.state.borrow().host.clone();
             let mut host = host.borrow_mut();
@@ -731,7 +737,7 @@ impl RuntimeBindings {
         };
         self.state.borrow_mut().frames.record_proxy_target(&proxy, realm);
         self.state.borrow_mut().frames.contexts.insert(realm, WindowContext {
-            event_target_slot, document, document_generation, frame: Some(frame), global, window: proxy, parent, top, origin, fetch_origin, document_url: child_url.to_owned(),
+            event_target_slot, document, document_generation, frame: Some(frame), frame_generation: Some(frame_generation), global, window: proxy, parent, top, origin, fetch_origin, document_url: child_url.to_owned(),
             installed: false, indices: 0,
         });
         let state = self.state.clone();
@@ -1885,7 +1891,7 @@ impl RuntimeBindingHost<'_> {
                 .map_err(|error| Throw::type_error(&format!("Root Window association: {error:?}")))?;
             self.state.borrow_mut().frames.record_proxy_target(&window, realm);
             self.state.borrow_mut().frames.contexts.insert(realm, WindowContext {
-                event_target_slot, document: NodeIdx(0), document_generation, frame: None, global, parent: window.clone(), top: window.clone(), window,
+                event_target_slot, document: NodeIdx(0), document_generation, frame: None, frame_generation: None, global, parent: window.clone(), top: window.clone(), window,
                 origin: ParsedUrl::parse(&document_url).map(|url| url.origin().serialize()).unwrap_or_else(|_| "null".into()), fetch_origin, document_url, installed: false, indices: 0,
             });
         }

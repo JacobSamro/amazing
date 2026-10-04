@@ -1,0 +1,269 @@
+{
+  "schema": 1,
+  "recorded_base": "614a5018e334dde2dd650134641e5851e1a76c61",
+  "gated_engine_base": "1710e4d39a460d0208f7ed2ffda33c4995458fa0",
+  "gated_source_commit": "55c33e4ddfb2dbbb52905c4a0cf37321ef042690",
+  "workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4459,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_details": [
+      {
+        "command": [
+          "cargo",
+          "nextest",
+          "run",
+          "--workspace",
+          "--locked",
+          "--no-fail-fast",
+          "--status-level",
+          "skip"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "        PASS [   0.002s] (4450/4459) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+          "        PASS [   0.002s] (4451/4459) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+          "        PASS [   0.005s] (4452/4459) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+          "        PASS [   0.009s] (4453/4459) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+          "        PASS [   0.009s] (4454/4459) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+          "        PASS [   0.008s] (4455/4459) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+          "        PASS [   0.020s] (4456/4459) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+          "        PASS [   0.016s] (4457/4459) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+          "        PASS [   8.888s] (4458/4459) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+          "        PASS [  26.233s] (4459/4459) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+          "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+          "     Summary [ 131.292s] 4459 tests run: 4459 passed, 17 skipped"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-dc6m0dow/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-55c33e4ddfb2dbbb52905c4a0cf37321ef042690-nextest.log",
+            "durable": {
+              "bytes": 620940,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-55c33e4ddfb2dbbb52905c4a0cf37321ef042690-nextest.log",
+              "sha256": "37e97097adbed08b4ac8a7af3f505b8cfb0aebd8a0b6ddbab0b19fc8a949ec66"
+            },
+            "native": {
+              "bytes": 620940,
+              "path": "/tmp/amazing-gate-command-dc6m0dow/output.log",
+              "sha256": "37e97097adbed08b4ac8a7af3f505b8cfb0aebd8a0b6ddbab0b19fc8a949ec66"
+            },
+            "source": "/tmp/amazing-gate-command-dc6m0dow/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "nextest",
+        "raw_native": {
+          "bytes": 620940,
+          "path": "/tmp/amazing-gate-command-dc6m0dow/output.log",
+          "sha256": "37e97097adbed08b4ac8a7af3f505b8cfb0aebd8a0b6ddbab0b19fc8a949ec66"
+        },
+        "schema": 1,
+        "source_commit": "55c33e4ddfb2dbbb52905c4a0cf37321ef042690",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--workspace",
+          "--locked",
+          "--doc"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "   Doc-tests amazing_webrtc_codecs",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "",
+          "   Doc-tests amazing_webrtc_crypto",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          ""
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-gcpwu26e/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-55c33e4ddfb2dbbb52905c4a0cf37321ef042690-doctests.log",
+            "durable": {
+              "bytes": 16669,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-55c33e4ddfb2dbbb52905c4a0cf37321ef042690-doctests.log",
+              "sha256": "b7eed48601cecd7f5a074d8787bc181498186a7f79ec1d51afffbcf067fc8e8a"
+            },
+            "native": {
+              "bytes": 16669,
+              "path": "/tmp/amazing-gate-command-gcpwu26e/output.log",
+              "sha256": "b7eed48601cecd7f5a074d8787bc181498186a7f79ec1d51afffbcf067fc8e8a"
+            },
+            "source": "/tmp/amazing-gate-command-gcpwu26e/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "doctests",
+        "raw_native": {
+          "bytes": 16669,
+          "path": "/tmp/amazing-gate-command-gcpwu26e/output.log",
+          "sha256": "b7eed48601cecd7f5a074d8787bc181498186a7f79ec1d51afffbcf067fc8e8a"
+        },
+        "schema": 1,
+        "source_commit": "55c33e4ddfb2dbbb52905c4a0cf37321ef042690",
+        "wrapper_exit": 0
+      }
+    ],
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 620940,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-55c33e4ddfb2dbbb52905c4a0cf37321ef042690-nextest.log",
+        "sha256": "37e97097adbed08b4ac8a7af3f505b8cfb0aebd8a0b6ddbab0b19fc8a949ec66"
+      },
+      {
+        "bytes": 16669,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-55c33e4ddfb2dbbb52905c4a0cf37321ef042690-doctests.log",
+        "sha256": "b7eed48601cecd7f5a074d8787bc181498186a7f79ec1d51afffbcf067fc8e8a"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "55c33e4ddfb2dbbb52905c4a0cf37321ef042690",
+    "summary_lines": [
+      "Summary [ 131.292s] 4459 tests run: 4459 passed, 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "workspace_tooling": {
+    "source_commit": "55c33e4ddfb2dbbb52905c4a0cf37321ef042690",
+    "owned_session": 24285,
+    "sandbox": "bx_qvc3xggw",
+    "observed": "2026-10-04T18:32:32.918069+00:00",
+    "actual_process_observation": {
+      "shell_pids": [
+        35594,
+        35597
+      ],
+      "child_pid": 35600,
+      "child_comm": "ln",
+      "child_elapsed_seconds": 1106,
+      "state": "S",
+      "wchan": "request_wait_answer",
+      "cargo_rustc_nextest_processes_observed": false
+    },
+    "gate_body_entered": false,
+    "actual_job_exit": 3,
+    "action": "Stop only affected owned sandbox; consume original terminal exit before ONE clean workspace rerun",
+    "raw_or_source_recovery_performed": false,
+    "full16_actual_exit": 0,
+    "full16_lost_files": 0,
+    "full16_lost_variants": 0,
+    "owned_sandbox_stop_exit": 0,
+    "terminal_confirmed": "2026-10-04T18:37:08.779435+00:00",
+    "terminal_reason": "SSH timed out after affected sandbox stopped; artifact fetch correctly refused stoppedbox",
+    "clean_workspace_rerun_count": 1
+  },
+  "test262": {
+    "job_exit": 0,
+    "shards": 16,
+    "baseline_published_engine_commit": "7bc73204149e50b8875c0ab9d1b552cb4e1fe251",
+    "baseline_gated_source": "885de701df5bc9e1bc170065928337a98d351286",
+    "baseline_summary_sha256": "d72abaca0efc22aa0c53e32aabf33ec61a8ee357b8421708c3346a4dabbcb0d1",
+    "summary": {
+      "files": {
+        "fail": 794,
+        "pass": 52612,
+        "skipped": 294,
+        "timeout": 1,
+        "unsupported": 171
+      },
+      "variants": {
+        "fail": 1488,
+        "pass": 101088,
+        "timeout": 2,
+        "unsupported": 340
+      }
+    },
+    "lost_files": [],
+    "lost_variants": [],
+    "gained_files": 0,
+    "provenance": {
+      "host_sha256": "4095a405e10e9b254df1b6f8282a0c430a4b4da678e981c3f5436a5d00413bcb",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "source_commit": "55c33e4ddfb2dbbb52905c4a0cf37321ef042690",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    "merged_summary_sha256": "c5697bd4d021a4bec65cfbb93ee3bcd1b21ad84046cefd8fddae0da5333c5c8e",
+    "shard_sha256": {
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-0.json": "c04f39a2f68fcd02f22b7bad3b0a8eca6470f29c25510c07efa5170bcfa00748",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-1.json": "f6b3536c06f15b6b3eccac16837fa831bba1912367416512dea5890e00fc29d3",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-10.json": "7e559aab92045dfcbdb777a84c622a64891d5156d608d3eb2671fc1d2fc9cfc5",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-11.json": "1c82e47c7cce0eb1675e2faa669f5b504e4734c44cde431bd49f28ba8abb29cc",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-12.json": "7b430e6e1e704b3d9905047f69a91996d767e49f3f81c562e2fcf4a064e611d7",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-13.json": "6a4acee2dd3aaa4888812f24bf2cdbd0a3ba70840bb5c1909f0a682eb9da1613",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-14.json": "fc1b81115a3615c5e21754dc40c29ed50570ea6ccfabc794b2607bdc9f643963",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-15.json": "0a14caff7a6be59d59899654d91089a382b01ebc7c63c7df6f50f53ff63e191f",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-2.json": "9ef985109f60d44334b514383d49c292d5c15ed6f8f043fd8146275ce62bbf50",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-3.json": "7051d5b420d5649499213bbe0019737f02fb6186484dce59f328fa1657c1997b",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-4.json": "294a80d019c341d62e545197bc5ec95de9f5e7d6a937370fe67241f7149d5ccb",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-5.json": "abe4c3f2cf9c636fc3e48285ed2ce22175347fb15de31a0c179593935b780f00",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-6.json": "82920c896ef7d115edb7a0f7301f380b1f1f0f26af2f47276ce90322d2261b94",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-7.json": "540ec25d557fec35ecd666d0b3dbc274fa2921e6b17778b464898496ae420d0d",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-8.json": "98c48b761c5d2aae99f9f97d99915a52982e0759ac8e65e9a9c2e76a45a0d75c",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-55c33e4d-window-activity-integration-9.json": "7ab3e3011d1a5cde2b91e60c951e24599944c451ac4db69cb7951120b2a95250"
+    }
+  },
+  "own_corpus_summary": "crates/amazing/evidence/window-activity/gate.summary.json",
+  "own_corpus_summary_sha256": "ed6bbd210cedfb0d5126c290e82a4a18bfbc7ea9225e78f92cb98116357e2823",
+  "post_gate_rebase": "Published614a5018 changes capture tooling only; entire engine byte identity verified against gated55c33e4d",
+  "source_conflict_resolution": "Owner production files exactly f924; combined source gated. Only compact evidence added."
+}

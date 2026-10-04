@@ -1,0 +1,126 @@
+{
+  "fixed_base": "eb8e42d3bb8c823cb6c9f663539eb4ecb0745891",
+  "gated_source": "f924e15cab23366d4541efeba786088e9423b8c2",
+  "source_files": {
+    "crates/amazing/src/runtime_host_html.rs": "ff9ec67ed3780aa522fd2e4ec5137e399c76cb4f87c891988b9a1e9f00178ad9",
+    "crates/amazing/src/runtime_host_html/history_context.rs": "912a4ecf039f9accaa89756d0470a3c30727736df34c3c6b350f2384c04c060c"
+  },
+  "remote_alias": "js-date",
+  "profile": {
+    "ordinary_ms": 25000,
+    "serialized_heavy_ms": 150000,
+    "shadow_actual_META_long_ms": 600000,
+    "encoding_ordinary_ms": 10000,
+    "encoding_actual_META_long_ms": 60000,
+    "modules_ms": 5000
+  },
+  "wrapper_exits": {
+    "before": 0,
+    "after": 0
+  },
+  "command_sha256": {
+    "before": "e4c2fcbabcfd46431cf06cf287fbda9198709202e3ece1f69e51a0d08dabb0ed",
+    "after": "540301a3ffb737666fc6a842d9767cb863d21fce3fa1fa9b1495cd2b56f35328"
+  },
+  "helper_sha256": "65f8dc911753794394b02bdda3193d4b0a141a0ced430ad665f6a02b4642ebc4",
+  "native": {
+    "before": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4451,
+        "skipped": 17
+      }
+    },
+    "after": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4452,
+        "skipped": 17
+      }
+    }
+  },
+  "corpora": {
+    "base-url": {
+      "after": 2,
+      "before": 2,
+      "files": 11
+    },
+    "core": {
+      "after": 92820,
+      "before": 92820,
+      "files": 888
+    },
+    "cssom": {
+      "after": 1772,
+      "before": 1772,
+      "files": 192
+    },
+    "encoding": {
+      "after": 12357,
+      "before": 12357,
+      "files": 194
+    },
+    "modules": {
+      "after": 145,
+      "before": 145,
+      "files": 111
+    },
+    "shadow": {
+      "after": 5681,
+      "before": 5681,
+      "files": 277
+    },
+    "syntax": {
+      "after": 3104,
+      "before": 3104,
+      "files": 220
+    },
+    "syntax72": {
+      "after": 2707,
+      "before": 2707,
+      "files": 72
+    },
+    "the-base-element": {
+      "after": 15,
+      "before": 15,
+      "files": 11
+    },
+    "the-history-interface": {
+      "after": 13,
+      "before": 13,
+      "files": 74
+    },
+    "the-iframe-element": {
+      "after": 24,
+      "before": 24,
+      "files": 150
+    },
+    "the-window-object": {
+      "after": 253,
+      "before": 253,
+      "files": 90
+    },
+    "the-windowproxy-exotic-object": {
+      "after": 14,
+      "before": 14,
+      "files": 8
+    },
+    "windows": {
+      "after": 4,
+      "before": 4,
+      "files": 53
+    }
+  },
+  "zero_passing_counter_and_file_losses": true,
+  "scope": "pure actual current Window/document/ancestor authority; no History owner/security/allocation or child staging"
+}
