@@ -109,6 +109,8 @@ code copied and adapted into our crates, never new crate dependencies.
 
 - **Allowed sources: MIT or Apache-2.0 only.** MPL-2.0 (Servo, Stylo, Nova) and GPL/LGPL code
   is read-only reference: study it, do not copy it.
+- Official Unicode 17 data and conformance tests have a data-only Unicode-3.0 exception
+  approved by the owner in ADR 0014. Rust algorithms still require MIT or Apache-2.0.
 - **Attribution is mandatory.** Every file containing ported code starts with a header comment
   naming the upstream repo, path, commit and license, e.g.
   `// Portions ported from boa-dev/boa (core/engine/src/builtins/...) @ <sha>, MIT.`
