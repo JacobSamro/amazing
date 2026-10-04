@@ -432,6 +432,9 @@ fn get_worker() -> std::io::Result<Sender<CoroutineJob>> {
 const MAX_IDLE_WORKERS: usize = 16;
 
 fn worker_loop(job_rx: Receiver<CoroutineJob>, self_tx: Sender<CoroutineJob>) {
+    // The serialized interpreter can move between actual OS threads. Query
+    // this worker's own bounds before any job executes, never the driver TLS.
+    crate::call_stack::initialize();
     while let Ok(job) = job_rx.recv() {
         run_job(job);
         let mut idle = IDLE.lock().unwrap();

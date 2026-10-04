@@ -35,6 +35,7 @@
 //! and a true asynchronous Promise job queue. Runtime errors are represented
 //! by [`value::Throw`]; no input is allowed to panic the engine.
 
+mod call_stack;
 pub mod ast;
 pub mod debug_hook;
 pub mod env;

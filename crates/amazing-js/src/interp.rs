@@ -339,6 +339,7 @@ pub struct Interpreter {
     pub error_proto: Obj,
     pub output: RefCell<Vec<String>>,
     depth: u32,
+    synchronous_call_policy: SynchronousCallPolicy,
     native_stack: Vec<Obj>,
     host_native_dispatch: Option<Rc<HostNativeDispatch>>,
     /// The embedding's dynamic `import()` / `import.source()` loader hook (see
@@ -418,6 +419,7 @@ impl Interpreter {
     }
 
     pub fn new() -> Self {
+        crate::call_stack::initialize();
         let object_proto = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
         let function_proto = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::function(JsFunction {
@@ -574,6 +576,7 @@ impl Interpreter {
             error_proto,
             output: RefCell::new(Vec::new()),
             depth: 0,
+            synchronous_call_policy: SynchronousCallPolicy::default(),
             native_stack: Vec::new(),
             host_native_dispatch: None,
             module_loader: None, phase_module_loader: None,
@@ -1841,3 +1844,7 @@ include!("runtime_native_task_tests.rs");
 #[path = "interp_for_in_head_tests.rs"]
 mod for_in_head_tests;
 include!("function_bind_tests.rs");
+include!("interp_call_resource.rs");
+
+#[cfg(test)]
+include!("interp_call_resource_tests.rs");

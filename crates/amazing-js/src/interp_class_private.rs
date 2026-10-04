@@ -24,6 +24,7 @@ fn eval_class_element_scope<T>(
     class_env: &EnvHandle,
     body: impl FnOnce(&mut Interpreter, &EnvHandle) -> Result<T, Throw>,
 ) -> Result<T, Throw> {
+    i.admit_synchronous_call()?;
     let scope = EnvHandle::new(EnvKind::Function, Some(class_env.clone()));
     scope.bind_this(this.clone());
     i.frames.push(CallFrame { context_id: CallFrame::next_context_id(), this, home, super_constructor: None, new_target: None, own_function: None });

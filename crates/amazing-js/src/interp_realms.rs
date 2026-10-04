@@ -307,7 +307,17 @@ impl Interpreter {
 }
 
 impl Interpreter {
+    #[inline(never)]
     fn call_value_with_new_target(&mut self, function: &JsValue, receiver: JsValue,
+        args: Vec<JsValue>, new_target: Option<JsValue>) -> Result<JsValue, Throw> {
+        self.admit_synchronous_call()?;
+        self.call_value_with_new_target_admitted(function, receiver, args, new_target)
+    }
+
+    // Keep the admission prologue small; wrappers and user-visible context
+    // bookkeeping are entered only after measuring this actual thread.
+    #[inline(never)]
+    fn call_value_with_new_target_admitted(&mut self, function: &JsValue, receiver: JsValue,
         args: Vec<JsValue>, new_target: Option<JsValue>) -> Result<JsValue, Throw> {
         if Self::is_bound_function(function) {
             return self.invoke_bound_function(function, args, new_target);

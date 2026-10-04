@@ -656,6 +656,7 @@ impl Program {
         frame: &mut Box<VmFrame>,
         quantum: usize,
     ) -> Result<FrameOutcome, Throw> {
+        i.admit_synchronous_call()?;
         with_vm_call_context(i, frame.call_context.clone(), frame.strict_context,
             |i| self.resume_frame_inner(i, frame, quantum))
     }
@@ -1949,7 +1950,24 @@ impl FunctionCode {
         JsValue::Object(handle)
     }
 
+    #[inline(never)]
     pub(crate) fn call(
+        &self,
+        i: &mut Interpreter,
+        parent: EnvHandle,
+        is_arrow: bool,
+        this: JsValue,
+        args: Vec<JsValue>,
+        generator_function: Option<Obj>,
+        derived: Option<DerivedConstructor>,
+        new_target: Option<JsValue>,
+    ) -> Result<JsValue, Throw> {
+        i.admit_synchronous_call()?;
+        self.call_admitted(i, parent, is_arrow, this, args, generator_function, derived, new_target)
+    }
+
+    #[inline(never)]
+    fn call_admitted(
         &self,
         i: &mut Interpreter,
         parent: EnvHandle,
@@ -2110,6 +2128,7 @@ impl FunctionCode {
     }
 
     fn call_async(&self, i: &mut Interpreter, env: EnvHandle) -> Result<JsValue, Throw> {
+        i.admit_synchronous_call()?;
         let promise = new_promise(i, PromiseFate::Pending);
         let JsValue::Object(target) = &promise else { unreachable!() };
         let frame = match self.0.program.start_frame(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT) {

@@ -5,7 +5,21 @@ impl Interpreter {
         self.get_prop_receiver(v, &k.into(), v.clone())
     }
 
+    #[inline(never)]
     fn get_prop_receiver(
+        &mut self,
+        v: &JsValue,
+        key: &PropertyKey,
+        receiver: JsValue,
+    ) -> Result<JsValue, Throw> {
+        // Trap lookup and callable metadata lookup can traverse Proxy and
+        // ordinary prototype chains without creating another JS call frame.
+        self.admit_synchronous_call()?;
+        self.get_prop_receiver_admitted(v, key, receiver)
+    }
+
+    #[inline(never)]
+    fn get_prop_receiver_admitted(
         &mut self,
         v: &JsValue,
         key: &PropertyKey,

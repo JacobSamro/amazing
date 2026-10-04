@@ -174,3 +174,5 @@ reproduced in the table row for that upstream.
 - boa-dev/boa @ 39cd11214ecb366200157dab96b3919e61e9a391 — MIT; Copyright (c) 2019 Jason Williams. Whole tagged-template callee/receiver capture, site lookup and ordered substitutions from core/engine/src/bytecompiler/expression/mod.rs adapted in crates/amazing-js/src/vm/compiler_templates.rs.
 
 - DioxusLabs/taffy, MIT, commit 2c81b8e09d172c2e4d7747be2b1e5a03e0f30bf0; Copyright (c) 2018 Visly Inc.; Copyright (c) 2026 Taffy Authors. Flex auto-margin/axis-alignment adaptation in crates/amazing-layout/src/flex.rs; license SHA256 f97daf1a0124413dccf399a4e6626b4b74acd05282f80b6d64ac82225650b77a.
+- rust-lang/stacker @ d3ac2df79a409c681329006e9b31c96ab9c5fcae — MIT, Copyright (c) 2014 Alex Crichton. OS-thread stack-bound discovery and volatile current-frame measurement adapted in `crates/amazing-js/src/call_stack.rs`; no crate dependency or stack switching.
+- rust-lang/libc @ b739c733e06a5f184bae7e296919c15d6ccd8ec8 — MIT, Copyright (c) The Rust Project Developers. GNU x86_64 `pthread_attr_t` layout adapted in `crates/amazing-js/src/call_stack.rs`; no crate dependency.

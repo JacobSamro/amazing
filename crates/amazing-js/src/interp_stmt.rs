@@ -2398,7 +2398,14 @@ impl Interpreter {
     fn construct(&mut self, f: &JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
         self.construct_with_new_target(f, args, f.clone())
     }
+    #[inline(never)]
     fn construct_with_new_target(&mut self, f: &JsValue, args: Vec<JsValue>, new_target: JsValue) -> Result<JsValue, Throw> {
+        self.admit_synchronous_call()?;
+        self.construct_with_new_target_admitted(f, args, new_target)
+    }
+
+    #[inline(never)]
+    fn construct_with_new_target_admitted(&mut self, f: &JsValue, args: Vec<JsValue>, new_target: JsValue) -> Result<JsValue, Throw> {
         let o = match f {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("constructor is not an object")),

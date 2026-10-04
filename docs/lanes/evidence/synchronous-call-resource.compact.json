@@ -1,0 +1,1850 @@
+{
+  "schema": 1,
+  "ticket": "synchronous-call-resource",
+  "recorded_origin": "601d78162b8075b5f0b40682cf245c472e4a8bc8",
+  "tested_source": "8a25206fa15e90a3a6a635d960fca8c056d0c650",
+  "qualification": "fixed-base GNU Linux; root full16 and combined merge gate separate",
+  "measured_at": "2026-10-04T21:33:42.658195+00:00",
+  "tool_owner": 18180,
+  "wrapper_before": 0,
+  "wrapper_after": 0,
+  "profile": {
+    "alias": "js-call-resource-20261004",
+    "box": "bx_mbdrhhwe",
+    "requested_vcpu": 4,
+    "requested_memory_gib": 8,
+    "finite_ttl_seconds": 7200
+  },
+  "embedding_contract": {
+    "allocation_request_bytes": 2097152,
+    "release_diagnostic_usable_bytes": 2093056,
+    "release_diagnostic_entry_remaining_bytes": 2082983,
+    "physical_reserve_bytes": 262144,
+    "logical_depth_limit": 512,
+    "coverage": "six genuine native/forced-AST groups in debug and release; unchanged10k Proxy/Bound/mixed.bind and property recursion controls",
+    "limitations": [
+      "Linux actual artifacts only; no Mac/Windows measured claim",
+      "ordinary OS threads only; no fiber/alt-stack support",
+      "arbitrary HostNative callback consumption is outside this bounded entry contract",
+      "matrix qualification is not a universal maximum unchecked-frame/headroom proof"
+    ]
+  },
+  "original_controls": {
+    "crates/amazing-js/src/interp_call_resource_tests.rs": {
+      "bytes": 10338,
+      "sha256": "a293f8401b94055ae662fa9e88d0c20bd6879711f80da4cb739ea956b5c6ea7d"
+    },
+    "crates/amazing-js/src/call_stack.rs": {
+      "bytes": 6046,
+      "sha256": "0381fbca86825090294abdb23e1a1573f23ce54da4594bce9b2d1cdc4a854ae3"
+    },
+    "crates/amazing-js/src/interp_call_resource.rs": {
+      "bytes": 2357,
+      "sha256": "47b706773c382261ae82ab9849befb06a6120538e75a39b59fc14576e4ae710f"
+    }
+  },
+  "native": {
+    "before": {
+      "counts": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 4
+        },
+        "nextest": {
+          "failed": 0,
+          "passed": 4561,
+          "skipped": 17
+        }
+      },
+      "job_exit": 0,
+      "phases": [
+        {
+          "phase": "nextest",
+          "command": [
+            "cargo",
+            "nextest",
+            "run",
+            "--workspace",
+            "--locked",
+            "--no-fail-fast",
+            "--status-level",
+            "skip",
+            "--success-output",
+            "final"
+          ],
+          "command_exit": 0,
+          "engine_exit": 0,
+          "wrapper_exit": 0,
+          "raw_native": {
+            "bytes": 2277664,
+            "path": "/tmp/amazing-gate-command-ncugdt8l/output.log",
+            "sha256": "c5bb9bca1436ae9067e2bd98616b696afcceeb754815bd5e31b430261259abfd"
+          },
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-nextest.log",
+              "durable": {
+                "bytes": 2277664,
+                "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-nextest.log",
+                "sha256": "c5bb9bca1436ae9067e2bd98616b696afcceeb754815bd5e31b430261259abfd"
+              },
+              "native": {
+                "bytes": 2277664,
+                "path": "/tmp/amazing-gate-command-ncugdt8l/output.log",
+                "sha256": "c5bb9bca1436ae9067e2bd98616b696afcceeb754815bd5e31b430261259abfd"
+              },
+              "source": "/tmp/amazing-gate-command-ncugdt8l/output.log"
+            }
+          ]
+        },
+        {
+          "phase": "doctests",
+          "command": [
+            "cargo",
+            "test",
+            "--workspace",
+            "--locked",
+            "--doc"
+          ],
+          "command_exit": 0,
+          "engine_exit": 0,
+          "wrapper_exit": 0,
+          "raw_native": {
+            "bytes": 17372,
+            "path": "/tmp/amazing-gate-command-2vpfi1cz/output.log",
+            "sha256": "edfe885954b2136d7582a223adc88482f7b82aba29a1145e68c91348fe785c1f"
+          },
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-doctests.log",
+              "durable": {
+                "bytes": 17372,
+                "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-doctests.log",
+                "sha256": "edfe885954b2136d7582a223adc88482f7b82aba29a1145e68c91348fe785c1f"
+              },
+              "native": {
+                "bytes": 17372,
+                "path": "/tmp/amazing-gate-command-2vpfi1cz/output.log",
+                "sha256": "edfe885954b2136d7582a223adc88482f7b82aba29a1145e68c91348fe785c1f"
+              },
+              "source": "/tmp/amazing-gate-command-2vpfi1cz/output.log"
+            }
+          ]
+        }
+      ]
+    },
+    "after": {
+      "counts": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 4
+        },
+        "nextest": {
+          "failed": 0,
+          "passed": 4567,
+          "skipped": 17
+        }
+      },
+      "job_exit": 0,
+      "phases": [
+        {
+          "phase": "nextest",
+          "command": [
+            "cargo",
+            "nextest",
+            "run",
+            "--workspace",
+            "--locked",
+            "--no-fail-fast",
+            "--status-level",
+            "skip",
+            "--success-output",
+            "final"
+          ],
+          "command_exit": 0,
+          "engine_exit": 0,
+          "wrapper_exit": 0,
+          "raw_native": {
+            "bytes": 2271993,
+            "path": "/tmp/amazing-gate-command-tmq2bmit/output.log",
+            "sha256": "2dc3dc525c7f503e63579deebfb2090b4c603ffd42da1503910a7e350d55da32"
+          },
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-nextest.log",
+              "durable": {
+                "bytes": 2271993,
+                "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-nextest.log",
+                "sha256": "2dc3dc525c7f503e63579deebfb2090b4c603ffd42da1503910a7e350d55da32"
+              },
+              "native": {
+                "bytes": 2271993,
+                "path": "/tmp/amazing-gate-command-tmq2bmit/output.log",
+                "sha256": "2dc3dc525c7f503e63579deebfb2090b4c603ffd42da1503910a7e350d55da32"
+              },
+              "source": "/tmp/amazing-gate-command-tmq2bmit/output.log"
+            }
+          ]
+        },
+        {
+          "phase": "doctests",
+          "command": [
+            "cargo",
+            "test",
+            "--workspace",
+            "--locked",
+            "--doc"
+          ],
+          "command_exit": 0,
+          "engine_exit": 0,
+          "wrapper_exit": 0,
+          "raw_native": {
+            "bytes": 17372,
+            "path": "/tmp/amazing-gate-command-4k5vd2o2/output.log",
+            "sha256": "da47829057ac2ca60bb6d689fd14afeb938feaaae5d1ba102c324ec2c47fe60b"
+          },
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-doctests.log",
+              "durable": {
+                "bytes": 17372,
+                "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-doctests.log",
+                "sha256": "da47829057ac2ca60bb6d689fd14afeb938feaaae5d1ba102c324ec2c47fe60b"
+              },
+              "native": {
+                "bytes": 17372,
+                "path": "/tmp/amazing-gate-command-4k5vd2o2/output.log",
+                "sha256": "da47829057ac2ca60bb6d689fd14afeb938feaaae5d1ba102c324ec2c47fe60b"
+              },
+              "source": "/tmp/amazing-gate-command-4k5vd2o2/output.log"
+            }
+          ]
+        }
+      ]
+    },
+    "minimum_stack_release": {
+      "source_commit": "8a25206fa15e90a3a6a635d960fca8c056d0c650",
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "-p",
+        "amazing-js",
+        "--release",
+        "--locked",
+        "--no-fail-fast",
+        "--status-level",
+        "skip",
+        "--success-output",
+        "final",
+        "-E",
+        "test(call_resource_tests)"
+      ],
+      "command_exit": 0,
+      "engine_exit": 0,
+      "wrapper_exit": 0,
+      "raw_native": {
+        "path": "/tmp/amazing-gate-command-8ljbyv6y/output.log",
+        "bytes": 141149,
+        "sha256": "f61e6ac94405e8da2b285848db96ad5ad8b5e47cde5be274d502db98bc46b2ea"
+      },
+      "output_copies": [
+        {
+          "source": "/tmp/amazing-gate-command-8ljbyv6y/output.log",
+          "destination": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-minimum-stack-release.log",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-gate-command-8ljbyv6y/output.log",
+            "bytes": 141149,
+            "sha256": "f61e6ac94405e8da2b285848db96ad5ad8b5e47cde5be274d502db98bc46b2ea"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-minimum-stack-release.log",
+            "bytes": 141149,
+            "sha256": "f61e6ac94405e8da2b285848db96ad5ad8b5e47cde5be274d502db98bc46b2ea"
+          }
+        }
+      ],
+      "diagnostic_tail": [
+        "    call-resource requested_stack=2097152 actual_usable=2093056 entry_remaining=2082983 forced_ast=true",
+        "    call-resource requested_stack=2097152 actual_usable=2093056 entry_remaining=2082983 forced_ast=true",
+        "    call-resource requested_stack=2097152 actual_usable=2093056 entry_remaining=2082983 forced_ast=true",
+        "    call-resource requested_stack=2097152 actual_usable=2093056 entry_remaining=2082983 forced_ast=true",
+        "    call-resource requested_stack=2097152 actual_usable=2093056 entry_remaining=2082983 forced_ast=true",
+        "    call-resource requested_stack=2097152 actual_usable=2093056 entry_remaining=2082983 forced_ast=false",
+        "    call-resource requested_stack=2097152 actual_usable=2093056 entry_remaining=2082983 forced_ast=false",
+        "    call-resource requested_stack=2097152 actual_usable=2093056 entry_remaining=2082983 forced_ast=false",
+        "    call-resource requested_stack=2097152 actual_usable=2093056 entry_remaining=2082983 forced_ast=false",
+        "    call-resource requested_stack=2097152 actual_usable=2093056 entry_remaining=2082983 forced_ast=false",
+        "    call-resource requested_stack=2097152 actual_usable=2093056 entry_remaining=2082983 forced_ast=false",
+        ""
+      ]
+    }
+  },
+  "corpus": {
+    "comparisons": 38,
+    "lost_files": 0,
+    "lost_variants": 0,
+    "gained_files": 0,
+    "gained_variants": 0,
+    "union": {
+      "default": {
+        "before": {
+          "files": 35831,
+          "variants": 67752
+        },
+        "after": {
+          "files": 35831,
+          "variants": 67752
+        }
+      },
+      "vm": {
+        "before": {
+          "files": 35831,
+          "variants": 67752
+        },
+        "after": {
+          "files": 35831,
+          "variants": 67752
+        }
+      }
+    },
+    "reports": [
+      {
+        "selector": "default-built-ins_AggregateError",
+        "before": {
+          "files": 25,
+          "variants": 50
+        },
+        "after": {
+          "files": 25,
+          "variants": 50
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7650816,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_AggregateError.json",
+          "sha256": "9bb0bc77a16b53fa650c407bb658e6c5ca62baaafe47461c92aab810d3e7df27"
+        },
+        "raw_after": {
+          "bytes": 7650815,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_AggregateError.json",
+          "sha256": "b09bd7d2050b77237d435e4e7e57662e0960e5c8547bfc9ad3fd5ffc44366260"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_Array",
+        "before": {
+          "files": 3327,
+          "variants": 6599
+        },
+        "after": {
+          "files": 3327,
+          "variants": 6599
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 8222367,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_Array.json",
+          "sha256": "83889dee220ecbe68b2fdb85fe3fbebef191cb4c9506b144622ca8c90f2a646a"
+        },
+        "raw_after": {
+          "bytes": 8222367,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_Array.json",
+          "sha256": "e5a2b3e72b4bb1014b86b40d72fc4aebde8fe2bf4ddf0537650c7891ac0f4d8c"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_AsyncFunction",
+        "before": {
+          "files": 18,
+          "variants": 36
+        },
+        "after": {
+          "files": 18,
+          "variants": 36
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7648941,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_AsyncFunction.json",
+          "sha256": "97fae4b9d9e8ae46a870f9061e2da716642dec31d15b4152fcf05aee60a4cc26"
+        },
+        "raw_after": {
+          "bytes": 7648941,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_AsyncFunction.json",
+          "sha256": "60f56a284791533a3385f8227c06e2291a3af941c2a0dc999bbb174c87ef08ba"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_AsyncGeneratorFunction",
+        "before": {
+          "files": 23,
+          "variants": 46
+        },
+        "after": {
+          "files": 23,
+          "variants": 46
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7650590,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_AsyncGeneratorFunction.json",
+          "sha256": "01f8e82516b327d8d9a427c8e5dda79af717cbd60c89f6618dac29043b91a28c"
+        },
+        "raw_after": {
+          "bytes": 7650590,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_AsyncGeneratorFunction.json",
+          "sha256": "c73b4165273cd774dab6866b78497ee8bed9ce2b2543f754a5add64b7140fa5b"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_Error",
+        "before": {
+          "files": 88,
+          "variants": 176
+        },
+        "after": {
+          "files": 88,
+          "variants": 176
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7665694,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_Error.json",
+          "sha256": "0f8af8224542d082687593cfeab4e0ba716dfbc8c6792bf07af88176af1cddec"
+        },
+        "raw_after": {
+          "bytes": 7665694,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_Error.json",
+          "sha256": "c2b419a6c53e2492227e0b5a3a1f23d4ab33ca7a58be47f13db919cfcd82ae95"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_Function",
+        "before": {
+          "files": 507,
+          "variants": 889
+        },
+        "after": {
+          "files": 507,
+          "variants": 889
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7719363,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_Function.json",
+          "sha256": "b4d09f07b37ed4495375b713a21706c31f5aeaa0131aa913690c536b57d56728"
+        },
+        "raw_after": {
+          "bytes": 7719363,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_Function.json",
+          "sha256": "7a88e2c5a2145a5e0c1481baa4b5a8b2f0c57109b74a62d0be6f3c0840720b3c"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_GeneratorFunction",
+        "before": {
+          "files": 23,
+          "variants": 46
+        },
+        "after": {
+          "files": 23,
+          "variants": 46
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7649939,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_GeneratorFunction.json",
+          "sha256": "fb0b61edeb62daf800800df7ac0e4a5450fff3d5f206d4c518063b811969f95c"
+        },
+        "raw_after": {
+          "bytes": 7649939,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_GeneratorFunction.json",
+          "sha256": "24b7e375ab07156c3f3458a5b634b12803be09ff68ac63d099c793559726e117"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_Iterator",
+        "before": {
+          "files": 654,
+          "variants": 1308
+        },
+        "after": {
+          "files": 654,
+          "variants": 1308
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7778377,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_Iterator.json",
+          "sha256": "8df004456fef4728b648ada7ac83fc1d4a011b4166400a1fee662d4acc499331"
+        },
+        "raw_after": {
+          "bytes": 7778378,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_Iterator.json",
+          "sha256": "6a633593fa496fb8230aa8fad67b7dda737bc8fb4530da3bc2fae4188b9770f4"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_Map",
+        "before": {
+          "files": 215,
+          "variants": 427
+        },
+        "after": {
+          "files": 215,
+          "variants": 427
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7684307,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_Map.json",
+          "sha256": "1b08e8ddaa4dfac8d2b7e92d2751e253c421f2d25cc459cc45e8aeaebf09a00b"
+        },
+        "raw_after": {
+          "bytes": 7684307,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_Map.json",
+          "sha256": "6febd8e4f72447fbd99612e41df4ebcbd1a8c322494fbe7345a3697a6b0b1c7a"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_NativeErrors",
+        "before": {
+          "files": 94,
+          "variants": 188
+        },
+        "after": {
+          "files": 94,
+          "variants": 188
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7660012,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_NativeErrors.json",
+          "sha256": "1da234822478527010e33f329f4efd2375d3ae8a9686511819d139d3a9b9476a"
+        },
+        "raw_after": {
+          "bytes": 7660012,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_NativeErrors.json",
+          "sha256": "aeaa26b9191f39a9f2b3dbf6b38de7c5be11497e711be7ad526640068db21898"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_Object",
+        "before": {
+          "files": 3413,
+          "variants": 6806
+        },
+        "after": {
+          "files": 3413,
+          "variants": 6806
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 8116333,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_Object.json",
+          "sha256": "88736bc7cb5906cef01eace9fb3062c6921e6fa2d1a441dc5a44f6847a70630e"
+        },
+        "raw_after": {
+          "bytes": 8116333,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_Object.json",
+          "sha256": "59d6d58db46e165467c25e62186e4f44b57c543391b6a5347291a9f767852f4e"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_Promise",
+        "before": {
+          "files": 732,
+          "variants": 1458
+        },
+        "after": {
+          "files": 732,
+          "variants": 1458
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7779696,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_Promise.json",
+          "sha256": "b56c108561efa20aa4f2f119b3c39ce7b406fd8da29a070d19dbdfbdeafefde3"
+        },
+        "raw_after": {
+          "bytes": 7779696,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_Promise.json",
+          "sha256": "e9e9715f45217f1c0b565f2a7b2ea257da292156f7522fe11075fe6032ced877"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_Proxy",
+        "before": {
+          "files": 311,
+          "variants": 607
+        },
+        "after": {
+          "files": 311,
+          "variants": 607
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7704385,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_Proxy.json",
+          "sha256": "004a42bb7636c41fc210df018794b6951fab7da79640761ac0289fd6f3e986c5"
+        },
+        "raw_after": {
+          "bytes": 7704386,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_Proxy.json",
+          "sha256": "7085ced5c6620c347cbc767cf9303de39751a24be14a39cadd07689be24c2658"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_Reflect",
+        "before": {
+          "files": 154,
+          "variants": 308
+        },
+        "after": {
+          "files": 154,
+          "variants": 308
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7672191,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_Reflect.json",
+          "sha256": "a891776e9960a0ab1870c8f3064a5b678929fcb9d1a6722ec644a0dfa196e273"
+        },
+        "raw_after": {
+          "bytes": 7672191,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_Reflect.json",
+          "sha256": "dc9922938d40a0e6083d64e023ff4873c47643523498878386bf03f2630f27cb"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_Set",
+        "before": {
+          "files": 394,
+          "variants": 786
+        },
+        "after": {
+          "files": 394,
+          "variants": 786
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7718098,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_Set.json",
+          "sha256": "8995246977e4992957ce1c01af4cfff0e6b68457769de43e7041d82d43f18e0d"
+        },
+        "raw_after": {
+          "bytes": 7718098,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_Set.json",
+          "sha256": "39ca4fef32f67ec86cd8ef3fbb8debe03b0bc80b418acf14357d350d538dd400"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_String",
+        "before": {
+          "files": 1335,
+          "variants": 2667
+        },
+        "after": {
+          "files": 1335,
+          "variants": 2667
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7845821,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_String.json",
+          "sha256": "77883c91895e5e532393b91c2538c8175ebd8423198ebe8965c593303dc55ef2"
+        },
+        "raw_after": {
+          "bytes": 7845821,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_String.json",
+          "sha256": "97ed4308e55c3bb89bb9ed1666715bcb99b09d8bc543846298018bf6abe56384"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_SuppressedError",
+        "before": {
+          "files": 22,
+          "variants": 44
+        },
+        "after": {
+          "files": 22,
+          "variants": 44
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7650674,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_SuppressedError.json",
+          "sha256": "61d2b6cad8e269aeee5e03f364ca3a1d3cebe3b24aa009d762d0da698552430b"
+        },
+        "raw_after": {
+          "bytes": 7650674,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_SuppressedError.json",
+          "sha256": "d115863581707e1daccc6653510b106b4a7538c55ca15f9bbbefd159b9922ec9"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-built-ins_ThrowTypeError",
+        "before": {
+          "files": 14,
+          "variants": 28
+        },
+        "after": {
+          "files": 14,
+          "variants": 28
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7647755,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-built-ins_ThrowTypeError.json",
+          "sha256": "5f9a26bbc70251dfa281db4d2b6dabd3fb9bb5ef0ad0e4ab32ecb6a41d445dd6"
+        },
+        "raw_after": {
+          "bytes": 7647755,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-built-ins_ThrowTypeError.json",
+          "sha256": "7ee25d3f498f578c22afb07bdf48beea386414762a4395c504a43101b1d06819"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "default-language",
+        "before": {
+          "files": 24482,
+          "variants": 45283
+        },
+        "after": {
+          "files": 24482,
+          "variants": 45283
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 14490969,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-default-language.json",
+          "sha256": "f3ed8ef8b19be801a2cbb1fc17893ac9759e863ccac59816cdc1c1b2e70a296d"
+        },
+        "raw_after": {
+          "bytes": 14490969,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-default-language.json",
+          "sha256": "00943dba02db67b3e204474c3e83e4dbcaf6750951d282bb7054731f161779e2"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_AggregateError",
+        "before": {
+          "files": 25,
+          "variants": 50
+        },
+        "after": {
+          "files": 25,
+          "variants": 50
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7650816,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_AggregateError.json",
+          "sha256": "d2f914eee5ff0d42cfcf774856f6feae03e50d0191cd49c95ef5eac90af6dd14"
+        },
+        "raw_after": {
+          "bytes": 7650816,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_AggregateError.json",
+          "sha256": "7ffdff947b3bd79ee72e9f195bbb61fb7f22ee5a4901315fde837d17cb6beb28"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_Array",
+        "before": {
+          "files": 3327,
+          "variants": 6599
+        },
+        "after": {
+          "files": 3327,
+          "variants": 6599
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 8222367,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_Array.json",
+          "sha256": "11985fd81e2258fa02c797d4ec3a20b82d0ad1de35f8db4f8857c4079e88ce36"
+        },
+        "raw_after": {
+          "bytes": 8222367,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_Array.json",
+          "sha256": "af3702eb9f7543481147db8a82fb8e2ad96e160b4c693b7b550b14256968f7df"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_AsyncFunction",
+        "before": {
+          "files": 18,
+          "variants": 36
+        },
+        "after": {
+          "files": 18,
+          "variants": 36
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7648941,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_AsyncFunction.json",
+          "sha256": "1abe661f07ff920b1dce3a67042ca00d9036a420158c6b32038977ca94686806"
+        },
+        "raw_after": {
+          "bytes": 7648941,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_AsyncFunction.json",
+          "sha256": "83be4f494bfa231f9f7255ba658254aacde1cb82016b1717b851cb687abe7959"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_AsyncGeneratorFunction",
+        "before": {
+          "files": 23,
+          "variants": 46
+        },
+        "after": {
+          "files": 23,
+          "variants": 46
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7650590,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_AsyncGeneratorFunction.json",
+          "sha256": "f63a0a07523bba5150dfd12750c463c8164f9c2f9a690c5b708094aca9c59248"
+        },
+        "raw_after": {
+          "bytes": 7650590,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_AsyncGeneratorFunction.json",
+          "sha256": "9f7349ad16a9b8694ef1d904f565fe730cd0e6cf1167a90d49a1362017e603c5"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_Error",
+        "before": {
+          "files": 88,
+          "variants": 176
+        },
+        "after": {
+          "files": 88,
+          "variants": 176
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7665694,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_Error.json",
+          "sha256": "e6f363ab9efec4e100013fc476c805a710f5356fc70d36c6018f5bd01dd7840d"
+        },
+        "raw_after": {
+          "bytes": 7665694,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_Error.json",
+          "sha256": "1f26b2bae61c9d226873eb9d3d5403cd321eb9e22000e844f1534734089d1a20"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_Function",
+        "before": {
+          "files": 507,
+          "variants": 889
+        },
+        "after": {
+          "files": 507,
+          "variants": 889
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7719362,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_Function.json",
+          "sha256": "496dc18a11237a6af2edec0b301c771d9fbee4c3924e508dfe4fe6b935200535"
+        },
+        "raw_after": {
+          "bytes": 7719362,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_Function.json",
+          "sha256": "2e916c22d299a7ecab7ad0d1d3984eaa9999935359aa469f54410b01e931bd2f"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_GeneratorFunction",
+        "before": {
+          "files": 23,
+          "variants": 46
+        },
+        "after": {
+          "files": 23,
+          "variants": 46
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7649939,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_GeneratorFunction.json",
+          "sha256": "4b68d873227a6bbea8a02bdb921230ba19a579d5f2f285ff14559f710883088d"
+        },
+        "raw_after": {
+          "bytes": 7649939,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_GeneratorFunction.json",
+          "sha256": "f10fbed62617e115424eca96905f0fb5411c3d0b3d12c199972365f2f2ebebf6"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_Iterator",
+        "before": {
+          "files": 654,
+          "variants": 1308
+        },
+        "after": {
+          "files": 654,
+          "variants": 1308
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7778378,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_Iterator.json",
+          "sha256": "9c56a25d4ff20d582523a1ef6dd3b8f5ec6843b373e4d3288b96218d50528b46"
+        },
+        "raw_after": {
+          "bytes": 7778378,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_Iterator.json",
+          "sha256": "410886eb161d4a270b410a7a6d45c522abe5ede7b07d9df9e0cddbe9fc9b9ef1"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_Map",
+        "before": {
+          "files": 215,
+          "variants": 427
+        },
+        "after": {
+          "files": 215,
+          "variants": 427
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7684307,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_Map.json",
+          "sha256": "a80f7dc646e7da110e904058415f9687e5fc0b64f1ee35c7b757ed703c3983d1"
+        },
+        "raw_after": {
+          "bytes": 7684306,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_Map.json",
+          "sha256": "cae831ff17ab883a5ad10ab6f11e70cf47a80e73f3436474c46bbaaf4e16c0e8"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_NativeErrors",
+        "before": {
+          "files": 94,
+          "variants": 188
+        },
+        "after": {
+          "files": 94,
+          "variants": 188
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7660012,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_NativeErrors.json",
+          "sha256": "b48c96a683966282a363c64994adf53cbcb402cba8720cd9e35169cbd8ffb405"
+        },
+        "raw_after": {
+          "bytes": 7660012,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_NativeErrors.json",
+          "sha256": "d46dcec58f298bad7929848b8bd39bc7e732c57fb19c4285ff6633631c48a64f"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_Object",
+        "before": {
+          "files": 3413,
+          "variants": 6806
+        },
+        "after": {
+          "files": 3413,
+          "variants": 6806
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 8116333,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_Object.json",
+          "sha256": "0b6555c3fe908966079a6a472a46a434e6687ca3182e549cb7727c6a65f79f79"
+        },
+        "raw_after": {
+          "bytes": 8116333,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_Object.json",
+          "sha256": "ddec8dfde053afd167560f8b8e7c2884368c8645e2319b9dc6d6d06633080ac6"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_Promise",
+        "before": {
+          "files": 732,
+          "variants": 1458
+        },
+        "after": {
+          "files": 732,
+          "variants": 1458
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7779696,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_Promise.json",
+          "sha256": "5fc7c771739b7f62aa7c9defda297be090825effbf67f9c7774d26fe7b75d8eb"
+        },
+        "raw_after": {
+          "bytes": 7779696,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_Promise.json",
+          "sha256": "25de915c84ce2003d3483903890fdb7ad05e81a3f11afafbb72751a998b5268a"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_Proxy",
+        "before": {
+          "files": 311,
+          "variants": 607
+        },
+        "after": {
+          "files": 311,
+          "variants": 607
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7704386,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_Proxy.json",
+          "sha256": "9b255c83caa1a8d9a0fdbcc03c516b6aa5fbbcf4e0a604db7851839d25c2d369"
+        },
+        "raw_after": {
+          "bytes": 7704386,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_Proxy.json",
+          "sha256": "50049fd10aeda3028b76b2bd4b799165d8caa5a8ad6d4d1d230936982bc64621"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_Reflect",
+        "before": {
+          "files": 154,
+          "variants": 308
+        },
+        "after": {
+          "files": 154,
+          "variants": 308
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7672191,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_Reflect.json",
+          "sha256": "ba34ecdc696df75cd43cd026a5ad25f6717b042eedeca21845d6edb0555b3d8c"
+        },
+        "raw_after": {
+          "bytes": 7672191,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_Reflect.json",
+          "sha256": "0f371780c3690d3f0f1aabb2a65eab565af1df8705972e795ebce78f994dd035"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_Set",
+        "before": {
+          "files": 394,
+          "variants": 786
+        },
+        "after": {
+          "files": 394,
+          "variants": 786
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7718098,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_Set.json",
+          "sha256": "1844cadf21c4b8d07c6a0e830f08034c062c07811d51371c3ae6f3d5c15cd085"
+        },
+        "raw_after": {
+          "bytes": 7718098,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_Set.json",
+          "sha256": "d3e666ade82c2bde8b829cf6ea904a08181c28ed49a1d3b833cbb1ee28668679"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_String",
+        "before": {
+          "files": 1335,
+          "variants": 2667
+        },
+        "after": {
+          "files": 1335,
+          "variants": 2667
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7845821,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_String.json",
+          "sha256": "1269732a4344159e9b9542d5c7a4bba8be22fb26f3b1246eb2bbbee0ce086daa"
+        },
+        "raw_after": {
+          "bytes": 7845821,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_String.json",
+          "sha256": "e6c0d7da658667edf93db424fbaf6fd8f3d421ed1fa8cae685a412516709de89"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_SuppressedError",
+        "before": {
+          "files": 22,
+          "variants": 44
+        },
+        "after": {
+          "files": 22,
+          "variants": 44
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7650673,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_SuppressedError.json",
+          "sha256": "5e473a7b96324bcea44cb1d228d33da23f589a9294e291983f3799b13979931a"
+        },
+        "raw_after": {
+          "bytes": 7650674,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_SuppressedError.json",
+          "sha256": "eb53d7383a19c669b2e29371e366fdeef3f762d58739a85eb6966bf9f39ca742"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-built-ins_ThrowTypeError",
+        "before": {
+          "files": 14,
+          "variants": 28
+        },
+        "after": {
+          "files": 14,
+          "variants": 28
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 7647755,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-built-ins_ThrowTypeError.json",
+          "sha256": "95b3fd26a113f4c02eac1ad88f15b6bc50c9ae198e61de1f158f5afb778c7120"
+        },
+        "raw_after": {
+          "bytes": 7647755,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-built-ins_ThrowTypeError.json",
+          "sha256": "85800fe056e3d86d6aa4f2762fb454808873fdf61d2fd47c5d722ed451a8bf81"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      },
+      {
+        "selector": "vm-language",
+        "before": {
+          "files": 24482,
+          "variants": 45283
+        },
+        "after": {
+          "files": 24482,
+          "variants": 45283
+        },
+        "lost_files": [],
+        "lost_variants": [],
+        "gained_files": [],
+        "gained_variants": [],
+        "raw_before": {
+          "bytes": 14490969,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-before-vm-language.json",
+          "sha256": "072bd1b16c3d1344178feaccc61f17b6b434b81bb81748431fa41d52f251f68d"
+        },
+        "raw_after": {
+          "bytes": 14490969,
+          "path": "/home/user/amazing/out/js-call-resource-20261004/call-resource-published-after-vm-language.json",
+          "sha256": "965ba3da53342a4c712837d8fab8e57e9233a45f4dd8601a38a1126342fbe803"
+        },
+        "host_before": "034341399a0c52fac70ca1fcc46c01065fdd34613e5bf4dac8aceb23b4a66d1d",
+        "host_after": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+        "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+        "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+        "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+        "classification_identical": true
+      }
+    ]
+  },
+  "compact_receipts": {
+    "call-resource-published-after-default-built-ins_AggregateError.compact.json": {
+      "bytes": 4314,
+      "sha256": "5353dbc23f112897f4eb8209c7b35850a63243e4a3d55ece40ead5d4db4dba72"
+    },
+    "call-resource-published-after-default-built-ins_Array.compact.json": {
+      "bytes": 25552,
+      "sha256": "e821d2a7de71bae6c63946dcd3a41aab2d99680828ea21bf5ce8ee50b7e32c83"
+    },
+    "call-resource-published-after-default-built-ins_AsyncFunction.compact.json": {
+      "bytes": 4225,
+      "sha256": "1b86177b8a1d42d50e2f6ff2dff7c5c14413f9815d64c7f37114656216626bac"
+    },
+    "call-resource-published-after-default-built-ins_AsyncGeneratorFunction.compact.json": {
+      "bytes": 4326,
+      "sha256": "50f8e822db0ad4b6e3b2a90a15d540b4be446efea8e053e7a0b5e845a11a3adf"
+    },
+    "call-resource-published-after-default-built-ins_Error.compact.json": {
+      "bytes": 5026,
+      "sha256": "5376b74b8b703c699dd178b536c51db69258b88288577897c7fcfaf7264efa1d"
+    },
+    "call-resource-published-after-default-built-ins_Function.compact.json": {
+      "bytes": 7462,
+      "sha256": "01046c5c7116e23f0ed521a0597de28b8f2dd61f5ba34e125d4a13c01f922382"
+    },
+    "call-resource-published-after-default-built-ins_GeneratorFunction.compact.json": {
+      "bytes": 4317,
+      "sha256": "39b8cfa37fcbe15db646d5b5a3820f3cf68e3a01b20a7b07c389de56555d1614"
+    },
+    "call-resource-published-after-default-built-ins_Iterator.compact.json": {
+      "bytes": 9569,
+      "sha256": "1a3416028b16e24f83b1e4516f16cda1fb0921aea48afa7da8a318b9af61024d"
+    },
+    "call-resource-published-after-default-built-ins_Map.compact.json": {
+      "bytes": 6192,
+      "sha256": "9cfba560cbc1dc43f34bfce1fe307165256c036d2c794b3402c056726d84f0a8"
+    },
+    "call-resource-published-after-default-built-ins_NativeErrors.compact.json": {
+      "bytes": 4720,
+      "sha256": "5a3c9f808bb3b5867eae06a4965511b07b1032b84b94a3aa6d111207f6760a02"
+    },
+    "call-resource-published-after-default-built-ins_Object.compact.json": {
+      "bytes": 22740,
+      "sha256": "7540eeb23b3e308781f8f0a1e1f752c277be3518578fd96b0b0a031afea28c79"
+    },
+    "call-resource-published-after-default-built-ins_Promise.compact.json": {
+      "bytes": 9752,
+      "sha256": "2a1a812a37d5068f081a9950b0c0cdd37fe707a43922b4b2c0153fbe44fbb27c"
+    },
+    "call-resource-published-after-default-built-ins_Proxy.compact.json": {
+      "bytes": 6918,
+      "sha256": "21bd767c808f23cd780c8ef353bca5b766591f33bd920439e4f887289768c07f"
+    },
+    "call-resource-published-after-default-built-ins_Reflect.compact.json": {
+      "bytes": 5592,
+      "sha256": "b1244903c518150d633de44df4a1c81abc6389100bea0d5912bba60491942a8e"
+    },
+    "call-resource-published-after-default-built-ins_Set.compact.json": {
+      "bytes": 7488,
+      "sha256": "87a5557c56ae1df77b173ad388167ccd01c95268458f424a8ab3360ccc7423f2"
+    },
+    "call-resource-published-after-default-built-ins_String.compact.json": {
+      "bytes": 13996,
+      "sha256": "d4a65e55945846e446003b22fb2843db0c07cad8ea014309020ec2b6981eba1f"
+    },
+    "call-resource-published-after-default-built-ins_SuppressedError.compact.json": {
+      "bytes": 4279,
+      "sha256": "793b96b39673bf5362d41349d83f39d463506dd7538e9ba3abe0d307b187a733"
+    },
+    "call-resource-published-after-default-built-ins_ThrowTypeError.compact.json": {
+      "bytes": 4218,
+      "sha256": "a638f6686cc8203ac644232e82a133252419f3d40e81997436045b766e13ca4c"
+    },
+    "call-resource-published-after-default-language.compact.json": {
+      "bytes": 178053,
+      "sha256": "b6d70226cb31cac8e9214eb2077cc42fabb1eb7ad61175d5af94ebbc7e9c90b9"
+    },
+    "call-resource-published-after-doctests.phase.manifest.json": {
+      "bytes": 1354,
+      "sha256": "e3cf5b36f5cc5a5d341cbfaa90b821613a86f9859ec2543b932d91deed111ece"
+    },
+    "call-resource-published-after-minimum-stack-release.phase.manifest.json": {
+      "bytes": 2369,
+      "sha256": "6fbfce9e4e3f5587fe4201b23963372639bc43ee937e49e9e2f2f9f0feef5d36"
+    },
+    "call-resource-published-after-nextest.phase.manifest.json": {
+      "bytes": 1612,
+      "sha256": "f4668acc6f6f1f378b05f1873b6947ea6bc3ab3eafba9214c3f452a0162816a7"
+    },
+    "call-resource-published-after-release.phase.manifest.json": {
+      "bytes": 1681,
+      "sha256": "0cbd991c1d0a53fd76c8ef4fa966ec78f9c46628cb2f8e0e5687f9dd9b9bb9f1"
+    },
+    "call-resource-published-after-terminal.manifest.json": {
+      "bytes": 6907,
+      "sha256": "87dfb1496e3df1edc382919a96cbfe79913b7baca658fa39b8a4fd5160fd4788"
+    },
+    "call-resource-published-after-vm-built-ins_AggregateError.compact.json": {
+      "bytes": 4309,
+      "sha256": "9a22c8bcf2fbf3f8b4302c811f293aac272fd0f1eb35b2a20762a8adb9a72bd2"
+    },
+    "call-resource-published-after-vm-built-ins_Array.compact.json": {
+      "bytes": 25547,
+      "sha256": "538e0714c18b9d97b7c6cc521d128dfb933516e6bd2660d4c2e046350be75b9b"
+    },
+    "call-resource-published-after-vm-built-ins_AsyncFunction.compact.json": {
+      "bytes": 4220,
+      "sha256": "6c5b2c6eeae26160f5d9e4071997a963bb4b8ee1bfa43213fc6c9c519337ad05"
+    },
+    "call-resource-published-after-vm-built-ins_AsyncGeneratorFunction.compact.json": {
+      "bytes": 4321,
+      "sha256": "246e6ebbf3386acb4d85798fea801d3e78f991fdd85bf2d7ad015f38185a6030"
+    },
+    "call-resource-published-after-vm-built-ins_Error.compact.json": {
+      "bytes": 5021,
+      "sha256": "2e07bd3f777fffdc173be42feb353b44ab2196989a71b630efd543e8a81a79d9"
+    },
+    "call-resource-published-after-vm-built-ins_Function.compact.json": {
+      "bytes": 7457,
+      "sha256": "ee3ba80994a3c18713be685ffe29f059420f7560eeb9d4c34bfe32c103b69e8c"
+    },
+    "call-resource-published-after-vm-built-ins_GeneratorFunction.compact.json": {
+      "bytes": 4312,
+      "sha256": "daa89e9f99a8887a19af16dda2b66caa99fcc20f1b151959a5c3a18e160c3a32"
+    },
+    "call-resource-published-after-vm-built-ins_Iterator.compact.json": {
+      "bytes": 9564,
+      "sha256": "49b6bf31ef2a88c7e4c2db0a75156f359ecd40dd583a21a10df0c91764f41df7"
+    },
+    "call-resource-published-after-vm-built-ins_Map.compact.json": {
+      "bytes": 6187,
+      "sha256": "c7f49babfa6753fe6cf7f042b3c78c04472670733f901a12e35d594fc74f8b6a"
+    },
+    "call-resource-published-after-vm-built-ins_NativeErrors.compact.json": {
+      "bytes": 4715,
+      "sha256": "0152051644cb0f0c6b9b89e0dded82716be295d213020d986b5a0ec5a3e9a471"
+    },
+    "call-resource-published-after-vm-built-ins_Object.compact.json": {
+      "bytes": 22735,
+      "sha256": "402ff824f4fa251f0b558004b9ac945cf26843d7d9216ccb8bfbcf37d762c03c"
+    },
+    "call-resource-published-after-vm-built-ins_Promise.compact.json": {
+      "bytes": 9747,
+      "sha256": "e72cdd648459c9bc79b1c74a7e6c955452fdcde48c17451b0b545338479f6f69"
+    },
+    "call-resource-published-after-vm-built-ins_Proxy.compact.json": {
+      "bytes": 6913,
+      "sha256": "e4d5bd913c65478cdf5a0456aa8b3fd680c2adfc244fbecd069d39619e12fdbb"
+    },
+    "call-resource-published-after-vm-built-ins_Reflect.compact.json": {
+      "bytes": 5587,
+      "sha256": "70bfafdc5ed2c5c749bb62b7f7889179ab28659929f06bf604feaf936940eead"
+    },
+    "call-resource-published-after-vm-built-ins_Set.compact.json": {
+      "bytes": 7483,
+      "sha256": "24237284bed0eb14fe441df456170654b7ad94c851d54761cb26f3281091369b"
+    },
+    "call-resource-published-after-vm-built-ins_String.compact.json": {
+      "bytes": 13991,
+      "sha256": "8b7db4a9d832d8827e3e04bf8b43f17d588320899a7177b2c11304d509c480e4"
+    },
+    "call-resource-published-after-vm-built-ins_SuppressedError.compact.json": {
+      "bytes": 4274,
+      "sha256": "2d8290b22544afe3599de8d4d1a676bab09582bf49b10d6d805dab8691048ecc"
+    },
+    "call-resource-published-after-vm-built-ins_ThrowTypeError.compact.json": {
+      "bytes": 4213,
+      "sha256": "4ac8ecf4fd36aa3d672c39d7b97acfe0a5b34f5e920bdc6f0ad70e271c011243"
+    },
+    "call-resource-published-after-vm-language.compact.json": {
+      "bytes": 178048,
+      "sha256": "9cb76e7ebacc0df10dbae993467a84e62d039e4b289df1d2e28b70924d22a230"
+    },
+    "call-resource-published-after-workspace.manifest.json": {
+      "bytes": 6678,
+      "sha256": "75acbad9d279721ae3ac592dea6eb85c2a028201eb41386db54e355dcfe5baf3"
+    },
+    "call-resource-published-before-default-built-ins_AggregateError.compact.json": {
+      "bytes": 4315,
+      "sha256": "00d07537fbe6beb755c01ed0da76396824a4b6c8968f88ede0f8b54cc8e8b8a5"
+    },
+    "call-resource-published-before-default-built-ins_Array.compact.json": {
+      "bytes": 25553,
+      "sha256": "4f64bc6ff21dc7ccb7bcdc1f232c985f527adbf49d95c5c2d30a987b3158cd86"
+    },
+    "call-resource-published-before-default-built-ins_AsyncFunction.compact.json": {
+      "bytes": 4226,
+      "sha256": "ddc273db089723809eb9bc2885896d439165f90c4d290afbcf91ca2564d559ae"
+    },
+    "call-resource-published-before-default-built-ins_AsyncGeneratorFunction.compact.json": {
+      "bytes": 4327,
+      "sha256": "f3cf2867dadcc02c671e741397c3d2b070aabd92d1113e97430434634cdcea2a"
+    },
+    "call-resource-published-before-default-built-ins_Error.compact.json": {
+      "bytes": 5027,
+      "sha256": "2430d06b8d0d0a908f1fcf57db574facdef6e630472e17213a3b2253cb0c1196"
+    },
+    "call-resource-published-before-default-built-ins_Function.compact.json": {
+      "bytes": 7463,
+      "sha256": "04926d022f08382feee61274cfaf0fc09309ee4936f08ae87e4d974e08838e92"
+    },
+    "call-resource-published-before-default-built-ins_GeneratorFunction.compact.json": {
+      "bytes": 4318,
+      "sha256": "034a755fbd9db2bacb9bd18904792a8b54d9bd5096295ff0916debb666bb342c"
+    },
+    "call-resource-published-before-default-built-ins_Iterator.compact.json": {
+      "bytes": 9570,
+      "sha256": "f1f01bea51f84f5352ac082aceb454e0a7874d0eac3e2941d7b40a9db7ea9e70"
+    },
+    "call-resource-published-before-default-built-ins_Map.compact.json": {
+      "bytes": 6193,
+      "sha256": "441c5a81acc71c1cc4886d2d2b84dd5d9bba61d5e467ba934bdf7eb3959a6002"
+    },
+    "call-resource-published-before-default-built-ins_NativeErrors.compact.json": {
+      "bytes": 4721,
+      "sha256": "bed6552307525701891fbd2a08c53c0e552ae2f4f4b481f8030b21175b397cc2"
+    },
+    "call-resource-published-before-default-built-ins_Object.compact.json": {
+      "bytes": 22741,
+      "sha256": "90c3f5465a00e418119cfcd3da59062a984aef63cdb4ef8cabca231e10f94d7d"
+    },
+    "call-resource-published-before-default-built-ins_Promise.compact.json": {
+      "bytes": 9753,
+      "sha256": "20e92daa9da32f9a417bdc03d13eca4ceda002101be6b632623ff0fc73c62873"
+    },
+    "call-resource-published-before-default-built-ins_Proxy.compact.json": {
+      "bytes": 6919,
+      "sha256": "46d6d43698682d69c8623c3a9c7e50dbf37b9ac44150d1b6758ab5223e57fc47"
+    },
+    "call-resource-published-before-default-built-ins_Reflect.compact.json": {
+      "bytes": 5593,
+      "sha256": "d74b12545b76fd524e249be10870fb54f621a904acf740ca37b3745cf1c3e59a"
+    },
+    "call-resource-published-before-default-built-ins_Set.compact.json": {
+      "bytes": 7489,
+      "sha256": "65a55745204212b1a966a151cc6781b40589603cce6d61487132d4750191638d"
+    },
+    "call-resource-published-before-default-built-ins_String.compact.json": {
+      "bytes": 13997,
+      "sha256": "6ec5cb76108234f0656865dcadf4b1d4e800fbf4faceb7fc28d9a277a51f4c02"
+    },
+    "call-resource-published-before-default-built-ins_SuppressedError.compact.json": {
+      "bytes": 4280,
+      "sha256": "4a0eda6fb2ccc2620c712cf0a3988210a9676dae52dd811cbaac804bd7297f91"
+    },
+    "call-resource-published-before-default-built-ins_ThrowTypeError.compact.json": {
+      "bytes": 4219,
+      "sha256": "a3b220089a324fcbda5459d5fd20d2ddb84345a784f0ae9d591ebf1f1c6a5899"
+    },
+    "call-resource-published-before-default-language.compact.json": {
+      "bytes": 178054,
+      "sha256": "e0809ad38af2059bd71f816011354087e0d04e45ad1ee2565fa92cd067a98584"
+    },
+    "call-resource-published-before-doctests.phase.manifest.json": {
+      "bytes": 1356,
+      "sha256": "eff0d2b675a8eabb37009cec1e9cb07a3e0e3c628bca6b132b6785fa2f6acf57"
+    },
+    "call-resource-published-before-nextest.phase.manifest.json": {
+      "bytes": 1616,
+      "sha256": "ec2d9f453bb0868d661bfea1eeb3ffe5764ad67758842909c96e3485332baa42"
+    },
+    "call-resource-published-before-release.phase.manifest.json": {
+      "bytes": 1684,
+      "sha256": "d8e46c7ade90044f9aabdc861da9d6660593076bee4d8cf33ef348d71a6274b4"
+    },
+    "call-resource-published-before-terminal.manifest.json": {
+      "bytes": 6890,
+      "sha256": "187ac730a04d9870ce8587c38ae7f1df3e2fde73c5a434ef7c2725a3de0bea79"
+    },
+    "call-resource-published-before-vm-built-ins_AggregateError.compact.json": {
+      "bytes": 4310,
+      "sha256": "b7280fd2e51eab9eb1d0c2d9ff3583c9a4c5317e51cd5d559e7730981e5f43ba"
+    },
+    "call-resource-published-before-vm-built-ins_Array.compact.json": {
+      "bytes": 25548,
+      "sha256": "83cfcb916f78f7815f1a98324aa2c29e4a09d7ed7f56ececf60a2430bdbb2f59"
+    },
+    "call-resource-published-before-vm-built-ins_AsyncFunction.compact.json": {
+      "bytes": 4221,
+      "sha256": "5bfb34979679dd3ee3b5d9a01f391f93389c0ca8abc98b796b00019ac9b60574"
+    },
+    "call-resource-published-before-vm-built-ins_AsyncGeneratorFunction.compact.json": {
+      "bytes": 4322,
+      "sha256": "791bb3812fc433a6577efe2ddbbe44e9b581da5cbc7013fa5122a12df8a25a5e"
+    },
+    "call-resource-published-before-vm-built-ins_Error.compact.json": {
+      "bytes": 5022,
+      "sha256": "e534e307e4388a1529fd25b4e27dab258cecbbb2dde4239381fe2b77ef5da8fc"
+    },
+    "call-resource-published-before-vm-built-ins_Function.compact.json": {
+      "bytes": 7458,
+      "sha256": "cffb104452b4d94600f3b208abeb3742656f1346cd1aabe1f00c087012b4c8f8"
+    },
+    "call-resource-published-before-vm-built-ins_GeneratorFunction.compact.json": {
+      "bytes": 4313,
+      "sha256": "005482396f6aac086ed921c462ba58a803142de3344d84a291502345d8042289"
+    },
+    "call-resource-published-before-vm-built-ins_Iterator.compact.json": {
+      "bytes": 9565,
+      "sha256": "c6a3f75d5e40f5c6400ee1e8f732843d05e70fa64ae156ef8be1279956124f29"
+    },
+    "call-resource-published-before-vm-built-ins_Map.compact.json": {
+      "bytes": 6188,
+      "sha256": "57f9f0b4133e0f6baa08c3c35eb780409da8b457308f568b2538c68d70b11f4b"
+    },
+    "call-resource-published-before-vm-built-ins_NativeErrors.compact.json": {
+      "bytes": 4716,
+      "sha256": "afc50a61918a0080c6848e75a4e4f8cce4a05b26216a2008010634f927c5b69a"
+    },
+    "call-resource-published-before-vm-built-ins_Object.compact.json": {
+      "bytes": 22736,
+      "sha256": "af38fa5636dea1330bc42c881112fe4d4e021d783a1a836e5f5db127f50f8a32"
+    },
+    "call-resource-published-before-vm-built-ins_Promise.compact.json": {
+      "bytes": 9748,
+      "sha256": "eb10f3e43724fac38fb03d213a1312c5d7988cceb4fb6244f13d5ab582db6909"
+    },
+    "call-resource-published-before-vm-built-ins_Proxy.compact.json": {
+      "bytes": 6914,
+      "sha256": "e64e19224a6c000383017644eedb91bd23eb21e310b6d180a5a6e2a84cf7e1a7"
+    },
+    "call-resource-published-before-vm-built-ins_Reflect.compact.json": {
+      "bytes": 5588,
+      "sha256": "2f9686c8db791daa1a8cf6a99404a1a6da1fd2b6356fb2182b1a8994e02e8b49"
+    },
+    "call-resource-published-before-vm-built-ins_Set.compact.json": {
+      "bytes": 7484,
+      "sha256": "b3ae3102909a8e781f41633a8ad381cf43b3b24ee28a227168969951033fd0cd"
+    },
+    "call-resource-published-before-vm-built-ins_String.compact.json": {
+      "bytes": 13992,
+      "sha256": "c9eb7815017a88f460e27829b90f0cddc784eb9dfa53077064896eed723d92ce"
+    },
+    "call-resource-published-before-vm-built-ins_SuppressedError.compact.json": {
+      "bytes": 4275,
+      "sha256": "87441a2867a99fbc42f0a3db0a0c280799f7b43ff8a894755d7927d4c9be9652"
+    },
+    "call-resource-published-before-vm-built-ins_ThrowTypeError.compact.json": {
+      "bytes": 4214,
+      "sha256": "3c10d9ca01bad25a9e7a2ef2ddb25e68cafb154457072ebbe0d5fea915777fb8"
+    },
+    "call-resource-published-before-vm-language.compact.json": {
+      "bytes": 178049,
+      "sha256": "05b15670ae9ad7a090a147d23004ef39abc4633797560d3f9d728aef725bf51e"
+    },
+    "call-resource-published-before-workspace.manifest.json": {
+      "bytes": 6686,
+      "sha256": "23d34596e239fadf6486f9dc0546cea4eb708b0188e33dc47ab505401859c399"
+    }
+  },
+  "raw_custody": "Full logs/reports remain on Boat at recorded native paths and /home/user/amazing/out/js-call-resource-20261004/call-resource-published-{before,after}-*; no raw download or retrospective platform claim."
+}
