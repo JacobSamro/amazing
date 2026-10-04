@@ -1,6 +1,7 @@
 //! CLI command families.
 pub(crate) mod gpu;
 pub(crate) mod js;
+pub(crate) mod html5lib_tree;
 pub(crate) mod launch;
 pub(crate) mod net;
 pub(crate) mod parse;

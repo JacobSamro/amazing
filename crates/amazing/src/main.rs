@@ -94,6 +94,7 @@ fn main() -> ExitCode {
             println!("dom: arena skeleton present (u32 indices, no Rc<RefCell>)");
             ExitCode::SUCCESS
         }
+        Some("html5lib-tree") => cmd::html5lib_tree::cmd_html5lib_tree(&args[2..]),
         Some("parse") => cmd::parse::cmd_parse(args.get(2).map(String::as_str)),
         Some("parse-fragment") => match args.get(2) {
             Some(context) => cmd::parse::cmd_parse_fragment(context, args.get(3).map(String::as_str)),
@@ -140,7 +141,7 @@ fn main() -> ExitCode {
         Some(other) => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|render-wpt <page.html> <out.ppm> <width> <height>|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|h264-rtp-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|sdp-browser-answer <offer.sdp>|browser-peer [http-port]|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]|devtools <url> [listen-addr]]"
+                "usage: amazing [version|html5lib-tree <enabled|disabled> <static|execute> [fragment-context]|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|render-wpt <page.html> <out.ppm> <width> <height>|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|h264-rtp-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|sdp-browser-answer <offer.sdp>|browser-peer [http-port]|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]|devtools <url> [listen-addr]]"
             );
             ExitCode::FAILURE
         }

@@ -1,0 +1,161 @@
+{
+  "fixed_base": "601d78162b8075b5f0b40682cf245c472e4a8bc8",
+  "gated_source": "5941359078f5ed5d2773bd50151e4cd2662179d9",
+  "source_files": {
+    "crates/amazing-html/evidence/html45/run.py": "a8e4029c76c28261b9ba8a091b236b744e399ecb452661d98632c1d036eac4c5",
+    "crates/amazing/src/cmd/html5lib_tree.rs": "7aef0edfb6b932bd3efc618e034ad2b42a3d2b25e51c617a3784cb38eab1eba1",
+    "crates/amazing/src/cmd/mod.rs": "1d2f729fddd94041e62404774b4a4b323510d97643869406610a1b78c49c0a39",
+    "crates/amazing/src/main.rs": "b5227e320a60bd007b0f46b4ad1bb16448dcd8f5f7a755ddd8532b04fa206148"
+  },
+  "remote_alias": "js-date",
+  "profile": {
+    "ordinary_ms": 25000,
+    "serialized_heavy_ms": 150000,
+    "shadow_actual_META_long_ms": 600000,
+    "encoding_ordinary_ms": 10000,
+    "encoding_actual_META_long_ms": 60000,
+    "modules_ms": 5000
+  },
+  "wrapper_exits": {
+    "before": 0,
+    "after": 0
+  },
+  "command_sha256": {
+    "before": "1199bf1f95a89846a2e2cdbde395741fb0de336170bc453ebe1f2b818c953e65",
+    "after": "35df6328af33ecc06442e625f99e71e203debb9a5e8e181889bf1db6d1290add"
+  },
+  "helper_sha256": "65f8dc911753794394b02bdda3193d4b0a141a0ced430ad665f6a02b4642ebc4",
+  "native": {
+    "before": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4561,
+        "skipped": 17
+      }
+    },
+    "after": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4564,
+        "skipped": 17
+      }
+    }
+  },
+  "corpora": {
+    "base-url": {
+      "after": 2,
+      "before": 2,
+      "files": 11
+    },
+    "core": {
+      "after": 92838,
+      "before": 92838,
+      "files": 888
+    },
+    "cssom": {
+      "after": 1772,
+      "before": 1772,
+      "files": 192
+    },
+    "encoding": {
+      "after": 12357,
+      "before": 12357,
+      "files": 194
+    },
+    "modules": {
+      "after": 145,
+      "before": 145,
+      "files": 111
+    },
+    "shadow": {
+      "after": 5681,
+      "before": 5681,
+      "files": 277
+    },
+    "syntax": {
+      "after": 3216,
+      "before": 3216,
+      "files": 220
+    },
+    "syntax72": {
+      "after": 2708,
+      "before": 2708,
+      "files": 72
+    },
+    "the-base-element": {
+      "after": 15,
+      "before": 15,
+      "files": 11
+    },
+    "the-history-interface": {
+      "after": 13,
+      "before": 13,
+      "files": 74
+    },
+    "the-iframe-element": {
+      "after": 28,
+      "before": 28,
+      "files": 150
+    },
+    "the-window-object": {
+      "after": 253,
+      "before": 253,
+      "files": 90
+    },
+    "the-windowproxy-exotic-object": {
+      "after": 14,
+      "before": 14,
+      "files": 8
+    },
+    "windows": {
+      "after": 4,
+      "before": 4,
+      "files": 53
+    }
+  },
+  "zero_passing_counter_and_file_losses": true,
+  "scope": "complete six scripted html5lib embedding cases; static parser/expected comparison unchanged; no external/module fetch",
+  "trees": {
+    "after_passed": 1930,
+    "before_passed": 1930,
+    "lost": [],
+    "raw_after": {
+      "bytes": 183082,
+      "path": "/home/user/amazing/out/js-date/html-scripted-tree-probe-after-5941359078f5ed5d2773bd50151e4cd2662179d9/trees.json",
+      "sha256": "fd1ab07a655bb7814b181a310cf2a9d6d3cd9f12de3b6862b82257cd677cc888"
+    },
+    "raw_before": {
+      "bytes": 183082,
+      "path": "/home/user/amazing/out/js-date/html-scripted-tree-probe-before-601d78162b8075b5f0b40682cf245c472e4a8bc8/trees.json",
+      "sha256": "fd1ab07a655bb7814b181a310cf2a9d6d3cd9f12de3b6862b82257cd677cc888"
+    },
+    "unsupported": 6
+  },
+  "executed_tree_after": {
+    "passed": 1936,
+    "unsupported": 0,
+    "new_passing_ids": [
+      "scripted_adoption01.dat:1",
+      "scripted_ark.dat:1",
+      "scripted_foster01.dat:1",
+      "scripted_foster01.dat:2",
+      "scripted_webkit01.dat:1",
+      "scripted_webkit01.dat:2"
+    ],
+    "raw": {
+      "bytes": 182656,
+      "path": "/home/user/amazing/out/js-date/html-scripted-tree-probe-after-5941359078f5ed5d2773bd50151e4cd2662179d9/executed-trees.json",
+      "sha256": "5e80fc40123ad87af7b3edab971e20df27bb77e491799c52941ff77ae0f1bfab"
+    }
+  }
+}

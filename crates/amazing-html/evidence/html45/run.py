@@ -12,6 +12,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("corpus", type=Path)
 parser.add_argument("--binary", type=Path, required=True)
 parser.add_argument("--output", type=Path, required=True)
+parser.add_argument("--execute-binary", type=Path, help="Installed driver scripted-tree probe; static parser observations remain unchanged")
 args = parser.parse_args()
 repo = Path(__file__).resolve().parents[4]
 spec = importlib.util.spec_from_file_location("html5lib", repo / "scripts/html5lib.py")
@@ -29,8 +30,10 @@ for path in sorted(resources.glob("*.dat")):
         mode = "disabled" if "#script-off" in blocks[case.index - 1].split("#document\n", 1)[0] else "enabled"
         command = [str(args.binary), mode]
         if case.source_file.startswith("scripted_") and mode == "enabled":
-            records.append({"id": f"{case.source_file}:{case.index}", "status": "unsupported", "mode": mode, "script_variant": True, "reason": "requires JavaScript execution by an embedding host"})
-            continue
+            if args.execute_binary is None:
+                records.append({"id": f"{case.source_file}:{case.index}", "status": "unsupported", "mode": mode, "script_variant": True, "reason": "requires JavaScript execution by an embedding host"})
+                continue
+            command = [str(args.execute_binary), "html5lib-tree", mode, "execute"]
         if case.context:
             command.append(case.context)
         process = subprocess.run(command, input=case.data, text=True, encoding="utf-8", capture_output=True, timeout=10)
