@@ -49,7 +49,7 @@ def compact(source, destination, exit_code, commit):
               'host_sha256', 'runner_sha256', 'timeout_seconds', 'classification_sha256')}
     result.update(schema=2, source_commit=commit, job_exit=0, discovered=len(paths),
                   paths_sha256=hashlib.sha256(json.dumps(paths, separators=(',', ':')).encode()).hexdigest(),
-                  runner_exit=exit_code, raw=raw(source),
+                  runner_exit=exit_code, phase_exits={'build': 0, 'runner': exit_code, 'packaging': 0}, raw=raw(source),
                   summary={'files': dict(collections.Counter(r['status'] for r in records))},
                   compact_records=base64.b64encode(zlib.compress(
                       json.dumps(records, separators=(',', ':')).encode(), 9)).decode())
@@ -79,6 +79,10 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     t = sub.add_parser('test262')
     t.add_argument('--source-commit', default=''); t.add_argument('source'); t.add_argument('destination'); t.add_argument('exit', type=int)
+    f = sub.add_parser('failure')
+    f.add_argument('--source-commit', required=True); f.add_argument('--shard', required=True)
+    f.add_argument('destination'); f.add_argument('phase'); f.add_argument('exit', type=int)
+    f.add_argument('files', nargs='*')
     m = sub.add_parser('manifest')
     m.add_argument('--source-commit', default=''); m.add_argument('--phase', action='append', default=[]); m.add_argument('destination'); m.add_argument('exit', type=int); m.add_argument('files', nargs='+')
     args = parser.parse_args()
@@ -86,6 +90,12 @@ def main():
         if args.exit not in (0, 1):
             raise ValueError('runner did not complete normally')
         compact(args.source, args.destination, args.exit, args.source_commit)
+    elif args.command == 'failure':
+        write(args.destination, {'schema': 1, 'source_commit': args.source_commit,
+                                'shard': args.shard, 'phase': args.phase, 'actual_exit': args.exit,
+                                'raw': [raw(p) if pathlib.Path(p).is_file() else
+                                        {'path': str(pathlib.Path(p).resolve()), 'missing': True}
+                                        for p in args.files]})
     else:
         write(args.destination, {'schema': 1, 'source_commit': args.source_commit, 'job_exit': args.exit,
                                 'phase_exits': {name: int(code) for name, code in (p.split('=', 1) for p in args.phase)},

@@ -166,7 +166,7 @@ PY
     }
     echo "linux-run[$LANE]: guarded mission transport $MISSION_SHA256" >&2
   else
-    git -C "$MAIN" archive "$COMMIT" | tar x -C "$SRC" || exit 2
+    python3 "$REPO/scripts/gate-source.py" "$MAIN" "$COMMIT" "$SRC" || exit 2
   fi
   echo "linux-run[$LANE]: $HOST at $REF ($COMMIT)" >&2
 else

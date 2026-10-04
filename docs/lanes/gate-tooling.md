@@ -38,3 +38,23 @@ and invokes it through Bash from both supported callers, making invocation
 independent of checkout mode handling. Nextest counts accept the optional slow
 annotation. This observation does not qualify the failed gate; the owner will
 perform one clean rerun. The running Test262 job was not changed or restarted.
+
+## Phase failure diagnosis and source sync
+
+Follow-up base: `2f80eb4d224c2a2d5236987df104154e73b83730`.
+Test262's remote EXIT trap publishes a small failure manifest naming the setup,
+build, runner or packaging phase and its actual exit. It includes hashes and
+remote paths for available raw operands, and explicitly marks absent operands.
+The supported wrapper waits for the job, then fetches that manifest on failure;
+missing diagnostics do not erase the failed wrapper status. Runner exits 0/1
+remain measured conformance results; abnormal exits fail the job. No original
+live job or raw artifact is recovered or changed.
+
+Exact-ref source transport now excludes only historical evidence JSONL and
+oversized evidence output formats. Source, fixture/testdata/test directories,
+TSV files and literal Rust include targets are preserved. Git archive excludes
+those objects before extraction and transfer. A short sync summary records
+omitted bytes/count/path-list hash. There is no new gate protocol or retry loop.
+
+Shell syntax, Python AST and whitespace checks passed. Runtime verification
+belongs to the single supported clean rerun after the original gate terminates.

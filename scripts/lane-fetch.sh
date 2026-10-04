@@ -8,7 +8,7 @@ LANE="${1:?lane}"; DEST="${2:?destination}"; shift 2
 [ "$#" -gt 0 ] || { echo 'lane-fetch: explicit compact paths required' >&2; exit 2; }
 # No globs/recursive pulls or raw artifact escape hatch.
 for src in "$@"; do
-  [[ "$src" =~ ^[a-zA-Z0-9_./-]*/([a-zA-Z0-9_-]+\.)?(compact|summary|manifest)\.json$ ]] || {
+  [[ "$src" =~ ^[a-zA-Z0-9_./-]*/([a-zA-Z0-9_.-]+\.)?(compact|summary|manifest)\.json$ ]] || {
     echo "lane-fetch: only explicit compact/summary/manifest JSON paths are allowed" >&2; exit 2;
   }
 done
