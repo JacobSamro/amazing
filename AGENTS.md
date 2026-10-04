@@ -33,6 +33,29 @@ Speed comes from doing a lot per cycle, not from many small cycles.
   licensed Rust engine, port the algorithm instead of re-deriving it. See "Porting from other
   engines" below.
 
+## Evidence policy (2026-10-04, user-approved)
+
+On 2026-10-03 lanes committed 174 MB of evidence in one day against about 10 MB of code, mostly
+raw `before.jsonl`/`after.jsonl` dumps of about 4 MB each. `.git` is shared by every lane and
+clone, and history is never rewritten, so every committed byte is permanent.
+
+- **Commit compact evidence only.** Per gate, commit at most:
+  - a `compact.json` mapping test id to classification (`--compact` for render sweeps), or a
+    pass-set listing;
+  - the counts (pass, fail, timeout, gained, lost);
+  - the lost list (it should be empty) and the gained list;
+  - the sha256 of each raw result file;
+  - the source and base commits.
+- **Raw dumps stay on the build host,** under `$OUT`. This covers per-test `report.json`,
+  `before/after.jsonl`, logs, renders, PPM/PNG diffs and full Test262 result JSON. Record their
+  sha256 and host path in the compact file, so a gate can be re-checked without the bytes.
+- **Size limit: 512 KB per evidence file, 2 MB per ticket.** Anything larger needs a note in
+  `questions.md` saying why, and the integrator decides before merging.
+- **Evidence never comes at the expense of honesty.** Smaller files must keep exact
+  counts, every lost id, and enough hashes to prove which binary and corpus produced them.
+- **Integrator:** check `git diff --stat <base> <lane-branch> -- '*/evidence/*' docs/lanes/`
+  before every merge, and send back any branch that exceeds the limit.
+
 ## Porting from other engines (2026-09-27, user-approved, ADR 0013)
 
 Amazing stays our own architecture (value model, VM, bindings) and std-only in the engine cores,
