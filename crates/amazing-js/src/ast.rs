@@ -507,8 +507,33 @@ pub enum ExprKind {
     },
 }
 
+/// Identity of one parsed template site. Cloning an AST preserves identity,
+/// while semantic AST comparisons continue to compare only syntax.
+#[derive(Clone, Copy)]
+pub struct TemplateSite(u64);
+
+impl TemplateSite {
+    pub(crate) fn new() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        Self(NEXT.fetch_update(std::sync::atomic::Ordering::Relaxed,
+            std::sync::atomic::Ordering::Relaxed, |value| value.checked_add(1))
+            .expect("template site identity exhausted"))
+    }
+    pub(crate) fn key(self) -> u64 { self.0 }
+}
+impl PartialEq for TemplateSite {
+    fn eq(&self, _: &Self) -> bool { true }
+}
+impl Eq for TemplateSite {}
+impl std::fmt::Debug for TemplateSite {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TemplateSite")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TemplateLit {
+    pub site: TemplateSite,
     /// Cooked quasi strings; always exactly one more quasi than `exprs`
     /// (empty leading/trailing quasis included).
     pub quasis: Vec<String>,

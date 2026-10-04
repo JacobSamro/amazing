@@ -34,6 +34,8 @@ mod tests_calls;
 mod tests_chains;
 #[cfg(test)]
 mod tests_super_reads;
+#[cfg(test)]
+mod tests_templates;
 
 use super::{callable_function, for_iteration_env, new_promise, perform_promise_then, promise_resolving_functions, reference_name, settle_promise, Interpreter, Reference};
 use crate::ast::{BinOp, ForLeft, UnOp, VarKind};
@@ -225,6 +227,7 @@ enum Instruction {
     SetArrayLengthFrom(Register, Register),
     CaptureSpread(usize, Register),
     TemplateAppend(Register, Vec<u16>, Option<Register>),
+    TemplateObject(Register, Rc<crate::ast::TemplateLit>),
     Declare(String, Register, VarKind),
     ReserveBinding(String, bool),
     NamedEvaluation(Register, Rc<crate::ast::Expr>, String),
@@ -1037,6 +1040,9 @@ impl Program {
                     }
                     Instruction::CaptureSpread(slot, source) => {
                         spreads[*slot] = Some(i.iterate(&registers[*source])?);
+                    }
+                    Instruction::TemplateObject(dst, template) => {
+                        registers[*dst] = i.get_template_object(template.as_ref())?;
                     }
                     Instruction::TemplateAppend(dst, quasi, expression) => {
                         let mut units = registers[*dst].as_str().expect("template accumulator").units().to_vec();

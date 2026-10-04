@@ -27,6 +27,8 @@ mod completions;
 mod chains;
 #[path = "compiler_classes.rs"]
 mod classes;
+#[path = "compiler_templates.rs"]
+mod templates;
 use completions::CompletionBoundary;
 
 const MAX_REGISTERS: usize = 65_536;
@@ -1371,6 +1373,9 @@ impl Compiler {
                         .unwrap_or_else(|| quasi.encode_utf16().collect());
                     self.emit(Instruction::TemplateAppend(dst, units, expression));
                 }
+            }
+            ExprKind::TaggedTemplate { tag, template } => {
+                self.tagged_template(dst, tag, template, expression.span)?;
             }
             ExprKind::Function(function) => {
                 let code = self.compile_function(function, expression.span)?;

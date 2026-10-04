@@ -1,6 +1,9 @@
 // ForIn head initializer ordering adapted from boa-dev/boa
 // (core/engine/src/bytecompiler/statement/loop.rs::compile_for_in_loop)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// GetTemplateObject registry/cache algorithm adapted from lucid-softworks/lumen
+// (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
+// Stable parse-site tokens replace upstream pointer identity; UTF-16 values and realms remain Amazing-owned.
 // Synchronous ForIn/OfBodyEvaluation adapted from lucid-softworks/lumen
 // (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/error/{mod,aggregate,type}.rs)
@@ -89,13 +92,6 @@ fn push_blocked(blocked: &mut Vec<String>, added: Vec<String>) -> usize {
     pushed
 }
 
-thread_local! {
-    /// 13.2.8.1 GetTemplateObject's per-realm [[TemplateMap]], approximated
-    /// here as (realm, template-literal AST node address) -> the frozen
-    /// template object. See `Interpreter::get_template_object`.
-    static TEMPLATE_OBJECTS: RefCell<HashMap<(RealmHandle, usize), JsValue>> = RefCell::new(HashMap::new());
-
-}
 
 fn annex_b_eligible_set<R>(i: &Interpreter, f: impl FnOnce(&mut HashSet<usize>) -> R) -> R {
     f(&mut i.annex_b_eligible.borrow_mut())
@@ -2026,16 +2022,14 @@ impl Interpreter {
         Ok(self.chain_callee(c, e)?.unwrap_or((JsValue::Undefined, JsValue::Undefined)))
     }
 
-    /// 13.2.8.1 GetTemplateObject: builds, once per template literal site per
+    /// 13.2.8.4 GetTemplateObject: builds, once per template literal site per
     /// realm (mirroring the spec's per-Realm [[TemplateMap]]), the frozen
     /// cooked-strings array with a frozen `raw` array of the same site's raw
-    /// spellings. Cached by this exact `TemplateLit` AST node's address --
-    /// stable across repeated evaluations of the same call site (a loop
-    /// body, a function called more than once) because the AST is walked by
-    /// reference and never cloned between evaluations.
-    fn get_template_object(&mut self, t: &ast::TemplateLit) -> Result<JsValue, Throw> {
-        let key = (self.binding_current_realm(), t as *const ast::TemplateLit as usize);
-        if let Some(cached) = TEMPLATE_OBJECTS.with(|cache| cache.borrow().get(&key).cloned()) {
+    /// spellings. The parsed site's stable token survives AST/body clones;
+    /// the owning interpreter retains one frozen object per realm and site.
+    pub(crate) fn get_template_object(&mut self, t: &ast::TemplateLit) -> Result<JsValue, Throw> {
+        let key = (self.binding_current_realm(), t.site.key());
+        if let Some(cached) = self.template_objects.get(&key).cloned() {
             return Ok(cached);
         }
         let raw: Vec<JsValue> = t.raw_quasis_utf16.iter()
@@ -2067,7 +2061,7 @@ impl Interpreter {
             setter: None,
         });
         let template_object = object_integrity(self, vec![template_object], true)?;
-        TEMPLATE_OBJECTS.with(|cache| cache.borrow_mut().insert(key, template_object.clone()));
+        self.template_objects.insert(key, template_object.clone());
         Ok(template_object)
     }
 

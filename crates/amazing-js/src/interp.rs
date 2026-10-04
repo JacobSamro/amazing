@@ -328,6 +328,9 @@ pub struct Interpreter {
     pub date_proto: Obj,
     pub promise_proto: Obj,
     intrinsic_promise_constructor: JsValue,
+    // Owned by the interpreter, so coroutine worker handoffs retain the same
+    // per-realm registry without thread-local caches or pointer identity.
+    template_objects: HashMap<(RealmHandle, u64), JsValue>,
     pub regexp_proto: Obj,
     /// %Error.prototype%, kept as a stored field so the `stack` accessor's
     /// setter can compare its receiver against the exact home object
@@ -566,6 +569,7 @@ impl Interpreter {
             date_proto,
             promise_proto,
             intrinsic_promise_constructor: JsValue::Undefined,
+            template_objects: HashMap::new(),
             regexp_proto,
             error_proto,
             output: RefCell::new(Vec::new()),

@@ -940,6 +940,7 @@ impl Parser {
             }
         }
         Ok(TemplateLit {
+            site: TemplateSite::new(),
             quasis,
             quasis_utf16,
             raw_quasis_utf16,
