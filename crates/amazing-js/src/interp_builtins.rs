@@ -3,7 +3,7 @@
 // Error-family allocation, metadata and iterable algorithms adapted to Amazing.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/array/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
-// Generic Array search/reduction length protocols; other builtin algorithms unchanged.
+// Generic Array search/reduction length protocols; whole join uses UTF-16 accumulation.
 // Portions ported from boa-dev/boa (core/engine/src/builtins/promise/mod.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT:
 // JSRT-30 optional result-capability completion in Promise reaction jobs;
@@ -2213,27 +2213,26 @@ fn native_array_join(
     } else {
         ArrayJoinGuard(false)
     };
-    let length = i.get_prop(&this, "length")?;
-    let length = i.to_number(&length)?;
-    let length = if length.is_nan() || length <= 0.0 { 0 } else {
-        length.floor().min(9_007_199_254_740_991.0) as usize
+    // Adapted whole join sequence: LengthOfArrayLike, separator conversion,
+    // ordered Get/ToString, then concatenation of original UTF-16 units.
+    // Keep the existing identity guard and its abrupt-completion cleanup.
+    let length = array_like_length(i, &this)?;
+    let separator = match a.first().filter(|value| !value.is_undefined()) {
+        Some(value) => i.to_js_string(value)?,
+        None => crate::value::JsString::from(","),
     };
-    let sep = if let Some(v) = a.first().filter(|v| !v.is_undefined()) {
-        i.to_string(v)?
-    } else {
-        ",".to_string()
-    };
-    let mut out = String::new();
-    for n in 0..length {
-        if n > 0 {
-            out.push_str(&sep)
-        }
-        let v = i.get_prop(&this, &n.to_string())?;
-        if !v.is_null() && !v.is_undefined() {
-            out.push_str(&i.to_string(&v)?);
+    // Grow from actual appended data. An array-like length is not a safe
+    // allocation hint: a first indexed getter may throw before any output.
+    let mut units = Vec::new();
+    for index in 0..length {
+        if index != 0 { units.extend_from_slice(separator.units()); }
+        let element = i.get_prop(&this, &index.to_string())?;
+        if !element.is_null() && !element.is_undefined() {
+            let next = i.to_js_string(&element)?;
+            units.extend_from_slice(next.units());
         }
     }
-    Ok(JsValue::str(out))
+    Ok(JsValue::str_units(units))
 }
 fn native_array_to_string(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     if this.is_null() || this.is_undefined() {
@@ -3150,3 +3149,6 @@ mod promise_constructor_allocation_tests {
     }
 }
 include!("runtime_string_normalization_tests.rs");
+
+#[cfg(test)]
+include!("runtime_array_join_tests.rs");
