@@ -51,188 +51,182 @@
     "root_source_bytes_identical": true
   },
   "workspace": {
-    "manifest": ".agents/integrator-primary/gates/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e.manifest.json",
-    "bytes": 7985,
-    "sha256": "7def0d1e2e609e3378dc6372ff2d077604997d19b9c60bf989704fca3ad2961f",
-    "actual_workspace_exit": 0,
-    "receipt": {
-      "counts": {
-        "doctests": {
-          "failed": 0,
-          "ignored": 0,
-          "passed": 4
-        },
-        "nextest": {
-          "failed": 0,
-          "passed": 4651,
-          "skipped": 17
-        }
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
       },
-      "job_exit": 0,
-      "phase_details": [
-        {
-          "command": [
-            "cargo",
-            "nextest",
-            "run",
-            "--workspace",
-            "--locked",
-            "--no-fail-fast",
-            "--status-level",
-            "skip"
-          ],
-          "command_exit": 0,
-          "diagnostic_tail": [
-            "        PASS [   0.002s] (4642/4651) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
-            "        PASS [   0.002s] (4643/4651) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
-            "        PASS [   0.007s] (4644/4651) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
-            "        PASS [   0.008s] (4645/4651) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
-            "        PASS [   0.011s] (4646/4651) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
-            "        PASS [   0.015s] (4647/4651) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
-            "        PASS [   0.008s] (4648/4651) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
-            "        PASS [   0.016s] (4649/4651) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
-            "        PASS [   8.330s] (4650/4651) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
-            "        PASS [  26.803s] (4651/4651) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
-            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
-            "     Summary [ 142.904s] 4651 tests run: 4651 passed (1 slow), 17 skipped"
-          ],
-          "engine_exit": 0,
-          "native_receipt": "/tmp/amazing-gate-command-u_renq6b/phase.manifest.json",
-          "output_copies": [
-            {
-              "copy_exit": 0,
-              "destination": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-nextest.log",
-              "durable": {
-                "bytes": 642799,
-                "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-nextest.log",
-                "sha256": "a7c9be08fdb94d152b4f871b9fbda39a48f236d2a6e05f3ee28ffa774423f0fe"
-              },
-              "native": {
-                "bytes": 642799,
-                "path": "/tmp/amazing-gate-command-u_renq6b/output.log",
-                "sha256": "a7c9be08fdb94d152b4f871b9fbda39a48f236d2a6e05f3ee28ffa774423f0fe"
-              },
-              "source": "/tmp/amazing-gate-command-u_renq6b/output.log"
-            }
-          ],
-          "output_copy_exit": 0,
-          "phase": "nextest",
-          "raw_native": {
-            "bytes": 642799,
-            "path": "/tmp/amazing-gate-command-u_renq6b/output.log",
-            "sha256": "a7c9be08fdb94d152b4f871b9fbda39a48f236d2a6e05f3ee28ffa774423f0fe"
-          },
-          "schema": 1,
-          "source_commit": "c2e830cf003fb9fe10a32e368a7477c9e994e52e",
-          "wrapper_exit": 0
-        },
-        {
-          "command": [
-            "cargo",
-            "test",
-            "--workspace",
-            "--locked",
-            "--doc"
-          ],
-          "command_exit": 0,
-          "diagnostic_tail": [
-            "   Doc-tests amazing_webrtc_codecs",
-            "",
-            "running 0 tests",
-            "",
-            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-            "",
-            "   Doc-tests amazing_webrtc_crypto",
-            "",
-            "running 0 tests",
-            "",
-            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-            ""
-          ],
-          "engine_exit": 0,
-          "native_receipt": "/tmp/amazing-gate-command-praiy9sb/phase.manifest.json",
-          "output_copies": [
-            {
-              "copy_exit": 0,
-              "destination": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-doctests.log",
-              "durable": {
-                "bytes": 18472,
-                "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-doctests.log",
-                "sha256": "470e2b1ac8164be7788c5daffdd6a2a3323ebce085c9a4f53a08a81196284c72"
-              },
-              "native": {
-                "bytes": 18472,
-                "path": "/tmp/amazing-gate-command-praiy9sb/output.log",
-                "sha256": "470e2b1ac8164be7788c5daffdd6a2a3323ebce085c9a4f53a08a81196284c72"
-              },
-              "source": "/tmp/amazing-gate-command-praiy9sb/output.log"
-            }
-          ],
-          "output_copy_exit": 0,
-          "phase": "doctests",
-          "raw_native": {
-            "bytes": 18472,
-            "path": "/tmp/amazing-gate-command-praiy9sb/output.log",
-            "sha256": "470e2b1ac8164be7788c5daffdd6a2a3323ebce085c9a4f53a08a81196284c72"
-          },
-          "schema": 1,
-          "source_commit": "c2e830cf003fb9fe10a32e368a7477c9e994e52e",
-          "wrapper_exit": 0
-        }
-      ],
-      "phase_exits": {
-        "doctests": 0,
-        "nextest": 0
-      },
-      "raw": [
-        {
+      "nextest": {
+        "failed": 0,
+        "passed": 4651,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_details": [
+      {
+        "command": [
+          "cargo",
+          "nextest",
+          "run",
+          "--workspace",
+          "--locked",
+          "--no-fail-fast",
+          "--status-level",
+          "skip"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "        PASS [   0.002s] (4642/4651) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+          "        PASS [   0.002s] (4643/4651) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+          "        PASS [   0.007s] (4644/4651) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+          "        PASS [   0.008s] (4645/4651) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+          "        PASS [   0.011s] (4646/4651) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+          "        PASS [   0.015s] (4647/4651) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+          "        PASS [   0.008s] (4648/4651) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+          "        PASS [   0.016s] (4649/4651) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+          "        PASS [   8.330s] (4650/4651) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+          "        PASS [  26.803s] (4651/4651) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+          "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+          "     Summary [ 142.904s] 4651 tests run: 4651 passed (1 slow), 17 skipped"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-u_renq6b/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-nextest.log",
+            "durable": {
+              "bytes": 642799,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-nextest.log",
+              "sha256": "a7c9be08fdb94d152b4f871b9fbda39a48f236d2a6e05f3ee28ffa774423f0fe"
+            },
+            "native": {
+              "bytes": 642799,
+              "path": "/tmp/amazing-gate-command-u_renq6b/output.log",
+              "sha256": "a7c9be08fdb94d152b4f871b9fbda39a48f236d2a6e05f3ee28ffa774423f0fe"
+            },
+            "source": "/tmp/amazing-gate-command-u_renq6b/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "nextest",
+        "raw_native": {
           "bytes": 642799,
-          "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-nextest.log",
+          "path": "/tmp/amazing-gate-command-u_renq6b/output.log",
           "sha256": "a7c9be08fdb94d152b4f871b9fbda39a48f236d2a6e05f3ee28ffa774423f0fe"
         },
-        {
+        "schema": 1,
+        "source_commit": "c2e830cf003fb9fe10a32e368a7477c9e994e52e",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--workspace",
+          "--locked",
+          "--doc"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "   Doc-tests amazing_webrtc_codecs",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "",
+          "   Doc-tests amazing_webrtc_crypto",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          ""
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-praiy9sb/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-doctests.log",
+            "durable": {
+              "bytes": 18472,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-doctests.log",
+              "sha256": "470e2b1ac8164be7788c5daffdd6a2a3323ebce085c9a4f53a08a81196284c72"
+            },
+            "native": {
+              "bytes": 18472,
+              "path": "/tmp/amazing-gate-command-praiy9sb/output.log",
+              "sha256": "470e2b1ac8164be7788c5daffdd6a2a3323ebce085c9a4f53a08a81196284c72"
+            },
+            "source": "/tmp/amazing-gate-command-praiy9sb/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "doctests",
+        "raw_native": {
           "bytes": 18472,
-          "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-doctests.log",
+          "path": "/tmp/amazing-gate-command-praiy9sb/output.log",
           "sha256": "470e2b1ac8164be7788c5daffdd6a2a3323ebce085c9a4f53a08a81196284c72"
-        }
-      ],
-      "schema": 1,
-      "source_commit": "c2e830cf003fb9fe10a32e368a7477c9e994e52e",
-      "summary_lines": [
-        "Summary [ 142.904s] 4651 tests run: 4651 passed (1 slow), 17 skipped",
-        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
-      ]
-    }
+        },
+        "schema": 1,
+        "source_commit": "c2e830cf003fb9fe10a32e368a7477c9e994e52e",
+        "wrapper_exit": 0
+      }
+    ],
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 642799,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-nextest.log",
+        "sha256": "a7c9be08fdb94d152b4f871b9fbda39a48f236d2a6e05f3ee28ffa774423f0fe"
+      },
+      {
+        "bytes": 18472,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e-doctests.log",
+        "sha256": "470e2b1ac8164be7788c5daffdd6a2a3323ebce085c9a4f53a08a81196284c72"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "c2e830cf003fb9fe10a32e368a7477c9e994e52e",
+    "summary_lines": [
+      "Summary [ 142.904s] 4651 tests run: 4651 passed (1 slow), 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
   },
   "test262": {
     "gained_files": 0,
@@ -665,5 +659,11 @@
   },
   "actual_workspace_exit": 0,
   "actual_full16_exit": 0,
-  "raw_policy": "Raw remains in sandbox HOME; compact evidence only. Independent template candidate on current published base; raw stays HOME."
+  "raw_policy": "Raw remains in sandbox HOME; compact evidence only. Independent template candidate on current published base; raw stays HOME.",
+  "workspace_manifest": {
+    "manifest": ".agents/integrator-primary/gates/workspace-20261005T002752-77410/c2e830cf003fb9fe10a32e368a7477c9e994e52e/workspace-c2e830cf003fb9fe10a32e368a7477c9e994e52e.manifest.json",
+    "bytes": 7985,
+    "sha256": "7def0d1e2e609e3378dc6372ff2d077604997d19b9c60bf989704fca3ad2961f",
+    "actual_workspace_exit": 0
+  }
 }
