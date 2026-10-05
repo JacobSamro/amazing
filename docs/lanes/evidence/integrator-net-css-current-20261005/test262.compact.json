@@ -1,0 +1,80 @@
+{
+  "gained_files": 0,
+  "lost_files": [],
+  "lost_variants": [],
+  "provenance": {
+    "host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+    "source_commit": "408cb841c0064c55e638a0d701f373e7e8d46020",
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "timeout_seconds": 60.0
+  },
+  "schema": 2,
+  "shard_sha256": {
+    "shard-0.compact.json": "0a8277b57661ed68f30a423e1e6ce71729a2f573e32189df9e47fecccf7cf5d6",
+    "shard-1.compact.json": "ae190b5e5dc7522f9a4828be9eee36262de883b7f81d307a68383316860d1155",
+    "shard-2.compact.json": "ec36d750db5aa4e3ebe7e9f298d818c60fab94a364325ad96aa752c0c43f7545",
+    "shard-3.compact.json": "686faa499e875e29f05d399046e95c4e597f3f3c9c0a4e449955e8972208ce60",
+    "shard-4.compact.json": "81a1c0d423d1b7f60fb26d18559a72403e18c21f64b5d05f77d190e759edcf46",
+    "shard-5.compact.json": "926ba056338df4334fd2455a73d8c1ee49d3e63082677a75159016aad8a4e58b",
+    "shard-6.compact.json": "288a898610fc6f11462f82e0a4cb000603b1e1de5efc27aec50ebd1fabced0d0",
+    "shard-7.compact.json": "01312dc3dc961a3ca58dc850fc1786c1dd892c639ac8e22081707ce252f95da8",
+    "shard-8.compact.json": "e36b13bb956c7efa13fd5ee305ebf4734f59615cc2fe0a1a06bf23375c3154a4",
+    "shard-9.compact.json": "2fc812c130acd2bec0a7cd9276d7ec902aab10201f2faa475b039db319f9d95d",
+    "shard-10.compact.json": "4791505e6cd579c00544ca92eb06ffc12dfc01507666a606f28344b159ed10a3",
+    "shard-11.compact.json": "6f0464a94bd8e3e5e9e207a3b6155fbc285d422e09a826f9a6a1202033a96a3f",
+    "shard-12.compact.json": "fadc5d025f210ed17f3c3595b366c420d97bb3bda3bd68eb1bcec32e29c7972f",
+    "shard-13.compact.json": "7ad3de4b41a1683678d802ec8e0093e2f9e03242e661037c86b3d37da36e5446",
+    "shard-14.compact.json": "aaaf817516271ff4cde4145300cc48d2baf21c07f7400550e1bf2950d4fb3168",
+    "shard-15.compact.json": "3cc4e7a5095998e691fabe011b82f9234b1220dde7b12422283b7303663acb4e"
+  },
+  "shards": [
+    "test262/shard-0.compact.json",
+    "test262/shard-1.compact.json",
+    "test262/shard-2.compact.json",
+    "test262/shard-3.compact.json",
+    "test262/shard-4.compact.json",
+    "test262/shard-5.compact.json",
+    "test262/shard-6.compact.json",
+    "test262/shard-7.compact.json",
+    "test262/shard-8.compact.json",
+    "test262/shard-9.compact.json",
+    "test262/shard-10.compact.json",
+    "test262/shard-11.compact.json",
+    "test262/shard-12.compact.json",
+    "test262/shard-13.compact.json",
+    "test262/shard-14.compact.json",
+    "test262/shard-15.compact.json"
+  ],
+  "summary": {
+    "files": {
+      "fail": 706,
+      "pass": 52701,
+      "skipped": 294,
+      "unsupported": 171
+    },
+    "variants": {
+      "fail": 1363,
+      "pass": 101215,
+      "unsupported": 340
+    }
+  },
+  "recorded_integration_base": "44a6adf25457746066108eb2a846c8002cc1b033",
+  "baseline_original_compact": {
+    "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/t262-62b1ead8-net-reporting-group-initial.json",
+    "sha256": "fcee60d2540646dd7afd361e45c85ded89b1deb51ead8e2fef505c7ad8466c5d"
+  },
+  "original_after_compact": {
+    "sha256": "06196670c52c98b1030718850bd1b1cc31f98597bebc37a842e7619c034e0f04"
+  },
+  "root_independent_verification": {
+    "inventory": 53872,
+    "passing_files": 52701,
+    "passing_variants": 101215,
+    "lost_files": [],
+    "lost_variants": [],
+    "disjoint_shards": 16
+  },
+  "initial_tooling_failure_preserved": "initial sourceupload124 on shard0 beforejob, ONEclean full16 actual0; no originalfailure erased"
+}

@@ -521,6 +521,7 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "background-attachment", initial: "scroll", inherited: false },
     PropertyMetadata { name: "image-orientation", initial: "from-image", inherited: true },
     PropertyMetadata { name: "object-fit", initial: "fill", inherited: false },
+    PropertyMetadata { name: "image-rendering", initial: "auto", inherited: true },
     PropertyMetadata { name: "transform-origin", initial: "50% 50%", inherited: false },
     PropertyMetadata { name: "perspective-origin", initial: "50% 50%", inherited: false },
     PropertyMetadata { name: "transform-box", initial: "view-box", inherited: false },
@@ -1239,6 +1240,10 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     }
     if position_values::supported(&property) {
         return if needs_deferred_expansion(value) { vec![(property, value.into())] } else { position_values::canonical(&property, value).map(|value| vec![(property, value)]).unwrap_or_default() };
+    }
+    if crate::image_policy::supported(&property) {
+        return if needs_deferred_expansion(value) || contains_attr_function(value) { vec![(property, value.into())] }
+        else { crate::image_policy::canonical(&property,value).map(|value| vec![(property,value)]).unwrap_or_default() };
     }
     if property == "font-width" { return expand_declaration("font-stretch", value); }
     if property == "word-wrap" { return expand_declaration("overflow-wrap", value); }
@@ -2922,6 +2927,8 @@ fn compute_normal_value(
         canonical_font_feature_value(property.name, &computed).unwrap_or(computed)
     } else if crate::text_properties::supported(property.name) {
         crate::text_properties::canonical(property.name, &computed).unwrap_or(computed)
+    } else if crate::image_policy::supported(property.name) {
+        crate::image_policy::canonical(property.name,&computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "display" {
         values::display_canonical(&computed).unwrap_or(&computed).to_owned()
     } else if matches!(property.name, "ruby-align" | "ruby-position" | "ruby-overhang" | "ruby-merge") {

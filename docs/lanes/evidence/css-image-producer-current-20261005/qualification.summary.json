@@ -1,0 +1,80 @@
+{
+  "source": "85f3d4c339786a814f8b17dd8e3564431b21e138",
+  "native_controller": 98449,
+  "actual_controller_exit": 0,
+  "native_job": "ee788b88b03e49428f9ee955d7dd96ec",
+  "actual_native_exit": 0,
+  "actual_runner_exit": 0,
+  "terminal_status_controller": 68151,
+  "summary_fetch_controller": 15385,
+  "summary_fetch_exit": 0,
+  "bulk_initial_fetch_controller": 51268,
+  "bulk_initial_fetch_exit": 3,
+  "corrected_supported_fetch_controller": 53793,
+  "corrected_supported_fetch_exit": 0,
+  "phase_exits": {
+    "nextest": 0,
+    "doctests": 0,
+    "ensure-wpt": 0,
+    "release-build": 0,
+    "parsing": 0,
+    "css-css-fonts": 0,
+    "css-css-transforms": 0,
+    "css-css-images": 0,
+    "css-CSS2-floats": 0,
+    "css-CSS2-normal-flow": 0,
+    "css-CSS2-positioning": 0,
+    "css-css-backgrounds": 0,
+    "css-css-contain": 0,
+    "css-css-display": 0,
+    "css-css-overflow": 0,
+    "css-css-position": 0,
+    "css-css-ruby": 0,
+    "css-css-sizing": 0,
+    "css-css-tables": 0,
+    "css-css-viewport": 0,
+    "css-css-color": 0,
+    "css-css-cascade": 0,
+    "css-css-conditional": 0,
+    "css-selectors": 0,
+    "css-css-shadow": 0,
+    "image-resources": 0
+  },
+  "workspace_docs": {
+    "doctests": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 4
+    },
+    "nextest": {
+      "failed": 0,
+      "passed": 4743,
+      "skipped": 17
+    }
+  },
+  "parsing": {
+    "passed": 4330,
+    "total": 5126,
+    "files": 514,
+    "skipped_non_literal": 169
+  },
+  "render20_counts": {
+    "crash": 0,
+    "error": 0,
+    "mismatch": 887,
+    "pass": 1327,
+    "timeout": 0,
+    "unsupported": 0
+  },
+  "resource491_counts": {
+    "mismatch": 112,
+    "pass": 318,
+    "unsupported": 23,
+    "crash": 38
+  },
+  "resource_cases": 491,
+  "RC21_entries": 226,
+  "classification_files": 22,
+  "verified_compact_bytes": 348489,
+  "qualification": "Initial native BEFORE passes; ONE corrected supported compact fetch passes. Duplicate phase receipts embedded in authentic gate summary; no native rerun or phase-file reconstruction performed. AFTER held pending reviewed public input contract."
+}

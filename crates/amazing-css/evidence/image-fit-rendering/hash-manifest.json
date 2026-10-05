@@ -1,0 +1,14 @@
+{
+  "compact.json": {
+    "bytes": 131365,
+    "sha256": "513861914d3a4ab2d7e4cef54b08c6edd8d4dc04303c85fcca5c435c2e0ba93d"
+  },
+  "renders.compact.json": {
+    "bytes": 183662,
+    "sha256": "8de77213ae8f8c234ef1c5d90b140009d247591288f967655c329baf8208cdd9"
+  },
+  "source-command-freeze.json": {
+    "bytes": 2392,
+    "sha256": "b62f94c10a0f98058ba23535c7eaf4e30a669e68e959f90a271a61ca7695231f"
+  }
+}

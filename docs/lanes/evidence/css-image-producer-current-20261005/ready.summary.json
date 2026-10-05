@@ -1,0 +1,123 @@
+{
+  "recorded_ready_base": "64f5d9b86c1cda019f73aedb2dd4f7137a3b7663",
+  "qualified_engine_source": "85f3d4c339786a814f8b17dd8e3564431b21e138",
+  "qualified_engine_base": "6b3061f1dd51e6dbc5ece75478b15512564ffed2",
+  "owned_engine_drift": [],
+  "actual_controller": 98449,
+  "actual_controller_exit": 0,
+  "native_job": "ee788b88b03e49428f9ee955d7dd96ec",
+  "native_exit": 0,
+  "runner_exit": 0,
+  "packet_files": {
+    "css-css-display.compact.json": {
+      "bytes": 2625,
+      "sha256": "9f6a0de745c80ed64b6fea63e73b7bb491d9f36fe97ca1cfa77c2c78be756da8"
+    },
+    "css-css-shadow.compact.json": {
+      "bytes": 2665,
+      "sha256": "be6548668582efa42e61e1e42ab6f39f31ec3e447e64b6068d16b2123ab474bf"
+    },
+    "css-css-color.compact.json": {
+      "bytes": 11397,
+      "sha256": "29e3a7e47abbf8b6773e8c490c1048c097c64d80b864a451deef36557fbd9526"
+    },
+    "css-selectors.compact.json": {
+      "bytes": 5383,
+      "sha256": "e0a62dc2ced4ccb3db74ddcef32d0f43941c37eb7dce62c73d4d7e3a901a2c4f"
+    },
+    "css-css-sizing.compact.json": {
+      "bytes": 10323,
+      "sha256": "5319f405ad73558ef69646821596b38dde89d63bda9f62e4176c02d64f2cc6aa"
+    },
+    "parsing.summary.json": {
+      "bytes": 142513,
+      "sha256": "7e3e4f7c09bf72fd68ad5bc53559a533cf268a4bfb9ffa6f0c6b56025fc340f5"
+    },
+    "css-css-cascade.compact.json": {
+      "bytes": 1609,
+      "sha256": "e83920e1b56775073f0e7a6f2a190b9de1add1bb250d05d3d91722c787cd5e5c"
+    },
+    "css-css-backgrounds.compact.json": {
+      "bytes": 10243,
+      "sha256": "e5b856c811cfa60b03ff551e6f097091c959a2b36ab60224cc560157e0c8de5a"
+    },
+    "css-css-overflow.compact.json": {
+      "bytes": 24520,
+      "sha256": "8fe59330b52944f2de5fae8724b468452c9dde7ba12635af53be4c1588865388"
+    },
+    "css-css-fonts.compact.json": {
+      "bytes": 2147,
+      "sha256": "0d47f63cfcf3686c7e6bb47b54c71a4141a26d3b6d1505618e636d0614a79420"
+    },
+    "css-CSS2-normal-flow.compact.json": {
+      "bytes": 2571,
+      "sha256": "d7c3315b6eddb37a6b691053577b77be77ee0debbc12bad8c7fac4ff6b563ab3"
+    },
+    "css-css-ruby.compact.json": {
+      "bytes": 4169,
+      "sha256": "6b4ec0951f3e440ba583e830f52899f43fb3e5fa9a7fac3878b1abb638ef3065"
+    },
+    "css-CSS2-positioning.compact.json": {
+      "bytes": 935,
+      "sha256": "0bdbf45123028fa622b29a78d75009a53828279cce3915ee6f32535cd10fc8c4"
+    },
+    "css-css-conditional.compact.json": {
+      "bytes": 5038,
+      "sha256": "b91e029760feeea118095ddba7854b07322d52d6998b9b80a1a248d9d3a1f0c2"
+    },
+    "gate.summary.json": {
+      "bytes": 39157,
+      "sha256": "cd812eb45a80a5cd760572394c87f7fa77923f416a38a6185258e1142da9888f"
+    },
+    "css-css-transforms.compact.json": {
+      "bytes": 23240,
+      "sha256": "cfe1af9f9690e8194c2dfc4f45ebe134ca4d600287d4c14939d9e202e393474e"
+    },
+    "css-css-position.compact.json": {
+      "bytes": 4561,
+      "sha256": "d1d72fc60f785445ac8dcc11fede37d91633363b05ece80b33c150689e48d72b"
+    },
+    "css-css-viewport.compact.json": {
+      "bytes": 5642,
+      "sha256": "0067c78bc16f8b09d69d1144561f6e5510beaafffdc73f7460134e238aa88d5a"
+    },
+    "css-css-images.compact.json": {
+      "bytes": 9922,
+      "sha256": "64775d59ab712f5082591d385db0b76c25e78fc00ce596fa7e2de05dabd04afe"
+    },
+    "css-CSS2-floats.compact.json": {
+      "bytes": 2827,
+      "sha256": "aa3c61ba36716a3c02388b9268bfc9bec4a6110148c47ee772cc73f931677649"
+    },
+    "css-css-contain.compact.json": {
+      "bytes": 14302,
+      "sha256": "e746089d2d60ed5cdf93050d5402ece2c24aec44bceb2e44af41d2455cac32ce"
+    },
+    "image-resources.compact.json": {
+      "bytes": 56146,
+      "sha256": "e6f144f6ae59f3501d8884afdcbd286e97538f6108ce8e454d30fb96daf19fba"
+    },
+    "css-css-tables.compact.json": {
+      "bytes": 5711,
+      "sha256": "85ba82d96d10620dfa8f6ae23064b4b2b0d83f0aecd0bcef056be637991abbcf"
+    },
+    "storage.summary.json": {
+      "bytes": 1939,
+      "sha256": "a69aaf0509d51bb69fc1cfcefa1a688a5aa783bfb1e7267d5088908211829516"
+    },
+    "qualification.summary.json": {
+      "bytes": 2098,
+      "sha256": "aeeee3bc26de5827498c69e0a0bb9bbd3f746d4435f6ec61b79844636be5c9b5"
+    },
+    "terminal.summary.json": {
+      "bytes": 1184,
+      "sha256": "d45f69e110a0a6671edb2b8168b1d7bda94d9ae20db374122ae43ad74b9cdd9e"
+    },
+    "endpoint.manifest.json": {
+      "bytes": 604,
+      "sha256": "8aa228fca6d00af040dfaa93be88a7ece0c1d3428e25b5a1245d8687a5c50f40"
+    }
+  },
+  "scope": "CSS object-fit/image-rendering producer only. Whole own corpus baseline on qualified source; all original491/226/20/17/workspace/docs retained. Current dev unchanged owned paths. Integrator full16 and exact merged candidate still required.",
+  "original_ready_evidence": "Existing image-fit-rendering evidence records its original older paired producer gate; this new full baseline is additional authentic current source proof. No claim newready SHA directly executed."
+}
