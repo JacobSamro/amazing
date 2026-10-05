@@ -1,0 +1,14 @@
+{
+  "session_id": 77324,
+  "exit_code": 0,
+  "observed_at": "2026-10-05T07:11:50.872166+00:00",
+  "command": [
+    "python3",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/run-aspect-ratio.py"
+  ],
+  "baseline_job_id": "4d82cba0d2994d64981520d2aaa823ca",
+  "candidate_job_id": "2903018b59a548a7b62b8ca83a597c8a",
+  "box": "bx_72e3q7u5",
+  "source": "7ab1c8a65a282d19f2a1c281b7233e1fe3fc57c5",
+  "base": "a035b2b558065d72664ce7617da0a7261027bb0d"
+}

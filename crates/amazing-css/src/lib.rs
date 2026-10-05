@@ -43,6 +43,7 @@ pub mod color;
 mod counter_styles;
 mod imports;
 mod change_classification;
+mod aspect_ratio;
 mod computed;
 mod image_values;
 mod gradient_values;
