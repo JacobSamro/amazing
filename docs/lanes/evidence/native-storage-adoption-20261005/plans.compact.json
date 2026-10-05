@@ -1,0 +1,53 @@
+{
+  "after": {
+    "baseline_manifest": "/tmp/amazing-native-retained/native-storage-adoption-20261005/retained/manifests/storage-before-native.json",
+    "baseline_source": "93e757b1c0ccdc900400cb59ce94dc341b795ba2",
+    "bootstrap_budget_bytes": 2147483648,
+    "build_budget_bytes": 134217728,
+    "compact_root": "/home/user/amazing/out/native-storage-adoption-20261005/native-storage-adoption/after-clean1/compact",
+    "elf_policy": "runnable",
+    "job": "storage-after-native-clean1",
+    "output_root": "/tmp/amazing-native-retained/native-storage-adoption-20261005",
+    "phase": "after",
+    "reserve_bytes": 67108864,
+    "retained_root": "/tmp/amazing-native-retained/native-storage-adoption-20261005/retained",
+    "retention_budget_bytes": 33554432,
+    "retention_method": "hardlink",
+    "schema": 1,
+    "scratch_parent": "/tmp/amazing-native-storage",
+    "source": "93e757b1c0ccdc900400cb59ce94dc341b795ba2",
+    "summary_path": "/home/user/amazing/out/native-storage-adoption-20261005/native-storage-adoption/after-clean1/compact/storage-after-native-clean1.summary.json",
+    "ticket": "native-storage-adoption"
+  },
+  "before": {
+    "bootstrap_budget_bytes": 2147483648,
+    "build_budget_bytes": 134217728,
+    "compact_root": "/home/user/amazing/out/native-storage-adoption-20261005/native-storage-adoption/compact",
+    "elf_policy": "runnable",
+    "job": "storage-before-native",
+    "output_root": "/tmp/amazing-native-retained/native-storage-adoption-20261005",
+    "phase": "before",
+    "reserve_bytes": 67108864,
+    "retained_root": "/tmp/amazing-native-retained/native-storage-adoption-20261005/retained",
+    "retention_budget_bytes": 33554432,
+    "retention_method": "hardlink",
+    "schema": 1,
+    "scratch_parent": "/tmp/amazing-native-storage",
+    "source": "93e757b1c0ccdc900400cb59ce94dc341b795ba2",
+    "summary_path": "/home/user/amazing/out/native-storage-adoption-20261005/native-storage-adoption/compact/storage-before-native.summary.json",
+    "ticket": "native-storage-adoption"
+  },
+  "commands": [
+    {
+      "bytes": 141,
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/native-storage-adoption/before-native.command.sh",
+      "sha256": "1ed5a6ca0cb8a5448c067efd880a8787d129f7c84aeb96b0e499b53b699c765c"
+    },
+    {
+      "bytes": 957,
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/native-storage-adoption/after-clean1.command.sh",
+      "sha256": "57091487e5b5e87a1b32177182ca9f3cdde85827eb030e98a3c0aa1344ee616b"
+    }
+  ],
+  "schema": 1
+}

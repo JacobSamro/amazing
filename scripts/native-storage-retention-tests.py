@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 import unittest
+import importlib.util
 
 PARSER = argparse.ArgumentParser()
 PARSER.add_argument('--output', required=True)
@@ -234,6 +235,209 @@ class Controls(unittest.TestCase):
         self.assertFalse(self.out.exists())
 
 
+    def policy_invocation(self, phase='before', baseline=None):
+        args = self.invocation(phase, baseline)
+        index = args.index('--')
+        return args[:index] + ['--retention-method', 'hardlink', '--elf-policy', 'runnable'] + args[index:]
+
+    def test_terminal_hardlink_retains_original_inode_without_duplicate_payload(self):
+        inode = self.root / 'inode'
+        args = self.policy_invocation()
+        args[-1] += f"; pathlib.Path({str(inode)!r}).write_text(str((p/'measured').stat().st_ino))"
+        receipt = self.invoke(args)
+        manifest = json.loads(pathlib.Path(receipt['artifact_manifest']['path']).read_text())
+        elf = next(row for row in manifest['artifacts'] if row['kind'] == 'elf')
+        self.assertEqual(elf['retention_method'], 'hardlink')
+        self.assertEqual(pathlib.Path(elf['blob']).stat().st_ino, int(inode.read_text()))
+        self.assertEqual(receipt['copied_unique_bytes'], 0)
+        self.assertFalse(pathlib.Path(receipt['target']).exists())
+        self.assertEqual(subprocess.run([elf['blob']], check=False).returncode, 0)
+
+    def test_real_relocatable_object_is_reconstructible_only_under_explicit_new_policy(self):
+        code = self.root / 'fixture.c'
+        code.write_text('int fixture(void) { return 37; }\n')
+        obj = self.root / 'fixture.o'
+        subprocess.run(['cc', '-c', str(code), '-o', str(obj)], check=True)
+        for explicit in (False, True):
+            args = self.policy_invocation() if explicit else self.invocation()
+            args[-1] += f"; shutil.copy2({str(obj)!r},p/'compiler-object.o')"
+            receipt = self.invoke(args)
+            manifest = json.loads(pathlib.Path(receipt['artifact_manifest']['path']).read_text())
+            objects = [a for a in manifest['artifacts'] if a['relative_path'] == 'compiler-object.o']
+            self.assertEqual(len(objects), 0 if explicit else 1)
+            if objects:
+                self.assertEqual(objects[0]['elf_type'], 'relocatable')
+            else:
+                self.assertGreaterEqual(receipt['recoverable_bytes'], obj.stat().st_size)
+
+    def test_actual_shared_library_and_exec_survive_runnable_policy(self):
+        code = self.root / 'fixture.c'
+        code.write_text('int fixture(void) { return 37; } int main(void) { return 0; }\n')
+        library = self.root / 'fixture.so'
+        executable = self.root / 'fixture-exec'
+        subprocess.run(['cc', '-fPIC', '-shared', str(code), '-o', str(library)], check=True)
+        subprocess.run(['cc', '-no-pie', str(code), '-o', str(executable)], check=True)
+        args = self.policy_invocation()
+        args[-1] += f"; shutil.copy2({str(library)!r},p/'library'); shutil.copy2({str(executable)!r},p/'executable')"
+        receipt = self.invoke(args)
+        rows = json.loads(pathlib.Path(receipt['artifact_manifest']['path']).read_text())['artifacts']
+        shared = next(a for a in rows if a['relative_path'] == 'library')
+        executable_row = next(a for a in rows if a['relative_path'] == 'executable')
+        self.assertEqual(shared['elf_type'], 'shared-object')
+        self.assertEqual(executable_row['elf_type'], 'executable')
+        self.assertEqual(subprocess.run([executable_row['blob']], check=False).returncode, 0)
+        result = subprocess.run([sys.executable, '-c', 'import ctypes,sys; assert ctypes.CDLL(sys.argv[1]).fixture()==37', shared['blob']], check=False)
+        self.assertEqual(result.returncode, 0)
+
+    def test_unknown_elf_bytes_remain_protected(self):
+        args = self.policy_invocation()
+        args[-1] += "; (p/'unknown.o').write_bytes(bytes([127,69,76,70,0,0,0]))"
+        receipt = self.invoke(args)
+        rows = json.loads(pathlib.Path(receipt['artifact_manifest']['path']).read_text())['artifacts']
+        self.assertEqual(next(a for a in rows if a['relative_path']=='unknown.o')['elf_type'], 'unknown')
+
+    def test_hardlink_pair_reuses_verified_frozen_baseline(self):
+        before = self.invoke(self.policy_invocation())
+        after = self.invoke(self.policy_invocation('after', before))
+        self.assertEqual(after['copied_unique_bytes'], 0)
+        self.assertEqual(before['profile'], after['profile'])
+        self.assertEqual(after['baseline']['sha256'], before['artifact_manifest']['sha256'])
+
+    def plan(self, budget=1048576):
+        self.job += 1
+        plan = {'schema':1, 'ticket':'native-plan-controls', 'source':SOURCE, 'phase':'before',
+                'job':'plan-'+str(self.job), 'scratch_parent':str(self.scratch),
+                'output_root':str(self.out), 'retained_root':str(self.retained),
+                'build_budget_bytes':budget, 'retention_budget_bytes':budget,
+                'bootstrap_budget_bytes':budget, 'reserve_bytes':4096,
+                'retention_method':'hardlink', 'elf_policy':'runnable'}
+        file = self.root / ('plan-'+str(self.job)+'.json')
+        file.write_text(json.dumps(plan))
+        return file, plan
+
+    def plan_args(self, mode, file):
+        return [sys.executable, str(HELPER.with_name('native-storage-plan.py')), mode, '--plan', str(file)]
+
+    def test_plan_capacity_counts_simultaneous_bootstrap_build_and_retention(self):
+        free = os.statvfs(ROOT).f_bavail * os.statvfs(ROOT).f_frsize
+        file, plan = self.plan(free * 2 // 5)
+        receipt = self.invoke(self.plan_args('check', file), 3)
+        requirement = receipt['capacity']['shared_device_requirements'][0]['required_bytes']
+        self.assertEqual(requirement, 3 * plan['build_budget_bytes'] + 4096)
+        self.assertFalse(self.scratch.exists())
+
+    def test_plan_prebootstrap_refusal_prevents_actual_next_shell_stage(self):
+        free = os.statvfs(ROOT).f_bavail * os.statvfs(ROOT).f_frsize
+        file, _ = self.plan(free * 2)
+        marker = self.root / 'bootstrap-started'
+        import shlex
+        check = ' '.join(shlex.quote(a) for a in self.plan_args('check', file))
+        command = check + ' || exit 3\n touch ' + shlex.quote(str(marker))
+        result = subprocess.run(['bash', '-c', command], capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 3)
+        self.assertFalse(marker.exists())
+        self.assertFalse(self.scratch.exists())
+
+    def test_plan_actual_command_receives_fresh_target_and_profiles(self):
+        file, plan = self.plan()
+        plan['summary_path'] = str(self.out/'compact'/'job.summary.json')
+        file.write_text(json.dumps(plan))
+        self.invoke(self.plan_args('check', file))
+        command = self.root / 'command.sh'
+        command.write_text('cp /usr/bin/true "$CARGO_TARGET_DIR/measured"\n' +
+                           'test "$CARGO_INCREMENTAL" = 0 && test "$CARGO_PROFILE_TEST_DEBUG" = line-tables-only\n')
+        receipt = self.invoke(self.plan_args('run', file) + ['--command-file',str(command)])
+        self.assertTrue(receipt['target_retired'])
+        self.assertIn('/before/plan-', receipt['target'])
+        summary=json.loads(pathlib.Path(plan['summary_path']).read_text())
+        self.assertEqual(summary['actual_storage_exit'],0)
+        self.assertTrue(summary['target_retired'])
+        self.assertEqual(summary['session_raw']['sha256'],sha(pathlib.Path(receipt['session'])/'session.json'))
+
+    def test_plan_rejects_missing_after_baseline_before_bootstrap(self):
+        file, plan = self.plan()
+        plan['phase'] = 'after'
+        file.write_text(json.dumps(plan))
+        rejected = self.invoke(self.plan_args('check',file),3)
+        self.assertIn('exact baseline',rejected['error'])
+        self.assertFalse(self.scratch.exists())
+
+    def test_plan_rejects_ambiguous_or_unknown_capacity_inputs(self):
+        file, plan = self.plan()
+        plan['bootstrap_budget_bytes'] = True
+        file.write_text(json.dumps(plan))
+        self.assertIn('positive byte budgets',self.invoke(self.plan_args('validate',file),3)['error'])
+        plan['bootstrap_budget_bytes'] = 1048576
+        plan['implicit_cleanup'] = True
+        file.write_text(json.dumps(plan))
+        self.assertIn('fields/schema',self.invoke(self.plan_args('validate',file),3)['error'])
+
+    def test_plan_after_runs_with_exact_baseline_and_separate_phase_target(self):
+        file, plan = self.plan()
+        command = self.root / 'pair.sh'
+        command.write_text('cp /usr/bin/true "$CARGO_TARGET_DIR/measured"\n')
+        before = self.invoke(self.plan_args('run',file)+['--command-file',str(command)])
+        after_file, after_plan = self.plan()
+        after_plan.update(phase='after',baseline_source=SOURCE,baseline_manifest=before['artifact_manifest']['path'])
+        after_file.write_text(json.dumps(after_plan))
+        self.invoke(self.plan_args('check',after_file))
+        after = self.invoke(self.plan_args('run',after_file)+['--command-file',str(command)])
+        self.assertNotEqual(before['target'],after['target'])
+        self.assertEqual(after['baseline']['sha256'],before['artifact_manifest']['sha256'])
+        self.assertEqual(after['copied_unique_bytes'],0)
+
+    def test_reused_job_is_refused_before_bootstrap(self):
+        file, _ = self.plan()
+        command = self.root / 'job.sh'
+        command.write_text('cp /usr/bin/true "$CARGO_TARGET_DIR/measured"\n')
+        self.invoke(self.plan_args('run',file)+['--command-file',str(command)])
+        refused = self.invoke(self.plan_args('check',file),3)
+        self.assertIn('already exists',refused['error'])
+
+    def test_hardlink_policy_refuses_distinct_native_filesystem_before_target(self):
+        distinct = pathlib.Path(tempfile.mkdtemp(prefix='native-retention-cross-device.',dir='/dev/shm'))
+        self.assertNotEqual(distinct.stat().st_dev, self.root.stat().st_dev)
+        args = self.policy_invocation()
+        args[args.index('--output-root')+1]=str(distinct/'out')
+        args[args.index('--retained-root')+1]=str(distinct/'out'/'retained')
+        refused = self.invoke(args,3)
+        self.assertIn('same actual filesystem',refused['error'])
+        self.assertFalse(self.scratch.exists())
+        self.assertFalse((distinct/'out').exists())
+        distinct.rmdir()
+
+    def test_native_retention_and_separate_compact_device_preserve_raw_home(self):
+        compact = pathlib.Path(tempfile.mkdtemp(prefix='native-compact-device.',dir='/dev/shm'))
+        self.assertNotEqual(compact.stat().st_dev,self.root.stat().st_dev)
+        raw = compact/'existing-raw.log'
+        raw.write_bytes(b'raw custody intact')
+        original = sha(raw)
+        file, plan = self.plan()
+        plan.update(compact_root=str(compact),summary_path=str(compact/'phase.summary.json'))
+        file.write_text(json.dumps(plan))
+        self.invoke(self.plan_args('check',file))
+        command = self.root/'native.sh'
+        command.write_text('cp /usr/bin/true "$CARGO_TARGET_DIR/measured"\n')
+        result = self.invoke(self.plan_args('run',file)+['--command-file',str(command)])
+        summary = json.loads((compact/'phase.summary.json').read_text())
+        self.assertEqual(summary['actual_storage_exit'],0)
+        self.assertTrue(result['target_retired'])
+        self.assertEqual(sha(raw),original)
+        rows=json.loads(pathlib.Path(result['artifact_manifest']['path']).read_text())['artifacts']
+        self.assertEqual(rows[0]['retention_method'],'hardlink')
+        self.assertEqual(subprocess.run([rows[0]['blob']],check=False).returncode,0)
+        raw.unlink(); (compact/'phase.summary.json').unlink(); compact.rmdir()
+
+    def test_published_wrapper_storage_admission_precedes_cargo_bootstrap(self):
+        wrapper = HELPER.with_name('linux-run.sh').read_text()
+        remote = wrapper[wrapper.index('  REMOTE="trap'):]
+        self.assertLess(remote.index('$STORAGE_PRELUDE'),remote.index('bootstrap_native_cargo'))
+        self.assertLess(remote.index('bootstrap_native_cargo'),remote.index('$STORAGE_COMMAND'))
+        self.assertIn('CARGO_PROFILE_DEV_DEBUG',wrapper)
+        self.assertIn('CARGO_PROFILE_TEST_DEBUG',wrapper)
+        subprocess.run(['bash','-n',str(HELPER.with_name('linux-run.sh'))],check=True)
+
+
 class Results(unittest.TextTestResult):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -259,7 +463,7 @@ output.parent.mkdir(parents=True, exist_ok=True)
 summary = {'schema': 1, 'source': SOURCE, 'ticket': 'native-storage-retention',
            'tests_run': result.testsRun, 'classifications': result.classifications,
            'failures': len(result.failures), 'errors': len(result.errors),
-           'helper_sha256': sha(HELPER), 'controls_sha256': sha(pathlib.Path(__file__)),
+           'helper_sha256': sha(HELPER), 'plan_sha256': sha(HELPER.with_name('native-storage-plan.py')), 'wrapper_sha256':sha(HELPER.with_name('linux-run.sh')), 'controls_sha256': sha(pathlib.Path(__file__)),
            'native_elf': {'path': str(ELF), 'bytes': ELF.stat().st_size, 'sha256': sha(ELF)},
            'fixture_root': str(ROOT), 'engine_build_or_gate': False}
 summary['diagnostics'] = {test._testMethodName: '\n'.join(trace.splitlines()[-24:])[-4096:]

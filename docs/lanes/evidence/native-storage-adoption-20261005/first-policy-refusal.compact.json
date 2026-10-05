@@ -1,0 +1,35 @@
+{
+  "actual_exit": 3,
+  "boot_id": "306b3c74-7ee8-42bd-b73a-4e62a2b46c09",
+  "catalog_error": null,
+  "execution_raw": {
+    "bytes": 700,
+    "path": "/home/user/.amazing-jobs/3a77413cd20c48d58bf18570730f6124/command.log",
+    "sha256": "99b583a03176dc74c554ab27c07f8739c9cec152ecbaef27b76ebd06b5f02db0"
+  },
+  "job": {
+    "box_id": "bx_8e3h9jun",
+    "command_sha256": "1ed5a6ca0cb8a5448c067efd880a8787d129f7c84aeb96b0e499b53b699c765c",
+    "execution_sha256": "174455fc7cfc20788b390a633a0dbf04fb50188dfdb2dc32b375582ccab1341a",
+    "host": "user@37.59.33.138",
+    "job_id": "3a77413cd20c48d58bf18570730f6124",
+    "lane": "native-storage-adoption-20261005",
+    "output_root": "amazing/out/native-storage-adoption-20261005/native-storage-adoption/compact",
+    "port": 19038,
+    "schema": 2,
+    "source_archive_sha256": "c6124df8bc6b493a07b615a57bb67e0b9f2f7753aba647ac85657f30779370f5",
+    "source_commit": "6b5a4f1f4d3aac075cd71bc0ee59692a5360d85c"
+  },
+  "observer_pipe_closed": false,
+  "owner": {
+    "cmdline_sha256": "91ff1bd848a7b6f092ebf1f34e123e62acdc2c5e31a6f912e823662ad1580aa4",
+    "parent_pid": 34860,
+    "pid": 34897,
+    "start_ticks": 80876,
+    "state": "R"
+  },
+  "reason": "authenticated actual command exit",
+  "runner_exit": 3,
+  "started_ns": 1791203315078332005,
+  "state": "TERMINAL"
+}

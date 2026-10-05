@@ -25,6 +25,8 @@
 #   --setup-summary PATH  compact local setup-failure receipt; no remote raw fetch
 #   --endpoint-receipt PATH --compact-root REMOTE_DIR
 #               capture one Boat job endpoint and its completed compact catalog
+#   --storage-plan PATH  opt-in exact source/phase/job budgets and terminal retention
+#                       admitted on native storage before Cargo bootstrap
 #   --command-file PATH   exact command bytes from a file, avoiding argv limits
 #   --no-slot   skip the slot queue; for crate-scoped iterations only
 #
@@ -40,7 +42,7 @@ MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-
 
 LANE="${1:?usage: linux-run.sh <lane> [--host H] [--ref REF] [--no-slot] -- <command>}"
 shift
-HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0 SETUP_SUMMARY="" ENDPOINT_RECEIPT="" COMPACT_ROOT="" COMMAND_FILE=""
+HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0 SETUP_SUMMARY="" ENDPOINT_RECEIPT="" COMPACT_ROOT="" COMMAND_FILE="" STORAGE_PLAN=""
 if [ -e "$MAIN/.agents/.boat-only" ]; then HOST=boat; fi
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -52,6 +54,7 @@ while [ $# -gt 0 ]; do
     --setup-summary) SETUP_SUMMARY="$2"; shift 2 ;;
     --endpoint-receipt) ENDPOINT_RECEIPT="$2"; shift 2 ;;
     --compact-root) COMPACT_ROOT="$2"; shift 2 ;;
+    --storage-plan) STORAGE_PLAN="$2"; shift 2 ;;
     --command-file) COMMAND_FILE="$2"; shift 2 ;;
     --no-slot) SLOT=0; shift ;;
     --which) WHICH=1; shift ;;
@@ -198,6 +201,15 @@ else
   echo "linux-run[$LANE]: $HOST from $SRC ($(git -C "$SRC" rev-parse --short HEAD)$(git -C "$SRC" diff --quiet HEAD || echo ', with uncommitted edits'))" >&2
 fi
 
+# Storage adoption is exact-ref Boat-only. Validate shape before allocation;
+# actual filesystem capacity and baseline bytes are checked natively.
+if [ -n "$STORAGE_PLAN" ]; then
+  [ "$HOST" = boat ] && [ -n "$REF" ] && [ -z "$MISSION_PACKAGE" ] || {
+    echo 'linux-run: storage plan requires exact-ref ordinary Boat source' >&2; exit 2;
+  }
+  COMMIT="$COMMIT" python3 "$REPO/scripts/native-storage-plan.py" validate --plan "$STORAGE_PLAN" || exit 2
+fi
+
 # Authenticate a complete canonical source packet before any remote job. Avoid
 # sending file-by-file writes through snapshot-backed HOME.
 SOURCE_ARCHIVE=""
@@ -284,6 +296,23 @@ if [ "$HOST" = boat ]; then
   [ "$ok" = 1 ] || { echo "linux-run: could not sync to Boat for $LANE after the allowed setup attempts" >&2; exit 3; }
   NATIVE_INPUTS_B64="$(base64 < "$REPO/scripts/native-inputs.py" | tr -d '\n')"
   BOOTSTRAP_B64="$(base64 < "$REPO/scripts/linux-bootstrap.sh" | tr -d '\n')"
+  STORAGE_PRELUDE="" STORAGE_COMMAND="$CMD"
+  if [ -n "$STORAGE_PLAN" ]; then
+    STORAGE_HELPER_B64="$(base64 < "$REPO/scripts/native-storage-retention.py" | tr -d '\n')"
+    STORAGE_DRIVER_B64="$(base64 < "$REPO/scripts/native-storage-plan.py" | tr -d '\n')"
+    STORAGE_PLAN_B64="$(base64 < "$STORAGE_PLAN" | tr -d '\n')"
+    STORAGE_CMD_B64="$(printf '%s' "$CMD" | base64 | tr -d '\n')"
+    STORAGE_PRELUDE="
+printf '%s' '$STORAGE_HELPER_B64' | base64 -d > \"\$BOOTSTRAP_NATIVE/native-storage-retention.py\" || exit 3
+printf '%s' '$STORAGE_DRIVER_B64' | base64 -d > \"\$BOOTSTRAP_NATIVE/native-storage-plan.py\" || exit 3
+printf '%s' '$STORAGE_PLAN_B64' | base64 -d > \"\$BOOTSTRAP_NATIVE/storage-plan.json\" || exit 3
+printf '%s' '$STORAGE_CMD_B64' | base64 -d > \"\$BOOTSTRAP_NATIVE/storage-command.sh\" || exit 3
+export CARGO_PROFILE_DEV_DEBUG=\${CARGO_PROFILE_DEV_DEBUG:-line-tables-only}
+export CARGO_PROFILE_TEST_DEBUG=\${CARGO_PROFILE_TEST_DEBUG:-line-tables-only} CARGO_INCREMENTAL=0
+/usr/bin/python3 -s -S -P \"\$BOOTSTRAP_NATIVE/native-storage-plan.py\" check --plan \"\$BOOTSTRAP_NATIVE/storage-plan.json\" || exit 3
+"
+    STORAGE_COMMAND="/usr/bin/python3 -s -S -P \"\$BOOTSTRAP_NATIVE/native-storage-plan.py\" run --plan \"\$BOOTSTRAP_NATIVE/storage-plan.json\" --command-file \"\$BOOTSTRAP_NATIVE/storage-command.sh\""
+  fi
   REMOTE="trap 'timeout --kill-after=5 15 rm -f ~/$LEASE' EXIT
 export LANE='$LANE' COMMIT='${COMMIT:-working-tree}' OUT=\$HOME/amazing/out/$LANE
 bootstrap=\$(mktemp /tmp/amazing-bootstrap-script.XXXXXX) || exit 3
@@ -298,6 +327,7 @@ bootstrap_stage environment-copy 30 cp ~/.amazing-env \"\$env_native\"
 bootstrap_stage environment-load 30 bash -c '. \"\$1\" && export -p > \"\$2\"' bash \"\$env_native\" \"\$env_native.exports\"
 . \"\$env_native.exports\" || exit 3
 bootstrap_clean_python_environment
+$STORAGE_PRELUDE
 bootstrap_native_cargo
 export JOBS=\$(nproc) CARGO_BUILD_JOBS=\$(nproc)
 export TEST262_ROOT=\$HOME/corpora/test262 RUSTUP_TOOLCHAIN=1.97.1 OUT=\$HOME/amazing/out/$LANE
@@ -310,7 +340,7 @@ bootstrap_native_tools
 bootstrap_native_inputs
 export CARGO_TARGET_DIR=/tmp/amazing-native-target-$LANE-${COMMIT:-working-tree} CARGO_INCREMENTAL=0
 export AMAZING_SOURCE_COMMIT='${COMMIT:-working-tree}'
-$CMD"
+$STORAGE_COMMAND"
   if [ -n "$ENDPOINT_RECEIPT" ]; then
     # Supervise the entire native bootstrap, not merely the last gate command.
     # Isolated system Python can record ownership before template Python/env

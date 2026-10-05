@@ -1,0 +1,72 @@
+{
+  "actual_storage_exit": 0,
+  "artifact_manifest": {
+    "bytes": 846,
+    "path": "/tmp/amazing-native-retained/native-storage-adoption-20261005/retained/manifests/storage-before-native.json",
+    "sha256": "cd05df2f510c3160ba7eb1fa71d8300ade01275e7efd92851badb8462ee63176"
+  },
+  "baseline": null,
+  "capacity": {
+    "admitted": true,
+    "filesystems": [
+      {
+        "available_bytes": 32398569472,
+        "device": 64769,
+        "path": "/tmp/amazing-native-storage",
+        "required_bytes": 134217728,
+        "total_bytes": 73635184640
+      },
+      {
+        "available_bytes": 32398569472,
+        "device": 64769,
+        "path": "/tmp/amazing-native-retained/native-storage-adoption-20261005",
+        "required_bytes": 33554432,
+        "total_bytes": 73635184640
+      }
+    ],
+    "shared_device_requirements": [
+      {
+        "available_bytes": 32398569472,
+        "required_bytes": 234881024
+      }
+    ]
+  },
+  "command_exit": 0,
+  "copied_unique_bytes": 0,
+  "free_after": [
+    {
+      "available_bytes": 32398483456,
+      "device": 64769,
+      "path": "/tmp/amazing-native-storage",
+      "total_bytes": 73635184640
+    },
+    {
+      "available_bytes": 32398483456,
+      "device": 64769,
+      "path": "/tmp/amazing-native-retained/native-storage-adoption-20261005",
+      "total_bytes": 73635184640
+    }
+  ],
+  "job": "storage-before-native",
+  "phase": "before",
+  "profile": {
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+  },
+  "recoverable_bytes": 0,
+  "recoverable_files": 0,
+  "retained_elf_files": 1,
+  "retained_files": 1,
+  "retained_logical_bytes": 26936,
+  "retention_capacity_required_bytes": 13312,
+  "schema": 1,
+  "session_raw": {
+    "bytes": 2268,
+    "path": "/tmp/amazing-native-storage/native-storage-adoption/93e757b1c0ccdc900400cb59ce94dc341b795ba2/before/storage-before-native/session.json",
+    "sha256": "71f9d6e71c4cddafface8e8216990ea654685a23055f9fd56a13d1fcaa63d997"
+  },
+  "source": "93e757b1c0ccdc900400cb59ce94dc341b795ba2",
+  "state": "TERMINAL",
+  "target_retired": true
+}

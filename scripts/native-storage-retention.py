@@ -16,6 +16,7 @@ import pathlib
 import re
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -115,7 +116,22 @@ def validated_manifest(path, expected_source=None):
             'artifact_count': len(data['artifacts'])}
 
 
-def artifacts(target):
+def elf_kind(path):
+    with path.open('rb') as stream:
+        header = stream.read(64)
+    if not header.startswith(b'\x7fELF'):
+        return None
+    # Preserve malformed/unknown ELF, never classify by filename or executable bit.
+    if len(header) < 20 or header[4] not in (1, 2) or header[5] not in (1, 2):
+        return 'unknown'
+    required = 52 if header[4] == 1 else 64
+    if len(header) < required or header[6] != 1:
+        return 'unknown'
+    kind = struct.unpack_from('<H' if header[5] == 1 else '>H', header, 16)[0]
+    return {1: 'relocatable', 2: 'executable', 3: 'shared-object'}.get(kind, 'unknown')
+
+
+def artifacts(target, elf_policy='all'):
     retained, recoverable = [], []
     for directory, dirs, files in os.walk(target, followlinks=False):
         for name in dirs + files:
@@ -126,12 +142,11 @@ def artifacts(target):
             info = path.stat()
             if not stat.S_ISREG(info.st_mode):
                 raise StorageError('target contains a non-regular artifact')
-            with path.open('rb') as stream:
-                elf = stream.read(4) == b'\x7fELF'
+            elf = elf_kind(path)
             row = {'relative_path': str(path.relative_to(target)), 'bytes': info.st_size,
                    'mode': stat.S_IMODE(info.st_mode)}
-            if elf or path.suffix in SOURCE_SUFFIXES:
-                retained.append(dict(row, sha256=digest(path), kind='elf' if elf else 'generated-source'))
+            if (elf and not (elf == 'relocatable' and elf_policy == 'runnable')) or path.suffix in SOURCE_SUFFIXES:
+                retained.append(dict(row, sha256=digest(path), kind='elf' if elf else 'generated-source', elf_type=elf))
             else:
                 recoverable.append(row)
     return retained, recoverable
@@ -139,7 +154,7 @@ def artifacts(target):
 
 def freeze_artifacts(session, data, output, reserve):
     target = session / 'target'
-    retained, recoverable = artifacts(target)
+    retained, recoverable = artifacts(target, data.get('elf_policy', 'all'))
     blobs = output / 'blobs'
     missing = {}
     for artifact in retained:
@@ -149,7 +164,13 @@ def freeze_artifacts(session, data, output, reserve):
                 raise StorageError('existing retained blob failed integrity verification')
         else:
             missing[artifact['sha256']] = artifact['bytes']
-    requirement = sum(missing.values())
+    hardlink = data.get('retention_method') == 'hardlink'
+    if hardlink and filesystem(target)['device'] != filesystem(output)['device']:
+        raise StorageError('hardlink retention requires the same actual filesystem')
+    payload_bytes = 0 if hardlink else sum(missing.values())
+    requirement = payload_bytes + (len(missing) * 4096 + len(retained) * 1024 + 8192 if hardlink else 0)
+    if requirement > data.get('retention_budget_bytes', requirement):
+        raise StorageError('artifact bytes exceed explicit retention budget; target remains intact')
     if filesystem(output)['available_bytes'] < requirement + reserve:
         raise StorageError('insufficient artifact-retention capacity; target remains intact')
     blobs.mkdir(parents=True, exist_ok=True)
@@ -157,17 +178,25 @@ def freeze_artifacts(session, data, output, reserve):
         original = target / artifact['relative_path']
         destination = blobs / artifact['sha256']
         if not destination.exists():
-            with tempfile.NamedTemporaryFile(dir=blobs, delete=False) as stream:
-                temporary = pathlib.Path(stream.name)
-                with original.open('rb') as source:
-                    shutil.copyfileobj(source, stream, 1024 * 1024)
-                stream.flush()
-                os.fsync(stream.fileno())
-            if digest(temporary) != artifact['sha256']:
-                raise StorageError('artifact copy did not preserve exact bytes')
-            # ELF blobs remain real executable files, usable by a frozen baseline.
-            temporary.chmod(artifact['mode'] | (0o500 if artifact['kind'] == 'elf' else 0))
-            os.replace(temporary, destination)
+            if hardlink:
+                # Only our leased, terminal, freshly-created target is eligible.
+                # Do not chmod a hardlink: its original mode and inode are custody.
+                os.link(original, destination)
+                artifact['retention_method'] = 'hardlink'
+            else:
+                with tempfile.NamedTemporaryFile(dir=blobs, delete=False) as stream:
+                    temporary = pathlib.Path(stream.name)
+                    with original.open('rb') as source:
+                        shutil.copyfileobj(source, stream, 1024 * 1024)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                if digest(temporary) != artifact['sha256']:
+                    raise StorageError('artifact copy did not preserve exact bytes')
+                temporary.chmod(artifact['mode'] | (0o500 if artifact['kind'] == 'elf' else 0))
+                os.replace(temporary, destination)
+                artifact['retention_method'] = 'copy'
+        else:
+            artifact['retention_method'] = 'deduplicated'
         if digest(original) != artifact['sha256'] or digest(destination) != artifact['sha256']:
             raise StorageError('artifact changed during retention; target remains intact')
         artifact['blob'] = str(destination)
@@ -187,7 +216,7 @@ def freeze_artifacts(session, data, output, reserve):
                                  'bytes': manifest.stat().st_size},
                 retained_files=len(retained), retained_elf_files=sum(a['kind'] == 'elf' for a in retained),
                 retained_logical_bytes=sum(a['bytes'] for a in retained),
-                copied_unique_bytes=requirement,
+                copied_unique_bytes=payload_bytes, retention_capacity_required_bytes=requirement,
                 recoverable_files=len(recoverable), recoverable_bytes=sum(a['bytes'] for a in recoverable),
                 recoverable_manifest_sha256=hashlib.sha256(json.dumps(recoverable, sort_keys=True).encode()).hexdigest(),
                 retention_complete=True)
@@ -233,6 +262,8 @@ def run(args):
     profile = {key: os.environ.get(key, value) for key, value in PROFILE.items()}
     if baseline and json.loads(pathlib.Path(baseline['path']).read_text())['profile'] != profile:
         raise StorageError('before/after Cargo profile must match')
+    if args.retention_method == 'hardlink' and filesystem(scratch)['device'] != filesystem(retained)['device']:
+        raise StorageError('hardlink retention requires the same actual filesystem')
     admit = capacity(scratch, output, args.build_budget_bytes,
                      args.retention_budget_bytes, args.reserve_bytes)
     receipt = {'schema': 1, 'utc': utc(), 'ticket': ticket, 'job': job, 'source': source,
@@ -250,7 +281,8 @@ def run(args):
         target.mkdir()
         data = dict(receipt, state='RUNNING', owner_pid=os.getpid(), session=str(session),
                     scratch_parent=str(scratch), target=str(target), command=args.command,
-                    retention_complete=False)
+                    retention_complete=False, retention_method=args.retention_method,
+                    elf_policy=args.elf_policy, retention_budget_bytes=args.retention_budget_bytes)
         atomic_json(session / 'session.json', data)
         environment = dict(os.environ, **profile, CARGO_TARGET_DIR=str(target))
         # The existing native launcher owns timeout/supervision. Keep the lease
@@ -298,6 +330,8 @@ def main():
     for name in ('build-budget-bytes', 'retention-budget-bytes'):
         run_parser.add_argument('--' + name, type=int, required=True)
     run_parser.add_argument('--reserve-bytes', type=int, default=64 * 1024 * 1024)
+    run_parser.add_argument('--retention-method', choices=('copy', 'hardlink'), default='copy')
+    run_parser.add_argument('--elf-policy', choices=('all', 'runnable'), default='all')
     run_parser.add_argument('--baseline-manifest')
     run_parser.add_argument('--baseline-source')
     run_parser.add_argument('command', nargs=argparse.REMAINDER)

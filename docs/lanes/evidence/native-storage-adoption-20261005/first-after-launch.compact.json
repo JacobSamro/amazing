@@ -1,0 +1,20 @@
+{
+  "actual_exit": null,
+  "boot_id": "306b3c74-7ee8-42bd-b73a-4e62a2b46c09",
+  "job": {
+    "box_id": "bx_8e3h9jun",
+    "command_sha256": "dad8de44c013453d9dddb4274241537a5e9af04585e18a79b794581ff56a9986",
+    "execution_sha256": "16399c7bab11a331395f6f4003cd084f539490986695ef10275706c71361e850",
+    "host": "user@37.59.33.138",
+    "job_id": "07a44444e0374797aead9a5116a0dc21",
+    "lane": "native-storage-adoption-20261005",
+    "output_root": "amazing/out/native-storage-adoption-20261005/native-storage-adoption/compact",
+    "port": 19038,
+    "schema": 2,
+    "source_archive_sha256": "a62468d2c2d3df72efb678a2390c44373e1ecc6c538d1747b0630ec90de56074",
+    "source_commit": "93e757b1c0ccdc900400cb59ce94dc341b795ba2"
+  },
+  "reason": "ownership observation unavailable: [Errno 2] No such file or directory: '/home/user/.amazing-jobs/07a44444e0374797aead9a5116a0dc21/start.manifest.json'",
+  "runner_exit": null,
+  "state": "UNKNOWN"
+}

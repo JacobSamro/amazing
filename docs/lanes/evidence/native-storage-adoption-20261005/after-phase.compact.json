@@ -1,0 +1,77 @@
+{
+  "actual_storage_exit": 0,
+  "artifact_manifest": {
+    "bytes": 860,
+    "path": "/tmp/amazing-native-retained/native-storage-adoption-20261005/retained/manifests/storage-after-native-clean1.json",
+    "sha256": "16c98e4bdf5884801e96ea54aaa1c5493f7fbda43528bf886fbfa5f56ee60321"
+  },
+  "baseline": {
+    "artifact_count": 1,
+    "path": "/tmp/amazing-native-retained/native-storage-adoption-20261005/retained/manifests/storage-before-native.json",
+    "sha256": "cd05df2f510c3160ba7eb1fa71d8300ade01275e7efd92851badb8462ee63176",
+    "source": "93e757b1c0ccdc900400cb59ce94dc341b795ba2"
+  },
+  "capacity": {
+    "admitted": true,
+    "filesystems": [
+      {
+        "available_bytes": 32146067456,
+        "device": 64769,
+        "path": "/tmp/amazing-native-storage",
+        "required_bytes": 134217728,
+        "total_bytes": 73635184640
+      },
+      {
+        "available_bytes": 32146067456,
+        "device": 64769,
+        "path": "/tmp/amazing-native-retained/native-storage-adoption-20261005",
+        "required_bytes": 33554432,
+        "total_bytes": 73635184640
+      }
+    ],
+    "shared_device_requirements": [
+      {
+        "available_bytes": 32146067456,
+        "required_bytes": 234881024
+      }
+    ]
+  },
+  "command_exit": 0,
+  "copied_unique_bytes": 0,
+  "free_after": [
+    {
+      "available_bytes": 32143945728,
+      "device": 64769,
+      "path": "/tmp/amazing-native-storage",
+      "total_bytes": 73635184640
+    },
+    {
+      "available_bytes": 32143945728,
+      "device": 64769,
+      "path": "/tmp/amazing-native-retained/native-storage-adoption-20261005",
+      "total_bytes": 73635184640
+    }
+  ],
+  "job": "storage-after-native-clean1",
+  "phase": "after",
+  "profile": {
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+  },
+  "recoverable_bytes": 0,
+  "recoverable_files": 0,
+  "retained_elf_files": 1,
+  "retained_files": 1,
+  "retained_logical_bytes": 26936,
+  "retention_capacity_required_bytes": 9216,
+  "schema": 1,
+  "session_raw": {
+    "bytes": 2549,
+    "path": "/tmp/amazing-native-storage/native-storage-adoption/93e757b1c0ccdc900400cb59ce94dc341b795ba2/after/storage-after-native-clean1/session.json",
+    "sha256": "5dab42cf12302a5ad7c2466de2275d6666f0dda3f090705eb7f07998ff1eb231"
+  },
+  "source": "93e757b1c0ccdc900400cb59ce94dc341b795ba2",
+  "state": "TERMINAL",
+  "target_retired": true
+}

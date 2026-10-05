@@ -1,0 +1,10 @@
+{
+  "actual_controls_exit": 0,
+  "raw": {
+    "bytes": 7930,
+    "path": "/home/user/amazing/out/native-storage-adoption-20261005/native-storage-adoption/after-clean1/controls.raw.log",
+    "sha256": "448f01901eaf3d7432c665906504914fc78362d9727378b5f10cd11efcb9066e"
+  },
+  "schema": 1,
+  "source": "93e757b1c0ccdc900400cb59ce94dc341b795ba2"
+}
