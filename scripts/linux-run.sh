@@ -25,6 +25,7 @@
 #   --setup-summary PATH  compact local setup-failure receipt; no remote raw fetch
 #   --endpoint-receipt PATH --compact-root REMOTE_DIR
 #               capture one Boat job endpoint and its completed compact catalog
+#   --command-file PATH   exact command bytes from a file, avoiding argv limits
 #   --no-slot   skip the slot queue; for crate-scoped iterations only
 #
 # Environment on the host: CARGO_TARGET_DIR, JOBS (per-slot parallelism),
@@ -39,7 +40,7 @@ MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-
 
 LANE="${1:?usage: linux-run.sh <lane> [--host H] [--ref REF] [--no-slot] -- <command>}"
 shift
-HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0 SETUP_SUMMARY="" ENDPOINT_RECEIPT="" COMPACT_ROOT=""
+HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0 SETUP_SUMMARY="" ENDPOINT_RECEIPT="" COMPACT_ROOT="" COMMAND_FILE=""
 if [ -e "$MAIN/.agents/.boat-only" ]; then HOST=boat; fi
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -51,6 +52,7 @@ while [ $# -gt 0 ]; do
     --setup-summary) SETUP_SUMMARY="$2"; shift 2 ;;
     --endpoint-receipt) ENDPOINT_RECEIPT="$2"; shift 2 ;;
     --compact-root) COMPACT_ROOT="$2"; shift 2 ;;
+    --command-file) COMMAND_FILE="$2"; shift 2 ;;
     --no-slot) SLOT=0; shift ;;
     --which) WHICH=1; shift ;;
     --) shift; break ;;
@@ -61,8 +63,13 @@ if [ -e "$MAIN/.agents/.boat-only" ] && [ "$HOST" != boat ]; then
   echo "linux-run: this fleet is configured for Boat only; use --host boat" >&2
   exit 2
 fi
-[ $# -gt 0 ] || [ "${WHICH:-0}" = 1 ] || { echo "linux-run: no command given" >&2; exit 2; }
-CMD="$*"
+[ $# -gt 0 ] || [ -n "$COMMAND_FILE" ] || [ "${WHICH:-0}" = 1 ] || { echo "linux-run: no command given" >&2; exit 2; }
+if [ -n "$COMMAND_FILE" ]; then
+  [ $# = 0 ] && [ -f "$COMMAND_FILE" ] || { echo 'linux-run: command file must replace command arguments' >&2; exit 2; }
+  CMD=""; IFS= read -r -d '' CMD < "$COMMAND_FILE" || true
+else
+  CMD="$*"
+fi
 if [ -n "$ENDPOINT_RECEIPT$COMPACT_ROOT" ]; then
   [ -n "$ENDPOINT_RECEIPT" ] && [ -n "$COMPACT_ROOT" ] && [ -n "$REF" ] && [ ! -e "$ENDPOINT_RECEIPT" ] || {
     echo 'linux-run: endpoint capture requires a fresh receipt, exact ref and compact root' >&2; exit 2;
@@ -307,15 +314,24 @@ $CMD"
     # Supervise the entire native bootstrap, not merely the last gate command.
     # Isolated system Python can record ownership before template Python/env
     # setup; every bootstrap failure then has the same actual-exit contract.
-    JOB_ROW=$(python3 "$REPO/scripts/completed-job.py" capture --receipt "$ENDPOINT_RECEIPT" --lane "$LANE" --source "$COMMIT" --box "$BOAT_ID" --host "$BOAT_HOST" --port "$BOAT_PORT" --root "$COMPACT_ROOT" --command "$CMD" --execution "$REMOTE" --source-archive-sha256 "${SOURCE_ARCHIVE_SHA:-$MISSION_SHA256}") || exit 3
-    JOB_CODE=$(base64 < "$REPO/scripts/completed-job.py" | tr -d '\n')
-    EXECUTION_Q=$(printf '%q' "$REMOTE")
-    REMOTE="exec env -u PYTHONHOME -u PYTHONPATH -u PYTHONUSERBASE -u VIRTUAL_ENV /usr/bin/python3 -I -c \"\$(printf '%s' '$JOB_CODE' | base64 -d)\" run '$JOB_ROW' $EXECUTION_Q"
+    # Capture digests from files: commands may exceed Linux's per-argument
+    # limit even when the outer caller can pass them on another platform.
+    command_file=$(mktemp) || exit 3
+    execution_file=$(mktemp) || { rm -f "$command_file"; exit 3; }
+    printf '%s' "$CMD" > "$command_file"
+    printf '%s' "$REMOTE" > "$execution_file"
+    JOB_ROW=$(python3 "$REPO/scripts/completed-job.py" capture --receipt "$ENDPOINT_RECEIPT" --lane "$LANE" --source "$COMMIT" --box "$BOAT_ID" --host "$BOAT_HOST" --port "$BOAT_PORT" --root "$COMPACT_ROOT" --command-file "$command_file" --execution-file "$execution_file" --source-archive-sha256 "${SOURCE_ARCHIVE_SHA:-$MISSION_SHA256}")
+    capture_rc=$?
+    if [ "$capture_rc" = 0 ]; then
+      REMOTE=$(python3 "$REPO/scripts/completed-job.py" launch "$JOB_ROW" --execution-file "$execution_file")
+      capture_rc=$?
+    fi
+    rm -f "$command_file" "$execution_file"
+    [ "$capture_rc" = 0 ] || exit 3
     JOB_CAPTURED=1
   fi
-  ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"
   T0=$(date +%s)
-  $BSSH "$BOAT_HOST" "echo $ENCODED | base64 -d | bash"
+  printf '%s' "$REMOTE" | $BSSH "$BOAT_HOST" "bash -s"
   rc=$?
   if [ -n "$ENDPOINT_RECEIPT" ]; then
     observation="$ENDPOINT_RECEIPT.observation.summary.json"

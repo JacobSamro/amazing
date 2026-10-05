@@ -50,6 +50,8 @@ def valid(row):
     return row
 
 def capture(args):
+    if getattr(args,'command_file',None):args.command=pathlib.Path(args.command_file).read_text()
+    if getattr(args,'execution_file',None):args.execution=pathlib.Path(args.execution_file).read_text()
     row=dict(schema=1,lane=args.lane,source_commit=args.source,box_id=args.box,host=args.host,port=args.port,job_id=uuid.uuid4().hex,output_root=args.root,command_sha256=digest(args.command.encode()))
     if args.execution is not None:
         row.update(schema=2,execution_sha256=digest(args.execution.encode()),source_archive_sha256=args.source_archive_sha256)
@@ -90,7 +92,8 @@ def run(row,command):
     try:
         raw_path=records/'command.log';raw_hash=hashlib.sha256();raw_bytes=0;observer_lost=False
         with raw_path.open('xb') as raw:
-            child=subprocess.Popen(['bash','-c',command],process_group=0,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+            script=records/'command.sh';script.write_bytes(command.encode());script.chmod(0o600)
+            child=subprocess.Popen(['bash',str(script)],process_group=0,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
             witness=proc(child.pid)
             save(records/'child.manifest.json',dict(start,child=witness))
             if received:
@@ -134,6 +137,21 @@ def run(row,command):
                 except ProcessLookupError:pass
                 child.wait()
         for sig,handler in previous.items():signal.signal(sig,handler)
+
+
+def launch(row,command):
+    """Stream this foreground launcher to bash -s; never place payload in argv."""
+    valid(row)
+    if digest(command.encode())!=row.get('execution_sha256',row['command_sha256']):raise ValueError('job command mismatch')
+    code=base64.b64encode(pathlib.Path(__file__).read_bytes()).decode()
+    body=base64.b64encode(command.encode()).decode()
+    # Base64 cannot contain underscores, so these heredoc terminators cannot
+    # collide with either payload. The temporary runner remains under HOME.
+    return ('runner=$(mktemp "$HOME/.amazing-launch.XXXXXX") || exit 3\n'
+            'trap \'rm -f "$runner"\' EXIT\n'
+            'base64 -d > "$runner" <<\'AMAZING_RUNNER_END\'\n'+code+'\nAMAZING_RUNNER_END\n'
+            'env -u PYTHONHOME -u PYTHONPATH -u PYTHONUSERBASE -u VIRTUAL_ENV /usr/bin/python3 -I "$runner" run-base64stdin '+shlex.quote(encoded(row))+" <<'AMAZING_EXECUTION_END'\n"+body+'\nAMAZING_EXECUTION_END\n'
+            'rc=$?\nexit "$rc"\n')
 
 
 def completion(row):
@@ -257,9 +275,12 @@ def main():
     p=argparse.ArgumentParser();subs=p.add_subparsers(dest='action',required=True)
     a=subs.add_parser('validate-request');a.add_argument('--lane',required=True);a.add_argument('--root',required=True)
     a=subs.add_parser('capture')
-    for name in ('receipt','lane','source','box','host','root','command'):a.add_argument('--'+name,required=True)
-    a.add_argument('--port',type=int,required=True);a.add_argument('--execution');a.add_argument('--source-archive-sha256')
+    for name in ('receipt','lane','source','box','host','root'):a.add_argument('--'+name,required=True)
+    g=a.add_mutually_exclusive_group(required=True);g.add_argument('--command');g.add_argument('--command-file')
+    a.add_argument('--port',type=int,required=True);g=a.add_mutually_exclusive_group();g.add_argument('--execution');g.add_argument('--execution-file');a.add_argument('--source-archive-sha256')
     a=subs.add_parser('run');a.add_argument('receipt');a.add_argument('command')
+    a=subs.add_parser('run-base64stdin');a.add_argument('receipt')
+    a=subs.add_parser('launch');a.add_argument('receipt');a.add_argument('--execution-file',required=True)
     a=subs.add_parser('observe');a.add_argument('receipt')
     a=subs.add_parser('verify');a.add_argument('receipt');a.add_argument('lane');a.add_argument('source');a.add_argument('paths',nargs='+')
     for name in ('status','wait'):
@@ -273,6 +294,8 @@ def main():
     if args.action=='validate-request':valid_output_root(args.lane,args.root);return 0
     if args.action=='capture':capture(args);return 0
     if args.action=='run':return run(decode(args.receipt),args.command)
+    if args.action=='run-base64stdin':return run(decode(args.receipt),base64.b64decode(sys.stdin.buffer.read().strip(),validate=True).decode())
+    if args.action=='launch':print(launch(decode(args.receipt),pathlib.Path(args.execution_file).read_text()),end='');return 0
     if args.action=='observe':print(json.dumps(observe(decode(args.receipt))));return 0
     if args.action=='verify':print(json.dumps(verify(decode(args.receipt),args.lane,args.source,args.paths)));return 0
     if args.action in ('status','wait'):

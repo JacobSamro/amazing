@@ -1,0 +1,54 @@
+{
+  "base": "abbe251695dab037e72f33cd7c1d19f412b4d98e",
+  "recorded_published_base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "prerequisite_ready": "abbe251695dab037e72f33cd7c1d19f412b4d98e",
+  "source": "07cb11ec790a52e43c5a2bb67bf46bbf72f5da97",
+  "wrapper_sha256": "12a53ded66ab9333d9611664bd3f9d06b23eb406b1f39c5165069ba5ca3e64f3",
+  "command_sha256": "d9a5d5a0fd7f554da7b5b23c9fda25a7d26451ac12c83c36a779693ae68513a5",
+  "command_bytes": 196678,
+  "native_job": {
+    "schema": 2,
+    "lane": "public-job-large-command-rerun-20261005",
+    "source_commit": "07cb11ec790a52e43c5a2bb67bf46bbf72f5da97",
+    "box_id": "bx_4gzkd9qr",
+    "host": "user@37.59.33.142",
+    "port": 19040,
+    "job_id": "a9799a8ed346491ebbce63975f6216db",
+    "output_root": "amazing/out/public-job-large-command-rerun-20261005/public-job-large-command-r2",
+    "command_sha256": "d9a5d5a0fd7f554da7b5b23c9fda25a7d26451ac12c83c36a779693ae68513a5",
+    "execution_sha256": "0e6810c91beda9608dc1c87b237174c281bae7d47a074cd49372472b2fea5160",
+    "source_archive_sha256": "77d49550ec1fc2843b8be0b79e5331a4f846fde4398649c45bcf34d925d8db1f"
+  },
+  "native_actual_exit": 0,
+  "runner_exit": 0,
+  "tests": 34,
+  "source_files": {
+    "scripts/linux-run.sh": "12a53ded66ab9333d9611664bd3f9d06b23eb406b1f39c5165069ba5ca3e64f3",
+    "scripts/completed-job.py": "6a69c3460ff734b941c1f959c2d229cae20661c83a054500cf2a36a8928a5514",
+    "scripts/completed-job-large-command-tests.py": "4523c38158e8a8f4f284adfd38d2f80d20038e157a2a1100ecdb8a33c7f18640"
+  },
+  "evidence": {
+    "qualification.summary.json": {
+      "bytes": 1671,
+      "sha256": "06cd8615ca586ecedbacd0e5a8cc433757f8ad88169b828d4b2c947ea0f39f20"
+    },
+    "terminal.summary.json": {
+      "bytes": 1164,
+      "sha256": "a7d890a977054dda6053943edd8a98958a91b607794a2d98761f2315d8a195a1"
+    }
+  },
+  "raw": {
+    "path": "/home/user/.amazing-jobs/a9799a8ed346491ebbce63975f6216db/command.log",
+    "bytes": 5425,
+    "sha256": "c938ed454c3b39197cc0af231973494cf633a22dc6eefaae276e188c1dc7c9d9"
+  },
+  "initial_attempt": {
+    "owner": 55254,
+    "wrapper_exit": 3,
+    "upload_actual_exit": 1,
+    "native_job_started": false,
+    "box": "bx_afydmw4k"
+  },
+  "clean_rerun_used": true,
+  "local_tests": false
+}
