@@ -1,0 +1,15 @@
+Component qualification is recorded in `evidence_custody_holds.compact.json`: new12 and existing22 controls pass; optional caller2 failures and overalljob1 remain explicit. Workspace/docs were not run by this lane; root authorized reuse of its freshly qualified engine gate because no engine/Cargo source changed. The following original design/native plan predates that run.
+
+# Authenticated evidence custody holds
+
+Source-only ticket based on 43e959578e44e2539921d16178ea2788461e61b9. Root/orchestrator owns registration, consumption and lifecycle; lanes never run these lifecycle commands themselves. No box allocation, engine changes or raw recovery is performed by this helper.
+
+`python3 scripts/evidence-custody.py hold --receipt <captured-endpoint.json> --receipt-sha256 <sha> --seconds 1800 --reason terminal-unconsumed` registers a private local hold under `~/.amazing-evidence-custody`. `unknown-exit` is the other permitted reason. The captured supported endpoint receipt binds box/job/source/command/archive and strict lane output root; SHA authenticates original bytes. The box must appear in the root-owned Amazing lane map. Existing records cannot be implicitly renewed or overwritten.
+
+`python3 scripts/evidence-custody.py consume --receipt <same-receipt> --receipt-sha256 <same-sha> --consumption-receipt <root-compact-custody-receipt>` explicitly releases the hold while preserving registration, source authentication and consumption hash. This is root's explicit acknowledgment, not an automatic claim that arbitrary evidence passed verification.
+
+The reaper consults holds before busy/idle/resize decisions and rechecks immediately before each stop. Unconsumed holds remain a stop veto even after their deadline; provider expiry remains finite. Malformed, nonprivate, symlinked or mismatched records fail closed: no managed stop and no renewal authority. Other projects and unmanaged boxes are skipped before hold lookup, preserving account ownership. Existing busy behavior is unchanged.
+
+Renewals are opt-in with `--extend-custody`. Each requested TTL is at most900 seconds, no later than the authenticated hold deadline (at most7200 seconds after registration), and never shortens existing expiry. `--no-auto-extend` still disables all renewal. Every veto/renewal is visible in the reaper log. Missing/ambiguous expiry never authorizes renewal. This does not guarantee survival beyond provider expiry; root must arrange finite custody promptly.
+
+Native qualification plan (no allocation yet): whole `python3 scripts/test-evidence-custody.py` controls followed by existing public tooling suites and workspace/doctests through supported linux-run, on an authorized finite alias. Controls use actual private files, hashes, atomic registration and mocked provider calls; they never stop/extend a real box. Cover terminal/UNKNOWN, explicit consumption, expiration, corruption/permissions/symlinks, managed/unrelated IDs, duplicate publication, finite TTL and no-auto-extend. Root reviews the complete source/command before native execution. Compact results only.

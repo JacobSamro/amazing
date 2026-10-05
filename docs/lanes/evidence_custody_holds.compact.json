@@ -1,0 +1,140 @@
+{
+  "schema": 1,
+  "ticket": "authenticated-evidence-custody-holds",
+  "recorded_origin_base": "97d9827bfb89477edb051f59b4e4dc49a3679152",
+  "qualified_component_source": "91c75cdd0ab52112cd8ee67b809228c53afd7446",
+  "production_and_control_sha256": {
+    "scripts/boat-idle-reaper.py": "2a6aa75b42076932ac4a404d66432185851a5048c6411f505d36d091c6a7e708",
+    "scripts/evidence-custody.py": "111a7325b6704568deacd62eda478f6abf254cf3eb4172dc127736492e4e6d91",
+    "scripts/test-evidence-custody.py": "3177a2ccd11f66f116cc67ec3f3b966a776cbd67a645413b9a2188d2908ab163"
+  },
+  "lane": "reaper-custody-controls-20261005",
+  "endpoint": {
+    "schema": 2,
+    "lane": "reaper-custody-controls-20261005",
+    "source_commit": "91c75cdd0ab52112cd8ee67b809228c53afd7446",
+    "box_id": "bx_88kt52qg",
+    "host": "user@5.135.136.234",
+    "port": 19037,
+    "job_id": "97b8c8d084dd498ba4ed70aa41f6e054",
+    "output_root": "amazing/out/reaper-custody-controls-20261005/qualification-91c75cdd",
+    "command_sha256": "e9c8ded428f73e76ef9402fb342363f2b2521d2e8b2a0078aa4e56acbc5bc677",
+    "execution_sha256": "db8cd268040b246b727b1acd951f3f8c95544fde434825795b0c241fe5f3c096",
+    "source_archive_sha256": "d5683cf8d6c04d83b6a58441bf2454821abba17ee44431f509cfe6d694ccfc84"
+  },
+  "actual_wrapper_exit": 1,
+  "actual_compact_fetch_exit": 0,
+  "component_results": {
+    "large-command-controls": {
+      "command_exit": 0,
+      "tests": 4,
+      "pass": 4,
+      "fail": 0,
+      "raw": {
+        "path": "/tmp/amazing-gate-command-n53o7ncw/output.log",
+        "bytes": 102,
+        "sha256": "0bb4be249ea04a6d81efdd1eb6ba46cc7741bf8c4fa7fb57125ca0f8f621d88f"
+      },
+      "durable_raw": {
+        "path": "/home/user/amazing/out/reaper-custody-controls-20261005/qualification-91c75cdd/large-command-controls.log",
+        "bytes": 102,
+        "sha256": "0bb4be249ea04a6d81efdd1eb6ba46cc7741bf8c4fa7fb57125ca0f8f621d88f"
+      },
+      "phase_receipt_sha256": "66888c9012c4297a0f7630f0d655c106d8e1de6d79c81493b892d79a2184d933"
+    },
+    "custody-controls": {
+      "command_exit": 0,
+      "tests": 12,
+      "pass": 12,
+      "fail": 0,
+      "raw": {
+        "path": "/tmp/amazing-gate-command-5x9jyixe/output.log",
+        "bytes": 779,
+        "sha256": "056d2b8849d0a52c0e2c9cba54555f2e5f771727660f1c3195319814d732bd12"
+      },
+      "durable_raw": {
+        "path": "/home/user/amazing/out/reaper-custody-controls-20261005/qualification-91c75cdd/custody-controls.log",
+        "bytes": 779,
+        "sha256": "056d2b8849d0a52c0e2c9cba54555f2e5f771727660f1c3195319814d732bd12"
+      },
+      "phase_receipt_sha256": "42cb159bfbdd96dc4a341f1ba304a2e7b93eecee047069d78530ca5931283a90"
+    },
+    "preflight-controls": {
+      "command_exit": 0,
+      "tests": 6,
+      "pass": 6,
+      "fail": 0,
+      "raw": {
+        "path": "/tmp/amazing-gate-command-qmofcfq1/output.log",
+        "bytes": 104,
+        "sha256": "9f8f7c57bde4ddfd32e16bd6cb6b6c50e9e36896cfbb2d9dc8ae4cd6a993f4e7"
+      },
+      "durable_raw": {
+        "path": "/home/user/amazing/out/reaper-custody-controls-20261005/qualification-91c75cdd/preflight-controls.log",
+        "bytes": 104,
+        "sha256": "9f8f7c57bde4ddfd32e16bd6cb6b6c50e9e36896cfbb2d9dc8ae4cd6a993f4e7"
+      },
+      "phase_receipt_sha256": "923764bae9a52482b680d2733fa31153d04173b4c23dd5747e9eaadc814df08c"
+    },
+    "lifecycle-controls": {
+      "command_exit": 0,
+      "tests": 12,
+      "pass": 12,
+      "fail": 0,
+      "raw": {
+        "path": "/tmp/amazing-gate-command-wuixfu_i/output.log",
+        "bytes": 775,
+        "sha256": "05edd5f128660e9d3116920490503859d8a72e0a350bd1bcdc1e9eac0962ef42"
+      },
+      "durable_raw": {
+        "path": "/home/user/amazing/out/reaper-custody-controls-20261005/qualification-91c75cdd/lifecycle-controls.log",
+        "bytes": 775,
+        "sha256": "05edd5f128660e9d3116920490503859d8a72e0a350bd1bcdc1e9eac0962ef42"
+      },
+      "phase_receipt_sha256": "d660609d15fac425309af8331f28a5dafda0740b5de0e3e4d91f10729a0716e9"
+    },
+    "caller-controls": {
+      "command_exit": 1,
+      "tests": 3,
+      "pass": 1,
+      "fail": 2,
+      "raw": {
+        "path": "/tmp/amazing-gate-command-y5zxikw4/output.log",
+        "bytes": 20847,
+        "sha256": "08865a5767163f47e0d88b852ed20e7391e6f627459db27031923d034e12772c"
+      },
+      "durable_raw": {
+        "path": "/home/user/amazing/out/reaper-custody-controls-20261005/qualification-91c75cdd/caller-controls.log",
+        "bytes": 20847,
+        "sha256": "08865a5767163f47e0d88b852ed20e7391e6f627459db27031923d034e12772c"
+      },
+      "phase_receipt_sha256": "4f5444c02882f9d0a9d24cba1414ff8fb445f62314e2887e1b252bfbab7b8229"
+    }
+  },
+  "actual_gate_manifest_sha256": "97d04e166e3f41d8c7df3d629a023a5c66b715dda71affc1e74c4533a24c7423",
+  "optional_suite_disposition": {
+    "suite": "completed-callers-tests.py",
+    "actual_exit": 1,
+    "failures": 2,
+    "reason": "Existing fake caller endpoint/status fixture lacks current native-summary resolution contract. Unchanged optional public suite; root explicitly ruled non-blocking and separately owned. No failure suppressed or fixture changed."
+  },
+  "workspace_and_docs": {
+    "lane_ran": false,
+    "status": "not reached after optional caller failure",
+    "root_authorized_engine_reuse": {
+      "source_base": "97d9827bfb89477edb051f59b4e4dc49a3679152",
+      "workspace_pass": 4797,
+      "doctests_pass": 16,
+      "full16_zero_loss": true,
+      "custody_scope": "root qualification; not claimed as execution of 91c75 branch"
+    }
+  },
+  "scope": "Python reaper/helper/tests only; no engine or Cargo files changed; root lifecycle application remains separate",
+  "controls_lifecycle": "Mocks/fixtures only, no real Boat stop/extend from lane",
+  "native_test_total": 37,
+  "native_pass": 35,
+  "native_fail": 2,
+  "native_custody_controls_pass": 12,
+  "source_compatibility": "origin/dev diff43..97 is empty for reaper and completed-job receipt validator",
+  "historical_failure_preserved": true
+}

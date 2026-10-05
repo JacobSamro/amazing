@@ -20,6 +20,7 @@ Usage: scripts/boat-idle-reaper.py [--idle-minutes 5] [--scarce-idle-minutes 15]
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 from pathlib import Path
 import os
@@ -61,6 +62,24 @@ def boat(*args: str, timeout: int = 60) -> dict | None:
         return None
     lines = [l for l in out.splitlines() if l.startswith("{")]
     return json.loads(lines[-1]) if lines else None
+
+
+_custody_spec = importlib.util.spec_from_file_location("evidence_custody", Path(__file__).with_name("evidence-custody.py"))
+custody = importlib.util.module_from_spec(_custody_spec)
+_custody_spec.loader.exec_module(custody)
+
+
+def custody_status(sandbox_id: str, now: float) -> dict:
+    return custody.decision(custody.DEFAULT_DIRECTORY, sandbox_id, now)
+
+
+def custody_extension(sandbox: dict, hold: dict, now: float) -> int:
+    try:
+        remaining = datetime.fromisoformat(sandbox['archiveAfter'].replace('Z', '+00:00')).timestamp()-now
+    except (KeyError, TypeError, ValueError):
+        return 0
+    requested = hold['extension_seconds']
+    return requested if remaining <= RENEW_BEFORE_SECONDS and requested > remaining else 0
 
 
 LANE_MAP = Path(__file__).resolve().parent.parent / ".agents" / ".boat-lanes.json"
@@ -142,6 +161,8 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-auto-extend", action="store_true",
                     help="Keep finite mission TTLs unchanged; continue normal idle stopping")
+    ap.add_argument("--extend-custody", action="store_true",
+                    help="Allow visible <=900s renewals bounded by authenticated custody deadline; --no-auto-extend still forbids renewal")
     args = ap.parse_args()
 
     idle_since: dict[str, float] = {}
@@ -161,6 +182,18 @@ def main() -> int:
             if (not name.startswith("amazing") or "keep" in name.lower() or sid in KEEP
                     or sid not in managed_ids()):
                 continue
+            hold = custody_status(sid, now)
+            if hold['held']:
+                idle_since.pop(sid, None)
+                log(f"CUSTODY-HOLD {sid}: jobs={hold['records']} errors={hold['errors']}")
+                ttl = custody_extension(sb, hold, now)
+                if ttl and args.extend_custody and not args.no_auto_extend:
+                    log(f"CUSTODY-EXTEND {sid}: finite {ttl}s, bounded by explicit hold deadline")
+                    if not args.dry_run:
+                        result = boat("extend", sid, "--ttl", str(ttl))
+                        if not result or result.get('event') == 'error':
+                            log(f"CUSTODY-EXTEND failed {sid}")
+                continue
             busy = is_busy(sid)
             if busy is not False:
                 idle_since.pop(sid, None)
@@ -175,7 +208,7 @@ def main() -> int:
             # size change is applied in the first gap between runs: stop it now
             # and boat-lane.py resumes it at the wanted size.
             want = wanted.get(sid)
-            if want and sb.get("type") and sb.get("type") != want and is_busy(sid) is False:
+            if want and sb.get("type") and sb.get("type") != want and is_busy(sid) is False and not custody_status(sid, time.time())["held"]:
                 log(f"RESIZE-STOP {sid} ({sb.get('type')} -> {want} on next resume)")
                 if not args.dry_run:
                     boat("stop", sid, timeout=120)
@@ -185,7 +218,7 @@ def main() -> int:
             idle_min = (now - first) / 60
             if idle_min >= limit:
                 # Probe once more: a run may have started since the last poll.
-                if is_busy(sid) is not False:
+                if is_busy(sid) is not False or custody_status(sid, time.time())["held"]:
                     idle_since.pop(sid, None)
                     continue
                 log(f"STOP {sid} ({name}, {sb.get('type')}) idle {idle_min:.0f} min")
