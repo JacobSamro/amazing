@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "recorded_origin_base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "sources": {
+    "before": "16e6183dc6dbea293f96639705fc3cca0fad9426",
+    "after": "377d16a098ae56f84835979e27ffef1188a0f682"
+  },
+  "selectors": [
+    "language/",
+    "built-ins/Function/",
+    "built-ins/AsyncFunction/",
+    "built-ins/GeneratorFunction/",
+    "built-ins/AsyncGeneratorFunction/",
+    "built-ins/Object/",
+    "built-ins/Proxy/",
+    "built-ins/Reflect/"
+  ],
+  "modes": [
+    "default",
+    "vm"
+  ],
+  "jobs": 8,
+  "timeout_seconds": 60,
+  "shared_groups": 19,
+  "after_only_vm_groups": 3,
+  "native_before_outcomes": "unknown; authentic newly added controls may fail, no manufactured expected counts",
+  "native_after_required": "workspace0 and doctests0",
+  "commands": {
+    "before": {
+      "path": ".agents/js-lang/tail-calls-gate-prepared/before-corrected-final-command.sh",
+      "sha256": "0042e035110ecf60f463c30e07d66c32f55f252334ce73f85d281485eddc8f4f",
+      "launch_argv_sha256": "9ba29abb291095867fda082ddee547d9ef988d617e4a9d436e66134d9623092c",
+      "root": "amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d"
+    },
+    "after": {
+      "path": ".agents/js-lang/tail-calls-gate-prepared/after-corrected-final-command.sh",
+      "sha256": "c6eb73542aeeddd551e6968202278afddd9c0bedbea4eb5fba451764eeff571e",
+      "launch_argv_sha256": "82334fb296e52b02d15321ba7181a630d3e2a0cc8f171f3ba074d755806bd313",
+      "root": "amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0"
+    }
+  },
+  "raw_policy": "raw HOME; compact only fetch",
+  "compute": {
+    "lane": "js-lang-strict-tail-calls-20261005",
+    "profile": "default 4 vCPU / 8 GiB, finite7200",
+    "caller_sha256": "f3048a26c9a7ad1a6103784e374c319d057da8b89ea22da7d2ecf8dba9a7cd75",
+    "authority": "root whole frozen pair grant"
+  },
+  "initial_authored_failure": {
+    "source": "89e6192c1a7519f041312a6f0dbf84e381de00f1",
+    "owner": 93089,
+    "actual_exit": 101,
+    "compiler_error": "E0583 missing test module path",
+    "raw_sha256": "438fb83a9a8743af7484563bd2ef5397c79e14799d49d32fbb1d98d25bf6df34",
+    "receipt": "before-compact/workspace.phase.manifest.json",
+    "test_engine_execution": false
+  },
+  "native_target_identity": {
+    "before": "/tmp/amazing-tail-calls-before-16e6183d-fresh-target",
+    "after": "/tmp/amazing-tail-calls-after-377d16a0-fresh-target"
+  },
+  "first_after_failure": {
+    "source": "e807ba5dc27d573a53bd88914ae1dd922ae94170",
+    "actual_exit": 100,
+    "workspace": {
+      "passed": 4727,
+      "failed": 4,
+      "skipped": 17
+    },
+    "receipt": "after-first-compact/gate.manifest.json",
+    "raw_sha256": "0c3c0fad679ff53d587261f4ca774f3ad3ddab4f1bac7d092c0da71a701944ad",
+    "disposition": "two genuine forwarding regressions plus two invalid authored direct-using CaseClause fixtures; all corrected together; no waived pass"
+  },
+  "corrected_controls": "All19 shared groups retained; switch uses valid nested blocks and exact CaseClause/DefaultClause using SyntaxError guards; added64 mixed wrappers per genuine tail body."
+}

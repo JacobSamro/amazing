@@ -1,3 +1,6 @@
+// Proper-tail outcome/redispatch adaptation from lucid-softworks/lumen
+// (crates/lumen/src/{eval,interpreter}.rs and interpreter/call_entry.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Bound function exotic [[Call]] and [[Construct]] do not create a function
 // execution context of their own. Enter only the ultimate target's realm.
 impl Interpreter {
@@ -7,8 +10,8 @@ impl Interpreter {
                 if std::ptr::fn_addr_eq(*native, native_bound as crate::value::NativeFn))))
     }
 
-    fn invoke_bound_function(&mut self, function: &JsValue, args: Vec<JsValue>,
-        new_target: Option<JsValue>) -> Result<JsValue, Throw> {
+    fn bound_call_record(&mut self, function: &JsValue,
+        args: Vec<JsValue>) -> Result<TailCallRecord, Throw> {
         let JsValue::Object(object) = function else { return Err(Throw::type_error("invalid bound function")); };
         let data = object.borrow().func.as_ref().and_then(|function| function.home.clone())
             .ok_or_else(|| Throw::type_error("invalid bound function data"))?;
@@ -24,6 +27,12 @@ impl Interpreter {
             arguments.push(stored.borrow().get_own(index.to_string()).unwrap_or(JsValue::Undefined));
         }
         arguments.extend(args);
+        TailCallRecord::new(target, receiver, arguments)
+    }
+
+    fn invoke_bound_function(&mut self, function: &JsValue, args: Vec<JsValue>,
+        new_target: Option<JsValue>) -> Result<JsValue, Throw> {
+        let TailCallRecord { callee: target, receiver, arguments, .. } = self.bound_call_record(function, args)?;
         if self.depth >= MAX_CALL_DEPTH { return Err(Throw::range_error("maximum call stack size exceeded")); }
         self.depth += 1;
         let result = if let Some(new_target) = new_target {

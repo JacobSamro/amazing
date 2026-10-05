@@ -1,3 +1,6 @@
+// Proper-tail outcome/redispatch adaptation from lucid-softworks/lumen
+// (crates/lumen/src/{eval,interpreter}.rs and interpreter/call_entry.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Function body lexical reservation/closure-environment adaptation reuses
 // lucid-softworks/lumen (crates/lumen/src/{eval,interpreter}.rs)
 // @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
@@ -36,6 +39,8 @@ mod chains;
 mod classes;
 #[path = "compiler_templates.rs"]
 mod templates;
+#[path = "compiler_tail_calls.rs"]
+mod tail_calls;
 use completions::CompletionBoundary;
 
 const MAX_REGISTERS: usize = 65_536;
@@ -237,6 +242,7 @@ struct Compiler {
     scope_depth: usize,
     /// The innermost disposal scope captures each using declaration.
     resource_stack: Vec<usize>,
+    tail_calls_allowed: bool,
     with_depth: usize,
     completion_stack: Vec<CompletionBoundary>,
 }
@@ -287,6 +293,7 @@ impl Compiler {
             pending_labels: Vec::new(),
             scope_depth: 0,
             resource_stack: Vec::new(),
+            tail_calls_allowed: true,
             with_depth: 0,
             completion_stack: Vec::new(),
         }
@@ -439,8 +446,11 @@ impl Compiler {
         child.native_declarations = true;
         match &arrow.body {
             ast::ArrowBody::Expr(expression) => {
-                let value = child.expression(expression)?;
-                child.emit(Instruction::Return(value));
+                if child.proper_tail_body() { child.tail_return(expression)?; }
+                else {
+                    let value = child.expression(expression)?;
+                    child.emit(Instruction::Return(value));
+                }
             }
             ast::ArrowBody::Block(block) => {
                 if child.native_declarations { child.annex_declarations(&block.body, &params); }
@@ -664,7 +674,10 @@ impl Compiler {
         if fills_empty { self.completion_stack.push(CompletionBoundary::Undefined); }
         let resources = matches!(&statement.kind, StmtKind::For { init: Some(ast::ForInit::Decl(d)), .. } if d.resource_kind.is_some())
             .then(|| self.begin_resources());
+        let saved = self.tail_calls_allowed;
+        if resources.is_some() { self.tail_calls_allowed = false; }
         let result = self.statement_inner(statement);
+        self.tail_calls_allowed = saved;
         let result = result.and_then(|()| match resources {
             Some((slot, handler)) => self.end_resources(slot, handler, statement.span),
             None => Ok(()),
@@ -897,7 +910,10 @@ impl Compiler {
                 let done = self.register(statement.span)?;
                 self.emit(Instruction::IteratorStep(value, done, slot));
                 let done_branch = self.emit(Instruction::Branch(done, Condition::Truthy, 0));
-                self.for_iteration(left, value, body, statement.span)?;
+                let saved = std::mem::replace(&mut self.tail_calls_allowed, false);
+                let result = self.for_iteration(left, value, body, statement.span);
+                self.tail_calls_allowed = saved;
+                result?;
                 self.emit(Instruction::Jump(start));
                 self.patch(done_branch);
                 self.emit(Instruction::TryNormal);
@@ -956,7 +972,10 @@ impl Compiler {
                 let value = self.register(statement.span)?;
                 self.emit(Instruction::AsyncIteratorValue(value, result));
                 self.emit(Instruction::AsyncIteratorBeginBody(slot));
-                self.for_iteration(left, value, body, statement.span)?;
+                let saved = std::mem::replace(&mut self.tail_calls_allowed, false);
+                let result = self.for_iteration(left, value, body, statement.span);
+                self.tail_calls_allowed = saved;
+                result?;
                 self.emit(Instruction::Jump(start));
                 self.patch(done_branch);
                 self.emit(Instruction::TryNormal);
@@ -1027,9 +1046,18 @@ impl Compiler {
                 for (case_index, case) in cases.iter().enumerate() {
                     let body_start = self.program.code.len();
                     body_starts.push(body_start);
-                    for statement in &case.body {
-                        self.completion_statement(statement, case_pair)?;
-                    }
+                    let saved = self.tail_calls_allowed;
+                    let result: Result<(), CompileError> = (|| {
+                        for statement in &case.body {
+                            self.completion_statement(statement, case_pair)?;
+                            if matches!(&statement.kind, StmtKind::Var(declaration) if declaration.resource_kind.is_some()) {
+                                self.tail_calls_allowed = false;
+                            }
+                        }
+                        Ok(())
+                    })();
+                    self.tail_calls_allowed = saved;
+                    result?;
                     let _ = case_index;
                 }
                 for (index, branch) in case_branches {
@@ -1090,7 +1118,10 @@ impl Compiler {
                 });
                 self.emit(Instruction::EnterScope);
                 self.instantiate_block(&statement.block.body);
-                self.statements(&statement.block.body, statement.block.span)?;
+                let saved = std::mem::replace(&mut self.tail_calls_allowed, false);
+                let result = self.statements(&statement.block.body, statement.block.span);
+                self.tail_calls_allowed = saved;
+                result?;
                 self.emit(Instruction::LeaveScope);
                 self.emit(Instruction::TryNormal);
 
@@ -1104,7 +1135,11 @@ impl Compiler {
                     } else { self.emit(Instruction::EnterCatch(None)); }
                     if self.native_declarations { self.emit(Instruction::EnterScope); }
                     self.instantiate_block(&catch.body.body);
-                    self.statements(&catch.body.body, catch.body.span)?;
+                    let saved = self.tail_calls_allowed;
+                    self.tail_calls_allowed &= statement.finally.is_none();
+                    let result = self.statements(&catch.body.body, catch.body.span);
+                    self.tail_calls_allowed = saved;
+                    result?;
                     if self.native_declarations { self.emit(Instruction::LeaveScope); }
                     self.emit(Instruction::LeaveScope);
                     self.emit(Instruction::TryNormal);
@@ -1132,6 +1167,9 @@ impl Compiler {
                 };
             }
             StmtKind::Return(expression) if self.program.is_function => {
+                if self.proper_tail_body() {
+                    if let Some(expression) = expression { return self.tail_return(expression); }
+                }
                 let value = if let Some(expression) = expression {
                     let value = self.expression(expression)?;
                     if self.is_async && self.is_generator {

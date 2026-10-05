@@ -1,3 +1,6 @@
+// Proper-tail outcome/redispatch adaptation from lucid-softworks/lumen
+// (crates/lumen/src/{eval,interpreter}.rs and interpreter/call_entry.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Function body lexical reservation/closure-environment adaptation reuses
 // lucid-softworks/lumen (crates/lumen/src/{eval,interpreter}.rs)
 // @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
@@ -78,6 +81,7 @@ enum Flow {
     Break(Option<String>),
     Continue(Option<String>),
     Return(JsValue),
+    Tail(TailCallRecord),
 }
 
 struct ForInState {
@@ -380,6 +384,9 @@ pub struct Interpreter {
     completion: Option<JsValue>,
     frames: Vec<CallFrame>,
     strict_eval_context: bool,
+    tail_calls_allowed: bool,
+    // Resource frames belonging to a live caller do not constrain this callee.
+    tail_resource_base: usize,
     /// Saved `strict_eval_context` values for the VM's `EnterStrict`/
     /// `ExitStrict` instructions, which bracket a class's heritage
     /// expression and computed member keys -- always strict, per spec,
@@ -610,6 +617,8 @@ impl Interpreter {
             completion: None,
             frames: Vec::new(),
             strict_eval_context: false,
+            tail_calls_allowed: false,
+            tail_resource_base: 0,
             vm_strict_stack: Vec::new(),
             direct_eval_call: false,
             direct_eval_env: None,
@@ -1359,6 +1368,7 @@ impl Interpreter {
         match self.exec_stmts(&p.body, &env)? {
             Flow::Normal => {}
             Flow::Return(value) => self.completion = Some(value),
+            Flow::Tail(_) => unreachable!("Script is not a tail-call body"),
             Flow::Break(_) | Flow::Continue(_) => return Err(Throw::syntax_error("illegal break or continue")),
         }
         if self.external_scheduling.is_none() { self.drain_jobs()?; }
@@ -1835,6 +1845,7 @@ include!("interp_coroutine.rs");
 include!("interp_async_generator_return.rs");
 include!("interp_async_generator_yield.rs");
 include!("interp_stmt.rs");
+include!("interp_tail_calls.rs");
 include!("interp_references.rs");
 include!("interp_yield_delegate.rs");
 include!("interp_optional_chain.rs");
@@ -1892,3 +1903,7 @@ include!("interp_call_resource_tests.rs");
 #[cfg(test)]
 include!("runtime_dynamic_source_tests.rs");
 include!("runtime_eval_global_tests.rs");
+
+#[cfg(test)]
+#[path = "interp_tail_call_tests.rs"]
+mod tail_call_tests;

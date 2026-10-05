@@ -1,0 +1,783 @@
+{
+  "schema": 1,
+  "comparisons": [
+    {
+      "selector_mode": "default-built-ins-AsyncFunction.compact.json",
+      "selected_files": 312,
+      "variant_inventory": 36,
+      "before_pass_files": 18,
+      "after_pass_files": 18,
+      "before_pass_variants": 36,
+      "after_pass_variants": 36,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "b237120da70892c5d36efb38e390037ac2ab6518d18b2420c3ee666d85392f1f",
+      "after_compact_sha256": "fb03f21c34d4ee57fc6d36a57098a27c506aa0448fa850ed9f3e6b21e504bf38",
+      "before_raw": {
+        "bytes": 7649126,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/default-built-ins-AsyncFunction.json",
+        "sha256": "18a3ee555d7b07687f5b49da9ffad89b3cc4630dd212872cb3c939e1a59688d7"
+      },
+      "after_raw": {
+        "bytes": 7649126,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/default-built-ins-AsyncFunction.json",
+        "sha256": "57a24f43ba5dc598087cc81f91010ff13b36487bb9569aad020ef7106e466fdd"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "default-built-ins-AsyncGeneratorFunction.compact.json",
+      "selected_files": 317,
+      "variant_inventory": 46,
+      "before_pass_files": 23,
+      "after_pass_files": 23,
+      "before_pass_variants": 46,
+      "after_pass_variants": 46,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "22737ad053cfc53cca52699a8d61b665c18bde52d761251cc84440223de6b8a4",
+      "after_compact_sha256": "5a226404fd0568ef75093308186274012033442705ea34d7626c5e6bd59aa59e",
+      "before_raw": {
+        "bytes": 7650775,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/default-built-ins-AsyncGeneratorFunction.json",
+        "sha256": "ec3e2602622d7d95ab1b4eac6e7204eb487580c1912eb2c4aa59e96c5acaad62"
+      },
+      "after_raw": {
+        "bytes": 7650775,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/default-built-ins-AsyncGeneratorFunction.json",
+        "sha256": "ce7df0fafc5b169c549a5cc32734c86a2e3febdba72df3f02a0f6321f12cfcd8"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "default-built-ins-Function.compact.json",
+      "selected_files": 809,
+      "variant_inventory": 905,
+      "before_pass_files": 514,
+      "after_pass_files": 514,
+      "before_pass_variants": 903,
+      "after_pass_variants": 903,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "93f7c33901b22f4c6e6ae1c469de47570fe694d60031e36d6382cc5bff0e159e",
+      "after_compact_sha256": "86fa3a076c565daf92c0aca7a8f597bc606630e917367251abbd5ac1b700892a",
+      "before_raw": {
+        "bytes": 7716796,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/default-built-ins-Function.json",
+        "sha256": "75e8896361f0c27ec021345107cc0f7ff7eff1c292bd6ae6b9c3e57eda4141d5"
+      },
+      "after_raw": {
+        "bytes": 7716796,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/default-built-ins-Function.json",
+        "sha256": "45df0a4d5f22179ae606726d227ea93de3ecc72739eac95d9ca55c68ed96febf"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "default-built-ins-GeneratorFunction.compact.json",
+      "selected_files": 317,
+      "variant_inventory": 46,
+      "before_pass_files": 23,
+      "after_pass_files": 23,
+      "before_pass_variants": 46,
+      "after_pass_variants": 46,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "dd0ae1e1dc7bdbcbde2fb5747df8faeda80f275e2f0ef28db2217b7bbc303131",
+      "after_compact_sha256": "852cfe66a1469186d572a9c6029753747f150c7ab6acfb1361929d406d99462e",
+      "before_raw": {
+        "bytes": 7650124,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/default-built-ins-GeneratorFunction.json",
+        "sha256": "d9747805f06c8fb4a153cde69ba03e7c7680cf28a2f7bb3bd2aeeebf8e9114fd"
+      },
+      "after_raw": {
+        "bytes": 7650124,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/default-built-ins-GeneratorFunction.json",
+        "sha256": "d7adfe56a1e655bec2fa8af1abd10f89572454eb9b20da29f9f7b689b7a327e1"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "default-built-ins-Object.compact.json",
+      "selected_files": 3708,
+      "variant_inventory": 6808,
+      "before_pass_files": 3413,
+      "after_pass_files": 3413,
+      "before_pass_variants": 6806,
+      "after_pass_variants": 6806,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "954eaa452a8cf1a9594c08d184c9a087bf3469ec6f1572e657a6905316c0ae9a",
+      "after_compact_sha256": "c45786bd86d59c30314fb9453c89a499755c94ffcff740c24aac8797c5b7a0b9",
+      "before_raw": {
+        "bytes": 8116518,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/default-built-ins-Object.json",
+        "sha256": "91b28721349ab826d5e332b920cfe1097235b348342df1ec944a240fb47d5257"
+      },
+      "after_raw": {
+        "bytes": 8116518,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/default-built-ins-Object.json",
+        "sha256": "547cc5e118dca501c8029880d8b1feb16f73915e9c7bcd29df73939624797439"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "default-built-ins-Proxy.compact.json",
+      "selected_files": 605,
+      "variant_inventory": 607,
+      "before_pass_files": 311,
+      "after_pass_files": 311,
+      "before_pass_variants": 607,
+      "after_pass_variants": 607,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "f52e72b22cc842584d0a6fc0991d5fc21e3e8e1ce7dc8c9062514d4a17aab484",
+      "after_compact_sha256": "bbd2cf0e0bba47a5c57c494c248173e3ce792c3c03794be1a66ffa7bb14679d9",
+      "before_raw": {
+        "bytes": 7704571,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/default-built-ins-Proxy.json",
+        "sha256": "31e65f69bf4db18ad20e94978565875325d2dd26fa32baa6593bf6d3f9502aaf"
+      },
+      "after_raw": {
+        "bytes": 7704571,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/default-built-ins-Proxy.json",
+        "sha256": "96bb8cf0ffc4769f5214b54a49636d77208b78e3cf3b41fe9bd7b7e28b06d23d"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "default-built-ins-Reflect.compact.json",
+      "selected_files": 448,
+      "variant_inventory": 308,
+      "before_pass_files": 154,
+      "after_pass_files": 154,
+      "before_pass_variants": 308,
+      "after_pass_variants": 308,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "a83f84a42f64e933c3b17f45e462cb7687fdd8d274fc2501205b431f4827f2ca",
+      "after_compact_sha256": "c09de745d746667ab7657e2f878befbb8dd78db559b39a2e90194b186e71231b",
+      "before_raw": {
+        "bytes": 7672376,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/default-built-ins-Reflect.json",
+        "sha256": "e4e3766e3a4a21f3afaf1ca1a401869dd3158d59ea5e17429258c8f1950761af"
+      },
+      "after_raw": {
+        "bytes": 7672376,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/default-built-ins-Reflect.json",
+        "sha256": "b03b64c728ca368c0734a73d8ee099ffe82955a3811f03c48b9ee3930f64f603"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "default-language.compact.json",
+      "selected_files": 24866,
+      "variant_inventory": 45394,
+      "before_pass_files": 24477,
+      "after_pass_files": 24511,
+      "before_pass_variants": 45266,
+      "after_pass_variants": 45300,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [
+        "language/expressions/call/tco-call-args.js",
+        "language/expressions/call/tco-member-args.js",
+        "language/expressions/call/tco-non-eval-function-dynamic.js",
+        "language/expressions/call/tco-non-eval-function.js",
+        "language/expressions/call/tco-non-eval-global.js",
+        "language/expressions/call/tco-non-eval-with.js",
+        "language/expressions/coalesce/tco-pos-null.js",
+        "language/expressions/coalesce/tco-pos-undefined.js",
+        "language/expressions/comma/tco-final.js",
+        "language/expressions/conditional/tco-cond.js",
+        "language/expressions/conditional/tco-pos.js",
+        "language/expressions/logical-and/tco-right.js",
+        "language/expressions/logical-or/tco-right.js",
+        "language/expressions/tagged-template/tco-call.js",
+        "language/expressions/tagged-template/tco-member.js",
+        "language/expressions/tco-pos.js",
+        "language/statements/block/tco-stmt-list.js",
+        "language/statements/block/tco-stmt.js",
+        "language/statements/do-while/tco-body.js",
+        "language/statements/for/tco-const-body.js",
+        "language/statements/for/tco-let-body.js",
+        "language/statements/for/tco-lhs-body.js",
+        "language/statements/for/tco-var-body.js",
+        "language/statements/if/tco-else-body.js",
+        "language/statements/if/tco-if-body.js",
+        "language/statements/labeled/tco.js",
+        "language/statements/return/tco.js",
+        "language/statements/switch/tco-case-body-dflt.js",
+        "language/statements/switch/tco-case-body.js",
+        "language/statements/switch/tco-dftl-body.js",
+        "language/statements/try/tco-catch-finally.js",
+        "language/statements/try/tco-catch.js",
+        "language/statements/try/tco-finally.js",
+        "language/statements/while/tco-body.js"
+      ],
+      "gained_variants": [
+        [
+          "language/expressions/call/tco-call-args.js",
+          "strict"
+        ],
+        [
+          "language/expressions/call/tco-member-args.js",
+          "strict"
+        ],
+        [
+          "language/expressions/call/tco-non-eval-function-dynamic.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/call/tco-non-eval-function.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/call/tco-non-eval-global.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/call/tco-non-eval-with.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/coalesce/tco-pos-null.js",
+          "strict"
+        ],
+        [
+          "language/expressions/coalesce/tco-pos-undefined.js",
+          "strict"
+        ],
+        [
+          "language/expressions/comma/tco-final.js",
+          "strict"
+        ],
+        [
+          "language/expressions/conditional/tco-cond.js",
+          "strict"
+        ],
+        [
+          "language/expressions/conditional/tco-pos.js",
+          "strict"
+        ],
+        [
+          "language/expressions/logical-and/tco-right.js",
+          "strict"
+        ],
+        [
+          "language/expressions/logical-or/tco-right.js",
+          "strict"
+        ],
+        [
+          "language/expressions/tagged-template/tco-call.js",
+          "strict"
+        ],
+        [
+          "language/expressions/tagged-template/tco-member.js",
+          "strict"
+        ],
+        [
+          "language/expressions/tco-pos.js",
+          "strict"
+        ],
+        [
+          "language/statements/block/tco-stmt-list.js",
+          "strict"
+        ],
+        [
+          "language/statements/block/tco-stmt.js",
+          "strict"
+        ],
+        [
+          "language/statements/do-while/tco-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/for/tco-const-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/for/tco-let-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/for/tco-lhs-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/for/tco-var-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/if/tco-else-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/if/tco-if-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/labeled/tco.js",
+          "strict"
+        ],
+        [
+          "language/statements/return/tco.js",
+          "strict"
+        ],
+        [
+          "language/statements/switch/tco-case-body-dflt.js",
+          "strict"
+        ],
+        [
+          "language/statements/switch/tco-case-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/switch/tco-dftl-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/try/tco-catch-finally.js",
+          "strict"
+        ],
+        [
+          "language/statements/try/tco-catch.js",
+          "strict"
+        ],
+        [
+          "language/statements/try/tco-finally.js",
+          "strict"
+        ],
+        [
+          "language/statements/while/tco-body.js",
+          "strict"
+        ]
+      ],
+      "before_compact_sha256": "5d14094fab31d0d7f0aafe6ce61ac5727d63e25d3da2704e9df899b48d1bd359",
+      "after_compact_sha256": "c742cf0c642d62130035c2fa9b8d4c2eaa64a83162f262f7eb2cc01dda2bbdce",
+      "before_raw": {
+        "bytes": 14482586,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/default-language.json",
+        "sha256": "8dc5fc07a54442918d6971a46a443629cd572986932cd4721c0e9109e576fd83"
+      },
+      "after_raw": {
+        "bytes": 14476944,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/default-language.json",
+        "sha256": "bc7829a128c8554da6a2394db9047977accf51a0a0f863ed04a6e7830137c61e"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "vm-built-ins-AsyncFunction.compact.json",
+      "selected_files": 312,
+      "variant_inventory": 36,
+      "before_pass_files": 18,
+      "after_pass_files": 18,
+      "before_pass_variants": 36,
+      "after_pass_variants": 36,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "9663baa3c1d153323176977b104c9d2c593e3605f4e4f3f2338d299dff7928f5",
+      "after_compact_sha256": "6589643f40a310458a2af63f15e04ab9ac398643fc489d49fe35cd20a1f50913",
+      "before_raw": {
+        "bytes": 7649126,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/vm-built-ins-AsyncFunction.json",
+        "sha256": "938254114422a09659ae4fe30d6e375e06f465509636d89ea1408b33569f624c"
+      },
+      "after_raw": {
+        "bytes": 7649126,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/vm-built-ins-AsyncFunction.json",
+        "sha256": "7ab27749a9ce124673a0b9b36a3121e174c4d42017bb9aa3db7a23bc853525fd"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "vm-built-ins-AsyncGeneratorFunction.compact.json",
+      "selected_files": 317,
+      "variant_inventory": 46,
+      "before_pass_files": 23,
+      "after_pass_files": 23,
+      "before_pass_variants": 46,
+      "after_pass_variants": 46,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "b0644cefb6c882fd3b6d3bd22d0d06a2c966311aa0331965bcc31ba60f16c6de",
+      "after_compact_sha256": "b08842fca47d6d526e43e0e72a9f52e01947c4389f03ac09ceb8876f04a919fb",
+      "before_raw": {
+        "bytes": 7650775,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/vm-built-ins-AsyncGeneratorFunction.json",
+        "sha256": "a5ded00d9b33491d7e67fdb1042dd8ddaa00f404832b6efcb73e418f43711179"
+      },
+      "after_raw": {
+        "bytes": 7650775,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/vm-built-ins-AsyncGeneratorFunction.json",
+        "sha256": "6672a7550474068041eaf6814a563f684455ecc437cf2578775555259d915de6"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "vm-built-ins-Function.compact.json",
+      "selected_files": 809,
+      "variant_inventory": 905,
+      "before_pass_files": 514,
+      "after_pass_files": 514,
+      "before_pass_variants": 903,
+      "after_pass_variants": 903,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "dde34ff78f0ad1f246620780c678ce80fe05d6ba979d9f2db5149902186785f1",
+      "after_compact_sha256": "ffa8e8b36de756a1ebbd49e2fc2c339d27410779fe94d1215dd465f871d0bc07",
+      "before_raw": {
+        "bytes": 7716796,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/vm-built-ins-Function.json",
+        "sha256": "ef5a9a45e2c02242c0f12696fc3a0db45b0096d49ecbab60803b6a93f388161a"
+      },
+      "after_raw": {
+        "bytes": 7716796,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/vm-built-ins-Function.json",
+        "sha256": "bdcf93ac110833aef57e9d4ba07dcc89bcbd72ad268dac5346f26dccc7912bd4"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "vm-built-ins-GeneratorFunction.compact.json",
+      "selected_files": 317,
+      "variant_inventory": 46,
+      "before_pass_files": 23,
+      "after_pass_files": 23,
+      "before_pass_variants": 46,
+      "after_pass_variants": 46,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "cc45bc6d10044272069b1bd7eb24fd33221c0c5f53e8407fd1d962c6b601e6b7",
+      "after_compact_sha256": "6fd10b325ecf5cf7d109a5c6f0d38e7205b292838fd8f39989cfc973f20aac0d",
+      "before_raw": {
+        "bytes": 7650124,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/vm-built-ins-GeneratorFunction.json",
+        "sha256": "53bde0e72c85c052fa4d7058c9c76e5c105dd02399d9ee46fefd8f9f7dd4597d"
+      },
+      "after_raw": {
+        "bytes": 7650124,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/vm-built-ins-GeneratorFunction.json",
+        "sha256": "6b51ac797bfa06428100789bbeb408d5150bfae1a5110ab5a7701dd1409918e2"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "vm-built-ins-Object.compact.json",
+      "selected_files": 3708,
+      "variant_inventory": 6808,
+      "before_pass_files": 3413,
+      "after_pass_files": 3413,
+      "before_pass_variants": 6806,
+      "after_pass_variants": 6806,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "1d3b509e7eeb7758df90e7a53c774dface164f820924a993e755b814348d7318",
+      "after_compact_sha256": "69c2da080a72d09e66faa191006a0f4124b5a58a88948866bbb6791f576904ed",
+      "before_raw": {
+        "bytes": 8116518,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/vm-built-ins-Object.json",
+        "sha256": "27ca6416632c8e3dbae04089d23de98f7e9b1c09ff474f1fb7d0017999e05887"
+      },
+      "after_raw": {
+        "bytes": 8116518,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/vm-built-ins-Object.json",
+        "sha256": "145dbb353258331a73f73c61506135813ce8a99b952c450671707ecd1e3ae3e5"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "vm-built-ins-Proxy.compact.json",
+      "selected_files": 605,
+      "variant_inventory": 607,
+      "before_pass_files": 311,
+      "after_pass_files": 311,
+      "before_pass_variants": 607,
+      "after_pass_variants": 607,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "a3d7ea145b612b82ce7a0b17bfb3eecb2924c1c4d7dea60aa84f9db254c679dd",
+      "after_compact_sha256": "dd4620d869b55c3bea848021698bab5b257554a8b272bff11243ae9c679cd0ff",
+      "before_raw": {
+        "bytes": 7704571,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/vm-built-ins-Proxy.json",
+        "sha256": "bbbfa7c2b68a5aa6facb401fb191fac68a23bccdd14c914e938d477c3ed99f8d"
+      },
+      "after_raw": {
+        "bytes": 7704571,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/vm-built-ins-Proxy.json",
+        "sha256": "739dc8947df1f7737d2a4c4a1da4f599ef547ee525aaacfb1cd97c9a2556f0c2"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "vm-built-ins-Reflect.compact.json",
+      "selected_files": 448,
+      "variant_inventory": 308,
+      "before_pass_files": 154,
+      "after_pass_files": 154,
+      "before_pass_variants": 308,
+      "after_pass_variants": 308,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "04b0bd4dc98f6f602a1c637c404c409f9d6a6d1c5c6ce305bfa2078ff06748be",
+      "after_compact_sha256": "59ee05881baf0054952e9ecfb0858017e6c5b5764ceb4b278d657d8e97142c0a",
+      "before_raw": {
+        "bytes": 7672376,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/vm-built-ins-Reflect.json",
+        "sha256": "fd686b9f354cac68f6fc87dec52b3f7f514e8fee047bc99eb66afa4e80e69206"
+      },
+      "after_raw": {
+        "bytes": 7672376,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/vm-built-ins-Reflect.json",
+        "sha256": "3bd44f72c011e4b08061756660b4ac6172267c5267aad31926a5d7e200a12235"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    },
+    {
+      "selector_mode": "vm-language.compact.json",
+      "selected_files": 24866,
+      "variant_inventory": 45394,
+      "before_pass_files": 24477,
+      "after_pass_files": 24511,
+      "before_pass_variants": 45266,
+      "after_pass_variants": 45300,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [
+        "language/expressions/call/tco-call-args.js",
+        "language/expressions/call/tco-member-args.js",
+        "language/expressions/call/tco-non-eval-function-dynamic.js",
+        "language/expressions/call/tco-non-eval-function.js",
+        "language/expressions/call/tco-non-eval-global.js",
+        "language/expressions/call/tco-non-eval-with.js",
+        "language/expressions/coalesce/tco-pos-null.js",
+        "language/expressions/coalesce/tco-pos-undefined.js",
+        "language/expressions/comma/tco-final.js",
+        "language/expressions/conditional/tco-cond.js",
+        "language/expressions/conditional/tco-pos.js",
+        "language/expressions/logical-and/tco-right.js",
+        "language/expressions/logical-or/tco-right.js",
+        "language/expressions/tagged-template/tco-call.js",
+        "language/expressions/tagged-template/tco-member.js",
+        "language/expressions/tco-pos.js",
+        "language/statements/block/tco-stmt-list.js",
+        "language/statements/block/tco-stmt.js",
+        "language/statements/do-while/tco-body.js",
+        "language/statements/for/tco-const-body.js",
+        "language/statements/for/tco-let-body.js",
+        "language/statements/for/tco-lhs-body.js",
+        "language/statements/for/tco-var-body.js",
+        "language/statements/if/tco-else-body.js",
+        "language/statements/if/tco-if-body.js",
+        "language/statements/labeled/tco.js",
+        "language/statements/return/tco.js",
+        "language/statements/switch/tco-case-body-dflt.js",
+        "language/statements/switch/tco-case-body.js",
+        "language/statements/switch/tco-dftl-body.js",
+        "language/statements/try/tco-catch-finally.js",
+        "language/statements/try/tco-catch.js",
+        "language/statements/try/tco-finally.js",
+        "language/statements/while/tco-body.js"
+      ],
+      "gained_variants": [
+        [
+          "language/expressions/call/tco-call-args.js",
+          "strict"
+        ],
+        [
+          "language/expressions/call/tco-member-args.js",
+          "strict"
+        ],
+        [
+          "language/expressions/call/tco-non-eval-function-dynamic.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/call/tco-non-eval-function.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/call/tco-non-eval-global.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/call/tco-non-eval-with.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/coalesce/tco-pos-null.js",
+          "strict"
+        ],
+        [
+          "language/expressions/coalesce/tco-pos-undefined.js",
+          "strict"
+        ],
+        [
+          "language/expressions/comma/tco-final.js",
+          "strict"
+        ],
+        [
+          "language/expressions/conditional/tco-cond.js",
+          "strict"
+        ],
+        [
+          "language/expressions/conditional/tco-pos.js",
+          "strict"
+        ],
+        [
+          "language/expressions/logical-and/tco-right.js",
+          "strict"
+        ],
+        [
+          "language/expressions/logical-or/tco-right.js",
+          "strict"
+        ],
+        [
+          "language/expressions/tagged-template/tco-call.js",
+          "strict"
+        ],
+        [
+          "language/expressions/tagged-template/tco-member.js",
+          "strict"
+        ],
+        [
+          "language/expressions/tco-pos.js",
+          "strict"
+        ],
+        [
+          "language/statements/block/tco-stmt-list.js",
+          "strict"
+        ],
+        [
+          "language/statements/block/tco-stmt.js",
+          "strict"
+        ],
+        [
+          "language/statements/do-while/tco-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/for/tco-const-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/for/tco-let-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/for/tco-lhs-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/for/tco-var-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/if/tco-else-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/if/tco-if-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/labeled/tco.js",
+          "strict"
+        ],
+        [
+          "language/statements/return/tco.js",
+          "strict"
+        ],
+        [
+          "language/statements/switch/tco-case-body-dflt.js",
+          "strict"
+        ],
+        [
+          "language/statements/switch/tco-case-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/switch/tco-dftl-body.js",
+          "strict"
+        ],
+        [
+          "language/statements/try/tco-catch-finally.js",
+          "strict"
+        ],
+        [
+          "language/statements/try/tco-catch.js",
+          "strict"
+        ],
+        [
+          "language/statements/try/tco-finally.js",
+          "strict"
+        ],
+        [
+          "language/statements/while/tco-body.js",
+          "strict"
+        ]
+      ],
+      "before_compact_sha256": "8b6f920e0643bd2ed218bdaed16cebb09eab26281a84b17daca4de7de58e4325",
+      "after_compact_sha256": "6e959a582295462b5a64d2b45e841d9f55438068b081f1821f86a5c95a7834d8",
+      "before_raw": {
+        "bytes": 14482586,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-before-16e6183d/vm-language.json",
+        "sha256": "5897196e73690e3fc867b94ace70ff52d714498c66b39a656c443a6f9c485f1f"
+      },
+      "after_raw": {
+        "bytes": 14476944,
+        "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-377d16a0/vm-language.json",
+        "sha256": "8c6fb4df6bb1971217e7727f5813465e5eabc444b0884995c3e0a8bbff20df71"
+      },
+      "before_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "after_host": "91873b4a33ef19fb8b259c717a3695cc0bdd621107681e5fc0f053bfdc5e0ef4"
+    }
+  ],
+  "lost_files": 0,
+  "lost_variants": 0
+}

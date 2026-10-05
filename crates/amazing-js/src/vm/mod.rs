@@ -1,3 +1,6 @@
+// Proper-tail outcome/redispatch adaptation from lucid-softworks/lumen
+// (crates/lumen/src/{eval,interpreter}.rs and interpreter/call_entry.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Function body lexical reservation/closure-environment adaptation reuses
 // lucid-softworks/lumen (crates/lumen/src/{eval,interpreter}.rs)
 // @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
@@ -33,6 +36,8 @@ mod tests_classes;
 mod tests_sync_realms;
 #[cfg(test)]
 mod tests_calls;
+#[cfg(test)]
+mod tests_tail_calls;
 #[cfg(test)]
 mod tests_chains;
 #[cfg(test)]
@@ -275,6 +280,7 @@ enum Instruction {
     ClassAppendElement(usize, usize, Option<KeyOperand>),
     ClassFinish(Register, usize),
     Call(Register, Register, Register, Vec<CallArgument>),
+    TailCall(Register, Register, Vec<CallArgument>, bool),
     CallEval(Register, Register, Register, Vec<CallArgument>),
     Construct(Register, Register, Vec<CallArgument>),
     Throw(Register),
@@ -479,6 +485,7 @@ enum FrameOutcome {
     YieldedIteratorResult(JsValue),
     Awaited(JsValue),
     Completed(JsValue),
+    Tail(super::TailCallRecord),
 }
 
 pub struct GeneratorState {
@@ -599,9 +606,20 @@ impl Program {
         self.execute_frame(i, frame)
     }
 
+    fn execute_function_outcome(&self, i: &mut Interpreter, env: EnvHandle,
+        fuel: usize, strict: bool) -> Result<super::CallOutcome, Throw> {
+        let mut frame = self.start_function_frame(i, env, fuel, strict)?;
+        match self.resume_frame(i, &mut frame, usize::MAX)? {
+            FrameOutcome::Completed(value) => Ok(super::CallOutcome::Value(value)),
+            FrameOutcome::Tail(record) => Ok(super::CallOutcome::Tail(record)),
+            _ => unreachable!("synchronous body suspended"),
+        }
+    }
+
     fn execute_frame(&self, i: &mut Interpreter, mut frame: Box<VmFrame>) -> Result<JsValue, Throw> {
         match self.resume_frame(i, &mut frame, usize::MAX)? {
             FrameOutcome::Completed(value) => Ok(value),
+            FrameOutcome::Tail(_) => unreachable!("tail outcome requires function entry"),
             FrameOutcome::Suspended => unreachable!("unbounded VM slice suspended"),
             FrameOutcome::Yielded(_) | FrameOutcome::YieldedIteratorResult(_) => unreachable!("non-generator program yielded"),
             FrameOutcome::Awaited(_) => unreachable!("non-async program awaited"),
@@ -770,6 +788,7 @@ impl Program {
             // context. The outcome carries that prepared Promise, not the
             // operand, so drivers never repeat its observable constructor read.
             let mut awaited_promise = None;
+            let mut tail_call = None;
             let step = (|| -> Result<Option<Abrupt>, Throw> {
                 match op {
                     Instruction::NoOp => {}
@@ -1364,6 +1383,24 @@ impl Program {
                         registers[*dst] =
                             i.call_value(&registers[*callee], registers[*this].clone(), args)?;
                     }
+                    Instruction::TailCall(callee, receiver, arguments, direct) => {
+                        let args = expand_arguments(&registers, spreads, arguments)?;
+                        let function = registers[*callee].clone();
+                        let receiver = registers[*receiver].clone();
+                        if *direct && i.is_intrinsic_eval(&function) {
+                            let value = i.invoke_evaluated_expression_call(true,
+                                function, receiver, args, &env)?;
+                            return Ok(Some(Abrupt::Return(value)));
+                        }
+                        // A preceding fall-through case can own resources in
+                        // the shared CaseBlock even when this clause is statically
+                        // eligible. Preserve Call-before-DisposeResources ordering.
+                        if resources.iter().any(|frame| !frame.is_empty()) {
+                            let value = i.call_value(&function, receiver, args)?;
+                            return Ok(Some(Abrupt::Return(value)));
+                        }
+                        tail_call = Some(super::TailCallRecord::new(function, receiver, args)?);
+                    }
                     Instruction::CallEval(dst, callee, this, arguments) => {
                         let args = expand_arguments(&registers, spreads, arguments)?;
                         registers[*dst] = i.invoke_evaluated_expression_call(true,
@@ -1741,6 +1778,7 @@ impl Program {
                     return Ok(FrameOutcome::Completed(value));
                 }
             }
+            if let Some(record) = tail_call { return Ok(FrameOutcome::Tail(record)); }
             if yield_dst.is_some() {
                 let value = match op {
                     Instruction::Yield(_, src) => registers[*src].clone(),
@@ -2001,8 +2039,29 @@ impl FunctionCode {
         derived: Option<DerivedConstructor>,
         new_target: Option<JsValue>,
     ) -> Result<JsValue, Throw> {
+        let caller = i.binding_current_realm();
+        let outcome = self.call_outcome(i, parent, is_arrow, this, args,
+            generator_function, derived, new_target, caller)?;
+        match outcome {
+            super::CallOutcome::Value(value) => Ok(value),
+            super::CallOutcome::Tail(record) => i.finish_detached_tail_call(record),
+        }
+    }
+
+    pub(crate) fn call_outcome(
+        &self,
+        i: &mut Interpreter,
+        parent: EnvHandle,
+        is_arrow: bool,
+        this: JsValue,
+        args: Vec<JsValue>,
+        generator_function: Option<Obj>,
+        derived: Option<DerivedConstructor>,
+        new_target: Option<JsValue>,
+        caller_realm: super::RealmHandle,
+    ) -> Result<super::CallOutcome, Throw> {
         i.admit_synchronous_call()?;
-        self.call_admitted(i, parent, is_arrow, this, args, generator_function, derived, new_target)
+        self.call_admitted(i, parent, is_arrow, this, args, generator_function, derived, new_target, caller_realm)
     }
 
     #[inline(never)]
@@ -2016,7 +2075,8 @@ impl FunctionCode {
         generator_function: Option<Obj>,
         derived: Option<DerivedConstructor>,
         new_target: Option<JsValue>,
-    ) -> Result<JsValue, Throw> {
+        caller_realm: super::RealmHandle,
+    ) -> Result<super::CallOutcome, Throw> {
         // An arrow's own environment owns no `this`/`super`/TDZ state of its
         // own: it is `EnvKind::Arrow`, transparent to `resolve_this_checked`,
         // `initialize_this` and `mark_this_uninitialized`, which all walk
@@ -2086,25 +2146,22 @@ impl FunctionCode {
                     Some(JsValue::Object(proto)) => Some(proto),
                     _ => None,
                 });
-            return Ok(self.generator_object(i, env, generator_proto, Some(frame)));
+            return Ok(super::CallOutcome::Value(self.generator_object(i, env, generator_proto, Some(frame))));
         }
         if self.0.is_async {
-            return self.call_async(i, env);
+            return self.call_async(i, env).map(super::CallOutcome::Value);
         }
+        let outcome = self.0.program.execute_function_outcome(i, env.clone(),
+            ORDINARY_FUNCTION_INSTRUCTION_LIMIT, self.0.strict)?;
         if derived.is_some() {
-            // A derived constructor's completion, per spec: an object return
-            // value wins outright, a non-undefined non-object return value is
-            // a TypeError, and otherwise the (by now super()-initialized)
-            // `this` is the result -- a ReferenceError if `super()` never ran.
-            return match self.0.program.execute_function(i, env.clone(), ORDINARY_FUNCTION_INSTRUCTION_LIMIT, self.0.strict) {
-                Ok(value) if value.is_object() => Ok(value),
-                Ok(value) if !value.is_undefined() =>
-                    Err(Throw::type_error("derived constructor returned a non-object")),
-                Ok(_) => env.resolve_this_checked(),
-                Err(error) => Err(error),
+            let caller = caller_realm;
+            return match outcome {
+                super::CallOutcome::Tail(record) => Ok(super::CallOutcome::Tail(record.derived_result(env, caller))),
+                super::CallOutcome::Value(value) => i.complete_derived_constructor(
+                    super::Flow::Return(value), &env, caller).map(super::CallOutcome::Value),
             };
         }
-        self.0.program.execute_function(i, env, ORDINARY_FUNCTION_INSTRUCTION_LIMIT, self.0.strict)
+        Ok(outcome)
     }
 
     /// Start the resumable body in the environment prepared by AST parameter binding.
@@ -2324,6 +2381,7 @@ fn async_continue(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>, kind:
         }
         Ok(FrameOutcome::Yielded(_)) | Ok(FrameOutcome::YieldedIteratorResult(_)) => unreachable!("async function yielded"),
         Ok(FrameOutcome::Suspended) => unreachable!("unbounded async slice suspended"),
+        Ok(FrameOutcome::Tail(_)) => unreachable!("async function cannot tail call"),
         Err(Throw(error)) => settle_promise(&target, rejection(i, error), i)?,
     }
     Ok(())
@@ -2539,6 +2597,7 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
             Ok(generator_result(i, value, true))
         }
         Ok(FrameOutcome::Suspended) => unreachable!("unbounded generator slice suspended"),
+        Ok(FrameOutcome::Tail(_)) => unreachable!("generator cannot tail call"),
         Ok(FrameOutcome::Awaited(_)) => Err(Throw::range_error("async generator await limit exceeded")),
         Err(error) => Err(error),
     }
@@ -2769,6 +2828,7 @@ fn async_generator_run(
         }
         Ok(FrameOutcome::YieldedIteratorResult(_)) => unreachable!("async generator emitted a sync iterator result"),
         Ok(FrameOutcome::Suspended) => unreachable!("unbounded async generator slice suspended"),
+        Ok(FrameOutcome::Tail(_)) => unreachable!("async generator cannot tail call"),
         Err(Throw(error)) => {
             async_generator_in_context(i, body_realm, context, strict, |i| {
                 settle_promise(&target, rejection(i, error), i)?;

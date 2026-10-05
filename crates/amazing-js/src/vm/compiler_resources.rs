@@ -1,3 +1,6 @@
+// Proper-tail outcome/redispatch adaptation from lucid-softworks/lumen
+// (crates/lumen/src/{eval,interpreter}.rs and interpreter/call_entry.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 //! Disposal uses the VM's existing abrupt-completion/finally machinery. The
 //! resource stack is owned by each heap frame, including across pending awaits.
 use super::*;
@@ -61,7 +64,18 @@ impl Compiler {
             .then(|| self.begin_resources());
         self.emit(Instruction::CompleteEmpty);
         let pair = self.completion_pair(span)?;
-        for statement in statements { self.completion_statement(statement, pair)?; }
+        let saved = self.tail_calls_allowed;
+        let result: Result<(), CompileError> = (|| {
+            for statement in statements {
+                self.completion_statement(statement, pair)?;
+                if matches!(&statement.kind, StmtKind::Var(declaration) if declaration.resource_kind.is_some()) {
+                    self.tail_calls_allowed = false;
+                }
+            }
+            Ok(())
+        })();
+        self.tail_calls_allowed = saved;
+        result?;
         if let Some((slot, handler)) = resources { self.end_resources(slot, handler, span)?; }
         Ok(())
     }

@@ -1,3 +1,6 @@
+// Proper-tail outcome/redispatch adaptation from lucid-softworks/lumen
+// (crates/lumen/src/{eval,interpreter}.rs and interpreter/call_entry.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Super-reference read portions adapted from lucid-softworks/lumen
 // (crates/lumen/src/eval.rs, super reference and member/index paths)
 // @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
@@ -42,19 +45,26 @@ impl Compiler {
     // of the short circuit, but does not turn a property Reference into a value.
     pub(super) fn chain_reference(&mut self, expression: &Expr, delete: bool) -> Result<(Register, Register), CompileError> {
         self.enter(expression.span)?;
-        let result = self.chain_reference_inner(expression, delete, None);
+        let result = self.chain_reference_inner(expression, delete, None, false);
+        self.depth -= 1;
+        result
+    }
+
+    pub(super) fn tail_chain_reference(&mut self, expression: &Expr) -> Result<(Register, Register), CompileError> {
+        self.enter(expression.span)?;
+        let result = self.chain_reference_inner(expression, false, None, true);
         self.depth -= 1;
         result
     }
 
     pub(super) fn heritage_reference(&mut self, expression: &Expr, slot: usize) -> Result<Register, CompileError> {
         self.enter(expression.span)?;
-        let result = self.chain_reference_inner(expression, false, Some(slot)).map(|pair| pair.0);
+        let result = self.chain_reference_inner(expression, false, Some(slot), false).map(|pair| pair.0);
         self.depth -= 1;
         result
     }
 
-    fn chain_reference_inner(&mut self, expression: &Expr, delete: bool, capture: Option<usize>) -> Result<(Register, Register), CompileError> {
+    fn chain_reference_inner(&mut self, expression: &Expr, delete: bool, capture: Option<usize>, tail: bool) -> Result<(Register, Register), CompileError> {
         if let ExprKind::Paren(inner) = &expression.kind {
             if let Some(slot) = capture { return self.heritage_reference(inner, slot).map(|value| (value, 0)); }
             return self.chain_reference(inner, delete);
@@ -149,8 +159,10 @@ impl Compiler {
                 }
                 Link::Call(args, _, direct) => {
                     let arguments = self.call_arguments(args)?;
-                    self.emit(if *direct { Instruction::CallEval(value, value, receiver, arguments) }
-                        else { Instruction::Call(value, value, receiver, arguments) });
+                    self.emit(if tail && index + 1 == links.len() {
+                        Instruction::TailCall(value, receiver, arguments, *direct)
+                    } else if *direct { Instruction::CallEval(value, value, receiver, arguments) }
+                    else { Instruction::Call(value, value, receiver, arguments) });
                     self.emit(Instruction::Move(receiver, 0));
                 }
             }
