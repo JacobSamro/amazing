@@ -574,6 +574,7 @@ impl Parser {
     // ----- primary ------------------------------------------------------------
 
     pub(super) fn parse_primary(&mut self) -> Result<Expr, SyntaxError> {
+        let source_start = self.pos;
         let start = self.cur_loc();
         use crate::tokens::Keyword as K;
         if self.cur().escaped_identifier && matches!(self.cur().kind, TokenKind::Keyword(_))
@@ -703,7 +704,7 @@ impl Parser {
                 let token = self.bump();
                 if self.at_punct(Punct::Arrow) && !self.cur().newline_before {
                     self.bump();
-                    return self.finish_arrow(start, vec![plain_param(Ident::new("yield", token.span))], false);
+                    return self.finish_arrow(start, source_start, vec![plain_param(Ident::new("yield", token.span))], false);
                 }
                 Ok(Expr::new(ExprKind::Ident(Ident::new("yield", token.span)), self.span_from(start)))
             }
@@ -719,6 +720,7 @@ impl Parser {
     /// shape that starts with an identifier (`x =>`, `async x =>`,
     /// `async (…) =>`, `async function`).
     pub(super) fn parse_ident_primary(&mut self) -> Result<Expr, SyntaxError> {
+        let source_start = self.pos;
         let start = self.cur_loc();
         // async function expression
         if self.word("async") && self.nth_is_function(1) {
@@ -742,7 +744,7 @@ impl Parser {
                 return Err(self.err_at(param.span.start, "await is reserved in async arrow formals"));
             }
             self.bump(); // =>
-            return self.finish_arrow(start, vec![plain_param(param)], true);
+            return self.finish_arrow(start, source_start, vec![plain_param(param)], true);
         }
         // async parenthesized arrow: speculate `(params) =>`.
         if self.word("async") && self.nth_punct(1, Punct::LParen) && !self.nth(1).newline_before {
@@ -754,7 +756,7 @@ impl Parser {
             let params = self.try_arrow_params();
             self.in_async -= 1;
             match params {
-                Ok(params) => return self.finish_arrow(start, params, true),
+                Ok(params) => return self.finish_arrow(start, source_start, params, true),
                 Err(_) => {
                     self.pos = save_pos;
                     self.last_end = save_end;
@@ -770,7 +772,7 @@ impl Parser {
         {
             let param = self.expect_ident()?;
             self.bump(); // =>
-            return self.finish_arrow(start, vec![plain_param(param)], false);
+            return self.finish_arrow(start, source_start, vec![plain_param(param)], false);
         }
         // Plain identifier reference.
         let id = self.expect_ident()?;
@@ -782,12 +784,13 @@ impl Parser {
     /// arrow parameters. Attempts arrow parameters strictly; rewinds to the
     /// saved position on any mismatch and parses parentheses instead.
     pub(super) fn parse_paren_or_arrow(&mut self) -> Result<Expr, SyntaxError> {
+        let source_start = self.pos;
         let start = self.cur_loc();
         let save_pos = self.pos;
         let save_end = self.last_end;
         let save_noin = self.no_in;
         match self.try_arrow_params() {
-            Ok(params) => return self.finish_arrow(start, params, false),
+            Ok(params) => return self.finish_arrow(start, source_start, params, false),
             Err(_) => {
                 self.pos = save_pos;
                 self.last_end = save_end;
@@ -821,6 +824,7 @@ impl Parser {
     pub(super) fn finish_arrow(
         &mut self,
         start: SourceLocation,
+        source_start: usize,
         params: Vec<Param>,
         is_async: bool,
     ) -> Result<Expr, SyntaxError> {
@@ -857,6 +861,7 @@ impl Parser {
         }
         Ok(Expr::new(
             ExprKind::Arrow(ArrowFunc {
+                source: self.source_from(source_start),
                 params,
                 body,
                 is_async,
@@ -1016,6 +1021,7 @@ impl Parser {
     }
 
     pub(super) fn parse_object_element(&mut self) -> Result<ObjElem, SyntaxError> {
+        let source_start = self.pos;
         let start = self.cur_loc();
         if self.eat_punct(Punct::Ellipsis) {
             let inner = self.parse_assignment_with_in()?;
@@ -1100,6 +1106,7 @@ impl Parser {
                 key: key.clone(),
                 key_utf16: key_utf16.clone(),
                 value: PropValue::Method(ClassMethod {
+                    source: self.source_from(source_start),
                     decorators: Vec::new(),
                     key,
                     key_utf16,

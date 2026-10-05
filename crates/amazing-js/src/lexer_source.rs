@@ -7,7 +7,7 @@ use std::rc::Rc;
 /// remain surrogate code points; no scalar replacement or sentinel is used.
 #[derive(Clone)]
 pub(crate) struct LexerSource {
-    units: Rc<[u16]>,
+    units: crate::source_text::SourceText,
     points: Rc<[u32]>,
     unit_starts: Rc<[usize]>,
 }
@@ -32,14 +32,17 @@ impl LexerSource {
             points.push(point);
         }
         starts.push(input.len());
-        Self { units: input.into(), points: points.into(), unit_starts: starts.into() }
+        Self { units: crate::source_text::SourceText::from_utf16(input), points: points.into(), unit_starts: starts.into() }
     }
+
+    pub(crate) fn text(&self) -> crate::source_text::SourceText { self.units.clone() }
+    pub(crate) fn unit_offset(&self, index: usize) -> usize { self.unit_starts[index] }
 
     pub(crate) fn len(&self) -> usize { self.points.len() }
     pub(crate) fn point(&self, index: usize) -> Option<u32> { self.points.get(index).copied() }
     pub(crate) fn scalar(&self, index: usize) -> Option<char> { self.point(index).and_then(char::from_u32) }
     pub(crate) fn units(&self, start: usize, end: usize) -> &[u16] {
-        &self.units[self.unit_starts[start]..self.unit_starts[end]]
+        &self.units.units()[self.unit_starts[start]..self.unit_starts[end]]
     }
     pub(crate) fn contains(&self, start: usize, end: usize, point: u32) -> bool {
         self.points[start..end].contains(&point)

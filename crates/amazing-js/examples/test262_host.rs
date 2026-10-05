@@ -46,6 +46,7 @@ fn emit(phase: &str, kind: &str, detail: &str) {
 
 fn native(i: &Interpreter, name: &str, call: NativeFn) -> JsValue {
     let mut obj = JsObject::function(JsFunction {
+        source: Default::default(),
         name: name.into(),
         params: vec![],
         body: FunctionBody::Native(call),

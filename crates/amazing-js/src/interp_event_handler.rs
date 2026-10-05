@@ -27,6 +27,7 @@ impl Interpreter {
         // Do not inherit the compiling script's strictness or module environment.
         let strict = has_use_strict_directive(&function.body.body);
         let mut object = JsObject::function(JsFunction {
+            source: Default::default(),
             name: name.to_owned(), params: function.params,
             body: FunctionBody::Block(function.body), env,
             is_arrow: false, is_async: false, is_generator: false,
@@ -125,6 +126,7 @@ impl Interpreter {
                 configurable && self.global_env.remove_object_binding(name)
                     && self.global_obj.borrow_mut().delete_own(name)
             }
+            Some(Reference::Binding(binding, captured)) => captured.delete_local_binding(&binding),
             Some(_) => false,
         };
         Ok(JsValue::Bool(deleted))

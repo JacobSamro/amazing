@@ -39,7 +39,7 @@ impl Compiler {
             self.emit(Instruction::TryNormal);
             let catch = self.program.code.len();
             let error = self.register(span)?;
-            self.emit(Instruction::EnterCatchValue(error));
+            self.emit(Instruction::EnterCatchValue(error, false));
             self.emit(Instruction::ResourceError(slot, error));
             self.emit(Instruction::LeaveScope);
             self.emit(Instruction::TryNormal);

@@ -135,27 +135,10 @@ impl Interpreter {
             class_initializer: grammar.class_initializer,
             visible_private_names: if direct { caller.visible_private_names() } else { Vec::new() },
         };
-        let program = crate::parser::parse_eval(&source.to_utf8_lossy(), &context)
+        let program = crate::parser::parse_eval_utf16(source.units(), &context)
             .map_err(|error|Throw::syntax_error(error.to_string()))?;
         let strict = context.strict || has_use_strict_directive(&program.body);
         let env = EnvHandle::new(if strict { EnvKind::Var } else { EnvKind::Block }, Some(caller));
-        // Eval's lexical declarations are local and start in the TDZ, including
-        // declarations later in the statement list and destructuring names.
-        for statement in &program.body {
-            match &statement.kind {
-                StmtKind::Var(declaration) if declaration.kind != ast::VarKind::Var => {
-                    for entry in &declaration.decls {
-                        for name in binding_names(&entry.binding) {
-                            env.declare_uninitialized(&name, declaration.kind == ast::VarKind::Let)?;
-                        }
-                    }
-                }
-                StmtKind::Class(class) => {
-                    if let Some(name) = &class.name { env.declare_uninitialized(&name.name, true)?; }
-                }
-                _ => {}
-            }
-        }
         self.direct_eval_env = Some(env);
         let previous_eval = self.in_eval;
         let previous_strict = self.strict_eval_context;

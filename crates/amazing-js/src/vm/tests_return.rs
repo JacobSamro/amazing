@@ -299,6 +299,7 @@ fn injected_normalization_runs_under_saved_invocation_and_strictness() {
     let mut i = Interpreter::new();
     i.run_script("var marker={},observed=false,out=false,p=Promise.resolve(7);async function* f(){'use strict';try{yield 1}catch(e){return e===marker}}var g=f()").unwrap();
     let getter = JsValue::object(JsObject::function(JsFunction {
+        source: Default::default(),
         name: "constructorProbe".into(), params: vec![], body: FunctionBody::Native(constructor),
         is_arrow: false, is_async: false, is_generator: false, env: i.global_env.clone(),
         home: None, proto_for_new: None,

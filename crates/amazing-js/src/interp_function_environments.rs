@@ -33,6 +33,7 @@ impl Interpreter {
         parameters: &EnvHandle,
         params: &[ast::Param],
         variable_names: &[String],
+        function_names: &[String],
     ) -> Result<EnvHandle, Throw> {
         if !parameters_have_expressions(params) { return Ok(parameters.clone()); }
         let body = EnvHandle::new(EnvKind::Var, Some(parameters.clone()));
@@ -41,15 +42,22 @@ impl Interpreter {
         if parameters.local_cell("arguments").is_some() {
             parameter_names.insert("arguments".into());
         }
-        for name in variable_names {
-            if parameter_names.contains(name) {
-                // A body var sharing a formal name starts with a copy of its
-                // initialized value, not a shared cell. Function hoisting
-                // subsequently replaces it with the declared function.
-                body.declare_var(name, parameters.resolve(name).unwrap_or(JsValue::Undefined))?;
-            }
+        for name in variable_names.iter().chain(function_names) {
+            if body.local_cell(name).is_some() { continue; }
+            // FDI step 30: function-declared names start undefined; other
+            // formal/arguments names copy their value into a distinct cell.
+            let value = if parameter_names.contains(name) && !function_names.contains(name) {
+                parameters.resolve(name).ok_or_else(|| Throw::reference_error("initialized parameter binding missing"))?
+            } else { JsValue::Undefined };
+            body.declare_var(name, value)?;
         }
         Ok(body)
+    }
+
+    fn function_body_needs_arguments(params: &[ast::Param], body: &[ast::Stmt]) -> bool {
+        parameters_have_expressions(params) || !(block_lexical_names(body).iter().any(|name| name == "arguments")
+            || body.iter().any(|statement| matches!(&statement.kind,
+                ast::StmtKind::Function(function) if function.name.as_ref().is_some_and(|name| name.name == "arguments"))))
     }
 
     fn prepare_ast_function_body_environment(
@@ -58,7 +66,12 @@ impl Interpreter {
         let mut functions = Vec::new();
         let mut variables = Vec::new();
         collect_eval_declarations(body, &mut functions, &mut variables);
-        self.prepare_function_body_environment(parameters, params, &variables)
+        let direct_functions: Vec<String> = body.iter().filter_map(|statement| {
+            if let ast::StmtKind::Function(function) = &statement.kind {
+                function.name.as_ref().map(|name| name.name.clone())
+            } else { None }
+        }).collect();
+        self.prepare_function_body_environment(parameters, params, &variables, &direct_functions)
     }
 }
 

@@ -923,6 +923,7 @@ fn thread_async_callback(i: &Interpreter, state: Rc<RefCell<ThreadGeneratorState
     holder.exotic = Exotic::ThreadGenerator(state);
     let _ = env.declare_var("[[ThreadAsyncState]]", JsValue::object(holder));
     let mut function = JsObject::function(JsFunction {
+        source: Default::default(),
         name: if reject { "awaitRejected" } else { "awaitFulfilled" }.into(),
         params: vec![],
         body: FunctionBody::Native(if reject { thread_async_rejected } else { thread_async_fulfilled }),

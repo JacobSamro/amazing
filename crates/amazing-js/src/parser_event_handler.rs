@@ -36,6 +36,7 @@ pub fn parse_event_handler(
     }
     Parser::new(source).validate_function_params(&params, &body, false)?;
     Ok(FunctionItem {
+        source: Default::default(),
         name: Some(Ident::new(name, body.span)), params, body,
         is_async: false, is_generator: false,
     })

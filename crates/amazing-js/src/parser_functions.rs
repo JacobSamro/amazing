@@ -7,6 +7,7 @@ impl Parser {
     /// Parses everything after `async`?/`function` — the keyword itself is
     /// consumed here. Callers fix up `is_async`.
     pub(super) fn parse_function_rest(&mut self, is_async: bool, declaration: bool) -> Result<FunctionItem, SyntaxError> {
+        let source_start = self.pos - usize::from(is_async);
         self.bump(); // function
         let is_generator = self.eat_punct(Punct::Star);
         let saved_async = self.in_async;
@@ -78,11 +79,12 @@ impl Parser {
             }
         }
         self.validate_scope_names(&body.body, false)?;
-        self.validate_function_params(&params, &body, is_async || is_generator)?;
+        self.validate_function_params(&params, &body, false)?;
         if has_use_strict(&body) {
             self.validate_strict_statements(&body.body)?;
         }
         Ok(FunctionItem {
+            source: self.source_from(source_start),
             name,
             params,
             body,
@@ -103,17 +105,7 @@ impl Parser {
         if !simple && has_use_strict(body) {
             return Err(self.err_at(body.span.start, "use strict directive with non-simple parameters"));
         }
-        let mut seen = HashSet::new();
-        for param in params {
-            for name in binding_names(&param.binding) {
-                if (strict || force_unique || !simple) && !seen.insert(name.name.clone()) {
-                    return Err(self.err_at(name.span.start, "duplicate parameter"));
-                }
-                if strict && matches!(name.name.as_str(), "eval" | "arguments" | "implements" | "interface" | "package" | "private" | "protected" | "public" | "static" | "yield" | "let") {
-                    return Err(self.err_at(name.span.start, "invalid strict parameter name"));
-                }
-            }
-        }
+        self.validate_parameter_names(params, strict, force_unique)?;
         let parameter_names: HashSet<_> = params.iter().flat_map(|param| binding_names(&param.binding))
             .map(|name| name.name.clone()).collect();
         for statement in &body.body {
@@ -130,6 +122,31 @@ impl Parser {
         Ok(())
     }
 
+    // FormalParameters has its own early errors, independent of any body goal.
+    // Only strict declarations/expressions and UniqueFormalParameters goals
+    // prohibit duplicates in a simple list; every non-simple list is unique.
+    pub(super) fn validate_parameter_names(
+        &self,
+        params: &[Param],
+        strict: bool,
+        force_unique: bool,
+    ) -> Result<(), SyntaxError> {
+        let simple = params.iter().all(|param| !param.rest && param.default.is_none()
+            && matches!(param.binding, Binding::Ident(_)));
+        let mut seen = HashSet::new();
+        for param in params {
+            for name in binding_names(&param.binding) {
+                if (strict || force_unique || !simple) && !seen.insert(name.name.clone()) {
+                    return Err(self.err_at(name.span.start, "duplicate parameter"));
+                }
+                if strict && matches!(name.name.as_str(), "eval" | "arguments" | "implements" | "interface" | "package" | "private" | "protected" | "public" | "static" | "yield" | "let") {
+                    return Err(self.err_at(name.span.start, "invalid strict parameter name"));
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn parse_params(&mut self) -> Result<Vec<Param>, SyntaxError> {
         self.in_formal_params += 1;
         let result = self.parse_params_inner();
@@ -139,15 +156,22 @@ impl Parser {
 
     pub(super) fn parse_params_inner(&mut self) -> Result<Vec<Param>, SyntaxError> {
         self.expect_punct(Punct::LParen)?;
+        let params = self.parse_parameter_list(false)?;
+        self.expect_punct(Punct::RParen)?;
+        Ok(params)
+    }
+
+    pub(super) fn parse_parameter_list(&mut self, eof: bool) -> Result<Vec<Param>, SyntaxError> {
         let mut params = Vec::new();
-        if !self.at_punct(Punct::RParen) {
+        let at_end = |p: &Self| if eof { p.at_eof() } else { p.at_punct(Punct::RParen) };
+        if !at_end(self) {
             loop {
                 let pstart = self.cur_loc();
                 let rest = self.eat_punct(Punct::Ellipsis);
                 let binding = self.parse_binding()?;
                 let default = if !rest && self.eat_punct(Punct::Eq) {
                     let saved = self.no_in;
-                    self.no_in = true;
+                    self.no_in = false; // Initializer uses AssignmentExpression[+In].
                     let d = self.parse_assignment_expr();
                     self.no_in = saved;
                     Some(d?)
@@ -166,12 +190,11 @@ impl Parser {
                 if rest {
                     return Err(self.err("rest parameter must be last and cannot have a trailing comma"));
                 }
-                if self.at_punct(Punct::RParen) {
+                if at_end(self) {
                     break;
                 }
             }
         }
-        self.expect_punct(Punct::RParen)?;
         Ok(params)
     }
 
@@ -254,8 +277,11 @@ impl Parser {
 
     /// Parses everything after the `class` keyword (consumed here).
     pub(super) fn parse_class_rest(&mut self) -> Result<ClassItem, SyntaxError> {
+        let source_start = self.pos;
         let decorators = self.parse_decorators()?;
-        self.parse_class_with_decorators(decorators)
+        let mut class = self.parse_class_with_decorators(decorators)?;
+        class.source = self.source_from(source_start);
+        Ok(class)
     }
 
     pub(super) fn parse_class_with_decorators(&mut self, decorators: Vec<Expr>) -> Result<ClassItem, SyntaxError> {
@@ -267,6 +293,7 @@ impl Parser {
     }
 
     fn parse_class_rest_inner(&mut self, decorators: Vec<Expr>) -> Result<ClassItem, SyntaxError> {
+        let source_start = self.pos;
         if !self.eat_kw(crate::tokens::Keyword::Class) { return Err(self.err("decorators must precede a class")); }
         let name = if matches!(self.cur().kind, TokenKind::Ident(_)) {
             let id = self.expect_ident()?;
@@ -352,6 +379,7 @@ impl Parser {
             }
         }
         Ok(ClassItem {
+            source: self.source_from(source_start),
             decorators,
             name,
             super_class,
@@ -380,6 +408,7 @@ impl Parser {
         if is_static {
             self.bump();
         }
+        let source_start = self.pos; // MethodDefinition excludes static/decorators.
         let is_accessor = self.word("accessor") && !self.nth(1).newline_before
             && self.nth_starts_member_key(1);
         if is_accessor { self.bump(); }
@@ -466,6 +495,7 @@ impl Parser {
             self.validate_method_params(&params, &body, true, has_use_strict(&body))?;
             self.validate_strict_statements(&body.body)?;
             return Ok(ClassMember::Method(ClassMethod {
+                source: self.source_from(source_start),
                 decorators,
                 key,
                 key_utf16,

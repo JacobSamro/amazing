@@ -6,7 +6,7 @@ fn has_local_object_environment(env: &EnvHandle) -> bool {
     while let Some(env) = current {
         let frame = env.0.borrow();
         if frame.binding_object.is_some() { return true; }
-        if frame.kind != EnvKind::Block { return false; }
+        if !matches!(frame.kind, EnvKind::Block | EnvKind::Catch) { return false; }
         current = frame.parent.clone();
     }
     false

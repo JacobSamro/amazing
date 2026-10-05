@@ -1,3 +1,6 @@
+// Function body lexical reservation/closure-environment adaptation reuses
+// lucid-softworks/lumen (crates/lumen/src/{eval,interpreter}.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Portions ported from lucid-softworks/lumen (crates/lumen/src/eval.rs,
 // declare_block_lexicals/annexb_fn_sync_eval) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 //! Experimental register VM. Compilation rejects unsupported syntax atomically;
@@ -315,7 +318,8 @@ enum Instruction {
     ResourceNext(Register, Register, Register, usize),
     ResourceError(usize, Register),
     ResourceFinish(usize),
-    EnterCatchValue(Register),
+    /// The flag distinguishes an actual CatchParameter from internal handlers.
+    EnterCatchValue(Register, bool),
     /// Private field read (JSVM-10): `#x` resolves lexically through the
     /// active PrivateEnvironment chain at *runtime* (`env.resolve_private`),
     /// not at compile time -- a private name closes over whichever class
@@ -370,6 +374,7 @@ enum ClassHeritageCode {
 
 #[derive(Debug)]
 struct CompiledFunction {
+    source: crate::source_text::SourceMetadata,
     name: String,
     params: Vec<crate::ast::Param>,
     body_lexical_names: Vec<String>,
@@ -585,7 +590,16 @@ impl Program {
     }
 
     fn execute(&self, i: &mut Interpreter, env: EnvHandle, fuel: usize) -> Result<JsValue, Throw> {
-        let mut frame = self.start_frame(i, env, fuel)?;
+        let frame = self.start_frame(i, env, fuel)?;
+        self.execute_frame(i, frame)
+    }
+
+    fn execute_function(&self, i: &mut Interpreter, env: EnvHandle, fuel: usize, strict: bool) -> Result<JsValue, Throw> {
+        let frame = self.start_function_frame(i, env, fuel, strict)?;
+        self.execute_frame(i, frame)
+    }
+
+    fn execute_frame(&self, i: &mut Interpreter, mut frame: Box<VmFrame>) -> Result<JsValue, Throw> {
         match self.resume_frame(i, &mut frame, usize::MAX)? {
             FrameOutcome::Completed(value) => Ok(value),
             FrameOutcome::Suspended => unreachable!("unbounded VM slice suspended"),
@@ -594,11 +608,18 @@ impl Program {
         }
     }
 
-    fn start_frame(
-        &self,
-        i: &mut Interpreter,
-        env: EnvHandle,
-        fuel: usize,
+    fn start_frame(&self, i: &mut Interpreter, env: EnvHandle, fuel: usize) -> Result<Box<VmFrame>, Throw> {
+        let strict = i.strict_eval_context;
+        self.start_frame_inner(i, env, fuel, false, strict)
+    }
+
+    fn start_function_frame(&self, i: &mut Interpreter, env: EnvHandle, fuel: usize, strict: bool) -> Result<Box<VmFrame>, Throw> {
+        self.start_frame_inner(i, env, fuel, true, strict)
+    }
+
+    fn start_frame_inner(
+        &self, i: &mut Interpreter, env: EnvHandle, fuel: usize,
+        function_body: bool, body_strict: bool,
     ) -> Result<Box<VmFrame>, Throw> {
         let mut frame = Box::new(VmFrame {
             global_annex_allowed: None,
@@ -642,10 +663,27 @@ impl Program {
             consume(&mut frame.fuel)?;
             frame.env.hoist_var(name)?;
         }
-        for function in &self.functions {
+        let variable_env = frame.env.clone();
+        if function_body {
+            // FDI steps 31–35: sloppy bodies have an independent lexical
+            // record, even with no declarations. Strict bodies reuse varEnv.
+            if !body_strict { frame.env = EnvHandle::new(EnvKind::Block, Some(variable_env.clone())); }
+            // Only the genuine body-entry boundary consumes this compiler
+            // prefix. Generic scripts and manual Program frames execute it
+            // normally, retaining their previous scope and quantum behavior.
+            while let Some(Instruction::ReserveBinding(name, mutable)) = self.code.get(frame.pc) {
+                consume(&mut frame.fuel)?;
+                frame.env.declare_uninitialized(name, *mutable)?;
+                frame.pc += 1;
+            }
+        }
+        for (index, function) in self.functions.iter().enumerate() {
+            // Genuine FDI chooses only the last declaration of each name.
+            // Generic Script/manual frames retain their original behavior.
+            if function_body && self.functions[index + 1..].iter().any(|later| later.name == function.name) { continue; }
             consume(&mut frame.fuel)?;
             let value = function.code.instantiate(i, &frame.env);
-            frame.env.declare_var(&function.name, value)?;
+            variable_env.declare_var(&function.name, value)?;
         }
         Ok(frame)
     }
@@ -1164,7 +1202,7 @@ impl Program {
                             .take()
                             .ok_or_else(|| Throw::type_error("missing VM catch value"))?;
                         scopes.push(classes::snapshot(env, *strict_context, strict_stack));
-                        *env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+                        *env = EnvHandle::new(if name.is_some() { EnvKind::Catch } else { EnvKind::Block }, Some(env.clone()));
                         if let Some(name) = name {
                             env.declare_lexical(name, thrown, true)?;
                         }
@@ -1684,11 +1722,11 @@ impl Program {
                     Instruction::ResourceFinish(slot) => {
                         if let Some(error) = resource_errors[*slot].take() { return Err(error); }
                     }
-                    Instruction::EnterCatchValue(dst) => {
+                    Instruction::EnterCatchValue(dst, actual_catch_parameter) => {
                         let handler = try_stack.last_mut().ok_or_else(|| Throw::type_error("invalid resource catch"))?;
                         registers[*dst] = handler.caught.take().ok_or_else(|| Throw::type_error("missing disposal error"))?;
                         scopes.push(classes::snapshot(env, *strict_context, strict_stack));
-                        *env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+                        *env = EnvHandle::new(if *actual_catch_parameter { EnvKind::Catch } else { EnvKind::Block }, Some(env.clone()));
                     }
                 }
                 Ok(None)
@@ -1833,6 +1871,7 @@ impl FunctionCode {
     pub(crate) fn instantiate(&self, i: &Interpreter, env: &EnvHandle) -> JsValue {
         let name = self.0.name.clone();
         let mut object = JsObject::function(JsFunction {
+            source: self.0.source.clone(),
             name: name.clone(),
             params: self.0.params.clone(),
             body: FunctionBody::Bytecode(self.clone()),
@@ -2031,18 +2070,12 @@ impl FunctionCode {
         // whose body already owns an arguments declaration.
         let env = i.prepare_function_parameter_environment(&env, &self.0.params, self.0.strict);
         i.bind_params(&env, &self.0.params, args, is_arrow || self.0.skip_implicit_arguments, self.0.strict)?;
-        let env = i.prepare_function_body_environment(&env, &self.0.params, &self.0.program.hoisted)?;
+        let function_names = self.0.program.functions.iter().map(|function| function.name.clone()).collect::<Vec<_>>();
+        let env = i.prepare_function_body_environment(&env, &self.0.params, &self.0.program.hoisted, &function_names)?;
         if self.0.is_generator {
-            // FDI runs during the call, while only body execution is deferred.
-            // Parameter eval may have created a var binding that conflicts
-            // with a body lexical declaration; report that before returning
-            // the generator, even if it is never resumed.
-            let frame = self.0.program.start_frame(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT)?;
-            for name in &self.0.body_lexical_names {
-                if env.would_conflict_as_lexical(name) {
-                    return Err(Throw::syntax_error(format!("identifier '{name}' has already been declared")));
-                }
-            }
+            // Parameters and body lexical instantiation are eager; only
+            // execution of the generator statements is deferred.
+            let frame = self.0.program.start_function_frame(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT, self.0.strict)?;
             // Read `functionObject.prototype` now, not before parameters were
             // bound: a parameter default can replace it during
             // FunctionDeclarationInstantiation (just above), and per spec
@@ -2063,7 +2096,7 @@ impl FunctionCode {
             // value wins outright, a non-undefined non-object return value is
             // a TypeError, and otherwise the (by now super()-initialized)
             // `this` is the result -- a ReferenceError if `super()` never ran.
-            return match self.0.program.execute(i, env.clone(), ORDINARY_FUNCTION_INSTRUCTION_LIMIT) {
+            return match self.0.program.execute_function(i, env.clone(), ORDINARY_FUNCTION_INSTRUCTION_LIMIT, self.0.strict) {
                 Ok(value) if value.is_object() => Ok(value),
                 Ok(value) if !value.is_undefined() =>
                     Err(Throw::type_error("derived constructor returned a non-object")),
@@ -2071,7 +2104,7 @@ impl FunctionCode {
                 Err(error) => Err(error),
             };
         }
-        self.0.program.execute(i, env, ORDINARY_FUNCTION_INSTRUCTION_LIMIT)
+        self.0.program.execute_function(i, env, ORDINARY_FUNCTION_INSTRUCTION_LIMIT, self.0.strict)
     }
 
     /// Start the resumable body in the environment prepared by AST parameter binding.
@@ -2131,7 +2164,7 @@ impl FunctionCode {
         i.admit_synchronous_call()?;
         let promise = new_promise(i, PromiseFate::Pending);
         let JsValue::Object(target) = &promise else { unreachable!() };
-        let frame = match self.0.program.start_frame(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT) {
+        let frame = match self.0.program.start_function_frame(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT, self.0.strict) {
             Ok(frame) => Some(frame),
             Err(Throw(error)) => {
                 settle_promise(target, rejection(i, error), i)?;
@@ -2161,6 +2194,7 @@ fn async_handler(i: &Interpreter, state: Rc<RefCell<GeneratorState>>, reject: bo
     holder.exotic = Exotic::Generator(state);
     let _ = env.declare_var("[[VmAsyncState]]", JsValue::object(holder));
     let mut function = JsObject::function(JsFunction {
+        source: Default::default(),
         name: if reject { "awaitRejected" } else { "awaitFulfilled" }.into(),
         params: vec![],
         body: FunctionBody::Native(if reject { async_rejected } else { async_fulfilled }),
@@ -2430,7 +2464,7 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
             state.started = true;
             match state.frame.take() {
                 Some(frame) => frame,
-                None => state.code.0.program.start_frame(i, state.env.clone(), DEFAULT_INSTRUCTION_LIMIT)?,
+                None => state.code.0.program.start_function_frame(i, state.env.clone(), DEFAULT_INSTRUCTION_LIMIT, state.code.0.strict)?,
             }
         };
         state.executing = true;
@@ -2608,7 +2642,7 @@ fn async_generator_drain(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>
                 let s = state.borrow();
                 (s.code.clone(), s.env.clone())
             };
-            match code.0.program.start_frame(i, env, DEFAULT_INSTRUCTION_LIMIT) {
+            match code.0.program.start_function_frame(i, env, DEFAULT_INSTRUCTION_LIMIT, code.0.strict) {
                 Ok(frame) => state.borrow_mut().frame = Some(frame),
                 Err(Throw(error)) => {
                     settle_promise(&request.target, rejection(i, error), i)?;
@@ -2821,6 +2855,7 @@ fn async_generator_callback(
     let _ = env.declare_var("[[VmAsyncState]]", JsValue::object(holder));
     let _ = env.declare_var("[[VmAsyncGeneratorTarget]]", JsValue::Object(target));
     let mut function = JsObject::function(JsFunction {
+        source: Default::default(),
         name: name.into(),
         params: vec![],
         body: FunctionBody::Native(native),
@@ -2872,3 +2907,7 @@ fn consume(fuel: &mut usize) -> Result<(), Throw> {
     *fuel -= 1;
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "runtime_fdi_tests.rs"]
+mod runtime_fdi_tests;

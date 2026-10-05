@@ -142,13 +142,18 @@ fn binding(target: &Binding) -> Result<(), SyntaxError> {
     Ok(())
 }
 
-fn function_item(function: &FunctionItem) -> Result<(), SyntaxError> {
-    for param in &function.params {
+pub(super) fn parameters(params: &[Param]) -> Result<(), SyntaxError> {
+    for param in params {
         binding(&param.binding)?;
         if let Some(default) = &param.default {
             expression(default, false)?;
         }
     }
+    Ok(())
+}
+
+pub(super) fn function_item(function: &FunctionItem) -> Result<(), SyntaxError> {
+    parameters(&function.params)?;
     validate_program(&function.body.body)
 }
 

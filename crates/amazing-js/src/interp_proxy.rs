@@ -329,6 +329,7 @@ impl Interpreter {
         object.constructible = constructible;
         if callable {
             object.func = Some(JsFunction {
+                source: Default::default(),
                 name: "".into(), params: Vec::new(), body: FunctionBody::Native(proxy_unreachable_call),
                 is_arrow: false, is_async: false, is_generator: false,
                 env: EnvHandle::new(EnvKind::Global, None), home: None, proto_for_new: None,
@@ -340,6 +341,7 @@ impl Interpreter {
 
     fn new_proxy_revoke_function(&self, state: Rc<ProxyState>) -> JsValue {
         let mut object = JsObject::function(JsFunction {
+            source: Default::default(),
             name: "".into(), params: Vec::new(), body: FunctionBody::Native(proxy_revoke_call),
             is_arrow: false, is_async: false, is_generator: false,
             env: EnvHandle::new(EnvKind::Global, None), home: None, proto_for_new: None,

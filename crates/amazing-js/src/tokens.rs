@@ -140,6 +140,8 @@ impl TokenKind {
 /// insertion.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
+    /// Real immutable source-unit range; ignored by semantic token equality.
+    pub source: crate::source_text::SourceMetadata,
     pub kind: TokenKind,
     pub span: Span,
     pub newline_before: bool,
@@ -163,6 +165,7 @@ pub struct Token {
 impl Token {
     pub fn new(kind: TokenKind, span: Span, newline_before: bool) -> Self {
         Token {
+            source: Default::default(),
             kind,
             span,
             newline_before,

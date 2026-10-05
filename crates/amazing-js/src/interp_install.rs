@@ -15,6 +15,7 @@ impl Interpreter {
     }
     pub(crate) fn native_arity(name: &str, f: crate::value::NativeFn, proto: &Obj, arity: usize) -> JsValue {
         let mut o = JsObject::function(JsFunction {
+            source: Default::default(),
             name: name.into(),
             params: Vec::new(),
             body: FunctionBody::Native(f),

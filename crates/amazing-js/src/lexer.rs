@@ -61,6 +61,7 @@ pub(crate) struct Lexer {
     source: crate::lexer_source::LexerSource,
     pending: std::collections::VecDeque<Token>,
     idx: usize,
+    token_start: usize,
     line: u32,
     col: u32,
     /// Open `{` seen in plain code; distinguishes an object/block `}` from
@@ -69,6 +70,7 @@ pub(crate) struct Lexer {
     /// Plain-code brace depth at each open template substitution.
     template_bases: Vec<usize>,
     annex_b_comments: bool,
+    hashbang_allowed: bool,
     line_has_code: bool,
 }
 
@@ -82,14 +84,18 @@ impl Lexer {
             source: crate::lexer_source::LexerSource::utf16(src),
             pending: std::collections::VecDeque::new(),
             idx: 0,
+            token_start: 0,
             line: 1,
             col: 1,
             brace_depth: 0,
             template_bases: Vec::new(),
             annex_b_comments: true,
+            hashbang_allowed: true,
             line_has_code: false,
         }
     }
+
+    pub(crate) fn set_function_goal(&mut self) { self.hashbang_allowed = false; }
 
     pub(crate) fn set_module_goal(&mut self) {
         self.annex_b_comments = false;
@@ -113,6 +119,7 @@ impl Lexer {
         }
         let newline_before = self.skip_trivia()?;
         let start = self.loc();
+        self.token_start = self.idx;
         if self.at_end() {
             if !self.template_bases.is_empty() {
                 return Err(syntax_error("unterminated template literal", start));
@@ -157,6 +164,7 @@ impl Lexer {
     pub(crate) fn regex_token(&mut self) -> Result<Token, SyntaxError> {
         let newline_before = self.skip_trivia()?;
         let start = self.loc();
+        self.token_start = self.idx;
         if self.cur() != Some('/') {
             return Err(syntax_error("expected RegExp literal", start));
         }
@@ -235,8 +243,16 @@ impl Lexer {
         }
     }
 
+    pub(crate) fn source_text(&self) -> crate::source_text::SourceText { self.source.text() }
+
     fn mk(&self, kind: TokenKind, start: SourceLocation, newline_before: bool) -> Token {
-        Token::new(kind, Span::new(start, self.loc()), newline_before)
+        let mut token = Token::new(kind, Span::new(start, self.loc()), newline_before);
+        let begin = if matches!(token.kind, TokenKind::Punct(Punct::DollarBrace)) {
+            self.idx - 2
+        } else { self.token_start };
+        token.source = crate::source_text::SourceMetadata::new(self.source.text()
+            .range(self.source.unit_offset(begin), self.source.unit_offset(self.idx)).unwrap());
+        token
     }
 
     fn punct_tok(&mut self, p: Punct) -> Punct {
@@ -269,7 +285,7 @@ impl Lexer {
                     self.line_has_code = false;
                     self.advance();
                 }
-                Some('#') if self.idx == 0 && self.peek(1) == Some('!') => {
+                Some('#') if self.hashbang_allowed && self.idx == 0 && self.peek(1) == Some('!') => {
                     while !self.at_end() && !self.cur().is_some_and(is_line_terminator) {
                         self.advance();
                     }

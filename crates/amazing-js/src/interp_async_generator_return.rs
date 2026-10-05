@@ -234,6 +234,7 @@ fn thread_async_generator_callback(
     holder.exotic = Exotic::ThreadGenerator(state);
     let _ = env.declare_var("[[ThreadAsyncState]]", JsValue::object(holder));
     let mut function = JsObject::function(JsFunction {
+        source: Default::default(),
         name: if reject {
             "asyncGeneratorReturnRejected"
         } else {

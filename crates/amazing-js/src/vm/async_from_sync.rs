@@ -97,6 +97,7 @@ fn callback(i: &Interpreter, target: Obj, iterator: JsValue, flag: bool, reject:
     env.declare_var("[[Iterator]]", iterator).unwrap();
     env.declare_var("[[DoneOrSkipClose]]", JsValue::Bool(flag)).unwrap();
     let mut callback = JsObject::function(JsFunction {
+        source: Default::default(),
         name: String::new(), params: Vec::new(),
         body: FunctionBody::Native(if reject { rejected } else { fulfilled }),
         is_arrow: false, is_async: false, is_generator: false, env,

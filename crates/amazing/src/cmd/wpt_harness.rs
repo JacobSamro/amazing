@@ -808,6 +808,7 @@ fn completion_callback(
 }
 fn install_callback(js: &mut Interpreter, name: &str, callback: NativeFn) -> Result<(), String> {
     let mut object = JsObject::function(JsFunction {
+        source: Default::default(),
         name: name.into(),
         params: Vec::new(),
         body: FunctionBody::Native(callback),

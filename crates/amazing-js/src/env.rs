@@ -45,6 +45,8 @@ pub struct Binding {
     /// the same exporter cell, so reads always observe later writes.
     pub initialized: bool,
     pub import_target: Option<BindingCell>,
+    /// Only new non-strict eval locals have DeleteBinding permission.
+    pub deletable: bool,
 }
 
 #[derive(Clone)]
@@ -64,7 +66,7 @@ impl BindingCell {
             immutable_strict: true,
             lexical: true,
             initialized: true,
-            import_target: None,
+            import_target: None, deletable: false,
         })))
     }
 
@@ -129,12 +131,15 @@ pub enum EnvKind {
     /// Body variable environment below a parameter-expression environment.
     /// Owns var/eval declarations and inherits this/super from the call frame.
     Var,
-    /// Block / loop-body / catch environment.
+    /// Block / loop-body / object-environment wrapper.
     Block,
     /// The global environment: lookups missing here become ReferenceErrors.
     Global,
     /// Module environment: a strict top-level var scope.
     Module,
+    /// Actual CatchParameter declarative record. Transparent to this/var scope;
+    /// distinct from the catch body block and internal disposal handlers.
+    Catch,
 }
 
 #[derive(Default)]
@@ -242,7 +247,7 @@ impl Env {
                 immutable_strict: true,
                 lexical,
                 initialized: true,
-                import_target: None,
+                import_target: None, deletable: false,
             }))),
         );
         Ok(())
@@ -451,7 +456,7 @@ impl EnvHandle {
         let mut frame = self.0.borrow_mut();
         if let Some(cell) = existing { frame.vars.entry(name.to_owned()).or_insert(cell); return; }
         frame.vars.entry(name.to_owned()).or_insert_with(|| BindingCell(Rc::new(RefCell::new(Binding {
-            value, mutable: true, immutable_strict: true, lexical: false, initialized: true, import_target: None,
+            value, mutable: true, immutable_strict: true, lexical: false, initialized: true, import_target: None, deletable: false,
         }))));
     }
 
@@ -483,7 +488,7 @@ impl EnvHandle {
         let mut record = record.borrow_mut();
         if record.lexicals.contains_key(name) { return Err(Throw::syntax_error(format!("identifier '{name}' has already been declared"))); }
         record.lexicals.insert(name.to_owned(), BindingCell(Rc::new(RefCell::new(Binding {
-            value: JsValue::Undefined, mutable, immutable_strict: true, lexical: true, initialized: false, import_target: None,
+            value: JsValue::Undefined, mutable, immutable_strict: true, lexical: true, initialized: false, import_target: None, deletable: false,
         }))));
         Ok(())
     }
@@ -530,6 +535,51 @@ impl EnvHandle {
     /// `var` declaration: mutable, non-lexical, redeclaration-friendly.
     pub fn declare_var(&self, name: &str, value: JsValue) -> Result<(), Throw> {
         self.0.borrow_mut().declare_raw(name, value, true, false)
+    }
+
+    /// Eval creates a deletable local binding only when the name is new.
+    /// Existing formal/var cells keep their identity and deletion policy.
+    pub(crate) fn declare_sloppy_eval_var(&self, name: &str, value: Option<JsValue>) -> Result<(), Throw> {
+        let mut env = self.0.borrow_mut();
+        debug_assert!(env.kind != EnvKind::Global);
+        let new = !env.vars.contains_key(name);
+        if let Some(value) = value {
+            env.declare_raw(name, value, true, false)?;
+        } else if new {
+            env.declare_raw(name, JsValue::Undefined, true, false)?;
+        } else if env.vars[name].0.borrow().lexical {
+            return Err(Throw::syntax_error(format!("identifier '{name}' has already been declared")));
+        }
+        if new { env.vars[name].0.borrow_mut().deletable = true; }
+        Ok(())
+    }
+
+    /// SetMutableBinding on an already captured declarative record. A deleted
+    /// sloppy binding is recreated here, never in a parent or the global object.
+    pub(crate) fn set_local_binding(&self, name: &str, value: JsValue, strict: bool) -> Result<(), Throw> {
+        let mut env = self.0.borrow_mut();
+        if env.script_cell(name).is_some() || env.vars.contains_key(name) {
+            // Presence ensures assign_raw cannot enter its parent-search arm.
+            env.assign_raw(name, value, strict)?;
+            return Ok(());
+        }
+        if strict || env.kind == EnvKind::Global {
+            return Err(Throw::reference_error(format!("{name} is not defined")));
+        }
+        env.declare_raw(name, value, true, false)?;
+        env.vars[name].0.borrow_mut().deletable = true;
+        Ok(())
+    }
+
+    /// DeleteBinding acts on the captured declarative frame, without GetValue.
+    pub(crate) fn delete_local_binding(&self, name: &str) -> bool {
+        let mut env = self.0.borrow_mut();
+        let allowed = env.vars.get(name).is_some_and(|cell| {
+            let binding = cell.0.borrow();
+            binding.deletable && !binding.lexical && binding.import_target.is_none()
+        });
+        if allowed { env.vars.remove(name); }
+        allowed
     }
 
     /// VarDeclarationInstantiation leaves an existing var/function value in
@@ -655,7 +705,7 @@ impl EnvHandle {
             immutable_strict: true,
             lexical: true,
             initialized: false,
-            import_target: None,
+            import_target: None, deletable: false,
         })));
         env.vars.insert(name.to_owned(), cell.clone());
         Ok(cell)
@@ -676,7 +726,7 @@ impl EnvHandle {
                 immutable_strict: true,
                 lexical: true,
                 initialized: true,
-                import_target: Some(target),
+                import_target: Some(target), deletable: false,
             }))),
         );
         Ok(())
@@ -932,5 +982,48 @@ mod tests {
         exporter.assign("counter", JsValue::num(2.0)).unwrap();
         assert_eq!(importer.resolve("value"), Some(JsValue::num(2.0)));
         assert!(importer.assign("value", JsValue::num(3.0)).is_err());
+    }
+}
+
+#[cfg(test)]
+mod eval_local_binding_policy_tests {
+    use super::*;
+    #[test]
+    fn new_eval_cells_delete_recreate_locally_and_preserve_all_existing_binding_kinds() {
+        for value in [None, Some(JsValue::Num(7.0))] {
+            let outer=EnvHandle::new(EnvKind::Function,None);
+            outer.declare_var("x",JsValue::Num(91.0)).unwrap();
+            let local=EnvHandle::new(EnvKind::Var,Some(outer.clone()));
+            local.declare_sloppy_eval_var("x",value).unwrap();
+            assert!(local.delete_local_binding("x"));
+            assert_eq!(outer.resolve("x"),Some(JsValue::Num(91.0)));
+            assert!(local.set_local_binding("x",JsValue::Num(4.0),true).is_err());
+            assert!(local.local_cell("x").is_none());
+            local.set_local_binding("x",JsValue::Num(4.0),false).unwrap();
+            assert_eq!(local.local_cell("x").unwrap().read().unwrap(),JsValue::Num(4.0));
+            assert_eq!(outer.resolve("x"),Some(JsValue::Num(91.0)));
+            assert!(local.delete_local_binding("x"));
+        }
+        let env=EnvHandle::new(EnvKind::Function,None);
+        env.declare_var("formal",JsValue::Num(1.0)).unwrap();
+        let formal=env.local_cell("formal").unwrap();
+        env.declare_sloppy_eval_var("formal",Some(JsValue::Num(7.0))).unwrap();
+        assert!(formal.same_target(&env.local_cell("formal").unwrap()));
+        assert_eq!(formal.read().unwrap(),JsValue::Num(7.0));
+        assert!(!env.delete_local_binding("formal"));
+        for mutable in [false,true] {
+            let name=if mutable {"tdz_let"}else{"tdz_const"};
+            let cell=env.declare_uninitialized(name,mutable).unwrap();
+            assert!(env.declare_sloppy_eval_var(name,None).is_err());
+            assert!(env.set_local_binding(name,JsValue::Num(1.0),false).is_err());
+            assert!(!env.delete_local_binding(name));
+            assert!(cell.is_uninitialized());
+        }
+        let target=BindingCell::new_value(JsValue::Num(42.0));
+        env.declare_import("imported",target.clone()).unwrap();
+        assert!(env.declare_sloppy_eval_var("imported",Some(JsValue::Num(1.0))).is_err());
+        assert!(env.set_local_binding("imported",JsValue::Num(1.0),false).is_err());
+        assert!(!env.delete_local_binding("imported"));
+        assert_eq!(target.read().unwrap(),JsValue::Num(42.0));
     }
 }

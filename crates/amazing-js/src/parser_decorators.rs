@@ -47,6 +47,7 @@ impl Parser {
 
     pub(super) fn parse_decorated_module_item(&mut self, exports: &mut HashSet<String>) -> Result<ModuleItem, SyntaxError> {
         let start = self.cur_loc();
+        let source_start = self.pos;
         let decorators = self.parse_decorators()?;
         if self.at_kw(crate::tokens::Keyword::Export) {
             let mut item = self.parse_export_declaration(exports)?;
@@ -65,7 +66,8 @@ impl Parser {
             statement.span.start = start;
             Ok(item)
         } else {
-            let class = self.parse_class_with_decorators(decorators)?;
+            let mut class = self.parse_class_with_decorators(decorators)?;
+            class.source = self.source_from(source_start);
             if class.name.is_none() { return Err(self.err_at(start, "class declaration requires a name")); }
             Ok(ModuleItem::Statement(Stmt::new(StmtKind::Class(Box::new(class)), self.span_from(start))))
         }

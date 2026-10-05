@@ -69,6 +69,9 @@ pub use event_handler::parse_event_handler;
 #[path = "parser_eval.rs"]
 mod eval;
 pub use eval::{parse_eval, parse_eval_utf16, EvalContext};
+#[path = "parser_dynamic_function.rs"]
+mod dynamic_function;
+pub use dynamic_function::{DynamicFunctionKind, parse_dynamic_parameters_utf16, parse_dynamic_body_utf16, parse_dynamic_function_expression_utf16};
 
 /// Parses a full script; static imports and exports require [`parse_module`].
 pub fn parse_script(src: &str) -> Result<Program, SyntaxError> {
@@ -384,6 +387,19 @@ struct Parser {
 }
 
 impl Parser {
+    /// Exact first/last consumed token bounds; speculation restores token position.
+    fn source_from(&self, first: usize) -> crate::source_text::SourceMetadata {
+        if first >= self.pos { return Default::default(); }
+        let mut tokens = self.tokens.borrow_mut();
+        let start = tokens.get(first).source.range().map(|r| r.start());
+        let end = tokens.get(self.pos - 1).source.range().map(|r| r.end());
+        match (start, end) {
+            (Some(start), Some(end)) => tokens.source_text().range(start, end)
+                .map(crate::source_text::SourceMetadata::new).unwrap_or_default(),
+            _ => Default::default(),
+        }
+    }
+
     fn new(src: &str) -> Self {
         Self::new_utf16(&src.encode_utf16().collect::<Vec<_>>())
     }
@@ -2329,3 +2345,7 @@ mod construct_tests {
     }
 
 }
+
+#[cfg(test)]
+#[path = "parser_source_tests.rs"]
+mod source_tests;

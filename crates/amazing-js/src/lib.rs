@@ -83,3 +83,5 @@ mod tests {
         assert!(p.body.is_empty());
     }
 }
+
+pub mod source_text;

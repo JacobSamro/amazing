@@ -5,6 +5,11 @@ impl Parser {
     // ----- program & statements -------------------------------------------
 
     pub(super) fn parse_program(&mut self) -> Result<Program, SyntaxError> {
+        let block = self.parse_eof_statement_list()?;
+        Ok(Program { span: block.span, body: block.body })
+    }
+
+    pub(super) fn parse_eof_statement_list(&mut self) -> Result<Block, SyntaxError> {
         let start = self.cur_loc();
         let mut body = Vec::new();
         let mut in_directive_prologue = true;
@@ -30,10 +35,7 @@ impl Parser {
             }
         }
         cover::validate_program(&body)?;
-        Ok(Program {
-            span: self.span_from(start),
-            body,
-        })
+        Ok(Block { span: self.span_from(start), body })
     }
 
     pub(super) fn parse_stmt(&mut self) -> Result<Stmt, SyntaxError> {

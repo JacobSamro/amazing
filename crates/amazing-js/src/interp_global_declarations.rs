@@ -229,26 +229,57 @@ mod global_declaration_tests {
     #[test]
     fn rejected_scripts_create_no_bindings_and_lexicals_share_across_overlays() {
         for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
-            for (setup, rejected, absent) in [
-                ("var x=1", "var absent;let x=2", "absent"),
-                ("let x=1", "var absent;var x=2", "absent"),
-                ("let x=1", "var absent;let x=2", "absent"),
-                ("Object.defineProperty(globalThis,'x',{value:1,configurable:false})", "var absent;let x=2", "absent"),
-                ("Object.preventExtensions(globalThis)", "var absent;function f(){}", "absent"),
-                ("Object.defineProperty(globalThis,'x',{value:1,writable:false,configurable:false})", "var absent;function x(){}", "absent"),
-                ("eval('var x=3');Reflect.deleteProperty(globalThis,'x')", "var absent;let x=4", "absent"),
+            for (setup, subsequent, absent, accepted) in [
+                ("var x=1", "var absent;let x=2", "absent", false),
+                ("let x=1", "var absent;var x=2", "absent", false),
+                ("let x=1", "var absent;let x=2", "absent", false),
+                ("Object.defineProperty(globalThis,'x',{value:1,configurable:false})", "var absent;let x=2", "absent", false),
+                ("Object.preventExtensions(globalThis)", "var absent;function f(){}", "absent", false),
+                ("Object.defineProperty(globalThis,'x',{value:1,writable:false,configurable:false})", "var absent;function x(){}", "absent", false),
+                ("eval('var x=3');Reflect.deleteProperty(globalThis,'x')", "var absent;let x=4", "absent", true),
             ] {
                 let mut interpreter = Interpreter::new();
                 interpreter.run_script_with_backend(setup, backend).unwrap();
-                assert!(interpreter.run_script_with_backend(rejected, backend).is_err(), "{backend:?}: {rejected}");
-                assert!(interpreter.global_env.local_cell(absent).is_none());
-                assert!(interpreter.global_obj.borrow().own_prop(absent).is_none());
+                // ECMA-262 2027 GlobalDeclarationInstantiation checks existing
+                // lexicals and restricted own properties, not deleted eval names.
+                let result = interpreter.run_script_with_backend(subsequent, backend);
+                assert_eq!(result.is_ok(), accepted, "{backend:?}: {setup} -> {subsequent}");
+                assert_eq!(interpreter.global_env.local_cell(absent).is_some(), accepted);
+                assert_eq!(interpreter.global_obj.borrow().own_prop(absent).is_some(), accepted);
+                if accepted {
+                    assert_eq!(interpreter.run_script_with_backend("x===4&&!Object.hasOwn(globalThis,'x')&&Object.hasOwn(globalThis,'absent')", backend).unwrap(), JsValue::Bool(true));
+                }
             }
             let mut interpreter = Interpreter::new();
             interpreter.run_script_with_backend("var capture=()=>x", backend).unwrap();
             interpreter.global_env = interpreter.binding_create_global_environment_overlay();
             interpreter.run_script_with_backend("let x=3", backend).unwrap();
             assert_eq!(interpreter.run_script_with_backend("capture()===3&&!Object.hasOwn(globalThis,'x')", backend).unwrap(), JsValue::Bool(true));
+        }
+    }
+
+    #[test]
+    fn configurable_eval_globals_and_restricted_script_properties_remain_distinct() {
+        let cases: &[(&str, bool, &str)] = &[
+            ("eval('var x=3')", true, "x===4&&globalThis.x===3"),
+            ("eval('function x(){return 3}')", true, "x===4&&globalThis.x()===3"),
+            ("eval('function x(){return 3}');Reflect.deleteProperty(globalThis,'x')", true, "x===4&&!Object.hasOwn(globalThis,'x')"),
+            ("Object.defineProperty(globalThis,'x',{value:3,configurable:true})", true, "x===4&&globalThis.x===3"),
+            ("Object.defineProperty(Object.getPrototypeOf(globalThis),'x',{value:3,configurable:false})", true, "x===4&&globalThis.x===3&&!Object.hasOwn(globalThis,'x')"),
+            ("eval('var x=3');Object.defineProperty(globalThis,'x',{configurable:false})", false, "x===3&&globalThis.x===3"),
+            ("var x=3;Reflect.deleteProperty(globalThis,'x')", false, "x===3&&Object.hasOwn(globalThis,'x')"),
+            ("function x(){return 3};Reflect.deleteProperty(globalThis,'x')", false, "x()===3&&Object.hasOwn(globalThis,'x')"),
+        ];
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            for &(setup, accepted, check) in cases {
+                let mut interpreter = Interpreter::new();
+                interpreter.run_script_with_backend(setup, backend).unwrap();
+                let result = interpreter.run_script_with_backend("var absent;let x=4", backend);
+                assert_eq!(result.is_ok(), accepted, "{backend:?}: {setup}");
+                assert_eq!(interpreter.global_env.local_cell("absent").is_some(), accepted);
+                assert_eq!(interpreter.global_obj.borrow().own_prop("absent").is_some(), accepted);
+                assert_eq!(interpreter.run_script_with_backend(check, backend).unwrap(), JsValue::Bool(true), "{backend:?}: {setup}");
+            }
         }
     }
 

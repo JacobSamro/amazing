@@ -1,3 +1,6 @@
+// Function body lexical reservation/closure-environment adaptation reuses
+// lucid-softworks/lumen (crates/lumen/src/{eval,interpreter}.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Portions ported from boa-dev/boa (core/engine/src/bytecompiler/mod.rs::call)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: whole call-reference,
 // grouped receiver and contextual eval lowering onto rooted registers.
@@ -11,6 +14,10 @@ use crate::ast::{
 use crate::tokens::Span;
 use crate::value::{JsString, JsValue};
 use std::rc::Rc;
+
+#[cfg(test)]
+#[path = "tests_source.rs"]
+mod tests_source;
 
 #[path = "compiler_patterns.rs"]
 mod patterns;
@@ -108,6 +115,7 @@ pub(crate) fn compile_class_method(method: &ast::ClassMethod, strict: bool) -> R
     let mut compiler = Compiler::new(false);
     compiler.strict = strict;
     let result = compiler.compile_function(&ast::FunctionItem {
+        source: method.source.clone(),
         name: None,
         params: method.params.clone(),
         body: method.body.clone(),
@@ -150,6 +158,7 @@ pub(crate) fn compile_async_body(body: &ast::Block, strict: bool) -> Result<Func
     let mut compiler = Compiler::new(false);
     compiler.strict = strict;
     let result = compiler.compile_function(&ast::FunctionItem {
+        source: Default::default(),
         name: None,
         params: vec![],
         body: body.clone(),
@@ -169,6 +178,7 @@ pub(crate) fn compile_generator_body(body: &ast::Block, strict: bool) -> Result<
     let mut compiler = Compiler::new(false);
     compiler.strict = strict;
     compiler.compile_function(&ast::FunctionItem {
+        source: Default::default(),
         name: None,
         params: vec![],
         body: body.clone(),
@@ -192,6 +202,7 @@ pub(crate) fn compile_async_generator_body(body: &ast::Block, strict: bool) -> R
     let mut compiler = Compiler::new(false);
     compiler.strict = strict;
     compiler.compile_function(&ast::FunctionItem {
+        source: Default::default(),
         name: None,
         params: vec![],
         body: body.clone(),
@@ -384,6 +395,7 @@ impl Compiler {
         child.native_declarations = true;
         child.annex_declarations(&function.body.body, &params);
         child.hoist_functions(&function.body.body)?;
+        child.reserve_body_lexicals(&function.body.body);
         child.statements(&function.body.body, function.body.span)?;
         let body_lexical_names = super::super::block_lexical_names(&function.body.body);
         let skip_implicit_arguments = !params.iter().any(|p| p.default.is_some() || Self::binding_has_parameter_expression(&p.binding))
@@ -393,6 +405,7 @@ impl Compiler {
             return Err(self.error(span, "instruction limit"));
         }
         Ok(FunctionCode(Rc::new(CompiledFunction {
+            source: function.source.clone(),
             name: function
                 .name
                 .as_ref()
@@ -432,10 +445,12 @@ impl Compiler {
             ast::ArrowBody::Block(block) => {
                 if child.native_declarations { child.annex_declarations(&block.body, &params); }
                 child.hoist_functions(&block.body)?;
+                child.reserve_body_lexicals(&block.body);
                 child.statements(&block.body, block.span)?;
             }
         }
         Ok(FunctionCode(Rc::new(CompiledFunction {
+            source: arrow.source.clone(),
             name: String::new(),
             params,
             body_lexical_names: Vec::new(),
@@ -455,6 +470,7 @@ impl Compiler {
         class_method: bool,
     ) -> Result<FunctionCode, CompileError> {
         let function = ast::FunctionItem {
+            source: method.source.clone(),
             name: None,
             params: method.params.clone(),
             body: method.body.clone(),
@@ -504,6 +520,9 @@ impl Compiler {
         });
         let implicit_derived_ctor = super_class.is_some() && constructor.is_none();
         let function = ast::FunctionItem {
+            // Constructor [[SourceText]] is the entire class production,
+            // including the synthesized constructor of an implicit class.
+            source: class.source.clone(),
             name: class.name.clone(),
             params: constructor.map_or_else(Vec::new, |method| method.params.clone()),
             body: constructor.map_or_else(
@@ -613,7 +632,7 @@ impl Compiler {
     fn emit(&mut self, op: Instruction) -> usize {
         let index = self.program.code.len();
         match &op {
-            Instruction::EnterScope | Instruction::EnterObjectScope(_) | Instruction::EnterCatch(_) | Instruction::EnterCatchValue(_) | Instruction::BindFor(..) => self.scope_depth += 1,
+            Instruction::EnterScope | Instruction::EnterObjectScope(_) | Instruction::EnterCatch(_) | Instruction::EnterCatchValue(..) | Instruction::BindFor(..) => self.scope_depth += 1,
             Instruction::LeaveScope => self.scope_depth -= 1,
             _ => {}
         }
@@ -696,7 +715,9 @@ impl Compiler {
                     if declaration.kind == VarKind::Const && binding.init.is_none() {
                         return Err(self.error(binding.span, "const requires an initializer"));
                     }
-                    if declaration.kind != VarKind::Var && (!self.native_declarations || (self.scope_depth == 0 && self.program.global_declarations.is_none())) && (declaration.resource_kind.is_some() || !matches!(binding.binding, Binding::Ident(_))) {
+                    // Genuine function bodies already own an eager lexical prefix.
+                    // Generic script/manual entry keeps its statement reservation.
+                    if declaration.kind != VarKind::Var && (!self.native_declarations || (!self.program.is_function && self.scope_depth == 0 && self.program.global_declarations.is_none())) && (declaration.resource_kind.is_some() || !matches!(binding.binding, Binding::Ident(_))) {
                         self.reserve_pattern(&binding.binding, declaration.kind == VarKind::Let);
                     }
                     let reference = if declaration.kind == VarKind::Var && (self.with_depth != 0 || self.program.global_declarations.is_some()) {
@@ -1077,7 +1098,7 @@ impl Compiler {
                     let start = self.program.code.len();
                     if let Some(binding) = &catch.binding {
                         let value = self.register(catch.body.span)?;
-                        self.emit(Instruction::EnterCatchValue(value));
+                        self.emit(Instruction::EnterCatchValue(value, true));
                         self.reserve_pattern(binding, true);
                         self.binding_pattern(binding, value, VarKind::Let, catch.body.span)?;
                     } else { self.emit(Instruction::EnterCatch(None)); }

@@ -2920,40 +2920,70 @@ fn native_queue_microtask(
     Ok(JsValue::Undefined)
 }
 
-// testharness.js distinguishes callback setup from property-object setup with
-// instanceof Function, and checks setup properties with hasOwnProperty.
-//
-// Shared by %Function%, %AsyncFunction%, %GeneratorFunction% and
-// %AsyncGeneratorFunction% (CreateDynamicFunction): `prefix` selects the
-// kind by spelling out the keyword(s) that precede the synthesized
-// function's name, so the parser sets `is_async`/`is_generator` on the
-// resulting `ast::FunctionItem` exactly as it would for a literal
-// declaration -- `make_function` then places the result on the matching
-// shared `[[Prototype]]` (async_function_proto, generator_function_proto,
-// ...) with no further kind-specific logic needed here. Call and construct
-// behave identically (this ignores `this`/`new.target`; a subclassed
-// construction's `[[Prototype]]` is fixed up generically afterward by
-// `construct_with_new_target`).
-fn native_dynamic_function(i: &mut Interpreter, args: Vec<JsValue>, prefix: &str) -> Result<JsValue, Throw> {
-    let mut parts = args
-        .iter()
-        .map(|a| i.to_string(a))
+// CreateDynamicFunction shares one algorithm across the four intrinsic kinds.
+// The core host permits compilation of strings; browser CSP/Trusted Types policy
+// must be enforced by its embedding and is not claimed by this default policy.
+fn runtime_is_dynamic_function_constructor(native: crate::value::NativeFn) -> bool {
+    [native_function_constructor as crate::value::NativeFn,
+     native_generator_function_constructor as crate::value::NativeFn,
+     native_async_function_constructor as crate::value::NativeFn,
+     native_async_generator_function_constructor as crate::value::NativeFn]
+        .into_iter().any(|constructor| std::ptr::fn_addr_eq(native, constructor))
+}
+
+fn native_dynamic_function(
+    i: &mut Interpreter, args: Vec<JsValue>, kind: crate::parser::DynamicFunctionKind,
+) -> Result<JsValue, Throw> {
+    use crate::parser::{DynamicFunctionKind, parse_dynamic_parameters_utf16,
+        parse_dynamic_body_utf16, parse_dynamic_function_expression_utf16};
+    let constructor = JsValue::Object(i.native_stack.last().cloned()
+        .ok_or_else(|| Throw::type_error("missing dynamic function constructor context"))?);
+    let new_target = i.current_new_target().unwrap_or_else(|| constructor.clone());
+    // ToString is observable: parameters precede the body, once each, and all
+    // coercions precede every parse goal and NewTarget.prototype access.
+    let mut parts = args.iter().map(|argument| i.to_js_string(argument))
         .collect::<Result<Vec<_>, _>>()?;
-    let body = parts.pop().unwrap_or_default();
-    let source = format!("{prefix} anonymous({}) {{\n{}\n}}", parts.join(","), body);
-    let script = crate::parse_script(&source).map_err(|e| Throw::syntax_error(e.to_string()))?;
-    if script.body.len() != 1 {
-        return Err(Throw::syntax_error("invalid Function constructor source"));
+    let body = parts.pop().unwrap_or_else(|| crate::value::JsString::from(""));
+    let mut parameters = Vec::new();
+    for (index, parameter) in parts.iter().enumerate() {
+        if index > 0 { parameters.push(b',' as u16); }
+        parameters.extend_from_slice(parameter.units());
     }
-    if let ast::StmtKind::Function(function) = &script.body[0].kind {
-        let previous_strict = i.strict_eval_context;
-        i.strict_eval_context = false;
-        let value = i.make_function(function, &i.global_with_active_source_context());
-        i.strict_eval_context = previous_strict;
-        Ok(value)
-    } else {
-        Err(Throw::syntax_error("invalid Function constructor source"))
+    let mut body_parse = vec![b'\n' as u16];
+    body_parse.extend_from_slice(body.units());
+    body_parse.push(b'\n' as u16);
+    let prefix = match kind {
+        DynamicFunctionKind::Normal => "function",
+        DynamicFunctionKind::Generator => "function*",
+        DynamicFunctionKind::Async => "async function",
+        DynamicFunctionKind::AsyncGenerator => "async function*",
+    };
+    let mut source = prefix.encode_utf16().collect::<Vec<_>>();
+    source.extend(" anonymous(".encode_utf16());
+    source.extend_from_slice(&parameters);
+    source.extend("\n) {".encode_utf16());
+    source.extend_from_slice(&body_parse);
+    source.push(b'}' as u16);
+    // Independent goals prevent parameter/body text from crossing the wrapper
+    // boundary. The final expression goal applies their combined early errors.
+    parse_dynamic_parameters_utf16(&parameters, kind)
+        .map_err(|error| Throw::syntax_error(error.to_string()))?;
+    parse_dynamic_body_utf16(&body_parse, kind)
+        .map_err(|error| Throw::syntax_error(error.to_string()))?;
+    let function = parse_dynamic_function_expression_utf16(&source, kind)
+        .map_err(|error| Throw::syntax_error(error.to_string()))?;
+    let prototype = match i.get_prop(&new_target, "prototype")? {
+        JsValue::Object(prototype) => prototype,
+        _ => i.constructor_fallback_prototype(&constructor, &new_target)?,
+    };
+    let previous_strict = i.strict_eval_context;
+    i.strict_eval_context = false;
+    let value = i.make_function(&function, &i.global_with_active_source_context());
+    i.strict_eval_context = previous_strict;
+    if let JsValue::Object(object) = &value {
+        object.borrow_mut().proto = Some(prototype);
     }
+    Ok(value)
 }
 
 fn native_function_constructor(
@@ -2961,7 +2991,7 @@ fn native_function_constructor(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    native_dynamic_function(i, args, "function")
+    native_dynamic_function(i, args, crate::parser::DynamicFunctionKind::Normal)
 }
 
 fn native_async_function_constructor(
@@ -2969,7 +2999,7 @@ fn native_async_function_constructor(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    native_dynamic_function(i, args, "async function")
+    native_dynamic_function(i, args, crate::parser::DynamicFunctionKind::Async)
 }
 
 fn native_generator_function_constructor(
@@ -2977,7 +3007,7 @@ fn native_generator_function_constructor(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    native_dynamic_function(i, args, "function*")
+    native_dynamic_function(i, args, crate::parser::DynamicFunctionKind::Generator)
 }
 
 fn native_async_generator_function_constructor(
@@ -2985,7 +3015,7 @@ fn native_async_generator_function_constructor(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    native_dynamic_function(i, args, "async function*")
+    native_dynamic_function(i, args, crate::parser::DynamicFunctionKind::AsyncGenerator)
 }
 fn native_has_own_property(
     i: &mut Interpreter,

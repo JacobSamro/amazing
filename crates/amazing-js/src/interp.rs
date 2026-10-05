@@ -1,3 +1,6 @@
+// Function body lexical reservation/closure-environment adaptation reuses
+// lucid-softworks/lumen (crates/lumen/src/{eval,interpreter}.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Portions ported from boa-dev/boa (core/engine/src/object/operations.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // OrdinaryHasInstance bound-target delegation adapted to native home records.
@@ -423,6 +426,7 @@ impl Interpreter {
         let object_proto = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
         let function_proto = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::function(JsFunction {
+                source: Default::default(),
                 name: String::new(), params: Vec::new(),
                 body: FunctionBody::Native(native_function_prototype),
                 is_arrow: false, is_async: false, is_generator: false,
@@ -1345,8 +1349,9 @@ impl Interpreter {
         let previous_completion = self.completion.clone();
         self.completion = None;
         let env = direct_eval_env.unwrap_or_else(|| self.global_env.clone());
-        if self.in_eval { self.validate_eval_global_declarations(&p.body, &env)?; }
-        if !self.in_eval && env.kind() == EnvKind::Global {
+        if self.in_eval {
+            self.instantiate_eval_declarations(&p.body, &env)?;
+        } else if env.kind() == EnvKind::Global {
             let plan = GlobalDeclarationPlan::new(&p.body, self.strict_eval_context);
             self.instantiate_global_declarations(&plan, &env)?;
         } else { self.hoist(&p.body, &env)?; }
@@ -1401,7 +1406,39 @@ impl Interpreter {
     /// enclosing barriers; a simple catch parameter keeps Annex B's exception.
     /// Adapted from lucid-softworks/lumen (crates/lumen/src/interpreter.rs, collect_annexb_funcs)
     /// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
+    fn hoist_function_body(&mut self, body: &[ast::Stmt], variable_env: &EnvHandle, strict: bool) -> Result<EnvHandle, Throw> {
+        let mut blocked = block_lexical_names(body);
+        // First instantiate var names/Annex B eligibility, without creating
+        // direct function closures. FDI then reserves the body lexical record.
+        self.hoist_inner_with_closure_env(body, variable_env, false, &mut blocked, None)?;
+        let lexical_env = self.prepare_function_lexical_environment(body, variable_env, strict)?;
+        let mut seen = HashSet::new();
+        let mut functions = Vec::new();
+        for statement in body.iter().rev() {
+            if let ast::StmtKind::Function(function) = &statement.kind {
+                if let Some(name) = &function.name {
+                    if seen.insert(name.name.clone()) { functions.push(function); }
+                }
+            }
+        }
+        // FDI selects the last declaration of each name before allocating
+        // any of its closures, then initializes in original list order.
+        for function in functions.into_iter().rev() {
+                if let Some(name) = &function.name {
+                    let value = self.make_function(function, &lexical_env);
+                    if self.in_eval { self.create_eval_binding(variable_env, &name.name, Some(value))?; }
+                    else { variable_env.declare_var(&name.name, value)?; }
+                }
+        }
+        Ok(lexical_env)
+    }
+
     fn hoist_inner(&mut self, body: &[ast::Stmt], env: &EnvHandle, nested: bool, blocked: &mut Vec<String>) -> Result<(), Throw> {
+        // Script, eval and ordinary block callers retain their original record.
+        self.hoist_inner_with_closure_env(body, env, nested, blocked, Some(env))
+    }
+
+    fn hoist_inner_with_closure_env(&mut self, body: &[ast::Stmt], env: &EnvHandle, nested: bool, blocked: &mut Vec<String>, closure_env: Option<&EnvHandle>) -> Result<(), Throw> {
         for s in body {
             match &s.kind {
                 StmtKind::Var(d) if d.kind == ast::VarKind::Var => {
@@ -1412,9 +1449,12 @@ impl Interpreter {
                 StmtKind::Function(f) => {
                     if let Some(n) = &f.name {
                         if !nested {
-                            let v = self.make_function(f, env);
-                            if self.in_eval { self.create_eval_binding(env, &n.name, Some(v))?; }
-                            else { env.declare_var(&n.name, v)?; }
+                            if let Some(closure_env) = closure_env {
+                                let v = self.make_function(f, closure_env);
+                                if self.in_eval { self.create_eval_binding(env, &n.name, Some(v))?; }
+                                else { env.declare_var(&n.name, v)?; }
+                            } else if self.in_eval { self.create_eval_binding(env, &n.name, None)?; }
+                            else { env.hoist_var(&n.name)?; }
                         } else if !self.strict_eval_context && !f.is_async && !f.is_generator {
                             // Record THIS declaration's own individual eligibility, keyed by its
                             // own AST node address, not just "does the shared var exist" -- the
@@ -1540,7 +1580,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn hoist_var(&self, d: &ast::VarDecl, env: &EnvHandle) -> Result<(), Throw> {
+    fn hoist_var(&mut self, d: &ast::VarDecl, env: &EnvHandle) -> Result<(), Throw> {
         if d.kind == ast::VarKind::Var {
             for x in &d.decls {
                 self.hoist_binding(&x.binding, env)?;
@@ -1549,7 +1589,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn hoist_binding(&self, binding: &Binding, env: &EnvHandle) -> Result<(), Throw> {
+    fn hoist_binding(&mut self, binding: &Binding, env: &EnvHandle) -> Result<(), Throw> {
         match binding {
             Binding::Ident(identifier) => {
                 if self.in_eval {
@@ -1848,3 +1888,7 @@ include!("interp_call_resource.rs");
 
 #[cfg(test)]
 include!("interp_call_resource_tests.rs");
+
+#[cfg(test)]
+include!("runtime_dynamic_source_tests.rs");
+include!("runtime_eval_global_tests.rs");

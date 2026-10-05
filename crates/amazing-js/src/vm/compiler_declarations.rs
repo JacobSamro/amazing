@@ -90,7 +90,19 @@ impl Compiler {
 
     pub(super) fn instantiate_block(&mut self, body: &[Stmt]) {
         if !self.native_declarations { return; }
+        self.reserve_body_lexicals(body);
         let mut functions = Vec::new();
+        for statement in body {
+            if let Some(function) = declaration(statement) {
+                self.block_function_nodes.insert(function as *const ast::FunctionItem as usize);
+                functions.push(Rc::new(function.clone()));
+            }
+        }
+        if !functions.is_empty() { self.emit(Instruction::InitBlockFunctions(functions)); }
+    }
+
+    /// FDI reserves only direct lexical declarations; its functions remain vars.
+    pub(super) fn reserve_body_lexicals(&mut self, body: &[Stmt]) {
         for statement in body {
             match &statement.kind {
                 StmtKind::Var(d) if d.kind != VarKind::Var => {
@@ -101,12 +113,7 @@ impl Compiler {
                 }
                 _ => {}
             }
-            if let Some(function) = declaration(statement) {
-                self.block_function_nodes.insert(function as *const ast::FunctionItem as usize);
-                functions.push(Rc::new(function.clone()));
-            }
         }
-        if !functions.is_empty() { self.emit(Instruction::InitBlockFunctions(functions)); }
     }
 
     pub(super) fn if_branch(&mut self, statement: &Stmt) -> Result<(), CompileError> {

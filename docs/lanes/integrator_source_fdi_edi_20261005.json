@@ -1,0 +1,2276 @@
+{
+  "ticket": "source-fdi-edi-joint",
+  "published_base": "ccbe84327b1e177cdf05bc4d9b6ce27b433e4b5f",
+  "tested_source": "c8bb8da37096904649051069ff1ad0ad651efd78",
+  "owner_ready": "a8273ae74f26887e926845f655ae05a7283b2bc1",
+  "owner_review": {
+    "ready": "a8273ae74f26887e926845f655ae05a7283b2bc1",
+    "tested_source": "36c227f0adc3313cf140cf10b6586b20cd46fba2",
+    "base": "70a76d75dd90009bd6948c0bae548ded5ab6a7e1",
+    "source_bytes_identical": [
+      "crates/amazing-js/examples/test262_host.rs",
+      "crates/amazing-js/src/ast.rs",
+      "crates/amazing-js/src/env.rs",
+      "crates/amazing-js/src/interp.rs",
+      "crates/amazing-js/src/interp_async_generator_return.rs",
+      "crates/amazing-js/src/interp_bindings.rs",
+      "crates/amazing-js/src/interp_builtins.rs",
+      "crates/amazing-js/src/interp_class_evaluation_state.rs",
+      "crates/amazing-js/src/interp_coroutine.rs",
+      "crates/amazing-js/src/interp_eval_context.rs",
+      "crates/amazing-js/src/interp_eval_declarations.rs",
+      "crates/amazing-js/src/interp_event_handler.rs",
+      "crates/amazing-js/src/interp_function_environments.rs",
+      "crates/amazing-js/src/interp_global_declarations.rs",
+      "crates/amazing-js/src/interp_install.rs",
+      "crates/amazing-js/src/interp_object_extra.rs",
+      "crates/amazing-js/src/interp_proxy.rs",
+      "crates/amazing-js/src/interp_stmt.rs",
+      "crates/amazing-js/src/interp_with.rs",
+      "crates/amazing-js/src/lexer.rs",
+      "crates/amazing-js/src/lexer_source.rs",
+      "crates/amazing-js/src/lib.rs",
+      "crates/amazing-js/src/parser.rs",
+      "crates/amazing-js/src/parser_cover.rs",
+      "crates/amazing-js/src/parser_decorators.rs",
+      "crates/amazing-js/src/parser_dynamic_function.rs",
+      "crates/amazing-js/src/parser_eval.rs",
+      "crates/amazing-js/src/parser_event_handler.rs",
+      "crates/amazing-js/src/parser_expressions.rs",
+      "crates/amazing-js/src/parser_functions.rs",
+      "crates/amazing-js/src/parser_source_tests.rs",
+      "crates/amazing-js/src/parser_statements.rs",
+      "crates/amazing-js/src/runtime_dynamic_source_tests.rs",
+      "crates/amazing-js/src/runtime_eval_global_tests.rs",
+      "crates/amazing-js/src/source_text.rs",
+      "crates/amazing-js/src/token_stream.rs",
+      "crates/amazing-js/src/tokens.rs",
+      "crates/amazing-js/src/value.rs",
+      "crates/amazing-js/src/vm/async_from_sync.rs",
+      "crates/amazing-js/src/vm/compiler.rs",
+      "crates/amazing-js/src/vm/compiler_declarations.rs",
+      "crates/amazing-js/src/vm/compiler_resources.rs",
+      "crates/amazing-js/src/vm/mod.rs",
+      "crates/amazing-js/src/vm/runtime_fdi_tests.rs",
+      "crates/amazing-js/src/vm/tests_return.rs",
+      "crates/amazing-js/src/vm/tests_source.rs",
+      "crates/amazing-js/tests/source_text_utf16.rs",
+      "crates/amazing-regex/src/parser.rs",
+      "crates/amazing-regex/src/tests.rs",
+      "crates/amazing/src/cmd/wpt_harness.rs"
+    ],
+    "authored_file_lines": {
+      "crates/amazing-js/examples/test262_host.rs": 494,
+      "crates/amazing-js/src/ast.rs": 736,
+      "crates/amazing-js/src/env.rs": 1029,
+      "crates/amazing-js/src/interp.rs": 1894,
+      "crates/amazing-js/src/interp_async_generator_return.rs": 309,
+      "crates/amazing-js/src/interp_bindings.rs": 963,
+      "crates/amazing-js/src/interp_builtins.rs": 3143,
+      "crates/amazing-js/src/interp_class_evaluation_state.rs": 317,
+      "crates/amazing-js/src/interp_coroutine.rs": 1389,
+      "crates/amazing-js/src/interp_eval_context.rs": 161,
+      "crates/amazing-js/src/interp_eval_declarations.rs": 219,
+      "crates/amazing-js/src/interp_event_handler.rs": 253,
+      "crates/amazing-js/src/interp_function_environments.rs": 172,
+      "crates/amazing-js/src/interp_global_declarations.rs": 318,
+      "crates/amazing-js/src/interp_install.rs": 721,
+      "crates/amazing-js/src/interp_object_extra.rs": 1232,
+      "crates/amazing-js/src/interp_proxy.rs": 840,
+      "crates/amazing-js/src/interp_stmt.rs": 3365,
+      "crates/amazing-js/src/interp_with.rs": 48,
+      "crates/amazing-js/src/lexer.rs": 1943,
+      "crates/amazing-js/src/lexer_source.rs": 50,
+      "crates/amazing-js/src/lib.rs": 87,
+      "crates/amazing-js/src/parser.rs": 2351,
+      "crates/amazing-js/src/parser_cover.rs": 317,
+      "crates/amazing-js/src/parser_decorators.rs": 107,
+      "crates/amazing-js/src/parser_dynamic_function.rs": 59,
+      "crates/amazing-js/src/parser_eval.rs": 202,
+      "crates/amazing-js/src/parser_event_handler.rs": 61,
+      "crates/amazing-js/src/parser_expressions.rs": 1180,
+      "crates/amazing-js/src/parser_functions.rs": 649,
+      "crates/amazing-js/src/parser_source_tests.rs": 170,
+      "crates/amazing-js/src/parser_statements.rs": 1223,
+      "crates/amazing-js/src/runtime_dynamic_source_tests.rs": 202,
+      "crates/amazing-js/src/runtime_eval_global_tests.rs": 165,
+      "crates/amazing-js/src/source_text.rs": 37,
+      "crates/amazing-js/src/token_stream.rs": 68,
+      "crates/amazing-js/src/tokens.rs": 605,
+      "crates/amazing-js/src/value.rs": 1512,
+      "crates/amazing-js/src/vm/async_from_sync.rs": 133,
+      "crates/amazing-js/src/vm/compiler.rs": 1931,
+      "crates/amazing-js/src/vm/compiler_declarations.rs": 128,
+      "crates/amazing-js/src/vm/compiler_resources.rs": 68,
+      "crates/amazing-js/src/vm/mod.rs": 2913,
+      "crates/amazing-js/src/vm/runtime_fdi_tests.rs": 137,
+      "crates/amazing-js/src/vm/tests_return.rs": 370,
+      "crates/amazing-js/src/vm/tests_source.rs": 59,
+      "crates/amazing-js/tests/source_text_utf16.rs": 203,
+      "crates/amazing-regex/src/parser.rs": 1096,
+      "crates/amazing-regex/src/tests.rs": 839,
+      "crates/amazing/src/cmd/wpt_harness.rs": 1789
+    },
+    "summary_bytes": 47785,
+    "summary_sha256": "0c5f74676e0d754650363f9ec21b60e829eada288797abae20d37cc6ec7602ac",
+    "qualification": {
+      "schema": 1,
+      "base": "70a76d75dd90009bd6948c0bae548ded5ab6a7e1",
+      "tested_before": "9d3aaa65d3b0eef3b9e7e74cbf55eb552df9738b",
+      "tested_after": "36c227f0adc3313cf140cf10b6586b20cd46fba2",
+      "ready_branch": "lane/source47-fdi-edi-ready",
+      "qualified_source_patch_sha256": "2555f196f8f72b5e0ead96c48e7f8ae7e97c48fbb97ebe3bfc29ae9ddaa1b367",
+      "comparison": {
+        "union_counts": {
+          "default": {
+            "before": {
+              "passing_files": 37785,
+              "passing_variants": 71658
+            },
+            "after": {
+              "passing_files": 37806,
+              "passing_variants": 71693
+            }
+          },
+          "vm": {
+            "before": {
+              "passing_files": 37785,
+              "passing_variants": 71658
+            },
+            "after": {
+              "passing_files": 37806,
+              "passing_variants": 71693
+            }
+          }
+        },
+        "base": "70a76d75dd90009bd6948c0bae548ded5ab6a7e1",
+        "before": "9d3aaa65d3b0eef3b9e7e74cbf55eb552df9738b",
+        "after": "36c227f0adc3313cf140cf10b6586b20cd46fba2",
+        "pairs": [
+          {
+            "mode": "default",
+            "selector": "language",
+            "before_files": 24482,
+            "after_files": 24494,
+            "before_variants": 45283,
+            "after_variants": 45300,
+            "gained_files": [
+              "annexB/language/eval-code/direct/script-decl-lex-no-collision.js",
+              "language/eval-code/direct/var-env-func-init-global-update-configurable.js",
+              "language/eval-code/direct/var-env-func-init-local-new-delete.js",
+              "language/eval-code/direct/var-env-lower-lex-non-strict.js",
+              "language/eval-code/direct/var-env-var-init-local-new-delete.js",
+              "language/eval-code/indirect/var-env-func-init-global-update-configurable.js",
+              "language/global-code/script-decl-lex-var-declared-via-eval.js",
+              "language/literals/regexp/S7.8.5_A1.1_T2.js",
+              "language/literals/regexp/S7.8.5_A1.4_T2.js",
+              "language/literals/regexp/S7.8.5_A2.1_T2.js",
+              "language/literals/regexp/S7.8.5_A2.4_T2.js",
+              "language/statements/let/function-local-closure-set-before-initialization.js"
+            ],
+            "gained_variants": [
+              [
+                "annexB/language/eval-code/direct/script-decl-lex-no-collision.js",
+                "non-strict"
+              ],
+              [
+                "language/eval-code/direct/var-env-func-init-global-update-configurable.js",
+                "non-strict"
+              ],
+              [
+                "language/eval-code/direct/var-env-func-init-local-new-delete.js",
+                "non-strict"
+              ],
+              [
+                "language/eval-code/direct/var-env-lower-lex-non-strict.js",
+                "non-strict"
+              ],
+              [
+                "language/eval-code/direct/var-env-var-init-local-new-delete.js",
+                "non-strict"
+              ],
+              [
+                "language/eval-code/indirect/var-env-func-init-global-update-configurable.js",
+                "non-strict"
+              ],
+              [
+                "language/eval-code/indirect/var-env-func-init-global-update-configurable.js",
+                "strict"
+              ],
+              [
+                "language/global-code/script-decl-lex-var-declared-via-eval.js",
+                "non-strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A1.1_T2.js",
+                "non-strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A1.1_T2.js",
+                "strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A1.4_T2.js",
+                "non-strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A1.4_T2.js",
+                "strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A2.1_T2.js",
+                "non-strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A2.1_T2.js",
+                "strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A2.4_T2.js",
+                "non-strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A2.4_T2.js",
+                "strict"
+              ],
+              [
+                "language/statements/let/function-local-closure-set-before-initialization.js",
+                "non-strict"
+              ]
+            ],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 14490969,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-language.json",
+              "sha256": "5203ea30a56d599f65876ca0da172ea16791fff54e703b9f45aa61f7d30b59cf"
+            },
+            "after_raw": {
+              "bytes": 14486300,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-language.json",
+              "sha256": "ade07f1c0e74017e269c678c122e4be851637b54d9d48c7bc0893e100de58394"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/Function",
+            "before_files": 507,
+            "after_files": 514,
+            "before_variants": 889,
+            "after_variants": 903,
+            "gained_files": [
+              "annexB/built-ins/Function/createdynfn-html-close-comment-params.js",
+              "annexB/built-ins/Function/createdynfn-html-open-comment-params.js",
+              "built-ins/Function/prototype/toString/AsyncFunction.js",
+              "built-ins/Function/prototype/toString/AsyncGenerator.js",
+              "built-ins/Function/prototype/toString/Function.js",
+              "built-ins/Function/prototype/toString/GeneratorFunction.js",
+              "built-ins/Function/prototype/toString/method-computed-property-name.js"
+            ],
+            "gained_variants": [
+              [
+                "annexB/built-ins/Function/createdynfn-html-close-comment-params.js",
+                "non-strict"
+              ],
+              [
+                "annexB/built-ins/Function/createdynfn-html-close-comment-params.js",
+                "strict"
+              ],
+              [
+                "annexB/built-ins/Function/createdynfn-html-open-comment-params.js",
+                "non-strict"
+              ],
+              [
+                "annexB/built-ins/Function/createdynfn-html-open-comment-params.js",
+                "strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/AsyncFunction.js",
+                "non-strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/AsyncFunction.js",
+                "strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/AsyncGenerator.js",
+                "non-strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/AsyncGenerator.js",
+                "strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/Function.js",
+                "non-strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/Function.js",
+                "strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/GeneratorFunction.js",
+                "non-strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/GeneratorFunction.js",
+                "strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/method-computed-property-name.js",
+                "non-strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/method-computed-property-name.js",
+                "strict"
+              ]
+            ],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7719363,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_Function.json",
+              "sha256": "1ce864bef51680f97bec82d2d0e44dc63ec519ea4277c08bcec2f9e5e50ae0b0"
+            },
+            "after_raw": {
+              "bytes": 7716610,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_Function.json",
+              "sha256": "6d599aba5ce530633f15b079a9df06ec8bd68899873c7c8738b345b9a7016017"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/AsyncFunction",
+            "before_files": 18,
+            "after_files": 18,
+            "before_variants": 36,
+            "after_variants": 36,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7648941,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_AsyncFunction.json",
+              "sha256": "3b72ab480a38cfd77c552949391bba617e231dcba493e2219a1c2111759aa9e4"
+            },
+            "after_raw": {
+              "bytes": 7648941,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_AsyncFunction.json",
+              "sha256": "d6aba42b9d37182597c83fe3a47afd5ffdd6bb1a1c3f61bc2e0a9decbbd2b7a1"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/GeneratorFunction",
+            "before_files": 23,
+            "after_files": 23,
+            "before_variants": 46,
+            "after_variants": 46,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7649939,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_GeneratorFunction.json",
+              "sha256": "073713733ceeef272f4de5b730fe0a72e7f8e4ac2488b5329cd9263a43f1697a"
+            },
+            "after_raw": {
+              "bytes": 7649939,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_GeneratorFunction.json",
+              "sha256": "8785d1e60f55b41d0fc0d01ed5e3dbefc014b9d82fd8aa0042cb80c0d1aeb989"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/AsyncGeneratorFunction",
+            "before_files": 23,
+            "after_files": 23,
+            "before_variants": 46,
+            "after_variants": 46,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7650590,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_AsyncGeneratorFunction.json",
+              "sha256": "1fb49d1de0314d2a9ec0e8ecaa2311a21b6bcf0a9fedb5704aef7758ba28ba64"
+            },
+            "after_raw": {
+              "bytes": 7650590,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_AsyncGeneratorFunction.json",
+              "sha256": "6d40480bc03c696341647627ba1bfc0ad8167b1fb8b9a44c1e44dccc36e04e1e"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/Promise",
+            "before_files": 732,
+            "after_files": 732,
+            "before_variants": 1458,
+            "after_variants": 1458,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7779696,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_Promise.json",
+              "sha256": "86fccdd05f50f1304398baea3ed83e55d5a6a485463aa55a307b8a6df02a4da9"
+            },
+            "after_raw": {
+              "bytes": 7779696,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_Promise.json",
+              "sha256": "993d4865bdb63fe6c7cd73481d65947a32298f6fe3c78f22a29add7033f231c0"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/Iterator",
+            "before_files": 654,
+            "after_files": 654,
+            "before_variants": 1308,
+            "after_variants": 1308,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7778378,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_Iterator.json",
+              "sha256": "871eb5981a094b6d0b672eaa07027551a803d927b9c213e7b3f59dca59b58da5"
+            },
+            "after_raw": {
+              "bytes": 7778378,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_Iterator.json",
+              "sha256": "148cb3bb4e3371d6345b66177bf77a7149bf10b7cbb0ec7f90b01c603808a16c"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/Object",
+            "before_files": 3413,
+            "after_files": 3413,
+            "before_variants": 6806,
+            "after_variants": 6806,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 8116333,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_Object.json",
+              "sha256": "684f48ddbc9bfe6cfa4e51b52bab0b8ee9905d639504ea73e4744f5ee87f332a"
+            },
+            "after_raw": {
+              "bytes": 8116333,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_Object.json",
+              "sha256": "4f8af6b5afd8b3bc6152757ee3c2cc5c1b396ad40f0a45d336407e37d47db11a"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/Proxy",
+            "before_files": 311,
+            "after_files": 311,
+            "before_variants": 607,
+            "after_variants": 607,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7704384,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_Proxy.json",
+              "sha256": "6fe820e137d62fc248f723f90462e34ee53f8d155b1877cf0a41239a37d49549"
+            },
+            "after_raw": {
+              "bytes": 7704386,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_Proxy.json",
+              "sha256": "7ef07a47a2259b075b79a9576f576d6fab5757c6ac0841efb90d21228442b45a"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/Reflect",
+            "before_files": 154,
+            "after_files": 154,
+            "before_variants": 308,
+            "after_variants": 308,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7672191,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_Reflect.json",
+              "sha256": "749c36103f56e2ee4f2a87d7c5fd0a705ef2f2e22a51c8cc527a69e0fa67e102"
+            },
+            "after_raw": {
+              "bytes": 7672191,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_Reflect.json",
+              "sha256": "22f094bf6b573baf79fa20290f798539232184c9eb5f07df41bb04a7a697acf0"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/Array",
+            "before_files": 3327,
+            "after_files": 3327,
+            "before_variants": 6599,
+            "after_variants": 6599,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 8222367,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_Array.json",
+              "sha256": "8020f1281ae3aeb5b2dce1061af4752455326734c36da06c3f5bbad6324d0238"
+            },
+            "after_raw": {
+              "bytes": 8222367,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_Array.json",
+              "sha256": "b67b583506ff937087788173e14910a32d238684ff3aa03145bf75a5bb2a9786"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/String",
+            "before_files": 1335,
+            "after_files": 1335,
+            "before_variants": 2667,
+            "after_variants": 2667,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7845821,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_String.json",
+              "sha256": "666027b1d1d3045e9c105bc668cca9aaa5000da8305f6d5aa39969a8d1b9c56b"
+            },
+            "after_raw": {
+              "bytes": 7845821,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_String.json",
+              "sha256": "38b066a19182fd64e08f02f0e9418c023bd4ec9a27f72854e6e7d1ead0134c5b"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/RegExp",
+            "before_files": 1954,
+            "after_files": 1956,
+            "before_variants": 3906,
+            "after_variants": 3910,
+            "gained_files": [
+              "annexB/built-ins/RegExp/RegExp-leading-escape-BMP.js",
+              "annexB/built-ins/RegExp/RegExp-trailing-escape-BMP.js"
+            ],
+            "gained_variants": [
+              [
+                "annexB/built-ins/RegExp/RegExp-leading-escape-BMP.js",
+                "non-strict"
+              ],
+              [
+                "annexB/built-ins/RegExp/RegExp-leading-escape-BMP.js",
+                "strict"
+              ],
+              [
+                "annexB/built-ins/RegExp/RegExp-trailing-escape-BMP.js",
+                "non-strict"
+              ],
+              [
+                "annexB/built-ins/RegExp/RegExp-trailing-escape-BMP.js",
+                "strict"
+              ]
+            ],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 8089104,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_RegExp.json",
+              "sha256": "d968c7d86dd5e6a1219b116ae359ae44ba0a5bf798c46ce02eff3a93090299da"
+            },
+            "after_raw": {
+              "bytes": 8087951,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_RegExp.json",
+              "sha256": "fbe9d7360001b0266d6456351993bdbbaa8504e78a72fec33a4a1202b3775fdd"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/Map",
+            "before_files": 215,
+            "after_files": 215,
+            "before_variants": 427,
+            "after_variants": 427,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7684307,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_Map.json",
+              "sha256": "6a369d9654e68dc51cb5c5568e591e9d926e1e13e68b2fd4bfc113e6e0c1c0ed"
+            },
+            "after_raw": {
+              "bytes": 7684307,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_Map.json",
+              "sha256": "0a210efc92ed7fe2e2699b14b22d9399b889a36e5bf57603094a4f313ff0c4ac"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/Set",
+            "before_files": 394,
+            "after_files": 394,
+            "before_variants": 786,
+            "after_variants": 786,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7718098,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_Set.json",
+              "sha256": "b8bab996f1edef4bfa9d24c93c186b877f6f6aacc67cc9774d8862569d337f40"
+            },
+            "after_raw": {
+              "bytes": 7718097,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_Set.json",
+              "sha256": "d71580a6de47eb24111d760a0994ccca80d32aeaf0a1d4252493e174d5357899"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/Error",
+            "before_files": 88,
+            "after_files": 88,
+            "before_variants": 176,
+            "after_variants": 176,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7665694,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_Error.json",
+              "sha256": "3eb718a7228a5fd2610c04ae6c6bfcfb0570eb838743ed634ff0d8150e035ca8"
+            },
+            "after_raw": {
+              "bytes": 7665694,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_Error.json",
+              "sha256": "813ebade5d178500edc94c8286940a85b58ce54862cdcdb1c797998ac40e42f0"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/AggregateError",
+            "before_files": 25,
+            "after_files": 25,
+            "before_variants": 50,
+            "after_variants": 50,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7650816,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_AggregateError.json",
+              "sha256": "790857eaa1cd7d5ba0523d5acb15290c906b46b221e39fc86cec9025c0711d9d"
+            },
+            "after_raw": {
+              "bytes": 7650816,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_AggregateError.json",
+              "sha256": "d737eadd9b1ecbde0b7ff0a5d6e94619f96011f3d30b05f49f9d2cd10d8dcbc1"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/NativeErrors",
+            "before_files": 94,
+            "after_files": 94,
+            "before_variants": 188,
+            "after_variants": 188,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7660012,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_NativeErrors.json",
+              "sha256": "e85af2cc2ff8eaa37262589c7d1dfa4b5135ff662d3a9860069ea36112c6d379"
+            },
+            "after_raw": {
+              "bytes": 7660012,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_NativeErrors.json",
+              "sha256": "b7934c191e24e94871ea354a657411085d6bc9e08aae9e575f5bfcb1eb102196"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/ThrowTypeError",
+            "before_files": 14,
+            "after_files": 14,
+            "before_variants": 28,
+            "after_variants": 28,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7647755,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_ThrowTypeError.json",
+              "sha256": "b0d616e071ff2f09c3b0f83d5202669e5f966552d55540ddf70c60c7e7e6937e"
+            },
+            "after_raw": {
+              "bytes": 7647755,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_ThrowTypeError.json",
+              "sha256": "982a9095634319775f165cf233acf461187b6c69feb594345c781a969dbb4b4d"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "default",
+            "selector": "built-ins/SuppressedError",
+            "before_files": 22,
+            "after_files": 22,
+            "before_variants": 44,
+            "after_variants": 44,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7650673,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-default-built-ins_SuppressedError.json",
+              "sha256": "c23643ddbd831a20cacef048e919a50dc494bff1aade72b21fcc46d64948e484"
+            },
+            "after_raw": {
+              "bytes": 7650674,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-default-built-ins_SuppressedError.json",
+              "sha256": "de8e930c3d83abb0ce8e2695aee6caf6723cae4355997ce9881b80482dbe5778"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "language",
+            "before_files": 24482,
+            "after_files": 24494,
+            "before_variants": 45283,
+            "after_variants": 45300,
+            "gained_files": [
+              "annexB/language/eval-code/direct/script-decl-lex-no-collision.js",
+              "language/eval-code/direct/var-env-func-init-global-update-configurable.js",
+              "language/eval-code/direct/var-env-func-init-local-new-delete.js",
+              "language/eval-code/direct/var-env-lower-lex-non-strict.js",
+              "language/eval-code/direct/var-env-var-init-local-new-delete.js",
+              "language/eval-code/indirect/var-env-func-init-global-update-configurable.js",
+              "language/global-code/script-decl-lex-var-declared-via-eval.js",
+              "language/literals/regexp/S7.8.5_A1.1_T2.js",
+              "language/literals/regexp/S7.8.5_A1.4_T2.js",
+              "language/literals/regexp/S7.8.5_A2.1_T2.js",
+              "language/literals/regexp/S7.8.5_A2.4_T2.js",
+              "language/statements/let/function-local-closure-set-before-initialization.js"
+            ],
+            "gained_variants": [
+              [
+                "annexB/language/eval-code/direct/script-decl-lex-no-collision.js",
+                "non-strict"
+              ],
+              [
+                "language/eval-code/direct/var-env-func-init-global-update-configurable.js",
+                "non-strict"
+              ],
+              [
+                "language/eval-code/direct/var-env-func-init-local-new-delete.js",
+                "non-strict"
+              ],
+              [
+                "language/eval-code/direct/var-env-lower-lex-non-strict.js",
+                "non-strict"
+              ],
+              [
+                "language/eval-code/direct/var-env-var-init-local-new-delete.js",
+                "non-strict"
+              ],
+              [
+                "language/eval-code/indirect/var-env-func-init-global-update-configurable.js",
+                "non-strict"
+              ],
+              [
+                "language/eval-code/indirect/var-env-func-init-global-update-configurable.js",
+                "strict"
+              ],
+              [
+                "language/global-code/script-decl-lex-var-declared-via-eval.js",
+                "non-strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A1.1_T2.js",
+                "non-strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A1.1_T2.js",
+                "strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A1.4_T2.js",
+                "non-strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A1.4_T2.js",
+                "strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A2.1_T2.js",
+                "non-strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A2.1_T2.js",
+                "strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A2.4_T2.js",
+                "non-strict"
+              ],
+              [
+                "language/literals/regexp/S7.8.5_A2.4_T2.js",
+                "strict"
+              ],
+              [
+                "language/statements/let/function-local-closure-set-before-initialization.js",
+                "non-strict"
+              ]
+            ],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 14490969,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-language.json",
+              "sha256": "1c9d39170d5eb0815ef87e43d9d3a2c1a4f8b211ec19b858d651b777e3344dc9"
+            },
+            "after_raw": {
+              "bytes": 14486302,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-language.json",
+              "sha256": "6acb33af8b81a8dffbc8b66da165b28c9437ebfff5bbb0b66d5363ceabee5f0c"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/Function",
+            "before_files": 507,
+            "after_files": 514,
+            "before_variants": 889,
+            "after_variants": 903,
+            "gained_files": [
+              "annexB/built-ins/Function/createdynfn-html-close-comment-params.js",
+              "annexB/built-ins/Function/createdynfn-html-open-comment-params.js",
+              "built-ins/Function/prototype/toString/AsyncFunction.js",
+              "built-ins/Function/prototype/toString/AsyncGenerator.js",
+              "built-ins/Function/prototype/toString/Function.js",
+              "built-ins/Function/prototype/toString/GeneratorFunction.js",
+              "built-ins/Function/prototype/toString/method-computed-property-name.js"
+            ],
+            "gained_variants": [
+              [
+                "annexB/built-ins/Function/createdynfn-html-close-comment-params.js",
+                "non-strict"
+              ],
+              [
+                "annexB/built-ins/Function/createdynfn-html-close-comment-params.js",
+                "strict"
+              ],
+              [
+                "annexB/built-ins/Function/createdynfn-html-open-comment-params.js",
+                "non-strict"
+              ],
+              [
+                "annexB/built-ins/Function/createdynfn-html-open-comment-params.js",
+                "strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/AsyncFunction.js",
+                "non-strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/AsyncFunction.js",
+                "strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/AsyncGenerator.js",
+                "non-strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/AsyncGenerator.js",
+                "strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/Function.js",
+                "non-strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/Function.js",
+                "strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/GeneratorFunction.js",
+                "non-strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/GeneratorFunction.js",
+                "strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/method-computed-property-name.js",
+                "non-strict"
+              ],
+              [
+                "built-ins/Function/prototype/toString/method-computed-property-name.js",
+                "strict"
+              ]
+            ],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7719363,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_Function.json",
+              "sha256": "b2249c3c3da61dd974365c926d1e83b550d00254e9e862b78df5eb4da75c829f"
+            },
+            "after_raw": {
+              "bytes": 7716611,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_Function.json",
+              "sha256": "bda513e55d3b69a5ce3891f6ac366462b43afbb7b674bc89eb953ce9ac1c8d93"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/AsyncFunction",
+            "before_files": 18,
+            "after_files": 18,
+            "before_variants": 36,
+            "after_variants": 36,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7648941,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_AsyncFunction.json",
+              "sha256": "e198d95e95ba715d5618576b631d99b35931389c97676308a64d83817d2085b5"
+            },
+            "after_raw": {
+              "bytes": 7648941,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_AsyncFunction.json",
+              "sha256": "0b09bd8adc74baf5a81fcd38aa1746acbc3242214403b86a910e450739783ef0"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/GeneratorFunction",
+            "before_files": 23,
+            "after_files": 23,
+            "before_variants": 46,
+            "after_variants": 46,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7649939,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_GeneratorFunction.json",
+              "sha256": "b8e36d810e56dd963ea1e7f695491c2fb181f3fed69648f773cf26abe4f372c7"
+            },
+            "after_raw": {
+              "bytes": 7649939,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_GeneratorFunction.json",
+              "sha256": "781573766794fc4a0c27f3fa93d4926c183fd6e542a834b6cd3677aca6101595"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/AsyncGeneratorFunction",
+            "before_files": 23,
+            "after_files": 23,
+            "before_variants": 46,
+            "after_variants": 46,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7650590,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_AsyncGeneratorFunction.json",
+              "sha256": "28770abdd47be93770e7f56dad1e40957afece840bb8b8bf4dfa9fcf1e7fbec2"
+            },
+            "after_raw": {
+              "bytes": 7650590,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_AsyncGeneratorFunction.json",
+              "sha256": "ff517f784832f285df1188eba05441386c21d6af24897bdd7c0d585fe2b3b0b1"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/Promise",
+            "before_files": 732,
+            "after_files": 732,
+            "before_variants": 1458,
+            "after_variants": 1458,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7779696,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_Promise.json",
+              "sha256": "892113c569cb8ab2085d425bdda4353faf03df9fc4d4e774b2a8274a90f4ddae"
+            },
+            "after_raw": {
+              "bytes": 7779696,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_Promise.json",
+              "sha256": "d27547a6bb54e6ece2cc1f5f6b5eada051977508fb378824c8500a68c0407cc4"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/Iterator",
+            "before_files": 654,
+            "after_files": 654,
+            "before_variants": 1308,
+            "after_variants": 1308,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7778378,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_Iterator.json",
+              "sha256": "f004621d63a21951c8197803fa33611cf92b57ced8decec9c1ae4aa50d85e706"
+            },
+            "after_raw": {
+              "bytes": 7778378,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_Iterator.json",
+              "sha256": "9c117fc1ceca85b5fce6443ac358884d64751f7bed39694ae70d5940b0bd5f84"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/Object",
+            "before_files": 3413,
+            "after_files": 3413,
+            "before_variants": 6806,
+            "after_variants": 6806,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 8116333,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_Object.json",
+              "sha256": "fe47e490facd5ef7418d6f30326ea1d1a0476c6f9f99ed92e39685be47e54773"
+            },
+            "after_raw": {
+              "bytes": 8116333,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_Object.json",
+              "sha256": "b76cfe454093e09f84227f82e78d7fc87bba21f379e898899e43bc15a2900ee4"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/Proxy",
+            "before_files": 311,
+            "after_files": 311,
+            "before_variants": 607,
+            "after_variants": 607,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7704386,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_Proxy.json",
+              "sha256": "c90b73f17fe7e00315978a992caf4888620a9e29be8f828d0ca8dddeb293772b"
+            },
+            "after_raw": {
+              "bytes": 7704386,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_Proxy.json",
+              "sha256": "69c37c5058dce2aab1038247d750021976a26edd411b443c2215e9d1b0c8aacf"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/Reflect",
+            "before_files": 154,
+            "after_files": 154,
+            "before_variants": 308,
+            "after_variants": 308,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7672191,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_Reflect.json",
+              "sha256": "1467977dbdcf9c8a5a8b3c9f3af24d67435eed5656aa6aac5c1aa056822989b9"
+            },
+            "after_raw": {
+              "bytes": 7672191,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_Reflect.json",
+              "sha256": "43396748562ac7b06b2f117c370e66a621e64fe01830baf62ff50855b3e96953"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/Array",
+            "before_files": 3327,
+            "after_files": 3327,
+            "before_variants": 6599,
+            "after_variants": 6599,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 8222367,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_Array.json",
+              "sha256": "2f7df1252e3de4e186aa8143aac3d07b89ec6c258d8c3c9f12764f9f07f97f8e"
+            },
+            "after_raw": {
+              "bytes": 8222367,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_Array.json",
+              "sha256": "8648f5f0cdc6e25adf83f4cadcacb519b233244a6fdcd9ade1ea04c707f220f3"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/String",
+            "before_files": 1335,
+            "after_files": 1335,
+            "before_variants": 2667,
+            "after_variants": 2667,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7845822,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_String.json",
+              "sha256": "7b1c0621589f732fe68d811a76750b45e92a10b349b2f2132f7c7b6ab0a0dd0d"
+            },
+            "after_raw": {
+              "bytes": 7845821,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_String.json",
+              "sha256": "db59bfb6e4742fbf2834d4b9e88817716f761e95544b94a226de097018e85ae3"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/RegExp",
+            "before_files": 1954,
+            "after_files": 1956,
+            "before_variants": 3906,
+            "after_variants": 3910,
+            "gained_files": [
+              "annexB/built-ins/RegExp/RegExp-leading-escape-BMP.js",
+              "annexB/built-ins/RegExp/RegExp-trailing-escape-BMP.js"
+            ],
+            "gained_variants": [
+              [
+                "annexB/built-ins/RegExp/RegExp-leading-escape-BMP.js",
+                "non-strict"
+              ],
+              [
+                "annexB/built-ins/RegExp/RegExp-leading-escape-BMP.js",
+                "strict"
+              ],
+              [
+                "annexB/built-ins/RegExp/RegExp-trailing-escape-BMP.js",
+                "non-strict"
+              ],
+              [
+                "annexB/built-ins/RegExp/RegExp-trailing-escape-BMP.js",
+                "strict"
+              ]
+            ],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 8089104,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_RegExp.json",
+              "sha256": "1d8c683b4360d091b6aa1a9ca2317ee9c6858adf544a5d2fdc78d5f6e8cb1abe"
+            },
+            "after_raw": {
+              "bytes": 8087951,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_RegExp.json",
+              "sha256": "ff3295911c50f34bf2bd3ddc1dac9297e83399479ee3b061de6efa677914e145"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/Map",
+            "before_files": 215,
+            "after_files": 215,
+            "before_variants": 427,
+            "after_variants": 427,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7684307,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_Map.json",
+              "sha256": "d0678f2393872d419cc3c18ad14a3fa7d9cfab1bee84ccb72bdc5a08dc43954f"
+            },
+            "after_raw": {
+              "bytes": 7684306,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_Map.json",
+              "sha256": "13a97ee5595ecc928967e97305a6002b4944f1fa475d698df8032b319a4003ae"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/Set",
+            "before_files": 394,
+            "after_files": 394,
+            "before_variants": 786,
+            "after_variants": 786,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7718098,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_Set.json",
+              "sha256": "3f8c4537c2c71d971d4d9f7ed5fadba2c5d507abc67f6b633f91a12529c29e67"
+            },
+            "after_raw": {
+              "bytes": 7718098,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_Set.json",
+              "sha256": "934471e6dd9eef17ad5c8fe6a56e92e419e997bc385865034b586bfe4b7ff1a0"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/Error",
+            "before_files": 88,
+            "after_files": 88,
+            "before_variants": 176,
+            "after_variants": 176,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7665694,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_Error.json",
+              "sha256": "74c88eba45d5ffc9a8f5658b0599e0f6000adc770f08417858145e5d5823f0bc"
+            },
+            "after_raw": {
+              "bytes": 7665694,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_Error.json",
+              "sha256": "6a63e9a121778b802e52e6ed93ff9c2c6614300fbeff1c2f70c385b3d222e6e1"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/AggregateError",
+            "before_files": 25,
+            "after_files": 25,
+            "before_variants": 50,
+            "after_variants": 50,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7650816,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_AggregateError.json",
+              "sha256": "27f6d21b9e13c7e18fcbd39154c1bfe0c78ac1412ae0f2d5cb0217eb6d51bd83"
+            },
+            "after_raw": {
+              "bytes": 7650816,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_AggregateError.json",
+              "sha256": "f5a890f5f125b765fd7523b2d9eed4764d80c852399ca8b8c7ec568c66a7e282"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/NativeErrors",
+            "before_files": 94,
+            "after_files": 94,
+            "before_variants": 188,
+            "after_variants": 188,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7660012,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_NativeErrors.json",
+              "sha256": "7d15c188b1b6d5140915e3a92c178c5fbac9af63e924d3e031724afac0d7e8b6"
+            },
+            "after_raw": {
+              "bytes": 7660012,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_NativeErrors.json",
+              "sha256": "3993c64b116f8e561bb7d57dda54a1e4a38a746fc739842ae671229efa63065b"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/ThrowTypeError",
+            "before_files": 14,
+            "after_files": 14,
+            "before_variants": 28,
+            "after_variants": 28,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7647755,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_ThrowTypeError.json",
+              "sha256": "21a194083b7a5e0b58f000377edcff5e214b160894ffa5cae453f48d2f515896"
+            },
+            "after_raw": {
+              "bytes": 7647755,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_ThrowTypeError.json",
+              "sha256": "19e809c1a174494166f51e0b5c43950f6ed8fc783e70e666536b894bab147e33"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          {
+            "mode": "vm",
+            "selector": "built-ins/SuppressedError",
+            "before_files": 22,
+            "after_files": 22,
+            "before_variants": 44,
+            "after_variants": 44,
+            "gained_files": [],
+            "gained_variants": [],
+            "lost_files": [],
+            "lost_variants": [],
+            "before_raw": {
+              "bytes": 7650674,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-vm-built-ins_SuppressedError.json",
+              "sha256": "883ecda7263e7cbb4052094f2448d3576df390e2da4ee73e859270976a39b5de"
+            },
+            "after_raw": {
+              "bytes": 7650674,
+              "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-vm-built-ins_SuppressedError.json",
+              "sha256": "5326f60d5ac12f191be392648c23197347458b92668da080a75549b433092682"
+            },
+            "before_host": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc",
+            "after_host": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          }
+        ],
+        "zero_lost_files": true,
+        "zero_lost_variants": true
+      },
+      "native": {
+        "before": {
+          "counts": {
+            "passed": 4605,
+            "failed": 25,
+            "skipped": 17
+          },
+          "raw": {
+            "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-nextest.log",
+            "bytes": 2374524,
+            "sha256": "ba0fd0473840f83656776b41d2ce103fc935ac9b5be0b998c0a5cb435175480d"
+          }
+        },
+        "after": {
+          "counts": {
+            "passed": 4643,
+            "failed": 0,
+            "skipped": 17
+          },
+          "raw": {
+            "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-nextest.log",
+            "bytes": 2316739,
+            "sha256": "cf29c9716bfa4d81717f97d36036f57a836648550e8ed3ee47a8dc41209a8aad"
+          }
+        }
+      },
+      "native_pass_identities_lost": 0,
+      "before_expected_failures": [
+        [
+          "amazing-js",
+          "interp::dynamic_function_source_protocol_tests::actual_source_spelling_survives_function_forms_and_utf16_eval"
+        ],
+        [
+          "amazing-js",
+          "interp::dynamic_function_source_protocol_tests::all_four_dynamic_kinds_retain_prescribed_source_and_metadata"
+        ],
+        [
+          "amazing-js",
+          "interp::dynamic_function_source_protocol_tests::argument_coercion_and_all_parse_errors_precede_newtarget_prototype_once"
+        ],
+        [
+          "amazing-js",
+          "interp::dynamic_function_source_protocol_tests::native_bound_and_proxy_fallback_reads_no_author_properties"
+        ],
+        [
+          "amazing-js",
+          "interp::dynamic_function_source_protocol_tests::three_real_grammar_goals_preserve_comments_and_forbid_boundary_crossing"
+        ],
+        [
+          "amazing-js",
+          "interp::eval_declaration_protocol_tests::actual_proxy_global_preserves_internal_operations_and_abrupt_identity"
+        ],
+        [
+          "amazing-js",
+          "interp::eval_declaration_protocol_tests::annex_candidates_promote_only_the_actual_eligible_occurrence"
+        ],
+        [
+          "amazing-js",
+          "interp::eval_declaration_protocol_tests::authentic_catch_parameter_exception_keeps_body_block_barriers"
+        ],
+        [
+          "amazing-js",
+          "interp::eval_declaration_protocol_tests::genuine_later_scripts_can_lexically_shadow_eval_globals"
+        ],
+        [
+          "amazing-js",
+          "interp::eval_declaration_protocol_tests::global_functions_replace_configurable_descriptors_for_all_four_kinds"
+        ],
+        [
+          "amazing-js",
+          "interp::eval_declaration_protocol_tests::intervening_lexical_records_are_checked_without_object_operations"
+        ],
+        [
+          "amazing-js",
+          "interp::eval_declaration_protocol_tests::local_delete_strictness_alias_and_source_protocol_guards"
+        ],
+        [
+          "amazing-js",
+          "interp::global_declaration_tests::configurable_eval_globals_and_restricted_script_properties_remain_distinct"
+        ],
+        [
+          "amazing-js",
+          "interp::global_declaration_tests::rejected_scripts_create_no_bindings_and_lexicals_share_across_overlays"
+        ],
+        [
+          "amazing-js",
+          "interp::vm::runtime_fdi_tests::function_body_lexical_instantiation_reserves_tdz_and_captures_direct_functions"
+        ],
+        [
+          "amazing-js",
+          "interp::vm::runtime_fdi_tests::function_declared_formals_copy_distinct_cells_and_choose_last_closure"
+        ],
+        [
+          "amazing-js",
+          "interp::vm::runtime_fdi_tests::genuine_block_concise_and_async_arrow_body_instantiation"
+        ],
+        [
+          "amazing-js::source_text_utf16",
+          "cloned_template_sites_keep_identity_while_fresh_parses_and_realms_are_distinct"
+        ],
+        [
+          "amazing-js::source_text_utf16",
+          "comments_hashbang_and_asi_accept_real_source_characters_and_keep_lines"
+        ],
+        [
+          "amazing-js::source_text_utf16",
+          "coroutine_workers_keep_exact_literal_and_template_site_units"
+        ],
+        [
+          "amazing-js::source_text_utf16",
+          "escaped_and_literal_units_are_equivalent_without_rewriting_the_source"
+        ],
+        [
+          "amazing-js::source_text_utf16",
+          "literal_units_distinguish_surrogates_replacement_and_private_use_code_points"
+        ],
+        [
+          "amazing-js::source_text_utf16",
+          "regex_goal_rewind_compiles_exact_raw_and_escaped_pattern_units"
+        ],
+        [
+          "amazing-js::source_text_utf16",
+          "template_raw_and_cooked_units_normalize_only_literal_line_terminators"
+        ],
+        [
+          "amazing-regex",
+          "tests::utf16_pattern_unicode_modes_combine_pairs_but_preserve_lone_units"
+        ]
+      ],
+      "doctests_each": {
+        "passed": 4,
+        "exit": 0
+      },
+      "original_resource_release_controls_each": {
+        "cases": 6,
+        "exit": 0
+      },
+      "owner_session": 30119,
+      "actual_owner_exit": 0,
+      "actual_stage_exits": {
+        "before": 1,
+        "after": 0
+      },
+      "raw_home_prefix": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-{before,after}",
+      "release_elf_custody": {
+        "before": {
+          "source": "/tmp/amazing-native-target-js-call-resource-20261004/release/examples/test262_host",
+          "destination": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-test262_host",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-native-target-js-call-resource-20261004/release/examples/test262_host",
+            "bytes": 13292272,
+            "sha256": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-before-test262_host",
+            "bytes": 13292272,
+            "sha256": "eb946d5eafd63c6b6fdd94e588e07c40c9281f5bafab4bfc430a1bfdbe1cccfc"
+          }
+        },
+        "after": {
+          "source": "/tmp/amazing-native-target-js-call-resource-20261004/release/examples/test262_host",
+          "destination": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-test262_host",
+          "copy_exit": 0,
+          "native": {
+            "path": "/tmp/amazing-native-target-js-call-resource-20261004/release/examples/test262_host",
+            "bytes": 13316176,
+            "sha256": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          },
+          "durable": {
+            "path": "/home/user/amazing/out/js-call-resource-20261004/source-fdi-edi-joint-v2-after-test262_host",
+            "bytes": 13316176,
+            "sha256": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4"
+          }
+        }
+      },
+      "original_control_sha256": {
+        "crates/amazing-js/tests/source_text_utf16.rs": "440eaa9413a6fb1756ecef7ef915aa7213431627215f1f4790522f16ffa4d9b7",
+        "crates/amazing-js/src/parser_source_tests.rs": "570e2e709fd0f8af57915b3e78a04fd41cffa6066c6671412489cb171af28572",
+        "crates/amazing-js/src/runtime_dynamic_source_tests.rs": "1edc010495483a4edda5416520804a50c712401b1e1ff560d03ad54bea79860d",
+        "crates/amazing-js/src/runtime_eval_global_tests.rs": "7c39eeed3ffe48a5807f4c9eb4fba30cde7f3c25b089126ef71062f1abdb03e0",
+        "crates/amazing-js/src/vm/runtime_fdi_tests.rs": "94d89be0f52be8a2fb8a0d9d7e1880e04af26a8366691fa6cd3743ed90219d92",
+        "crates/amazing-js/src/vm/tests_source.rs": "4fd696c04c8575acb16e3e715886a713863d5c502b274919330678230ba9bfa1",
+        "crates/amazing-js/src/interp_call_resource_tests.rs": "a293f8401b94055ae662fa9e88d0c20bd6879711f80da4cb739ea956b5c6ea7d"
+      },
+      "first_attempt": {
+        "owner": 70639,
+        "before_raw_sha256": "7c6afa5848e583d7b3902e932c756306f66418dcfa5024ba2e8a638fff8c55a0",
+        "after_raw_sha256": "8734209c9a238cd778639ab43f98adcf82cf92a92a4abb13c3453cf6b43afaf2",
+        "parser_correction": "Date-reviewed cad619 distinguishes genuine nextest rows from authored PASS stdout; Summary/identity checks retained.",
+        "approved_fixture_correction": "d5b6427e: original input retained; obsolete global eval-name rejection oracle corrected to current primary CreateGlobalVarBinding."
+      },
+      "limits": [
+        "Linux x86_64 only; no new AST Send/Sync or cycle reclamation claim.",
+        "Synthetic body-only/native bridges retain absent source; genuine callable source preserved.",
+        "Wider historical global script-name policy remains a separate GDI ticket."
+      ]
+    },
+    "earlier_ready_revision": "4f87173b2942295579879f2c4f281bbb136e27f8",
+    "root_candidate": "c8bb8da37096904649051069ff1ad0ad651efd78",
+    "root_source_bytes_identical": true,
+    "ready_revision_changes_docs_only": [
+      "docs/lanes/js-lang_source47-current.md",
+      "docs/lanes/js-lang_utf16-frontend-current.md",
+      "docs/lanes/js-runtime_eval-global.md",
+      "docs/lanes/js-vm_edi_catch_companion.md",
+      "docs/lanes/js-vm_source47.md",
+      "docs/lanes/runtime-fdi-current.md",
+      "docs/lanes/runtime-fdi-edi-source-union.md",
+      "docs/lanes/runtime-source47-current.md"
+    ]
+  },
+  "workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4684,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_details": [
+      {
+        "command": [
+          "cargo",
+          "nextest",
+          "run",
+          "--workspace",
+          "--locked",
+          "--no-fail-fast",
+          "--status-level",
+          "skip"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "        PASS [   0.002s] (4675/4684) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+          "        PASS [   0.002s] (4676/4684) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+          "        PASS [   0.005s] (4677/4684) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+          "        PASS [   0.008s] (4678/4684) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+          "        PASS [   0.007s] (4679/4684) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+          "        PASS [   0.003s] (4680/4684) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+          "        PASS [   0.021s] (4681/4684) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+          "        PASS [   0.013s] (4682/4684) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+          "        PASS [   8.058s] (4683/4684) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+          "        PASS [  22.214s] (4684/4684) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+          "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+          "     Summary [ 136.542s] 4684 tests run: 4684 passed (1 slow), 17 skipped"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-tkpebxa4/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-20261005T004222-69495/c8bb8da37096904649051069ff1ad0ad651efd78/workspace-c8bb8da37096904649051069ff1ad0ad651efd78-nextest.log",
+            "durable": {
+              "bytes": 667348,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T004222-69495/c8bb8da37096904649051069ff1ad0ad651efd78/workspace-c8bb8da37096904649051069ff1ad0ad651efd78-nextest.log",
+              "sha256": "cbc03abb4e4c69bde06eb49c13d5c510dfce02a24169f92650692b97e609414a"
+            },
+            "native": {
+              "bytes": 667348,
+              "path": "/tmp/amazing-gate-command-tkpebxa4/output.log",
+              "sha256": "cbc03abb4e4c69bde06eb49c13d5c510dfce02a24169f92650692b97e609414a"
+            },
+            "source": "/tmp/amazing-gate-command-tkpebxa4/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "nextest",
+        "raw_native": {
+          "bytes": 667348,
+          "path": "/tmp/amazing-gate-command-tkpebxa4/output.log",
+          "sha256": "cbc03abb4e4c69bde06eb49c13d5c510dfce02a24169f92650692b97e609414a"
+        },
+        "schema": 1,
+        "source_commit": "c8bb8da37096904649051069ff1ad0ad651efd78",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--workspace",
+          "--locked",
+          "--doc"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "   Doc-tests amazing_webrtc_codecs",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "",
+          "   Doc-tests amazing_webrtc_crypto",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          ""
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-pts97o3q/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-20261005T004222-69495/c8bb8da37096904649051069ff1ad0ad651efd78/workspace-c8bb8da37096904649051069ff1ad0ad651efd78-doctests.log",
+            "durable": {
+              "bytes": 18872,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T004222-69495/c8bb8da37096904649051069ff1ad0ad651efd78/workspace-c8bb8da37096904649051069ff1ad0ad651efd78-doctests.log",
+              "sha256": "0f09d40939597f9a692951dd3c31945f2ad61f30c0298b672fa47f9d864236e8"
+            },
+            "native": {
+              "bytes": 18872,
+              "path": "/tmp/amazing-gate-command-pts97o3q/output.log",
+              "sha256": "0f09d40939597f9a692951dd3c31945f2ad61f30c0298b672fa47f9d864236e8"
+            },
+            "source": "/tmp/amazing-gate-command-pts97o3q/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "doctests",
+        "raw_native": {
+          "bytes": 18872,
+          "path": "/tmp/amazing-gate-command-pts97o3q/output.log",
+          "sha256": "0f09d40939597f9a692951dd3c31945f2ad61f30c0298b672fa47f9d864236e8"
+        },
+        "schema": 1,
+        "source_commit": "c8bb8da37096904649051069ff1ad0ad651efd78",
+        "wrapper_exit": 0
+      }
+    ],
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 667348,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T004222-69495/c8bb8da37096904649051069ff1ad0ad651efd78/workspace-c8bb8da37096904649051069ff1ad0ad651efd78-nextest.log",
+        "sha256": "cbc03abb4e4c69bde06eb49c13d5c510dfce02a24169f92650692b97e609414a"
+      },
+      {
+        "bytes": 18872,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T004222-69495/c8bb8da37096904649051069ff1ad0ad651efd78/workspace-c8bb8da37096904649051069ff1ad0ad651efd78-doctests.log",
+        "sha256": "0f09d40939597f9a692951dd3c31945f2ad61f30c0298b672fa47f9d864236e8"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "c8bb8da37096904649051069ff1ad0ad651efd78",
+    "summary_lines": [
+      "Summary [ 136.542s] 4684 tests run: 4684 passed (1 slow), 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "workspace_manifest": {
+    "manifest": ".agents/integrator-primary/gates/workspace-20261005T004222-69495/c8bb8da37096904649051069ff1ad0ad651efd78/workspace-c8bb8da37096904649051069ff1ad0ad651efd78.manifest.json",
+    "bytes": 7985,
+    "sha256": "2fdddc7ffa0edea4b1707c55b4f82c7e9de1b9b8a7b85ae468646e8e9fcbf7d5",
+    "actual_workspace_exit": 0
+  },
+  "test262": {
+    "gained_files": 43,
+    "lost_files": [],
+    "lost_variants": [],
+    "provenance": {
+      "host_sha256": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "8e473d3d18d48c95827acba5381ff60319457a19e0618c6b7d9b1ec2eab687fc",
+      "source_commit": "c8bb8da37096904649051069ff1ad0ad651efd78",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    "schema": 2,
+    "shard_sha256": {
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-0.json": "640da639b22145856ec77485d6babf9f1474d1857295e898e5bbe18a20ef1015",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-1.json": "8c0fcb342a602ad58323352a6137964409f6342e67e68e9249510804d43dc692",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-10.json": "8d55189daabdccafc6c61135fd4fb2c235c466c2bd69c366267056d85ce8b8e7",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-11.json": "2f49f2f79b631fcbf21864ccfbe92fbb64527014171d17ac023d2ea06f505ee7",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-12.json": "cc9aca6b927ce0795b4fe89e7ec416612f62eb8ab6a18951849e9fd465b8c8db",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-13.json": "ad4d82c40a84d395e5a176697e18c47015b40b4118bb5e556230004570cba8e2",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-14.json": "d1df3cb45eaf9db035fe32a1f6d2b9841917ffd05502c78364d682f195f43863",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-15.json": "798de7d3477a352e9baaeaee9c7f84003e662dd6ab791df2538e4f77049b9801",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-2.json": "7608bd07c0c16342f8ffc3929cc4618b828a98c8e326a0076b77223ee0a18424",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-3.json": "4423d7e27ecfe0b54a6218d0f8e9e5d49b835ea46899539848e0aa64e28fb844",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-4.json": "803ccfa50c4a739dcefe92f43eb174fdc53d49b80548d19b4931ad9053f5307a",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-5.json": "cb8bbf23cdec6b1752202f5a01c34a414294e029c701ea7adf8f180ce3dc4f3b",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-6.json": "70b3b0e94fb0b3981609de63f333897f5d08bc4e3c81c8235617a6b5b3576023",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-7.json": "1b15792a8ec7fa39212ec002d7dbd96b3af35165be3bdb3a1b8d197074723a82",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-8.json": "2d14bfea8d1b38343766f77fc7b970ab1256e91ae7d3ec03a96336193f22309a",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-9.json": "de159d65cc3ab94256c5979cfa10dae7977a9be718833bdf4e0db9d979f2bb94"
+    },
+    "shards": [
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-0.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-1.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-2.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-3.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-4.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-5.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-6.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-7.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-8.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-9.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-10.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-11.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-12.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-13.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-14.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-c8bb8da3-source-fdi-edi-15.json"
+    ],
+    "summary": {
+      "files": {
+        "fail": 740,
+        "pass": 52666,
+        "skipped": 294,
+        "timeout": 1,
+        "unsupported": 171
+      },
+      "variants": {
+        "fail": 1397,
+        "pass": 101179,
+        "timeout": 2,
+        "unsupported": 340
+      }
+    }
+  },
+  "shard_receipts": [
+    {
+      "shard": 0,
+      "bytes": 50551,
+      "sha256": "640da639b22145856ec77485d6babf9f1474d1857295e898e5bbe18a20ef1015",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "ed9c34fdaf7e88ace9884618a8016dc5e7fe8a448ed14b0952fe03d909fbb4fa",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "77e4ef401016bf4afbd67e5f6b253338f20cd6503062e206da0d292c2aa29dfa",
+          "raw_bytes": 10406
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 1,
+      "bytes": 50347,
+      "sha256": "8c0fcb342a602ad58323352a6137964409f6342e67e68e9249510804d43dc692",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "a940c77ec7659ebc028ac5cae6eaf2993929f07a1fc51ba4ec373a71031e7e1c",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "76381e298994891a1b2a87e45d2914dde4f21854559d655c3f13c27b8ca9b495",
+          "raw_bytes": 10432
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 2,
+      "bytes": 50518,
+      "sha256": "7608bd07c0c16342f8ffc3929cc4618b828a98c8e326a0076b77223ee0a18424",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "98100129f865605c3da32297d25c4d348d9a279dec10c1d1e91d2da7eb93c47b",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "5fe9e869858121104bfd0842c0efd18c05a017c0431e209d244015f0e475b278",
+          "raw_bytes": 10366
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 3,
+      "bytes": 50899,
+      "sha256": "4423d7e27ecfe0b54a6218d0f8e9e5d49b835ea46899539848e0aa64e28fb844",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "f64345b7f6f9862e9e976778d3ac64f61b5150952aca2bd31705f95da53660cd",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "0399becaa67d7c9ade990c96210826250fc1c317ea6952261f3c5015fb72a511",
+          "raw_bytes": 10457
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 4,
+      "bytes": 50666,
+      "sha256": "803ccfa50c4a739dcefe92f43eb174fdc53d49b80548d19b4931ad9053f5307a",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "c6e56d29b09f3a9876a5e2537497b6ffe1047047d4fb0a7db012feb30617e875",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "dcd6616dbc426c5d0c50d6631f2a575aa0c87e421bf2d5c21dfa22846c74d540",
+          "raw_bytes": 10383
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 5,
+      "bytes": 50839,
+      "sha256": "cb8bbf23cdec6b1752202f5a01c34a414294e029c701ea7adf8f180ce3dc4f3b",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "2e2aa3b62d354f4e66fa077e1afc7ba4389215f7f41dacac4c820e7c2e228462",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "d3a6bd7c260ab9be19b4a0b20df5e78c1c4889f12c178fe99f8d6a3927a11ad3",
+          "raw_bytes": 10380
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 6,
+      "bytes": 50942,
+      "sha256": "70b3b0e94fb0b3981609de63f333897f5d08bc4e3c81c8235617a6b5b3576023",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "ee90daac63992c845de0d89a4ef018451c6db24d16c42b5554111ccf0788399f",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "1e0bc9a2c9eb71f90ace32645a39f21ca64738fa0c2844affeaa6c6dbffb869e",
+          "raw_bytes": 10388
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 7,
+      "bytes": 51026,
+      "sha256": "1b15792a8ec7fa39212ec002d7dbd96b3af35165be3bdb3a1b8d197074723a82",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "5e5b221253e33ebf15d838738c5238eabb74955383e93e87a719a49294b299c4",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "ba266b435ed76e4583894330d8ec422b62e8336099ddf3a9215a7978b2d981b2",
+          "raw_bytes": 10328
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 8,
+      "bytes": 50730,
+      "sha256": "2d14bfea8d1b38343766f77fc7b970ab1256e91ae7d3ec03a96336193f22309a",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "04a77b3a32c2b93faad2811a64c8844772df54eb4f2af1f20f6f67f5f5952947",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "64795c73330ec6422ffbdd7cd9488f04b473412ae40bef5c8f3c1f9a6595c0c3",
+          "raw_bytes": 10332
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 9,
+      "bytes": 50679,
+      "sha256": "de159d65cc3ab94256c5979cfa10dae7977a9be718833bdf4e0db9d979f2bb94",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "c8e02672e1027f9272abbf8dfcd5a291abb0f92651a9aed7765d5e8bf412610e",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "f7d661d918dc5950b03017fb18090bb640f3bd5b54e8f36233570c1c8d54df9a",
+          "raw_bytes": 10338
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 10,
+      "bytes": 50896,
+      "sha256": "8d55189daabdccafc6c61135fd4fb2c235c466c2bd69c366267056d85ce8b8e7",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "8e9516063797b42383679f1047d840bbfc815b83b0c05d175071f128c736a0ea",
+          "raw_bytes": 10354
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "4a95ae980aa9ceea9a47c83b96b6c7548c69a2af673b7b3b250ed4d5fc5220cb",
+          "raw_bytes": 10365
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 11,
+      "bytes": 50497,
+      "sha256": "2f49f2f79b631fcbf21864ccfbe92fbb64527014171d17ac023d2ea06f505ee7",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "48c1adbbf77db658d53ffe1373e80492eb45ef151e9893d87f27192ea052bb52",
+          "raw_bytes": 10354
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "fc66ae7208ccd3d2cef7326a5e60bff716632c0c38ba2223771456f74a53c92f",
+          "raw_bytes": 10387
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 12,
+      "bytes": 50489,
+      "sha256": "cc9aca6b927ce0795b4fe89e7ec416612f62eb8ab6a18951849e9fd465b8c8db",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "2ff921bbf05cfb7669600ce83b6445717e89cd2b5528a4ecd32a3608d0afc4e3",
+          "raw_bytes": 10354
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "ee7b97d7d8018d582d9b76585ae7bab6598077641c378f620cfbabd75c62790a",
+          "raw_bytes": 10382
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 13,
+      "bytes": 50665,
+      "sha256": "ad4d82c40a84d395e5a176697e18c47015b40b4118bb5e556230004570cba8e2",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "f8fd72afa103c286f50bd62b9959041e35539ef6b9b385437b9c60601728aea0",
+          "raw_bytes": 10354
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "ade9c2858f181b03b980fb8a969a3ea7817f432e8524ea9537913706a113199c",
+          "raw_bytes": 10240
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 14,
+      "bytes": 50873,
+      "sha256": "d1df3cb45eaf9db035fe32a1f6d2b9841917ffd05502c78364d682f195f43863",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "e5d594fa14aa74769abffc5072d9ce0fa780a4ddb027df5d3ccb006e09933b26",
+          "raw_bytes": 10354
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "b93ae49e9c955d7c0283ee3458d2b4ee6c4d8077da001fde5ec3d743478dbf92",
+          "raw_bytes": 10411
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 15,
+      "bytes": 50729,
+      "sha256": "798de7d3477a352e9baaeaee9c7f84003e662dd6ab791df2538e4f77049b9801",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "40c636e6995e3b54afae5f1ae41957f23ed59b8ba8df27abf297e2ba6de37bba",
+          "raw_bytes": 10354
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "8e6df4eeec157071bad0280ca830019f964078f3f8ae75a4c939aff33168e4fa",
+          "raw_bytes": 10407
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    }
+  ],
+  "native_shard_phases_authenticated": 48,
+  "independent_passset_comparison": {
+    "inventory": 53872,
+    "pass_files": 52666,
+    "pass_variants": 101179,
+    "lost_files": 0,
+    "lost_variants": 0,
+    "gained_files": 43,
+    "gained_variants": 72
+  },
+  "actual_workspace_exit": 0,
+  "actual_full16_exit": 0,
+  "raw_policy": "Raw remains in sandbox HOME; compact evidence only. Independent Source47/FDI/EDI candidate on current published base; shipping50enginefiles byteexactqualified source; raw stays HOME."
+}

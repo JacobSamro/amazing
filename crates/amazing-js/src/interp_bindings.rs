@@ -188,6 +188,7 @@ impl Interpreter {
         policy: HostCallPolicy,
     ) -> JsValue {
         let mut object = JsObject::function(JsFunction {
+            source: Default::default(),
             name: name.into(),
             params: Vec::new(),
             body: FunctionBody::HostNative(id, policy, self.host_realm),

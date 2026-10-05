@@ -36,6 +36,7 @@ impl Interpreter {
         });
         let original = if let Some(method) = constructor { self.method_value(method, &class_env, true) } else {
             self.make_function(&ast::FunctionItem {
+                source: class.source.clone(),
                 name: class.name.clone(), params: Vec::new(),
                 body: ast::Block { body: Vec::new(), span: crate::tokens::Span::new(crate::tokens::SourceLocation::new(1, 1), crate::tokens::SourceLocation::new(1, 1)) },
                 is_async: false, is_generator: false,
@@ -57,6 +58,7 @@ impl Interpreter {
                 object.derived_constructor = Some(DerivedConstructor { parent: parent.clone(), implicit: constructor.is_none() });
             }
             let function = object.func.as_mut().unwrap();
+            function.source = class.source.clone();
             function.home = Some(prototype.clone());
             function.proto_for_new = Some(prototype.clone());
             function.name = class_name.to_utf8_lossy();

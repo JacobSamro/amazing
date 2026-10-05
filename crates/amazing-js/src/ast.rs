@@ -297,6 +297,7 @@ pub struct CatchClause {
 /// declarations — the parser enforces that).
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionItem {
+    pub source: crate::source_text::SourceMetadata,
     pub name: Option<Ident>,
     pub params: Vec<Param>,
     pub body: Block,
@@ -314,6 +315,7 @@ pub struct Param {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassItem {
+    pub source: crate::source_text::SourceMetadata,
     /// Decorator expressions in source evaluation order.
     pub decorators: Vec<Expr>,
     /// `None` for anonymous class expressions; declarations always have a
@@ -334,6 +336,7 @@ pub enum ClassMember {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassMethod {
+    pub source: crate::source_text::SourceMetadata,
     /// Decorator expressions in source evaluation order.
     pub decorators: Vec<Expr>,
     pub key: PropKey,
@@ -556,6 +559,7 @@ pub enum MemberProp {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArrowFunc {
+    pub source: crate::source_text::SourceMetadata,
     pub params: Vec<Param>,
     pub body: ArrowBody,
     pub is_async: bool,

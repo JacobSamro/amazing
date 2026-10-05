@@ -20,6 +20,8 @@ impl TokenStream {
             before: Vec::new(),
         }
     }
+    pub(crate) fn source_text(&self) -> crate::source_text::SourceText { self.lexer.source_text() }
+    pub(crate) fn set_function_goal(&mut self) { self.lexer.set_function_goal(); }
     pub(crate) fn set_module_goal(&mut self) {
         self.lexer.set_module_goal();
     }

@@ -622,6 +622,7 @@ impl Property {
 /// What kind of callable lives inside an object.
 #[derive(Debug, Clone)]
 pub struct JsFunction {
+    pub source: crate::source_text::SourceMetadata,
     /// Name for stack traces and `fn.name`.
     pub name: String,
     /// Parameter list incl. defaults/rest flags (cloned from the AST).

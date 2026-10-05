@@ -1,3 +1,6 @@
+// Function body lexical reservation/closure-environment adaptation reuses
+// lucid-softworks/lumen (crates/lumen/src/{eval,interpreter}.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // ForIn head initializer ordering adapted from boa-dev/boa
 // (core/engine/src/bytecompiler/statement/loop.rs::compile_for_in_loop)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
@@ -229,16 +232,10 @@ impl Interpreter {
                         // (shadowed by an intervening let/const at its own nesting depth) would
                         // still stomp an earlier legitimately-hoisted one on every execution.
                         //
-                        // B.3.3.1's own exception: the whole extension is skipped, not merely a
-                        // no-op sync, when F collides with a parameter name of the immediately
-                        // enclosing function (a parameter's own cell IS non-lexical once bound,
-                        // indistinguishable by identity/is_lexical alone from a genuine
-                        // hoist_inner-created placeholder -- current_function_param_names checks
-                        // the AST directly, mirroring exec_if_branch's identical check for the
-                        // bare if/else-position case).
-                        let blocked_by_param = self.current_function_param_names().iter().any(|p| p == &n.name);
-                        let promoted = !blocked_by_param
-                            && scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical())
+                        // Instantiation owns this occurrence's formal-name exclusions:
+                        // ordinary FDI applies them, while eval uses its own collector.
+                        // Execution consumes the original node key without reclassifying it.
+                        let promoted = scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical())
                             && is_annex_b_eligible(self, f.as_ref() as *const ast::FunctionItem);
                         if promoted {
                             if let Some(local) = env.local_cell(&n.name) {
@@ -495,13 +492,9 @@ impl Interpreter {
             if !self.strict_eval_context && !f.is_async && !f.is_generator {
                 if let Some(n) = &f.name {
                     let scope = env.var_scope();
-                    // B.3.3.1's own exception: the whole extension is skipped, not merely a
-                    // no-op sync, when F collides with a parameter name of the immediately
-                    // enclosing function (var_scope's own cell IS that parameter's cell here,
-                    // indistinguishable by identity/is_lexical alone from a genuine hoist_inner
-                    // placeholder -- `current_function_param_names` checks the AST directly).
-                    let blocked_by_param = self.current_function_param_names().iter().any(|p| p == &n.name);
-                    if !blocked_by_param && scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical())
+                    // FDI/eval instantiation has already classified this exact node;
+                    // caller metadata must not reinterpret the collector's decision.
+                    if scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical())
                         && is_annex_b_eligible(self, f.as_ref() as *const ast::FunctionItem) {
                         let implicit = EnvHandle::new(EnvKind::Block, Some(env.clone()));
                         let v = self.make_function(f, &implicit);
@@ -949,10 +942,8 @@ impl Interpreter {
             ),
         }
     }
-    fn exec_lexical_block(&mut self, b: &ast::Block, env: &EnvHandle) -> Result<Flow, Throw> {
-        self.completion = None;
-        let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-        for statement in &b.body {
+    fn reserve_body_lexicals(&self, body: &[ast::Stmt], e: &EnvHandle) -> Result<(), Throw> {
+        for statement in body {
             match &statement.kind {
                 StmtKind::Var(declaration) if declaration.kind != ast::VarKind::Var => {
                     for item in &declaration.decls {
@@ -963,6 +954,22 @@ impl Interpreter {
                 _ => {}
             }
         }
+        Ok(())
+    }
+
+    fn prepare_function_lexical_environment(&self, body: &[ast::Stmt], variable_env: &EnvHandle, strict: bool) -> Result<EnvHandle, Throw> {
+        // FDI steps 31–35: declarations are reserved before any body
+        // statement, while sloppy lexical bindings remain outside varEnv.
+        let lexical_env = if strict { variable_env.clone() }
+            else { EnvHandle::new(EnvKind::Block, Some(variable_env.clone())) };
+        self.reserve_body_lexicals(body, &lexical_env)?;
+        Ok(lexical_env)
+    }
+
+    fn exec_lexical_block(&mut self, b: &ast::Block, env: &EnvHandle) -> Result<Flow, Throw> {
+        self.completion = None;
+        let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+        self.reserve_body_lexicals(&b.body, &e)?;
         // BlockDeclarationInstantiation's own function-hoisting: every direct
         // FunctionDeclaration child of this block is lexically bound, to a fresh
         // closure, at block entry -- independent of Annex B (this happens in strict
@@ -1004,7 +1011,7 @@ impl Interpreter {
             Err(th) => {
                 let th = self.normalize_throw(th);
                 if let Some(c) = &t.catch {
-                    let ce = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+                    let ce = EnvHandle::new(if c.binding.is_some() { EnvKind::Catch } else { EnvKind::Block }, Some(env.clone()));
                     (|| {
                         if let Some(binding) = &c.binding {
                             self.bind_pattern(binding, th.0, ast::VarKind::Let, &ce)?;
@@ -1725,6 +1732,9 @@ impl Interpreter {
         match reference {
             Reference::Binding(name, binding_env) => {
                 let env = &binding_env;
+                if env.kind() != EnvKind::Global {
+                    return env.set_local_binding(&name, value, self.strict_eval_context);
+                }
                 if name == "location" && env.shares_binding_frame(&self.global_env, &name) {
                     let window = JsValue::Object(self.global_obj.clone());
                     return self.set_prop(&window, "location", value);
@@ -2203,8 +2213,9 @@ impl Interpreter {
                     if !fun.is_arrow { e.bind_this(this); }
                     let e = self.prepare_function_parameter_environment(&e, &fun.params, strict_function);
                     self.bind_params(&e, &fun.params, args, fun.is_arrow, strict_function)?;
-                    let e = self.prepare_function_body_environment(&e, &fun.params, &[])?;
+                    let e = self.prepare_function_body_environment(&e, &fun.params, &[], &[])?;
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
+                    let e = self.prepare_function_lexical_environment(&[], &e, strict_function)?;
                     if thread_async {
                         if let Some(promise) = self.start_thread_async_function(FunctionBody::Expr(x.clone()), e.clone(), strict_function) {
                             thread_started.set(true);
@@ -2241,7 +2252,7 @@ impl Interpreter {
                         }
                     }
                     let e = self.prepare_function_parameter_environment(&e, &fun.params, strict_function);
-                    self.bind_params(&e, &fun.params, args, fun.is_arrow, strict_function)?;
+                    self.bind_params(&e, &fun.params, args, fun.is_arrow || !Self::function_body_needs_arguments(&fun.params, &b.body), strict_function)?;
                     let e = self.prepare_ast_function_body_environment(&e, &fun.params, &b.body)?;
                     // Generators/async generators: FunctionDeclarationInstantiation (hoisting)
                     // still runs eagerly, synchronously, right here -- only the body's statements
@@ -2253,24 +2264,7 @@ impl Interpreter {
                         if new_target.is_some() {
                             return Err(Throw::type_error("generator functions are not constructors"));
                         }
-                        self.hoist(&b.body, &e)?;
-                        // The rest of FDI's lexical-name reservation is fused with statement
-                        // execution in this tree walker (`exec_stmts` declares a top-level
-                        // `let`/`const`/class binding when it reaches that statement, not
-                        // up front) -- fine for an ordinary function, whose body runs
-                        // synchronously right here anyway, but wrong for a generator, whose
-                        // body is about to be deferred to a coroutine. A same-frame
-                        // redeclaration conflict (e.g. a parameter default's `eval("var x")`
-                        // against a top-level `let x` in the body) must still surface from
-                        // this call, synchronously, per spec -- so check for it here, against
-                        // exactly the names `exec_stmts` would later try to declare.
-                        for name in block_lexical_names(&b.body) {
-                            if e.would_conflict_as_lexical(&name) {
-                                return Err(Throw::syntax_error(format!(
-                                    "identifier '{name}' has already been declared"
-                                )));
-                            }
-                        }
+                        let e = self.hoist_function_body(&b.body, &e, strict_function)?;
                         return Ok(self.start_thread_generator(&o, b, e, fun.is_async, strict_function));
                     }
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
@@ -2279,7 +2273,7 @@ impl Interpreter {
                     // invalidate the per-occurrence Annex B eligibility keys.
                     let body = Rc::new(FunctionBody::Block(b));
                     let FunctionBody::Block(b) = body.as_ref() else { unreachable!() };
-                    self.hoist(&b.body, &e)?;
+                    let e = self.hoist_function_body(&b.body, &e, strict_function)?;
                     if thread_async {
                         if let Some(promise) = self.start_thread_async_function(body.clone(), e.clone(), strict_function) {
                             thread_started.set(true);
@@ -2354,10 +2348,13 @@ impl Interpreter {
         // Allocate locally before binding patterns so assignment cannot escape
         // into a same-named binding in the enclosing environment.
         let mut names = std::collections::HashSet::new();
+        let has_duplicates = ps.iter().flat_map(|p| binding_names(&p.binding)).any(|name| !names.insert(name));
+        names.clear();
         for p in ps {
             for name in binding_names(&p.binding) {
                 if names.insert(name.clone()) {
                     e.declare_uninitialized(&name, true)?;
+                    if has_duplicates { e.initialize_parameter(&name, JsValue::Undefined)?; }
                 }
             }
         }
@@ -2368,7 +2365,10 @@ impl Interpreter {
         // loop below, not after it.
         if !is_arrow && !names.contains("arguments") {
             let a = self.create_arguments_object(e, ps, &args, strict);
-            if e.kind() == EnvKind::Parameter { e.declare_lexical("arguments", a, true)?; }
+            if strict {
+                e.declare_lexical("arguments", a, false)?;
+                e.finish_parameter_initialization("arguments");
+            } else if e.kind() == EnvKind::Parameter { e.declare_lexical("arguments", a, true)?; }
             else { e.declare_var("arguments", a)?; }
         }
         for (i, p) in ps.iter().enumerate() {
@@ -2468,6 +2468,12 @@ impl Interpreter {
                 || std::ptr::fn_addr_eq(*native, std_set_constructor as crate::value::NativeFn)) {
             return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
         }
+        // CreateDynamicFunction owns coercion and all three parse goals before
+        // NewTarget.prototype. Generic allocation would reverse that order.
+        if matches!(&fun.body, FunctionBody::Native(native)
+            if runtime_is_dynamic_function_constructor(*native)) {
+            return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
+        }
         if matches!(fun.body, FunctionBody::HostNative(_, HostCallPolicy::ConstructOnlyAllocates, _)) {
             let result = self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target))?;
             return if result.is_object() { Ok(result) }
@@ -2510,6 +2516,7 @@ impl Interpreter {
             }
         }
         let mut o = JsObject::function(JsFunction {
+            source: f.source.clone(),
             name: f.name.as_ref().map(|x| x.name.clone()).unwrap_or_default(),
             params: f.params.clone(),
             body: FunctionBody::Block(f.body.clone()),
@@ -2603,6 +2610,7 @@ impl Interpreter {
             ast::ArrowBody::Block(b) => FunctionBody::Block(b.clone()),
         };
         let mut o = JsObject::function(JsFunction {
+            source: a.source.clone(),
             name: "".into(),
             params: a.params.clone(),
             body,
@@ -2663,6 +2671,7 @@ impl Interpreter {
             }
         }
         let mut o = JsObject::function(JsFunction {
+            source: m.source.clone(),
             name: "".into(),
             params: m.params.clone(),
             body: FunctionBody::Block(m.body.clone()),
