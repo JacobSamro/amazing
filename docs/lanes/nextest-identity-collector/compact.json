@@ -1,0 +1,92 @@
+{
+  "additional_strict_negative_controls": 18,
+  "authenticated_fixture": {
+    "bytes": 68553,
+    "sha256": "834473ef1719368663e40404be438320ccf9e9b41e10d12f408e05623878d4ef"
+  },
+  "control_script": {
+    "bytes": 10831,
+    "sha256": "a6488926a75f51d4cc6c1a960e682e1bdbe38f5be308359b6ba373e836af9817"
+  },
+  "controls_compact": {
+    "bytes": 5340,
+    "sha256": "4303b653faf2135b9bd93611d6c9a288bde7a7c5bf81cdbfd54055bed2f1ee2e"
+  },
+  "counts": {
+    "fail": 0,
+    "pass": 59
+  },
+  "endpoint": {
+    "box_id": "bx_kth9evmd",
+    "command_sha256": "1b879b5207fe86f35d4faacdae58597875748f4e29c3625997cd497b39b38d38",
+    "execution_sha256": "57c93b5b9700284e598a20a6cb30bd597f020988e1ebaf0e7a8f3507cfa286af",
+    "host": "user@5.39.75.58",
+    "job_id": "99abfd03039242c198b7f0b43f380f42",
+    "lane": "nextest-compact-tooling-20261005",
+    "output_root": "amazing/out/nextest-compact-tooling-20261005/compact",
+    "port": 19037,
+    "schema": 2,
+    "source_archive_sha256": "fb559ec3b8020cbe8bdb6ed208e8ca583e5490139591de513d1d0a1468719939",
+    "source_commit": "9c908d242e3f8a0e9240b0969c249e9c9c6d2ea7"
+  },
+  "native_control_exit": 0,
+  "original_controls": 40,
+  "outer_source": "fae2c0aaa66afe7be9793f4397161ed9defecfa0",
+  "production_helper": {
+    "bytes": 8361,
+    "sha256": "cddc4e6ec9f9ea5c253e50bb3ac7ff02d64389b9dc696370cb02dc417092cd80"
+  },
+  "profile": {
+    "finite_ttl_seconds": 7200,
+    "memory_gib": 8,
+    "vcpu": 4
+  },
+  "qualification": "Standalone public tooling only. No engine/Cargo run, workspace/Test262/profile equivalence, or408 rerun claimed.",
+  "recorded_base": "44a6adf25457746066108eb2a846c8002cc1b033",
+  "schema": 1,
+  "terminal": {
+    "actual_exit": 0,
+    "boot_id": "1eaa066c-f43b-4664-9a40-d00a93805b0b",
+    "catalog_error": null,
+    "execution_raw": {
+      "bytes": 5404,
+      "path": "/home/user/.amazing-jobs/99abfd03039242c198b7f0b43f380f42/command.log",
+      "sha256": "f4a3130d092178c64781b7637bf28a9cc9cec3b6d39a79e06d611cec7f0f0e4f"
+    },
+    "job": {
+      "box_id": "bx_kth9evmd",
+      "command_sha256": "1b879b5207fe86f35d4faacdae58597875748f4e29c3625997cd497b39b38d38",
+      "execution_sha256": "57c93b5b9700284e598a20a6cb30bd597f020988e1ebaf0e7a8f3507cfa286af",
+      "host": "user@5.39.75.58",
+      "job_id": "99abfd03039242c198b7f0b43f380f42",
+      "lane": "nextest-compact-tooling-20261005",
+      "output_root": "amazing/out/nextest-compact-tooling-20261005/compact",
+      "port": 19037,
+      "schema": 2,
+      "source_archive_sha256": "fb559ec3b8020cbe8bdb6ed208e8ca583e5490139591de513d1d0a1468719939",
+      "source_commit": "9c908d242e3f8a0e9240b0969c249e9c9c6d2ea7"
+    },
+    "observer_pipe_closed": false,
+    "owner": {
+      "cmdline_sha256": "8882f7cc0c52322375d3b205d135a6eec628054e07c26309a0312e655362c823",
+      "parent_pid": 39282,
+      "pid": 39299,
+      "start_ticks": 107925,
+      "state": "R"
+    },
+    "reason": "authenticated actual command exit",
+    "runner_exit": 0,
+    "started_ns": 1791215378175865459,
+    "state": "TERMINAL"
+  },
+  "tested_source": "9c908d242e3f8a0e9240b0969c249e9c9c6d2ea7",
+  "transport": {
+    "engine_rerun": false,
+    "initial_fetch_error": "basename was outside required job-relative output root",
+    "initial_fetch_exit": 3,
+    "one_clean_fetch_exit": 0,
+    "raw_recovery": false
+  },
+  "truthful_signal_projection_control": 1,
+  "utc": "2026-10-05T15:51:54.165694+00:00"
+}

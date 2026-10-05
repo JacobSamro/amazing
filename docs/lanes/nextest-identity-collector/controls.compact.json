@@ -1,0 +1,262 @@
+{
+  "actual_exit": 0,
+  "controls": {
+    "bytes": 10831,
+    "path": "/tmp/amazing-bootstrap.rqx9hy/source/scripts/nextest-compact-controls.py",
+    "sha256": "a6488926a75f51d4cc6c1a960e682e1bdbe38f5be308359b6ba373e836af9817"
+  },
+  "counts": {
+    "fail": 0,
+    "pass": 59
+  },
+  "fixture": {
+    "bytes": 68553,
+    "path": "/tmp/amazing-bootstrap.rqx9hy/source/scripts/fixtures/nextest-compact/authenticated-maps.json",
+    "sha256": "834473ef1719368663e40404be438320ccf9e9b41e10d12f408e05623878d4ef"
+  },
+  "helper": {
+    "bytes": 8361,
+    "path": "/tmp/amazing-bootstrap.rqx9hy/source/scripts/nextest-compact.py",
+    "sha256": "cddc4e6ec9f9ea5c253e50bb3ac7ff02d64389b9dc696370cb02dc417092cd80"
+  },
+  "qualification": "Standalone native Python tooling controls only; no engine/Cargo/profile equivalence claim. Authentic compact fixtures retain original hashes; text controls are explicit formatting fixtures.",
+  "results": [
+    {
+      "id": "legacy",
+      "status": "pass"
+    },
+    {
+      "id": "progress",
+      "status": "pass"
+    },
+    {
+      "id": "wide_progress",
+      "status": "pass"
+    },
+    {
+      "id": "ansi_csi",
+      "status": "pass"
+    },
+    {
+      "id": "ansi_osc_bel",
+      "status": "pass"
+    },
+    {
+      "id": "ansi_osc_st",
+      "status": "pass"
+    },
+    {
+      "id": "name_spaces_punctuation",
+      "status": "pass"
+    },
+    {
+      "id": "skip_not_in_run_total",
+      "status": "pass"
+    },
+    {
+      "id": "fail_rows",
+      "status": "pass"
+    },
+    {
+      "id": "final_repeat_after_summary",
+      "status": "pass"
+    },
+    {
+      "id": "duplicate_row",
+      "status": "pass"
+    },
+    {
+      "id": "progress_collision",
+      "status": "pass"
+    },
+    {
+      "id": "contradictory_duplicate",
+      "status": "pass"
+    },
+    {
+      "id": "missing_summary",
+      "status": "pass"
+    },
+    {
+      "id": "duplicate_summary",
+      "status": "pass"
+    },
+    {
+      "id": "missing_status_rows",
+      "status": "pass"
+    },
+    {
+      "id": "malformed_row",
+      "status": "pass"
+    },
+    {
+      "id": "missing_binary",
+      "status": "pass"
+    },
+    {
+      "id": "count_mismatch",
+      "status": "pass"
+    },
+    {
+      "id": "fail_count_mismatch",
+      "status": "pass"
+    },
+    {
+      "id": "duplicate_count",
+      "status": "pass"
+    },
+    {
+      "id": "incomplete_run",
+      "status": "pass"
+    },
+    {
+      "id": "real_lost_pass",
+      "status": "pass"
+    },
+    {
+      "id": "skip_loses_pass",
+      "status": "pass"
+    },
+    {
+      "id": "exact_name_no_global_progress_removal",
+      "status": "pass"
+    },
+    {
+      "id": "baseline_collision",
+      "status": "pass"
+    },
+    {
+      "id": "authentic_540_to_598_compact",
+      "status": "pass"
+    },
+    {
+      "id": "authentic_negative_one_lost",
+      "status": "pass"
+    },
+    {
+      "id": "compressed_trailing_data",
+      "status": "pass"
+    },
+    {
+      "id": "duplicate_json_identity",
+      "status": "pass"
+    },
+    {
+      "id": "whole_authentic_identity_formatting_fixture",
+      "status": "pass"
+    },
+    {
+      "id": "phase_raw_provenance",
+      "status": "pass"
+    },
+    {
+      "id": "actual_exit_zero",
+      "status": "pass"
+    },
+    {
+      "id": "raw_hash_mismatch",
+      "status": "pass"
+    },
+    {
+      "id": "source_mismatch",
+      "status": "pass"
+    },
+    {
+      "id": "phase_copy_failure",
+      "status": "pass"
+    },
+    {
+      "id": "actual_nonzero_preserved",
+      "status": "pass"
+    },
+    {
+      "id": "zero_exit_failed_count_contradiction",
+      "status": "pass"
+    },
+    {
+      "id": "missing_native_exit",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_command_nonzero_engine_zero",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_wrapper_nonzero_engine_zero",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_command_zero_engine_nonzero",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_command_bool",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_engine_bool",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_wrapper_bool",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_copy_bool",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_command_string",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_engine_string",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_wrapper_string",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_copy_string",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_command_missing",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_wrapper_missing",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_copy_missing",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_engine_negative",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_wrapper_negative",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_copy_nonzero",
+      "status": "pass"
+    },
+    {
+      "id": "exit_witness_signal_projection_contradiction",
+      "status": "pass"
+    },
+    {
+      "id": "truthful_gate_command_signal_projection",
+      "status": "pass"
+    },
+    {
+      "id": "cli_real_failure_and_lost",
+      "status": "pass"
+    }
+  ],
+  "schema": 1
+}
