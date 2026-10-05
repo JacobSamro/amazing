@@ -241,6 +241,32 @@ pub(crate) fn computed_percentage(css:&str)->Option<f64> {
     let tokens:Vec<_>=tokenize(css).into_iter().map(|t|match t {Token::Percentage(n)=>Token::Number(n),other=>other}).collect();
     computed_number(&crate::syntax::serialize(&tokens))
 }
+/// Computed angle serialization uses degrees directly. Routing an authored
+/// degree through radians and back injects binary roundoff into its CSS text.
+/// Validate dimensions with the existing angle grammar before evaluating the
+/// same expression in degrees; the typed matrix path still uses radians.
+pub(crate) fn computed_angle_degrees(css: &str) -> Option<f64> {
+    let tokens = tokenize(css);
+    let significant: Vec<_> = tokens.iter().filter(|t| !matches!(t, Token::Whitespace)).collect();
+    if matches!(significant.as_slice(), [Token::Number(n)] if *n == 0.0) {
+        return Some(0.0);
+    }
+    if !angle(css) { return None; }
+    let tokens = tokens.into_iter().map(|token| match token {
+        Token::Dimension(n, unit) => {
+            let degrees = match unit.to_ascii_lowercase().as_str() {
+                "deg" => n,
+                "grad" => n * 0.9,
+                "turn" => n * 360.0,
+                "rad" => n.to_degrees(),
+                _ => return None,
+            };
+            degrees.is_finite().then_some(Token::Number(degrees))
+        }
+        token => Some(token),
+    }).collect::<Option<Vec<_>>>()?;
+    computed_number(&crate::syntax::serialize(&tokens))
+}
 /// Pure angle computation in radians, without inventing layout/font context.
 pub(crate) fn computed_angle(css: &str) -> Option<f64> {
     if !angle(css) { return None; }
