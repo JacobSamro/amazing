@@ -2,7 +2,7 @@
 //! Compression follows FIPS 180-4; the caller has already bounded response size.
 use super::constants::{H256, H384, H512, K256, K512};
 
-pub(super) fn digest(kind: usize, input: &[u8]) -> Vec<u8> {
+pub(crate) fn digest(kind: usize, input: &[u8]) -> Vec<u8> {
     match kind {
         0 => sha256(input).to_vec(),
         1 => sha512_family(input, true)[..48].to_vec(),

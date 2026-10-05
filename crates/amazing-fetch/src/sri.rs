@@ -1,7 +1,7 @@
 //! Subresource Integrity Level 2 metadata parsing and strongest-digest checks.
 //! https://www.w3.org/TR/sri/#response-verification-algorithms
 mod constants;
-mod sha2;
+pub(crate) mod sha2;
 
 pub(crate) struct Metadata {
     strongest: Option<usize>,

@@ -2,6 +2,8 @@
 //! The policy container and element metadata are supplied by the embedder.
 use crate::{HeaderList, HttpUrl, Origin, Request};
 use amazing_net::ParsedUrl;
+mod inline;
+pub use inline::*;
 
 const MAX_POLICY_BYTES: usize = 65_536;
 const MAX_DIRECTIVES: usize = 256;
@@ -35,7 +37,15 @@ pub struct CspDirective {
     pub sources: Vec<String>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CspPolicySource {
+    Header,
+    Meta,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CspPolicy {
+    pub source: CspPolicySource,
+    /// Exact serialized policy, retaining duplicate and unknown directives for reports.
+    pub original_policy: String,
     pub disposition: CspDisposition,
     pub directives: Vec<CspDirective>,
 }
@@ -45,6 +55,13 @@ pub struct CspPolicyList {
 }
 
 impl CspPolicyList {
+    /// Delivery provenance survives cloning/inheritance. Response parsing drops
+    /// empty directive sets (CSP3 2.2.2); meta policies never count for hiding.
+    pub fn contains_header_delivered_policy(&self) -> bool {
+        self.policies
+            .iter()
+            .any(|p| p.source == CspPolicySource::Header)
+    }
     /// A comma separates serialized policies; a semicolon separates directives.
     /// Limits are checked on borrowed header values before constructing strings.
     pub fn from_headers(headers: &HeaderList) -> Result<Self, CspParseError> {
@@ -75,40 +92,100 @@ impl CspPolicyList {
             }
         }
         let mut list = Self::default();
-        for (name, value) in headers.iter() {
-            let disposition = match name {
-                "content-security-policy" => CspDisposition::Enforce,
-                "content-security-policy-report-only" => CspDisposition::ReportOnly,
-                _ => continue,
-            };
-            for serialized in value.split(',') {
-                let mut policy = CspPolicy {
-                    disposition,
-                    directives: Vec::new(),
-                };
-                for part in serialized.split(';') {
-                    let mut tokens = part.split_ascii_whitespace();
-                    let Some(name) = tokens.next() else {
-                        continue;
+        // CSP3 2.2.2 collects enforcing headers first, then report-only headers,
+        // regardless of their ordering in the HTTP header list.
+        for (header_name, disposition) in [
+            ("content-security-policy", CspDisposition::Enforce),
+            (
+                "content-security-policy-report-only",
+                CspDisposition::ReportOnly,
+            ),
+        ] {
+            for (_, value) in headers.iter().filter(|(name, _)| *name == header_name) {
+                for serialized in value.split(',') {
+                    let mut policy = CspPolicy {
+                        source: CspPolicySource::Header,
+                        original_policy: serialized.trim_matches(is_ascii_whitespace).to_owned(),
+                        disposition,
+                        directives: Vec::new(),
                     };
-                    if !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
-                        continue;
+                    for part in serialized.split(';') {
+                        if !part.is_ascii() {
+                            continue;
+                        }
+                        let mut tokens = part.split(is_ascii_whitespace).filter(|s| !s.is_empty());
+                        let Some(name) = tokens.next() else {
+                            continue;
+                        };
+                        if !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+                            continue;
+                        }
+                        let name = name.to_ascii_lowercase();
+                        if policy.directives.iter().any(|d| d.name == name) {
+                            continue;
+                        }
+                        policy.directives.push(CspDirective {
+                            name,
+                            sources: tokens
+                                .filter(|s| valid_source(s))
+                                .map(str::to_owned)
+                                .collect(),
+                        });
                     }
-                    let name = name.to_ascii_lowercase();
-                    if policy.directives.iter().any(|d| d.name == name) {
-                        continue;
+                    if !policy.directives.is_empty() {
+                        list.policies.push(policy);
                     }
-                    policy.directives.push(CspDirective {
-                        name,
-                        sources: tokens
-                            .filter(|s| valid_source(s))
-                            .map(str::to_owned)
-                            .collect(),
-                    });
                 }
-                list.policies.push(policy);
             }
         }
+        Ok(list)
+    }
+    /// Parse an enforcing meta-delivered policy. The HTML owner must call this
+    /// only for a valid, connected CSP meta element in the document head; policies
+    /// apply prospectively. Report-only meta delivery is not supported by CSP.
+    pub fn from_meta(serialized: &str) -> Result<Self, CspParseError> {
+        if serialized.len() > MAX_POLICY_BYTES {
+            return Err(CspParseError::TooLong);
+        }
+        // Meta is a serialized policy, not a comma-delimited header policy list.
+        // A comma is invalid in a directive value, not a second enforcing policy.
+        // Reuse bounded directive parsing without converting it into two policies.
+        let mut list = Self::default();
+        let mut policy = CspPolicy {
+            source: CspPolicySource::Meta,
+            original_policy: serialized.trim_matches(is_ascii_whitespace).into(),
+            disposition: CspDisposition::Enforce,
+            directives: Vec::new(),
+        };
+        if serialized.split(';').count() > MAX_DIRECTIVES {
+            return Err(CspParseError::TooManyDirectives);
+        }
+        for part in serialized.split(';') {
+            if !part.is_ascii() {
+                continue;
+            }
+            let mut tokens = part.split(is_ascii_whitespace).filter(|s| !s.is_empty());
+            let Some(name) = tokens.next() else {
+                continue;
+            };
+            if !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+                continue;
+            }
+            let name = name.to_ascii_lowercase();
+            if matches!(name.as_str(), "report-uri" | "frame-ancestors" | "sandbox")
+                || policy.directives.iter().any(|d| d.name == name)
+            {
+                continue;
+            }
+            policy.directives.push(CspDirective {
+                name,
+                sources: tokens
+                    .filter(|s| valid_source(s))
+                    .map(str::to_owned)
+                    .collect(),
+            });
+        }
+        list.policies.push(policy);
         Ok(list)
     }
     pub fn pre_request(&self, request: &Request) -> CspCheck {
@@ -173,6 +250,9 @@ fn is_policy_header(name: &str) -> bool {
         name,
         "content-security-policy" | "content-security-policy-report-only"
     )
+}
+fn is_ascii_whitespace(c: char) -> bool {
+    matches!(c, '\t' | '\n' | '\x0c' | '\r' | ' ')
 }
 fn valid_source(s: &str) -> bool {
     !s.is_empty()
