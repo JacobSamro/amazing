@@ -1,0 +1,17 @@
+# Native scalar BigInt eligibility
+
+Recorded base: ac72a9687c8a1ff76c3d0eb47db98a321ad263b8.
+
+Restore the entire scalar literal producer from qualified archived 067fd6834f4d8431d42ed166f0020aef592c6907 (replay 06e2317c), retaining its eight original native/AST groups unchanged. The literal arm uses the AST evaluator's exact BinaryBigInt::parse_radix(digits, 10) and Interpreter::bigint_value, emitted as an existing rooted Constant. Invalid manually authored digits preserve CompileError and atomic runtime SyntaxError fallback; no fabricated value or compile-time realm error is introduced.
+
+No optional-chain, Super-write, Delete helper, parser, realm or value schema changes. Optional/read and whole Super31/35 remain separate successors, not hidden ticket prerequisites.
+
+Boa literal emission attribution is retained in compiler.rs and a new THIRD_PARTY_NOTICES row. Exact upstream MIT license at 39cd11214ecb366200157dab96b3919e61e9a391 was rechecked 2026-10-05: Copyright (c) 2019 Jason Williams; core/engine/src/bytecompiler/expression/mod.rs::compile_literal. Amazing keeps its own existing arbitrary-precision parser/value representation.
+
+Fresh Linux qualification completed on exact source 1e0cb0c588639244ba367ea402bdb339ad7bb48f, using the supported 37ed launcher on default 4 vCPU / 8 GB. Baseline: workspace 4,709 passed / 17 skipped and four doctests. Candidate: 4,717 passed / 17 skipped and four doctests, including all eight added original control groups. Both release builds and completed job receipts exited 0. The baseline does not contain the eight newly added native-control fixtures.
+
+All 17 whole selections in both default and VM modes were freshly measured (34 pairs, jobs 8, timeout 60 seconds). Each mode retains 30,432 passing files and 57,007 passing variants; zero lost files or variants, zero gains. The corpus selector follows the actual runner substring filter, retaining matching Annex B paths. Compact comparisons and native/source/ELF hashes are adjacent JSON files; raw stays HOME on bx_7kcjbx6e. Optional/read and whole Super31/35 remain independent successors. The integrator's pinned 16-shard merge gate remains required.
+
+The first fresh candidate 6629ef5c stopped at workspace compilation (exit 101): its archived malformed-manual-AST fixture used the former StmtKind::Expr name. The successor changes only that pattern to current StmtKind::Expression; all eight test names, inputs and assertions are retained. Raw failure remains HOME under bigint-native-after-6629ef5c/nextest.log (SHA256 f41daa9f46b67f79548c1e2a6885ae59291c8acee16a712f3b08ade6476c3d99). Production is unchanged.
+
+Current publication package records origin/dev 69f1193e99be9c9a7ab03463bab16760325b4fa5 and contains only this independent scalar producer. Amazing JS source on that base is byte-identical to fixed 6b3061f1. The fresh 445bdccd/c52e56b9 shared prerequisite pair retains all eight original BigInt controls and all 23 whole selections in both modes: 30,444 passing files / 56,997 variants per mode, zero lost passes. That combined candidate remains on HOLD for three separate mirror/optional/Super lifetime assertions; this package does not claim that failed whole workspace passed, or that the current standalone package has a fresh workspace result. The original independent qualification above and current shared-source observations are distinct. The integrator must gate this independent package, without importing those failing families, before publication. No collector, optional-chain, Super or constructor source is included.

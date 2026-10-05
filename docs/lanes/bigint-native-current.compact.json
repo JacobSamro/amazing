@@ -1,0 +1,170 @@
+{
+  "recorded_origin_dev": "69f1193e99be9c9a7ab03463bab16760325b4fa5",
+  "qualified_original_ready": "6aaca3e8159099a397106f7d3d3cafcf1c3303c5",
+  "scope": "Whole scalar BigInt native Constant producer only, original eight groups unchanged",
+  "current_js_base": "6b3061f1dd51e6dbc5ece75478b15512564ffed2",
+  "own_js_drift_to_recorded_origin": [],
+  "fresh_shared_pair_context": {
+    "before": "445bdccd5f2a943cd84bafaf05a933d97963af85",
+    "after": "c52e56b98069d53faf8445bfff1b8ba3a003bfe6",
+    "native_before_counts": {
+      "PASS": 4782,
+      "SKIP": 17,
+      "FAIL": 41
+    },
+    "native_after_counts": {
+      "PASS": 4820,
+      "SKIP": 17,
+      "FAIL": 3
+    },
+    "whole_after_qualification": "HOLD for three separate optional/Super/mirror assertions, not waived",
+    "BigInt_original_controls": {
+      "counts": {
+        "PASS": 8
+      },
+      "identities": {
+        "amazing-js::interp::vm::tests_bigint_literals::bigint_class_keys_fields_static_initialization_and_native_methods_remain_coherent": "PASS",
+        "amazing-js::interp::vm::tests_bigint_literals::bigint_constant_strong_roots_outlive_ast_and_quantums_and_budget_errors_restore_context": "PASS",
+        "amazing-js::interp::vm::tests_bigint_literals::bigint_constants_are_realm_independent_but_operator_errors_restore_callee_context": "PASS",
+        "amazing-js::interp::vm::tests_bigint_literals::bigint_literal_defaults_destructuring_closures_and_update_keep_value_semantics": "PASS",
+        "amazing-js::interp::vm::tests_bigint_literals::bigint_literal_registers_survive_yield_await_and_abrupt_cleanup": "PASS",
+        "amazing-js::interp::vm::tests_bigint_literals::bigint_literals_keep_arbitrary_precision_without_number_roundtrip": "PASS",
+        "amazing-js::interp::vm::tests_bigint_literals::malformed_manual_bigint_ast_keeps_runtime_syntax_error_adapter_in_actual_realm": "PASS",
+        "amazing-js::interp::vm::tests_bigint_literals::bigint_literal_whole_scalar_matrix_is_native_in_all_callable_kinds": "PASS"
+      }
+    },
+    "both_modes": {
+      "default": {
+        "before_files": 30444,
+        "after_files": 30444,
+        "before_variants": 56997,
+        "after_variants": 56997
+      },
+      "vm": {
+        "before_files": 30444,
+        "after_files": 30444,
+        "before_variants": 56997,
+        "after_variants": 56997
+      }
+    },
+    "lost_passing_files_or_variants": [],
+    "lost_native_legacy": [],
+    "receipt_manifest_path": ".agents/js-vm/eligibility-mirror-prepared/whole-pair-hold.compact.json",
+    "receipt_manifest_sha256": "b6b5dbc5a853631a6e1aa4a3b60f84a22c8a24c6f658ac31fd449cb944c8d8fd",
+    "raw_native_before": {
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--workspace",
+        "--locked",
+        "--no-fail-fast",
+        "--status-level",
+        "skip"
+      ],
+      "command_exit": 100,
+      "diagnostic_tail": [
+        "        FAIL [   0.013s] (3123/4823) amazing-js interp::vm::tests_super_ordinary::super_plain_and_compound_null_bigint_rhs_keep_abrupt_and_key_conversion_order",
+        "        FAIL [   0.024s] (3128/4823) amazing-js interp::vm::tests_super_writes::borrowed_foreign_super_write_preserves_body_home_and_actual_receiver_through_await",
+        "        FAIL [   0.014s] (3129/4823) amazing-js interp::vm::tests_super_writes::derived_super_write_arrow_checks_this_tdz_before_raw_key_and_rhs",
+        "        FAIL [   0.014s] (3130/4823) amazing-js interp::vm::tests_super_writes::injected_super_write_throw_and_return_preserve_cleanup_without_coercing_abandoned_key",
+        "        FAIL [   0.013s] (3131/4823) amazing-js interp::vm::tests_super_writes::parked_super_write_captures_changed_base_and_canonical_key_once_before_rhs",
+        "        FAIL [   0.013s] (3132/4823) amazing-js interp::vm::tests_super_writes::super_plain_write_defers_null_and_key_failure_until_after_rhs_while_compound_reads_first",
+        "        FAIL [   0.013s] (3133/4823) amazing-js interp::vm::tests_super_writes::super_read_and_setter_abrupt_preserve_original_values_and_skip_later_operations",
+        "        FAIL [   4.488s] (3134/4823) amazing-js interp::vm::tests_optional_ordinary::ordinary_optional_chains_whole_matrix_is_native_in_all_callable_kinds",
+        "        FAIL [   0.014s] (3135/4823) amazing-js interp::vm::tests_super_writes::super_write_reference_survives_instruction_quantums_and_budget_abrupt_restores_context",
+        "        FAIL [   2.802s] (3137/4823) amazing-js interp::vm::tests_super_ordinary::ordinary_super_whole_write_matrix_uses_native_records_in_all_callable_kinds",
+        "        FAIL [   2.118s] (3146/4823) amazing-js interp::vm::tests_super_writes::super_write_records_cover_plain_compound_logical_update_and_pattern_operations",
+        "error: test run failed"
+      ],
+      "engine_exit": 100,
+      "native_receipt": "/tmp/amazing-gate-command-rnwu3eme/phase.manifest.json",
+      "output_copies": [
+        {
+          "copy_exit": 0,
+          "destination": "/home/user/amazing/out/js-vm-mirror-20261005/eligibility-mirror-before-445bdccd-first/nextest.log",
+          "durable": {
+            "bytes": 867094,
+            "path": "/home/user/amazing/out/js-vm-mirror-20261005/eligibility-mirror-before-445bdccd-first/nextest.log",
+            "sha256": "8c7341d305f5ba90a75da66f7392f977ec332ecf28ddec666f6fdde59c1f421c"
+          },
+          "native": {
+            "bytes": 867094,
+            "path": "/tmp/amazing-gate-command-rnwu3eme/output.log",
+            "sha256": "8c7341d305f5ba90a75da66f7392f977ec332ecf28ddec666f6fdde59c1f421c"
+          },
+          "source": "/tmp/amazing-gate-command-rnwu3eme/output.log"
+        }
+      ],
+      "output_copy_exit": 0,
+      "phase": "nextest",
+      "raw_native": {
+        "bytes": 867094,
+        "path": "/tmp/amazing-gate-command-rnwu3eme/output.log",
+        "sha256": "8c7341d305f5ba90a75da66f7392f977ec332ecf28ddec666f6fdde59c1f421c"
+      },
+      "schema": 1,
+      "source_commit": "445bdccd5f2a943cd84bafaf05a933d97963af85",
+      "wrapper_exit": 100
+    },
+    "raw_native_after": {
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--workspace",
+        "--locked",
+        "--no-fail-fast",
+        "--status-level",
+        "skip"
+      ],
+      "command_exit": 100,
+      "diagnostic_tail": [
+        "        PASS [   0.005s] (4818/4823) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+        "        PASS [   0.003s] (4819/4823) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+        "        PASS [   0.014s] (4820/4823) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+        "        PASS [   0.012s] (4821/4823) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+        "        PASS [   7.596s] (4822/4823) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+        "        PASS [  21.003s] (4823/4823) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+        "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+        "     Summary [ 134.643s] 4823 tests run: 4820 passed, 3 failed, 17 skipped",
+        "        FAIL [   0.071s] (2614/4823) amazing-js interp::global_mirror_lifetime_tests::ordinary_global_mutation_routes_refresh_the_same_physical_binding_cell",
+        "        FAIL [   0.014s] (3078/4823) amazing-js interp::vm::tests_optional_ordinary::optional_chain_frame_roots_survive_external_receiver_release_between_quantums",
+        "        FAIL [   0.013s] (3122/4823) amazing-js interp::vm::tests_super_ordinary::super_native_reference_owns_released_base_until_put_and_frame_teardown",
+        "error: test run failed"
+      ],
+      "engine_exit": 100,
+      "native_receipt": "/tmp/amazing-gate-command-chcb9o8u/phase.manifest.json",
+      "output_copies": [
+        {
+          "copy_exit": 0,
+          "destination": "/home/user/amazing/out/js-vm-mirror-20261005/eligibility-mirror-after-c52e56b9-first/nextest.log",
+          "durable": {
+            "bytes": 684109,
+            "path": "/home/user/amazing/out/js-vm-mirror-20261005/eligibility-mirror-after-c52e56b9-first/nextest.log",
+            "sha256": "4037eca0424691fe6d3e58d6cb08f309bd53681e42843b50a31602e06f9b70ab"
+          },
+          "native": {
+            "bytes": 684109,
+            "path": "/tmp/amazing-gate-command-chcb9o8u/output.log",
+            "sha256": "4037eca0424691fe6d3e58d6cb08f309bd53681e42843b50a31602e06f9b70ab"
+          },
+          "source": "/tmp/amazing-gate-command-chcb9o8u/output.log"
+        }
+      ],
+      "output_copy_exit": 0,
+      "phase": "nextest",
+      "raw_native": {
+        "bytes": 684109,
+        "path": "/tmp/amazing-gate-command-chcb9o8u/output.log",
+        "sha256": "4037eca0424691fe6d3e58d6cb08f309bd53681e42843b50a31602e06f9b70ab"
+      },
+      "schema": 1,
+      "source_commit": "c52e56b98069d53faf8445bfff1b8ba3a003bfe6",
+      "wrapper_exit": 100
+    }
+  },
+  "current_standalone_workspace_measured": false,
+  "integrator_16_shard_gate_required": true,
+  "original_test_file_sha256": "5e346b08ee97291ffc58a5385111b6ebc9ad70fd80b84fa1accca89432499b06"
+}

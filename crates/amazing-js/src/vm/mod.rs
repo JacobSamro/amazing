@@ -44,6 +44,8 @@ mod tests_chains;
 mod tests_super_reads;
 #[cfg(test)]
 mod tests_templates;
+#[cfg(test)]
+mod tests_bigint_literals;
 
 use super::{callable_function, for_iteration_env, new_promise, perform_promise_then, promise_resolving_functions, reference_name, settle_promise, Interpreter, Reference};
 use crate::ast::{BinOp, ForLeft, UnOp, VarKind};

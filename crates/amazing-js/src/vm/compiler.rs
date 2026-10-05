@@ -7,6 +7,9 @@
 // Portions ported from boa-dev/boa (core/engine/src/bytecompiler/mod.rs::call)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT: whole call-reference,
 // grouped receiver and contextual eval lowering onto rooted registers.
+// BigInt literal constant emission also adapted from that commit's
+// core/engine/src/bytecompiler/expression/mod.rs::compile_literal, MIT;
+// parsing uses Amazing's exact existing AST literal algorithm.
 use super::{
     CallArgument, ClassCode, ClassMethodCode, ClassSuper, CompileError, CompiledFunction, Condition, FunctionCode, HoistedFunction,
     Instruction, KeyOperand, Program, Register,
@@ -1266,6 +1269,12 @@ impl Compiler {
         match &expression.kind {
             ExprKind::Num(number) => {
                 self.emit(Instruction::Numeric(dst, number.clone()));
+            }
+            ExprKind::BigInt(digits) => {
+                let value = crate::interp::BinaryBigInt::parse_radix(digits, 10)
+                    .map(crate::interp::Interpreter::bigint_value)
+                    .ok_or_else(|| self.error(expression.span, "invalid BigInt literal"))?;
+                self.emit(Instruction::Constant(dst, value));
             }
             ExprKind::RegExp(regex) => {
                 self.emit(Instruction::RegExp(dst, regex.clone()));
