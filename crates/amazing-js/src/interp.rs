@@ -1856,6 +1856,7 @@ include!("builtins_std_collections.rs");
 include!("builtins_std_collection_iter.rs");
 include!("builtins_std_iterator.rs");
 include!("builtins_binary.rs");
+include!("builtins_binary_sort.rs");
 include!("builtins_binary_bigint.rs");
 include!("builtins_binary_base64.rs");
 include!("builtins_intl_data.rs");

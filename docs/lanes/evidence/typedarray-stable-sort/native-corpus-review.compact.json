@@ -1,0 +1,115 @@
+{
+  "observed_at": "2026-10-05T09:54:41.708017+00:00",
+  "source": "0787913bea179d563198de10bc0dbde259cc75c3",
+  "native_job_exit": 0,
+  "counts": {
+    "doctests": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 4
+    },
+    "nextest": {
+      "failed": 0,
+      "passed": 4734,
+      "skipped": 17
+    }
+  },
+  "phase_receipts": [
+    {
+      "phase": "workspace",
+      "sha256": "915af4ab8089cd6ff169519420c0f13977b19b641745f59800d53b3a0f793f4d",
+      "engine_exit": 0,
+      "copy_hashes_verified": true
+    },
+    {
+      "phase": "doctests",
+      "sha256": "d92c80f4b02ef9b4ccdab95d9762cde07e7cf31fe3aa0b19099874128d71c74c",
+      "engine_exit": 0,
+      "copy_hashes_verified": true
+    },
+    {
+      "phase": "release",
+      "sha256": "cdedc1a1804196852eefbfe07864d0c42cf584fc401898e89be8955ed257233d",
+      "engine_exit": 0,
+      "copy_hashes_verified": true
+    },
+    {
+      "phase": "tooling",
+      "sha256": "bad536bfab6cc26f30a189c921e953bd95265cdd7252c9ff3ebd764b8d0f6783",
+      "engine_exit": 0,
+      "copy_hashes_verified": true
+    },
+    {
+      "phase": "default",
+      "sha256": "03458752a101db4796f99486d34a4ab811b7d9346a48e2cddee2569a88f283fe",
+      "engine_exit": 1,
+      "copy_hashes_verified": true
+    },
+    {
+      "phase": "vm",
+      "sha256": "666c7611b36513fcd8139518724dd320ea04394024ac7c9eb8acf304fcf0c1ec",
+      "engine_exit": 1,
+      "copy_hashes_verified": true
+    }
+  ],
+  "corpora": {
+    "default": {
+      "summary": {
+        "files": {
+          "fail": 89,
+          "pass": 2199,
+          "skipped": 294,
+          "unsupported": 1
+        }
+      },
+      "original_sort_modifications": {
+        "path": "staging/sm/TypedArray/sort_modifications.js",
+        "status": "pass",
+        "reason": "",
+        "variants": [
+          {
+            "variant": "non-strict",
+            "status": "pass"
+          },
+          {
+            "variant": "strict",
+            "status": "pass"
+          }
+        ]
+      },
+      "timeout_seconds": 60,
+      "host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "raw_sha256": "d548ab362c1678992f3c5f1c3adb039591b5be28a62f72ddbdf72e1c517e360a"
+    },
+    "vm": {
+      "summary": {
+        "files": {
+          "fail": 91,
+          "pass": 2197,
+          "skipped": 294,
+          "unsupported": 1
+        }
+      },
+      "original_sort_modifications": {
+        "path": "staging/sm/TypedArray/sort_modifications.js",
+        "status": "pass",
+        "reason": "",
+        "variants": [
+          {
+            "variant": "non-strict",
+            "status": "pass"
+          },
+          {
+            "variant": "strict",
+            "status": "pass"
+          }
+        ]
+      },
+      "timeout_seconds": 60,
+      "host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "raw_sha256": "4fd4eeee3daa5a8721cafe86edcde3afc815edb5b85b0f2df5dbe97bb67b2b5c"
+    }
+  },
+  "full16_zero_loss_pending": true,
+  "historical_VM_pair_not_claimed": true
+}

@@ -1283,30 +1283,7 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
                 return Err(Throw::type_error("comparefn must be a function"));
             }
             let mut copy = values;
-            for index in 1..copy.len() {
-                let mut cursor = index;
-                while cursor > 0 {
-                    let ordering = if matches!(compare, JsValue::Undefined) {
-                        if let (JsValue::BigInt(a), JsValue::BigInt(b)) = (&copy[cursor - 1], &copy[cursor]) {
-                            a.cmp(b)
-                        } else {
-                        let a = copy[cursor - 1].to_number()?;
-                        let b = copy[cursor].to_number()?;
-                        if a.is_nan() { if b.is_nan() { std::cmp::Ordering::Equal } else { std::cmp::Ordering::Greater } }
-                        else if b.is_nan() { std::cmp::Ordering::Less }
-                        else { a.total_cmp(&b) }
-                        }
-                    } else {
-                        let compared = i.call_value(&compare, JsValue::Undefined,
-                            vec![copy[cursor - 1].clone(), copy[cursor].clone()])?;
-                        let compared = i.to_number(&compared)?;
-                        compared.partial_cmp(&0.0).unwrap_or(std::cmp::Ordering::Equal)
-                    };
-                    if ordering != std::cmp::Ordering::Greater { break; }
-                    copy.swap(cursor - 1, cursor);
-                    cursor -= 1;
-                }
-            }
+            binary_typed_stable_sort(i, &mut copy, &compare)?;
             if name == "toSorted" { binary_typed_from_values(i, kind, copy) }
             else { for (j,value) in copy.iter().enumerate() { binary_write_value(i, &view, kind, j*kind.size(), true, value)?; } Ok(this) }
         }
