@@ -32,18 +32,43 @@ pub fn serve<F>(
 where
     F: FnOnce(&mut ServerStream) + Send + 'static,
 {
+    serve_certificates(
+        protocols,
+        vec![CertificateDer::from(CERT.to_vec())],
+        KEY,
+        false,
+        handler,
+    )
+}
+
+pub(super) fn serve_certificates<F>(
+    protocols: Vec<Vec<u8>>,
+    certificates: Vec<CertificateDer<'static>>,
+    key: &[u8],
+    present_invalid_constraints: bool,
+    handler: F,
+) -> (u16, std::thread::JoinHandle<Result<(), TlsError>>)
+where
+    F: FnOnce(&mut ServerStream) + Send + 'static,
+{
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
-    let mut config =
-        ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-            .with_safe_default_protocol_versions()
-            .unwrap()
-            .with_no_client_auth()
-            .with_single_cert(
-                vec![CertificateDer::from(CERT.to_vec())],
-                PrivatePkcs8KeyDer::from(KEY.to_vec()).into(),
-            )
-            .unwrap();
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let builder = ServerConfig::builder_with_provider(provider.clone())
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth();
+    let key = PrivatePkcs8KeyDer::from(key.to_vec()).into();
+    let mut config = if present_invalid_constraints {
+        // A fixture server must be able to present certificates the client
+        // rejects. This changes certificate selection only; client trust and
+        // cryptographic verification remain the ordinary rustls verifier.
+        let signing_key = provider.key_provider.load_private_key(key).unwrap();
+        let certified = rustls::sign::CertifiedKey::new(certificates, signing_key);
+        builder.with_cert_resolver(Arc::new(FixtureCertificates(Arc::new(certified))))
+    } else {
+        builder.with_single_cert(certificates, key).unwrap()
+    };
     config.alpn_protocols = protocols;
     let thread = std::thread::spawn(move || {
         let (tcp, _) = listener.accept().map_err(transport_error)?;
@@ -164,7 +189,21 @@ mod tests {
         let (port, thread) = serve(vec![b"h2".to_vec()], |_| {
             panic!("untrusted handshake accepted")
         });
-        assert!(super::super::connect("localhost", port, Duration::from_secs(3)).is_err());
+        assert!(matches!(
+            super::super::connect("localhost", port, Duration::from_secs(3)),
+            Err(TlsError::Certificate(CertificateError::UnknownIssuer))
+        ));
         assert!(thread.join().unwrap().is_err());
+    }
+}
+
+#[derive(Debug)]
+struct FixtureCertificates(Arc<rustls::sign::CertifiedKey>);
+impl rustls::server::ResolvesServerCert for FixtureCertificates {
+    fn resolve(
+        &self,
+        _: rustls::server::ClientHello<'_>,
+    ) -> Option<Arc<rustls::sign::CertifiedKey>> {
+        Some(self.0.clone())
     }
 }

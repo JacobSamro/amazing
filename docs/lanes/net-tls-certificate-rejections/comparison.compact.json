@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "base_commit": "ccbe84327b1e177cdf05bc4d9b6ce27b433e4b5f",
+  "source_commit": "8b93d32dee9f65d050c7d64c28dc0637d14adb3c",
+  "box": "bx_u3g2zwvh",
+  "phase_exits": {
+    "before": {
+      "doctests": 0,
+      "network-corpus": 0,
+      "workspace": 0
+    },
+    "after": {
+      "doctests": 0,
+      "network-corpus": 0,
+      "workspace": 0
+    }
+  },
+  "suites": {
+    "workspace": {
+      "before": {
+        "pass": 4651,
+        "skip": 17
+      },
+      "after": {
+        "pass": 4657,
+        "skip": 17
+      },
+      "lost": [],
+      "gained": [
+        "amazing-net-tls validation_tests::common_name_and_dns_ip_do_not_replace_san_identity",
+        "amazing-net-tls validation_tests::complete_intermediate_chain_required",
+        "amazing-net-tls validation_tests::dns_and_ip_subject_alternative_names",
+        "amazing-net-tls validation_tests::no_common_alpn_is_terminal",
+        "amazing-net-tls validation_tests::validity_and_server_authentication_constraints",
+        "amazing-net-tls validation_tests::wildcard_is_one_dns_label"
+      ],
+      "before_pass_set_sha256": "f8c1433824fda3fd297da269ccc90773e8a5cbe5c31a9cf8cc627e9a1cabf136",
+      "after_pass_set_sha256": "fb1f81475522de2963450d816ed23c77ff0e5d42b7128ce45d43d3bbfe08370e"
+    },
+    "network-corpus": {
+      "before": {
+        "pass": 462
+      },
+      "after": {
+        "pass": 468
+      },
+      "lost": [],
+      "gained": [
+        "amazing-net-tls validation_tests::common_name_and_dns_ip_do_not_replace_san_identity",
+        "amazing-net-tls validation_tests::complete_intermediate_chain_required",
+        "amazing-net-tls validation_tests::dns_and_ip_subject_alternative_names",
+        "amazing-net-tls validation_tests::no_common_alpn_is_terminal",
+        "amazing-net-tls validation_tests::validity_and_server_authentication_constraints",
+        "amazing-net-tls validation_tests::wildcard_is_one_dns_label"
+      ],
+      "before_pass_set_sha256": "3dadb86a11243d709e5a6639b7e4dd0b43ff30f89dab5cdff1b6b54dd53dc9d2",
+      "after_pass_set_sha256": "a051cb8300e8676fb9062275e2e8c0ac05bca0cef5ef2e1b15c1fb6fc908607d"
+    }
+  },
+  "doctests": {
+    "before": {
+      "passed": 4,
+      "failed": 0
+    },
+    "after": {
+      "passed": 4,
+      "failed": 0
+    }
+  },
+  "captured_summaries": {
+    "after.summary.json": {
+      "sha256": "8f07dc4102a684ddd5eddbf69e6b1e5b0aaf04d0b49e2a09e5ef753f9882a811",
+      "bytes": 169219
+    },
+    "before.summary.json": {
+      "sha256": "f7089836737135554216df4b3291299fa39693b04d7ce3cb11c21f1e91ad033a",
+      "bytes": 168922
+    },
+    "after2.summary.json": {
+      "sha256": "b16aa29be569ccf09be9ca08caed5129652d5af8676986afbfb6c773148802df",
+      "bytes": 517108
+    }
+  },
+  "crate_tree_sha": "cc6ac88f1fab74d0a30d33213b2a280156462bb4",
+  "initial_candidate": {
+    "source": "a70d3fbdba12cfa212f9b49657a1e8ae9913ff5f",
+    "preserved_branch": "lane/net-tls-certificate-rejections-failed-a70",
+    "workspace_exit": 110,
+    "network_corpus_exit": 100,
+    "reason": "Fixture server rejected unknown critical extension before presenting it; corrected fixture server selection. Workspace also lacked process_leaks classification. Corrected candidate all suites passed; no waiver."
+  }
+}
