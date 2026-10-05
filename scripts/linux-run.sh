@@ -25,6 +25,7 @@
 #   --setup-summary PATH  compact local setup-failure receipt; no remote raw fetch
 #   --endpoint-receipt PATH --compact-root REMOTE_DIR
 #               capture one Boat job endpoint and its completed compact catalog
+#   --command-file PATH   exact command bytes from a file, avoiding argv limits
 #   --no-slot   skip the slot queue; for crate-scoped iterations only
 #
 # Environment on the host: CARGO_TARGET_DIR, JOBS (per-slot parallelism),
@@ -39,7 +40,7 @@ MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-
 
 LANE="${1:?usage: linux-run.sh <lane> [--host H] [--ref REF] [--no-slot] -- <command>}"
 shift
-HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0 SETUP_SUMMARY="" ENDPOINT_RECEIPT="" COMPACT_ROOT=""
+HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0 SETUP_SUMMARY="" ENDPOINT_RECEIPT="" COMPACT_ROOT="" COMMAND_FILE=""
 if [ -e "$MAIN/.agents/.boat-only" ]; then HOST=boat; fi
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -51,6 +52,7 @@ while [ $# -gt 0 ]; do
     --setup-summary) SETUP_SUMMARY="$2"; shift 2 ;;
     --endpoint-receipt) ENDPOINT_RECEIPT="$2"; shift 2 ;;
     --compact-root) COMPACT_ROOT="$2"; shift 2 ;;
+    --command-file) COMMAND_FILE="$2"; shift 2 ;;
     --no-slot) SLOT=0; shift ;;
     --which) WHICH=1; shift ;;
     --) shift; break ;;
@@ -61,8 +63,13 @@ if [ -e "$MAIN/.agents/.boat-only" ] && [ "$HOST" != boat ]; then
   echo "linux-run: this fleet is configured for Boat only; use --host boat" >&2
   exit 2
 fi
-[ $# -gt 0 ] || [ "${WHICH:-0}" = 1 ] || { echo "linux-run: no command given" >&2; exit 2; }
-CMD="$*"
+[ $# -gt 0 ] || [ -n "$COMMAND_FILE" ] || [ "${WHICH:-0}" = 1 ] || { echo "linux-run: no command given" >&2; exit 2; }
+if [ -n "$COMMAND_FILE" ]; then
+  [ $# = 0 ] && [ -f "$COMMAND_FILE" ] || { echo 'linux-run: command file must replace command arguments' >&2; exit 2; }
+  CMD=""; IFS= read -r -d '' CMD < "$COMMAND_FILE" || true
+else
+  CMD="$*"
+fi
 if [ -n "$ENDPOINT_RECEIPT$COMPACT_ROOT" ]; then
   [ -n "$ENDPOINT_RECEIPT" ] && [ -n "$COMPACT_ROOT" ] && [ -n "$REF" ] && [ ! -e "$ENDPOINT_RECEIPT" ] || {
     echo 'linux-run: endpoint capture requires a fresh receipt, exact ref and compact root' >&2; exit 2;
@@ -217,6 +224,7 @@ if [ "$HOST" = boat ]; then
   # Source archives stage directly on native storage. Pooled sandboxes host
   # several lanes, each with a separate source namespace and native target.
   LEASE=".amazing-busy/$LANE.$$"
+  JOB_CAPTURED=0 JOB_TERMINAL=0
   ok=0
   ATTEMPTS="1"
   [ -n "$MISSION_PACKAGE" ] && ATTEMPTS="1"
@@ -228,7 +236,7 @@ if [ "$HOST" = boat ]; then
     BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=2 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"
     # Drop the lease if we exit before the remote command's own trap takes
     # over (failed or interrupted sync); a stale lease keeps the sandbox billed.
-    trap '$BSSH "$BOAT_HOST" "rm -f $LEASE" 2>/dev/null; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"; rm -f "${SOURCE_ARCHIVE:-}"' EXIT
+    trap 'if [ "${JOB_CAPTURED:-0}" = 0 ] || [ "${JOB_TERMINAL:-0}" = 1 ]; then $BSSH "$BOAT_HOST" "rm -f $LEASE" 2>/dev/null; fi; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"; rm -f "${SOURCE_ARCHIVE:-}"' EXIT
     # Seed only from the canonical local source below. Snapshot-backed template
     # directories can change metadata during tar reads and fail fresh shard
     # setup; a partial template seed must never become build input.
@@ -274,13 +282,6 @@ if [ "$HOST" = boat ]; then
     fi
   done
   [ "$ok" = 1 ] || { echo "linux-run: could not sync to Boat for $LANE after the allowed setup attempts" >&2; exit 3; }
-  JOB_COMMAND="$CMD"
-  if [ -n "$ENDPOINT_RECEIPT" ]; then
-    JOB_ROW=$(python3 "$REPO/scripts/completed-job.py" capture --receipt "$ENDPOINT_RECEIPT" --lane "$LANE" --source "$COMMIT" --box "$BOAT_ID" --host "$BOAT_HOST" --port "$BOAT_PORT" --root "$COMPACT_ROOT" --command "$CMD") || exit 3
-    JOB_CODE=$(base64 < "$REPO/scripts/completed-job.py" | tr -d '\n')
-    CMD_Q=$(printf '%q' "$CMD")
-    JOB_COMMAND="python3 -c \"\$(printf '%s' '$JOB_CODE' | base64 -d)\" run '$JOB_ROW' $CMD_Q"
-  fi
   NATIVE_INPUTS_B64="$(base64 < "$REPO/scripts/native-inputs.py" | tr -d '\n')"
   BOOTSTRAP_B64="$(base64 < "$REPO/scripts/linux-bootstrap.sh" | tr -d '\n')"
   REMOTE="trap 'timeout --kill-after=5 15 rm -f ~/$LEASE' EXIT
@@ -308,14 +309,50 @@ fi
 bootstrap_native_tools
 bootstrap_native_inputs
 export CARGO_TARGET_DIR=/tmp/amazing-native-target-$LANE CARGO_INCREMENTAL=0
-$JOB_COMMAND"
-  ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"
+$CMD"
+  if [ -n "$ENDPOINT_RECEIPT" ]; then
+    # Supervise the entire native bootstrap, not merely the last gate command.
+    # Isolated system Python can record ownership before template Python/env
+    # setup; every bootstrap failure then has the same actual-exit contract.
+    # Capture digests from files: commands may exceed Linux's per-argument
+    # limit even when the outer caller can pass them on another platform.
+    command_file=$(mktemp) || exit 3
+    execution_file=$(mktemp) || { rm -f "$command_file"; exit 3; }
+    printf '%s' "$CMD" > "$command_file"
+    printf '%s' "$REMOTE" > "$execution_file"
+    JOB_ROW=$(python3 "$REPO/scripts/completed-job.py" capture --receipt "$ENDPOINT_RECEIPT" --lane "$LANE" --source "$COMMIT" --box "$BOAT_ID" --host "$BOAT_HOST" --port "$BOAT_PORT" --root "$COMPACT_ROOT" --command-file "$command_file" --execution-file "$execution_file" --source-archive-sha256 "${SOURCE_ARCHIVE_SHA:-$MISSION_SHA256}")
+    capture_rc=$?
+    if [ "$capture_rc" = 0 ]; then
+      REMOTE=$(python3 "$REPO/scripts/completed-job.py" launch "$JOB_ROW" --execution-file "$execution_file")
+      capture_rc=$?
+    fi
+    rm -f "$command_file" "$execution_file"
+    [ "$capture_rc" = 0 ] || exit 3
+    JOB_CAPTURED=1
+  fi
   T0=$(date +%s)
-  $BSSH "$BOAT_HOST" "echo $ENCODED | base64 -d | bash"
+  printf '%s' "$REMOTE" | $BSSH "$BOAT_HOST" "bash -s"
   rc=$?
+  if [ -n "$ENDPOINT_RECEIPT" ]; then
+    observation="$ENDPOINT_RECEIPT.observation.summary.json"
+    python3 "$REPO/scripts/completed-job.py" wait --receipt "$ENDPOINT_RECEIPT" --lane "$LANE" --source "$COMMIT" --seconds 60 --output "$observation"
+    observed_rc=$?
+    if python3 - "$observation" <<'PYJOB'
+import json,sys
+row=json.load(open(sys.argv[1]))
+raise SystemExit(0 if row.get('state')=='TERMINAL' and type(row.get('runner_exit')) is int else 1)
+PYJOB
+    then
+      JOB_TERMINAL=1
+      rc=$observed_rc
+    else
+      echo "linux-run[$LANE]: native job UNKNOWN/RUNNING; wrapper observation exit $rc; captured lease preserved" >&2
+      [ "$rc" != 0 ] || rc=3
+    fi
+  fi
   # Start/end per run, for `boat-lane.py pool-report` (busy and overlap per pool).
   python3 "$REPO/scripts/boat-lane.py" record-run "$T0" "$(date +%s)" "$LANE" "$BOAT_POOL" "$rc" || \
-    echo "linux-run: activity recording failed; actual job exit remains $rc" >&2
+    echo "linux-run: activity recording failed; wrapper/status exit remains $rc" >&2
   exit $rc
 fi
 
