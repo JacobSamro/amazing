@@ -270,6 +270,9 @@ impl amazing_layout::ReplacedElementProvider for PageMedia {
 }
 
 impl amazing_paint::ImageProvider for PageMedia {
+    fn image_density(&self, node: amazing_dom::NodeIdx) -> f32 {
+        self.images.iter().find(|entry| entry.node == node).map(|entry| entry.density).unwrap_or(1.0)
+    }
     fn background_image(&self,node:amazing_dom::NodeIdx,url:&str)->Option<&amazing_media::Image> {
         self.background_sources.get(&(node,url.to_owned(),None)).and_then(|url|self.decoded.get(url))
             .or_else(||self.decoded.get(url))
@@ -301,6 +304,9 @@ pub(crate) struct PagePaint<'a> {
 }
 
 impl amazing_paint::ImageProvider for PagePaint<'_> {
+    fn image_density(&self, node: amazing_dom::NodeIdx) -> f32 {
+        amazing_paint::ImageProvider::image_density(self.media, node)
+    }
     fn background_image(&self,node:amazing_dom::NodeIdx,url:&str)->Option<&amazing_media::Image> {
         amazing_paint::ImageProvider::background_image(self.media,node,url)
     }

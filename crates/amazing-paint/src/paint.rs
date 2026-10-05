@@ -418,6 +418,10 @@ pub trait ImageProvider {
         ->Option<&amazing_media::Image> {
         self.background_image(node,url)
     }
+    /// Selected HTML source density. Sampling stays in decoded pixels while
+    /// natural-size fitting uses CSS dimensions. Plain and generated resources
+    /// default to one; providers keep this consistent with intrinsic layout.
+    fn image_density(&self, _node: amazing_dom::NodeIdx) -> f32 { 1.0 }
     /// Inline fragments retain node identity; callers supply its computed style.
     fn presentation(&self, _node: amazing_dom::NodeIdx) -> ImagePresentation {
         ImagePresentation::default()
@@ -897,11 +901,12 @@ fn paint_decorations(
         }
     } else if box_.replaced_size.is_some() {
         if let Some(image) = box_.node.and_then(|node| images.image(node)) {
-            paint_image(
+            paint_image_at_density(
                 surface,
                 &box_.content_box,
                 image,
                 ImagePresentation::from_style(&box_.style),
+                box_.node.map(|node| images.image_density(node)).unwrap_or(1.0),
                 clip,
             );
         }
@@ -1265,11 +1270,12 @@ fn paint_replaced_fragments(
                 clip,
             );
         } else if let Some(image) = resolved_replaced_image(images, replaced.node, None) {
-            paint_image(
+            paint_image_at_density(
                 surface,
                 &rect,
                 image,
                 images.presentation(replaced.node),
+                images.image_density(replaced.node),
                 clip,
             );
         }
@@ -2114,11 +2120,12 @@ fn paint_lines(
                     clip,
                 );
             } else if let Some(image) = resolved_replaced_image(images, replaced.node, None) {
-                paint_image(
+                paint_image_at_density(
                     surface,
                     &rect,
                     image,
                     images.presentation(replaced.node),
+                    images.image_density(replaced.node),
                     clip,
                 );
             }
@@ -2163,6 +2170,18 @@ fn paint_image(
     presentation: ImagePresentation,
     clip: ClipRect,
 ) {
+    paint_image_at_density(surface, rect, image, presentation, 1.0, clip);
+}
+
+fn paint_image_at_density(
+    surface: &mut Surface,
+    rect: &amazing_layout::Rect,
+    image: &amazing_media::Image,
+    presentation: ImagePresentation,
+    density: f32,
+    clip: ClipRect,
+) {
+    if !density.is_finite() || density <= 0.0 { return; }
     let Some(expected) = (image.width as usize)
         .checked_mul(image.height as usize)
         .and_then(|n| n.checked_mul(4))
@@ -2173,7 +2192,7 @@ fn paint_image(
         return;
     }
     let clip = clip.intersect(rect.x, rect.y, rect.w, rect.h);
-    let Some(destination) = presentation.destination(*rect, (image.width, image.height)) else {
+    let Some(destination) = presentation.destination_with_natural_size(*rect, (image.width as f64 / density as f64, image.height as f64 / density as f64)) else {
         return;
     };
     let rect = &destination;

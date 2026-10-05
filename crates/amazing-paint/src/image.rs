@@ -10,6 +10,7 @@ pub enum ObjectFit {
     Cover,
     None,
     ScaleDown,
+    CoverScaleDown,
 }
 
 /// An axis position: fraction of the leftover space, plus a CSS-pixel offset.
@@ -34,18 +35,13 @@ pub struct ImagePresentation {
 }
 impl ImagePresentation {
     pub fn from_style(style: &ComputedStyle) -> Self {
-        let fit = match style
-            .get("object-fit")
-            .unwrap_or("fill")
-            .trim()
-            .to_ascii_lowercase()
-            .as_str()
-        {
-            "contain" => ObjectFit::Contain,
-            "cover" => ObjectFit::Cover,
-            "none" => ObjectFit::None,
-            "scale-down" => ObjectFit::ScaleDown,
-            _ => ObjectFit::Fill,
+        let fit = match style.object_fit() {
+            amazing_css::ObjectFitValue::Fill => ObjectFit::Fill,
+            amazing_css::ObjectFitValue::Contain => ObjectFit::Contain,
+            amazing_css::ObjectFitValue::Cover => ObjectFit::Cover,
+            amazing_css::ObjectFitValue::None => ObjectFit::None,
+            amazing_css::ObjectFitValue::ScaleDown => ObjectFit::ScaleDown,
+            amazing_css::ObjectFitValue::CoverScaleDown => ObjectFit::CoverScaleDown,
         };
         let (x, y) =
             position(style.get("object-position").unwrap_or("50% 50%")).unwrap_or_default();
@@ -55,8 +51,15 @@ impl ImagePresentation {
     /// The concrete object rectangle. Caller clips it to the content box even
     /// for `overflow:visible`; positioning percentages use leftover space.
     pub fn destination(self, content: Rect, natural: (u32, u32)) -> Option<Rect> {
-        if natural.0 == 0
-            || natural.1 == 0
+        self.destination_with_natural_size(content, (natural.0 as f64, natural.1 as f64))
+    }
+
+    /// Density-corrected natural CSS dimensions; decoded sampling sizes remain
+    /// unchanged. Fractional source densities must not round the natural size.
+    pub fn destination_with_natural_size(self, content: Rect, natural: (f64, f64)) -> Option<Rect> {
+        if !natural.0.is_finite() || !natural.1.is_finite()
+            || natural.0 <= 0.0
+            || natural.1 <= 0.0
             || content.w <= 0.0
             || content.h <= 0.0
             || ![
@@ -74,7 +77,7 @@ impl ImagePresentation {
         {
             return None;
         }
-        let (nw, nh) = (natural.0 as f64, natural.1 as f64);
+        let (nw, nh) = natural;
         let (cw, ch) = (content.w as f64, content.h as f64);
         let contain = (cw / nw).min(ch / nh);
         let (w, h) = match self.fit {
@@ -86,6 +89,10 @@ impl ImagePresentation {
                 (nw * scale, nh * scale)
             }
             ObjectFit::ScaleDown => (nw * contain.min(1.0), nh * contain.min(1.0)),
+            ObjectFit::CoverScaleDown => {
+                let scale = (cw / nw).max(ch / nh).min(1.0);
+                (nw * scale, nh * scale)
+            }
         };
         let x = content.x as f64 + (cw - w) * self.x.fraction as f64 + self.x.offset as f64;
         let y = content.y as f64 + (ch - h) * self.y.fraction as f64 + self.y.offset as f64;
@@ -222,6 +229,7 @@ pub struct StyledImages<'a> {
     pub styles: &'a amazing_css::StyledDom,
 }
 impl crate::ImageProvider for StyledImages<'_> {
+    fn image_density(&self, node: amazing_dom::NodeIdx) -> f32 { self.images.image_density(node) }
     fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
         self.images.image(node)
     }
@@ -371,6 +379,28 @@ mod tests {
                     (2, 1)
                 )
                 .is_none());
+        }
+    }
+}
+
+#[cfg(test)]
+mod flagged_fit_controls {
+    use super::*;
+    #[test]
+    fn every_flag_spelling_uses_actual_presentation_and_distinct_geometry() {
+        let content=Rect{x:10.0,y:20.0,w:100.0,h:100.0};
+        for (names,fit,expected) in [
+            (["scale-down","contain scale-down","scale-down contain"],ObjectFit::ScaleDown,[(40.0,20.0),(100.0,50.0),(50.0,100.0)]),
+            (["cover scale-down","scale-down cover","COVER SCALE-DOWN"],ObjectFit::CoverScaleDown,[(40.0,20.0),(200.0,100.0),(100.0,200.0)]),
+        ] {
+            for name in names {
+                let style:ComputedStyle=[("object-fit".to_owned(),name.to_owned()),("object-position".to_owned(),"right 2px bottom 3px".to_owned())].into_iter().collect();
+                let presentation=ImagePresentation::from_style(&style);assert_eq!(presentation.fit,fit);
+                for (natural,(w,h)) in [(40,20),(400,200),(200,400)].into_iter().zip(expected) {
+                    let r=presentation.destination(content,natural).unwrap();
+                    assert_eq!((r.w,r.h),(w,h));assert_eq!((r.x,r.y),(content.x+100.0-w-2.0,content.y+100.0-h-3.0));
+                }
+            }
         }
     }
 }

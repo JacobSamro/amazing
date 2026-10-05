@@ -88,3 +88,6 @@ pub use parser::{
 pub use imports::{ImportRule, ImportLayer, SupportsCondition, LoadedStylesheet,
     ImportProjection, ImportProjectionError, ProjectedFontFace, project_imports, project_imports_with_media};
 #[cfg(test)] mod import_tests;
+
+mod image_policy;
+pub use image_policy::ObjectFitValue;
