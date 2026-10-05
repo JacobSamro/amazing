@@ -593,8 +593,8 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
             }
             return None;
         }
-        "object-fit" => {
-            return matches!(s, "fill" | "contain" | "cover" | "none" | "scale-down").then_some(V::Unparsed);
+        "object-fit" | "image-rendering" => {
+            return crate::image_policy::canonical(property,css).map(|_| V::Unparsed);
         }
         "object-position" | "transform-origin" | "perspective-origin" | "transform-box" => {
             return crate::computed::position_values::canonical(property,css).map(|_|V::Unparsed);
