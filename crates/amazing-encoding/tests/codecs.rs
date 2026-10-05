@@ -178,3 +178,37 @@ fn standard_exception_vectors() {
     assert_eq!(encode("あ\x1B", Encoding::Iso2022Jp, false).unwrap(),
         b"\x1B$B\x24\x22\x1B(B&#65533;");
 }
+
+#[test]
+fn iso2022_incomplete_escape_eof_restores_output_state() {
+    // Exercise each output state, both incomplete escape states, every chunk
+    // boundary, and both error modes. EOF must clear the consecutive-escape
+    // flag without changing the selected character set.
+    for selector in [b"(B", b"(J", b"(I", b"$B"] {
+        for incomplete in [b"\x1B".as_slice(), b"\x1B(".as_slice(), b"\x1B$".as_slice()] {
+            let input = [b"\x1B".as_slice(), selector.as_slice(), incomplete].concat();
+            for fatal in [false, true] {
+                for split in 0..=input.len() {
+                    let mut decoder = Decoder::new(Encoding::Iso2022Jp, fatal);
+                    let mut output = String::new();
+                    decoder.push(&input[..split], &mut output).unwrap();
+                    decoder.push(&input[split..], &mut output).unwrap();
+                    assert!(decoder.finish(&mut output).is_err() == fatal);
+                    // A fatal EOF can restore a byte which itself needs an EOF
+                    // error in JIS0208. Consume it before resuming the decoder.
+                    if fatal && decoder.buffered_input_bytes() != 0 {
+                        let _ = decoder.finish(&mut output);
+                    }
+                    assert_eq!(decoder.buffered_input_bytes(), 0);
+                    decoder.finish(&mut output).unwrap();
+                    output.clear();
+                    // No character occurred after the first valid escape, so
+                    // a stale output flag would reject this valid escape.
+                    decoder.push(b"\x1B(J\\", &mut output).unwrap();
+                    decoder.finish(&mut output).unwrap();
+                    assert_eq!(output, "¥", "selector{selector:?} incomplete{incomplete:?} fatal{fatal} split{split}");
+                }
+            }
+        }
+    }
+}

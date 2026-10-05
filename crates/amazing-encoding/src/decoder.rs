@@ -42,7 +42,12 @@ impl Decoder {
             if matches!(step, Step::Need) && final_input {
                 // UTF-16 EOF clears both the leading surrogate and leading
                 // byte together, producing one error even when both exist.
-                let n = if self.encoding == Encoding::Iso2022Jp { 1 }
+                let n = if self.encoding == Encoding::Iso2022Jp {
+                    // Escape start/escape EOF restores the output state and
+                    // clears the output flag, just like an invalid escape.
+                    self.iso_escape_output = false;
+                    1
+                }
                     else { self.pending.len() };
                 step = Step::Error(n);
             }
