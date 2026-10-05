@@ -1,0 +1,1 @@
+{"lane": "public-job-lifecycle-20261005", "pool": "public-job-lifecycle-20261005", "queried_at_epoch": 1791187559.7925959, "sandbox": {"archiveAfter": "2026-10-05T09:58:30.617Z", "health": "ok", "id": "bx_aceh97hz", "lastSnapshotStatus": "completed", "machineProvider": "baremetal", "memoryGB": 8, "state": "idle", "type": "default", "vcpu": 4}}
