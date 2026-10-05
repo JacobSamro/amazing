@@ -33,6 +33,8 @@
 //! assert!(dom.dump(amazing_dom::NodeIdx(0)).contains("<b>"));
 //! ```
 
+pub mod sandbox;
+pub mod link_rel;
 pub mod encoding;
 mod encoding_prescan;
 mod byte_stream;

@@ -1,0 +1,11 @@
+# Native HTML sandbox and link prerequisite
+
+Recorded source base: `a5a56a90e1fa507fa9babb56e6f64636b496f93f`. Qualified production source: `6de4be646a3aad33d933cf78d3af58b0203c8427` (ready squash preserves every production byte).
+
+Implements the complete sixteen-restriction sandbox parser, thirteen allowance keywords and creation-set union, exact UTF16/ASCII handling, and the existing nine link keywords/processing-trigger distinctions. Genuine existing driver script/origin sandbox checks now use typed restrictions; legacy IPC permission-bit semantics are preserved. Recognizing a relation is not a claim that its complete installed model exists. All nine installed models and remaining sandbox consumers are explicit follow-up contracts in questions.md.
+
+Whole matched Linux gate: workspace **5006 → 5012 passed**, 0 failures /17 skipped; docs **36 → 36**. All six new native groups passed. Original fourteen protected WPT cohorts plus whole link-element directory have **zero lost passing files or subtest-name multiplicities**; all per-file Counters are identical, and full native Counter gzip SHA is identical. Static trees **1930 → 1930**, scripted trees **1936 → 1936**, XMLTS **2377 inventory /1992 eligible /1864 passes /47 residual failures** unchanged. Exact counts, source/binary/raw hashes and compact classifications are in evidence/qualification.summary.json.
+
+Actual command/runner/storage exit **0/0/0** both sides; public compact fetch **0**. Initial fresh AFTER was rejected before engine for native capacity (32.19 GB < unchanged32.35 GB guard); its failure is preserved. The ONE clean fresh AFTER completed0. The published remote-reference tool authenticates original BEFORE metadata/profile while keeping its actual raw/ELFs on its original box, with no receiver-side ELF-readback claim. All **1003 BEFORE /1004 AFTER ELF files** retained and hash-read back on their actual native filesystems. Guard remains26 GiB build+2 GiB bootstrap+2 GiB reserve+128 MiB physical hardlink retention; no measured peak reduction, foreign cleanup, raw/ELF ferry or BEFORE rerun.
+
+Raw remains native, referenced by hash/path; root owns archival before stop. Engine integration still requires the integrator's pinned16-shard zero-loss Test262 gate. This ticket is the qualified native prerequisite, not full installed sandbox/nine-model completion.

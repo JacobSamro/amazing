@@ -1,0 +1,254 @@
+{
+  "schema": 1,
+  "base": "a5a56a90e1fa507fa9babb56e6f64636b496f93f",
+  "qualified_production_source": "6de4be646a3aad33d933cf78d3af58b0203c8427",
+  "tool_published_source": "e641e8229ef5faed6bad2d54192bb21b431fb7bd",
+  "scope": "Complete native sandbox/link parsing and trigger prerequisite, preserving legacy permission wire bits. Existing genuine driver script/origin checks use typed flags. Full installed nine relation models remain open.",
+  "native": {
+    "before": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 36
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 5006,
+        "skipped": 17
+      }
+    },
+    "after": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 36
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 5012,
+        "skipped": 17
+      }
+    },
+    "added_groups": 6
+  },
+  "zero_lost_passing_files": true,
+  "zero_lost_passing_multiplicities": true,
+  "zero_lost_XML_and_tree_ids": true,
+  "cohorts": {
+    "base-url": {
+      "after": 2,
+      "before": 2,
+      "files": 11
+    },
+    "core": {
+      "after": 93221,
+      "before": 93221,
+      "files": 888
+    },
+    "cssom": {
+      "after": 1772,
+      "before": 1772,
+      "files": 192
+    },
+    "encoding": {
+      "after": 12357,
+      "before": 12357,
+      "files": 194
+    },
+    "link-elements": {
+      "after": 1,
+      "before": 1,
+      "files": 21
+    },
+    "modules": {
+      "after": 145,
+      "before": 145,
+      "files": 111
+    },
+    "shadow": {
+      "after": 5681,
+      "before": 5681,
+      "files": 277
+    },
+    "syntax": {
+      "after": 3216,
+      "before": 3216,
+      "files": 220
+    },
+    "syntax72": {
+      "after": 2708,
+      "before": 2708,
+      "files": 72
+    },
+    "the-base-element": {
+      "after": 15,
+      "before": 15,
+      "files": 11
+    },
+    "the-history-interface": {
+      "after": 13,
+      "before": 13,
+      "files": 74
+    },
+    "the-iframe-element": {
+      "after": 28,
+      "before": 28,
+      "files": 150
+    },
+    "the-window-object": {
+      "after": 253,
+      "before": 253,
+      "files": 90
+    },
+    "the-windowproxy-exotic-object": {
+      "after": 14,
+      "before": 14,
+      "files": 8
+    },
+    "windows": {
+      "after": 4,
+      "before": 4,
+      "files": 53
+    }
+  },
+  "static_trees": {
+    "before": 1930,
+    "after": 1930
+  },
+  "scripted_trees": {
+    "before": 1936,
+    "after": 1936
+  },
+  "XMLTS": {
+    "inventory": 2377,
+    "eligible": 1992,
+    "before_passed": 1864,
+    "after_passed": 1864,
+    "residual_failures": 47
+  },
+  "binary_before": "2fc21a1849b13d7df6e98a237eb547770e95c63e972f329db95ed9c10f96730f",
+  "binary_after": "69ac34b48612cfcde202c973cf46a6bffc86923ba44848787a3808071ffb7208",
+  "native_counter_raw": {
+    "bytes": 4535290,
+    "path": "/tmp/amazing-sandbox-link-output/html-sandbox-link-native-20261006/sandbox-link-before-a5a56a90/raw/wpt-counter-records.raw.json.gz",
+    "sha256": "bc2ecf16d38aa76ddfe0bd2923c4a1ba7421a949ccfb5f58a623ff910c6126dc",
+    "same_after_sha256": "bc2ecf16d38aa76ddfe0bd2923c4a1ba7421a949ccfb5f58a623ff910c6126dc",
+    "after_path": "/tmp/amazing-sandbox-link-output/html-sandbox-link-after-clean-20261006/sandbox-link-after-clean-6de4be64/raw/wpt-counter-records.raw.json.gz"
+  },
+  "before_job": {
+    "schema": 2,
+    "lane": "html-sandbox-link-native-20261006",
+    "source_commit": "a5a56a90e1fa507fa9babb56e6f64636b496f93f",
+    "box_id": "bx_zbzscxub",
+    "host": "user@217.182.194.181",
+    "port": 19042,
+    "job_id": "b7dc22df99f94d7796dbe8106c09d047",
+    "output_root": "amazing/out/html-sandbox-link-native-20261006/html-sandbox-link-native-20261006/before",
+    "command_sha256": "a93a4e9fe2c5d7a6724841dc686a579999687b1c72ee6155eb002dbc2e24a8ac",
+    "execution_sha256": "16e4e6250e53cf86fa9f1308916e7ad244dc30f5b9388f19ae674b50a948c683",
+    "source_archive_sha256": "4636f05c79b74d17370e654ece2c70273a03806b204d0f2643631d84fefa36b0"
+  },
+  "after_job": {
+    "schema": 2,
+    "lane": "html-sandbox-link-after-clean-20261006",
+    "source_commit": "6de4be646a3aad33d933cf78d3af58b0203c8427",
+    "box_id": "bx_3wbx4yy2",
+    "host": "user@213.32.27.19",
+    "port": 19046,
+    "job_id": "491b2ff316444f2aaa51c9fcde798c24",
+    "output_root": "amazing/out/html-sandbox-link-after-clean-20261006/html-sandbox-link-after-clean-20261006/after",
+    "command_sha256": "3ecde53197839e9f3f85c71cecee37ad1b6b622c9cc701946929646c5f0dfa06",
+    "execution_sha256": "5a74e128b1e7041eae386203ff0dab2fde1b91bc0062860b5a2c31df448020cc",
+    "source_archive_sha256": "a77eafa5a84f597b06b398d64fe7529bd73fc8925823cd059153ca1790959b08"
+  },
+  "before_actual_exit": 0,
+  "after_actual_exit": 0,
+  "compact_fetch_exit": 0,
+  "all_ELF_retention": {
+    "before": {
+      "elf_count": 1003,
+      "manifest": {
+        "bytes": 460958,
+        "path": "/tmp/amazing-sandbox-link-output/html-sandbox-link-native-20261006/sandbox-link-before-a5a56a90/retained/manifests/sandbox-link-before-a5a56a90.json",
+        "sha256": "002f398cad49796361b8eefe1f8dbad95a46be077f008d7b0e85fc068b070309"
+      }
+    },
+    "after": {
+      "elf_count": 1004,
+      "manifest": {
+        "bytes": 471683,
+        "path": "/tmp/amazing-sandbox-link-output/html-sandbox-link-after-clean-20261006/sandbox-link-after-clean-6de4be64/retained/manifests/sandbox-link-after-clean-6de4be64.json",
+        "sha256": "a30edf372b24331b2a3696bdb5584e37bea887afdcffb1122439de2601b1f0d5"
+      }
+    },
+    "original_BEFORE_payload": "original box; remote reference is metadata-only, no receiver-side readback or ELF ferry",
+    "raw_retention": "native original boxes, root archival before stop"
+  },
+  "tool_failure": "Initial AFTER capacity3 before engine; unchanged ONE clean AFTER completed0. Original failure preserved.",
+  "guard_bytes": 32346472448,
+  "build_peak_budget_bytes": 27917287424,
+  "physical_retention_budget_bytes": 134217728,
+  "evidence_files": {
+    "original-before-reference.compact.json": {
+      "bytes": 7463,
+      "sha256": "7adc05bb1b0063df62ec1860e402417a29cb737205ff9752030eac5313b15129"
+    },
+    "initial-after-failure.summary.json": {
+      "bytes": 610,
+      "sha256": "0c4757f2ca911a85c1b51797b18a0623fe98b5bd8e29c8240da8c4daa1295a4c"
+    },
+    "before/xmlts.compact.json": {
+      "bytes": 193643,
+      "sha256": "4a7117d551c37c4e9d79ec1ae764189d0a35b0e360a4e66ab929532ed4bf8eab"
+    },
+    "before/wpt.compact.json": {
+      "bytes": 97840,
+      "sha256": "be7e0085cf4f374540a1a696a580b542a66d2036115181c79559752aab65c886"
+    },
+    "before/executed-trees.compact.json": {
+      "bytes": 89361,
+      "sha256": "c0cedfc5bad102593cd2d16b256021f094391d203080d915faaf9a9501d5bef7"
+    },
+    "before/trees.summary.json": {
+      "bytes": 45076,
+      "sha256": "39bf530cb1f7cda352bc76e4f8ee6e59c6a91d55b870f750c1b47866b4501d89"
+    },
+    "before/storage.summary.json": {
+      "bytes": 2333,
+      "sha256": "3af0af77d0b6f6ba73ffeb9b6f05697b25b7619110a256387046aeed257f104f"
+    },
+    "before/gate.manifest.json": {
+      "bytes": 3804,
+      "sha256": "ad01d4945df3e4cf005a10ac4a4cb6a488b095dc0b3a1c4d3aee29b77d26464b"
+    },
+    "after/xmlts.compact.json": {
+      "bytes": 193653,
+      "sha256": "de5c89dc905422c46463858df20c9702a0fa881281b01cd12829cc46471ca8c5"
+    },
+    "after/wpt.compact.json": {
+      "bytes": 97999,
+      "sha256": "b21787b9cbaa562ad646c88cae185445fe1d3d2e79988fe1be3b5e03e6893630"
+    },
+    "after/executed-trees.compact.json": {
+      "bytes": 89361,
+      "sha256": "c0cedfc5bad102593cd2d16b256021f094391d203080d915faaf9a9501d5bef7"
+    },
+    "after/trees.summary.json": {
+      "bytes": 45086,
+      "sha256": "38445c76713df11dbefaa09df518ee015666c97fd2944fa93e9dfd57d20488e8"
+    },
+    "after/comparison.summary.json": {
+      "bytes": 2556,
+      "sha256": "692f8546b464af4dd6330db59d7c16a7e7f84933123f60b89936c46e75312459"
+    },
+    "after/storage.summary.json": {
+      "bytes": 4109,
+      "sha256": "e31fe808ad894837e5d1ae38f57d613e6d21bcdf6329050a393038c64cc50d22"
+    },
+    "after/gate.manifest.json": {
+      "bytes": 3815,
+      "sha256": "841428eefdc508e51a26d37461788f52c7f0f03d0f37c58a4277f55a9430cb6f"
+    }
+  },
+  "evidence_bytes_before_summary": 876709
+}

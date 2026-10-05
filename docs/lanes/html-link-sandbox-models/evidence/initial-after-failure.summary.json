@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "phase": "initial-after",
+  "source": "6de4be646a3aad33d933cf78d3af58b0203c8427",
+  "shell_owner": 76689,
+  "box": "bx_4dxyk854",
+  "job": "f22d678402944593981c7462619865b2",
+  "actual_exit": 3,
+  "runner_exit": 3,
+  "engine_started": false,
+  "available_bytes": 32185212928,
+  "required_bytes": 32346472448,
+  "reason": "Native capacity admission rejection before engine",
+  "native_diagnostic": {
+    "path": "/tmp/amazing-job-f22d678402944593981c7462619865b2-_kjrj271/command.log",
+    "bytes": 1321,
+    "sha256": "f20ffe09f85177d55d46742ac10b42d2df4230ca4d5335d21e69af3ef6331f53"
+  }
+}

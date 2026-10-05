@@ -5,6 +5,9 @@
 //! wraps the same Document/Element prototypes as the top realm rather than a
 //! fully independent intrinsic set.
 use super::*;
+#[path = "runtime_host_html_sandbox.rs"]
+mod sandbox;
+use sandbox::{SandboxFlags, parse_sandbox};
 #[path = "runtime_host_html_fragment_scripts.rs"]
 mod fragment_scripts;
 #[path = "runtime_host_html/document_write.rs"]
@@ -95,42 +98,6 @@ struct HtmlNavigation {
     source: NavigationSource,
 }
 
-/// The `sandbox` attribute's recognized tokens, ASCII-case-insensitive and
-/// space-separated. Absent attribute means not sandboxed at all (full
-/// access, matching an ordinary same-origin child). Tokens this driver does
-/// not otherwise enforce (`allow-forms`, `allow-popups`,
-/// `allow-top-navigation`, ...) are accepted but currently no-ops, since the
-/// features they'd gate (form-target navigation restrictions, popups,
-/// top-level navigation from a child) either don't exist yet or aren't
-/// enforced here; see docs/lanes/html_TODO.md.
-#[derive(Clone, Copy, Default)]
-pub(crate) struct SandboxFlags {
-    pub(crate) sandboxed: bool,
-    pub(crate) allow_scripts: bool,
-    pub(crate) allow_same_origin: bool,
-}
-
-fn parse_sandbox(attr: Option<&str>) -> SandboxFlags {
-    let Some(attr) = attr else { return SandboxFlags::default() };
-    let mut flags = SandboxFlags { sandboxed: true, allow_scripts: false, allow_same_origin: false };
-    for token in attr.split_ascii_whitespace() {
-        match token.to_ascii_lowercase().as_str() {
-            "allow-scripts" => flags.allow_scripts = true,
-            "allow-same-origin" => flags.allow_same_origin = true,
-            _ => {}
-        }
-    }
-    flags
-}
-
-/// Bits 0-2 of `NavigableContext::sandbox_flags`; amazing-fetch only checks
-/// that the field fits in 16 bits (frame-embedding plumbing owned by the
-/// `net` lane), so this driver-local encoding is ours to define.
-impl SandboxFlags {
-    fn to_bits(self) -> u32 {
-        (self.sandboxed as u32) | (self.allow_scripts as u32) << 1 | (self.allow_same_origin as u32) << 2
-    }
-}
 
 #[derive(Default)]
 pub(super) struct FrameRuntime {
@@ -687,7 +654,7 @@ impl RuntimeBindings {
             Some((realm, context)) => context_origin(js, context, *realm)?,
             None => "null".into(),
         };
-        let origin = if sandbox.sandboxed && !sandbox.allow_same_origin {
+        let origin = if sandbox.origin_restricted() {
             let mut state = self.state.borrow_mut();
             state.frames.opaque_origin_counter += 1;
             format!("null (sandboxed #{})", state.frames.opaque_origin_counter)
@@ -700,7 +667,7 @@ impl RuntimeBindings {
         };
         let inherits = ParsedUrl::parse(child_url).is_ok_and(|url| matches_about_url(&url, "blank")
             || (matches_about_url(&url, "srcdoc") && url.query().is_none()));
-        let fetch_origin = if sandbox.sandboxed && !sandbox.allow_same_origin {
+        let fetch_origin = if sandbox.origin_restricted() {
             amazing_fetch::Origin::opaque()
         } else if inherits {
             initiator.map(|source| source.fetch_origin.clone()).or_else(|| parent_context.as_ref()
@@ -840,7 +807,7 @@ impl RuntimeBindings {
     fn frame_encoding_fallback(&self, frame: NodeIdx, final_url: &str, sandbox: SandboxFlags)
         -> amazing_encoding::Encoding {
         use amazing_encoding::Encoding;
-        if sandbox.sandboxed && !sandbox.allow_same_origin { return Encoding::Windows1252; }
+        if sandbox.origin_restricted() { return Encoding::Windows1252; }
         // The final remote navigation URL determines its nonsandboxed origin,
         // exactly as ensure_realm does when committing the actual Document.
         let Ok(url) = HttpUrl::parse(final_url) else { return Encoding::Windows1252; };
@@ -881,7 +848,7 @@ impl RuntimeBindings {
                     .then(|| (node,
                         host.dom.get_attribute_ns(node, None, "src").map(str::to_owned),
                         host.dom.get_attribute_ns(node, None, "srcdoc").map(str::to_owned),
-                        parse_sandbox(host.dom.get_attribute_ns(node, None, "sandbox"))))
+                        parse_sandbox(host.dom.attribute_ns_utf16(node, None, "sandbox").as_deref())))
             }).collect::<Vec<_>>()
         };
         let connected: HashSet<_> = candidates.iter().map(|(node, ..)| *node).collect();
@@ -1093,7 +1060,7 @@ impl RuntimeBindings {
             if let Some(document) = document {
                 // Scripting belongs to the browsing context, including
                 // XML/XHTML and the synchronous initial about:blank document.
-                let enabled = !(sandbox.sandboxed && !sandbox.allow_scripts);
+                let enabled = !(sandbox.scripts_restricted());
                 let _ = host.borrow_mut().dom.set_document_scripting_enabled(document, enabled);
                 // Navigation-created documents permit DSD regardless of sandbox scripting.
                 let _ = host.borrow_mut().dom.set_document_allows_declarative_shadow_roots(document, true);
@@ -1234,7 +1201,7 @@ impl RuntimeBindings {
             // stashed source, and `run_interleaved_iframe_parse` builds its
             // tree regardless, only skipping script execution itself.)
             (|| -> Result<(), Throw> {
-                if sandbox.sandboxed && !sandbox.allow_scripts { return Ok(()); }
+                if sandbox.scripts_restricted() { return Ok(()); }
                 let scripts = {
                     let state = state.borrow();
                     let host = state.host.borrow();
@@ -1278,7 +1245,7 @@ impl RuntimeBindings {
             })()
         };
         let result = result.and_then(|()| {
-            if sandbox.sandboxed && !sandbox.allow_scripts { return Ok(()); }
+            if sandbox.scripts_restricted() { return Ok(()); }
             let handlers = {
                 let state = state.borrow();
                 let host = state.host.borrow();
@@ -1322,7 +1289,7 @@ impl RuntimeBindings {
         let state = self.state.clone();
         let host = state.borrow().host.clone();
         let resolver = state.borrow().frames.resolver.clone();
-        let can_run_scripts = !(sandbox.sandboxed && !sandbox.allow_scripts);
+        let can_run_scripts = !(sandbox.scripts_restricted());
         let import = amazing_dom::markup::IncrementalDocumentImport::new(document);
         let mut parser = amazing_html::ResumableParser::new(Dom::new());
         let allow_shadow_roots = host.borrow().dom.document_allows_declarative_shadow_roots(document)
