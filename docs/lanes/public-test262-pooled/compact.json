@@ -1,0 +1,1258 @@
+{
+  "schema": 1,
+  "scope": "Pure public tooling qualification ONLY; original runner against synthetic protocol-host fixture is not engine conformance",
+  "recorded_origin_dev_base": "fd87ab4c5467af81758ea59cff179863ffdde6f4",
+  "qualified_source": "9b0e43d662c799d8d599784505a1c362ee63625c",
+  "profile": "default4vCPU/8GB finiteRUN_TTL7200; supported ensure may renew finite TTL; no lifecycle changes",
+  "behavior": "Optional --boxes placement; default16-box backend unchanged. 4 nativeboxes each upload/build once, run4 originalshards sequentially; all16 IDs preserved, jobs4/timeout60 unchanged. Only compact/phase/poolmetadata in HOME capturedOUT; raw results/logs native/tmp. Existing public merger retains zeroLost files/variants/source/runner/host/input/disjoint16 ownership checks.",
+  "qualified_public_sha256": {
+    "scripts/test262-boat.sh": "fcbfaee2b601d8085b4569542ab9c531d71be5c0ced3a610a999c4e7a5f38272",
+    "scripts/test262-pooled.py": "e382284b365f3c1ad98894c97448da30b1283c86f5d67215d1bdbfcf2acb6355",
+    "scripts/test262-pool-native.py": "254c9239a43c9b02c7ea6d51f29024dc2a1a48f2bc5f1e9e36fd61585c76b1a6",
+    "scripts/test262-pooled-tests.py": "f0b804dd199ccebda35aa33458914752fe64611ff2f74687eb9ab476306bc181"
+  },
+  "endpoint": {
+    "schema": 2,
+    "lane": "public-test262-pooled-controls-clean1-20261005",
+    "source_commit": "9b0e43d662c799d8d599784505a1c362ee63625c",
+    "box_id": "bx_pah7hnkr",
+    "host": "user@5.135.136.206",
+    "port": 19033,
+    "job_id": "c4543bce1eb24c1793dc83c4c94d5fa6",
+    "output_root": "amazing/out/public-test262-pooled-controls-clean1-20261005/qualification-9b0e",
+    "command_sha256": "706070d5839ac074668bbed166eb0da313df62a614ae760eb49d2af66ec19509",
+    "execution_sha256": "dffd338cf3138fcca37eaee5f49d0a80a9bf0af35bfe4c6f8a2fd51ba94a71db",
+    "source_archive_sha256": "3fc59e2bac646aaf1bd23c7078d593fc6afe5893f487d61e3ed8ab67fc4d22a9"
+  },
+  "qualification_compact": {
+    "bytes": 42293,
+    "sha256": "45935299ef368996cecf9e7cfdec19c22823c65e08a052961aa04fa9f1fbe72c"
+  },
+  "actual_exit": 0,
+  "runner_exit": 0,
+  "compact_fetch_exit": 0,
+  "raw": {
+    "path": "/tmp/amazing-job-c4543bce1eb24c1793dc83c4c94d5fa6-554cfqty/command.log",
+    "bytes": 115300,
+    "sha256": "e1f21ba4d0dd5a5b29ac1fb89fa4131ccce667cc2da4a978fcd2a3e97a60b743"
+  },
+  "source_packet": {
+    "source_commit": "9b0e43d662c799d8d599784505a1c362ee63625c",
+    "archive_bytes": 42122105,
+    "archive_sha256": "3fc59e2bac646aaf1bd23c7078d593fc6afe5893f487d61e3ed8ab67fc4d22a9",
+    "archive_mtime_ns": 1791219588490876528,
+    "started_ns": 1791219594484825000,
+    "finished_ns": 1791219682359636000,
+    "actual_exit": 0,
+    "runner_exit": 0,
+    "ready": true,
+    "receiver": {
+      "schema": 1,
+      "actual_exit": 0,
+      "source_commit": "9b0e43d662c799d8d599784505a1c362ee63625c",
+      "archive_bytes": 42122105,
+      "archive_sha256": "3fc59e2bac646aaf1bd23c7078d593fc6afe5893f487d61e3ed8ab67fc4d22a9",
+      "native_packet": "/tmp/amazing-source-transport-public-test262-pooled-controls-clean1-20261005.34536/source.tar.gz",
+      "native_device": 64769,
+      "admitted_free_bytes": 32457646080,
+      "published": true
+    }
+  },
+  "controls": {
+    "schema": 1,
+    "scope": "tooling controls only; synthetic protocol producer is not JS engine qualification",
+    "actual_exit": 0,
+    "expected_controls": 45,
+    "executed_controls": 45,
+    "failures": [],
+    "errors": [],
+    "skipped": [],
+    "started_ns": 1791219691756858391,
+    "finished_ns": 1791219705767988743,
+    "public_suite_sha256": {
+      "test262-pooled-tests.py": "f0b804dd199ccebda35aa33458914752fe64611ff2f74687eb9ab476306bc181",
+      "native-input-tests.py": "c5728116763f828e9c98ca0c1f4f1c24f9f6e6f6db6615277b56703c0cf170e8",
+      "source-upload-tests.py": "926b10f82ce64fdd69f1989455d7e7d2e7075b7d66b9d8b3141066f47828f89b",
+      "test262-job-state-tests.py": "f7bb3efd435d3dac2881ee75eb78dd350ff8bfd5fed43d4de820f72894cdbce6"
+    },
+    "native_phase_witnesses": [
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/0/compact/build.phase.manifest.json",
+        "sha256": "1d30892277098a0a6c899aeec04f498cdb36f4b5562e34aa9d96bb201db053d7",
+        "phase": "build",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-11ei61ho/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/0/compact/shard-0-packaging.phase.manifest.json",
+        "sha256": "c5a6c9f5e89fe3f75c4a1fccbdf72e2ab399f9376e959895a2eb47cc297d4992",
+        "phase": "shard-0-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-qp2esos_/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/0/compact/shard-0-runner.phase.manifest.json",
+        "sha256": "2bd5ba1e7aaba5842b3bd2343c052e684a3ea6d4b1ca50d307a77879680c5822",
+        "phase": "shard-0-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-6j9g6min/output.log",
+          "bytes": 1470,
+          "sha256": "629ed6574a94fa4ce99a1bc01b3d91b5d8d912726db1a4ccb4ef613ceef2e7a8"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/0/compact/shard-12-packaging.phase.manifest.json",
+        "sha256": "fadb1596de1b157eee2668cd4014eefd9da838b744672820f46cdab7dcd25d6f",
+        "phase": "shard-12-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-xdypn86h/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/0/compact/shard-12-runner.phase.manifest.json",
+        "sha256": "570464486edcb75eedeae5af49ab54ab19783a4e819552f10cc55d0c3906db63",
+        "phase": "shard-12-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-wgchh_by/output.log",
+          "bytes": 1471,
+          "sha256": "601dbe7a6231d5a62947bb6c0d616c685824c49e427e72f749e298d8633e0a5c"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/0/compact/shard-4-packaging.phase.manifest.json",
+        "sha256": "e80e069c1746ac2e3eb4183d211769b186812e01e408fc23eaf8c2bfb5ab739d",
+        "phase": "shard-4-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-dmh9b6_e/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/0/compact/shard-4-runner.phase.manifest.json",
+        "sha256": "c50881fdebb16a7a86b545b08b77a40693a86bf9aa50c4e55b1024edb9528ce6",
+        "phase": "shard-4-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-vp7gs_ej/output.log",
+          "bytes": 1470,
+          "sha256": "8d298c6527e56a2543c7f12108802b07f07e34a93cce24a64348dc9a2544b573"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/0/compact/shard-8-packaging.phase.manifest.json",
+        "sha256": "764ebe5a3eeff7f17f0cbad62b70371c7efa953de832124098deb4f9e68a06b9",
+        "phase": "shard-8-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-_9dyfywv/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/0/compact/shard-8-runner.phase.manifest.json",
+        "sha256": "9561f32a1865772394ff2fa646e41146d97c7b006ec051ebec7b60340392c502",
+        "phase": "shard-8-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-yoisu765/output.log",
+          "bytes": 1470,
+          "sha256": "464b5b0f335652a7a32d02d83c4a30181a247a13cc8582075b2126b0fe4e3472"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/1/compact/build.phase.manifest.json",
+        "sha256": "b65403ca16bfd90dae379bbe749a82b63684a3d0989ec1eb422691e1ba3e055a",
+        "phase": "build",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-_1bfbg_w/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/1/compact/shard-1-packaging.phase.manifest.json",
+        "sha256": "ce5b481de58bb492206ea0676a0bea50d710548a343a880092a2f88f620c72bc",
+        "phase": "shard-1-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-wwb5o6pu/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/1/compact/shard-1-runner.phase.manifest.json",
+        "sha256": "d7028de428b93408e32cd5c1dda78247234cc28253862fd85596bc8529c6cdbd",
+        "phase": "shard-1-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-y1v4a082/output.log",
+          "bytes": 1470,
+          "sha256": "3f0401023eee4655284005477d4f0c070cd07bbf408f075a4a3b4baa131d394b"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/1/compact/shard-13-packaging.phase.manifest.json",
+        "sha256": "581624b88ce707883da5dc7d446f2982a47475b61155db14e3768970fbe1984e",
+        "phase": "shard-13-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-r5bmrmar/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/1/compact/shard-13-runner.phase.manifest.json",
+        "sha256": "737d5cc55390d9e5183e13a19c76219ea985e21539ccf51efd715a843360036d",
+        "phase": "shard-13-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-dlas9cbo/output.log",
+          "bytes": 1471,
+          "sha256": "3abeee6c31d53511ba04968b5e152a635dc57cb53c2bd26096ada30839290940"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/1/compact/shard-5-packaging.phase.manifest.json",
+        "sha256": "32858b8c0ca00558b037071a57a19e6a619405abf77fbe79332a5116258e4eed",
+        "phase": "shard-5-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-6m00e8uh/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/1/compact/shard-5-runner.phase.manifest.json",
+        "sha256": "6834a3570f2a87d038bf09be80ca86538003528f1b2b31732e1020e7e98547e0",
+        "phase": "shard-5-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-pb88t570/output.log",
+          "bytes": 1470,
+          "sha256": "d9fd8d9b9225bcf6363fbf7926c272b942e2c8b98fa82de36122cfe67143f728"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/1/compact/shard-9-packaging.phase.manifest.json",
+        "sha256": "7c3dd5ebf6558880f4f66307012c66f1558df9013aabe33452d438baaabab9bc",
+        "phase": "shard-9-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-298b8_3l/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/1/compact/shard-9-runner.phase.manifest.json",
+        "sha256": "a4329637f090e28df0e6b6fe72c0c6ba10b6be5a381283ba5ab69dffa0d6d1c3",
+        "phase": "shard-9-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-rb018deg/output.log",
+          "bytes": 1470,
+          "sha256": "ef5f10f5a3e43cc3813811bd54c752d4db4e62d5f68b538e9a29ef27f8713010"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/2/compact/build.phase.manifest.json",
+        "sha256": "31ddc24874f377f975891bc8d99015879c162c625ae70f22af077368592c1df9",
+        "phase": "build",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-3ega2n5k/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/2/compact/shard-10-packaging.phase.manifest.json",
+        "sha256": "68083dff1d5671fc6fff34bcf9f93d9b9d877da7332346482e6ab9ec5f88de4e",
+        "phase": "shard-10-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-op9ithlr/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/2/compact/shard-10-runner.phase.manifest.json",
+        "sha256": "7e78e822d651db2cb24327917e216ce0a5365cf4bb2759b061800235d107e5b4",
+        "phase": "shard-10-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-2tnj8zl8/output.log",
+          "bytes": 1471,
+          "sha256": "57e01c4d991765922e3e8f0e9ce4625651817f12ca2456b4821121a43a2c741b"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/2/compact/shard-14-packaging.phase.manifest.json",
+        "sha256": "4b454447d4853392f2c8cd155ed71594a69c919ea8bc1d29140013a294b23558",
+        "phase": "shard-14-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-m1n58o4i/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/2/compact/shard-14-runner.phase.manifest.json",
+        "sha256": "bb784d0795b9e7b485f3e6b1445ebcbfd5980721deda58f4dd8dbc405e81b07d",
+        "phase": "shard-14-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-523j22nx/output.log",
+          "bytes": 1471,
+          "sha256": "08eb75d9641a36a1d5f531cb11115b567921fcb110c0f4d87b399bb5d91a964a"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/2/compact/shard-2-packaging.phase.manifest.json",
+        "sha256": "7de02c70e66110cdeca6d5f57a2bce87854a83cedeedea5558bf0fe6d1858682",
+        "phase": "shard-2-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-q8ujk77d/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/2/compact/shard-2-runner.phase.manifest.json",
+        "sha256": "f4a7bd9ef1b854f2b014cc8861213f6237e0be2562b4edb7db142d10bc1ac074",
+        "phase": "shard-2-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-n_okgcv3/output.log",
+          "bytes": 1470,
+          "sha256": "a0771b7192a8e343ab706567f2a57b810dc1ea9afe991a4bd3afa587968a6c64"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/2/compact/shard-6-packaging.phase.manifest.json",
+        "sha256": "b2e7b05ea4ecff58aec1aa1b2fc8ca40a2686d8793e10ec0235f67950522af07",
+        "phase": "shard-6-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-tlb508gh/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/2/compact/shard-6-runner.phase.manifest.json",
+        "sha256": "35cba9bbff30ecee7502f3e294bac80b53531c04700375a7ce32100e988ee187",
+        "phase": "shard-6-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-8k8u1t_h/output.log",
+          "bytes": 1469,
+          "sha256": "024f2a117f28a6c69b2728ff16a9c6ddc6aaf624ffd0fe1c659c58e26b465b07"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/3/compact/build.phase.manifest.json",
+        "sha256": "fadde46739f0d9da3f7ee833c2f94043d15cea9192f2fd9f27567ef110b9e7c8",
+        "phase": "build",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-udxuqg_m/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/3/compact/shard-11-packaging.phase.manifest.json",
+        "sha256": "ef0d1f76601d84ef2a02e74d20d989c954c7bea707d017c6cab7d5134bb0def4",
+        "phase": "shard-11-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-w2fzotsi/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/3/compact/shard-11-runner.phase.manifest.json",
+        "sha256": "d1325827bf8b7e9c2ff4231a933afb55d7fb728df944d7e7e8339d2e94610fcc",
+        "phase": "shard-11-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-wddxx_7f/output.log",
+          "bytes": 1471,
+          "sha256": "78c251f7d013fd12c61592e9d987698b0d0be0c707561f181ce3fd664282f94b"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/3/compact/shard-15-packaging.phase.manifest.json",
+        "sha256": "f53959b2c21f9481334305f009acf60508096ffa2555d23205e873614a91b9df",
+        "phase": "shard-15-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-sa1iphsi/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/3/compact/shard-15-runner.phase.manifest.json",
+        "sha256": "3e611d0920b67aedbedaa6368f5ae932407b1d58090ab409c102a5d886e47a2c",
+        "phase": "shard-15-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-etktlp43/output.log",
+          "bytes": 1471,
+          "sha256": "9cc9688c93e564df91d7e7984fdecbfa66049372c896665fadfa2f7373bfb8f8"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/3/compact/shard-3-packaging.phase.manifest.json",
+        "sha256": "d803f3d536d89b9d0cd7d837b8421b3e68974a6cc3c770de84c8a6aad1f8b4f5",
+        "phase": "shard-3-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-ycanpsj4/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/3/compact/shard-3-runner.phase.manifest.json",
+        "sha256": "9c4150c513aa3013404648c47dfcdd655f8d9ec5491770126970414922bba3c3",
+        "phase": "shard-3-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-osndhdk2/output.log",
+          "bytes": 1469,
+          "sha256": "72c17b0c27ab6fb4d3de9ea50576fd526435e4367c0e92e2df76155f32b71c49"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/3/compact/shard-7-packaging.phase.manifest.json",
+        "sha256": "1929688cea46a4d6d70f6c8d99e1b564358a670aa07a6e35231ab1cced93721f",
+        "phase": "shard-7-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-kziysj_g/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/before/3/compact/shard-7-runner.phase.manifest.json",
+        "sha256": "029b12791a3fba095c7c69207fb2073325b655707d20a771d9e98b8e66e82429",
+        "phase": "shard-7-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-09fvkb89/output.log",
+          "bytes": 1470,
+          "sha256": "20c84b7d82bdae649344cf40c58a22f8e98e285af1b9a2c428e91c08680fa180"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/build-fail/compact/build.phase.manifest.json",
+        "sha256": "5f1b026a63ea347f0ef40c069ba741d877d7e22c5714ffccf9f4d298c1c65be2",
+        "phase": "build",
+        "engine_exit": 101,
+        "wrapper_exit": 101,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-crreh3_h/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/0/compact/build.phase.manifest.json",
+        "sha256": "babd90c1f492ba1a1683b8396db3286f3a46a91c745f4496d120bfe7e759a270",
+        "phase": "build",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-6ow6qzxp/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/0/compact/shard-0-packaging.phase.manifest.json",
+        "sha256": "10a6edf9d3ead0de88ba1c89d433b0ad576670d6a976519c8f5dc09045ecfe2c",
+        "phase": "shard-0-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-f_u6p70i/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/0/compact/shard-0-runner.phase.manifest.json",
+        "sha256": "3585b0da2248165a9d072eac88e26884b443e4660b4770baad18df43ecf40ef1",
+        "phase": "shard-0-runner",
+        "engine_exit": 1,
+        "wrapper_exit": 1,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-jmid_o7t/output.log",
+          "bytes": 1516,
+          "sha256": "366cf1739feda7ac13b1b1122b1589a941e8023a780a5a1dccb1c41ec7008cf2"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/0/compact/shard-12-packaging.phase.manifest.json",
+        "sha256": "e78a5ebfbb371baa649f399ee145ae1fb81f682a50889401d3ad299a2162b5ad",
+        "phase": "shard-12-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-c09h3tr8/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/0/compact/shard-12-runner.phase.manifest.json",
+        "sha256": "bd1e0764a7710a63d39ec3e6846d130c096785f17b03e56a07569968d2f8d06b",
+        "phase": "shard-12-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-wuy86uco/output.log",
+          "bytes": 1471,
+          "sha256": "601dbe7a6231d5a62947bb6c0d616c685824c49e427e72f749e298d8633e0a5c"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/0/compact/shard-4-packaging.phase.manifest.json",
+        "sha256": "6e7fbaa98c635f967f9502b85150c39fd3ba003c64688237cef3a12ea0b19aaa",
+        "phase": "shard-4-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-simybju4/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/0/compact/shard-4-runner.phase.manifest.json",
+        "sha256": "1fa8d7f5fb020110026b66f3dfe592d1e5e2df3e8873e63af6987f849dd4aa69",
+        "phase": "shard-4-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-fg3nq9n_/output.log",
+          "bytes": 1470,
+          "sha256": "ea767bfc5788f5d9e85b529bd9ab4a28f351f10492e80579761000888600fe29"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/0/compact/shard-8-packaging.phase.manifest.json",
+        "sha256": "d7b8addf0650b2600ce21b5d213ef9e8baca865ea8fd487c3a8921e33b0733fa",
+        "phase": "shard-8-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-vkm5hq7w/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/0/compact/shard-8-runner.phase.manifest.json",
+        "sha256": "ea901428d3e8f35315a9c2d38f0fbd2a9bcab2de6944aaddd051334a9decab78",
+        "phase": "shard-8-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-f8oe4j99/output.log",
+          "bytes": 1470,
+          "sha256": "799e2237b131c887eb948bcb0dbfcec1c26d18e7b61422c0f062abcbea43c7b2"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/1/compact/build.phase.manifest.json",
+        "sha256": "0fde2c712e59279832de27cc9910c5badd2003299ae8beaf65daa5b412a4d6b1",
+        "phase": "build",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-822zal6j/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/1/compact/shard-1-packaging.phase.manifest.json",
+        "sha256": "e0774c190f7575d2a2f4b6d54e1bb27c8e0f4a32f7fbfe3ad26abdf34f857ebd",
+        "phase": "shard-1-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-12k95la3/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/1/compact/shard-1-runner.phase.manifest.json",
+        "sha256": "0ed2da1c178ff74ae6ce69e46dfdc7590400da7e0f4ec17f6809cab4e7f33046",
+        "phase": "shard-1-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-m_xluv_a/output.log",
+          "bytes": 1470,
+          "sha256": "76023fcbcd9e20df0b65e53ab854ea78e55dc7f2d8d0c9857d7b647f4b0b3cb0"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/1/compact/shard-13-packaging.phase.manifest.json",
+        "sha256": "eaf2b219ec123aca40cd1330df3f781a33d9c960e0e108ec30ec6e9da640263a",
+        "phase": "shard-13-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-s00jxpp8/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/1/compact/shard-13-runner.phase.manifest.json",
+        "sha256": "ee2bc63acec300dd2a4c4cf0e084c976a928782a9993e421e647ccca00d2adfb",
+        "phase": "shard-13-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-hd86jt5v/output.log",
+          "bytes": 1471,
+          "sha256": "d7e5e6acfb3bb67adc4dda16a248c4cc08d3244fc4b32886bacf35d939dc2ef5"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/1/compact/shard-5-packaging.phase.manifest.json",
+        "sha256": "2312ea9ea69abbdaac55354cbdedd3e013e36704e7a443638f5ca34034ebec1c",
+        "phase": "shard-5-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-uo5d6tdj/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/1/compact/shard-5-runner.phase.manifest.json",
+        "sha256": "99d6913973a47c2d4254bc90cec62401fea1c007a2c8180a7a4a0fd6c7e6e8e8",
+        "phase": "shard-5-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-171om8kb/output.log",
+          "bytes": 1470,
+          "sha256": "d9fd8d9b9225bcf6363fbf7926c272b942e2c8b98fa82de36122cfe67143f728"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/1/compact/shard-9-packaging.phase.manifest.json",
+        "sha256": "5db27a843fd5c85db617344f78f330d660a11da151202733c606b9579e1ce09c",
+        "phase": "shard-9-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-q9_tgj2r/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/1/compact/shard-9-runner.phase.manifest.json",
+        "sha256": "04976d3e3a35330a21b4df2eb5dbf3b7cfdf83608ada1a09aeab055f8f09f887",
+        "phase": "shard-9-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-7m8rw4ym/output.log",
+          "bytes": 1470,
+          "sha256": "f0f9e19bc81ee3de6e1019dbb359985a7fbc97e2f5635c20cf1156fe0b4e0a3e"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/2/compact/build.phase.manifest.json",
+        "sha256": "c6315e721734efcdba401a5a529cea5314cd4e479355c03965eb9a4cb591b62d",
+        "phase": "build",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-ldxt7wd7/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/2/compact/shard-10-packaging.phase.manifest.json",
+        "sha256": "ab3848cd59056064072a6d29a425154d6ae54a5b535211881cf67069bdc69e13",
+        "phase": "shard-10-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-r7ywariw/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/2/compact/shard-10-runner.phase.manifest.json",
+        "sha256": "cd4cc5d12acb65fa95482c521484f8e7b64431e9d7692a3dfc06194fdbbdcfc5",
+        "phase": "shard-10-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-mflx6oib/output.log",
+          "bytes": 1471,
+          "sha256": "b21f123cefa540f4dbc630d209309b7b6c5d372eef10a47707caf563207fe2e0"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/2/compact/shard-14-packaging.phase.manifest.json",
+        "sha256": "26b7ffb939a367a6f5b43f082c89908d30c11390748e81ba218697ab9d1e58d4",
+        "phase": "shard-14-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-ol66yexo/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/2/compact/shard-14-runner.phase.manifest.json",
+        "sha256": "8b08bd8ae4aecc92a145f3cb5f9592ecf1f44a5d6182e97c25b50dcc400c2e9c",
+        "phase": "shard-14-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-vjh6ifba/output.log",
+          "bytes": 1471,
+          "sha256": "08eb75d9641a36a1d5f531cb11115b567921fcb110c0f4d87b399bb5d91a964a"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/2/compact/shard-2-packaging.phase.manifest.json",
+        "sha256": "61337a49d9e6cf74551d8ec69c18a60af6a816b20b7da7db9adfd6ffd23c0f82",
+        "phase": "shard-2-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-a02pyyr7/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/2/compact/shard-2-runner.phase.manifest.json",
+        "sha256": "e53d783e5e87f7b9c7472c25089ba6e186293262397e2cc18b5a86292cb3d400",
+        "phase": "shard-2-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-hq45nju2/output.log",
+          "bytes": 1470,
+          "sha256": "a0771b7192a8e343ab706567f2a57b810dc1ea9afe991a4bd3afa587968a6c64"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/2/compact/shard-6-packaging.phase.manifest.json",
+        "sha256": "5779fd468a9cab2ed4bf9ece9b5af7075b42230a5c8d8b2850afbd09d59ace77",
+        "phase": "shard-6-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-6rsrmq1g/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/2/compact/shard-6-runner.phase.manifest.json",
+        "sha256": "81f1eff2fb67a166f7eff145d7cc24ff4cb36350bc6cd2fc813437a64844a313",
+        "phase": "shard-6-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-qj4cn28m/output.log",
+          "bytes": 1470,
+          "sha256": "e8a48b03b848c7ed85bc6a31790373c05273e2460a73c581196060a1bd8a9eba"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/3/compact/build.phase.manifest.json",
+        "sha256": "93f7dc96c99cbcd172b5ea0294abbabf6ee9fb4897f86438e991b8471b3c7a4a",
+        "phase": "build",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-_2ckhpo1/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/3/compact/shard-11-packaging.phase.manifest.json",
+        "sha256": "31a7574f3d6a475912afc421889d9674a129f99f7e2a00d134dd7d003d1b4d09",
+        "phase": "shard-11-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-1w0igdpl/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/3/compact/shard-11-runner.phase.manifest.json",
+        "sha256": "d26e8431847d99e4b39bbb0c676907fb2fe3a1a599593840f15191fb39c3de14",
+        "phase": "shard-11-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-beriijrh/output.log",
+          "bytes": 1471,
+          "sha256": "8bf237e44e5e782adbe78bdf54af641ab2066fa62655e43c0cd346c2779caad3"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/3/compact/shard-15-packaging.phase.manifest.json",
+        "sha256": "cfa91e69b18a6f4f2ba07ab4de79b81f9cea714c237ac6679659aee4b500eb3f",
+        "phase": "shard-15-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-iks_gr3y/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/3/compact/shard-15-runner.phase.manifest.json",
+        "sha256": "b6b32ad85b444bf46ba0543f3963ec93a8da9d6945a460996ac422956293da01",
+        "phase": "shard-15-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-wrwap22n/output.log",
+          "bytes": 1471,
+          "sha256": "f63b3e91acd1f193c74e0450dced7bce8c71e9f21b8307e7c18c85278d599a1b"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/3/compact/shard-3-packaging.phase.manifest.json",
+        "sha256": "63f5e58cef18f0578b7806a3fff7e3f033eb137165386c6b1aeb85fd8aa4379a",
+        "phase": "shard-3-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-thv5aahq/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/3/compact/shard-3-runner.phase.manifest.json",
+        "sha256": "93090521a9fa162107957072d7517b3898e2fc6db7c5073598ae6abcf3d085f0",
+        "phase": "shard-3-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-d84f_d25/output.log",
+          "bytes": 1469,
+          "sha256": "72c17b0c27ab6fb4d3de9ea50576fd526435e4367c0e92e2df76155f32b71c49"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/3/compact/shard-7-packaging.phase.manifest.json",
+        "sha256": "7d7e77ce6b7f12fccb9c0a547390af9b1ba0a5e1523de350b6d9a90fb1c9aa7f",
+        "phase": "shard-7-packaging",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-zytwj07d/output.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": []
+      },
+      {
+        "path": "/tmp/amazing-pooled-controls-o1kq_w1z/lost/3/compact/shard-7-runner.phase.manifest.json",
+        "sha256": "cdabfdd29a0945a357d9309bf7878f593613c6ee63da22321ec8906fe7e8e5ac",
+        "phase": "shard-7-runner",
+        "engine_exit": 0,
+        "wrapper_exit": 0,
+        "raw_native": {
+          "path": "/tmp/amazing-gate-command-6ashw0ah/output.log",
+          "bytes": 1470,
+          "sha256": "0813435ed115903fdd073e63f846946940b98ff9eb8138d32d3ff69013956226"
+        },
+        "output_copy_exit": 0,
+        "diagnostic_tail": [
+          "    }",
+          "  }",
+          "}"
+        ]
+      }
+    ],
+    "native_fixture_root": "/tmp/amazing-pooled-controls-o1kq_w1z"
+  },
+  "retained_failures": [
+    {
+      "scope": "Initial CLI caller rejected BEFORE allocation/job; no suite run",
+      "actual_exit": 2,
+      "root": "amazing/out/lane lacked mandatory childdir",
+      "receipt": ".agents/layout-grid/public-test262-pooled/initial/request-validation.summary.json"
+    },
+    {
+      "scope": "Frozen59dc genuine failed native qualification; no fake success or inferred old phase cause",
+      "source": "59dcf291980e5cbd34fb6a5a2d5915f53beddb86",
+      "job": "edb6a3dcc8624928ac4079c35066f8fa",
+      "actual_exit": 1,
+      "runner_exit": 1,
+      "expected_controls": 44,
+      "executed_controls": 30,
+      "error": "pooled fixture setUpClass firstpool actual3;14poolcontrols not run",
+      "compact_sha256": "8ca2ad680abf02185476ae1aecc50fc467d1ac83b36c86e104893bebf185a53d",
+      "raw": {
+        "path": "/tmp/amazing-job-edb6a3dcc8624928ac4079c35066f8fa-4mn5puhw/command.log",
+        "bytes": 24500,
+        "sha256": "afc62a683db7e13c553f2f7ec8dd945a4e470644292f72eae01abf888f77053d"
+      }
+    }
+  ],
+  "source_fix": "Required async:false added to synthetic protocol capabilities; actual missing-async negative exits2. Original44 retained plus1negative. Auto-captured73 nativephasewitnesses include true101 child wrappedpool3; no raw handrecovery.",
+  "engine_readmission": "No fullenginecorpus executed here; root will run next required actual pinnedfull16 gate through qualified backend. Future three required setup-clean gates monitor stays0/3 and nonblocking."
+}

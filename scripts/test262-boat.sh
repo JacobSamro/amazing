@@ -7,26 +7,32 @@
 #
 # Usage: scripts/test262-boat.sh <ref> <tag> [--shards N] [--baseline BASE.json]
 #                              [--lane-prefix NAME] [--runner-ref REF]
+#                              [--boxes N] (optional shared-build placement)
 #   Writes .agents/test262/t262-<shortsha>-<tag>.json (merged) and prints lost/gained
 #   against the baseline. Exit 1 when a baseline pass was lost.
 
 set -uo pipefail
+ORIGINAL_ARGS=("$@")
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")"
 REF="${1:?usage: test262-boat.sh <ref> <tag> [--shards N] [--baseline BASE.json]}"; TAG="${2:?tag}"; shift 2
-N=16 BASE="" LANE_PREFIX=t262-shard RUNNER_REF=""
+N=16 BASE="" LANE_PREFIX=t262-shard RUNNER_REF="" BOXES=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --shards) N="$2"; shift 2 ;;
     --baseline) BASE="$2"; shift 2 ;;
     --lane-prefix) LANE_PREFIX="$2"; shift 2 ;;
     --runner-ref) RUNNER_REF="$2"; shift 2 ;;
+    --boxes) BOXES="$2"; shift 2 ;;
     *) echo "test262-boat: unknown option $1" >&2; exit 2 ;;
   esac
 done
 [[ "$N" =~ ^[1-9][0-9]*$ ]] && [ "$N" -le 16 ] || { echo "shards must be 1..16" >&2; exit 2; }
 [[ "$TAG" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "invalid tag" >&2; exit 2; }
 [[ "$LANE_PREFIX" =~ ^[a-z0-9-]+$ ]] || { echo "invalid lane prefix" >&2; exit 2; }
+if [ -n "$BOXES" ]; then
+  exec python3 "$REPO/scripts/test262-pooled.py" "${ORIGINAL_ARGS[@]}"
+fi
 COMMIT="$(git -C "$MAIN" rev-parse "$REF^{commit}")" || exit 2
 SHA="${COMMIT:0:8}" || exit 2
 OUTDIR="$MAIN/.agents/test262"; mkdir -p "$OUTDIR"
