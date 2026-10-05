@@ -41,6 +41,33 @@ class Sources(unittest.TestCase):
             self.assertTrue((dest / 'scripts/driver.sh').stat().st_mode & 0o100)
             self.assertGreater((dest / 'Cargo.toml').stat().st_mtime, 1)
 
+    def test_old_and_future_archive_dates_rebuild_same_warm_cargo_target(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as d:
+            root = Path(d); work = root / 'work'; target = root / 'target'
+            for value, archived_date in [(1, 1), (2, 4102444800), (3, 1)]:
+                archive = root / ('source-' + str(value) + '.tgz')
+                inputs = {'Cargo.toml': b'[package]\nname="native_staging_control"\nversion="0.1.0"\nedition="2021"\n',
+                          'src/main.rs': ('fn main(){println!("' + str(value) + '");}\n').encode()}
+                with tarfile.open(archive, 'w:gz') as stream:
+                    for name, data in inputs.items():
+                        entry = tarfile.TarInfo(name); entry.size = len(data); entry.mode = 0o644; entry.mtime = archived_date
+                        stream.addfile(entry, io.BytesIO(data))
+                destination = root / ('stage-' + str(value)); row = stage.extract(archive, stage.digest(archive), destination)
+                stamp = row['source_timestamps']['stamp_ns']
+                self.assertEqual(row['source_timestamps']['regular_files_refreshed'], 2)
+                for name, data in inputs.items():
+                    self.assertEqual((destination / name).read_bytes(), data)
+                    self.assertEqual((destination / name).stat().st_mtime_ns, stamp)
+                # Reuse the same source location AND Cargo target. Copy2 retains
+                # the native staging generation rather than the archive date.
+                import shutil
+                shutil.copytree(destination, work, dirs_exist_ok=True)
+                env = dict(os.environ, CARGO_TARGET_DIR=str(target), CARGO_INCREMENTAL='0')
+                result = subprocess.run(['cargo', 'run', '--offline', '--quiet', '--manifest-path', str(work / 'Cargo.toml')],
+                                        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+                self.assertEqual(result.returncode, 0, result.stderr.decode())
+                self.assertEqual(result.stdout.decode().strip(), str(value))
+
     def test_changed_archive_is_rejected_before_destination_creation(self):
         with tempfile.TemporaryDirectory(dir='/tmp') as d:
             root = Path(d); archive = self.archive(root); expected = stage.digest(archive)

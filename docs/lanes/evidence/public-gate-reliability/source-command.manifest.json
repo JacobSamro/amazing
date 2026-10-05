@@ -1,0 +1,65 @@
+{
+  "source": "bfc00cdac19293bbf67a2d2292bbfadb17d6f7c8",
+  "recorded_dev_base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "public_prerequisite": "37ed04add4f8d3f8f318f6a5eca869d85a52ce40",
+  "lane": "public-gate-reliability-20261005",
+  "resources": {
+    "vcpu": 4,
+    "memory_gb": 8,
+    "ttl_seconds": 7200
+  },
+  "command": "python3 -I scripts/public-gate-contracts.py",
+  "files": {
+    "/Users/jMac/Projects/OpenSource/amazing-wt/test262-observer-state-source/scripts/linux-run.sh": {
+      "bytes": 22446,
+      "sha256": "8bce35228057dacd796547afd19bba029e143519efe8a6617f015616c2d2fc5b"
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/test262-observer-state-source/scripts/completed-job.py": {
+      "bytes": 22985,
+      "sha256": "8cf1ee91d9a21395aaf341e0fbb0377c36ab18715f409ed4040c32586e8c8036"
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/test262-observer-state-source/scripts/native-inputs.py": {
+      "bytes": 10863,
+      "sha256": "9323c601ec18cbd771379d6137066544d8ad5c4d6ba7f5028c02272b55f254a4"
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/test262-observer-state-source/scripts/test262-boat.sh": {
+      "bytes": 8517,
+      "sha256": "7067646e323a7e13131ca5b69c88e41577dc5d5728dc479db176e8266d3520a3"
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/test262-observer-state-source/scripts/test262-job-state.py": {
+      "bytes": 4731,
+      "sha256": "141c89351fb47dd923beb74f9ca337ae4201919857f2ab80004af58e4a548a18"
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/test262-observer-state-source/scripts/public-gate-contracts.py": {
+      "bytes": 2521,
+      "sha256": "68d3e60a6d327839671cb44924ddcf26c1f13908f2b48380e746efcb0191241c"
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/test262-observer-state-source/scripts/completed-job-tests.py": {
+      "bytes": 3995,
+      "sha256": "e1e35b02c4429cabb3a70271448315c8696e2bdeb78ce6e2aa86ac8842f52f28"
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/test262-observer-state-source/scripts/completed-job-preflight-tests.py": {
+      "bytes": 7162,
+      "sha256": "095cf1f9ed79c10ea87f79f6aa888acf598a8a00cc41021ca08e26e54a8436f4"
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/test262-observer-state-source/scripts/completed-job-lifecycle-tests.py": {
+      "bytes": 12064,
+      "sha256": "6e884b969dc06bcdd8cd5de7d06dd82590ba5843be7cd42729323f85326ae9c8"
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/test262-observer-state-source/scripts/completed-job-large-command-tests.py": {
+      "bytes": 4921,
+      "sha256": "4523c38158e8a8f4f284adfd38d2f80d20038e157a2a1100ecdb8a33c7f18640"
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/test262-observer-state-source/scripts/native-input-tests.py": {
+      "bytes": 9937,
+      "sha256": "356dd069e70e43f48f69bb3510d81584f3ee6fa5c7a2230f342b3929fe99e6b9"
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/test262-observer-state-source/scripts/test262-job-state-tests.py": {
+      "bytes": 7358,
+      "sha256": "f7bb3efd435d3dac2881ee75eb78dd350ff8bfd5fed43d4de820f72894cdbce6"
+    }
+  },
+  "policy": "Initial whole native contract qualification; ONE clean rerun only for tooling failure. Actual assertion failures remain repair work. No078/e177 recovery.",
+  "packaging_base": "3f1535a7336b21d2a3ccc562fc8c9a170f6c336c",
+  "integration_dependency": "GroupA contains37ed public prerequisite; queue until this exact candidate is published, or integrator cherry-picks own commit after its public prerequisite."
+}

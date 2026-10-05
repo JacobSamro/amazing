@@ -1,0 +1,28 @@
+{
+  "source": "bfc00cdac19293bbf67a2d2292bbfadb17d6f7c8",
+  "base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "packaging_base": "3f1535a7336b21d2a3ccc562fc8c9a170f6c336c",
+  "controller": 37974,
+  "actual_exit": 0,
+  "public_wait_exit": 0,
+  "compact_fetch_exit": 0,
+  "native_contracts": 47,
+  "files": {
+    "source-command.manifest.json": {
+      "bytes": 3520,
+      "sha256": "0b47697c425b25d6e24cca6bbf80693388761ccadf578c7840dcfb95b6ed2dbc"
+    },
+    "terminal.summary.json": {
+      "bytes": 1185,
+      "sha256": "66e0aef2ef713754973e4564acae9d5c3b193b6109ee3d8a2fe97b6e2abfa937"
+    },
+    "endpoint.manifest.json": {
+      "bytes": 606,
+      "sha256": "cf43d3813d223fe04b82c258524150280429a209cfdbee83813561c0ae4c7b31"
+    },
+    "contracts.summary.json": {
+      "bytes": 2694,
+      "sha256": "6c45ceab011943ed1340d47d74026bdf98bae0da32e85f9106afa9d428e7c00d"
+    }
+  }
+}

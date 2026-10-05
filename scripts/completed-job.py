@@ -17,6 +17,14 @@ def identity(row):return {k:row[k] for k in FIELDS+(('execution_sha256','source_
 def marker(row):return pathlib.Path.home()/('amazing-completed-'+row['job_id']+'.json')
 def ledger(row):return pathlib.Path.home()/'.amazing-jobs'/row['job_id']
 def boot_id():return pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+def sync_directory(path):
+    # Native Linux publication must persist the directory entry as well as its
+    # file bytes. Local receipt capture keeps its existing portable file fsync.
+    if sys.platform.startswith('linux'):
+        fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY)
+        try:os.fsync(fd)
+        finally:os.close(fd)
+
 def save(path,row):
     # Same-directory publication prevents a reader observing partial JSON.
     # Never overwrite a receipt or silently reuse another job's namespace.
@@ -25,6 +33,7 @@ def save(path,row):
     try:
         with temp.open('x') as f:json.dump(row,f,separators=(',',':'));f.write('\n');f.flush();os.fsync(f.fileno())
         os.link(temp,path)
+        sync_directory(path.parent)
     finally:temp.unlink(missing_ok=True)
 def proc(pid):
     p=pathlib.Path('/proc')/str(pid)
@@ -64,7 +73,10 @@ def catalog(row):
         for p in sorted(root.rglob('*.json')):
             if not COMPACT.fullmatch(p.name):continue
             if p.is_symlink() or not p.resolve().is_relative_to(root.resolve()):raise ValueError('nonlocal compact operand')
-            data=p.read_bytes();total+=len(data)
+            with p.open('rb') as stream:
+                data=stream.read();os.fsync(stream.fileno())
+            sync_directory(p.parent)
+            total+=len(data)
             if len(data)>524288 or total>2097152:raise ValueError('compact evidence limit exceeded')
             files[str(p.relative_to(pathlib.Path.home()))]={'bytes':len(data),'sha256':digest(data)}
     return files
@@ -78,8 +90,14 @@ def run(row,command):
     records.mkdir(parents=True,mode=0o700)
     start=dict(identity(row),boot_id=boot_id(),started_ns=time.time_ns(),owner=proc(os.getpid()))
     if start['owner'] is None:raise ValueError('owner process identity unavailable')
+    # Reserve bounded space before any child starts. Never remove source/raw
+    # artifacts to make room for an exit witness; the reserve is job-private.
+    reserve=records/'terminal.reserve'
+    with reserve.open('xb') as space:
+        os.posix_fallocate(space.fileno(),0,131072)
+        space.flush();os.fsync(space.fileno())
     save(records/'start.manifest.json',start)
-    child=None;received=[];previous={}
+    child=None;received=[];previous={};exit_saved=False
     def interrupted(signum,frame):
         received.append(signum)
         if child is not None:
@@ -111,12 +129,15 @@ def run(row,command):
                         # Prevent interpreter shutdown flushing the abandoned
                         # pipe and changing only the observer's process exit.
                         with open(os.devnull,'wb') as null:os.dup2(null.fileno(),sys.stdout.fileno())
-            child.stdout.close();code=child.wait();raw.flush();os.fsync(raw.fileno())
-        actual=code if code>=0 else 128-code
-        exit_row=dict(start,command_returncode=code,actual_exit=actual,exited_ns=time.time_ns(),signals=received,
-                      observer_pipe_closed=observer_lost,execution_raw={'path':str(raw_path),'bytes':raw_bytes,'sha256':raw_hash.hexdigest()})
-        # Preserve the real exit even when compact cataloging subsequently fails.
-        save(records/'exit.manifest.json',exit_row)
+            child.stdout.close();code=child.wait()
+            actual=code if code>=0 else 128-code
+            exit_row=dict(start,command_returncode=code,actual_exit=actual,exited_ns=time.time_ns(),signals=received,
+                          observer_pipe_closed=observer_lost,execution_raw={'path':str(raw_path),'bytes':raw_bytes,'sha256':raw_hash.hexdigest()})
+            reserve.unlink();sync_directory(records)
+            # Witness the actual wait result before optional diagnostic-log
+            # synchronization or compact catalog publication can fail.
+            save(records/'exit.manifest.json',exit_row);exit_saved=True
+            raw.flush();os.fsync(raw.fileno())
         try:
             files=catalog(row);runner_exit=actual;error=None
         except Exception as failure:
@@ -136,6 +157,18 @@ def run(row,command):
                 try:os.killpg(child.pid,signal.SIGKILL)
                 except ProcessLookupError:pass
                 child.wait()
+        # A failure while opening/draining diagnostics or recording the child
+        # still cannot turn a genuine, synchronously waited exit into UNKNOWN.
+        # SIGKILL of the supervisor has no such witness and remains UNKNOWN.
+        reserve.unlink(missing_ok=True)
+        if child is not None and child.returncode is not None and not exit_saved:
+            code=child.returncode
+            actual=code if code>=0 else 128-code
+            try:
+                save(records/'exit.manifest.json',dict(start,command_returncode=code,
+                     actual_exit=actual,exited_ns=time.time_ns(),signals=received,
+                     execution_raw_error='diagnostic/custody interrupted; native wait result preserved'))
+            except FileExistsError:pass # Immutable first witness already published.
         for sig,handler in previous.items():signal.signal(sig,handler)
 
 
@@ -189,7 +222,11 @@ def observe(row):
             return result
         if any(current.get(k)!=witness.get(k) for k in ('pid','start_ticks','cmdline_sha256')):
             result['reason']='process identity changed; PID may have been reused';return result
-        if current['state'] in ('Z','X'):result['reason']='owned supervisor exited without completion evidence';return result
+        if current['state'] in ('Z','X'):
+            if ended is not None:
+                result.update(state='TERMINAL',actual_exit=ended['actual_exit'],runner_exit=None,reason='authenticated native exit; supervisor exited before final catalog')
+            else:result['reason']='owned supervisor exited without completion evidence'
+            return result
         try:
             child_record=json.loads((ledger(row)/'child.manifest.json').read_text());check_identity(row,child_record)
             if child_record.get('owner')!=witness or child_record.get('started_ns')!=start['started_ns']:raise ValueError('child start identity mismatch')
