@@ -3,10 +3,11 @@
 
 A lost SSH observation never proves a native command stopped. Schema 2 binds
 its complete bootstrap execution as well as the requested gate command. HOME
-holds immutable start/child/exit/completion records; /proc witnesses distinguish
+holds immutable start/child/exit/completion records; streaming diagnostics stay
+native so a mounted HOME write failure cannot terminate an owned child. /proc witnesses distinguish
 an owned live process from a reused PID or another boot. No job is detached.
 """
-import argparse,base64,hashlib,json,os,pathlib,re,shlex,signal,subprocess,sys,time,uuid
+import argparse,base64,hashlib,json,os,pathlib,re,shlex,signal,subprocess,sys,time,uuid,tempfile
 
 FIELDS=('schema','lane','source_commit','box_id','host','port','job_id','output_root','command_sha256')
 COMPACT=re.compile(r'(?:[A-Za-z0-9_.-]+\.)?(?:compact|summary|manifest)\.json')
@@ -81,6 +82,15 @@ def catalog(row):
             files[str(p.relative_to(pathlib.Path.home()))]={'bytes':len(data),'sha256':digest(data)}
     return files
 
+def diagnostic_file(row):
+    directory=pathlib.Path(tempfile.mkdtemp(prefix='amazing-job-'+row['job_id']+'-',dir='/tmp'))
+    return directory/'command.log'
+
+def failure_detail(error,phase,path):
+    return dict(phase=phase,error_type=type(error).__name__,errno=getattr(error,'errno',None),
+                message=str(error)[:1000],path=str(path))
+
+
 def run(row,command):
     valid(row)
     expected=row.get('execution_sha256',row['command_sha256'])
@@ -88,7 +98,9 @@ def run(row,command):
     root=pathlib.Path.home()/row['output_root'];records=ledger(row)
     if root.exists() or marker(row).exists() or records.exists():raise ValueError('job output or marker already exists')
     records.mkdir(parents=True,mode=0o700)
-    start=dict(identity(row),boot_id=boot_id(),started_ns=time.time_ns(),owner=proc(os.getpid()))
+    raw_path=diagnostic_file(row)
+    start=dict(identity(row),boot_id=boot_id(),started_ns=time.time_ns(),owner=proc(os.getpid()),
+               native_diagnostics={'path':str(raw_path),'device':raw_path.parent.stat().st_dev})
     if start['owner'] is None:raise ValueError('owner process identity unavailable')
     # Reserve bounded space before any child starts. Never remove source/raw
     # artifacts to make room for an exit witness; the reserve is job-private.
@@ -108,47 +120,69 @@ def run(row,command):
     for sig in (signal.SIGHUP,signal.SIGTERM,signal.SIGINT):
         previous[sig]=signal.signal(sig,interrupted)
     try:
-        raw_path=records/'command.log';raw_hash=hashlib.sha256();raw_bytes=0;observer_lost=False
-        with raw_path.open('xb') as raw:
-            script=records/'command.sh';script.write_bytes(command.encode());script.chmod(0o600)
+        raw_hash=hashlib.sha256();raw_bytes=0;observer_lost=False;diagnostic_error=None
+        raw=raw_path.open('xb')
+        def failed_diagnostic(error,phase):
+            nonlocal diagnostic_error
+            if diagnostic_error is None:
+                diagnostic_error=failure_detail(error,phase,raw_path)
+                # A failed diagnostic sink is visible, but its optional status
+                # publication must not stop the owned foreground child either.
+                try:save(records/'diagnostic-error.manifest.json',dict(start,diagnostic_error=diagnostic_error))
+                except OSError as publish_error:
+                    diagnostic_error['status_publish_error']=failure_detail(publish_error,'diagnostic-status',records)
+        try:
+            script=raw_path.parent/'command.sh';script.write_bytes(command.encode());script.chmod(0o600)
             child=subprocess.Popen(['bash',str(script)],process_group=0,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
             witness=proc(child.pid)
             save(records/'child.manifest.json',dict(start,child=witness))
             if received:
                 try:os.killpg(child.pid,received[-1])
                 except ProcessLookupError:pass
-            # A closed observation pipe cannot erase native diagnostics or be
-            # confused with the command's exit. We remain its foreground owner.
-            # Hangup/cancellation still forwards to the child process group.
+            # Continue draining an owned child after diagnostic I/O failure.
+            # Never substitute a successful gate or discard the failure: its
+            # actual wait result survives, while compact fetch stays refused.
             while chunk:=child.stdout.read1(65536):
-                raw.write(chunk);raw.flush();raw_hash.update(chunk);raw_bytes+=len(chunk)
+                if diagnostic_error is None:
+                    try:
+                        written=raw.write(chunk)
+                        if written!=len(chunk):raise OSError(5,'short diagnostic write')
+                        raw.flush();raw_hash.update(chunk);raw_bytes+=len(chunk)
+                    except OSError as error:failed_diagnostic(error,'diagnostic-stream')
                 if not observer_lost:
                     try:sys.stdout.buffer.write(chunk);sys.stdout.buffer.flush()
                     except (BrokenPipeError,OSError):
                         observer_lost=True
-                        # Prevent interpreter shutdown flushing the abandoned
-                        # pipe and changing only the observer's process exit.
                         with open(os.devnull,'wb') as null:os.dup2(null.fileno(),sys.stdout.fileno())
             child.stdout.close();code=child.wait()
             actual=code if code>=0 else 128-code
             exit_row=dict(start,command_returncode=code,actual_exit=actual,exited_ns=time.time_ns(),signals=received,
-                          observer_pipe_closed=observer_lost,execution_raw={'path':str(raw_path),'bytes':raw_bytes,'sha256':raw_hash.hexdigest()})
+                          observer_pipe_closed=observer_lost)
+            if diagnostic_error is None:
+                exit_row['execution_raw']={'path':str(raw_path),'bytes':raw_bytes,'sha256':raw_hash.hexdigest()}
+            else:
+                exit_row['execution_raw_error']=diagnostic_error
+                exit_row['execution_raw_partial']={'path':str(raw_path),'hash_not_claimed':True}
             reserve.unlink();sync_directory(records)
-            # Witness the actual wait result before optional diagnostic-log
-            # synchronization or compact catalog publication can fail.
             save(records/'exit.manifest.json',exit_row);exit_saved=True
-            raw.flush();os.fsync(raw.fileno())
+            try:raw.flush();os.fsync(raw.fileno())
+            except OSError as error:failed_diagnostic(error,'diagnostic-sync')
+        finally:
+            try:raw.close()
+            except OSError as error:failed_diagnostic(error,'diagnostic-close')
         try:
+            if diagnostic_error is not None:raise ValueError('diagnostic failure: '+json.dumps(diagnostic_error,separators=(',',':')))
             files=catalog(row);runner_exit=actual;error=None
         except Exception as failure:
-            files={};runner_exit=3;error=str(failure)[:1000]
-        final=dict(exit_row,completed=True,runner_exit=runner_exit,artifacts=files,catalog_error=error)
+            files={};runner_exit=3;error=str(failure)[:2000]
+        final=dict(exit_row,completed=True,runner_exit=runner_exit,artifacts=files,catalog_error=error,diagnostic_error=diagnostic_error)
         save(marker(row),final)
         return runner_exit
     finally:
-        # Failure to publish custody must not leave this foreground command
+        # An unexpected ownership/custody failure must not leave this foreground command
         # running without its supervisor. This is our current child, never a
         # discovered old/orphan process or a sandbox lifecycle operation.
+        supervision_error=sys.exc_info()[1]
         if child is not None and child.poll() is None:
             try:os.killpg(child.pid,signal.SIGTERM)
             except ProcessLookupError:pass
@@ -167,7 +201,8 @@ def run(row,command):
             try:
                 save(records/'exit.manifest.json',dict(start,command_returncode=code,
                      actual_exit=actual,exited_ns=time.time_ns(),signals=received,
-                     execution_raw_error='diagnostic/custody interrupted; native wait result preserved'))
+                     execution_raw_error='diagnostic/custody interrupted; native wait result preserved',
+                     supervision_error=failure_detail(supervision_error,'supervisor-custody',records) if supervision_error is not None else None))
             except FileExistsError:pass # Immutable first witness already published.
         for sig,handler in previous.items():signal.signal(sig,handler)
 
@@ -200,7 +235,7 @@ def observe(row):
     try:
         final=completion(row);check_identity(row,final)
         if final.get('completed') is not True or type(final.get('actual_exit')) is not int:raise ValueError('job has not completed')
-        result.update(state='TERMINAL',actual_exit=final['actual_exit'],runner_exit=final.get('runner_exit',final['actual_exit']),reason='authenticated actual command exit',owner=final.get('owner'),started_ns=final.get('started_ns'),catalog_error=final.get('catalog_error'),execution_raw=final.get('execution_raw'),observer_pipe_closed=final.get('observer_pipe_closed',False))
+        result.update(state='TERMINAL',actual_exit=final['actual_exit'],runner_exit=final.get('runner_exit',final['actual_exit']),reason='authenticated actual command exit',owner=final.get('owner'),started_ns=final.get('started_ns'),catalog_error=final.get('catalog_error'),execution_raw=final.get('execution_raw'),observer_pipe_closed=final.get('observer_pipe_closed',False),signals=final.get('signals',[]),command_returncode=final.get('command_returncode'),exited_ns=final.get('exited_ns'),diagnostic_error=final.get('diagnostic_error'),native_diagnostics=final.get('native_diagnostics'))
         return result
     except FileNotFoundError:pass
     except (ValueError,KeyError,TypeError) as error:
@@ -208,12 +243,13 @@ def observe(row):
     try:
         start=json.loads((ledger(row)/'start.manifest.json').read_text());check_identity(row,start)
         witness=start['owner'];current=proc(witness['pid'])
-        result.update(owner=witness,started_ns=start['started_ns'],owner_alive=False)
+        result.update(owner=witness,started_ns=start['started_ns'],owner_alive=False,native_diagnostics=start.get('native_diagnostics'))
         ended=None
         try:
             ended=json.loads((ledger(row)/'exit.manifest.json').read_text());check_identity(row,ended)
             if type(ended.get('actual_exit')) is not int:raise ValueError('invalid native exit receipt')
             result['native_actual_exit']=ended['actual_exit']
+            result.update(signals=ended.get('signals',[]),command_returncode=ended.get('command_returncode'),exited_ns=ended.get('exited_ns'),execution_raw_error=ended.get('execution_raw_error'),supervision_error=ended.get('supervision_error'))
         except FileNotFoundError:pass
         if current is None:
             if ended is not None:
@@ -234,6 +270,10 @@ def observe(row):
             if child_witness is not None:
                 child_now=proc(child_witness['pid'])
                 result['child_alive']=bool(child_now and child_now['start_ticks']==child_witness['start_ticks'] and child_now['state'] not in ('Z','X') and child_now['parent_pid']==witness['pid'])
+        except FileNotFoundError:pass
+        try:
+            failure=json.loads((ledger(row)/'diagnostic-error.manifest.json').read_text());check_identity(row,failure)
+            result['diagnostic_error']=failure['diagnostic_error']
         except FileNotFoundError:pass
         result.update(state='RUNNING',owner_alive=True,reason='authenticated live supervisor process')
         if ended is not None:result['reason']='native child exited; live supervisor completing receipt'

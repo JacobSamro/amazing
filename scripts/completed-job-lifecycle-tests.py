@@ -89,18 +89,18 @@ class Lifecycle(unittest.TestCase):
     self.assertEqual(observed['state'],'TERMINAL');self.assertEqual(observed['actual_exit'],expected)
     self.assertEqual(child.returncode,expected);self.assertTrue(observed['observer_pipe_closed'])
     raw=observed['execution_raw'];data=pathlib.Path(raw['path']).read_bytes()
-    self.assertEqual(data,b'native output after observer disconnect');self.assertEqual(raw['sha256'],job.digest(data));self.assertTrue(pathlib.Path(raw['path']).is_relative_to(self.home))
+    self.assertEqual(data,b'native output after observer disconnect');self.assertEqual(raw['sha256'],job.digest(data));self.assertTrue(pathlib.Path(raw['path']).is_relative_to(pathlib.Path('/tmp')))
  def test_log_sync_failure_keeps_real_exit_without_fetch_permission(self):
   for expected in (0,101):
    with self.subTest(native_exit=expected):
     row=self.row('exit '+str(expected));command='exit '+str(expected)
-    code="import importlib.util,os,pathlib; spec=importlib.util.spec_from_file_location('job',"+repr(str(S/'completed-job.py'))+");j=importlib.util.module_from_spec(spec);spec.loader.exec_module(j);real=os.fsync\ndef sync(fd):\n p=os.readlink('/proc/self/fd/'+str(fd))\n if p.endswith('/command.log'):raise OSError('controlled diagnostic fsync failure')\n return real(fd)\nos.fsync=sync\nj.run(j.decode("+repr(job.encoded(row))+"),"+repr(command)+")"
+    code="import importlib.util,os,pathlib,sys; spec=importlib.util.spec_from_file_location('job',"+repr(str(S/'completed-job.py'))+");j=importlib.util.module_from_spec(spec);spec.loader.exec_module(j);real=os.fsync\ndef sync(fd):\n p=os.readlink('/proc/self/fd/'+str(fd))\n if p.endswith('/command.log'):raise OSError('controlled diagnostic fsync failure')\n return real(fd)\nos.fsync=sync\nsys.exit(j.run(j.decode("+repr(job.encoded(row))+"),"+repr(command)+"))"
     child=subprocess.Popen([sys.executable,'-I','-c',code],stdout=subprocess.PIPE,stderr=subprocess.PIPE);self.children.append(child)
     out,err=child.communicate(timeout=10);self.assertNotEqual(child.returncode,0)
     native=json.loads((job.ledger(row)/'exit.manifest.json').read_text());self.assertEqual(native['actual_exit'],expected)
-    observed=job.observe(row);self.assertEqual(observed['state'],'TERMINAL');self.assertEqual(observed['actual_exit'],expected);self.assertIsNone(observed['runner_exit'])
-    self.assertFalse((job.ledger(row)/'terminal.reserve').exists());self.assertFalse(job.marker(row).exists())
-    with self.assertRaises(FileNotFoundError):job.verify(row,row['lane'],row['source_commit'],[])
+    observed=job.observe(row);self.assertEqual(observed['state'],'TERMINAL');self.assertEqual(observed['actual_exit'],expected);self.assertEqual(observed['runner_exit'],3);self.assertEqual(observed['diagnostic_error']['phase'],'diagnostic-sync')
+    self.assertFalse((job.ledger(row)/'terminal.reserve').exists());self.assertTrue(job.marker(row).exists())
+    with self.assertRaisesRegex(ValueError,'catalog failed'):job.verify(row,row['lane'],row['source_commit'],[])
  def test_missing_final_catalog_keeps_durable_native_exit_without_guessed_runner_exit(self):
   row=self.row('exit 7');child=self.spawn(row,'exit 7');child.communicate(timeout=10);job.marker(row).unlink()
   observed=job.observe(row);self.assertEqual(observed['state'],'TERMINAL');self.assertEqual(observed['actual_exit'],7);self.assertIsNone(observed['runner_exit'])
