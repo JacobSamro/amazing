@@ -131,7 +131,29 @@ fn box_for(root: &amazing_layout::LayoutBox, node: NodeIdx) -> Option<&amazing_l
         _ => None,
     }
 }
+fn resolve_origin_value(style: &ComputedStyle, box_: &amazing_layout::LayoutBox, name: &str) -> Option<String> {
+    if !matches!(name, "transform-origin" | "perspective-origin") { return None; }
+    let zoom=style.effective_zoom();
+    if !zoom.is_finite() || zoom <= 0.0 { return None; }
+    // These are associated CSS layout boxes. Under Transforms1 section5,
+    // fill-box uses the actual content box; stroke/view-box use the border box.
+    // Non-CSS SVG geometry never enters this branch without a LayoutBox.
+    let reference=match style.get("transform-box").unwrap_or("view-box") {
+        "content-box" | "fill-box" => box_.content_box,
+        "border-box" | "stroke-box" | "view-box" => box_.border_box,
+        _ => return None,
+    };
+    // CSSOM reports offsets from the reference box's top-left. The matrix
+    // handoff can separately supply its local offset when composing transforms.
+    let origin=amazing_css::used_origin(style,name,amazing_css::OriginReferenceBox {
+        offset:[0.0;2],size:[f64::from(reference.w)/zoom,f64::from(reference.h)/zoom],
+    })?;
+    let mut value=format!("{} {}",px(origin[0]),px(origin[1]));
+    if name=="transform-origin" && origin[2]!=0.0 { value.push_str(&format!(" {}",px(origin[2]))); }
+    Some(value)
+}
 fn resolve_box_value(style: &ComputedStyle, box_: &amazing_layout::LayoutBox, name: &str) -> Option<String> {
+    if let Some(origin)=resolve_origin_value(style,box_,name) { return Some(origin); }
     let zoom = style.effective_zoom();
     let length = match name {
         "width" if style.get("box-sizing") == Some("border-box") => box_.border_box.w,
@@ -492,4 +514,70 @@ mod tests {
         assert_eq!(result,JsValue::str("true|true|2||true"));
         std::fs::remove_dir_all(directory).unwrap();
     }
+    #[test]
+    fn cssom_origin_reference_boxes_use_real_content_and_border_geometry() {
+        let mut scheduler=scheduler("<style>div{width:100px;height:80px;padding:10px;border:2px solid;transform-origin:50% 50%;perspective-origin:100% 25%}</style><div id=target></div>");
+        let result=scheduler.run_script(r#"
+            let el=document.getElementById('target'),s=getComputedStyle(el),out=[];
+            for(let box of ['view-box','border-box','stroke-box','content-box','fill-box']) {
+                el.setAttribute('style','transform-box:'+box);
+                out.push(s.transformOrigin+'|'+s.perspectiveOrigin);
+            }
+            out.join(';')
+        "#).unwrap();
+        assert_eq!(result,JsValue::str("62px 52px|124px 26px;62px 52px|124px 26px;62px 52px|124px 26px;50px 40px|100px 20px;50px 40px|100px 20px"));
+    }
+    #[test]
+    fn cssom_origin_calculations_use_document_font_and_nonzero_z() {
+        let mut scheduler=scheduler("<style>body{font-size:40px}div{width:200px;height:300px;transform-origin:calc(-100% + 10px - .5em) calc(10px - .5em) calc(10px - .5em);perspective-origin:right calc(10px - .5em) top calc(10px - .5em)}</style><div id=target></div>");
+        let result=scheduler.run_script(r#"
+            let el=document.getElementById('target'),s=getComputedStyle(el);
+            let first=s.transformOrigin+'|'+s.perspectiveOrigin;
+            el.setAttribute('style','font-size:20px;transform-origin:10% bottom 0px');
+            [first,s.transformOrigin,s.perspectiveOrigin].join(';')
+        "#).unwrap();
+        assert_eq!(result,JsValue::str("-210px -10px -10px|210px -10px;20px 300px;200px 0px"));
+    }
+    #[test]
+    fn cssom_origins_keep_effective_zoom_in_css_pixels_and_update_live_dimensions() {
+        let mut scheduler=scheduler("<style>section{zoom:2}div{zoom:1.5;box-sizing:border-box;width:124px;height:104px;padding:10px;border:2px solid;transform-origin:50% 50% 7px;perspective-origin:50% 50%}</style><section><div id=target></div></section>");
+        let result=scheduler.run_script(r#"
+            let el=document.getElementById('target'),s=getComputedStyle(el);
+            let first=s.transformOrigin+'|'+s.perspectiveOrigin;
+            el.setAttribute('style','transform-box:content-box');
+            let content=s.transformOrigin+'|'+s.perspectiveOrigin;
+            el.setAttribute('style','width:224px;height:204px;transform-box:content-box');
+            [first,content,s.transformOrigin,s.perspectiveOrigin].join(';')
+        "#).unwrap();
+        assert_eq!(result,JsValue::str("62px 52px 7px|62px 52px;50px 40px 7px|50px 40px;100px 90px 7px;100px 90px"));
+    }
+    #[test]
+    fn cssom_origin_fallbacks_preserve_unavailable_box_and_detached_behavior() {
+        let mut scheduler=scheduler("<style>div{width:100px;height:80px;transform-origin:25% 75% 5px;perspective-origin:40% 60%}div::before{content:'x';transform-origin:10% 20%;perspective-origin:30% 40%}</style><div id=target></div>");
+        let result=scheduler.run_script(r#"
+            let el=document.getElementById('target'),s=getComputedStyle(el),pseudo=getComputedStyle(el,'::before');
+            let first=s.transformOrigin+'|'+s.perspectiveOrigin;
+            let generated=pseudo.transformOrigin+'|'+pseudo.perspectiveOrigin;
+            el.setAttribute('style','display:none');
+            let hidden=s.transformOrigin+'|'+s.perspectiveOrigin;
+            el.setAttribute('style','display:contents');
+            let contents=s.transformOrigin+'|'+s.perspectiveOrigin;
+            el.remove();
+            [first,generated,hidden,contents,s.transformOrigin,s.perspectiveOrigin].join(';')
+        "#).unwrap();
+        assert_eq!(result,JsValue::str("25px 60px 5px|40px 48px;10% 20%|30% 40%;25% 75% 5px|40% 60%;25% 75% 5px|40% 60%;;"));
+    }
+
+    #[test]
+    fn cssom_origins_use_loaded_document_font_context_before_inheritance() {
+        let font=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/font-metrics-space.ttf");
+        let html=format!("<style>@font-face{{font-family:Actual;src:url('{}')}}section{{font-family:Actual;font-size:40px}}div{{width:200px;height:300px;transform-origin:calc(10% + .5em) calc(50% - 1em) 1em;perspective-origin:calc(100% - .5em) 1em}}</style><section><div id=target></div></section>",font.display());
+        let mut scheduler=scheduler(&html);
+        let result=scheduler.run_script(r#"
+            let s=getComputedStyle(document.getElementById('target'));
+            [s.fontFamily,s.fontSize,s.transformOrigin,s.perspectiveOrigin].join('|')
+        "#).unwrap();
+        assert_eq!(result,JsValue::str("Actual|40px|40px 110px 40px|180px 40px"));
+    }
+
 }

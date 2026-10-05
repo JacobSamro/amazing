@@ -1,0 +1,1 @@
+{"actual_returncode":0,"argv":["cargo","test","--workspace","--locked","--doc"],"phase":"doctests","raw":{"bytes":27675,"path":"/tmp/amazing-native-retained/css-origins-spec-controls-20261006/origins-spec-731e7aa0-initial/raw/doctests.log","sha256":"236d81a923f7d2b100d9b760125206e6f3e03cd68cbaa3b18151df685835942d"},"source_commit":"731e7aa002adc629ec1c9d398ba1ded6cbd76ae5"}

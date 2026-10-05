@@ -134,7 +134,7 @@ impl Parser {
             Token::Dimension(n, unit) if n.is_finite() => {
                 let css = format!("{n}{unit}");
                 crate::values::LengthPercentage::parse(&css).map(|_| Kind::Length)
-                    .or_else(|| matches!(unit.to_ascii_lowercase().as_str(),"cqw"|"cqh"|"cqi"|"cqb"|"cqmin"|"cqmax").then_some(Kind::Length))
+                    .or_else(|| matches!(unit.to_ascii_lowercase().as_str(),"cqw"|"cqh"|"cqi"|"cqb"|"cqmin"|"cqmax"|"vi"|"vb"|"svi"|"svb"|"lvi"|"lvb"|"dvi"|"dvb").then_some(Kind::Length))
                     .or_else(|| crate::values::Angle::parse(&css).map(|_| Kind::Angle))
             }
             // `size` names the calc-size basis inside its calculation.
@@ -196,6 +196,12 @@ pub(crate) fn length_percentage(css: &str, allow_percentage: bool) -> bool {
         Some(Kind::Percentage | Kind::LengthPercentage) => allow_percentage,
         _ => false,
     }
+}
+
+/// Validate literal or mathematical contextual lengths using the same dimensional
+/// parser. These units remain symbolic until their actual context is available.
+pub(crate) fn contextual_length_percentage(css: &str, allow_percentage: bool) -> bool {
+    length_percentage(&format!("calc({css})"), allow_percentage)
 }
 
 /// A percentage-only math expression; unlike length-percentage, a length

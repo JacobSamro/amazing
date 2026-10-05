@@ -1,0 +1,830 @@
+{
+  "source": "731e7aa002adc629ec1c9d398ba1ded6cbd76ae5",
+  "recorded_origin_dev_base": "c220413d7778de7a70ed56c8bf5adc81858fa744",
+  "state": "EXACT_SPEC_CONTROL_CORRECTION_FROZEN_INITIAL_GATE",
+  "allocation_authorized": true,
+  "worktree": "/Users/jMac/Projects/OpenSource/amazing-wt/css-transform-origins-whole-20261006",
+  "branch": "lane/css-transform-origins-spec-controls-source",
+  "source_files": {
+    "crates/amazing-css/src/background_values.rs": {
+      "sha256": "d34c775279e3889546a035ae14d75dae9a169f32332640d17c7ffa24053d2541",
+      "bytes": 22552,
+      "lines": 582
+    },
+    "crates/amazing-css/src/lib.rs": {
+      "sha256": "71942260e46bf956319bea634de165083f0ff3f35d71a9cc3fa90b3b97b75d02",
+      "bytes": 4787,
+      "lines": 99
+    },
+    "crates/amazing-css/src/math.rs": {
+      "sha256": "5c821545001391acb6d76f62cc8e6ae7181ba1548c35c4548742599fe75eea1b",
+      "bytes": 19664,
+      "lines": 410
+    },
+    "crates/amazing-css/src/position_values.rs": {
+      "sha256": "1b0760b8d88b63e13d2ba369b0bc4a5aeb84203b58585620af331ec606cdac4f",
+      "bytes": 15777,
+      "lines": 439
+    },
+    "crates/amazing-css/src/transform_origins.rs": {
+      "sha256": "288600c7b2968a84899cb0a9ae8453811941864e394bf69266d49ca5c56b880d",
+      "bytes": 1966,
+      "lines": 46
+    },
+    "crates/amazing-css/src/transform_origins_tests.rs": {
+      "sha256": "46633010c0edd256d95d860e701860371d88185b59560ad7c7d39a4800855a4b",
+      "bytes": 5785,
+      "lines": 101
+    },
+    "crates/amazing/src/runtime_host_cssom.rs": {
+      "sha256": "ed07ed8548b523c38e004a0d7bf0645a7292b665b445f8f4299e1a3b978553be",
+      "bytes": 36460,
+      "lines": 583
+    },
+    "docs/lanes/css-transform-origins-whole.md": {
+      "sha256": "3ef01f2036991c6bd3f77a45caa84585fd5b771e9919256eb3d64228611a7a17",
+      "bytes": 4578,
+      "lines": 39
+    }
+  },
+  "original_2D_shortcut_preserved": true,
+  "consumer_boundary": "CSS used-origin3D explicit actualreferencebox +installedCSSOM realLayoutBox/rootdocumentfonts/effectivezoom. Originalcomputed% and absent/detached/pseudo/layout fallbacks unchanged. No full3Dpaint/context claim.",
+  "public_adapters": {
+    "image-presentation-gate.py": {
+      "bytes": 11669,
+      "sha256": "ae3091556bd0993ea9ce864cb9eeed0d82dc7490a6ddd3699a20f2c14df62ba2"
+    },
+    "image-presentation-publish.py": {
+      "bytes": 3714,
+      "sha256": "c73fe8e04481d11b9eb117671ae70ec68ad57ced778356e59d00a2dfdc4dc461"
+    },
+    "image-resource-corpus.py": {
+      "bytes": 5555,
+      "sha256": "de54c2e13e991f1a1f1c095ff8dff317184d8e9afc5250ed5f7078a66b144456"
+    },
+    "image-corpus-contract.py": {
+      "bytes": 2541,
+      "sha256": "0a431044ca5a033adccfe237ed53000b08971b6d4fee6592079fc89213ea7db0"
+    },
+    "wpt_render_compare.py": {
+      "bytes": 32405,
+      "sha256": "219764b940f2b41da580f1eb73634088b96203b954f19fd72bf29dfba4f14b23"
+    },
+    "gate-summary.py": {
+      "bytes": 6347,
+      "sha256": "3e26631cb492c2e77808c7bc9a3354ab248d0e83cf8762b933892647fd7ce0f0"
+    }
+  },
+  "public_adapter_published": "65c24415",
+  "baseline_source": "1c682ab64702a48ebf775b6240004eda74899bdf",
+  "baseline_original_corpus_role": "AFTER",
+  "baseline_actual_native_exit": 0,
+  "baseline_all26_phase_exit": 0,
+  "baseline_files": {
+    "gate.summary.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/gate.summary.json",
+      "bytes": 42129,
+      "sha256": "cfe46287789d14e8bf26eef887989402287428167996fbe9ce56c88054c004ae"
+    },
+    "baseline-terminal.summary.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/endpoint.manifest.json.observation.summary.json",
+      "bytes": 1388,
+      "sha256": "f7497a0e86895d5dd6757b674e7dee8c5786f288e760889284f39fd55782c8c3"
+    },
+    "css-CSS2-floats.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-CSS2-floats.compact.json",
+      "bytes": 5202,
+      "sha256": "9f0791d87c85186907de12903ac975cb356f9c7f83ab9433bc3b56b439d30843"
+    },
+    "css-CSS2-normal-flow.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-CSS2-normal-flow.compact.json",
+      "bytes": 4776,
+      "sha256": "d0247149dcf16acaba7050e5bb1ef792112f884c2fa9deef6511658ac76e7bfb"
+    },
+    "css-CSS2-positioning.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-CSS2-positioning.compact.json",
+      "bytes": 1671,
+      "sha256": "cefcdeae7f0c110b572d65c12356b1c46eeadbf8b7514bda4bcaddcbb3180e11"
+    },
+    "css-css-backgrounds.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-backgrounds.compact.json",
+      "bytes": 19180,
+      "sha256": "ab36f3be8823f7458f1569fc4136d75c8edbcf78987468a8ea1984655c513026"
+    },
+    "css-css-cascade.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-cascade.compact.json",
+      "bytes": 2912,
+      "sha256": "3b6d23cbd84d70e162dd2c39edb554739563e83a5328b7d51a458844fd8e63b7"
+    },
+    "css-css-color.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-color.compact.json",
+      "bytes": 20957,
+      "sha256": "3955c370e0bfc4a2bef5532ccf0e2ace36e05464ce46d20b00321a8f0a9dc258"
+    },
+    "css-css-conditional.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-conditional.compact.json",
+      "bytes": 9326,
+      "sha256": "0d77044b930b5eeb4e14fd8ff707cdc299ce65de0b3f8cfbff8bdd850e4635e0"
+    },
+    "css-css-contain.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-contain.compact.json",
+      "bytes": 26560,
+      "sha256": "8f40a562117fdab58ffdbe0f7bc6833d953800132c32a95841a551bd551660f5"
+    },
+    "css-css-display.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-display.compact.json",
+      "bytes": 4834,
+      "sha256": "0ab5b8554171bb85a25d7c6478ad9eb5a0af7e321e7bf7da05bd01bfd033f09d"
+    },
+    "css-css-fonts.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-fonts.compact.json",
+      "bytes": 3895,
+      "sha256": "457c2439fd8c175fb7910b8b7b9ab3a69b74a84c95139da7970f316e22cb7140"
+    },
+    "css-css-images.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-images.compact.json",
+      "bytes": 18517,
+      "sha256": "83033c4a319ca6d08aab4cf6e91b726eee6376b7aa4ebbfb7136fe50ec3c4943"
+    },
+    "css-css-overflow.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-overflow.compact.json",
+      "bytes": 45454,
+      "sha256": "5b2bdd6af3488ee22231f969a2659b754d48e95e8a8623b129d8babc9f2c6cef"
+    },
+    "css-css-position.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-position.compact.json",
+      "bytes": 8565,
+      "sha256": "0e19b28cada4197b2591cdb55de679c3640d47f05e005b75a71eb21c0a3deab7"
+    },
+    "css-css-ruby.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-ruby.compact.json",
+      "bytes": 7665,
+      "sha256": "f87448314f972192f5d0e4088a4937a47ba6b640458f6e4b4595daf74e7957cf"
+    },
+    "css-css-shadow.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-shadow.compact.json",
+      "bytes": 4802,
+      "sha256": "8545059411bcb63840d452506e9202b4ddc8cf7d3e72a45f896e6ddc3324bec7"
+    },
+    "css-css-sizing.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-sizing.compact.json",
+      "bytes": 19380,
+      "sha256": "b236a80abcad32de81ff445b950ecfe93ed327ec5c59a68bf9bce8c208090739"
+    },
+    "css-css-tables.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-tables.compact.json",
+      "bytes": 10616,
+      "sha256": "4b67db8c644fffa8961e616efedc43c6d9e1cf97e5b54569778771cdf331d469"
+    },
+    "css-css-transforms.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-transforms.compact.json",
+      "bytes": 43065,
+      "sha256": "e5b8cdf6f5448d9ea8aec6254bdd4818b2cb9de8ae0847c67d486c1909cf9d5e"
+    },
+    "css-css-viewport.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-css-viewport.compact.json",
+      "bytes": 10407,
+      "sha256": "acfc79954543e3fa9d87f19cc9eb20758de422faffd36e467fa585f84646dd94"
+    },
+    "css-selectors.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/css-selectors.compact.json",
+      "bytes": 9950,
+      "sha256": "f75b474e073732662755a74025a3c804f2904353beb7037a159ec97c9c7e096c"
+    },
+    "image-resources.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/image-resources.compact.json",
+      "bytes": 56174,
+      "sha256": "19c51e10228f818702cd7a4893c4a521aee521c7f564821f7f88bfee77a64343"
+    },
+    "parsing.summary.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/transform-angle-successor/compact/parsing.summary.json",
+      "bytes": 142578,
+      "sha256": "96aa8f085c97f3a7df6dc237ab45c5f62875f116727dcd22e5759df17cee35b3"
+    }
+  },
+  "corpus": {
+    "parsing_selectors": [
+      "css-logical",
+      "css-color",
+      "css-values",
+      "css-cascade",
+      "css-conditional",
+      "css-fonts",
+      "css-text",
+      "css-backgrounds",
+      "css-transforms",
+      "css-flexbox",
+      "css-grid",
+      "css-images",
+      "css-sizing",
+      "css-contain",
+      "css-display",
+      "selectors",
+      "css-shadow"
+    ],
+    "render_dirs": [
+      "css/css-fonts",
+      "css/css-transforms",
+      "css/css-images",
+      "css/CSS2/floats",
+      "css/CSS2/normal-flow",
+      "css/CSS2/positioning",
+      "css/css-backgrounds",
+      "css/css-contain",
+      "css/css-display",
+      "css/css-overflow",
+      "css/css-position",
+      "css/css-ruby",
+      "css/css-sizing",
+      "css/css-tables",
+      "css/css-viewport",
+      "css/css-color",
+      "css/css-cascade",
+      "css/css-conditional",
+      "css/selectors",
+      "css/css-shadow"
+    ],
+    "resource_cases": 491,
+    "RC21": 226,
+    "viewport": [
+      800,
+      600
+    ],
+    "timeout": 20,
+    "jobs": 4,
+    "workspace_nextest": true,
+    "workspace_doctests": true
+  },
+  "profile": {
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_DEV_INCREMENTAL": null,
+    "CARGO_PROFILE_TEST_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_TEST_INCREMENTAL": null
+  },
+  "capacity": {
+    "actual_device_shared_required_bytes": 30198988800,
+    "build_target_raw_baseline_compact_staging_bytes": 25769803776,
+    "bootstrap_bytes": 2147483648,
+    "reserve_bytes": 2147483648,
+    "bounded_retention_copy_bytes": 134217728,
+    "no_WPT_copy": true,
+    "raw_ELF_source_native_preserved": true,
+    "no_crossbox_ELF_baseline_claim": true
+  },
+  "resources": {
+    "vCPU": 4,
+    "memory_GiB": 8,
+    "TTL_seconds": 7200
+  },
+  "command": {
+    "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/origins-spec-controls/command-prepared.sh",
+    "bytes": 120496,
+    "sha256": "91ed67a3bec32f1bec285aeac4ec73329639073d340230dc7eb9545769f91fe2"
+  },
+  "storage_plan": {
+    "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/origins-spec-controls/storage-plan.json",
+    "bytes": 935,
+    "sha256": "b16ab74b8db76b637f1eeec97281ab9b4a691714a270cd8ff98b6f55ce58c935"
+  },
+  "public_caller_path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/origins-current-c220/published-caller",
+  "public_caller_source": "c220413d7778de7a70ed56c8bf5adc81858fa744",
+  "argv": [
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/origins-current-c220/published-caller/scripts/linux-run.sh",
+    "css-origins-spec-controls-20261006",
+    "--ref",
+    "731e7aa002adc629ec1c9d398ba1ded6cbd76ae5",
+    "--storage-plan",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/origins-spec-controls/storage-plan.json",
+    "--endpoint-receipt",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/origins-spec-controls/endpoint.manifest.json",
+    "--compact-root",
+    "amazing/out/css-origins-spec-controls-20261006/origins-spec-731e7aa0-initial/compact",
+    "--setup-summary",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/origins-spec-controls/setup.summary.json",
+    "--command-file",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/origins-spec-controls/command-prepared.sh"
+  ],
+  "prepared_utc": "2026-10-05 22:38 UTC",
+  "source_test_groups": {
+    "CSS": 5,
+    "installed_runtime": 5
+  },
+  "all_original_tests_and_assertions_preserved": true,
+  "original_7e_source_preserved": "7e04156e5d64625a73ef8157dc0b4bb1cb0dbffd",
+  "origin_7e_all_5_production_and_test_files_byteexact": false,
+  "no_transform_ticket_prerequisite": true,
+  "transform_ticket_independent_ready": "db060233802068ad46faf75adad98fbde6af158a",
+  "baseline_selection": "Authentic qualified1c AFTER native0/all26phase0, whose complete transform CSS source is now installed by publishedc220. Original source/role/receipt bytes retained; no fresh BEFORE rebuild or relabel.",
+  "public_caller_published_tool_source": "7df1309440501fc216c5017018cf4d324ae44ce9",
+  "public_caller_files": {
+    "scripts/run-render-wpt.ps1": {
+      "sha256": "7cdecfacc4c7bdb1170de6a8780bfe1d754835826c79082833ecbd92e04bc2ef",
+      "bytes": 20889
+    },
+    "scripts/window-proof-tests.py": {
+      "sha256": "6a7512647c662c8743517ee2f4a0002f10edc4e8523f8db4e09e01bade15247a",
+      "bytes": 14119
+    },
+    "scripts/wpt_render_summary.py": {
+      "sha256": "9251e6e82930b6050d80ef00e21c57ee4788f9390c20f7de1e5e537a7fbec13b",
+      "bytes": 7537
+    },
+    "scripts/wpt_render_cluster.py": {
+      "sha256": "73a0555f608591580ab3c8dec30254e03a8a8b89ca3f1e4c0e80535b9943a78e",
+      "bytes": 7369
+    },
+    "scripts/smoke-gpui-address.ps1": {
+      "sha256": "66c647bd7307a4ddb5ef3a6e890c25882e12e5b623c44c4055eff0c046050b5b",
+      "bytes": 2645
+    },
+    "scripts/nextest-compact-controls.py": {
+      "sha256": "a6488926a75f51d4cc6c1a960e682e1bdbe38f5be308359b6ba373e836af9817",
+      "bytes": 10831
+    },
+    "scripts/window-proof.py": {
+      "sha256": "a6f7f1f3ea40b9d0965f76159fc4f4dd1e6d626e5a75595b91317cd2b3f1416c",
+      "bytes": 10780
+    },
+    "scripts/evidence-custody.py": {
+      "sha256": "111a7325b6704568deacd62eda478f6abf254cf3eb4172dc127736492e4e6d91",
+      "bytes": 6602
+    },
+    "scripts/test-evidence-custody.py": {
+      "sha256": "3177a2ccd11f66f116cc67ec3f3b966a776cbd67a645413b9a2188d2908ab163",
+      "bytes": 5918
+    },
+    "scripts/linux-native-cargo-fixture.py": {
+      "sha256": "aefc1ce6a925d98b1928d363a8115cb5a00f82e35e010e1000719b57c43d750b",
+      "bytes": 3533
+    },
+    "scripts/linux-bootstrap.sh": {
+      "sha256": "e6d985ebfe4f6c6771ec554db9329721c0e4e0b09113ec7b5fec244f423f1eb3",
+      "bytes": 4596
+    },
+    "scripts/gate-summary.py": {
+      "sha256": "0dc65b9e67509bcf681cacb52c5d92d5e1ef2274bdc337f09c5e591578bffe84",
+      "bytes": 11877
+    },
+    "scripts/render-corpus-collector-tests.py": {
+      "sha256": "14b11ef605650cd1a9acfff1ae629ac6bb5d3cde37dfb67215f83d3613e0faf5",
+      "bytes": 7644
+    },
+    "scripts/native-storage-retention-tests.py": {
+      "sha256": "e792e4cdad3fcc892ca79a34740682b359adb0ad1ff2158ab93466b2fe10b7d6",
+      "bytes": 34720
+    },
+    "scripts/linux-workspace-native.py": {
+      "sha256": "497fbb94e7357590846233118e56cc7c405505d6a272b014829f876b71a712b2",
+      "bytes": 3270
+    },
+    "scripts/native-storage-plan.py": {
+      "sha256": "3c4df2f01150f9da8b53695df781d2ee83fd7d79a92a1d9b33449d14bf763dbe",
+      "bytes": 8641
+    },
+    "scripts/gate-tooling-tests.py": {
+      "sha256": "3376dd055cfac0993762447fc2916f7c6718fef26299f015f2fc1dac09c7fbad",
+      "bytes": 9683
+    },
+    "scripts/merge-preflight.sh": {
+      "sha256": "dfd616efe45b3eccea7c65b402d263ec5e5b3031a529c5f05b92361cfeb2f9c5",
+      "bytes": 4509
+    },
+    "scripts/source-upload-qualification.py": {
+      "sha256": "9e0514fde66d02740774d6acda3113f64c50e3a14f6ca6a0e06fba1b4c5fee9e",
+      "bytes": 3776
+    },
+    "scripts/fleet-monitor.py": {
+      "sha256": "29ba3d56458f1e4298f6b0103b3337a2fc6a977557c9dee97691585a3eb6d6ee",
+      "bytes": 9912
+    },
+    "scripts/boat-idle-reaper.py": {
+      "sha256": "2a6aa75b42076932ac4a404d66432185851a5048c6411f505d36d091c6a7e708",
+      "bytes": 10282
+    },
+    "scripts/inventory-render-wpt.ps1": {
+      "sha256": "d46a77d2db36505c8af826a7b800211a1e4c601aaecce95eb2c076c7cf8208b5",
+      "bytes": 10365
+    },
+    "scripts/gate-summary-tests.py": {
+      "sha256": "f357493a8e1ccb9de3dadbfc1036343b8b074404460e8979e7c1c5debaf7240d",
+      "bytes": 12553
+    },
+    "scripts/native-template-cache-tests.py": {
+      "sha256": "4f40379f91a5fa0e73b553f8e5e63ce44d290390519f09bbb837fbe88058b79f",
+      "bytes": 13988
+    },
+    "scripts/primary-gate.sh": {
+      "sha256": "8c208eeb36d951334971ea6eb14c01583f119f3ee2386f65f8cfccee48a1dacb",
+      "bytes": 208
+    },
+    "scripts/phase4-visual-audit.ps1": {
+      "sha256": "ce5c9d14c257820f4f7dfd9519dab86293d0579ff5676dc69cf42668ad71c70c",
+      "bytes": 3041
+    },
+    "scripts/linux-run.sh": {
+      "sha256": "6c960c2a394d659990484388a15bd887f4db4f0793244669d9f88aafe08a1c28",
+      "bytes": 24974
+    },
+    "scripts/win-run.sh": {
+      "sha256": "7d30122cff2d26fa7e7ad80167eed69381975900e1fc2eebef4993d8668390e6",
+      "bytes": 5134
+    },
+    "scripts/capture-gpui-shell.ps1": {
+      "sha256": "fc835c3eaf47600dbc4099db9c3e77fd677874d50a19a74847b26aa605321df8",
+      "bytes": 3052
+    },
+    "scripts/completed-callers-tests.py": {
+      "sha256": "424bb9e63243fec1796e7a3a91bab10f4b91dcd0fc59dd71e39026552d52ce3f",
+      "bytes": 5197
+    },
+    "scripts/image-presentation-publish.py": {
+      "sha256": "c73fe8e04481d11b9eb117671ae70ec68ad57ced778356e59d00a2dfdc4dc461",
+      "bytes": 3714
+    },
+    "scripts/public-gate-contracts.py": {
+      "sha256": "68d3e60a6d327839671cb44924ddcf26c1f13908f2b48380e746efcb0191241c",
+      "bytes": 2521
+    },
+    "scripts/wpt.py": {
+      "sha256": "7190140daf834858fe2809b8ddbd950c332c56b94aff990500cbed0bab62e83c",
+      "bytes": 4251
+    },
+    "scripts/completed-job-large-command-tests.py": {
+      "sha256": "ad8a551731f592f3b99ea9fd6819b5226779d5dd48c90310e7a523d604acf2a0",
+      "bytes": 4966
+    },
+    "scripts/gate-source.py": {
+      "sha256": "079fdf03824a00f738804c7d9f3b029cf5def6d7985260963f1dcc4ef73e7ca5",
+      "bytes": 3268
+    },
+    "scripts/completed-job-lifecycle-tests.py": {
+      "sha256": "0a38968f4744d5e9e9940886092dd83f21f7df2d8e43b6d754eb8bae417dfde7",
+      "bytes": 12178
+    },
+    "scripts/with-build-slot.sh": {
+      "sha256": "2cd650e5f367ddb4bdb7d9bf3e7bdb9e397642317f5ae423f52651a0028844eb",
+      "bytes": 4462
+    },
+    "scripts/render-gate.py": {
+      "sha256": "c4cb1eecc149ffbab383624b3feb13969597beb9d3af662dbdaffad71aa4bcf7",
+      "bytes": 4848
+    },
+    "scripts/test262-job-state.py": {
+      "sha256": "141c89351fb47dd923beb74f9ca337ae4201919857f2ab80004af58e4a548a18",
+      "bytes": 4731
+    },
+    "scripts/linux-shell-capture.sh": {
+      "sha256": "67eb5ebb62248ebe9908b749330dac33d7edc206978db7b2da9e6ec280a3cddc",
+      "bytes": 3132
+    },
+    "scripts/test262-boat.sh": {
+      "sha256": "fcbfaee2b601d8085b4569542ab9c531d71be5c0ced3a610a999c4e7a5f38272",
+      "bytes": 8759
+    },
+    "scripts/real_pages_capture_compare.py": {
+      "sha256": "07bf7d0c6d3d18c98a3e5c7fb8196acb5e34f1d692a3bcb58e7974246c1330e1",
+      "bytes": 7238
+    },
+    "scripts/test262-job-state-tests.py": {
+      "sha256": "f7bb3efd435d3dac2881ee75eb78dd350ff8bfd5fed43d4de820f72894cdbce6",
+      "bytes": 7358
+    },
+    "scripts/linux-render-wpt.sh": {
+      "sha256": "5fbc93acab416b8cf3a4a535f9842b85b6a9b2fdd0886992cf569124bb4395e8",
+      "bytes": 3853
+    },
+    "scripts/generate_intl_data.py": {
+      "sha256": "b1da0b08f2e17cf77151c508720cb285091e3b07ea434a6e66e4464a6b0544c8",
+      "bytes": 31816
+    },
+    "scripts/wpt_render_compare.py": {
+      "sha256": "219764b940f2b41da580f1eb73634088b96203b954f19fd72bf29dfba4f14b23",
+      "bytes": 32405
+    },
+    "scripts/test262-pooled-tests.py": {
+      "sha256": "f0b804dd199ccebda35aa33458914752fe64611ff2f74687eb9ab476306bc181",
+      "bytes": 11618
+    },
+    "scripts/image-corpus-contract-tests.py": {
+      "sha256": "6355b86063eae2932117e0845252056639d86823c317289ec2da1df99e61c6ff",
+      "bytes": 12642
+    },
+    "scripts/image-resource-corpus.py": {
+      "sha256": "de54c2e13e991f1a1f1c095ff8dff317184d8e9afc5250ed5f7078a66b144456",
+      "bytes": 5555
+    },
+    "scripts/tmuxctl.py": {
+      "sha256": "a25937285027da146205bf0fac6ef090172c7fcbfc6b598eeffd9e6224044075",
+      "bytes": 63904
+    },
+    "scripts/completed-job-preflight-tests.py": {
+      "sha256": "095cf1f9ed79c10ea87f79f6aa888acf598a8a00cc41021ca08e26e54a8436f4",
+      "bytes": 7162
+    },
+    "scripts/generate_intl_tzdata.py": {
+      "sha256": "6212e3d1a3cc3f285f7ecc886a2e6ff47bd2e748a5fc6fc4f2da64f2214b6397",
+      "bytes": 3974
+    },
+    "scripts/boat-lane.py": {
+      "sha256": "adca82065f1cde9631cca5610cc4b3c0e625ca3c90193438a14fd040045f2cba",
+      "bytes": 18131
+    },
+    "scripts/source-upload-tests.py": {
+      "sha256": "926b10f82ce64fdd69f1989455d7e7d2e7075b7d66b9d8b3141066f47828f89b",
+      "bytes": 14394
+    },
+    "scripts/probe-gpui-navigation.ps1": {
+      "sha256": "3f49e6decb60a16cb0f71059d7ab854d32846afc942c3f57d31720d553739fbc",
+      "bytes": 3296
+    },
+    "scripts/ensure-wpt.sh": {
+      "sha256": "d189c8cc9c90f43b204d499503694b5033b88b7a6dce11a30ba01af80b17c53e",
+      "bytes": 1347
+    },
+    "scripts/refresh-lane-trees.sh": {
+      "sha256": "4340c74ffec025586b941bd5d1784e5de3f2f0653c13181cf1b6ff7055a6784b",
+      "bytes": 8602
+    },
+    "scripts/native-inputs.py": {
+      "sha256": "9323c601ec18cbd771379d6137066544d8ad5c4d6ba7f5028c02272b55f254a4",
+      "bytes": 10863
+    },
+    "scripts/thin-worktree-evidence.py": {
+      "sha256": "eac70117925eb04a08c4b7634346ef7396dc2d5a33cadc2555342099bd567b17",
+      "bytes": 3344
+    },
+    "scripts/public-gate-tests.py": {
+      "sha256": "f0103692c72dd882a9eea9a68c32466ac322f3641a50873c3e7e457134050bd8",
+      "bytes": 7313
+    },
+    "scripts/completed-job.py": {
+      "sha256": "9c2bde2eeaa2507e5a14d2cc17599908d1c2ea9b1418ba76a78d04a1ff3b15b1",
+      "bytes": 25769
+    },
+    "scripts/merge-preflight.py": {
+      "sha256": "12f972bfa03a8b0a967da354f29f37c2b779adb2450f84fc0810287acfd61e27",
+      "bytes": 3414
+    },
+    "scripts/test262-pooled.py": {
+      "sha256": "e382284b365f3c1ad98894c97448da30b1283c86f5d67215d1bdbfcf2acb6355",
+      "bytes": 7533
+    },
+    "scripts/linux-shell-capture-remote.sh": {
+      "sha256": "3468df297ed5d6947e60f0da14f091ab35b2c32883f54b447e8dab12eea8eabd",
+      "bytes": 4492
+    },
+    "scripts/gate-command.py": {
+      "sha256": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b",
+      "bytes": 4909
+    },
+    "scripts/nextest-compact.py": {
+      "sha256": "cddc4e6ec9f9ea5c253e50bb3ac7ff02d64389b9dc696370cb02dc417092cd80",
+      "bytes": 8361
+    },
+    "scripts/image-corpus-contract.py": {
+      "sha256": "0a431044ca5a033adccfe237ed53000b08971b6d4fee6592079fc89213ea7db0",
+      "bytes": 2541
+    },
+    "scripts/completed-job-tests.py": {
+      "sha256": "e1e35b02c4429cabb3a70271448315c8696e2bdeb78ce6e2aa86ac8842f52f28",
+      "bytes": 3995
+    },
+    "scripts/html5lib.py": {
+      "sha256": "c25fb94648d7ac18e030db244b86ab291dceaa0e89c6bfc51654110f5125517e",
+      "bytes": 11530
+    },
+    "scripts/native-template-cache.py": {
+      "sha256": "48c8f8d3e9914b47473ea0be734cf5b727099417d4a9df25c94e021b214b4019",
+      "bytes": 13430
+    },
+    "scripts/completed-job-diagnostic-tests.py": {
+      "sha256": "b7039e3102152a81dd25ced42d6a97b5e2c89513dededf18e09ce30b1188848c",
+      "bytes": 7152
+    },
+    "scripts/native-storage-retention.py": {
+      "sha256": "2628dc352f594177a540961888f8157517ca9603847716731b04146f9033d489",
+      "bytes": 27092
+    },
+    "scripts/render-corpus-collector.py": {
+      "sha256": "4308df951b05dcb050e8b8b5834f84a62400364cdaf1e8a0d25dbbe2c4309570",
+      "bytes": 8240
+    },
+    "scripts/generate_intl_locale_data.py": {
+      "sha256": "0ffbaa551a851a2273f9475f33ca276e30bbe6ba289704f58caa252c9c5027b1",
+      "bytes": 6241
+    },
+    "scripts/externalize-agent-scratch.py": {
+      "sha256": "3babc3f7892efe33f054eb4341330e916e7629a367e5844a3f4b741fbe5bd874",
+      "bytes": 4811
+    },
+    "scripts/test262-merge.py": {
+      "sha256": "d4bf3a351e9d35cc851c55727bb8c645c7353fa1a88f812ee9d274f421f8d787",
+      "bytes": 6153
+    },
+    "scripts/image-presentation-ferry.py": {
+      "sha256": "b4ee576b111f3cbfbbcba8c63c07b65a15ca0581fc4bbb6971ecf48ba40ef5ae",
+      "bytes": 5682
+    },
+    "scripts/linux-workspace-gate.py": {
+      "sha256": "ba41a786884e6d8253f696c7d3f956aed7e26f69bf6682c6f0dac95e955c1506",
+      "bytes": 7920
+    },
+    "scripts/native-input-tests.py": {
+      "sha256": "c5728116763f828e9c98ca0c1f4f1c24f9f6e6f6db6615277b56703c0cf170e8",
+      "bytes": 10048
+    },
+    "scripts/fleet-launch.sh": {
+      "sha256": "e5b18ec4c96e1013400e31c30edff995b5d7f86d599018f5b180ce15bce854ff",
+      "bytes": 2619
+    },
+    "scripts/ci.sh": {
+      "sha256": "f3de64d50cfae539d5d3958a9295fdf87d5a7266da4631334a9c0148d4d2deef",
+      "bytes": 344
+    },
+    "scripts/wpt_render_questions.py": {
+      "sha256": "b3334a29cce74c897b9154be68dae51c21632b7407b78f2d5e289ff23a04af4b",
+      "bytes": 4831
+    },
+    "scripts/lane-fetch.sh": {
+      "sha256": "fe4fa79beafef35bbce1ce853f4f3330ae8717b1a6e710675a3bd9892d0d84db",
+      "bytes": 2602
+    },
+    "scripts/linux-gate.sh": {
+      "sha256": "a67bfaad3c59582789a5190f71135f8b1f2180e643a08973b223783bc576a861",
+      "bytes": 323
+    },
+    "scripts/source-upload.py": {
+      "sha256": "d5b9b8469b7eb160cc2bf923aac48470b6a71b2a040b3a08e19a4c915219e908",
+      "bytes": 9573
+    },
+    "scripts/test262.py": {
+      "sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "bytes": 27773
+    },
+    "scripts/test262-pool-native.py": {
+      "sha256": "254c9239a43c9b02c7ea6d51f29024dc2a1a48f2bc5f1e9e36fd61585c76b1a6",
+      "bytes": 5518
+    },
+    "scripts/linux-workspace-gate-tests.py": {
+      "sha256": "5ddf8fbf78ee896dd876625672ca1e03a45fc86c93c0de130c0525eb764064a2",
+      "bytes": 11334
+    },
+    "scripts/image-presentation-gate.py": {
+      "sha256": "ae3091556bd0993ea9ce864cb9eeed0d82dc7490a6ddd3699a20f2c14df62ba2",
+      "bytes": 11669
+    },
+    "scripts/lane-fetch-window.sh": {
+      "sha256": "df039e35f3a1b8068e6f15c617bde8e838bcbeeb6bd8f4589fb204a66b719629",
+      "bytes": 2436
+    },
+    "scripts/completed-job-qualification.py": {
+      "sha256": "b4c701aa22e08aac779c92206915dd00f9d2d1e08a25e461c486fcb8213ee8bd",
+      "bytes": 2855
+    },
+    "scripts/tests/test_merge_preflight.py": {
+      "sha256": "c22afe4cc2145fa16adcb7eae6b4dc3682508691816920f8e2a8948aaea316b1",
+      "bytes": 3653
+    },
+    "scripts/fixtures/nextest-compact/authenticated-maps.json": {
+      "sha256": "834473ef1719368663e40404be438320ccf9e9b41e10d12f408e05623878d4ef",
+      "bytes": 68553
+    }
+  },
+  "root_published_transform_engine": "c220413d7778de7a70ed56c8bf5adc81858fa744",
+  "origin_7e_original_10_groups_and_api_consumer_byteexact": true,
+  "original_7e_lib_composed_with_published_transform_lib": true,
+  "public_caller_scripts_byteexact_to_published_7df": true,
+  "tooling_clean_allowance": {
+    "initial_root_controller": 64865,
+    "initial_job": "0a8354a9e49346ee91f6859be9e01c75",
+    "initial_box": "bx_st8ksnpa",
+    "initial_actual_exit": 1,
+    "engine_started": false,
+    "cause": "Baseline gate-summary adapter mismatch before engine; subsequent missing summary publish was consequential.",
+    "root_authenticated_diagnostic": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/origins-current-c220/root-authenticated-diagnostic.json",
+    "clean_attempt": 1,
+    "no_third_unchanged_run": true,
+    "root_owns_launch": true
+  },
+  "corpus_helper_overlay": {
+    "target": "scripts/gate-summary.py",
+    "qualified_source": "1c682ab64702a48ebf775b6240004eda74899bdf",
+    "qualified_sha256": "3e26631cb492c2e77808c7bc9a3354ab248d0e83cf8762b933892647fd7ce0f0",
+    "qualified_bytes": 6347,
+    "shipping_source": "731e7aa002adc629ec1c9d398ba1ded6cbd76ae5",
+    "shipping_sha256": "0dc65b9e67509bcf681cacb52c5d92d5e1ef2274bdc337f09c5e591578bffe84",
+    "shipping_bytes": 11877,
+    "preserved_original_native_path": "/tmp/amazing-native-retained/css-origins-spec-controls-20261006/origins-spec-731e7aa0-initial/inputs/corpus-helper-overlay/gate-summary.shipping.py",
+    "manifest_native_path": "/tmp/amazing-native-retained/css-origins-spec-controls-20261006/origins-spec-731e7aa0-initial/inputs/corpus-helper-overlay/overlay.manifest.json",
+    "scope": "CSS/WPT workspace/docs/17 parsing/20 static/491 resources/all226RC21 only; no Test262 runner invocation",
+    "engine_crates_Cargo_unchanged": true,
+    "all_other_baseline_adapter_hashes_equal": true
+  },
+  "shipping_corpus_adapters": {
+    "gate-summary.py": {
+      "sha256": "0dc65b9e67509bcf681cacb52c5d92d5e1ef2274bdc337f09c5e591578bffe84",
+      "source_commit": "731e7aa002adc629ec1c9d398ba1ded6cbd76ae5"
+    },
+    "image-corpus-contract.py": {
+      "sha256": "0a431044ca5a033adccfe237ed53000b08971b6d4fee6592079fc89213ea7db0",
+      "source_commit": "731e7aa002adc629ec1c9d398ba1ded6cbd76ae5"
+    },
+    "image-presentation-gate.py": {
+      "sha256": "ae3091556bd0993ea9ce864cb9eeed0d82dc7490a6ddd3699a20f2c14df62ba2",
+      "source_commit": "731e7aa002adc629ec1c9d398ba1ded6cbd76ae5"
+    },
+    "image-resource-corpus.py": {
+      "sha256": "de54c2e13e991f1a1f1c095ff8dff317184d8e9afc5250ed5f7078a66b144456",
+      "source_commit": "731e7aa002adc629ec1c9d398ba1ded6cbd76ae5"
+    },
+    "wpt_render_compare.py": {
+      "sha256": "219764b940f2b41da580f1eb73634088b96203b954f19fd72bf29dfba4f14b23",
+      "source_commit": "731e7aa002adc629ec1c9d398ba1ded6cbd76ae5"
+    }
+  },
+  "effective_corpus_adapters": {
+    "gate-summary.py": {
+      "sha256": "3e26631cb492c2e77808c7bc9a3354ab248d0e83cf8762b933892647fd7ce0f0",
+      "source_commit": "1c682ab64702a48ebf775b6240004eda74899bdf",
+      "byteexact_baseline": true
+    },
+    "image-corpus-contract.py": {
+      "sha256": "0a431044ca5a033adccfe237ed53000b08971b6d4fee6592079fc89213ea7db0",
+      "source_commit": "731e7aa002adc629ec1c9d398ba1ded6cbd76ae5",
+      "byteexact_baseline": true
+    },
+    "image-presentation-gate.py": {
+      "sha256": "ae3091556bd0993ea9ce864cb9eeed0d82dc7490a6ddd3699a20f2c14df62ba2",
+      "source_commit": "731e7aa002adc629ec1c9d398ba1ded6cbd76ae5",
+      "byteexact_baseline": true
+    },
+    "image-resource-corpus.py": {
+      "sha256": "de54c2e13e991f1a1f1c095ff8dff317184d8e9afc5250ed5f7078a66b144456",
+      "source_commit": "731e7aa002adc629ec1c9d398ba1ded6cbd76ae5",
+      "byteexact_baseline": true
+    },
+    "wpt_render_compare.py": {
+      "sha256": "219764b940f2b41da580f1eb73634088b96203b954f19fd72bf29dfba4f14b23",
+      "source_commit": "731e7aa002adc629ec1c9d398ba1ded6cbd76ae5",
+      "byteexact_baseline": true
+    }
+  },
+  "public_adapters_scope": "Previous recorded public_adapters describe the qualified CSS corpus adapters; shipping_corpus_adapters and effective_corpus_adapters explicitly distinguish the one reviewed helper overlay.",
+  "prior_a1fc_tooling_allowance_exhausted": true,
+  "new_source_is_genuine_engine_repair_not_unchanged_third_run": true,
+  "genuine_successor": {
+    "original_engine_source": "a1fc9481957acae13081d6edcf18bbb9e34b721c",
+    "original_job": "d86a261f55884253bbe80c163284dece",
+    "original_actual_exit": 1,
+    "nextest_phase_exit": 100,
+    "failed_id": "transform_origins::tests::bad_geometry_unknown_properties_and_unresolved_context_decline",
+    "original_assertion_preserved": true,
+    "cause": "Literal contextual position lengths were discarded during validation, exposing initial50%50% instead of unresolved symbolic computed values.",
+    "repair": "Reuse existing dimensional parser for literal/math context lengths, all container/logical viewport units and allfour position properties.",
+    "all_original10_groups_preserved": true,
+    "new_bulk_groups": 3,
+    "font_loss_still_blocked": {
+      "id": "css__css-fonts__font-size-zero-1-ref.html",
+      "classification": "crash",
+      "original_phase_exit": 2,
+      "no_waiver": true
+    },
+    "diagnostic_native0_source": "36d78dedc602c5b75ab458e586483fc3265aec6e",
+    "diagnostic_job": "c860904a4e6d49318b6cfc7e3e4c6542",
+    "diagnostic_sha256": "86e3a3c54fbba43b259ed3b457c1ce923a4d64ba9d2c917cf2f6c2bf240c210e"
+  },
+  "successor_gate_owner": "css_contain",
+  "successor_initial_gate_not_launched": false,
+  "successor_tooling_retry_policy": "ONE clean tooling rerun for this genuinely changed source only; no unchanged third a1fc run",
+  "font_lost_case_retained_no_waiver": true,
+  "root_workflow_grant": "Genuine compiler/engine failure: fix whole cluster preserving original10 controls/26 corpora, then own whole changed-source publicwrapper requalification. Root alone integrates/gates merged source/pushes dev.",
+  "spec_control_correction": {
+    "previous_source": "11d4677f2faba5926d9554a83165ed8fcaac5390",
+    "previous_actual_exit": 1,
+    "workspace": {
+      "passed": 4981,
+      "failed": 1,
+      "skipped": 17
+    },
+    "doctests": {
+      "passed": 31,
+      "failed": 0
+    },
+    "other25_actual_phase_exits": 0,
+    "original10groups_passed": true,
+    "original_font_lost_id_now_passes": true,
+    "no_corpus_lost_passes": true,
+    "production_engine_code_byteexact_to_11d": true,
+    "corrected_added_control": "transform-origin uses XY plus optionalZ, not four-token edge offsets; preserve that exact input as negative transform-origin and positive perspective-origin, canonicalcalc equivalent positive transform-origin.",
+    "all13groups_retained": true,
+    "specs": [
+      "https://drafts.csswg.org/css-transforms-1/#transform-origin-property",
+      "https://drafts.csswg.org/css-transforms-2/#perspective-origin-property"
+    ],
+    "no_old_failure_waived": true,
+    "qualified_diagnostic_source": "36d78dedc602c5b75ab458e586483fc3265aec6e",
+    "diagnostic_native0_job": "9fd959cfb3114a25a196933c5afd15f4",
+    "diagnostic_sha256": "bf8fde365c36a5902803f2fee8d03b06356d3b69508565a75de52dd914b86832"
+  }
+}
