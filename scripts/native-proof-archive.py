@@ -1,0 +1,273 @@
+#!/usr/bin/env python3
+"""Archive declared terminal proof on captured native /srv; never delete inputs."""
+import argparse
+import contextlib
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import signal
+import stat
+import sys
+import time
+import uuid
+
+ROOT = Path('/srv/amazing-proof')
+NATIVE_TYPES = {'ext2', 'ext3', 'ext4', 'xfs', 'btrfs', 'overlay'}
+
+
+def digest(path):
+    with Path(path).open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def identifier(value):
+    if not re.fullmatch(r'[a-z0-9][a-z0-9._-]{0,127}', value):
+        raise ValueError('invalid owner/job identity')
+    return value
+
+
+def canonical(path):
+    path = Path(path)
+    if not path.is_absolute() or path.resolve(strict=True) != path:
+        raise ValueError('proof operand must exist with no symlink components')
+    return path
+
+
+def unescape(value):
+    return re.sub(r'\\([0-7]{3})', lambda m: chr(int(m[1], 8)), value)
+
+
+def native_mount(path):
+    path = canonical(path)
+    matches = []
+    for line in Path('/proc/self/mountinfo').read_text().splitlines():
+        left, right = line.split(' - ', 1)
+        fields, filesystem = left.split(), right.split()
+        mount = Path(unescape(fields[4]))
+        if path == mount or mount in path.parents:
+            matches.append((len(mount.parts), {'mountpoint': str(mount),
+                            'filesystem': filesystem[0], 'source': unescape(filesystem[1]),
+                            'device': fields[2]}))
+    if not matches:
+        raise ValueError('no actual mount provenance')
+    result = max(matches, key=lambda row: row[0])[1]
+    if result['filesystem'] not in NATIVE_TYPES:
+        raise ValueError('proof requires native disk, not FUSE/ramfs/tmpfs: ' + result['filesystem'])
+    result['stat_device'] = path.stat().st_dev
+    return result
+
+
+def exclusions(path):
+    # Snapshot filters are relative to their containing directory. Refuse any
+    # potentially applicable policy instead of pretending to implement its
+    # gitignore matcher. No .gitignore interpretation or silent omissions.
+    policies = []
+    for parent in [path, *path.parents]:
+        for name in ('.boxignore', '.oneignore'):
+            policy = parent / name
+            if policy.exists() or policy.is_symlink(): policies.append(str(policy))
+    if policies:
+        raise ValueError('snapshot exclusion policy requires explicit resolution: ' + ','.join(policies))
+
+
+def root_admission():
+    root = canonical(ROOT)
+    if not root.is_dir() or root.stat().st_uid != os.getuid() or stat.S_IMODE(root.stat().st_mode) != 0o700:
+        raise ValueError('root must provision owner-private /srv/amazing-proof mode0700')
+    exclusions(root)
+    return native_mount(root)
+
+
+def fingerprint(info):
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns,
+            info.st_ctime_ns, stat.S_IMODE(info.st_mode))
+
+
+def inventory(roots):
+    rows, directories = [], []
+    for label, source in sorted(roots.items()):
+        source = canonical(source)
+        if not source.is_dir(): raise ValueError('input must be a terminal directory')
+        native_mount(source)
+        for directory, dirs, files in os.walk(source, followlinks=False):
+            parent = Path(directory)
+            native_mount(parent)
+            if any((parent/name).exists() or (parent/name).is_symlink() for name in ('.boxignore','.oneignore')):
+                raise ValueError('input policy could exclude copied proof; explicit resolution required')
+            directories.append({'label': label, 'path': str(parent.relative_to(source))})
+            for name in dirs + files:
+                if (parent / name).is_symlink(): raise ValueError('symlink proof is never followed or omitted')
+            for name in sorted(files):
+                file = parent / name
+                before = file.stat()
+                if not stat.S_ISREG(before.st_mode): raise ValueError('proof contains nonregular input')
+                sha = digest(file)
+                if fingerprint(file.stat()) != fingerprint(before): raise ValueError('input changed while hashing')
+                with file.open('rb') as stream: elf = stream.read(4) == b'\x7fELF'
+                rows.append({'label': label, 'path': str(file.relative_to(source)),
+                             'bytes': before.st_size, 'sha256': sha,
+                             'mode': stat.S_IMODE(before.st_mode), 'elf': elf,
+                             'source_identity': list(fingerprint(before))})
+    return sorted(rows, key=lambda row: (row['label'], row['path'])), sorted(directories, key=lambda row: (row['label'], row['path']))
+
+
+def fsync_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+
+
+def save(path, value):
+    # Exclusive publication; an existing completed or partial job is preserved.
+    pending = path.with_name(path.name + '.' + uuid.uuid4().hex + '.pending')
+    with pending.open('x') as stream:
+        json.dump(value, stream, separators=(',', ':'), sort_keys=True)
+        stream.write('\n'); stream.flush(); os.fsync(stream.fileno())
+    os.link(pending, path); pending.unlink(); fsync_directory(path.parent)
+
+
+def terminal(path, source, job):
+    path = canonical(path)
+    row = json.loads(path.read_text())
+    provenance = row.get('job') if isinstance(row.get('job'), dict) else row
+    actual_source = provenance.get('source_commit', provenance.get('source'))
+    actual_job = provenance.get('job_id', provenance.get('job'))
+    complete = row.get('state') == 'TERMINAL' or row.get('completed') is True
+    code = row.get('actual_exit', row.get('command_exit', row.get('engine_exit')))
+    if not complete or actual_source != source or actual_job != job or type(code) is not int:
+        raise ValueError('actual terminal source/job/exit receipt required; live jobs untouched')
+    return {'path': str(path), 'bytes': path.stat().st_size, 'sha256': digest(path), 'actual_exit': code}
+
+
+def archive(lane, source, job, roots, terminal_path, copy_budget, reserve):
+    identifier(lane); identifier(job)
+    if not re.fullmatch(r'[0-9a-f]{40}', source): raise ValueError('exact source commit required')
+    if copy_budget < 0 or reserve < 0: raise ValueError('negative capacity budget')
+    mount = root_admission()
+    producer = terminal(terminal_path, source, job)
+    roots = {identifier(label): canonical(path) for label, path in roots.items()}
+    if not roots: raise ValueError('no declared raw/ELF inputs')
+    for path in roots.values():
+        if ROOT == path or ROOT in path.parents or path in ROOT.parents:
+            raise ValueError('archive/input root overlap')
+    destination = ROOT / lane / source / job
+    if destination.exists() or destination.is_symlink(): raise ValueError('prior archive/partial preserved')
+    rows, directories = inventory(roots)
+    required = sum(row['bytes'] for row in rows) + 4096 * (len(rows) + len(directories)) + 65536
+    available = shutil.disk_usage(ROOT).free
+    if required > copy_budget or available < required + reserve:
+        raise OSError(28, 'explicit archive capacity unavailable; inputs untouched')
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    canonical(destination.parent); exclusions(destination.parent); native_mount(destination.parent)
+    destination.mkdir(mode=0o700)
+    header = {'schema': 1, 'lane': lane, 'source': source, 'job': job,
+              'destination': str(destination), 'inputs': {k: str(v) for k,v in roots.items()},
+              'terminal_producer': producer, 'mount': mount, 'required_bytes': required,
+              'available_bytes': available, 'copy_budget_bytes': copy_budget,
+              'reserve_bytes': reserve, 'complete': False, 'source_retained': True}
+    save(destination / 'start.manifest.json', header)
+    try:
+        for directory in directories:
+            (destination / 'payload' / directory['label'] / directory['path']).mkdir(parents=True, exist_ok=True, mode=0o700)
+        for row in rows:
+            original = roots[row['label']] / row['path']
+            final = destination / 'payload' / row['label'] / row['path']
+            if list(fingerprint(original.stat())) != row['source_identity']: raise ValueError('input changed before copy')
+            with original.open('rb') as source_stream, final.open('xb') as output:
+                shutil.copyfileobj(source_stream, output, 1024 * 1024)
+                output.flush(); os.fsync(output.fileno())
+            final.chmod(row['mode'])
+            with final.open('rb') as stream: os.fsync(stream.fileno())
+            if final.stat().st_size != row['bytes'] or digest(final) != row['sha256']:
+                raise ValueError('destination byte/hash readback failed')
+        after, after_directories = inventory(roots)
+        if rows != after or directories != after_directories: raise ValueError('input tree changed during archive; no completed publication')
+        if terminal(terminal_path, source, job) != producer: raise ValueError('terminal producer receipt changed')
+        copied, copied_directories = inventory({label:destination/'payload'/label for label in roots})
+        fields=('label','path','bytes','sha256','mode','elf')
+        if [{k:r[k] for k in fields} for r in copied] != [{k:r[k] for k in fields} for r in rows] or copied_directories != directories:
+            raise ValueError('final archived tree differs from declared original bytes')
+        if root_admission() != mount:raise ValueError('captured native root mount changed')
+        # Seal every payload directory before the complete receipt.
+        for directory, dirs, files in os.walk(destination / 'payload', topdown=False): fsync_directory(directory)
+        for parent in [destination, destination.parent, destination.parent.parent, ROOT]: fsync_directory(parent)
+        manifest = dict(header, complete=True, files=rows, directories=directories,
+                        file_count=len(rows), elf_count=sum(row['elf'] for row in rows),
+                        logical_bytes=sum(row['bytes'] for row in rows), completed_ns=time.time_ns())
+        save(destination / 'archive.manifest.json', manifest)
+        for parent in [destination, destination.parent, destination.parent.parent, ROOT]: fsync_directory(parent)
+        return {'schema': 1, 'complete': True, 'source': source, 'lane': lane, 'job': job,
+                'destination': str(destination), 'files': len(rows), 'elf_files': manifest['elf_count'],
+                'logical_bytes': manifest['logical_bytes'], 'mount': mount, 'source_retained': True,
+                'archive_manifest': {'path': str(destination/'archive.manifest.json'),
+                    'bytes': (destination/'archive.manifest.json').stat().st_size,
+                    'sha256': digest(destination/'archive.manifest.json')},
+                'snapshot_coverage': 'documented /srv; actual restored member verification is root lifecycle qualification'}
+    except BaseException as error:
+        # Preserve all partial bytes and the true failure; never erase originals.
+        try: save(destination/'failure.manifest.json', dict(header,error=type(error).__name__,message=str(error)))
+        except OSError: pass
+        raise
+
+
+def verify(manifest_path, expected_sha, archive_exit):
+    if archive_exit != 0:raise ValueError('actual archival command did not succeed')
+    manifest_path=canonical(manifest_path)
+    if ROOT not in manifest_path.parents or manifest_path.name!='archive.manifest.json':raise ValueError('not a captured-native archive manifest')
+    root_admission()
+    if digest(manifest_path)!=expected_sha:raise ValueError('archive manifest identity changed')
+    destination=manifest_path.parent
+    if (destination/'failure.manifest.json').exists():raise ValueError('archive has a failed/partial producer')
+    manifest=json.loads(manifest_path.read_text())
+    if manifest.get('complete') is not True or manifest.get('destination')!=str(destination):raise ValueError('archive not complete')
+    roots={label:destination/'payload'/label for label in manifest['inputs']}
+    rows,directories=inventory(roots);fields=('label','path','bytes','sha256','mode','elf')
+    if [{k:r[k] for k in fields} for r in rows] != [{k:r[k] for k in fields} for r in manifest['files']] or directories!=manifest['directories']:
+        raise ValueError('archived raw/ELF bytes or paths changed')
+    return {'schema':1,'complete':True,'actual_archive_exit':archive_exit,'destination':str(destination),
+            'source':manifest['source'],'lane':manifest['lane'],'job':manifest['job'],
+            'files':len(rows),'elf_files':sum(r['elf'] for r in rows),'archive_manifest_sha256':expected_sha}
+
+
+@contextlib.contextmanager
+def deadline(seconds):
+    if not 1 <= seconds <= 6600 or signal.getitimer(signal.ITIMER_REAL) != (0.0,0.0): raise ValueError('invalid or nonowned archive timer')
+    previous=signal.getsignal(signal.SIGALRM)
+    def expired(signum,frame): raise TimeoutError('native proof archive deadline expired')
+    signal.signal(signal.SIGALRM,expired); signal.setitimer(signal.ITIMER_REAL,seconds)
+    try: yield
+    finally: signal.setitimer(signal.ITIMER_REAL,0);signal.signal(signal.SIGALRM,previous)
+
+
+def main():
+    if len(sys.argv)>1 and sys.argv[1]=='verify':
+        p=argparse.ArgumentParser(description='Verify root stop-safety inputs; not an engine merge gate')
+        p.add_argument('mode');p.add_argument('manifest');p.add_argument('--sha256',required=True);p.add_argument('--actual-archive-exit',required=True,type=int)
+        args=p.parse_args()
+        try:
+            result=verify(args.manifest,args.sha256,args.actual_archive_exit);code=0
+        except Exception as error:
+            result={'schema':1,'complete':False,'error':str(error)};code=3
+        print(json.dumps(result,separators=(',',':')));return code
+    p=argparse.ArgumentParser(description=__doc__)
+    for name in ('lane','source','job','terminal-receipt'):p.add_argument('--'+name,required=True)
+    p.add_argument('--input',action='append',required=True,help='label=absolute native terminal directory')
+    p.add_argument('--copy-budget-bytes',type=int,required=True);p.add_argument('--reserve-bytes',type=int,required=True)
+    p.add_argument('--seconds',type=int,default=600)
+    args=p.parse_args()
+    try:
+        pairs=[value.split('=',1) for value in args.input]
+        if any(len(pair)!=2 for pair in pairs) or len({pair[0] for pair in pairs})!=len(pairs):raise ValueError('invalid or duplicate input labels')
+        with deadline(args.seconds):result=archive(args.lane,args.source,args.job,dict(pairs),args.terminal_receipt,args.copy_budget_bytes,args.reserve_bytes)
+        code=0
+    except Exception as error:
+        code=124 if isinstance(error,TimeoutError) else 3
+        result={'schema':1,'complete':False,'actual_exit':code,'source':args.source,'lane':args.lane,'job':args.job,'error':{'type':type(error).__name__,'errno':getattr(error,'errno',None),'message':str(error)}}
+    result['actual_exit']=code
+    print(json.dumps(result,separators=(',',':')),flush=True)
+    return code
+
+if __name__=='__main__':raise SystemExit(main())
