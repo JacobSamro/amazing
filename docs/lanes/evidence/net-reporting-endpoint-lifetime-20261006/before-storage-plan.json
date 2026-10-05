@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "ticket": "net-reporting-endpoint-lifetime-current-20261006",
+  "source": "68b1e6363be41f3867c684040326d54bf07af3af",
+  "phase": "before",
+  "job": "endpoint-baseline-68b1e636-initial",
+  "scratch_parent": "/tmp/amazing-native-storage",
+  "output_root": "/tmp/amazing-native-retained/net-reporting-endpoint-lifetime-current-20261006/endpoint-baseline-68b1e636-initial",
+  "retained_root": "/tmp/amazing-native-retained/net-reporting-endpoint-lifetime-current-20261006/endpoint-baseline-68b1e636-initial/retained",
+  "build_budget_bytes": 10737418240,
+  "retention_budget_bytes": 134217728,
+  "bootstrap_budget_bytes": 2147483648,
+  "reserve_bytes": 2147483648,
+  "retention_method": "hardlink-or-copy",
+  "elf_policy": "all",
+  "retire_after_retention": false,
+  "compact_root": "/home/user/amazing/out/net-reporting-endpoint-lifetime-current-20261006/endpoint-baseline-68b1e636-initial/compact",
+  "summary_path": "/home/user/amazing/out/net-reporting-endpoint-lifetime-current-20261006/endpoint-baseline-68b1e636-initial/compact/storage.summary.json"
+}

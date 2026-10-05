@@ -6,7 +6,8 @@ use amazing_net::dispatch::DispatchLimits;
 use std::{io::{Read,Write},net::TcpListener,thread,time::Duration,sync::{Mutex,mpsc}};
 struct Peer {base:String,stop:mpsc::Sender<()>,thread:thread::JoinHandle<()>,requests:Arc<Mutex<Vec<String>>>}
 impl Peer {
-    fn new(endpoint:bool)->Self {
+    fn new(endpoint:bool)->Self { Self::with_report_status(endpoint, 204) }
+    fn with_report_status(endpoint:bool, report_status:u16)->Self {
         let listener=TcpListener::bind("127.0.0.1:0").unwrap();listener.set_nonblocking(true).unwrap();
         let base=format!("http://127.0.0.1:{}",listener.local_addr().unwrap().port());let (stop,rx)=mpsc::channel();
         let requests=Arc::new(Mutex::new(Vec::new()));let saved=requests.clone();
@@ -24,7 +25,7 @@ impl Peer {
                 let response=match path.as_str() {
                     "/source"=>format!("HTTP/1.1 200 OK\r\nContent-Security-Policy-Report-Only: frame-src 'none'; report-to default\r\n{}Content-Length: 0\r\nConnection: close\r\n\r\n",if endpoint {"Reporting-Endpoints: default=\"/report\"\r\n"}else{""}),
                     "/first"=>"HTTP/1.1 302 Found\r\nLocation: /second\r\nReferrer-Policy: no-referrer\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
-                    "/report"=>"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n".into(),
+                    "/report"=>if report_status==204 {"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n".into()}else{format!("HTTP/1.1 {report_status} Status\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")},
                     "/broken"=>"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\nshort".into(),
                     "/hold"=>{thread::sleep(Duration::from_millis(150));"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into()},
                     _=>"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
@@ -279,4 +280,35 @@ fn navigation_source_loan_successful_buffered_and_zero_credit_streamed_heads_kee
         let requests=peer.close();assert_eq!(requests.iter().filter(|request|request.starts_with("POST /report ")).count(),count);
         assert!(requests.iter().any(|request|request.starts_with("GET /successful ")));
     }
+}
+
+#[test]
+fn source_loan_prepared_report_observes_original_endpoint_410_after_retirement() {
+    let peer=Peer::with_report_status(true,410);
+    let mut service=NetworkService::new(DispatchLimits::default());
+    let (handle,receiver,parent,protected)=source(&mut service,&peer);
+    let mut request=owned_request(&mut service,handle,&receiver,&parent,peer.url("/broken"));
+    let mut loan=service.prepare_navigation_csp_reporting(handle,&receiver,&mut request,&protected).unwrap();
+    let id=service.start_navigation_received(request,&receiver,Instant::now()).unwrap();
+    let receipt=outcome(&mut service,id,false).unwrap_err().csp_provenance.unwrap();
+    let plan=service.prepare_navigation_csp_report(&mut loan,&receipt,0,Instant::now()).unwrap();
+    let violation=plan.violation().clone();let snapshot=plan.report_snapshot();
+    service.queue_csp_report(handle,&violation,Instant::now(),Instant::now()).unwrap();
+    assert!(service.forget_reporting_document(handle));
+    let deadline=Instant::now()+Duration::from_secs(8);let mut finished=false;
+    while !finished&&Instant::now()<deadline {
+        for event in service.step(4096,Instant::now()) {
+            if let ServiceEvent::ReportFinished(result)=event {
+                assert_eq!(result.document,handle);
+                assert_eq!(result.outcome,ReportOutcome::Response{status:410,accepted:false});finished=true;
+            }
+        }thread::yield_now();
+    }
+    assert!(finished);assert_eq!(snapshot,violation.report_snapshot());
+    assert_eq!(service.queue_prepared_csp_report(plan,Instant::now()),Err(ReportError::NoEndpoint));
+    assert!(matches!(service.prepare_navigation_csp_report(&mut loan,&receipt,0,Instant::now()),Err(ReportError::InvalidReport)));
+    service.release_navigation_csp_reporting(loan).unwrap();
+    assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+    assert!(!service.has_pending_reporting_io());
+    assert_eq!(peer.close().iter().filter(|request|request.starts_with("POST /report ")).count(),1);
 }

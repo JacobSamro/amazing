@@ -149,6 +149,7 @@ pub(super) fn document_snapshot_bytes(settings:&Document)->Option<usize> {
         add(name.len())?;
         add(url.serialize().len())?;
     }
+    add(settings.endpoint_lifetime_bytes()?)?;
     for name in settings.failures.keys() {
         add(std::mem::size_of::<(String, u64)>())?;
         add(name.len())?;

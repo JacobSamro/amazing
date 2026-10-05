@@ -35,6 +35,7 @@ impl NetworkService {
             context: client.context.clone(),
             endpoints: endpoints(accepted_final_url, headers),
             failures: BTreeMap::new(),
+            endpoint_lifetimes: Default::default(),
             referrer_policy: client.referrer_policy,
         })
     }
@@ -52,6 +53,7 @@ impl NetworkService {
             context: client.context.clone(),
             endpoints: BTreeMap::new(),
             failures: BTreeMap::new(),
+            endpoint_lifetimes: Default::default(),
             referrer_policy: client.referrer_policy,
         })
     }

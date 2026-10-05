@@ -1831,3 +1831,260 @@ fn coep_revalidation_reports_merged_response_once_and_retains_actual_conditional
     }
     peer.join().unwrap();
 }
+
+#[test]
+fn endpoint_removal_reaches_live_and_retired_prepared_settings_without_global_transfer() {
+    for retired in [false, true] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = HttpUrl::parse(&format!("http://{}/document", listener.local_addr().unwrap())).unwrap();
+        let peer = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_request(&mut stream);
+            assert!(request.starts_with("POST /reports HTTP/1.1"));
+            stream.write_all(b"HTTP/1.1 410 Gone\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+        });
+        let mut service = NetworkService::new(DispatchLimits::default());
+        let handle = service.register_reporting_response(url.clone(), &headers(r#"csp="/reports", other="/reports""#), context(&url)).unwrap();
+        // Two original global endpoint objects may have the same URL. A fresh
+        // global at the same URL also has independent endpoint objects.
+        let fresh = service.register_reporting_response(url.clone(), &headers(r#"csp="/reports""#), context(&url)).unwrap();
+        let now = Instant::now();
+        let v = violation(&url.serialize());
+        let later = service.prepare_csp_report(handle, &v, now).unwrap();
+        let saved = service.reporting.document(handle).unwrap().clone();
+        let fresh_saved = service.reporting.document(fresh).unwrap().clone();
+        let chosen = saved.named_endpoint("csp").unwrap().1;
+        let other = saved.named_endpoint("other").unwrap().1;
+        service.queue_csp_report(handle, &v, now, now).unwrap();
+        if retired { assert!(service.forget_reporting_document(handle)); }
+        let terminal = run(&mut service, 1);
+        assert_eq!(terminal[0].document, handle);
+        assert_eq!(terminal[0].outcome, ReportOutcome::Response { status: 410, accepted: false });
+        assert!(!chosen.is_active());
+        assert_eq!(chosen.failures(), 0, "Remove Endpoint is not Failure");
+        assert!(other.is_active(), "same-URL sibling name is a distinct endpoint");
+        assert!(fresh_saved.named_endpoint("csp").is_ok(), "fresh global authority remains independent");
+        assert!(matches!(saved.named_endpoint("csp"), Err(ReportError::NoEndpoint)));
+        let snapshot = later.report_snapshot();
+        assert_eq!(snapshot, v.report_snapshot());
+        assert_eq!(service.queue_prepared_csp_report(later, Instant::now()), Err(ReportError::NoEndpoint));
+        assert!(!service.has_pending_reporting_io());
+        if !retired {
+            assert!(!service.reporting.document(handle).unwrap().endpoints.contains_key("csp"));
+            assert!(service.reporting.document(handle).unwrap().endpoints.contains_key("other"));
+        }
+        peer.join().unwrap();
+    }
+}
+
+#[test]
+fn endpoint_failure_state_is_shared_after_retirement_without_revocation() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = HttpUrl::parse(&format!("http://{}/document", listener.local_addr().unwrap())).unwrap();
+    let peer = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        assert!(read_request(&mut stream).starts_with("POST /reports HTTP/1.1"));
+        stream.write_all(b"HTTP/1.1 500 Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+    });
+    let mut service = NetworkService::new(DispatchLimits::default());
+    let handle = service.register_reporting_response(url.clone(), &headers(r#"csp="/reports""#), context(&url)).unwrap();
+    let saved = service.reporting.document(handle).unwrap().clone();
+    let state = saved.named_endpoint("csp").unwrap().1;
+    let now = Instant::now();
+    service.queue_csp_report(handle, &violation(&url.serialize()), now, now).unwrap();
+    assert!(service.forget_reporting_document(handle));
+    assert_eq!(run(&mut service, 1)[0].outcome, ReportOutcome::Response { status: 500, accepted: false });
+    assert_eq!(state.failures(), 1);
+    assert!(saved.named_endpoint("csp").is_ok());
+    peer.join().unwrap();
+}
+
+#[test]
+fn graph_dependencies_share_original_endpoint_removal_after_global_retirement() {
+    use crate::{EmbedderPolicy,EmbedderPolicyContainer,Destination,api::{ApiRequest,ApiRequestInit,ApiRequestInput}};
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();let port=listener.local_addr().unwrap().port();
+    let (tx,rx)=mpsc::channel();
+    let peer=thread::spawn(move|| {
+        for _ in 0..3 {
+            let (mut stream,_)=listener.accept().unwrap();let text=read_request(&mut stream);
+            let get=text.starts_with("GET ");tx.send(text).unwrap();
+            stream.write_all(if get {b"HTTP/1.1 200 OK\r\nContent-Type: application/javascript\r\nContent-Length: 4\r\nConnection: close\r\n\r\ntrue".as_slice()}
+                else {b"HTTP/1.1 410 Gone\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice()}).unwrap();
+        }
+    });
+    let url=HttpUrl::parse(&format!("http://localhost:{port}/document")).unwrap();
+    let client=receiving_client(&url,&format!("http://localhost:{port}/creation#private"));
+    let container=EmbedderPolicyContainer {value:EmbedderPolicy::UnsafeNone,reporting_endpoint:None,
+        report_only_value:EmbedderPolicy::RequireCorp,report_only_reporting_endpoint:Some("coep".into())};
+    let mut service=NetworkService::new(DispatchLimits::default());
+    let handle=service.register_reporting_client_response(&client,&url,&headers(r#"coep="/report""#)).unwrap();
+    let mut graph=service.prepare_coep_graph_reporting(handle,&client,&container).unwrap();let graph_id=graph.id();
+    let initial_credit=service.reporting.prepared_bytes.load(Ordering::Acquire);
+    assert!(service.forget_reporting_document(handle));
+    for (index,name) in ["root","dependency"].into_iter().enumerate() {
+        let plan=service.issue_coep_graph_request_settings(&mut graph,graph_id).unwrap();
+        let mut init=ApiRequestInit::default();init.mode=Some("no-cors".into());
+        let request=ApiRequest::new(ApiRequestInput::Url(&format!("http://127.0.0.1:{port}/{name}").encode_utf16().collect::<Vec<_>>()),init,&url,client.origin.clone()).unwrap();
+        let id=service.start_subresource_with_coep_reporting(request,client.context.clone(),Destination::Script,plan).unwrap();
+        let deadline=Instant::now()+Duration::from_secs(15);let mut finished=false;let mut reports=0;let mut delivered=0;
+        while Instant::now()<deadline && (!finished||service.has_pending_reporting_io()) {
+            for event in service.step(31,Instant::now()) {match event {
+                ServiceEvent::SubresourceFinished{id:found,response}=>{assert_eq!(found,id);assert_eq!(response.body,b"true");finished=true;},
+                ServiceEvent::CoepReport{id:found,document,report}=>{assert_eq!(found,id);assert_eq!(document,handle);let report=report.unwrap();
+                    assert_eq!(report.visibility,NativeReportVisibility::ObserverVisible);
+                    assert_eq!(String::from_utf16(&report.report_url).unwrap(),format!("http://localhost:{port}/creation"));
+                    if index==0 {assert!(report.delivery.is_ok());} else {assert_eq!(report.delivery,Err(ReportError::NoEndpoint));} reports+=1;},
+                ServiceEvent::ReportFinished(receipt)=>{assert_eq!(receipt.document,handle);assert_eq!(receipt.outcome,ReportOutcome::Response {status:410,accepted:false});delivered+=1;},
+                ServiceEvent::SubresourceFailed{failure,..}=>panic!("graph request failed: {:?}",failure.error),_=>{}
+            }}
+            thread::yield_now();
+        }
+        assert!(finished);assert_eq!(reports,1);assert_eq!(delivered,usize::from(index==0));
+        assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),initial_credit);
+        assert!(rx.recv_timeout(Duration::from_secs(10)).unwrap().starts_with(&format!("GET /{name} HTTP/1.1")));
+        if index==0 {assert!(rx.recv_timeout(Duration::from_secs(10)).unwrap().starts_with("POST /report HTTP/1.1"));}
+    }
+    service.release_coep_graph_reporting(graph,graph_id).unwrap();
+    assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+    assert!(!service.has_pending_reporting_io());peer.join().unwrap();
+}
+
+#[test]
+fn redirect_410_revokes_registered_endpoint_while_legacy_410_does_not() {
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let url=HttpUrl::parse(&format!("http://{}/document",listener.local_addr().unwrap())).unwrap();
+    let (tx,rx)=mpsc::channel();
+    let peer=thread::spawn(move|| {
+        for response in [
+            b"HTTP/1.1 307 Redirect\r\nLocation: /gone\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice(),
+            b"HTTP/1.1 410 Gone\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice(),
+            b"HTTP/1.1 410 Gone\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice(),
+        ] {
+            let (mut stream,_)=listener.accept().unwrap();tx.send(read_request(&mut stream)).unwrap();stream.write_all(response).unwrap();
+        }
+    });
+    let mut service=NetworkService::new(DispatchLimits::default());
+    let handle=service.register_reporting_response(url.clone(),&headers(r#"csp="/first", spare="/first""#),context(&url)).unwrap();
+    let saved=service.reporting.document(handle).unwrap().clone();let now=Instant::now();
+    let v=violation(&url.serialize());let plan=service.prepare_csp_report(handle,&v,now).unwrap();
+    service.queue_csp_report(handle,&v,now,now).unwrap();
+    assert_eq!(run(&mut service,1)[0].outcome,ReportOutcome::Response{status:410,accepted:false});
+    assert!(matches!(saved.named_endpoint("csp"),Err(ReportError::NoEndpoint)));
+    assert!(saved.named_endpoint("spare").is_ok());
+    assert_eq!(service.queue_prepared_csp_report(plan,Instant::now()),Err(ReportError::NoEndpoint));
+    let mut legacy=v;legacy.report_to=None;legacy.report_uris=vec!["/legacy".into()];
+    service.queue_csp_report(handle,&legacy,now,Instant::now()).unwrap();
+    assert_eq!(run(&mut service,1)[0].outcome,ReportOutcome::Response{status:410,accepted:true});
+    assert!(saved.named_endpoint("spare").is_ok());
+    for target in ["/first","/gone","/legacy"] {
+        assert!(rx.recv_timeout(Duration::from_secs(10)).unwrap().starts_with(&format!("POST {target} HTTP/1.1")));
+    }
+    assert!(!service.has_pending_reporting_io());peer.join().unwrap();
+}
+
+#[test]
+fn endpoint_state_is_private_same_service_and_fresh_initial_globals_stay_empty() {
+    let url=HttpUrl::parse("https://original.test/document").unwrap();
+    let mut service=NetworkService::new(DispatchLimits::default());
+    let client=receiving_client(&url,&url.serialize());
+    let handle=service.register_reporting_client_response(&client,&url,&headers(r#"csp="/reports""#)).unwrap();
+    let saved=service.reporting.document(handle).unwrap().clone();
+    let state=saved.named_endpoint("csp").unwrap().1;
+    let initial=service.register_reporting_initial_client(&client).unwrap();
+    let initial_saved=service.reporting.document(initial).unwrap();
+    assert!(initial_saved.endpoints.is_empty());assert!(initial_saved.endpoint_lifetimes.is_empty());
+    assert!(matches!(initial_saved.named_endpoint("csp"),Err(ReportError::NoEndpoint)));
+    let plan=service.prepare_csp_report(handle,&violation(&url.serialize()),Instant::now()).unwrap();
+    let mut foreign=NetworkService::new(DispatchLimits::default());
+    assert_eq!(foreign.queue_prepared_csp_report(plan,Instant::now()),Err(ReportError::StaleDocument));
+    assert!(state.is_active());assert_eq!(state.failures(),0);
+    assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+    assert!(!service.has_pending_reporting_io());assert!(!foreign.has_pending_reporting_io());
+    // The fresh global remains empty even after retirement of the configured one.
+    assert!(service.forget_reporting_document(handle));
+    assert!(service.reporting.document(initial).unwrap().endpoint_lifetimes.is_empty());
+}
+
+#[test]
+fn captured_coep_inheritance_report_uses_original_removed_endpoint_after_retirement() {
+    use crate::{EmbedderPolicy,EmbedderPolicyContainer,EmbedderPolicyOwner};
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let url=HttpUrl::parse(&format!("http://{}/document",listener.local_addr().unwrap())).unwrap();
+    let peer=thread::spawn(move|| {
+        let (mut stream,_)=listener.accept().unwrap();assert!(read_request(&mut stream).starts_with("POST /report HTTP/1.1"));
+        stream.write_all(b"HTTP/1.1 410 Gone\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+    });
+    let mut service=NetworkService::new(DispatchLimits::default());
+    let mut client=receiving_client(&url,&url.serialize());client.context.security.embedder_policy=EmbedderPolicy::RequireCorp;
+    let parent=EmbedderPolicyContainer {value:EmbedderPolicy::RequireCorp,reporting_endpoint:Some("csp".into()),
+        report_only_value:EmbedderPolicy::UnsafeNone,report_only_reporting_endpoint:None};
+    let handle=service.register_reporting_client_response(&client,&url,&headers(r#"csp="/report""#)).unwrap();
+    let plan=service.prepare_coep_inheritance_reporting(handle,&client,&parent).unwrap();
+    let now=Instant::now();service.queue_csp_report(handle,&violation(&url.serialize()),now,now).unwrap();
+    assert!(service.forget_reporting_document(handle));
+    assert_eq!(run(&mut service,1)[0].outcome,ReportOutcome::Response {status:410,accepted:false});
+    let child=EmbedderPolicyContainer {value:EmbedderPolicy::UnsafeNone,reporting_endpoint:None,
+        report_only_value:EmbedderPolicy::UnsafeNone,report_only_reporting_endpoint:None};
+    let reports=service.queue_coep_inheritance_reports(plan,&child,EmbedderPolicyOwner::NestedNavigation,
+        &[ParsedUrl::parse("https://actual-child.test/document").unwrap()],now,Instant::now()).unwrap();
+    assert!(!reports.check.allowed);assert_eq!(reports.reports.len(),1);
+    let report=reports.reports.into_iter().next().unwrap().unwrap();
+    assert_eq!(report.visibility,NativeReportVisibility::ObserverVisible);
+    assert_eq!(report.delivery,Err(ReportError::NoEndpoint));
+    assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+    assert!(!service.has_pending_reporting_io());assert!(service.reporting.document(handle).is_err());peer.join().unwrap();
+}
+
+#[test]
+fn endpoint_removal_preserves_already_admitted_sibling_delivery_without_revival() {
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let url=HttpUrl::parse(&format!("http://{}/document",listener.local_addr().unwrap())).unwrap();
+    let peer=thread::spawn(move|| {
+        for response in [b"HTTP/1.1 410 Gone\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice(),
+            b"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n".as_slice()] {
+            let (mut stream,_)=listener.accept().unwrap();assert!(read_request(&mut stream).starts_with("POST /reports HTTP/1.1"));
+            stream.write_all(response).unwrap();
+        }
+    });
+    let mut service=NetworkService::new(DispatchLimits::default());
+    let handle=service.register_reporting_response(url.clone(),&headers(r#"csp="/reports""#),context(&url)).unwrap();
+    let state=service.reporting.document(handle).unwrap().named_endpoint("csp").unwrap().1;
+    let now=Instant::now();let v=violation(&url.serialize());
+    let later=service.prepare_csp_report(handle,&v,now).unwrap();
+    let first=service.queue_csp_report(handle,&v,now,now).unwrap();
+    let second=service.queue_csp_report(handle,&v,now,now).unwrap();
+    assert_ne!(first,second);assert!(service.forget_reporting_document(handle));
+    let finished=run(&mut service,2);
+    for id in first.into_iter().chain(second) {assert!(finished.iter().any(|event|event.id==id&&event.document==handle));}
+    assert!(finished.iter().any(|event|event.outcome==ReportOutcome::Response{status:410,accepted:false}));
+    assert!(finished.iter().any(|event|event.outcome==ReportOutcome::Response{status:204,accepted:true}));
+    assert!(!state.is_active());assert_eq!(state.failures(),0);
+    assert_eq!(service.queue_prepared_csp_report(later,Instant::now()),Err(ReportError::NoEndpoint));
+    assert_eq!(service.reporting.retained_bytes,0);assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+    assert!(!service.has_pending_reporting_io());peer.join().unwrap();
+}
+
+#[test]
+fn cross_origin_410_requires_real_cors_acceptance_before_endpoint_removal() {
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint=format!("http://{}/report",listener.local_addr().unwrap());
+    let peer=thread::spawn(move|| {
+        let (mut stream,_)=listener.accept().unwrap();
+        let options=read_request(&mut stream);assert!(options.starts_with("OPTIONS /report HTTP/1.1"));
+        assert!(options.to_ascii_lowercase().contains("access-control-request-headers: content-type"));
+        stream.write_all(b"HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: http://localhost:12345\r\nAccess-Control-Allow-Methods: POST\r\nAccess-Control-Allow-Headers: content-type\r\nConnection: close\r\n\r\n").unwrap();drop(stream);
+        let (mut stream,_)=listener.accept().unwrap();
+        assert!(read_request(&mut stream).starts_with("POST /report HTTP/1.1"));
+        // An unauthenticated cross-origin response must not revoke authority.
+        stream.write_all(b"HTTP/1.1 410 Gone\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+    });
+    let url=HttpUrl::parse("http://localhost:12345/document").unwrap();
+    let mut service=NetworkService::new(DispatchLimits::default());
+    let handle=service.register_reporting_response(url.clone(),&headers(&format!("csp={}",quote(&endpoint))),context(&url)).unwrap();
+    let saved=service.reporting.document(handle).unwrap().clone();let state=saved.named_endpoint("csp").unwrap().1;
+    let now=Instant::now();service.queue_csp_report(handle,&violation(&url.serialize()),now,now).unwrap();
+    assert!(service.forget_reporting_document(handle));
+    assert_eq!(run(&mut service,1)[0].outcome,ReportOutcome::Failed(ReportError::Policy(FetchError::Cors)));
+    assert!(state.is_active());assert_eq!(state.failures(),1);assert!(saved.named_endpoint("csp").is_ok());
+    assert!(!service.has_pending_reporting_io());peer.join().unwrap();
+}

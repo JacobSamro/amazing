@@ -47,6 +47,7 @@ impl NetworkService {
         };
         add(saved.creation_url.serialize().len())?; add(saved.origin.serialize().len())?;
         for (name,url) in &saved.endpoints { add(std::mem::size_of::<(String,HttpUrl)>())?; add(name.len())?; add(url.serialize().len())?; }
+        add(saved.endpoint_lifetime_bytes().ok_or(ReportError::Limit)?)?;
         for name in saved.failures.keys() { add(std::mem::size_of::<(String,u64)>())?; add(name.len())?; }
         if let crate::cookies::CookieSite::Origin(origin) = &saved.context.cookie_site {add(origin.serialize().len())?;}
         if let Some(crate::Site::Tuple {scheme,domain}) = &saved.context.partition_key {add(scheme.len())?;add(domain.len())?;}

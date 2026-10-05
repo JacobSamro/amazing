@@ -1,0 +1,189 @@
+{
+  "schema": 1,
+  "recorded_ready_base": "fb00ca8c326e774fbca14e404d9c781035d4377e",
+  "qualified_source": "0e15e969ff0750f3875cfe88826bc5c3b0bcdecb",
+  "qualified_fixed_base": "68b1e6363be41f3867c684040326d54bf07af3af",
+  "shipping_source_projection": [
+    {
+      "path": "crates/amazing-fetch/src/reporting/coep_request.rs",
+      "bytes": 16700,
+      "sha256": "cf6662bc11c39819450c7e53acd1d384f277b30eca81fb438d9903540b57cc27"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/endpoint_lifetime.rs",
+      "bytes": 2248,
+      "sha256": "3e66f6b19c36ad00b76415eb8832348020b52eb1420dfa518b2e11ad2b4e8850"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/mod.rs",
+      "bytes": 32478,
+      "sha256": "71128ae02e4a82e2ccf9320fdceaa09410194c3b4ff16416ff47468b8d5e6c6e"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/native_report.rs",
+      "bytes": 8630,
+      "sha256": "78e6f28e0918ddd156124605d9261a7940185aad8549cee6379225a40f10cde4"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/navigation_csp_tests.rs",
+      "bytes": 28978,
+      "sha256": "805345020281e4f5367e553fcf3f30abc51bb2270139cfd314513678cf9cec33"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/prepared.rs",
+      "bytes": 7799,
+      "sha256": "a53089cb990af39861d908becd0eb5b9e57324558a92cf82f5af20eace47b045"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/test_report.rs",
+      "bytes": 5272,
+      "sha256": "c5e565e4be558f2e9f1c6aeaaeae5a99fd42526e38f3194b1038f9e2e79117f2"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/tests.rs",
+      "bytes": 105367,
+      "sha256": "007c9835b61870b3b43d4419dce1a732bb5106696a56528d1ff03ac3ffe9018d"
+    },
+    {
+      "path": "docs/lanes/net-tls-reporting-endpoint-lifetime.md",
+      "bytes": 2789,
+      "sha256": "81b7d6844aee620a0b77926e4dd1ecf9455498186921a3d6fa52b9a3201f53cd"
+    }
+  ],
+  "source_prerequisites": "Published570 genuine navigation source-loan/process and68 router; nine-path endpoint-only delta, no genericScript76/wire-origin/driver/process/Cargo history. Source aliases a6/ca00 preserved but not introduced as ancestry.",
+  "before": {
+    "workspace": 4980,
+    "skip": 17,
+    "docs": 34,
+    "native": 636,
+    "csp_files": 32,
+    "csp_subtests": 81,
+    "fresh_measurement": "Browser+original11CSP current68 only; authenticated currentengine workspace8e and native716 by exact entirecode projections; source/raw/hash receipts preserved."
+  },
+  "after": {
+    "workspace": 4989,
+    "skip": 17,
+    "docs": 34,
+    "native": 645,
+    "csp_files": 32,
+    "csp_subtests": 81
+  },
+  "before_job": "b355b48419f9427984e4798b4b07073a",
+  "before_actual_exit": 0,
+  "before_fetch_exit": 0,
+  "after_job": "5e0ccfc47d5247a582e440e8173a56be",
+  "after_actual_exit": 0,
+  "after_fetch_exit": 0,
+  "gained_native": [
+    "amazing-fetch reporting::navigation_csp::tests::source_loan_prepared_report_observes_original_endpoint_410_after_retirement",
+    "amazing-fetch reporting::tests::captured_coep_inheritance_report_uses_original_removed_endpoint_after_retirement",
+    "amazing-fetch reporting::tests::cross_origin_410_requires_real_cors_acceptance_before_endpoint_removal",
+    "amazing-fetch reporting::tests::endpoint_failure_state_is_shared_after_retirement_without_revocation",
+    "amazing-fetch reporting::tests::endpoint_removal_preserves_already_admitted_sibling_delivery_without_revival",
+    "amazing-fetch reporting::tests::endpoint_removal_reaches_live_and_retired_prepared_settings_without_global_transfer",
+    "amazing-fetch reporting::tests::endpoint_state_is_private_same_service_and_fresh_initial_globals_stay_empty",
+    "amazing-fetch reporting::tests::graph_dependencies_share_original_endpoint_removal_after_global_retirement",
+    "amazing-fetch reporting::tests::redirect_410_revokes_registered_endpoint_while_legacy_410_does_not"
+  ],
+  "lost": [],
+  "process_original13": {
+    "amazing-process::receiving_registration accepted_head_is_retained_after_real_completion_and_registration_is_connection_bound": "pass",
+    "amazing-process::receiving_registration captured_owner_ancestry_frame_and_full_policy_are_validated": "pass",
+    "amazing-process::receiving_registration coep_observer_receipts_keep_original_global_and_report_only_disposition": "pass",
+    "amazing-process::receiving_registration csp_admission_failure_has_no_invented_service_id_and_keeps_original_document_snapshot": "pass",
+    "amazing-process::receiving_registration csp_connection_and_framing_failures_preserve_actual_checked_vs_accepted_progress": "pass",
+    "amazing-process::receiving_registration csp_manual_continuation_deduplicates_native_prefix_without_rechecking_redirect_url": "pass",
+    "amazing-process::receiving_registration csp_report_only_response_snapshots_keep_protecting_status_not_target_status": "pass",
+    "amazing-process::receiving_registration csp_source_settings_loan_survives_retirement_before_response_and_manual_continuation": "pass",
+    "amazing-process::receiving_registration fresh_initial_is_explicit_and_never_a_failed_http_response_fallback": "pass",
+    "amazing-process::receiving_registration full_native_context_units_are_carried_without_url_or_scalar_policy_substitution": "pass",
+    "amazing-process::receiving_registration global_identity_cannot_replace_accepted_creation_origin_or_full_coep": "pass",
+    "amazing-process::receiving_registration manual_redirect_uses_retained_private_head_and_admitted_loan_after_retirement": "pass",
+    "amazing-process::receiving_registration source_and_embedding_origin_are_distinct_and_retired_owner_loan_survives": "pass"
+  },
+  "same_global_contract": "Private shared endpoint object survives originalglobal retirement/prepared settings; CORS-validated terminal410 removes only that endpoint, failure increments shared counter; distinct sameURL names/freshglobals keep independent objects; admitted sibling drain and legacyreport-uri semantics preserved. No global revive/endpoint authority transfer.",
+  "native_vs_installed_scope": "Native actual server/request/report outcomes and original installed CSP subset only. TrustedSPVE/realWindow retirement, worker/fullinstalled Reporting/Script/module consumer closure not claimed.",
+  "storage": "Both actualterminal/fetch0; real same-device guards and matching profiles, distinct fresh per-side source/target, allraw/source/generated/allELF retained native/tmp, compact HOME only; actualbefore /retained/manifests hash matches after baseline; no retries/hand recovery/cache deletion.",
+  "evidence": {
+    "before-compact-fetch-exit.summary.json": {
+      "bytes": 115,
+      "sha256": "2940e1ea7ebd5e4bd57cde0a5575f8619949e4dc1c2a7daef113185907498946"
+    },
+    "after-compact-fetch-exit.summary.json": {
+      "bytes": 115,
+      "sha256": "9d72411b7051ea6ffaff4f46e1b3c6b301e6ad4822aaa42008fb53cbd7c8d4de"
+    },
+    "root-integration.summary.json": {
+      "bytes": 1246,
+      "sha256": "c78ee2c6ecd21804f3a1ec22e6b07ed049b9f623fe5afce8cec5eef4247d8b96"
+    },
+    "before.endpoint.json": {
+      "bytes": 619,
+      "sha256": "3613bd2f9c809eab97b52c4e33a22bcbdfd86b4e5251f05d3f90a8f8458edf19"
+    },
+    "before.endpoint.json.observation.summary.json": {
+      "bytes": 1409,
+      "sha256": "d702fcc65e885c2a35e1f35d3ee96cfe511fda750a17bbccf94baba2bf7b58ec"
+    },
+    "after-storage-plan.json": {
+      "bytes": 1291,
+      "sha256": "767e8d05f87f6fc4e3d767c71e6a6ace11ae372617beeec3ca16ebc339e69fa5"
+    },
+    "after.endpoint.json.observation.summary.json": {
+      "bytes": 1402,
+      "sha256": "eca9d5c24e8981a08e6827dbe48aaa991e3f03150d17448759b542eb9081366d"
+    },
+    "before-storage-plan.json": {
+      "bytes": 1074,
+      "sha256": "e445f358e1a11e129297aebd3f6f73c8eca26c3a6ab0e5fb96d2e253ba5fb301"
+    },
+    "source-plan.json": {
+      "bytes": 5300,
+      "sha256": "e32924a6047c9426f613a1eaa25db632fa0f212255b4e58686b7b8dee5d6add3"
+    },
+    "after.endpoint.json": {
+      "bytes": 610,
+      "sha256": "511110f403b3a1f66592b2eae68ba2c446bbdf3aee972f4fac29487460abefcb"
+    },
+    "before.compact/before.summary.json": {
+      "bytes": 85333,
+      "sha256": "2cf25e53c40e47ae4f77774051f92b8fabe929ada0984b2bcacf51337810c177"
+    },
+    "before.compact/network-corpus.compact.json": {
+      "bytes": 20149,
+      "sha256": "02167c5fcf624f009c24e27a8e790b03853c4f9d5bd421d3a0d4e298418ba78b"
+    },
+    "before.compact/csp-wpt.compact.json": {
+      "bytes": 35921,
+      "sha256": "07dc07e935f6b4fb3974cc36e6df56e068b6114e1b9147d38a0ec782aa164c86"
+    },
+    "before.compact/storage.summary.json": {
+      "bytes": 2436,
+      "sha256": "4543b2e80e178f777e895c41ca0c4377b59e0eb2a0fc073551cf58b515e02981"
+    },
+    "after.compact/after.summary.json": {
+      "bytes": 372400,
+      "sha256": "2629e1e8b5ed3d050317d489c8d952e91f1cf49be5623e519b0566ffaf006da0"
+    },
+    "after.compact/network-corpus.compact.json": {
+      "bytes": 20328,
+      "sha256": "16571026f49e43cfbf27b95fe94f619043fcd0a05c0d112f2fb7ceaa70a4a8d8"
+    },
+    "after.compact/workspace.compact.json": {
+      "bytes": 142100,
+      "sha256": "a7eeb492c64912820bee53ec60a6e45b6570ea4cc7ece3757a6c37bfeef41439"
+    },
+    "after.compact/csp-wpt.compact.json": {
+      "bytes": 35912,
+      "sha256": "bc7f02a6315c4950256194f1493ad9978db99f5882fcc4946c406888b4d0aac8"
+    },
+    "after.compact/storage.summary.json": {
+      "bytes": 2701,
+      "sha256": "086d49acf08828e52b0b90526e534e059fe1deb8b23fc8f3ec2d411ff0847604"
+    },
+    "root-workspace/workspace.manifest.json": {
+      "bytes": 5681,
+      "sha256": "6f3906ebe5bdd0f59e05f863a21fc9b1da258d9b71f1085efa998eab7199af9c"
+    }
+  }
+}

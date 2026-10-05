@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "source": "0e15e969ff0750f3875cfe88826bc5c3b0bcdecb",
+  "base": "68b1e6363be41f3867c684040326d54bf07af3af",
+  "state": "whole-source-paired-commands-frozen-unallocated",
+  "preserved_original_source": "a6bcc74366d06c8455436e11c2991c589b142e04",
+  "original_delta_base": "ca00e195cd928cac09a96cb532bd7a3366354d51",
+  "application": "Exact nine-path scoped original delta applied cleanly; source doc records published68 base/current native custody, no historical ancestry",
+  "shipping": [
+    {
+      "path": "crates/amazing-fetch/src/reporting/coep_request.rs",
+      "bytes": 16700,
+      "sha256": "cf6662bc11c39819450c7e53acd1d384f277b30eca81fb438d9903540b57cc27",
+      "lines": 258
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/endpoint_lifetime.rs",
+      "bytes": 2248,
+      "sha256": "3e66f6b19c36ad00b76415eb8832348020b52eb1420dfa518b2e11ad2b4e8850",
+      "lines": 45
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/mod.rs",
+      "bytes": 32478,
+      "sha256": "71128ae02e4a82e2ccf9320fdceaa09410194c3b4ff16416ff47468b8d5e6c6e",
+      "lines": 825
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/native_report.rs",
+      "bytes": 8630,
+      "sha256": "78e6f28e0918ddd156124605d9261a7940185aad8549cee6379225a40f10cde4",
+      "lines": 239
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/navigation_csp_tests.rs",
+      "bytes": 28978,
+      "sha256": "805345020281e4f5367e553fcf3f30abc51bb2270139cfd314513678cf9cec33",
+      "lines": 314
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/prepared.rs",
+      "bytes": 7799,
+      "sha256": "a53089cb990af39861d908becd0eb5b9e57324558a92cf82f5af20eace47b045",
+      "lines": 193
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/test_report.rs",
+      "bytes": 5272,
+      "sha256": "c5e565e4be558f2e9f1c6aeaaeae5a99fd42526e38f3194b1038f9e2e79117f2",
+      "lines": 127
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/tests.rs",
+      "bytes": 105367,
+      "sha256": "007c9835b61870b3b43d4419dce1a732bb5106696a56528d1ff03ac3ffe9018d",
+      "lines": 2090
+    },
+    {
+      "path": "docs/lanes/net-tls-reporting-endpoint-lifetime.md",
+      "bytes": 2789,
+      "sha256": "81b7d6844aee620a0b77926e4dd1ecf9455498186921a3d6fa52b9a3201f53cd",
+      "lines": 9
+    }
+  ],
+  "authored_groups": 9,
+  "original_native_corpus": 636,
+  "original_process_groups": 13,
+  "original_csp_files": 32,
+  "original_csp_subtests": 81,
+  "commands_frozen": true,
+  "source_only": true,
+  "native_claim": false,
+  "installed_claim": false,
+  "primary": "https://w3c.github.io/reporting/#send-reports \u00a73.5.1/.2 reviewed2026-10-06; actual410 RemoveEndpoint distinct Failure and real CORS result",
+  "excluded": [
+    "generic Script settings79ed",
+    "wire-origin",
+    "new driver/IPC consumers"
+  ],
+  "baseline_custody": {
+    "base": "68b1e6363be41f3867c684040326d54bf07af3af",
+    "workspace_source": "8e2848bf0134502b88e08c0d6d74ba6bf6434063",
+    "workspace_job": "workspace-aa20dd4ae18b48cc8e3a93074f240312",
+    "workspace": 4980,
+    "docs": 34,
+    "workspace_crates_cargo_projection_paths": [],
+    "native_source": "71641676bf54edbffb54baccdfd2f9e0f05e0874",
+    "native_job": "881bfb54e6ef4c1b83a86b38834e1a1d",
+    "native": 636,
+    "native_net_tls_fetch_brotli_projection_paths": [],
+    "csp_reference": "Authentic original71632/81 passset; no identical driver claim. Fresh current68 browser/CSP BEFORE measurement is proposed if requested; baseline workspace/native engine reruns unnecessary.",
+    "manifest": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/reporting-endpoint-lifetime-current/root-workspace/workspace.manifest.json",
+      "sha256": "6f3906ebe5bdd0f59e05f863a21fc9b1da258d9b71f1085efa998eab7199af9c"
+    }
+  },
+  "public_source": "c2942529f9c2df4dfc8f1fa3b4494d4d42878e50",
+  "alias_proposed": "net-reporting-endpoint-lifetime-current-20261006",
+  "commands": {
+    "before-command.txt": "5d815187638fb885bb178de0b1da9e598e5d5142c4cdebc5f4dbacca92436c05",
+    "after-command.txt": "ffa51037bdfbf9ef9646bb45370082bd75e4685336bb14fa6824f6d2eb43a84a"
+  },
+  "launches": {
+    "before-launch.sh": "e6589f959e98ee3cf24ac03ca07ba2e04e13e47a34a8540ac33be44740a03129",
+    "after-launch.sh": "996ccc918a6f33f16b9c67e05b908805f4acd113f5fa742bebfcde4adab3af25"
+  },
+  "storage_plans": {
+    "before-storage-plan.json": "e445f358e1a11e129297aebd3f6f73c8eca26c3a6ab0e5fb96d2e253ba5fb301",
+    "after-storage-plan.json": "767e8d05f87f6fc4e3d767c71e6a6ace11ae372617beeec3ca16ebc339e69fa5"
+  },
+  "body_sha256": "82b4a3e8dcc3a671fd52fef8260e7e7fc25433873436d54df27d19f57426f323",
+  "scope": "Fresh current68 browser+original11CSP BEFORE only, authentic currentworkspace4980/docs34 and native636 reused by exact code projection. AFTER whole workspace/docs/browser/native636+9/original11CSP/process13. No claimed WPT equivalent driver; before must actual0 before AFTER.",
+  "capacity": "Real public actual same-device14.125GiB prebootstrap +12GiB engine guard; raw/source/generated/allELF native/tmp; HOME bounded compacts. Actual BEFORE retained/manifests path required AFTER; no stale/fake ELF authority.",
+  "profile": "line-tables-only DEV/TEST incremental0 default4/8 finite7200"
+}

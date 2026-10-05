@@ -151,11 +151,7 @@ impl NetworkService {
             return Err(ReportError::NoEndpoint);
         }
         let name: String = group.iter().map(|unit| char::from(*unit as u8)).collect();
-        let registered_endpoint = saved
-            .endpoints
-            .get(&name)
-            .cloned()
-            .ok_or(ReportError::NoEndpoint)?;
+        let (registered_endpoint, endpoint_lifetime) = saved.named_endpoint(&name)?;
         let body = format!(
             "[{{\"age\":{},\"type\":{},\"url\":{},\"user_agent\":{},\"body\":{}}}]",
             now.saturating_duration_since(queued_at).as_millis(),
@@ -192,6 +188,7 @@ impl NetworkService {
             document,
             route: ReportRoute::ReportingApi,
             endpoint_name: Some(name),
+            endpoint_lifetime: Some(endpoint_lifetime),
             endpoint: registered_endpoint,
             request,
             context: saved.context.clone(),

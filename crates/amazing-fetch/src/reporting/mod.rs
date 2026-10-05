@@ -1,6 +1,8 @@
 //! Native document Reporting endpoints and CSP request delivery.
 //! The embedding supplies accepted response headers and binds each capability
 //! to its actual Document lifetime. A URL is never a document identity.
+mod endpoint_lifetime;
+use endpoint_lifetime::EndpointLifetime;
 mod native_report;
 pub use native_report::*;
 mod prepared;
@@ -86,6 +88,7 @@ struct Document {
     context: ClientContext,
     endpoints: BTreeMap<String, HttpUrl>,
     failures: BTreeMap<String, u64>,
+    endpoint_lifetimes: std::sync::Arc<BTreeMap<String, std::sync::Arc<EndpointLifetime>>>,
     referrer_policy: crate::ReferrerPolicy,
 }
 struct Delivery {
@@ -93,6 +96,7 @@ struct Delivery {
     document: ReportingDocument,
     route: ReportRoute,
     endpoint_name: Option<String>,
+    endpoint_lifetime: Option<std::sync::Arc<EndpointLifetime>>,
     endpoint: HttpUrl,
     request: Request,
     context: ClientContext,
@@ -140,10 +144,14 @@ impl ReportingState {
             .get(&handle.id)
             .ok_or(ReportError::StaleDocument)
     }
-    fn insert(&mut self, document: Document) -> Result<ReportingDocument, ReportError> {
+    fn insert(&mut self, mut document: Document) -> Result<ReportingDocument, ReportError> {
         if self.documents.len() >= MAX_DOCUMENTS {
             return Err(ReportError::Limit);
         }
+        // A new native global always gets new endpoint objects, including fresh
+        // about globals. Only same-global settings clones share these objects.
+        document.endpoint_lifetimes = std::sync::Arc::new(document.endpoints.iter()
+            .map(|(name, url)| (name.clone(), std::sync::Arc::new(EndpointLifetime::new(url.clone())))).collect());
         let id = self.allocate();
         self.documents.insert(id, document);
         Ok(ReportingDocument {
@@ -218,6 +226,7 @@ impl NetworkService {
             origin: final_url.origin().clone(),
             endpoints: endpoints(&final_url, headers),
             failures: BTreeMap::new(),
+            endpoint_lifetimes: Default::default(),
             referrer_policy: headers
                 .get("referrer-policy")
                 .as_deref()
@@ -298,11 +307,7 @@ impl NetworkService {
         let targets = if let Some(name) = &violation.report_to {
             vec![(
                 Some(name.clone()),
-                saved
-                    .endpoints
-                    .get(name)
-                    .cloned()
-                    .ok_or(ReportError::NoEndpoint)?,
+                saved.named_endpoint(name)?.0,
             )]
         } else {
             let base = HttpUrl::parse(&violation.document_uri).ok();
@@ -339,6 +344,8 @@ impl NetworkService {
         let mut admitted = Vec::new();
         for (endpoint_name, mut endpoint) in targets {
             let registered_endpoint = endpoint.clone();
+            let endpoint_lifetime = endpoint_name.as_deref()
+                .map(|name| saved.named_endpoint(name).map(|(_, state)| state)).transpose()?;
             if let Some(upgraded) = self.hsts.upgrade(&endpoint, saved.context.now_unix) {
                 endpoint = upgraded;
             }
@@ -390,6 +397,7 @@ impl NetworkService {
                     ReportRoute::LegacyCsp
                 },
                 endpoint_name,
+                endpoint_lifetime,
                 endpoint: registered_endpoint,
                 request,
                 context: saved.context.clone(),
@@ -607,15 +615,17 @@ impl NetworkService {
             self.dispatcher.cancel(wire);
             self.reporting.retained_bytes -= delivery.bytes;
             if delivery.route == ReportRoute::ReportingApi
-                && !matches!(&outcome, ReportOutcome::Response { accepted: true, .. })
+                && !matches!(&outcome, ReportOutcome::Response { accepted: true, .. }
+                    | ReportOutcome::Response { status: 410, .. })
             {
-                if let (Some(document), Some(name)) = (
-                    self.reporting.documents.get_mut(&delivery.document.id),
-                    &delivery.endpoint_name,
-                ) {
-                    if document.endpoints.get(name) == Some(&delivery.endpoint) {
-                        let failures = document.failures.entry(name.clone()).or_default();
-                        *failures = failures.saturating_add(1);
+                if let Some(state) = &delivery.endpoint_lifetime {
+                    state.record_failure();
+                    if let (Some(document), Some(name)) = (
+                        self.reporting.documents.get_mut(&delivery.document.id), &delivery.endpoint_name,
+                    ) {
+                        if document.owns_endpoint(name, state) && state.is_active() {
+                            document.failures.insert(name.clone(), state.failures());
+                        }
                     }
                 }
             }
@@ -671,9 +681,12 @@ impl NetworkService {
                 _ => {}
             }
             if response.status == 410 {
-                if let Some(document) = self.reporting.documents.get_mut(&delivery.document.id) {
-                    if let Some(name) = &delivery.endpoint_name {
-                        if document.endpoints.get(name) == Some(&delivery.endpoint) {
+                if let Some(state) = &delivery.endpoint_lifetime {
+                    state.revoke();
+                    if let (Some(document), Some(name)) = (
+                        self.reporting.documents.get_mut(&delivery.document.id), &delivery.endpoint_name,
+                    ) {
+                        if document.owns_endpoint(name, state) {
                             document.endpoints.remove(name);
                             document.failures.remove(name);
                         }
@@ -704,6 +717,7 @@ impl NetworkService {
                     document: delivery.document,
                     route: delivery.route,
                     endpoint_name: delivery.endpoint_name.clone(),
+                    endpoint_lifetime: delivery.endpoint_lifetime.clone(),
                     endpoint: delivery.endpoint.clone(),
                     request: delivery.request.clone(),
                     context: delivery.context.clone(),
