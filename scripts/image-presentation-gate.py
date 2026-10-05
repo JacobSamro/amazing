@@ -12,6 +12,8 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent
+_contract_spec=importlib.util.spec_from_file_location('image_contract',ROOT/'image-corpus-contract.py')
+contract=importlib.util.module_from_spec(_contract_spec);_contract_spec.loader.exec_module(contract)
 LEGACY_EMBEDDED_EXECUTOR_SHA256 = '4310869c9a008b546b0bf5e3ab24520f90c00beec5c047937c57279b7ca0fb2d'
 SELECTORS = 'css-logical css-color css-values css-cascade css-conditional css-fonts css-text css-backgrounds css-transforms css-flexbox css-grid css-images css-sizing css-contain css-display selectors css-shadow'.split()
 DIRS = 'css/css-fonts css/css-transforms css/css-images css/CSS2/floats css/CSS2/normal-flow css/CSS2/positioning css/css-backgrounds css/css-contain css/css-display css/css-overflow css/css-position css/css-ruby css/css-sizing css/css-tables css/css-viewport css/css-color css/css-cascade css/css-conditional css/selectors css/css-shadow'.split()
@@ -34,6 +36,45 @@ def publish(path, value):
         os.fsync(stream.fileno())
 
 
+def validate_baseline(baseline, baseline_source, baseline_corpus_role='before', baseline_terminal=None):
+    old = json.loads((baseline / 'gate.summary.json').read_text())
+    if old['source_commit'] != baseline_source or old['job_exit'] != 0 or old['corpus_role'] != baseline_corpus_role:
+        raise ValueError('baseline is not a completed successful exact-source phase')
+    if baseline_corpus_role == 'after':
+        terminal_path=baseline_terminal or baseline / 'baseline-terminal.summary.json'
+        witness=json.loads(terminal_path.read_text())
+        expected=['nextest','doctests','ensure-wpt','release-build','parsing']+[d.replace('/','-') for d in DIRS]+['image-resources']
+        if (witness.get('state')!='TERMINAL' or witness['job']['source_commit']!=baseline_source
+                or witness.get('runner_exit')!=witness.get('actual_exit')
+                or [r['phase'] for r in old['phases']]!=expected
+                or any(r['actual_returncode']!=0 or r['source_commit']!=baseline_source for r in old['phases'])):
+            raise ValueError('completed AFTER baseline lacks authentic successful whole engine phases')
+        if witness.get('actual_exit')!=0:
+            if (witness.get('actual_exit')!=1 or baseline_source!='408cb841c0064c55e638a0d701f373e7e8d46020'
+                    or describe(baseline/'gate.summary.json')['sha256']!='ba9c8909ae555afa8af17a7945289b6890313fdb7f662a787956064b9919cf66'
+                    or describe(terminal_path)['sha256']!='b9d68194474f0bf2088685be064d0b2dfa8b16fa1d66345a607ada8405f547e3'):
+                raise ValueError('only authentic408 wholeCSS0 permits its original outside-scope outer1')
+    legacy = any(n.endswith('.phase.json') for n in old['compact_files'])
+    for name, row in old['compact_files'].items():
+        if name.endswith(('.phase.json', '.phase.manifest.json')):
+            # These duplicate compact receipts are already present in the
+            # authenticated public gate summary. Verify their original
+            # hashes in place; never recover raw or reconstruct files.
+            phase = next(r for r in old['phases'] if name in (r['phase'] + '.phase.json', r['phase'] + '.phase.manifest.json'))
+            data = (json.dumps(phase, sort_keys=True, separators=(',', ':')) + '\n').encode()
+            if hashlib.sha256(data).hexdigest() != row['sha256'] or len(data) != row['bytes']:
+                raise ValueError('embedded phase receipt differs from original digest')
+        elif describe(baseline / name)['sha256'] != row['sha256']:
+            raise ValueError('baseline compact bytes changed')
+    profile = {k: os.environ.get(k) for k in old['profile']}
+    if profile != old['profile']:
+        raise ValueError('corpus before/after profile differs')
+    for name, row in old['tooling'].items():
+        if not contract.compatible_helper(name, row['sha256'], describe(ROOT / name)['sha256']):
+            raise ValueError('corpus before/after classification adapter differs')
+    return old
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--source', required=True)
@@ -42,6 +83,7 @@ def main():
     p.add_argument('--compact-root', required=True)
     p.add_argument('--baseline-dir')
     p.add_argument('--baseline-source')
+    p.add_argument('--baseline-corpus-role', choices=('before', 'after'), default='before')
     a = p.parse_args()
     if os.environ.get('AMAZING_SOURCE_COMMIT') != a.source:
         p.error('native source identity mismatch')
@@ -62,28 +104,7 @@ def main():
     os.environ['TMPDIR'] = str((raw / 'tmp').resolve())
     baseline = pathlib.Path(a.baseline_dir) if a.baseline_dir else None
     if baseline:
-        old = json.loads((baseline / 'gate.summary.json').read_text())
-        if old['source_commit'] != a.baseline_source or old['job_exit'] != 0 or old['corpus_role'] != 'before':
-            raise ValueError('baseline is not a completed successful exact-source phase')
-        legacy = any(n.endswith('.phase.json') for n in old['compact_files'])
-        for name, row in old['compact_files'].items():
-            if name.endswith('.phase.json'):
-                # These duplicate compact receipts are already present in the
-                # authenticated public gate summary. Verify their original
-                # hashes in place; never recover raw or reconstruct files.
-                phase = next(r for r in old['phases'] if r['phase'] + '.phase.json' == name)
-                data = (json.dumps(phase, sort_keys=True, separators=(',', ':')) + '\n').encode()
-                if hashlib.sha256(data).hexdigest() != row['sha256'] or len(data) != row['bytes']:
-                    raise ValueError('embedded phase receipt differs from original digest')
-            elif describe(baseline / name)['sha256'] != row['sha256']:
-                raise ValueError('baseline compact bytes changed')
-        profile = {k: os.environ.get(k) for k in old['profile']}
-        if profile != old['profile']:
-            raise ValueError('corpus before/after profile differs')
-        for name, row in old['tooling'].items():
-            if describe(ROOT / name)['sha256'] != row['sha256']:
-                if not (legacy and name == 'image-presentation-gate.py' and row['sha256'] == LEGACY_EMBEDDED_EXECUTOR_SHA256):
-                    raise ValueError('corpus before/after classification adapter differs')
+        validate_baseline(baseline, a.baseline_source, a.baseline_corpus_role)
     phases, failed = [], False
 
     def run(label, argv):
@@ -140,7 +161,7 @@ def main():
                 failed = True
         argv = [sys.executable, str(ROOT / 'image-resource-corpus.py'), '--source', a.source, '--corpus-role', a.corpus_role, '--wpt-root', str(wpt), '--exe', str(exe), '--raw-out', str(raw / 'image-resources'), '--compact-out', str(compact / 'image-resources.compact.json')]
         if baseline:
-            argv += ['--baseline', str(baseline / 'image-resources.compact.json')]
+            argv += ['--baseline', str(baseline / 'image-resources.compact.json'), '--baseline-source', a.baseline_source, '--baseline-corpus-role', a.baseline_corpus_role]
         run('image-resources', argv)
     spec = importlib.util.spec_from_file_location('gate_summary', ROOT / 'gate-summary.py')
     summary = importlib.util.module_from_spec(spec)
@@ -151,7 +172,7 @@ def main():
               'placement': {'raw_device': raw.stat().st_dev, 'target_device': pathlib.Path(os.environ['CARGO_TARGET_DIR']).stat().st_dev, 'compact_device': compact.stat().st_dev},
               'job_exit': int(failed), 'phases': phases, 'render_dirs': DIRS, 'parsing_selectors': SELECTORS,
               'counts': summary.log_counts([r['raw']['path'] for r in phases]),
-              'tooling': {n: describe(ROOT / n) for n in ('image-presentation-gate.py', 'image-resource-corpus.py', 'wpt_render_compare.py', 'gate-summary.py')},
+              'tooling': {n: describe(ROOT / n) for n in ('image-presentation-gate.py', 'image-resource-corpus.py', 'wpt_render_compare.py', 'gate-summary.py', 'image-corpus-contract.py')},
               'compact_files': {f.name: describe(f) for f in compact.glob('*.json')},
               'raw_root': str(raw.resolve())}
     publish(compact / 'gate.summary.json', result)

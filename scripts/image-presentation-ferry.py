@@ -7,6 +7,7 @@ outputs, executable blobs, SSH or lifecycle actions are handled here.
 import argparse
 import base64
 import hashlib
+import importlib.util
 import json
 import pathlib
 import shlex
@@ -22,6 +23,7 @@ def main():
     p.add_argument('--baseline-dir', required=True)
     p.add_argument('--terminal-summary', required=True)
     p.add_argument('--baseline-source', required=True)
+    p.add_argument('--baseline-corpus-role', choices=('before','after'), default='before')
     p.add_argument('--after-command-template', required=True)
     p.add_argument('--template-sha256', required=True)
     p.add_argument('--native-baseline-dir', required=True)
@@ -31,22 +33,25 @@ def main():
     terminal_path = pathlib.Path(a.terminal_summary)
     terminal_bytes = terminal_path.read_bytes()
     terminal = json.loads(terminal_bytes)
-    if (terminal.get('state'), terminal.get('actual_exit'), terminal.get('runner_exit')) != ('TERMINAL', 0, 0):
-        p.error('baseline needs authenticated actual terminal0/runner0')
+    if terminal.get('state') != 'TERMINAL' or terminal.get('runner_exit') != terminal.get('actual_exit'):
+        p.error('baseline needs authenticated matching actual terminal/runner witness')
     if terminal['job']['source_commit'] != a.baseline_source:
         p.error('baseline terminal source mismatch')
     root = pathlib.Path(a.baseline_dir)
     gate_bytes = (root / 'gate.summary.json').read_bytes()
     gate = json.loads(gate_bytes)
-    if (gate['source_commit'], gate['corpus_role'], gate['job_exit']) != (a.baseline_source, 'before', 0):
-        p.error('baseline requires exact successful full corpus before')
-    files = {'gate.summary.json': gate_bytes}
+    spec=importlib.util.spec_from_file_location('public_image_gate',pathlib.Path(__file__).parent/'image-presentation-gate.py')
+    api=importlib.util.module_from_spec(spec);spec.loader.exec_module(api)
+    api.validate_baseline(root,a.baseline_source,a.baseline_corpus_role,terminal_path)
+    if terminal['actual_exit']!=0 and not (a.baseline_corpus_role=='after' and a.baseline_source=='408cb841c0064c55e638a0d701f373e7e8d46020'):
+        p.error('only authentic408 successfulCSS scope permits original outer1')
+    files = {'gate.summary.json': gate_bytes, 'baseline-terminal.summary.json': terminal_bytes}
     embedded = {}
     for name, receipt in gate['compact_files'].items():
         if pathlib.PurePosixPath(name).name != name or not name.endswith('.json'):
             p.error('baseline compact filename escapes owner')
-        if name.endswith('.phase.json'):
-            phase = next(r for r in gate['phases'] if r['phase'] + '.phase.json' == name)
+        if name.endswith(('.phase.json','.phase.manifest.json')):
+            phase = next(r for r in gate['phases'] if name in (r['phase'] + '.phase.json', r['phase'] + '.phase.manifest.json'))
             data = (json.dumps(phase, sort_keys=True, separators=(',', ':')) + '\n').encode()
             if digest(data) != receipt['sha256'] or len(data) != receipt['bytes']:
                 p.error('authentic embedded phase receipt hash differs')
@@ -69,11 +74,12 @@ def main():
     prelude += "import base64,hashlib,json,pathlib,sys,zlib\npacket=json.loads(zlib.decompress(base64.b64decode(" + repr(encoded) + ")))\n"
     prelude += "root=pathlib.Path(sys.argv[1]);root.mkdir(parents=True,exist_ok=False)\n"
     prelude += "for name,row in packet['files'].items():\n data=base64.b64decode(row['data'])\n if pathlib.PurePosixPath(name).name!=name or hashlib.sha256(data).hexdigest()!=row['sha256']: raise ValueError('compact ferry changed')\n (root/name).write_bytes(data)\n"
-    prelude += "(root/'baseline-terminal.summary.json').write_text(json.dumps(packet['terminal'],separators=(',',':'))+'\\n')\nAUTHENTIC_BASELINE_COMPACT\n"
+    prelude += 'AUTHENTIC_BASELINE_COMPACT\n'
     command = prelude.encode() + template
     with pathlib.Path(a.output_command).open('xb') as stream:
         stream.write(command)
     manifest = {'schema': 1, 'baseline_source': a.baseline_source,
+                'baseline_original_corpus_role': gate['corpus_role'], 'baseline_original_actual_exit': terminal['actual_exit'],
                 'baseline_job': terminal['job'], 'terminal_summary_sha256': digest(terminal_bytes),
                 'files': {name: {'sha256': digest(data), 'bytes': len(data)} for name, data in files.items()},
                 'embedded_phase_receipts': embedded,
