@@ -1,0 +1,38 @@
+{
+  "base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "tested_source": "3f1535a7336b21d2a3ccc562fc8c9a170f6c336c",
+  "controller_exit": 0,
+  "shards": 16,
+  "test262": {
+    "files": {
+      "fail": 706,
+      "pass": 52701,
+      "skipped": 294,
+      "unsupported": 171
+    },
+    "variants": {
+      "fail": 1363,
+      "pass": 101215,
+      "unsupported": 340
+    }
+  },
+  "lost_files": 0,
+  "lost_variants": 0,
+  "gained_files": 35,
+  "gained_variants": 36,
+  "workspace": {
+    "passed": 4739,
+    "failed": 0,
+    "skipped": 17,
+    "doctests_passed": 4
+  },
+  "encoding": {
+    "files": 1262,
+    "assertions_pass": 1473,
+    "lost_files": 0,
+    "lost_assertions": 0,
+    "raw_sha256": "7013e56c83cf7ef8bbf44e8ff4213a64ba34c80f5bea813c463255ec861a94e4"
+  },
+  "initial_tool_failure": "shard7 pre-job SCP upload1; one clean full16 passed",
+  "baseline_compact_sha256": "cb02296f31e4339f5f1a8ffede623202ed991f58f4e900c07f8fba9968359d6a"
+}

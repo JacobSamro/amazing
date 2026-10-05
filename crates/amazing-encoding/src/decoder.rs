@@ -16,13 +16,14 @@ pub struct Decoder {
     pending: Vec<u8>,
     offset: usize,
     replacement_seen: bool,
+    euc_jis0212: bool,
     iso_mode: IsoMode,
     iso_escape_output: bool,
 }
 impl Decoder {
     pub fn new(encoding: Encoding, fatal: bool) -> Self {
         Self { encoding, fatal, pending: Vec::with_capacity(4), offset: 0,
-            replacement_seen: false, iso_mode: IsoMode::Ascii, iso_escape_output: false }
+            replacement_seen: false, euc_jis0212: false, iso_mode: IsoMode::Ascii, iso_escape_output: false }
     }
     pub fn encoding(&self) -> Encoding { self.encoding }
     pub fn buffered_input_bytes(&self) -> usize { self.pending.len() }
@@ -167,28 +168,40 @@ impl Decoder {
                 .map_or(Step::Error(if second < 0x80 { 1 } else { 2 }), |cp| Step::Emit(cp,2)),
         }
     }
-    fn euc_jp_step(&self) -> Step {
+    fn euc_jp_step(&mut self) -> Step {
         let p=&self.pending; let first=p[0];
         if first < 0x80 { return Step::Emit(first as u32,1); }
         if first==0x8E {
             if p.len()<2 { return Step::Need; }
             return if (0xA1..=0xDF).contains(&p[1]) {
                 Step::Emit(0xFF61+p[1] as u32-0xA1,2)
-            } else { Step::Error(if p[1]<0x80 {1} else {2}) };
+            } else {
+                self.euc_jis0212=false;
+                Step::Error(if p[1]<0x80 {1} else {2})
+            };
         }
         if first==0x8F {
             if p.len()<2 { return Step::Need; }
-            if !(0xA1..=0xFE).contains(&p[1]) { return Step::Error(if p[1]<0x80 {1}else{2}); }
+            if !(0xA1..=0xFE).contains(&p[1]) {
+                self.euc_jis0212=false;
+                return Step::Error(if p[1]<0x80 {1}else{2});
+            }
+            // The selector is separate from the lead byte. EOF clears the
+            // lead but leaves this selector for a resumed native decoder.
+            self.euc_jis0212=true;
             if p.len()<3 { return Step::Need; }
+            self.euc_jis0212=false;
             if !(0xA1..=0xFE).contains(&p[2]) { return Step::Error(if p[2]<0x80 {2}else{3}); }
             let pointer=(p[1] as usize-0xA1)*94+(p[2] as usize-0xA1);
             return tables::lookup("jis0212",pointer).map_or(Step::Error(3), |cp| Step::Emit(cp,3));
         }
         if !(0xA1..=0xFE).contains(&first) { return Step::Error(1); }
         if p.len()<2 { return Step::Need; }
+        let index=if self.euc_jis0212 { "jis0212" } else { "jis0208" };
+        self.euc_jis0212=false;
         if !(0xA1..=0xFE).contains(&p[1]) { return Step::Error(if p[1]<0x80 {1}else{2}); }
         let pointer=(first as usize-0xA1)*94+(p[1] as usize-0xA1);
-        tables::lookup("jis0208",pointer).map_or(Step::Error(2), |cp| Step::Emit(cp,2))
+        tables::lookup(index,pointer).map_or(Step::Error(2), |cp| Step::Emit(cp,2))
     }
     fn shift_jis_step(&self) -> Step {
         let p=&self.pending; let first=p[0];
