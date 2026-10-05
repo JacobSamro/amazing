@@ -1,0 +1,15 @@
+{
+  "job": {
+    "schema": 1,
+    "lane": "net-reporting-standard-lifetime-20261005",
+    "source_commit": "72512fbb63b7ec226587d3f6052e2592c6737c43",
+    "box_id": "bx_3btbx3zu",
+    "host": "user@46.105.118.126",
+    "port": 19040,
+    "job_id": "6efef277aa7843a6a997d37429454f78",
+    "output_root": "amazing/out/net-reporting-standard-lifetime-20261005/reporting-standard-lifetime-net-reporting-standard-lifetime-20261005-after",
+    "command_sha256": "d70964f81d80ac32af1fc5c15056bd7c8ca2f6167970aea5fedebf48989b699b"
+  },
+  "boot_id": "e1f221bb-64aa-438d-b1df-27cec161c10c",
+  "actual_exit": 0
+}

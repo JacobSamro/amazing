@@ -33,7 +33,7 @@ use crate::NetError;
 pub(crate) const MAX_BODY_BYTES: usize = 32 * 1024 * 1024;
 const MAX_HEADER_BYTES: usize = 64 * 1024;
 
-const USER_AGENT: &str = "Ferric/0.1";
+pub const USER_AGENT: &str = "Ferric/0.1";
 
 /// Performs one GET against an HTTP or HTTPS URL. HTTPS crosses the isolated
 /// vetted-rustls adapter; response parsing and safety limits remain here.

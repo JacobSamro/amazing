@@ -22,6 +22,7 @@ fn context(source: &[u16], kind: CspInlineKind) -> CspInlineContext<'_> {
         parser_inserted: true,
         element: Some(17),
         document_url: "https://u:p@site.test/page?q=1#secret",
+        creation_url: "https://u:p@site.test/page?q=1#secret",
         referrer: "https://referrer.test/path#fragment",
         status_code: 200,
         source_file: "https://site.test/script.js#location",

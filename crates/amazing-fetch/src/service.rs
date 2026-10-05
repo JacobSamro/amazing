@@ -134,6 +134,7 @@ impl Default for ClientContext {
 
 #[derive(Debug)]
 pub enum ServiceEvent {
+    ReportFinished(crate::reporting::ReportFinished),
     ResponseHead { id: ServiceId, head: ApiResponseHead },
     BodyChunk { id: ServiceId, bytes: Vec<u8> },
     StreamFinished { id: ServiceId },
@@ -288,6 +289,7 @@ pub struct NetworkService {
     websockets: BTreeMap<ServiceId, WebSocketId>,
     prefer_websocket: bool,
     ready: Vec<ServiceEvent>,
+    pub(crate) reporting: crate::reporting::ReportingState,
 }
 impl NetworkService {
     /// A service result already queued for delivery is not pending I/O.
@@ -392,6 +394,16 @@ impl NetworkService {
             websockets: BTreeMap::new(),
             prefer_websocket: false,
             ready: Vec::new(),
+            reporting: crate::reporting::ReportingState::default(),
+        }
+    }
+    pub(crate) fn observe_reporting_hsts(&mut self, url: &HttpUrl, headers: &HeaderList, now: i64) {
+        let mut changed = false;
+        for (_, value) in headers.iter().filter(|(name, _)| *name == "strict-transport-security") {
+            changed |= self.hsts.observe(url, value, now);
+        }
+        if changed {
+            if let Some(disk) = &self.hsts_persistence { let _ = disk.save(&self.hsts, now); }
         }
     }
     /// Install a restored cache and its persistence hook before requests start.
@@ -809,6 +821,9 @@ impl NetworkService {
                 | NetEvent::Error { id, .. }
                 | NetEvent::Aborted { id } => *id,
             };
+            if self.on_reporting_event(&event, now, &mut result) {
+                continue;
+            }
             let Some(id) = self
                 .active
                 .iter()

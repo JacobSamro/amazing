@@ -3,7 +3,10 @@
 use crate::{HeaderList, HttpUrl, Origin, Request};
 use amazing_net::ParsedUrl;
 mod inline;
+mod meta_utf16;
+mod report_snapshot;
 pub use inline::*;
+pub use report_snapshot::*;
 
 const MAX_POLICY_BYTES: usize = 65_536;
 const MAX_DIRECTIVES: usize = 256;
@@ -44,8 +47,13 @@ pub enum CspPolicySource {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CspPolicy {
     pub source: CspPolicySource,
-    /// Exact serialized policy, retaining duplicate and unknown directives for reports.
+    /// Existing decoded/trimmed String serialization retained for compatibility.
+    /// Meta DOMString event/report authority is original_policy_units, not this diagnostic.
     pub original_policy: String,
+    /// Authoritative DOMString for original-policy event/report fields. Header
+    /// policies retain the existing decoded/trimmed header serialization; Meta
+    /// policies retain every native content attribute code unit without loss.
+    pub original_policy_units: Vec<u16>,
     pub disposition: CspDisposition,
     pub directives: Vec<CspDirective>,
 }
@@ -106,6 +114,7 @@ impl CspPolicyList {
                     let mut policy = CspPolicy {
                         source: CspPolicySource::Header,
                         original_policy: serialized.trim_matches(is_ascii_whitespace).to_owned(),
+                        original_policy_units: serialized.trim_matches(is_ascii_whitespace).encode_utf16().collect(),
                         disposition,
                         directives: Vec::new(),
                     };
@@ -144,49 +153,11 @@ impl CspPolicyList {
     /// only for a valid, connected CSP meta element in the document head; policies
     /// apply prospectively. Report-only meta delivery is not supported by CSP.
     pub fn from_meta(serialized: &str) -> Result<Self, CspParseError> {
+        // Preserve the legacy byte limit before any UTF16 allocation.
         if serialized.len() > MAX_POLICY_BYTES {
             return Err(CspParseError::TooLong);
         }
-        // Meta is a serialized policy, not a comma-delimited header policy list.
-        // A comma is invalid in a directive value, not a second enforcing policy.
-        // Reuse bounded directive parsing without converting it into two policies.
-        let mut list = Self::default();
-        let mut policy = CspPolicy {
-            source: CspPolicySource::Meta,
-            original_policy: serialized.trim_matches(is_ascii_whitespace).into(),
-            disposition: CspDisposition::Enforce,
-            directives: Vec::new(),
-        };
-        if serialized.split(';').count() > MAX_DIRECTIVES {
-            return Err(CspParseError::TooManyDirectives);
-        }
-        for part in serialized.split(';') {
-            if !part.is_ascii() {
-                continue;
-            }
-            let mut tokens = part.split(is_ascii_whitespace).filter(|s| !s.is_empty());
-            let Some(name) = tokens.next() else {
-                continue;
-            };
-            if !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
-                continue;
-            }
-            let name = name.to_ascii_lowercase();
-            if matches!(name.as_str(), "report-uri" | "frame-ancestors" | "sandbox")
-                || policy.directives.iter().any(|d| d.name == name)
-            {
-                continue;
-            }
-            policy.directives.push(CspDirective {
-                name,
-                sources: tokens
-                    .filter(|s| valid_source(s))
-                    .map(str::to_owned)
-                    .collect(),
-            });
-        }
-        list.policies.push(policy);
-        Ok(list)
+        Self::from_meta_utf16(&serialized.encode_utf16().collect::<Vec<_>>())
     }
     pub fn pre_request(&self, request: &Request) -> CspCheck {
         self.check(request, request.url())

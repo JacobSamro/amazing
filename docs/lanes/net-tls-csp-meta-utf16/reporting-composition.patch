@@ -1,0 +1,45 @@
+--- a/crates/amazing-fetch/src/reporting/mod.rs
++++ b/crates/amazing-fetch/src/reporting/mod.rs
+@@ -721,7 +721,7 @@
+             quote(&strip_url(&v.referrer)),
+             quote(&strip_url(&v.blocked_uri)),
+             quote(&v.effective_directive),
+-            quote(&v.original_policy),
++            quote_units(&v.original_policy_units),
+             source,
+             sample,
+             quote(disposition),
+@@ -745,7 +745,7 @@
+             quote(&strip_url(&v.blocked_uri)),
+             quote(&v.effective_directive),
+             quote(&v.effective_directive),
+-            quote(&v.original_policy),
++            quote_units(&v.original_policy_units),
+             quote(disposition),
+             v.status_code,
+             sample
+@@ -760,7 +760,7 @@
+         body
+     };
+     if modern {
+-        format!("[{{\"age\":{age},\"type\":\"csp-violation\",\"url\":{},\"user_agent\":{},\"body\":{body}}}]",quote(&strip_url(&v.document_uri)),quote(amazing_net::http::USER_AGENT)).into_bytes()
++        format!("[{{\"age\":{age},\"type\":\"csp-violation\",\"url\":{},\"user_agent\":{},\"body\":{body}}}]",quote(&v.report_url),quote(amazing_net::http::USER_AGENT)).into_bytes()
+     } else {
+         format!("{{\"csp-report\":{body}}}").into_bytes()
+     }
+--- a/crates/amazing-fetch/src/reporting/tests.rs
++++ b/crates/amazing-fetch/src/reporting/tests.rs
+@@ -14,11 +14,13 @@
+         violated_directive: "script-src-elem".into(),
+         source_directive: "default-src".into(),
+         original_policy: "default-src 'none'; report-to csp".into(),
++        original_policy_units: "default-src 'none'; report-to csp".encode_utf16().collect(),
+         policy_index: 0,
+         disposition: CspDisposition::Enforce,
+         blocked_uri: "inline".into(),
+         element: Some(7),
+         document_uri: url.into(),
++        report_url: strip_url(url),
+         referrer: String::new(),
+         status_code: 200,
+         source_file: url.into(),

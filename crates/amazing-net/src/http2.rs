@@ -152,7 +152,7 @@ pub(crate) fn request_fields(
         (b":scheme".to_vec(), url.scheme().as_bytes().to_vec()),
         (b":authority".to_vec(), url.host_and_port().into_bytes()),
         (b":path".to_vec(), url.http_request_target()?.into_bytes()),
-        (b"user-agent".to_vec(), b"Ferric/0.1".to_vec()),
+        (b"user-agent".to_vec(), crate::http::USER_AGENT.as_bytes().to_vec()),
         (b"accept".to_vec(), b"*/*".to_vec()),
         (b"accept-encoding".to_vec(), b"gzip, deflate, br".to_vec()),
     ];

@@ -55,6 +55,9 @@ pub struct CspInlineContext<'a> {
     /// The opaque native element identity is returned unchanged to the reporter.
     pub element: Option<u64>,
     pub document_url: &'a str,
+    /// Actual environment creation URL captured from the original native global.
+    /// This stays distinct from the document URL after history changes.
+    pub creation_url: &'a str,
     pub referrer: &'a str,
     pub status_code: u16,
     pub source_file: &'a str,
@@ -69,11 +72,15 @@ pub struct CspInlineViolation {
     /// Native diagnostic: the actual directive selected by fallback.
     pub source_directive: String,
     pub original_policy: String,
+    /// Exact saved policy DOMString; String is a compatibility diagnostic only.
+    pub original_policy_units: Vec<u16>,
     pub policy_index: usize,
     pub disposition: CspDisposition,
     pub blocked_uri: String,
     pub element: Option<u64>,
     pub document_uri: String,
+    /// Saved stripped creation URL for the Reporting envelope/Observer URL.
+    pub report_url: String,
     pub referrer: String,
     pub status_code: u16,
     pub source_file: String,
@@ -122,6 +129,7 @@ impl CspPolicyList {
                 violated_directive: effective.into(),
                 source_directive: directive.name.clone(),
                 original_policy: policy.original_policy.clone(),
+                original_policy_units: policy.original_policy_units.clone(),
                 policy_index,
                 disposition: policy.disposition,
                 blocked_uri: "inline".into(),
@@ -131,6 +139,7 @@ impl CspPolicyList {
                     context.element
                 },
                 document_uri: strip_report_url(context.document_url),
+                report_url: strip_report_url(context.creation_url),
                 referrer: strip_report_url(context.referrer),
                 status_code: context.status_code,
                 source_file: strip_report_url(context.source_file),

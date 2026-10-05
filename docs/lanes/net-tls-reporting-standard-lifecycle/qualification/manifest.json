@@ -1,0 +1,91 @@
+{
+  "state": "native-qualified-zero-loss",
+  "base": "104b8801cb7e11ed045e51c089ef092d87d8c966",
+  "source": "72512fbb63b7ec226587d3f6052e2592c6737c43",
+  "gate_sha256": "f0fb7adacb84fba29801f7d66a8970236d6b4049f0a08f8e13d96c1ea93aaba1",
+  "gate": {
+    "before": {
+      "ref": "104b8801cb7e11ed045e51c089ef092d87d8c966",
+      "command_sha256": "d998756a3447463ea1b711fc89adfea1901037a9a80b9ff9febcad4908110ea8",
+      "launch": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/reporting-standard-lifetime/before-launch.sh",
+      "root": "amazing/out/net-reporting-standard-lifetime-20261005/reporting-standard-lifetime-net-reporting-standard-lifetime-20261005-before",
+      "launch_sha256": "0d6ce873337c709c023bd260d2fc667316af15f7908fb80c0f05bef09704255d",
+      "job_id": "1abd1b0f76bd489c98c1ab24dd3352b4",
+      "box_id": "bx_3btbx3zu",
+      "terminal": "completed-job receiver verified actual completed control; exec session already ended after all phases0"
+    },
+    "after": {
+      "ref": "72512fbb63b7ec226587d3f6052e2592c6737c43",
+      "command_sha256": "d70964f81d80ac32af1fc5c15056bd7c8ca2f6167970aea5fedebf48989b699b",
+      "launch": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/reporting-standard-lifetime/after-launch.sh",
+      "root": "amazing/out/net-reporting-standard-lifetime-20261005/reporting-standard-lifetime-net-reporting-standard-lifetime-20261005-after",
+      "launch_sha256": "a59e9f8cab94af37e070f266a3483c3f6301468e9d85d20d47a5da65d8e3ada0"
+    }
+  },
+  "lane": "net-reporting-standard-lifetime-20261005",
+  "ttl_seconds": 7200,
+  "wrapper_sha256": "f3048a26c9a7ad1a6103784e374c319d057da8b89ea22da7d2ecf8dba9a7cd75",
+  "ready_base": "a035b2b558065d72664ce7617da0a7261027bb0d",
+  "actual_exit": {
+    "before": 0,
+    "after": 0
+  },
+  "coverage": "Native Reporting/Meta producers plus original CSP installed sweep; no installed Reporting-family consumer claim",
+  "counts": {
+    "workspace": [
+      4739,
+      4742
+    ],
+    "doctests": [
+      15,
+      15
+    ],
+    "native_tls_net_fetch": [
+      517,
+      520
+    ],
+    "csp_passing_files": [
+      32,
+      32
+    ],
+    "csp_passing_subtests": [
+      81,
+      81
+    ],
+    "lost": []
+  },
+  "files": {
+    "after.completed.summary.json": {
+      "bytes": 602,
+      "sha256": "543728f75fe8102eaf5cd17dd26a6d8a29c1ca1b45eed61a26c98f12e73aebde"
+    },
+    "after.csp.compact.json": {
+      "bytes": 35943,
+      "sha256": "7b795ab4cd747c29afecf834de08da27cbc7d5a076d77302c2ebbd83d4931a71"
+    },
+    "after.endpoint.json": {
+      "bytes": 459,
+      "sha256": "900c4457ec20d1fb0de2bf2675742cd354c8b5b2e29a47f59071be64f5a9c0bb"
+    },
+    "after.summary.json": {
+      "bytes": 197311,
+      "sha256": "0f9e40d3babdcc7a22df8efef9b885557b0238f01481af876de3ba5e3c3df208"
+    },
+    "before.completed.summary.json": {
+      "bytes": 603,
+      "sha256": "2c0b70243df49443ad2a85d692b68c6bb00d7101c8ee86ea9d7f307ff9dba15e"
+    },
+    "before.csp.compact.json": {
+      "bytes": 35870,
+      "sha256": "bb68cfc48784fdc8a8ccb680e67e05374e17fbc265cc98179d8ddc3153d5229e"
+    },
+    "before.endpoint.json": {
+      "bytes": 460,
+      "sha256": "181254a2a389cef9900aaaaabafd8224bc0ace062f461c0b033030055ed988b6"
+    },
+    "before.summary.json": {
+      "bytes": 196106,
+      "sha256": "97af19fe2f2417ed3b96754235f8ea8916040eecf7600ecb145a12d81d756655"
+    }
+  }
+}
