@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "state": "DONE",
+  "public_source": "36d78dedc602c5b75ab458e586483fc3265aec6e",
+  "recorded_base": "d265908ea158e34d82084d0c94e8b0f429751cd1",
+  "controller": {
+    "handle": 83273,
+    "actual_exit": 0
+  },
+  "fetch": {
+    "handle": 87941,
+    "actual_exit": 0
+  },
+  "job": {
+    "schema": 2,
+    "lane": "css-transform-current-20261005",
+    "source_commit": "36d78dedc602c5b75ab458e586483fc3265aec6e",
+    "box_id": "bx_7qrnsr2z",
+    "host": "user@5.135.136.200",
+    "port": 19039,
+    "job_id": "8e55bddfbe3e403db248f2d7309b7a2d",
+    "output_root": "amazing/out/css-transform-current-20261005/transform-failure-36d78ded/compact",
+    "command_sha256": "83acacf15bfdc043f5288f1d736eec67c37997b000b55517c6ec0680c63c8fa4",
+    "execution_sha256": "4d2b25e4c32edb698c96972e87f33aa22c02694578a27572ebf250cc92683466",
+    "source_archive_sha256": "1c8865821206682571f50687ff185d69578d1d0536c5a1f040e6832160bd23a0"
+  },
+  "actual_native_exit": 0,
+  "runner_exit": 0,
+  "controls": {
+    "pass": 24,
+    "fail": 0
+  },
+  "files": {
+    "controls.compact.json": {
+      "bytes": 1275,
+      "sha256": "362ff4a09b3dbcd0bd46421a1d26208b60b994e3c822ce72f9fed6ac7a5b5c7d"
+    },
+    "failure.compact.json": {
+      "bytes": 5862,
+      "sha256": "5bc3536211eb02ed4a1b99fa7dbd3800a2018a15c603b65e97f872731359cffb"
+    }
+  },
+  "original_engine_source": "4bdce228b6b84b2baa4f6853370e9c00bf52eceb",
+  "original_native_exit": 1,
+  "original_phase_exit": 100,
+  "original_raw": {
+    "bytes": 705384,
+    "path": "/tmp/amazing-native-retained/css-transform-current-20261005/transform-current-4bdce228-initial/raw/nextest.log",
+    "sha256": "d91d428da8c727bedddb7d3b977cc2bda3660a2db72c8f04644daabebeeb28d7"
+  },
+  "failure_id": "amazing-css::css10_svg_presentation::svg_transform_attribute_uses_element_specific_name",
+  "assertion": {
+    "path": "crates/amazing-css/tests/css10_svg_presentation.rs",
+    "line": 100,
+    "actual": "rotate(29.999999999999996deg)",
+    "expected": "rotate(30deg)"
+  },
+  "no_engine_rerun": true,
+  "no_raw_transfer": true,
+  "native_diagnostic_raw": {
+    "path": "/tmp/amazing-job-8e55bddfbe3e403db248f2d7309b7a2d-zki54g44/command.log",
+    "bytes": 4492,
+    "sha256": "fb8316d3b10ac75941172f01bb3592207c513a185d2ad7f59ac573ef86651ef3"
+  },
+  "terminal_sha256": "86300a4ec63442c5a6d11392ab76090fa37c911a9ad86b06f6b643227b115bce"
+}
