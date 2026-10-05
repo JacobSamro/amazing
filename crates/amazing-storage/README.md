@@ -17,13 +17,25 @@ CRC-32 of the payload.
 The payload is `u32 entry count` followed by entry key and length-prefixed value
 pairs. A log starts `AMSTLOG1`. Each record is `u32 payload length`, payload,
 CRC-32. Payload opcode 1 is put (entry key plus value); opcode 2 is delete
-(entry key). Records are capped at 64 MiB. A complete checksummed record is the
+(entry key). Opcode 3 is an atomic batch: `u32 operation count` followed by
+that many opcode-1/opcode-2 operations. Existing single-operation records remain
+readable; older implementations cannot read batch records. Records are capped at 64 MiB. A complete checksummed record is the
 commit boundary. Reopening ignores a torn final record and truncates that tail before new
 writes. Bad checkpoint data is rejected. Compaction writes and syncs an
 inactive slot temporary file, atomically renames it into that slot, then
 replaces the log with its header. The latest valid generation wins on reopen;
 the other slot remains a crash fallback. Replaying a pre-compaction log is
 idempotent for puts and deletes.
+
+`DiskStore::transaction` stages a callback against a private `MemoryStore` clone,
+checks final per-partition and shared-profile quotas, and publishes the complete
+entry delta in one synced batch record. Callback errors, panics and persistence
+errors leave committed entries and quota accounting unchanged. The exclusive
+mutable borrow serializes transactions; this is a native synchronous primitive,
+not an IndexedDB request scheduler. Quota settings and access clocks remain
+in-memory metadata. Empty entry deltas require no log record. A failed append
+repairs its original log length; failed repair blocks further writes until reopen.
+On Unix, new log files and checkpoint renames also sync the storage directory.
 
 `StorageArea` preserves UTF-16 code units and insertion order. `IndexedDb` takes
 owned `StructuredValue`s; the caller maps script values, async request events,

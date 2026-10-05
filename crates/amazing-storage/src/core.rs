@@ -3,7 +3,10 @@ use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, atomic::{AtomicU64, Ordering}};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct StorageKey {
@@ -59,26 +62,44 @@ pub struct QuotaLedger {
 }
 impl QuotaLedger {
     pub fn new(default_limit: u64) -> Self {
-        Self { default_limit, limits: BTreeMap::new(), stores: BTreeMap::new() }
+        Self {
+            default_limit,
+            limits: BTreeMap::new(),
+            stores: BTreeMap::new(),
+        }
     }
-    pub fn set_quota(&mut self, key: StorageKey, bytes: u64) { self.limits.insert(key, bytes); }
-    pub fn quota(&self, key: &StorageKey) -> u64 { self.limits.get(key).copied().unwrap_or(self.default_limit) }
+    pub fn set_quota(&mut self, key: StorageKey, bytes: u64) {
+        self.limits.insert(key, bytes);
+    }
+    pub fn quota(&self, key: &StorageKey) -> u64 {
+        self.limits.get(key).copied().unwrap_or(self.default_limit)
+    }
     pub fn usage(&self, key: &StorageKey) -> u64 {
-        self.stores.values().fold(0u64, |total, store|
-            total.saturating_add(store.get(key).copied().unwrap_or(0)))
+        self.stores.values().fold(0u64, |total, store| {
+            total.saturating_add(store.get(key).copied().unwrap_or(0))
+        })
     }
     fn replace(&mut self, id: u64, key: &StorageKey, usage: u64) -> Result<()> {
-        let old = self.stores.get(&id).and_then(|store| store.get(key)).copied().unwrap_or(0);
+        let old = self
+            .stores
+            .get(&id)
+            .and_then(|store| store.get(key))
+            .copied()
+            .unwrap_or(0);
         if self.usage(key).saturating_sub(old).saturating_add(usage) > self.quota(key) {
             return Err(Error::QuotaExceeded);
         }
-        self.stores.entry(id).or_default().insert(key.clone(), usage);
+        self.stores
+            .entry(id)
+            .or_default()
+            .insert(key.clone(), usage);
         Ok(())
     }
     fn register(&mut self, id: u64, memory: &MemoryStore) {
         let mut uses = BTreeMap::new();
         for key in memory.entries.keys() {
-            uses.entry(key.bucket.storage.clone()).or_insert_with(|| memory.usage(&key.bucket.storage));
+            uses.entry(key.bucket.storage.clone())
+                .or_insert_with(|| memory.usage(&key.bucket.storage));
         }
         self.stores.insert(id, uses);
     }
@@ -203,14 +224,11 @@ impl MemoryStore {
     where
         F: FnOnce(&mut Self) -> Result<T>,
     {
-        let backup = self.clone();
-        match f(self) {
-            Ok(v) => Ok(v),
-            Err(e) => {
-                *self = backup;
-                Err(e)
-            }
-        }
+        // Stage separately so unwinding cannot expose a partially applied transaction.
+        let mut next = self.clone();
+        let value = f(&mut next)?;
+        *self = next;
+        Ok(value)
     }
 }
 
@@ -294,7 +312,9 @@ fn read_format_version(path: &Path) -> Result<u32> {
     if data.len() != 12 || &data[..8] != FORMAT_MAGIC {
         return Err(Error::Corrupt);
     }
-    Ok(u32::from_le_bytes(data[8..12].try_into().map_err(|_| Error::Corrupt)?))
+    Ok(u32::from_le_bytes(
+        data[8..12].try_into().map_err(|_| Error::Corrupt)?,
+    ))
 }
 fn write_format_version(path: &Path) -> Result<()> {
     let mut data = Vec::with_capacity(12);
@@ -333,6 +353,36 @@ fn read_checkpoint(path: &Path) -> Result<(u64, BTreeMap<EntryKey, Vec<u8>>)> {
     }
     Ok((generation, entries))
 }
+fn replay_operation(r: &mut Reader<'_>, entries: &mut BTreeMap<EntryKey, Vec<u8>>) -> Result<()> {
+    let op = r.take(1)?[0];
+    replay_value(op, r, entries)
+}
+fn replay_value(
+    op: u8,
+    r: &mut Reader<'_>,
+    entries: &mut BTreeMap<EntryKey, Vec<u8>>,
+) -> Result<()> {
+    let key = decode_key(r)?;
+    match op {
+        1 => {
+            entries.insert(key, r.bytes()?);
+        }
+        2 => {
+            entries.remove(&key);
+        }
+        _ => return Err(Error::Corrupt),
+    }
+    Ok(())
+}
+fn sync_directory(path: &Path) -> io::Result<()> {
+    // Unix requires a directory fsync to make a newly created log or renamed snapshot
+    // durable. Windows does not support opening directories with std::fs::File.
+    #[cfg(unix)]
+    File::open(path)?.sync_all()?;
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
+}
 /// A committed transaction is one complete checksummed log record. A torn tail is ignored.
 /// Checkpoints rotate between two slots so Windows renames never replace the active slot.
 pub struct DiskStore {
@@ -341,6 +391,7 @@ pub struct DiskStore {
     generation: u64,
     shared_quota: Option<Arc<Mutex<QuotaLedger>>>,
     quota_id: u64,
+    poisoned: bool,
 }
 impl DiskStore {
     /// Open the store at `path`, never failing the caller because the on-disk
@@ -436,6 +487,7 @@ impl DiskStore {
                     generation,
                     shared_quota: None,
                     quota_id: 0,
+                    poisoned: false,
                 });
             }
             if &data[..8] != LOG_MAGIC {
@@ -462,20 +514,22 @@ impl DiskStore {
                 }
                 let mut r = Reader::new(payload);
                 let op = r.take(1)?[0];
-                let key = decode_key(&mut r)?;
-                match op {
-                    1 => {
-                        let value = r.bytes()?;
-                        memory.entries.insert(key.clone(), value);
-                        memory.access.entry(key.bucket).or_insert(0);
+                if op == 3 {
+                    // Validate the whole batch before exposing any of its operations.
+                    let count = r.u32()?;
+                    let mut entries = memory.entries.clone();
+                    for _ in 0..count {
+                        replay_operation(&mut r, &mut entries)?;
                     }
-                    2 => {
-                        memory.entries.remove(&key);
+                    if !r.done() {
+                        return Err(Error::Corrupt);
                     }
-                    _ => return Err(Error::Corrupt),
-                }
-                if !r.done() {
-                    return Err(Error::Corrupt);
+                    memory.entries = entries;
+                } else {
+                    replay_value(op, &mut r, &mut memory.entries)?;
+                    if !r.done() {
+                        return Err(Error::Corrupt);
+                    }
                 }
                 offset += len + 8;
             }
@@ -483,12 +537,16 @@ impl DiskStore {
             let file = OpenOptions::new().write(true).open(log)?;
             file.set_len(offset as u64)?;
         }
+        for key in memory.entries.keys() {
+            memory.access.entry(key.bucket.clone()).or_insert(0);
+        }
         Ok(Self {
             path,
             memory,
             generation,
             shared_quota: None,
             quota_id: 0,
+            poisoned: false,
         })
     }
     pub fn attach_quota(&mut self, ledger: Arc<Mutex<QuotaLedger>>) {
@@ -511,8 +569,18 @@ impl DiskStore {
         let mut quota = ledger.as_ref().map(|ledger| ledger.lock().unwrap());
         let usage = next.usage(&key.bucket.storage);
         if let Some(quota) = quota.as_mut() {
-            let old = quota.stores.get(&self.quota_id).and_then(|store| store.get(&key.bucket.storage)).copied().unwrap_or(0);
-            if quota.usage(&key.bucket.storage).saturating_sub(old).saturating_add(usage) > quota.quota(&key.bucket.storage) {
+            let old = quota
+                .stores
+                .get(&self.quota_id)
+                .and_then(|store| store.get(&key.bucket.storage))
+                .copied()
+                .unwrap_or(0);
+            if quota
+                .usage(&key.bucket.storage)
+                .saturating_sub(old)
+                .saturating_add(usage)
+                > quota.quota(&key.bucket.storage)
+            {
                 return Err(Error::QuotaExceeded);
             }
         }
@@ -521,7 +589,9 @@ impl DiskStore {
         bytes(&mut payload, &value);
         self.append(&payload)?;
         self.memory = next;
-        if let Some(quota) = quota.as_mut() { quota.replace(self.quota_id, &key.bucket.storage, usage)?; }
+        if let Some(quota) = quota.as_mut() {
+            quota.replace(self.quota_id, &key.bucket.storage, usage)?;
+        }
         Ok(())
     }
     pub fn delete(&mut self, key: &EntryKey) -> Result<bool> {
@@ -532,26 +602,128 @@ impl DiskStore {
         self.append(&payload)?;
         let deleted = self.memory.delete(key);
         let usage = self.memory.usage(&key.bucket.storage);
-        if let Some(quota) = quota.as_mut() { quota.stores.entry(self.quota_id).or_default().insert(key.bucket.storage.clone(), usage); }
+        if let Some(quota) = quota.as_mut() {
+            quota
+                .stores
+                .entry(self.quota_id)
+                .or_default()
+                .insert(key.bucket.storage.clone(), usage);
+        }
         Ok(deleted)
     }
-    fn append(&self, payload: &[u8]) -> Result<()> {
+    /// Stage a multi-key update and durably publish its final delta as one log record.
+    /// The callback sees its own writes; readers and quota accounting see only committed
+    /// state. Errors (including quota or persistence errors) discard the staged state.
+    /// A panic also leaves this store untouched. Transactions are serialized by `&mut self`.
+    pub fn transaction<F, T>(&mut self, f: F) -> Result<T>
+    where
+        F: FnOnce(&mut MemoryStore) -> Result<T>,
+    {
+        let mut next = self.memory.clone();
+        let value = f(&mut next)?;
+        let mut operations = Vec::new();
+        let mut count = 0u32;
+        for key in self.memory.entries.keys() {
+            if !next.entries.contains_key(key) {
+                operations.push(2);
+                encode_key(&mut operations, key);
+                count = count.checked_add(1).ok_or(Error::InvalidInput)?;
+            }
+        }
+        for (key, value) in &next.entries {
+            if self.memory.entries.get(key) != Some(value) {
+                operations.push(1);
+                encode_key(&mut operations, key);
+                bytes(&mut operations, value);
+                count = count.checked_add(1).ok_or(Error::InvalidInput)?;
+            }
+        }
+        let mut partitions = std::collections::BTreeSet::new();
+        for key in self.memory.entries.keys().chain(next.entries.keys()) {
+            partitions.insert(key.bucket.storage.clone());
+        }
+        let ledger = self.shared_quota.clone();
+        let mut quota = ledger.as_ref().map(|ledger| ledger.lock().unwrap());
+        for key in &partitions {
+            let usage = next.usage(key);
+            if usage > next.quota(key) {
+                return Err(Error::QuotaExceeded);
+            }
+            if let Some(quota) = quota.as_ref() {
+                let old = quota
+                    .stores
+                    .get(&self.quota_id)
+                    .and_then(|s| s.get(key))
+                    .copied()
+                    .unwrap_or(0);
+                if quota.usage(key).saturating_sub(old).saturating_add(usage) > quota.quota(key) {
+                    return Err(Error::QuotaExceeded);
+                }
+            }
+        }
+        if count != 0 {
+            let mut payload = vec![3];
+            payload.extend_from_slice(&count.to_le_bytes());
+            payload.extend_from_slice(&operations);
+            self.append(&payload)?;
+        }
+        self.memory = next;
+        if let Some(quota) = quota.as_mut() {
+            for key in partitions {
+                quota
+                    .stores
+                    .entry(self.quota_id)
+                    .or_default()
+                    .insert(key.clone(), self.memory.usage(&key));
+            }
+        }
+        Ok(value)
+    }
+    fn append(&mut self, payload: &[u8]) -> Result<()> {
+        if self.poisoned {
+            return Err(Error::Io(
+                "store needs reopening after failed log repair".into(),
+            ));
+        }
         if payload.len() > MAX_RECORD {
             return Err(Error::InvalidInput);
         }
         let path = self.path.join("log");
         let new = !path.exists();
         let mut file = OpenOptions::new().create(true).append(true).open(path)?;
-        if new {
-            file.write_all(LOG_MAGIC)?;
+        let original_len = file.metadata()?.len();
+        let result = (|| -> io::Result<()> {
+            if original_len == 0 {
+                file.write_all(LOG_MAGIC)?;
+            }
+            file.write_all(&(payload.len() as u32).to_le_bytes())?;
+            file.write_all(payload)?;
+            file.write_all(&crc32(payload).to_le_bytes())?;
+            file.sync_all()?;
+            if new {
+                sync_directory(&self.path)?;
+            }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            // A failed append must not hide a later successful commit behind a torn tail.
+            if file
+                .set_len(original_len)
+                .and_then(|_| file.sync_all())
+                .is_err()
+            {
+                self.poisoned = true;
+            }
+            return Err(error.into());
         }
-        file.write_all(&(payload.len() as u32).to_le_bytes())?;
-        file.write_all(payload)?;
-        file.write_all(&crc32(payload).to_le_bytes())?;
-        file.sync_all()?;
         Ok(())
     }
     pub fn checkpoint(&mut self) -> Result<()> {
+        if self.poisoned {
+            return Err(Error::Io(
+                "store needs reopening after failed log repair".into(),
+            ));
+        }
         let mut payload = Vec::new();
         payload.extend_from_slice(&(self.memory.entries.len() as u32).to_le_bytes());
         for (key, value) in &self.memory.entries {
@@ -577,6 +749,7 @@ impl DiskStore {
             fs::remove_file(&target)?;
         }
         fs::rename(&temporary, target)?;
+        sync_directory(&self.path)?;
         self.generation = next;
         let mut log = File::create(self.path.join("log"))?;
         log.write_all(LOG_MAGIC)?;

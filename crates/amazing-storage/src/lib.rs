@@ -10,4 +10,6 @@ pub mod locks;
 pub mod manager;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod transaction_tests;
 pub mod web;
