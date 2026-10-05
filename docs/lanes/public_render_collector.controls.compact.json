@@ -1,0 +1,216 @@
+{
+  "schema": 1,
+  "source_base": "43e959578e44e2539921d16178ea2788461e61b9",
+  "qualified_source": "415e74da2702e0d6a04ac824c762c96343d5bfe9",
+  "qualification": "Native tooling-only controls. Synthetic pixel producer; no engine build/test or Group B corpus qualification.",
+  "native_job": {
+    "schema": 2,
+    "lane": "public-render-collector-controls-20261005",
+    "source_commit": "415e74da2702e0d6a04ac824c762c96343d5bfe9",
+    "box_id": "bx_3gj36nqt",
+    "host": "user@5.135.136.201",
+    "port": 19033,
+    "job_id": "cc2a17c036ad47c2a290d49794d0a4a6",
+    "output_root": "amazing/out/public-render-collector-controls-20261005/collector-controls/415e74da2702e0d6a04ac824c762c96343d5bfe9",
+    "command_sha256": "8af6153816bb15dba8461162387148cffc8fb2410689587447e185d80d102970",
+    "execution_sha256": "518df4ff3bb05ffd25cc5155e8e715ccc845334f3692bd45810c44e25792e58c",
+    "source_archive_sha256": "2a406521257ab814399cee3d14f4bbb2b9be9e0d61c59b0a5a270a1c13011dfe"
+  },
+  "actual_exit": 0,
+  "execution_raw": {
+    "path": "/home/user/.amazing-jobs/cc2a17c036ad47c2a290d49794d0a4a6/command.log",
+    "bytes": 5618,
+    "sha256": "8ab0201562657699f581e414bd962209afe75cd74eb8289065381207830ab9da"
+  },
+  "command_sha256": "8af6153816bb15dba8461162387148cffc8fb2410689587447e185d80d102970",
+  "compact_receipt": {
+    "sha256": "a887c2d23fecf0bd50b7f3d33f244bad40e21cfaad9ff29e3933ad058890b7b1",
+    "bytes": 3897
+  },
+  "controls": {
+    "schema": 1,
+    "source": "415e74da2702e0d6a04ac824c762c96343d5bfe9",
+    "qualification": "Tooling controls ONLY; synthetic pixel producer, no Amazing engine build/tests or pinned WPT gate",
+    "controls": [
+      {
+        "name": "reference-root-canonicalized-through-real-symlink",
+        "passed": true,
+        "detail": {
+          "document_files": 9,
+          "testharness_files": 0,
+          "reftests": 8,
+          "eligible_static_self_contained": 8,
+          "selected": 8,
+          "excluded": {
+            "not-reftest": 1
+          }
+        }
+      },
+      {
+        "name": "incorrect-historical-census-is-nonblocking",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "absent-historical-census-does-not-remove-tests",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "slash-and-punctuation-projection-matches-public-id-contract",
+        "passed": true,
+        "detail": {
+          "actual": "ee82006807813d4acf7b96e8a176ddb61f5a06808d7657f12f3119aaba15873c",
+          "expected": "ee82006807813d4acf7b96e8a176ddb61f5a06808d7657f12f3119aaba15873c"
+        }
+      },
+      {
+        "name": "matching-historical-census-recorded-as-note",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "raw-envelope-counts-full-selected-references",
+        "passed": true,
+        "detail": 35872256
+      },
+      {
+        "name": "symlink-and-canonical-source-input-hashes-match",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "actual-public-comparator-before-exit-zero",
+        "passed": true,
+        "detail": 0
+      },
+      {
+        "name": "actual-public-comparator-before-entire-eight-pass",
+        "passed": true,
+        "detail": {
+          "pass": 8,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        }
+      },
+      {
+        "name": "actual-public-report-id:css__collector-controls__nested__a-case.html",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "actual-public-report-id:css__collector-controls__nested__b__case.html",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "actual-public-report-id:css__collector-controls__nested__dot.case.html",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "actual-public-report-id:css__collector-controls__nested__last-case.html",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "actual-public-report-id:css__collector-controls__nested__space__case.html",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "actual-public-report-id:css__collector-controls__nested__under_score.html",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "actual-public-report-id:css__collector-controls__nested__x__y.html",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "actual-public-report-id:css__collector-controls__nested__z__case.html",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "negative-actual-lost-pass-public-cli-exit-two",
+        "passed": true,
+        "detail": 2
+      },
+      {
+        "name": "negative-actual-lost-pass-id-retained",
+        "passed": true,
+        "detail": [
+          "css__collector-controls__nested__a-case.html"
+        ]
+      },
+      {
+        "name": "negative-preserves-all-other-seven-passes",
+        "passed": true,
+        "detail": {
+          "pass": 7,
+          "mismatch": 1,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        }
+      },
+      {
+        "name": "public-comparison-refuses-pass-to-mismatch",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "public-comparison-refuses-pass-to-timeout",
+        "passed": true,
+        "detail": null
+      }
+    ],
+    "counts": {
+      "passed": 22,
+      "failed": 0
+    },
+    "actual_control_process_exits": {
+      "before": 0,
+      "negative_after": 2
+    },
+    "negative_actual_lost": [
+      "css__collector-controls__nested__a-case.html"
+    ],
+    "raw_native_directory": "/tmp/amazing-collector-controls-je34al0x",
+    "raw_logs": [
+      {
+        "path": "/tmp/amazing-collector-controls-je34al0x/before.log",
+        "bytes": 721,
+        "sha256": "6988a8b8ac0eedbdd1913107376666eb84099635105a610974c5626edb2bbba5"
+      },
+      {
+        "path": "/tmp/amazing-collector-controls-je34al0x/negative-after.log",
+        "bytes": 897,
+        "sha256": "d3769c03225d44bec79c7363fc7bec28a825242b62ba5a84c81b71ab643380e4"
+      }
+    ],
+    "public_sources": {
+      "render-corpus-collector.py": {
+        "path": "/tmp/amazing-bootstrap.IO47RZ/source/scripts/render-corpus-collector.py",
+        "bytes": 8240,
+        "sha256": "4308df951b05dcb050e8b8b5834f84a62400364cdaf1e8a0d25dbbe2c4309570"
+      },
+      "render-corpus-collector-tests.py": {
+        "path": "/tmp/amazing-bootstrap.IO47RZ/source/scripts/render-corpus-collector-tests.py",
+        "bytes": 5996,
+        "sha256": "78b6900765b5b35519f67a6f5d905119dec20c33b025ba8562a666bd6dc94619"
+      },
+      "wpt_render_compare.py": {
+        "path": "/tmp/amazing-bootstrap.IO47RZ/source/scripts/wpt_render_compare.py",
+        "bytes": 31392,
+        "sha256": "97bd438374544f3861ad79fafbc587aa0dbd8b7506b789cfbd5cc92e9ba8a8db"
+      }
+    }
+  }
+}
