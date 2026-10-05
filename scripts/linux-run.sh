@@ -214,14 +214,21 @@ fi
 # sending file-by-file writes through snapshot-backed HOME.
 SOURCE_ARCHIVE=""
 SOURCE_ARCHIVE_SHA=""
+SOURCE_TRANSFER_RECEIPT=""
 if [ "$HOST" = boat ] && [ -z "$MISSION_PACKAGE" ]; then
   SOURCE_ARCHIVE=$(mktemp /tmp/amazing-source-transport.XXXXXX) || exit 3
   trap 'rm -f "${SOURCE_ARCHIVE:-}"; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"' EXIT
   tar -czf "$SOURCE_ARCHIVE" --exclude=./.git --exclude=./target --exclude='./target-*' \
     --exclude=./.agents --exclude=./out --exclude=./corpora -C "$SRC" . || exit 3
-  SOURCE_ARCHIVE_SHA=$(python3 - "$SOURCE_ARCHIVE" <<'PYHASH'
-import hashlib,sys
-with open(sys.argv[1],'rb') as stream: print(hashlib.file_digest(stream,'sha256').hexdigest())
+  # Packet provenance is recorded before any allocation and remains available
+  # even when no native job starts. The setup summary embeds this same receipt.
+  SOURCE_TRANSFER_RECEIPT="$SRC/source-transfer.manifest.json"
+  if [ -n "$SETUP_SUMMARY" ]; then SOURCE_TRANSFER_RECEIPT="$SETUP_SUMMARY.source-transfer.summary.json"
+  elif [ -n "$ENDPOINT_RECEIPT" ]; then SOURCE_TRANSFER_RECEIPT="$ENDPOINT_RECEIPT.source-transfer.summary.json"; fi
+  python3 "$REPO/scripts/source-upload.py" --receipt "$SOURCE_TRANSFER_RECEIPT" describe "$SOURCE_ARCHIVE" "${COMMIT:-working-tree}" || exit 3
+  SOURCE_ARCHIVE_SHA=$(python3 - "$SOURCE_TRANSFER_RECEIPT" <<'PYHASH'
+import json,sys
+print(json.load(open(sys.argv[1]))['archive_sha256'])
 PYHASH
   ) || exit 3
 fi
@@ -268,15 +275,13 @@ if [ "$HOST" = boat ]; then
     fi
     NATIVE_SOURCE_DIR="/tmp/amazing-source-transport-$LANE.$$"
     setup_phase=native-source-directory
-    $BSSH "$BOAT_HOST" "timeout --kill-after=5 60 bash -c 'mkdir -p amazing/out/$LANE .amazing-busy $NATIVE_SOURCE_DIR && touch $LEASE'"
+    $BSSH "$BOAT_HOST" "timeout --kill-after=5 60 bash -c 'mkdir -p amazing/out/$LANE .amazing-busy && mkdir -m 700 $NATIVE_SOURCE_DIR && touch $LEASE'"
     setup_rc=$?
     if [ "$setup_rc" = 0 ]; then
       setup_phase=native-source-upload
-      COMMIT="${COMMIT:-working-tree}" python3 "$REPO/scripts/native-inputs.py" --receipt "$SRC/source-transfer.manifest.json" transfer --seconds 900 -- \
-        scp -O -q -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=2 \
-        -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        -i "$HOME/.ssh/ascii_box_ed25519" -P "$BOAT_PORT" "$SOURCE_ARCHIVE" \
-        "$BOAT_HOST:$NATIVE_SOURCE_DIR/source.tar.gz"
+      python3 "$REPO/scripts/source-upload.py" --receipt "$SOURCE_TRANSFER_RECEIPT" send \
+        "$SOURCE_ARCHIVE" "${COMMIT:-working-tree}" "$BOAT_HOST" "$BOAT_PORT" \
+        "$HOME/.ssh/ascii_box_ed25519" "$NATIVE_SOURCE_DIR/source.tar.gz" --seconds 900
       setup_rc=$?
     fi
     if [ "$setup_rc" = 0 ]; then
@@ -289,7 +294,7 @@ if [ "$HOST" = boat ]; then
     if [ -n "$SETUP_SUMMARY" ]; then
       mkdir -p "$(dirname "$SETUP_SUMMARY")" &&
         python3 "$REPO/scripts/gate-summary.py" failure --source-commit "${COMMIT:-working-tree}" \
-          --shard "$LANE" --wrapper-exit 3 "$SETUP_SUMMARY" "$setup_phase" "$setup_rc" || \
+          --shard "$LANE" --wrapper-exit 3 --phase-receipt "$SOURCE_TRANSFER_RECEIPT" "$SETUP_SUMMARY" "$setup_phase" "$setup_rc" || \
           echo "linux-run: compact setup receipt could not be written" >&2
     fi
   done

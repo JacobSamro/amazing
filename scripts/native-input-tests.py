@@ -152,7 +152,9 @@ class PublicBoundary(unittest.TestCase):
         run = (SCRIPTS / 'linux-run.sh').read_text().split('# Bulk transfers')[0]
         self.assertNotIn('"$BOAT_HOST:amazing/wt/$LANE/"', run)
         self.assertIn('native-source-upload', run)
-        self.assertIn('transfer --seconds 900', run)
+        self.assertIn('source-upload.py', run)
+        self.assertIn('--seconds 900', run)
+        self.assertIn('--phase-receipt "$SOURCE_TRANSFER_RECEIPT"', run)
         bootstrap = (SCRIPTS / 'linux-bootstrap.sh').read_text()
         self.assertIn('native-test262-input 1200', bootstrap)
         self.assertIn('TEST262_ROOT=/tmp/amazing-test262-3655e746', bootstrap)
