@@ -1,0 +1,62 @@
+{
+  "qualified_source": "75c3d5a21f5fc5d89c370ba51aef351da7c183f5",
+  "controls": 10,
+  "actual_exit": 0,
+  "fetch_exit": 0,
+  "original_failed_source": "149a3237a44e7debd29821fc92b8443d0444e1d8",
+  "original_actual_exit": 1,
+  "whole_source_correction": "Deduplicate alternate direct record encoding while preserving whole report record_sets",
+  "files": [
+    {
+      "path": "docs/lanes/evidence/gate-summary-directory-20261006/failed-controls.phase.manifest.json",
+      "bytes": 1598,
+      "sha256": "ae7231357927a64955bc6ec531a98c2565b4e55c30ead51e13d9ee18f25aef19"
+    },
+    {
+      "path": "docs/lanes/evidence/gate-summary-directory-20261006/failed-controls.summary.json",
+      "bytes": 2123,
+      "sha256": "251def12286b6b9a717f1e5fd0a522298acdd54f463475e93411f9d631fa1072"
+    },
+    {
+      "path": "docs/lanes/evidence/gate-summary-directory-20261006/failed-storage.summary.json",
+      "bytes": 1763,
+      "sha256": "013ca8cfa4c2d0e3bb7e9da5631e75617f486fceef2ff912be263452ab2c1804"
+    },
+    {
+      "path": "docs/lanes/evidence/gate-summary-directory-20261006/failed-endpoint.manifest.json",
+      "bytes": 562,
+      "sha256": "1c87b2abe77c7ed75f6f95382ef79ea679f3fd80dfd88414bf29f824905e9f35"
+    },
+    {
+      "path": "docs/lanes/evidence/gate-summary-directory-20261006/failed-endpoint.manifest.json.observation.summary.json",
+      "bytes": 1352,
+      "sha256": "82687ed5de3cc672cb96ed9437984911ec3564af85efd90137c397ff1647abcb"
+    },
+    {
+      "path": "docs/lanes/evidence/gate-summary-directory-20261006/qualified-controls.phase.manifest.json",
+      "bytes": 1152,
+      "sha256": "58024682e44eb737dbe588b526a7adbb975dc732d53ce02657310f51e400cfca"
+    },
+    {
+      "path": "docs/lanes/evidence/gate-summary-directory-20261006/qualified-controls.summary.json",
+      "bytes": 1551,
+      "sha256": "f19a0d38a31c171ebfcf5b883aa83601181d9be25d3ba6d49670498b24a5376a"
+    },
+    {
+      "path": "docs/lanes/evidence/gate-summary-directory-20261006/qualified-storage.summary.json",
+      "bytes": 1818,
+      "sha256": "a1e860fcec6dc8883a5b09456ddad89e91f3be0a592cd8218637d4a7d4c11d0b"
+    },
+    {
+      "path": "docs/lanes/evidence/gate-summary-directory-20261006/qualified-endpoint.manifest.json",
+      "bytes": 581,
+      "sha256": "2b5e2f925036cb70b8764a433e194bf46595c79f917922e477228befd8d0391c"
+    },
+    {
+      "path": "docs/lanes/evidence/gate-summary-directory-20261006/qualified-endpoint.manifest.json.observation.summary.json",
+      "bytes": 1371,
+      "sha256": "ffb601a969cb46fe6e059b3929eb08d7fa385d617190172972f31ea8ff029533"
+    }
+  ],
+  "engine_conformance_claim": false
+}

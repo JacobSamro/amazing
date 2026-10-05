@@ -10,6 +10,8 @@ import re
 import zlib
 
 LIMIT = 512 * 1024
+TICKET_LIMIT = 2 * 1024 * 1024
+STATUSES = {"pass", "fail", "timeout", "unsupported", "skipped"}
 
 
 def write(path, value):
@@ -31,8 +33,45 @@ def unpack(report):
     return report['records']
 
 
+def shard_selection(shard):
+    # An unsharded directory report is not a numbered merge shard. Keep its
+    # original spelling in the receipt while selecting all fixture records.
+    if shard == '':
+        return 0, 1
+    if not isinstance(shard, str) or not re.fullmatch(r'\d+/[1-9]\d*', shard):
+        raise ValueError('invalid shard identity')
+    index, total = map(int, shard.split('/'))
+    if index >= total:
+        raise ValueError('invalid shard index')
+    return index, total
+
+
+def validate_records(records):
+    seen = set()
+    for record in records:
+        path = record['path']
+        if (not isinstance(path, str) or not path or path.startswith('/')
+                or '..' in path.split('/') or path in seen):
+            raise ValueError('invalid or duplicate test path')
+        seen.add(path)
+        if record['status'] not in STATUSES:
+            raise ValueError('invalid file classification')
+        variants = set()
+        for variant in record['variants']:
+            name = variant['variant']
+            if not isinstance(name, str) or not name or name in variants:
+                raise ValueError('invalid or duplicate variant identity')
+            variants.add(name)
+            if variant['status'] not in STATUSES:
+                raise ValueError('invalid variant classification')
+
+
 def compact(source, destination, exit_code, commit):
+    if exit_code not in (0, 1):
+        raise ValueError('runner did not complete normally')
     report = json.loads(pathlib.Path(source).read_text())
+    validate_records(report['records'])
+    index, total = shard_selection(report['shard'])
     records = [{'path': r['path'], 'status': r['status'],
                 'reason': r.get('reason', ''),
                 'variants': [{'variant': v['variant'], 'status': v['status']}
@@ -42,18 +81,80 @@ def compact(source, destination, exit_code, commit):
     for r in records:
         r['reason'] = 'selection.excluded' if 'selection.excluded' in r['reason'] else ''
     paths = sorted(r['path'] for r in records)
-    index, total = map(int, report['shard'].split('/'))
     records = [r for i, r in enumerate(records)
                if r['reason'] != 'selection.excluded' and (not r['path'].split('/')[-1].count('_FIXTURE') or i % total == index)]
     result = {k: report[k] for k in ('shard', 'test262_revision', 'input_sha256',
               'host_sha256', 'runner_sha256', 'timeout_seconds', 'classification_sha256')}
-    result.update(schema=2, source_commit=commit, job_exit=0, discovered=len(paths),
+    result.update(selection={k: report.get(k) for k in ('filter', 'limit', 'jobs')}, schema=2, source_commit=commit, job_exit=0, discovered=len(paths),
                   paths_sha256=hashlib.sha256(json.dumps(paths, separators=(',', ':')).encode()).hexdigest(),
                   runner_exit=exit_code, phase_exits={'build': 0, 'runner': exit_code, 'packaging': 0}, raw=raw(source),
                   summary={'files': dict(collections.Counter(r['status'] for r in records))},
                   compact_records=base64.b64encode(zlib.compress(
                       json.dumps(records, separators=(',', ':')).encode(), 9)).decode())
     write(destination, result)
+
+
+def bundle(index_path, destination):
+    """Lossless multi-selection storage; never discard tests to meet a budget.
+
+    Index rows explicitly identify role/selector/mode and an existing compact.
+    Whole compression removes overlap between directory selections. Chunking is
+    storage only: each report and its raw/source provenance survives unchanged.
+    """
+    rows = json.loads(pathlib.Path(index_path).read_text())
+    if not isinstance(rows, list) or not rows:
+        raise ValueError('empty or malformed bundle index')
+    identities, reports, record_sets, set_ids = set(), [], [], {}
+    for row in rows:
+        identity = (row['role'], row['selector'], row['mode'])
+        if (row['role'] not in ('before', 'after') or row['mode'] not in ('default', 'vm')
+                or not isinstance(row['selector'], str) or not row['selector']
+                or identity in identities):
+            raise ValueError('invalid or duplicate selection identity')
+        identities.add(identity)
+        report = json.loads(pathlib.Path(row['compact']).read_text())
+        if report.get('schema') != 2 or report.get('job_exit') != 0 or report.get('runner_exit') not in (0, 1):
+            raise ValueError('not a completed Test262 compact')
+        shard_selection(report['shard'])
+        records = unpack(report)
+        validate_records(records)
+        report = dict(report)
+        report.pop('compact_records', None)
+        # Direct records and compact_records are alternate encodings. Keep the
+        # complete decoded set once, rather than repeating direct records in
+        # every receipt as well as the deduplicated record_sets table.
+        report.pop('records', None)
+        record_bytes = json.dumps(records, separators=(',', ':'), sort_keys=True)
+        if record_bytes not in set_ids:
+            set_ids[record_bytes] = len(record_sets)
+            record_sets.append(records)
+        report['record_set'] = set_ids[record_bytes]
+        reports.append({'identity': list(identity), 'receipt': report,
+                        'compact_raw': raw(row['compact'])})
+    payload = json.dumps({'reports': reports, 'record_sets': record_sets},
+                         separators=(',', ':'), sort_keys=True).encode()
+    encoded = base64.b64encode(zlib.compress(payload, 9)).decode()
+    destination = pathlib.Path(destination)
+    parts = []
+    outputs = []
+    for number, start in enumerate(range(0, len(encoded), 256 * 1024)):
+        path = destination.with_name(destination.name + '.part-' + str(number) + '.compact.json')
+        data = (json.dumps({'schema': 1, 'part': number, 'data': encoded[start:start + 256 * 1024]},
+                           separators=(',', ':')) + '\n').encode()
+        parts.append({'name': path.name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
+        outputs.append((path, data))
+    manifest = {'schema': 1, 'encoding': 'base64-zlib-json', 'identities': sorted(map(list, identities)),
+                'reports': len(reports), 'uncompressed_bytes': len(payload),
+                'uncompressed_sha256': hashlib.sha256(payload).hexdigest(), 'parts': parts}
+    manifest_data = (json.dumps(manifest, separators=(',', ':'), sort_keys=True) + '\n').encode()
+    if (len(manifest_data) > LIMIT or any(len(data) > LIMIT for _, data in outputs)
+            or len(manifest_data) + sum(len(data) for _, data in outputs) > TICKET_LIMIT):
+        raise ValueError('lossless bundle exceeds ticket budget; no files written')
+    if destination.exists() or any(path.exists() for path, _ in outputs):
+        raise ValueError('bundle destination already exists')
+    for path, data in outputs:
+        path.write_bytes(data)
+    destination.write_bytes(manifest_data)
 
 
 def log_counts(files):
@@ -79,6 +180,8 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     t = sub.add_parser('test262')
     t.add_argument('--source-commit', default=''); t.add_argument('source'); t.add_argument('destination'); t.add_argument('exit', type=int)
+    b = sub.add_parser('bundle')
+    b.add_argument('index'); b.add_argument('destination')
     f = sub.add_parser('failure')
     f.add_argument('--source-commit', required=True); f.add_argument('--shard', required=True)
     f.add_argument('--phase-receipt')
@@ -93,6 +196,8 @@ def main():
         if args.exit not in (0, 1):
             raise ValueError('runner did not complete normally')
         compact(args.source, args.destination, args.exit, args.source_commit)
+    elif args.command == 'bundle':
+        bundle(args.index, args.destination)
     elif args.command == 'failure':
         write(args.destination, {'schema': 1, 'source_commit': args.source_commit,
                                 'shard': args.shard, 'phase': args.phase, 'actual_exit': args.exit,
