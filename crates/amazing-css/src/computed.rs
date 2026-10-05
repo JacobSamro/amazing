@@ -1143,6 +1143,7 @@ const PROPERTIES: &[PropertyMetadata] = &[
         initial: "horizontal-tb",
         inherited: true,
     },
+    PropertyMetadata { name: "contain", initial: "none", inherited: false },
     PropertyMetadata { name: "inline-size", initial: "auto", inherited: false },
     PropertyMetadata { name: "block-size", initial: "auto", inherited: false },
     PropertyMetadata { name: "min-inline-size", initial: "auto", inherited: false },
@@ -1239,6 +1240,10 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     }
     if position_values::supported(&property) {
         return if needs_deferred_expansion(value) { vec![(property, value.into())] } else { position_values::canonical(&property, value).map(|value| vec![(property, value)]).unwrap_or_default() };
+    }
+    if property == "contain" {
+        return if needs_deferred_expansion(value) { vec![(property, value.into())] }
+        else { crate::contain_value::specified(value).map(|value| vec![(property, value)]).unwrap_or_default() };
     }
     if property == "font-width" { return expand_declaration("font-stretch", value); }
     if property == "word-wrap" { return expand_declaration("overflow-wrap", value); }
@@ -2922,6 +2927,8 @@ fn compute_normal_value(
         canonical_font_feature_value(property.name, &computed).unwrap_or(computed)
     } else if crate::text_properties::supported(property.name) {
         crate::text_properties::canonical(property.name, &computed).unwrap_or(computed)
+    } else if property.name == "contain" {
+        crate::contain_value::computed(&computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "display" {
         values::display_canonical(&computed).unwrap_or(&computed).to_owned()
     } else if matches!(property.name, "ruby-align" | "ruby-position" | "ruby-overhang" | "ruby-merge") {

@@ -231,6 +231,9 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         // Not evaluated (no size-container-query matching yet), but a real
         // change establishes/removes a query container and containment, so
         // it is conservatively a full rebuild rather than a narrower kind.
+        // Containment can change counter scope, containing blocks and stacking.
+        // Conservatively rebuild until finer containment invalidation is owned.
+        "contain" |
         "container-name" |
         "container-type" |
         "content" |
@@ -281,7 +284,7 @@ mod tests {
         // `background-position-x`/`-y`, all PaintOnly. CSS39 adds thirteen
         // registered text policy axes, all Layout. CSS42 adds six image-border
         // properties, all PaintOnly.
-        assert_eq!(counts, [19, 52, 142, 34]);
+        assert_eq!(counts, [19, 52, 142, 35]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }

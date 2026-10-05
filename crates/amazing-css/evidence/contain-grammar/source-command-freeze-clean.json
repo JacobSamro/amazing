@@ -1,0 +1,56 @@
+{
+  "source": "6fe016be2aac56aef6a919cb4ac916481605bfcc",
+  "base": "a035b2b558065d72664ce7617da0a7261027bb0d",
+  "command": [
+    "python3",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/run-clean.py"
+  ],
+  "wrapper_source": "1f6226043afaecea79bbeb4b342af9705e153508",
+  "files": {
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/run.py": {
+      "sha256": "428a7822c593372b1e23aa36da1852ef5229621c5553173351151e5d39fa9d31",
+      "bytes": 2584
+    },
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/remote.py": {
+      "sha256": "2a7c60a15b9afe2f7a247566c19c7980641241dabee748dbf172a73189bd464d",
+      "bytes": 2948
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/render-timeout-ready/scripts/render-gate.py": {
+      "sha256": "e6a7a0bf25a5bc801ab7f173c417f4d72eaa60493434793f1e061e603a67f69e",
+      "bytes": 4846
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/render-timeout-ready/scripts/gate-command.py": {
+      "sha256": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b",
+      "bytes": 4909
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/render-timeout-ready/scripts/gate-summary.py": {
+      "sha256": "3e26631cb492c2e77808c7bc9a3354ab248d0e83cf8762b933892647fd7ce0f0",
+      "bytes": 6347
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/integrator-join-20261005/scripts/linux-run.sh": {
+      "sha256": "f3048a26c9a7ad1a6103784e374c319d057da8b89ea22da7d2ecf8dba9a7cd75",
+      "bytes": 20499
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/integrator-join-20261005/scripts/lane-fetch.sh": {
+      "sha256": "fe4fa79beafef35bbce1ce853f4f3330ae8717b1a6e710675a3bd9892d0d84db",
+      "bytes": 2602
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/integrator-join-20261005/scripts/completed-job.py": {
+      "sha256": "fffa0b5a6f2904dfc115943db985cd95583d6c4a9a1398f60e965f21fe1f37df",
+      "bytes": 8458
+    },
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/run-classified.py": {
+      "sha256": "9642d904fd00bef8b5caf56693b83c77a79806431efa7b76173a859baf676abc",
+      "bytes": 2582
+    },
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/run-clean.py": {
+      "sha256": "d2b0ee3529782b391b1807303e2587b584dd113aa84ce0acc5a45620e74ca879",
+      "bytes": 2596
+    }
+  },
+  "state": "one clean rerun prepared; no execution",
+  "updated": "2026-10-05T05:57:06.546113+00:00",
+  "reason": "Corrected initial native render batch exhausted /tmp; authentic fresh complete before/after run",
+  "baseline_tag": "contain-grammar-6fe016be-clean-20261005-before",
+  "alias": "css-contain-grammar-clean"
+}

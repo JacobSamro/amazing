@@ -545,6 +545,9 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
     if crate::computed::border_radius::supported(property) {
         return crate::computed::border_radius::valid(property, css).then_some(V::Unparsed);
     }
+    if property == "contain" {
+        return crate::contain_value::specified(css).map(|_| V::Unparsed);
+    }
     if property == "clip-path" {
         return crate::effects::parse_clip_path(css).map(V::ClipPath);
     }

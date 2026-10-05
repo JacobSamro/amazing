@@ -1,0 +1,14 @@
+{
+  "session_id": 58263,
+  "exit_code": 0,
+  "observed_at": "2026-10-05T06:38:51.911328+00:00",
+  "command": [
+    "python3",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/run-clean.py"
+  ],
+  "baseline_job_id": "4ba30db6e3ba480090436ce400a0a5c5",
+  "candidate_job_id": "1db9d61a354f4373a4773e6065956085",
+  "box": "bx_fqxx9522",
+  "source": "6fe016be2aac56aef6a919cb4ac916481605bfcc",
+  "base": "a035b2b558065d72664ce7617da0a7261027bb0d"
+}
