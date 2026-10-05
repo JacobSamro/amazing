@@ -21,7 +21,7 @@ class LargeCommands(unittest.TestCase):
     self.assertGreater(len(command.encode()),524288)
     result=self.execute(command,row);self.assertEqual(result.returncode,actual,result.stderr.decode())
     observed=job.observe(row);self.assertEqual(observed['state'],'TERMINAL');self.assertEqual(observed['actual_exit'],actual);self.assertEqual(observed['runner_exit'],actual)
-    script=job.ledger(row)/'command.sh';self.assertEqual(script.read_bytes(),command.encode());self.assertTrue(script.is_relative_to(pathlib.Path.home()))
+    script=pathlib.Path(observed['native_diagnostics']['path']).parent/'command.sh';self.assertEqual(script.read_bytes(),command.encode());self.assertTrue(script.is_relative_to(pathlib.Path('/tmp')))
     raw=observed['execution_raw'];data=pathlib.Path(raw['path']).read_bytes();self.assertTrue(data.endswith(('native-large-command '+str(actual)+'\n').encode()));self.assertEqual(data.count(b'phase '),48);self.assertEqual(raw['sha256'],job.digest(data))
     fetched=job.verify(row,row['lane'],row['source_commit'],[row['output_root']+'/result.compact.json']);self.assertEqual(fetched['actual_exit'],actual)
  def test_multi_megabyte_payload_has_no_exec_argument_limit(self):
