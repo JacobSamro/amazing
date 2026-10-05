@@ -152,7 +152,9 @@ fn actual_http_coep_cookie_set_cookie_and_stored_transport_receipt_matrix() {
         let request = api(&target, &origin, mode, credentials);
         let observable_credentials = request.credentials;
         let id = service.start(request, context.clone()).unwrap();
-        assert!(finish(&mut service, id).is_ok());
+        let received = finish(&mut service, id).unwrap();
+        assert_eq!(received.credential_receipt().unwrap().includes_credentials(), permitted);
+        assert_eq!(received.clone_response().unwrap().credential_receipt(), received.credential_receipt());
         let wire = rx
             .recv_timeout(Duration::from_secs(10))
             .unwrap()
@@ -332,7 +334,8 @@ fn actual_fresh_cache_applies_current_hop_credentials_without_losing_stored_rece
     let cached = service
         .start(api(&target, &origin, "no-cors", "include"), credentialless)
         .unwrap();
-    assert!(finish(&mut service, cached).is_ok());
+    let cached_response = finish(&mut service, cached).unwrap();
+    assert!(!cached_response.credential_receipt().unwrap().includes_credentials());
     assert!(
         service
             .cache
@@ -384,7 +387,8 @@ fn actual_credentialless_304_reuses_body_with_current_hop_credentials() {
     let validated = service
         .start(api(&target, &origin, "no-cors", "include"), context.clone())
         .unwrap();
-    assert!(finish(&mut service, validated).is_ok());
+    let validated_response = finish(&mut service, validated).unwrap();
+    assert!(!validated_response.credential_receipt().unwrap().includes_credentials());
     assert_eq!(
         service.cache.storage().get(0).unwrap().response.body,
         b"image"

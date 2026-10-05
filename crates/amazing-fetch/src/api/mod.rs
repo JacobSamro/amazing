@@ -70,3 +70,5 @@ pub fn byte_string(input: &[u16]) -> Result<String, ApiError> {
     }
     Ok(input.iter().map(|c| char::from(*c as u8)).collect())
 }
+
+mod navigation_continuation;

@@ -25,6 +25,25 @@ fn response(status: u16, fields: &[(&str, &str)]) -> InternalResponse {
         body: Some(b"secret".to_vec()),
     }
 }
+// Retain only genuine private native receipts; spell out the complete hidden
+// public view so its original visibility assertion remains independent of them.
+fn hidden_view_with_native_receipts(policy: &Request, native: &InternalResponse, kind: ResponseType) -> Response {
+    // Independently run the ordinary native producer, rather than copying the
+    // response under assertion. The expected receipt comes from the original
+    // explicit transport fact; every public hidden field comes from hidden().
+    let reference = filter_response(policy, native).unwrap();
+    assert_eq!(reference.credential_receipt().unwrap().includes_credentials(),
+        native.request_includes_credentials);
+    let hidden = Response::hidden(kind);
+    let mut expected = reference.clone();
+    expected.response_type = hidden.response_type;
+    expected.status = hidden.status;
+    expected.status_text = hidden.status_text;
+    expected.headers = hidden.headers;
+    expected.body = hidden.body;
+    expected.url_list = hidden.url_list;
+    expected
+}
 #[test]
 fn origins_normalize_host_default_port_and_ipv6() {
     assert_eq!(
@@ -217,16 +236,20 @@ fn redirect_modes_and_missing_location() {
         Err(FetchError::Redirect)
     );
     r.redirect = RedirectMode::Manual;
+    let native = response(302, &[]);
     let RedirectAction::Manual(filtered) =
-        redirect(&mut r, &response(302, &[]), Some(url("https://b.test"))).unwrap()
+        redirect(&mut r, &native, Some(url("https://b.test"))).unwrap()
     else {
         panic!()
     };
-    let mut expected = Response::hidden(ResponseType::OpaqueRedirect);
+    assert!(native.request_includes_credentials);
+    assert_eq!(filtered.credential_receipt().unwrap().includes_credentials(), native.request_includes_credentials);
+    let mut expected = hidden_view_with_native_receipts(&r, &native, ResponseType::OpaqueRedirect);
     expected.url_list = r.url_list().to_vec();
     let provenance = filtered.csp_provenance.as_ref().unwrap();
     assert_eq!(provenance.url_list(), r.url_list());
     assert!(provenance.violations().is_empty());
+    assert_eq!(filtered.csp_provenance, expected.csp_provenance);
     expected.csp_provenance = filtered.csp_provenance.clone();
     assert_eq!(filtered, expected);
     assert_eq!(r.url_list().len(), 1);
@@ -583,7 +606,10 @@ fn opaque_filters_hide_everything() {
     let provenance = filtered.csp_provenance.as_ref().unwrap();
     assert_eq!(provenance.url_list(), r.url_list());
     assert!(provenance.violations().is_empty());
-    let mut expected = Response::hidden(ResponseType::Opaque);
+    assert!(s.request_includes_credentials);
+    assert_eq!(filtered.credential_receipt().unwrap().includes_credentials(), s.request_includes_credentials);
+    let mut expected = hidden_view_with_native_receipts(&r, &s, ResponseType::Opaque);
+    assert_eq!(filtered.csp_provenance, expected.csp_provenance);
     expected.csp_provenance = filtered.csp_provenance.clone();
     assert_eq!(filtered, expected);
 }
@@ -806,4 +832,36 @@ fn referrers_strip_credentials_and_fragments_but_keep_encoded_path() {
         Some("https://a.test/%C3%A9?q".into())
     );
     assert!(source.without_fragment().contains("u:p@"));
+}
+
+#[test]
+fn native_credential_receipts_survive_filtering_and_synthetic_responses_remain_unknown() {
+    for cross in [false, true] {
+        for mode in [RequestMode::Cors, RequestMode::NoCors] {
+            for included in [false, true] {
+                let mut request = request(cross);
+                request.mode = mode;
+                let mut native = response(200, &[("access-control-allow-origin", "https://a.test")]);
+                native.request_includes_credentials = included;
+                let filtered = filter_response(&request, &native).unwrap();
+                assert_eq!(filtered.credential_receipt().unwrap().includes_credentials(), included);
+                assert_eq!(filtered.clone().credential_receipt(), filtered.credential_receipt());
+            }
+        }
+    }
+    assert!(Response::hidden(ResponseType::Error).credential_receipt().is_none());
+    assert!(api::ApiResponse::new(None, api::ApiResponseInit::default()).unwrap().credential_receipt().is_none());
+    assert!(api::ApiResponse::error().credential_receipt().is_none());
+}
+
+#[test]
+fn manual_native_redirect_keeps_actual_credential_receipt() {
+    for included in [false, true] {
+        let mut request=request(false);
+        request.redirect=RedirectMode::Manual;
+        let mut native=response(302,&[]);
+        native.request_includes_credentials=included;
+        let RedirectAction::Manual(filtered)=redirect(&mut request,&native,Some(url("https://a.test/next"))).unwrap() else { panic!("manual receipt") };
+        assert_eq!(filtered.credential_receipt().unwrap().includes_credentials(),included);
+    }
 }

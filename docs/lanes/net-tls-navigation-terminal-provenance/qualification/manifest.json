@@ -1,0 +1,165 @@
+{
+  "recorded_ready_base": "fd87ab4c5467af81758ea59cff179863ffdde6f4",
+  "qualified_engine": "3d1c8c0cc10bc78028f30317050caacbab2524b6",
+  "qualified_baseline": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "source_paths": {
+    "crates/amazing-fetch/src/api/mod.rs": {
+      "sha256": "758cdb62b3ee96b4f898283780ff8b32cdaf75a3a6e04101eb9120c6839aad8e",
+      "bytes": 1776
+    },
+    "crates/amazing-fetch/src/api/navigation_continuation.rs": {
+      "sha256": "cb8535d6ebd21c203b29cc369f765d9405cffc2fd15ad83320baa5d19c9b3647",
+      "bytes": 17124
+    },
+    "crates/amazing-fetch/src/api/objects.rs": {
+      "sha256": "5b882a699f1ce918933cdb0b1e017ca04dff5c67020bc00302d3b6ff1948f287",
+      "bytes": 59055
+    },
+    "crates/amazing-fetch/src/cors.rs": {
+      "sha256": "0494ff7f5d8dd5d2328d6a078b79c18e0ec84b5635853ed016bc2f042f3fc5ab",
+      "bytes": 13675
+    },
+    "crates/amazing-fetch/src/model.rs": {
+      "sha256": "039e846750970aa943abc08f5816a5eaac7421f95637d59c80c27ea4dbeb7afb",
+      "bytes": 11390
+    },
+    "crates/amazing-fetch/src/redirect.rs": {
+      "sha256": "b68001628acbc058ba310754a75a6e7de2e114d7ee0523b7896e63ff3015c901",
+      "bytes": 5045
+    },
+    "crates/amazing-fetch/src/reporting/coep_request.rs": {
+      "sha256": "cbc354b0a1a393b41b070b85b1639fa8bb73de0fa1bb260e17d2b795aa8ed501",
+      "bytes": 16615
+    },
+    "crates/amazing-fetch/src/reporting/coep_request/embedding_owner.rs": {
+      "sha256": "6f2bc10ead685cc9258beb3830c37bc9d0cb86d577c48d373b01f75e32c03617",
+      "bytes": 39414
+    },
+    "crates/amazing-fetch/src/reporting/mod.rs": {
+      "sha256": "c37b9fb07b8595030ef7829df3ac352ac86294f76fe902ab2e2c343b5a22b37b",
+      "bytes": 31389
+    },
+    "crates/amazing-fetch/src/security.rs": {
+      "sha256": "691dbc91b0b4b94c595b7e85638d2fe861ca9a9acf025cfe878a774d57bab206",
+      "bytes": 21935
+    },
+    "crates/amazing-fetch/src/service.rs": {
+      "sha256": "b5a9c732a9552a3a1f0c55f770fee90c09e4fcfc0b899d36fd68b5c222330717",
+      "bytes": 91838
+    },
+    "crates/amazing-fetch/src/service/navigation_received.rs": {
+      "sha256": "99f3325964dd049eb778198d6ccd05a32089da0ed46aa8ce47023f296fa51148",
+      "bytes": 5500
+    },
+    "crates/amazing-fetch/src/service/navigation_received_tests.rs": {
+      "sha256": "df6ca5f026768831ec45ded9b88dbfd1145cf1bddc476efcba4537cc3bdce9ab",
+      "bytes": 19083
+    },
+    "crates/amazing-fetch/tests/coep_network.rs": {
+      "sha256": "562fca731dea3d45fcc30b790e36f26650416309cc7998d88de21f308995d8c7",
+      "bytes": 21996
+    },
+    "crates/amazing-fetch/tests/policy.rs": {
+      "sha256": "021983c1d110ddbab94e9dd796730d0dd58a798315d275b7e2734fc1fc14ca2e",
+      "bytes": 30095
+    },
+    "crates/amazing-process/src/lib.rs": {
+      "sha256": "8eeb33cbd0496e97e75a17153a9aa30d6685850cea53640f48c8b398d55cb1fc",
+      "bytes": 28445
+    },
+    "crates/amazing-process/src/network_v2.rs": {
+      "sha256": "b3904f8c7cb0930993c6bff8d159e29dfc51916fb9f8c0d95b7e846014b3e80f",
+      "bytes": 46224
+    },
+    "crates/amazing-process/src/network_v2/receiving_coep.rs": {
+      "sha256": "a9124e06ebf5aa7b69b14891487b7277cedd0bf0bbbb53bb2af6f3eadd394a3a",
+      "bytes": 2831
+    },
+    "crates/amazing-process/src/protocol.rs": {
+      "sha256": "9e82461059a3c8c5246dbe130aca744b76c6d9fbc751459f1dd3abb58d5b5ae7",
+      "bytes": 15262
+    },
+    "crates/amazing-process/tests/navigation_metadata.rs": {
+      "sha256": "c4267973e073549867671d933634d519ce4ffc508fa7f2b21a0e759957f735f5",
+      "bytes": 14319
+    },
+    "crates/amazing-process/tests/network_contract.rs": {
+      "sha256": "b723c6f593828695dc7937d9519595b7fa1b4f7b1d25bcb31df78a96f5360530",
+      "bytes": 31490
+    },
+    "crates/amazing-process/tools/navigation_wpt_gate.py": {
+      "sha256": "514e236dbff1e3694ff46c1ba7469c991ee7c547f2f7b82534e3e36d08df2be9",
+      "bytes": 4091
+    }
+  },
+  "evidence": {
+    "after.summary.json": {
+      "bytes": 230724,
+      "sha256": "192ecc7c3d5ae563cecc3c836fc24cc792d4bb8f730fa75533e2e4dbfbc87a99"
+    },
+    "before.summary.json": {
+      "bytes": 194872,
+      "sha256": "076b590680ad2a532d1f3dfa0c21b080329a158c779cf2cd63d20d5cd35b3ab2"
+    },
+    "after.space.summary.json": {
+      "bytes": 352,
+      "sha256": "d99f43c666710e70e40a0b80b08f5eb537687f895a92a23edda86f72ed4845b1"
+    },
+    "before.csp.compact.json": {
+      "bytes": 35860,
+      "sha256": "77eafe422c3a8b78f8d841f8db7d7f09f73102466150cc9811962aed8624adc7"
+    },
+    "packet.json": {
+      "bytes": 4582,
+      "sha256": "f8de3ab2a3cd5b4bad70e58b30198067d6e58e86d415256ce6ee6807af472554"
+    },
+    "before.endpoint.json": {
+      "bytes": 630,
+      "sha256": "5733678fbd511ff76915fb307b197ad9be16a2a8107fa4d14be39e5fe7dd508a"
+    },
+    "after.csp.compact.json": {
+      "bytes": 35933,
+      "sha256": "9a0e7bd387d0f9d1783baa1ed8c8c9df5691f07baa8eacc30df65557ee8ef1c6"
+    },
+    "after.fetch-manifest.json": {
+      "bytes": 825,
+      "sha256": "f77aec70aa1eabc5df74dac1bd3f86e586d2caf30bf635777b8f587b9417313b"
+    },
+    "before.native-status.json": {
+      "bytes": 1209,
+      "sha256": "fd0174ff1ece84bac62a8fc3b3fee93740fe12f325ee98b6a2be7ea8202e6d1f"
+    },
+    "after.native-status.json": {
+      "bytes": 1416,
+      "sha256": "80f111759f94195fd5da24867b6ed45764d17aabe46b5abe9f2bb4e6894080c4"
+    },
+    "after.endpoint.json": {
+      "bytes": 626,
+      "sha256": "20b2611e0586385d352783c7c8979b3e811fbd5bcf160e4c1274f31f955afb11"
+    }
+  },
+  "actual_after_exit": 0,
+  "compact_fetch_exit": 0,
+  "lost": [],
+  "source_loan_included": false,
+  "reporting410_successor_included": false,
+  "prerequisites": "Published b154 COEP/output is byteexact on net/TLS. Whole residual includes independently accepted raw navigation carrier22a plus credential wire adapter, sealed owner/continuation and opt-in terminal envelope. Root may separately publish carrier and exact remaining residual; no lane ancestry.",
+  "failed_engine_attempts": {
+    "04a": {
+      "job": "02333c525893483a93dd48733286cc1c",
+      "actual_exit": 1,
+      "reason": "six compile errors"
+    },
+    "3722": {
+      "job": "a3bc992dd48743b0ab7323311b7f5a34",
+      "actual_exit": 1,
+      "workspace_failed": 4,
+      "native_failed": 3,
+      "lost_ids": [
+        "amazing-fetch::policy opaque_filters_hide_everything",
+        "amazing-fetch::policy redirect_modes_and_missing_location"
+      ]
+    }
+  },
+  "installed_coverage": "Original11 CSP subset32files81subtests only; native receiving/IPC/TLS server controls do not prove full installed HTML/worker/process consumer closure."
+}

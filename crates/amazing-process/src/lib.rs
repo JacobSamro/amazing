@@ -34,8 +34,8 @@ const INTERFACES: &[VersionRange] = &[
     },
     VersionRange {
         interface: 10,
-        min: 3,
-        max: 3,
+        min: 4,
+        max: 4,
     },
     VersionRange {
         interface: 11,

@@ -3,7 +3,7 @@
 //! draft (2026-09-23), and the annevk/orb processing-model draft (2026-09-23).
 use crate::{
     FetchError, HeaderList, HttpUrl, InternalResponse, RegistrableDomain, Request, RequestMode,
-    ResponseType, Site,
+    ResponseType, Site, Origin,
 };
 use crate::csp::{CspDisposition, CspPolicyList};
 use std::net::IpAddr;
@@ -192,10 +192,20 @@ pub fn check_corp_with_credentials(
     for_navigation: bool,
     domains: &impl RegistrableDomain,
 ) -> Result<(), FetchError> {
-    if for_navigation && request.security.embedder_policy == EmbedderPolicy::UnsafeNone {
+    let (checking_origin,embedder_policy)=if for_navigation {
+        request.embedding_owner.as_ref().map(|owner|(owner.origin(),owner.embedder_policy()))
+            .unwrap_or((&request.origin,request.security.embedder_policy))
+    } else {(&request.origin,request.security.embedder_policy)};
+    corp_internal(checking_origin,embedder_policy,request.url(),request.mode,headers,
+        request_includes_credentials,for_navigation,domains)
+}
+pub(crate) fn corp_internal(checking_origin:&Origin,embedder_policy:EmbedderPolicy,target:&HttpUrl,
+    mode:RequestMode,headers:&HeaderList,request_includes_credentials:bool,for_navigation:bool,
+    domains:&impl RegistrableDomain)->Result<(),FetchError> {
+    if for_navigation && embedder_policy == EmbedderPolicy::UnsafeNone {
         return Ok(());
     }
-    if (!for_navigation && request.mode != RequestMode::NoCors) || request.origin == *request.url().origin() {
+    if (!for_navigation && mode != RequestMode::NoCors) || checking_origin == target.origin() {
         return Ok(());
     }
     let policy = headers.get("cross-origin-resource-policy");
@@ -203,8 +213,8 @@ pub fn check_corp_with_credentials(
         Some("same-origin") => "same-origin",
         Some("same-site") => "same-site",
         Some("cross-origin") => "cross-origin",
-        _ if request.security.embedder_policy == EmbedderPolicy::RequireCorp
-            || (request.security.embedder_policy == EmbedderPolicy::Credentialless
+        _ if embedder_policy == EmbedderPolicy::RequireCorp
+            || (embedder_policy == EmbedderPolicy::Credentialless
                 && (request_includes_credentials || for_navigation)) => "same-origin",
         _ => "cross-origin",
     };
@@ -213,8 +223,8 @@ pub fn check_corp_with_credentials(
         "same-origin" => Err(FetchError::CrossOriginResourcePolicy),
         "same-site" => {
             match (
-                request.origin.site(domains),
-                request.url().origin().site(domains),
+                checking_origin.site(domains),
+                target.origin().site(domains),
             ) {
                 (
                     Site::Tuple {
@@ -237,7 +247,7 @@ pub fn check_redirect_corp(
     response: &InternalResponse,
     domains: &impl RegistrableDomain,
 ) -> Result<(), FetchError> {
-    check_corp_with_credentials(request, &response.headers, response.request_includes_credentials, false, domains)
+    check_corp_with_credentials(request, &response.headers, response.request_includes_credentials, request.embedding_owner.is_some() && request.mode==RequestMode::Navigate, domains)
 }
 
 fn mime_essence(headers: &HeaderList) -> Option<String> {
@@ -527,8 +537,8 @@ pub(crate) fn response_security_csp_progress(
     // Actual child-navigation custody comes from the native constructor, not
     // destination/URL heuristics. Redirect responses with Location belong to
     // the navigation controller; enforce this response check at the final hop.
-    let nested_response = request.nested_navigation && !(matches!(response.status,301|302|303|307|308)
-        && response.headers.get("location").is_some());
+    let nested_response = request.nested_navigation && (request.embedding_owner.is_some() || !(matches!(response.status,301|302|303|307|308)
+        && response.headers.get("location").is_some()));
     // Fetch's data scheme branch produces a basic response even in no-cors
     // mode. HTTP CORP/opaque checks must not turn that local response opaque.
     let http_response = matches!(request.url().as_parsed().scheme(), "http" | "https");

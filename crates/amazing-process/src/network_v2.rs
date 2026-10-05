@@ -287,10 +287,33 @@ struct Active {
     seen_head: bool,
     terminal: bool,
     subresource: bool,
+    navigation: bool,
     events: VecDeque<NetworkReply>,
 }
 fn wire_head(id: u64, active: &Active, head: ApiResponseHead) -> Result<NetworkHead, Error> {
+    let request_includes_credentials = head.credential_receipt()
+        .ok_or_else(|| invalid("missing native response credential receipt"))?
+        .includes_credentials();
+    let navigation = if active.navigation {
+        head.navigation.map(|head| NavigationResponseHead {
+            status: head.status, url: head.final_url, reason: head.reason,
+            headers: head.headers.into_iter().map(|(name, value)| HeaderField { name, value }).collect(),
+            referrer: head.referrer,
+        })
+    } else { None };
+    if active.navigation && navigation.is_none() {
+        return Err(invalid("missing accepted navigation metadata"));
+    }
+    if navigation.as_ref().is_some_and(|head|
+        !(100..=599).contains(&head.status)
+        || head.url.len() > MAX_URL_BYTES
+        || head.reason.len() > 1024
+        || head.referrer.len() > MAX_URL_BYTES
+        || check_headers(&head.headers).is_err()) {
+        return Err(invalid("navigation response head limit"));
+    }
     let outgoing = NetworkHead {
+        navigation,
         id,
         client_id: active.client_id,
         epoch: active.epoch,
@@ -306,7 +329,12 @@ fn wire_head(id: u64, active: &Active, head: ApiResponseHead) -> Result<NetworkH
         response_type: format!("{:?}", head.response_type),
         url_list: head.url_list,
         redirect_tainted: head.redirect_tainted,
+        request_includes_credentials,
     };
+    if outgoing.navigation.as_ref().is_some_and(|head|
+        head.url != outgoing.url || head.status != outgoing.status) {
+        return Err(invalid("navigation response provenance mismatch"));
+    }
     if outgoing.url.len() > MAX_URL_BYTES
         || outgoing.reason.len() > 1024
         || outgoing.response_type.len() > 64
@@ -587,6 +615,9 @@ impl State {
         let epoch = wire.epoch;
         let response_limit = wire.response_limit;
         let requested_destination = wire.destination.clone();
+        let navigation = !subresource && wire.mode == "navigate"
+            && (wire.destination == "document" && wire.context.top_level_navigation
+                || wire.destination == "frame" && !wire.context.top_level_navigation);
         if subresource
             && (!matches!(
                 requested_destination.as_str(),
@@ -632,6 +663,7 @@ impl State {
                 seen_head: false,
                 terminal: false,
                 subresource,
+                navigation,
                 events: VecDeque::new(),
             },
         );
@@ -1100,3 +1132,6 @@ impl Drop for NetworkSession {
         let _ = self.host.kill();
     }
 }
+
+mod receiving_coep;
+pub use receiving_coep::apply_receiving_coep;

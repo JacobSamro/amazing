@@ -1,0 +1,104 @@
+{
+  "source": "3d1c8c0cc10bc78028f30317050caacbab2524b6",
+  "base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "state": "native-qualified-ready-packaging",
+  "alias_proposed": "net-navigation-terminal-controlfix-20261005",
+  "profile": "default4vCPU8GB finite7200",
+  "rust_profiles": "DEV+TEST line-tables-only incremental0",
+  "capacity_after": "12GiB actual /tmp same-device",
+  "corpus": "workspace/docs/browser/wholeTLS-test-support-net-fetch/original11CSP",
+  "before_reuse": {
+    "job": "63ad50f2c11c4342ae8f5af67065a1a4",
+    "actual_exit": 0,
+    "fetch_exit": 0,
+    "command_sha256": "ad5d8d88dc05d7ceaf577d99db8c8f46c49014b67903d941690875e8a0d64ac2",
+    "files": {
+      "before.summary.json": {
+        "sha256": "076b590680ad2a532d1f3dfa0c21b080329a158c779cf2cd63d20d5cd35b3ab2",
+        "bytes": 194872
+      },
+      "csp-wpt/compact.json": {
+        "sha256": "77eafe422c3a8b78f8d841f8db7d7f09f73102466150cc9811962aed8624adc7",
+        "bytes": 35860
+      }
+    },
+    "workspace": 4709,
+    "docs": 4,
+    "native": 482,
+    "csp_files": 32,
+    "csp_subtests": 81,
+    "root_authorized": true,
+    "receipt": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/navigation-terminal-provenance/before.endpoint.json",
+    "native_status": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/navigation-terminal-provenance/before.native-status.json"
+  },
+  "failed_initial_source": "04a2668f878ae04ddef513629cf4cafa7f71a8fb",
+  "failed_initial_job": "02333c525893483a93dd48733286cc1c",
+  "original_controls": "unchanged; all6 compiler errors fixed in bulk",
+  "source_loan_included": false,
+  "installed_claim": false,
+  "public_runner": "fd87ab4c5467af81758ea59cff179863ffdde6f4",
+  "admission_sha256": "c131573069f7e85bf22c825901ecb6ebf76b0bd4722c472c994973ff14d5c0dd",
+  "command_sha256": "71c1c21c26baffc26763a6323b29eacaad73ce1924a3f40317b027c600dbcba1",
+  "launch_sha256": "b4a612a76b93bbd6ba3433de78b69eea9153b267eac2e76bfc86c87257b1d2d4",
+  "command_transport": "command-file heredoc avoids single-argument length limit; exact compact baseline hash verified",
+  "native_gate_claim": false,
+  "process_fixture_source": "cc3102e9 single-path exact correction from Lang",
+  "all_original_assertions_retained": true,
+  "control_fix": "independent native receipt expectation + explicit provenance/fact assertions; configured RequireCorp distinct loopback owner; matching304ETag/noCL",
+  "failed_sources": [
+    "04a2668f878ae04ddef513629cf4cafa7f71a8fb",
+    "3722aea1e364d4c597b42b9b70bde5d1a504d857"
+  ],
+  "public_tooling": {
+    "supervisor": "9c2b",
+    "transfer_qualified_source": "b457",
+    "published_wrapper_sha256": "6c960c2a394d659990484388a15bd887f4db4f0793244669d9f88aafe08a1c28",
+    "transfer_helper_sha256": "d5b9b8469b7eb160cc2bf923aac48470b6a71b2a040b3a08e19a4c915219e908",
+    "completed_job_sha256": "9c2bde2eeaa2507e5a14d2cc17599908d1c2ea9b1418ba76a78d04a1ff3b15b1",
+    "finite_ttl_seconds": 7200,
+    "normal_ensure": true
+  },
+  "command_unchanged": true,
+  "allocation": "root authorized fresh genuine3d1 sourcefix launch after exact publishedfd87 wrapper hashes recorded and command71c1 unchanged; finite7200 normalensure",
+  "launch_utc": "2026-10-05T16:15:07.499773+00:00",
+  "active_session": null,
+  "endpoint": {
+    "schema": 2,
+    "lane": "net-navigation-terminal-controlfix-20261005",
+    "source_commit": "3d1c8c0cc10bc78028f30317050caacbab2524b6",
+    "box_id": "bx_cm7vdurg",
+    "host": "user@5.39.71.210",
+    "port": 19046,
+    "job_id": "7960dea5966b4c6e943e274e17b91ed6",
+    "output_root": "amazing/out/net-navigation-terminal-controlfix-20261005/coep-output-net-navigation-terminal-controlfix-20261005-after",
+    "command_sha256": "71c1c21c26baffc26763a6323b29eacaad73ce1924a3f40317b027c600dbcba1",
+    "execution_sha256": "17bcb5e0f103bfcec2839c51173949c56c5b0970985ebb17d58ef3fa5f531dac",
+    "source_archive_sha256": "797388e3681a155c0cb57b582cabd625a03b5fa5cb62533ee104082f8f4c2330"
+  },
+  "native_space": {
+    "free_bytes": 32439504896,
+    "minimum": 12884901888,
+    "source": "/tmp/amazing-bootstrap.Dl4VCC/source",
+    "target": "/tmp/amazing-native-target-net-navigation-terminal-controlfix-20261005-after-nfl14c9q"
+  },
+  "actual_exit": 0,
+  "runner_exit": 0,
+  "compact_fetch_exit": 0,
+  "counts": {
+    "before": {
+      "workspace": 4709,
+      "docs": 4,
+      "native": 482,
+      "csp_files": 32,
+      "csp_subtests": 81
+    },
+    "after": {
+      "workspace": 4851,
+      "docs": 30,
+      "native": 615,
+      "csp_files": 32,
+      "csp_subtests": 81
+    }
+  },
+  "lost": []
+}

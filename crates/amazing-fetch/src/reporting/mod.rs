@@ -5,6 +5,8 @@ mod native_report;
 pub use native_report::*;
 mod prepared;
 mod coep_request;
+pub use coep_request::{NavigationEmbeddingElement,NavigationEmbeddingOwnerId,PreparedNavigationEmbeddingOwner};
+pub(crate) use coep_request::NavigationEmbeddingOwnerSnapshot;
 pub use coep_request::{CoepRequestReportSettings, CoepRequestStartError, PreparedCoepInheritanceReport, CoepInheritanceReports, CoepGraphId, CoepGraphReportSettings};
 pub mod structured;
 mod test_report;
@@ -119,6 +121,7 @@ impl Default for ReportingState {
     }
 }
 impl ReportingState {
+    pub(crate) fn service_id(&self)->u64 {self.service}
     fn allocate(&mut self) -> u64 {
         let id = self.next;
         self.next = self.next.checked_add(1).expect("report id exhausted");

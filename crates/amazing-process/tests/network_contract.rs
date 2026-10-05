@@ -90,6 +90,19 @@ fn versioned_contract_roundtrip_and_malformed_frames() {
         redirected: false,
         url_list: vec!["http://example.test/index".into()],
         redirect_tainted: true,
+        request_includes_credentials: true,
+        navigation: Some(NavigationResponseHead {
+            status: 200,
+            url: "http://example.test/index".into(),
+            reason: "OK".into(),
+            headers: vec![
+                HeaderField { name: "content-security-policy".into(), value: "script-src 'none'".into() },
+                HeaderField { name: "content-security-policy".into(), value: "default-src 'self'".into() },
+                HeaderField { name: "content-security-policy-report-only".into(), value: "script-src 'none'".into() },
+                HeaderField { name: "set-cookie".into(), value: "native=1; HttpOnly".into() },
+            ],
+            referrer: "http://example.test/creator".into(),
+        }),
     };
     let packets = vec![
         codec::encode(&start).unwrap(),
@@ -218,6 +231,7 @@ fn network_session_preserves_non_success_head_and_body() {
     let response = session.fetch(request("/index", &origin)).unwrap();
     consumed_tx.send(()).unwrap();
     server.join().unwrap();
+    assert!(response.head.navigation.is_none(), "ordinary Fetch has no navigation authority");
     assert_eq!(response.head.status, 404);
     assert_eq!(response.head.reason, "Not Found");
     assert_eq!(response.head.url, format!("{origin}/index"));
@@ -361,6 +375,7 @@ fn child_navigation_checks_embedding_and_keeps_manual_redirect_epoch() {
     nav.url = format!("{origin}/start");
     let first = session.fetch(nav.clone()).unwrap();
     assert_eq!(first.head.status, 302);
+    assert!(first.head.request_includes_credentials);
     let started = NetworkStarted { id: first.head.id, client_id: first.head.client_id, epoch: first.head.epoch };
     nav.url = format!("{origin}/final");
     let second = session.restart_navigation(&started, &first.head, nav).unwrap();

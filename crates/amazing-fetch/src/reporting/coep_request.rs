@@ -1,5 +1,8 @@
 //! Original receiving-global settings for an ordinary native request.
 //! These owned scalar settings survive only that request, never mint a global.
+mod embedding_owner;
+pub use embedding_owner::{NavigationEmbeddingElement,NavigationEmbeddingOwnerId,PreparedNavigationEmbeddingOwner};
+pub(crate) use embedding_owner::NavigationEmbeddingOwnerSnapshot;
 use super::*;
 use crate::{EmbedderPolicy, EmbedderPolicyContainer, ReceivingDocumentClient, Destination};
 
@@ -23,6 +26,7 @@ pub struct CoepRequestReportSettings {
     _credits: std::sync::Arc<prepared::PreparedCredits>,
     graph_receiver: Option<std::sync::Arc<GraphReceiver>>,
     _loan_credits: Option<prepared::PreparedCredits>,
+    navigation_owner_id: Option<NavigationEmbeddingOwnerId>,
 }
 impl NetworkService {
     pub fn prepare_coep_request_reporting<Identity>(
@@ -62,7 +66,7 @@ impl NetworkService {
             match quota.compare_exchange_weak(used,next,Ordering::AcqRel,Ordering::Acquire) {Ok(_)=>break,Err(n)=>used=n}
         }
         Ok(CoepRequestReportSettings {service:self.reporting.service,document,saved:std::sync::Arc::new(saved.clone()),container:std::sync::Arc::new(container.clone()),
-            _credits:std::sync::Arc::new(prepared::PreparedCredits {quota:quota.clone(),bytes}),graph_receiver:None,_loan_credits:None})
+            _credits:std::sync::Arc::new(prepared::PreparedCredits {quota:quota.clone(),bytes}),graph_receiver:None,_loan_credits:None,navigation_owner_id:None})
     }
     pub(crate) fn check_request_coep_reporting(
         &mut self, settings: &CoepRequestReportSettings, request: &Request,
@@ -72,8 +76,9 @@ impl NetworkService {
         if (!for_navigation && request.mode != RequestMode::NoCors)
             || !matches!(request.url().as_parsed().scheme(),"http"|"https") {return Ok(Vec::new());}
         let check=|value| {
-            let mut checked=request.clone(); checked.security.embedder_policy=value;
-            crate::check_corp_with_credentials(&checked,headers,includes_credentials,for_navigation,&crate::psl::PublicSuffixList)
+            let checking_origin=if for_navigation {request.embedding_owner.as_ref().map(|owner|owner.origin()).unwrap_or(&request.origin)} else {&request.origin};
+            crate::security::corp_internal(checking_origin,value,request.url(),request.mode,
+                headers,includes_credentials,for_navigation,&crate::psl::PublicSuffixList)
         };
         // Fetch CORP step3: explicit CORP denial is unrelated to COEP reporting.
         if check(EmbedderPolicy::UnsafeNone).is_err() {return Ok(Vec::new());}
@@ -83,7 +88,7 @@ impl NetworkService {
             (settings.container.value,&settings.container.reporting_endpoint,CoepReportDisposition::Enforce),
         ] { if check(value).is_err() {blocked.push((endpoint,disposition));} }
         if blocked.is_empty() {return Ok(Vec::new());}
-        let destination=destination(request.security.destination)?;
+        let destination=match &request.embedding_owner {Some(owner)=>owner.destination(),None=>destination(request.security.destination)?};
         let urls:Vec<_>=request.url_list().iter().map(|url|url.as_parsed().clone()).collect();
         let mut reports=Vec::new();
         for (endpoint,disposition) in blocked {
@@ -99,7 +104,10 @@ impl NetworkService {
 impl CoepRequestReportSettings {
     pub(crate) fn validate(&self, service:&NetworkService,request:&Request)->Result<(),ReportError> {
         if self.service!=service.reporting.service {return Err(ReportError::StaleDocument);}
-        if self.saved.origin!=request.origin || self.container.value!=request.security.embedder_policy
+        if request.embedding_owner.as_ref().map(|owner|owner.id())!=self.navigation_owner_id {return Err(ReportError::InvalidReport);}
+        let (origin,value)=request.embedding_owner.as_ref().map(|owner|(owner.origin(),owner.embedder_policy()))
+            .unwrap_or((&request.origin,request.security.embedder_policy));
+        if &self.saved.origin!=origin || self.container.value!=value
             || self.graph_receiver.as_ref().is_some_and(|receiver|receiver.client.csp_self_origin!=request.csp_self_origin) {return Err(ReportError::InvalidReport);}
         Ok(())
     }
@@ -202,7 +210,7 @@ impl NetworkService {
         let saved=&graph.settings;
         Ok(CoepRequestReportSettings {service:saved.service,document:saved.document,saved:saved.saved.clone(),
             container:saved.container.clone(),_credits:saved._credits.clone(),graph_receiver:saved.graph_receiver.clone(),
-            _loan_credits:Some(loan)})
+            _loan_credits:Some(loan),navigation_owner_id:None})
     }
     /// Consuming the graph prevents future dependency loans. Already admitted
     /// requests finish under their original settings; the final drop releases

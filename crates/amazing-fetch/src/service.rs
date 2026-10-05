@@ -1,4 +1,7 @@
 //! Driver-owned Fetch state. The embedding advances this once per event-loop turn.
+mod navigation_received;
+pub use navigation_received::{NavigationFailure,NavigationReceivedStartError};
+use navigation_received::{pending_navigation_failure,navigation_failure_with_progress};
 use crate::{
     api::{
         ApiCache, ApiError, ApiRequest, ApiRequestInit, ApiRequestInput, ApiResponse,
@@ -21,9 +24,11 @@ pub type RequestId = ServiceId;
 /// Script-visible response metadata after Fetch policy has accepted the head.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApiResponseHead {
+    pub(crate) credential_receipt: Option<crate::ResponseCredentialReceipt>,
     /// Native policy receipts, including report-only and actual redirect lineage.
     /// Independent of opaque/script-visible filtering.
     pub csp_provenance: Option<crate::CspResponseProvenance>,
+    pub navigation: Option<crate::api::NavigationResponseMetadata>,
     pub status: u16,
     pub reason: String,
     pub headers: Vec<(String, String)>,
@@ -36,6 +41,7 @@ pub struct ApiResponseHead {
     pub redirected: bool,
 }
 impl ApiResponseHead {
+    pub fn credential_receipt(&self) -> Option<crate::ResponseCredentialReceipt> { self.credential_receipt }
     fn from_response(response: &ApiResponse) -> Self {
         let chain_tainted = url_chain_tainted(&response.url_list);
         let location_tainted = response.headers.get_string("location").ok().flatten()
@@ -45,6 +51,8 @@ impl ApiResponseHead {
             .unwrap_or(false);
         Self {
             csp_provenance: response.csp_provenance.clone(),
+            credential_receipt: response.credential_receipt(),
+            navigation: response.navigation_metadata.clone(),
             status: response.status,
             reason: response.status_text.clone(),
             headers: response.headers.raw_entries().to_vec(),
@@ -157,6 +165,9 @@ pub enum ServiceEvent {
         id: ServiceId,
         event: NetEvent,
     },
+    /// Opt-in browser navigation result with real terminal check custody.
+    NavigationFinished {id:ServiceId,result:Result<ApiResponse,NavigationFailure>},
+    NavigationStreamFailed {id:ServiceId,failure:NavigationFailure},
     Finished {
         id: ServiceId,
         result: Result<ApiResponse, ApiError>,
@@ -194,6 +205,7 @@ struct Task {
     head_reason: String,
     body: Vec<u8>,
     trusted_subresource: bool,
+    received_navigation: bool,
     coep_reporting: Option<crate::reporting::CoepRequestReportSettings>,
 }
 
@@ -206,12 +218,16 @@ struct StreamTask {
     deferred_head: Option<(crate::Request, InternalResponse)>,
     chunks: VecDeque<Vec<u8>>,
     terminal: Option<Result<(), ApiError>>,
+    received_navigation: bool,
+    navigation_progress: Option<crate::CspResponseProvenance>,
+    navigation_failure: Option<NavigationFailure>,
 }
 impl StreamTask {
     fn new(credit: usize) -> Self {
         Self { credit, head_emitted: false, body_visible: true,
             sniff_prefix: Vec::new(), deferred_head: None,
-            chunks: VecDeque::new(), terminal: None }
+            chunks: VecDeque::new(), terminal: None, received_navigation:false,
+            navigation_progress:None,navigation_failure:None }
     }
     fn flush(&mut self, id: ServiceId, output: &mut Vec<ServiceEvent>) -> bool {
         while self.credit > 0 {
@@ -226,6 +242,8 @@ impl StreamTask {
             if let Some(terminal) = self.terminal.take() {
                 match terminal {
                     Ok(()) => output.push(ServiceEvent::StreamFinished { id }),
+                    Err(error) if self.received_navigation=>output.push(ServiceEvent::NavigationStreamFailed{id,
+                        failure:self.navigation_failure.take().unwrap_or(NavigationFailure{error,csp_provenance:self.navigation_progress.clone()})}),
                     Err(error) => output.push(ServiceEvent::StreamFailed { id, error }),
                 }
                 return true;
@@ -257,7 +275,11 @@ fn validated_stream_head(task: &Task, event: &NetEvent) -> Option<ApiResponseHea
     }
     let filtered = filter_response(&policy, &internal).ok()?;
     let response = ApiResponse::from_policy(filtered).ok()?;
-    Some(ApiResponseHead::from_response(&response))
+    let mut head = ApiResponseHead::from_response(&response);
+    head.navigation = crate::api::NavigationResponseMetadata::capture(
+        task.pending.policy(), &internal, task.pending.sent_referrer())
+        .map(|metadata| metadata.with_csp_receipt(head.csp_provenance.as_ref()));
+    Some(head)
 }
 
 fn opaque_stream_head(task: &Task, event: &NetEvent)
@@ -615,6 +637,10 @@ impl NetworkService {
         let Some(stream) = self.streams.get_mut(&id) else { return false; };
         stream.chunks.clear();
         stream.terminal = Some(Err(ApiError::Aborted));
+        if stream.received_navigation {
+            stream.navigation_failure=Some(NavigationFailure {error:ApiError::Aborted,
+                csp_provenance:stream.navigation_progress.clone()});
+        }
         true
     }
     fn finish_stream(&mut self, id: ServiceId, result: Result<ApiResponse, ApiError>,
@@ -675,19 +701,40 @@ impl NetworkService {
         let id=self.start_at_with_coep_reporting(request,context,now,settings)?;
         self.streams.insert(id,StreamTask::new(credit)); Ok(id)
     }
+    /// Streaming counterpart of authentic embedding-owner admission. Credit
+    /// controls only the application body queue; it never substitutes authority.
+    pub fn start_navigation_stream_with_embedding_owner(&mut self,request:ApiRequest,
+        context:ClientContext,initial_credit:u64,now:Instant,
+    )->Result<ServiceId,crate::reporting::CoepRequestStartError> {
+        let credit=usize::try_from(initial_credit).map_err(|_|crate::reporting::CoepRequestStartError::Fetch(ApiError::Network(FetchError::ResponseTooLarge)))?;
+        let id=self.start_navigation_with_embedding_owner(request,context,now)?;
+        self.streams.insert(id,StreamTask::new(credit));Ok(id)
+    }
     fn start_at_with_csp_progress(&mut self,request:ApiRequest,context:ClientContext,now:Instant,
         progress:&mut Option<crate::CspResponseProvenance>)->Result<ServiceId,ApiError> {
         self.start_at_inner(request,context,now,None,progress)
     }
-    fn start_at_inner(
+    pub(crate) fn start_at_inner(
         &mut self,
         mut request: ApiRequest,
         mut context: ClientContext,
         now: Instant,
-        coep_reporting:Option<crate::reporting::CoepRequestReportSettings>,
+        mut coep_reporting:Option<crate::reporting::CoepRequestReportSettings>,
         progress:&mut Option<crate::CspResponseProvenance>,
     ) -> Result<ServiceId, ApiError> {
-        if request.mode == crate::RequestMode::Navigate && context.frame_ancestors.is_empty() {
+        if let Some(owner)=&request.embedding_owner {
+            if request.mode!=crate::RequestMode::Navigate {
+                return Err(ApiError::Network(FetchError::FrameEmbedding));
+            }
+            if let Some(settings)=&coep_reporting {
+                settings.validate(self,&request.policy_request()?).map_err(|_|ApiError::Network(FetchError::FrameEmbedding))?;
+            } else {
+                coep_reporting=Some(owner.loan(self).map_err(|_|ApiError::Network(FetchError::FrameEmbedding))?);
+            }
+            context.security.destination=Destination::Other;
+            context.security.top_level_navigation=false;
+        }
+        if request.embedding_owner.is_none() && request.mode == crate::RequestMode::Navigate && context.frame_ancestors.is_empty() {
             context.security.destination = Destination::Document;
             context.security.top_level_navigation = true;
         }
@@ -794,7 +841,9 @@ impl NetworkService {
                     policy.security = context.security;
                     policy.csp = context.csp.clone();
                     policy.csp_destination = context.csp_destination;
-                    let plan = policy.prepare().map_err(ApiError::Network)?;
+                    let prepared=policy.prepare();
+                    *progress=policy.csp_pre_request_checked.then(||crate::CspResponseProvenance::checked(&policy,Vec::new()));
+                    let plan=prepared.map_err(ApiError::Network)?;
                     let internal = InternalResponse {
                         // Fetch HTTP-network-or-cache step14 applies the real
                         // current hop decision after selecting a stored response.
@@ -809,9 +858,12 @@ impl NetworkService {
                         self.emit_coep_response_reports(id,settings,&policy,&internal.headers,internal.request_includes_credentials,internal.status,now,&mut reports);
                         self.ready.extend(reports);
                     }
-                    let result = filter_response(&policy, &internal)
+                    let metadata = crate::api::NavigationResponseMetadata::capture(
+                        &policy, &internal, plan.referrer.as_deref());
+                    let result = crate::cors::filter_response_with_csp_progress(&policy, &internal, progress)
                         .map_err(ApiError::Network)
-                        .and_then(ApiResponse::from_policy);
+                        .and_then(ApiResponse::from_policy)
+                        .map(|mut response| { response.navigation_metadata = metadata.map(|head| head.with_csp_receipt(response.csp_provenance.as_ref())); response });
                     self.ready.push(ServiceEvent::Finished { id, result });
                     return Ok(id);
                 }
@@ -848,6 +900,7 @@ impl NetworkService {
             revalidating.then_some(conditional_headers),
             Some(&mut self.preflight_cache),
             progress,
+            Some(self.reporting.service_id()),
         )?;
         self.active.insert(
             id,
@@ -864,6 +917,7 @@ impl NetworkService {
                 head_reason: String::new(),
                 body: Vec::new(),
                 trusted_subresource: false,
+                received_navigation: false,
                 coep_reporting,
             },
         );
@@ -871,7 +925,7 @@ impl NetworkService {
     }
     fn emit_coep_response_reports(&mut self,id:ServiceId,settings:&crate::reporting::CoepRequestReportSettings,
         policy:&crate::Request,fields:&HeaderList,includes_credentials:bool,status:u16,now:Instant,result:&mut Vec<ServiceEvent>) {
-        let nested=policy.nested_navigation && !(matches!(status,301|302|303|307|308) && fields.get("location").is_some());
+        let nested=policy.nested_navigation && (policy.embedding_owner.is_some() || !(matches!(status,301|302|303|307|308) && fields.get("location").is_some()));
         match self.check_request_coep_reporting(settings,policy,fields,includes_credentials,nested,now) {
             Ok(reports)=>for report in reports {result.push(ServiceEvent::CoepReport{id,document:settings.document(),report:Ok(report)});},
             Err(error)=>result.push(ServiceEvent::CoepReport{id,document:settings.document(),report:Err(error)}),
@@ -881,6 +935,8 @@ impl NetworkService {
         let mut result = Vec::new();
         for event in std::mem::take(&mut self.ready) {
             match event {
+                ServiceEvent::NavigationFinished{id,result:outcome} if self.streams.contains_key(&id)=>
+                    self.finish_navigation_stream(id,outcome,&mut result),
                 ServiceEvent::Finished { id, result: outcome } if self.streams.contains_key(&id) =>
                     self.finish_stream(id, outcome, &mut result),
                 other => result.push(other),
@@ -946,7 +1002,9 @@ impl NetworkService {
                 }
             }
             if let NetEvent::Head { url, status, headers, .. } = &event {
-                let ancestors = &self.active[&id].context.frame_ancestors;
+                let policy=self.active[&id].pending.policy();
+                let ancestors = policy.embedding_owner.as_ref().map(|owner|owner.ancestors())
+                    .unwrap_or(self.active[&id].context.frame_ancestors.as_slice());
                 let redirects = matches!(status, 301 | 302 | 303 | 307 | 308)
                     && headers.iter().any(|(name, value)| name.eq_ignore_ascii_case("location") && !value.is_empty());
                 if self.active[&id].pending.policy().mode == crate::RequestMode::Navigate
@@ -961,6 +1019,10 @@ impl NetworkService {
                         let error = ApiError::Network(FetchError::FrameEmbedding);
                         if task.trusted_subresource {
                             result.push(ServiceEvent::SubresourceFailed{id,failure:SubresourceFailure{error,csp_provenance:task.pending.failure_csp_provenance()}});
+                        } else if task.received_navigation {
+                            let failure=pending_navigation_failure(&task,self.streams.get(&id),error);
+                            if self.streams.contains_key(&id) {self.finish_navigation_stream(id,Err(failure),&mut result);}
+                            else {result.push(ServiceEvent::NavigationFinished{id,result:Err(failure)});}
                         } else if self.streams.contains_key(&id) {
                             self.finish_stream(id, Err(error), &mut result);
                         } else {
@@ -977,6 +1039,7 @@ impl NetworkService {
                     if !stream.head_emitted {
                         if let Some(head) = validated_stream_head(task, &event) {
                             stream.head_emitted = true;
+                            if stream.received_navigation {stream.navigation_progress=head.csp_provenance.clone();}
                             result.push(ServiceEvent::ResponseHead { id, head });
                         } else if stream.deferred_head.is_none() {
                             stream.deferred_head = opaque_stream_head(task, &event);
@@ -1100,8 +1163,11 @@ impl NetworkService {
             if let Some(mut outcome) = finished {
                 let mut subresource = None;
                 let mut failure_provenance=None;
+                let mut navigation_failure=None;
+                let mut received_navigation=false;
                 if let Some(task) = self.active.remove(&id) {
                     failure_provenance=task.pending.failure_csp_provenance();
+                    received_navigation=task.received_navigation;
                     if outcome.is_ok() {
                         if let Some((status, response_headers)) = &task.head {
                             let before = self.cache.len();
@@ -1153,9 +1219,12 @@ impl NetworkService {
                                     if let Some(settings)=&task.coep_reporting {
                                         self.emit_coep_response_reports(id,settings,task.pending.policy(),&internal.headers,internal.request_includes_credentials,internal.status,now,&mut result);
                                     }
-                                    filter_response(task.pending.policy(), &internal)
+                                    let metadata = crate::api::NavigationResponseMetadata::capture(
+                                        task.pending.policy(), &internal, task.pending.sent_referrer());
+                                    crate::cors::filter_response_with_csp_progress(task.pending.policy(), &internal, &mut failure_provenance)
                                         .map_err(ApiError::Network)
                                         .and_then(ApiResponse::from_policy)
+                                        .map(|mut response| { response.navigation_metadata = metadata.map(|head| head.with_csp_receipt(response.csp_provenance.as_ref())); response })
                                 });
                         }
                     }
@@ -1180,6 +1249,11 @@ impl NetworkService {
                                 body: task.body.clone(),
                             }
                         }).map_err(Clone::clone));
+                    }
+                    if task.received_navigation {
+                        if let Err(error)=&outcome {
+                            navigation_failure=Some(navigation_failure_with_progress(&task,self.streams.get(&id),failure_provenance.as_ref(),error.clone()));
+                        }
                     }
                     if task.cacheable && outcome.as_ref().is_ok_and(|r| !r.redirected) {
                         if let Some((status, response_headers)) = task.head {
@@ -1211,6 +1285,10 @@ impl NetworkService {
                         Ok(response) => result.push(ServiceEvent::SubresourceFinished { id, response }),
                         Err(error) => result.push(ServiceEvent::SubresourceFailed { id, failure:SubresourceFailure{error,csp_provenance:failure_provenance} }),
                     }
+                } else if received_navigation {
+                    let outcome=outcome.map_err(|error| navigation_failure.unwrap_or(NavigationFailure{error,csp_provenance:failure_provenance}));
+                    if self.streams.contains_key(&id) {self.finish_navigation_stream(id,outcome,&mut result);}
+                    else {result.push(ServiceEvent::NavigationFinished{id,result:outcome});}
                 } else if self.streams.contains_key(&id) {
                     self.finish_stream(id, outcome, &mut result);
                 } else {
@@ -1248,9 +1326,17 @@ impl NetworkService {
             task.pending.cancel(&mut self.dispatcher);
             if task.trusted_subresource {
                 self.ready.push(ServiceEvent::SubresourceFailed{id,failure:SubresourceFailure{error:ApiError::Aborted,csp_provenance:task.pending.failure_csp_provenance()}});
+            } else if task.received_navigation {
+                let failure=pending_navigation_failure(&task,self.streams.get(&id),ApiError::Aborted);
+                self.ready.push(ServiceEvent::NavigationFinished{id,result:Err(failure)});
             } else {
                 self.ready.push(ServiceEvent::Finished {id,result:Err(ApiError::Aborted)});
             }
+            true
+        } else if let Some(index)=self.ready.iter().position(|event|matches!(event,ServiceEvent::NavigationFinished{id:found,..} if *found==id)) {
+            let ServiceEvent::NavigationFinished{result,..}=self.ready.remove(index) else {unreachable!()};
+            let csp_provenance=match result {Ok(response)=>response.csp_provenance,Err(failure)=>failure.csp_provenance};
+            self.ready.push(ServiceEvent::NavigationFinished{id,result:Err(NavigationFailure{error:ApiError::Aborted,csp_provenance})});
             true
         } else if let Some(index) = self.ready.iter().position(
             |event| matches!(event, ServiceEvent::Finished { id: found, .. } if *found == id),

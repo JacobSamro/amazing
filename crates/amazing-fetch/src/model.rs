@@ -31,9 +31,18 @@ pub enum Body {
     Bytes(Vec<u8>),
     Unreplayable,
 }
+/// Identity is minted only by the native navigation constructor; it holds no
+/// Window roots or author-controlled values and is never serialized as trust.
+#[derive(Debug)]
+pub(crate) struct NativeNavigationToken;
+impl PartialEq for NativeNavigationToken {
+    fn eq(&self,other:&Self)->bool { std::ptr::eq(self,other) }
+}
+impl Eq for NativeNavigationToken {}
 #[derive(Debug, Clone)]
 pub struct Request {
     pub(crate) url_list: Vec<HttpUrl>,
+    pub(crate) native_navigation_token: Option<std::sync::Arc<NativeNavigationToken>>,
     pub origin: Origin,
     method: String,
     pub headers: HeaderList,
@@ -56,6 +65,7 @@ pub struct Request {
     pub csp_violations: Vec<CspViolation>,
     /// Minted only by the native child-navigation constructor.
     pub(crate) nested_navigation: bool,
+    pub(crate) embedding_owner: Option<std::sync::Arc<crate::reporting::NavigationEmbeddingOwnerSnapshot>>,
     pub(crate) csp_pre_request_checked: bool,
     pub(crate) response_body_limit: Option<usize>,
     pub integrity: String,
@@ -65,6 +75,7 @@ impl Request {
     pub fn new(url: HttpUrl, origin: Origin) -> Self {
         Self {
             url_list: vec![url],
+            native_navigation_token: None,
             csp_self_origin: origin.clone(),
             origin,
             method: "GET".into(),
@@ -84,6 +95,7 @@ impl Request {
             csp_parser_inserted: false,
             csp_violations: Vec::new(),
             nested_navigation: false,
+            embedding_owner: None,
             csp_pre_request_checked: false,
             response_body_limit: None,
             integrity: String::new(),
@@ -235,9 +247,20 @@ impl CspResponseProvenance {
     pub fn url_list(&self) -> &[HttpUrl] { &self.url_list }
     pub fn violations(&self) -> &[CspViolation] { &self.violations }
 }
+/// Native custody of the actual main-hop Fetch credential decision.
+/// Synthetic responses cannot construct this receipt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResponseCredentialReceipt { includes_credentials: bool }
+impl ResponseCredentialReceipt {
+    pub fn includes_credentials(self) -> bool { self.includes_credentials }
+    pub(crate) fn received(response: &InternalResponse) -> Self {
+        Self { includes_credentials: response.request_includes_credentials }
+    }
+}
 /// Filtered response has no pointer back to hidden headers or body.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Response {
+    pub(crate) credential_receipt: Option<ResponseCredentialReceipt>,
     pub csp_provenance: Option<CspResponseProvenance>,
     pub response_type: ResponseType,
     pub status: u16,
@@ -247,6 +270,7 @@ pub struct Response {
     pub url_list: Vec<HttpUrl>,
 }
 impl Response {
+    pub fn credential_receipt(&self) -> Option<ResponseCredentialReceipt> { self.credential_receipt }
     pub fn hidden(response_type: ResponseType) -> Self {
         assert!(matches!(
             response_type,
@@ -255,6 +279,7 @@ impl Response {
         Self {
             response_type,
             csp_provenance: None,
+            credential_receipt: None,
             status: 0,
             status_text: String::new(),
             headers: HeaderList::default(),

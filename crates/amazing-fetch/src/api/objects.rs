@@ -76,8 +76,11 @@ pub enum ApiRequestInput<'a> {
 
 #[derive(Debug)]
 pub struct ApiRequest {
-    url: HttpUrl,
-    method: String,
+    pub(super) url: HttpUrl,
+    pub(super) native_navigation_token: Option<std::sync::Arc<crate::model::NativeNavigationToken>>,
+    pub(super) navigation_urls: Vec<HttpUrl>,
+    pub(super) navigation_csp_violations: Vec<crate::CspViolation>,
+    pub(super) method: String,
     pub headers: ApiHeaders,
     pub body: ApiBody,
     pub mode: RequestMode,
@@ -94,10 +97,11 @@ pub struct ApiRequest {
     pub signal_aborted: bool,
     pub reload_or_history: bool,
     pub client_reserved_id: Option<u64>,
-    stream_body: bool,
+    pub(super) stream_body: bool,
     force_preflight: bool,
-    origin: Origin,
-    nested_navigation: bool,
+    pub(super) origin: Origin,
+    pub(super) nested_navigation: bool,
+    pub(crate) embedding_owner: Option<std::sync::Arc<crate::reporting::NavigationEmbeddingOwnerSnapshot>>,
     // Ordinary browser-owned element/policy metadata; no WebIDL setter exists.
     csp_nonce: Option<String>,
     csp_parser_inserted: bool,
@@ -129,6 +133,12 @@ pub struct NavigableContext {
 }
 impl ApiRequest {
     pub fn child_navigation(target: HttpUrl, parent: &NavigableContext) -> Result<Self, ApiError> {
+        Self::child_navigation_with_initiator(target, parent, &parent.parent_origin)
+    }
+    /// The authentic incumbent initiator is separate from the embedding parent.
+    /// Parent custody still validates native ancestor/sandbox constraints.
+    pub fn child_navigation_with_initiator(target: HttpUrl, parent: &NavigableContext,
+        actual_initiator: &Origin) -> Result<Self, ApiError> {
         if parent.ancestor_origins.is_empty() || parent.ancestor_origins.len() > 32
             || parent.ancestor_origins.first() != Some(&parent.top_level_origin)
             || parent.ancestor_origins.last() != Some(&parent.parent_origin)
@@ -139,11 +149,18 @@ impl ApiRequest {
             method: "GET".into(), body: Vec::new(),
             referrer: parent.referrer.clone(),
             referrer_policy: parent.referrer_policy.clone(),
-            initiator_origin: parent.parent_origin.clone(),
+            initiator_origin: actual_initiator.clone(),
             reload_or_history: false, client_reserved_id: None,
         })?;
         request.destination = Destination::Other; // wire destination: frame
         request.nested_navigation = true;
+        Ok(request)
+    }
+    pub fn child_navigation_with_embedding_owner(target:HttpUrl,parent:&NavigableContext,
+        actual_initiator:&Origin,owner:crate::reporting::PreparedNavigationEmbeddingOwner)->Result<Self,ApiError> {
+        let snapshot=owner.into_snapshot(parent)?;
+        let mut request=Self::child_navigation_with_initiator(target,parent,actual_initiator)?;
+        request.embedding_owner=Some(snapshot);
         Ok(request)
     }
     pub fn navigation(target: HttpUrl, init: NavigationRequestInit) -> Result<Self, ApiError> {
@@ -165,6 +182,8 @@ impl ApiRequest {
             &target,
             init.initiator_origin,
         )?;
+        request.native_navigation_token = Some(std::sync::Arc::new(crate::model::NativeNavigationToken));
+        request.navigation_urls = vec![request.url.clone()];
         request.mode = RequestMode::Navigate;
         request.destination = Destination::Document;
         request.credentials = CredentialsMode::Include;
@@ -203,6 +222,9 @@ impl ApiRequest {
                 }
                 Self {
                     url,
+                    native_navigation_token: None,
+                    navigation_urls: Vec::new(),
+                    navigation_csp_violations: Vec::new(),
                     method: "GET".into(),
                     headers: ApiHeaders::new(HeaderGuard::Request),
                     body: ApiBody::empty(),
@@ -224,6 +246,7 @@ impl ApiRequest {
                     force_preflight: false,
                     origin: origin.clone(),
                     nested_navigation: false,
+                    embedding_owner: None,
                     csp_nonce: None, csp_parser_inserted: false, csp_self_origin: None,
                 }
             }
@@ -233,6 +256,9 @@ impl ApiRequest {
                 }
                 Self {
                     url: other.url.clone(),
+                    native_navigation_token: other.native_navigation_token.clone(),
+                    navigation_urls: other.navigation_urls.clone(),
+                    navigation_csp_violations: other.navigation_csp_violations.clone(),
                     method: other.method.clone(),
                     headers: other.headers.clone(),
                     body: other.body.clone_body()?,
@@ -254,6 +280,7 @@ impl ApiRequest {
                     force_preflight: other.force_preflight,
                     origin: other.origin.clone(),
                     nested_navigation: other.nested_navigation,
+                    embedding_owner: other.embedding_owner.clone(),
                     csp_nonce: other.csp_nonce.clone(), csp_parser_inserted: other.csp_parser_inserted, csp_self_origin: other.csp_self_origin.clone(),
                 }
             }
@@ -411,15 +438,19 @@ impl ApiRequest {
     pub fn set_use_cors_preflight(&mut self, value: bool) {
         self.force_preflight = value;
     }
-    pub fn clone_request(&self) -> Result<Self, ApiError> {
-        if self.body.is_unusable() {
+    pub fn clone_request(&self) -> Result<Self, ApiError> { self.clone_request_inner(false) }
+    pub(super) fn clone_request_inner(&self,drop_body:bool) -> Result<Self,ApiError> {
+        if !drop_body && self.body.is_unusable() {
             return Err(ApiError::BodyUsed);
         }
         Ok(Self {
             url: self.url.clone(),
+            native_navigation_token: self.native_navigation_token.clone(),
+            navigation_urls: self.navigation_urls.clone(),
+            navigation_csp_violations: self.navigation_csp_violations.clone(),
             method: self.method.clone(),
             headers: self.headers.clone(),
-            body: self.body.clone_body()?,
+            body: if drop_body { ApiBody::empty() } else { self.body.clone_body()? },
             mode: self.mode,
             destination: self.destination,
             credentials: self.credentials,
@@ -438,6 +469,7 @@ impl ApiRequest {
             force_preflight: self.force_preflight,
             origin: self.origin.clone(),
             nested_navigation: self.nested_navigation,
+            embedding_owner: self.embedding_owner.clone(),
             csp_nonce: self.csp_nonce.clone(), csp_parser_inserted: self.csp_parser_inserted, csp_self_origin: self.csp_self_origin.clone(),
         })
     }
@@ -459,9 +491,27 @@ impl ApiRequest {
         self.csp_self_origin = Some(receiving.csp_self_origin.clone());
         Ok(())
     }
+    pub(crate) fn apply_navigation_receiving_client<Identity>(&mut self,
+        receiving:&crate::ReceivingDocumentClient<Identity>) -> Result<(),crate::CspRequestEnrichmentError> {
+        self.apply_receiving_csp_client(receiving)?;
+        if self.navigation_urls.len() <= 1 {
+            self.referrer_policy=receiving.referrer_policy;
+            self.referrer=HttpUrl::from_parsed(receiving.document_url.clone()).ok()
+                .filter(|url|matches!(url.as_parsed().scheme(),"http"|"https"))
+                .map(|url|url.serialize()).unwrap_or_default();
+        }
+        Ok(())
+    }
     pub(crate) fn policy_request(&self) -> Result<Request, ApiError> {
         let mut out = Request::new(self.url.clone(), self.origin.clone());
+        out.native_navigation_token=self.native_navigation_token.clone();
+        if !self.navigation_urls.is_empty() {
+            out.url_list=self.navigation_urls.clone();
+            *out.url_list.last_mut().unwrap()=self.url.clone();
+            out.csp_violations=self.navigation_csp_violations.clone();
+        }
         out.nested_navigation = self.nested_navigation;
+        out.embedding_owner = self.embedding_owner.clone();
         out.csp_nonce = self.csp_nonce.clone();
         out.csp_parser_inserted = self.csp_parser_inserted;
         if let Some(origin) = &self.csp_self_origin { out.csp_self_origin = origin.clone(); }
@@ -547,11 +597,68 @@ pub struct ApiResponseInit {
     pub status_text: Option<Vec<u16>>,
     pub headers: Option<ApiHeaders>,
 }
+/// Browser-only metadata from an accepted navigation response. Script-visible
+/// Response headers retain Fetch filtering; this snapshot is never initialized
+/// by Response constructors or renderer-supplied policy data.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NavigationResponseMetadata {
+    authenticated_fields: (u16, String, String, Vec<(String, String)>, String),
+    native_csp_receipt: Option<crate::CspResponseProvenance>,
+    pub(super) native_navigation_token: Option<std::sync::Arc<crate::model::NativeNavigationToken>>,
+    pub(super) request_urls: Vec<HttpUrl>,
+    pub(super) request_origin: Origin,
+    pub(super) owner: Option<crate::reporting::NavigationEmbeddingOwnerId>,
+    pub(super) request_includes_credentials: bool,
+    pub status: u16,
+    pub final_url: String,
+    pub reason: String,
+    pub headers: Vec<(String, String)>,
+    pub referrer: String,
+}
+impl NavigationResponseMetadata {
+    pub(crate) fn with_csp_receipt(mut self, receipt: Option<&crate::CspResponseProvenance>) -> Self {
+        self.native_csp_receipt = receipt.cloned(); self
+    }
+    pub(super) fn authentic_received_fields(&self, receipt: Option<&crate::CspResponseProvenance>) -> bool {
+        self.authenticated_fields.0 == self.status
+            && self.authenticated_fields.1 == self.final_url
+            && self.authenticated_fields.2 == self.reason
+            && self.authenticated_fields.3 == self.headers
+            && self.authenticated_fields.4 == self.referrer
+            && self.native_csp_receipt.as_ref() == receipt && receipt.is_some()
+    }
+    pub(crate) fn capture(policy: &Request, response: &crate::InternalResponse,
+        referrer: Option<&str>) -> Option<Self> {
+        if policy.mode != RequestMode::Navigate
+            || !matches!(policy.url().as_parsed().scheme(), "http" | "https") {
+            return None;
+        }
+        let authenticated_fields = (response.status, policy.url().without_fragment(),
+            response.status_text.clone(), response.headers.iter().map(|(n,v)|(n.to_owned(),v.to_owned())).collect(),
+            referrer.unwrap_or_default().to_owned());
+        Some(Self {
+            authenticated_fields,
+            native_csp_receipt: None,
+            native_navigation_token: policy.native_navigation_token.clone(),
+            request_urls: policy.url_list().to_vec(),
+            request_origin: policy.origin.clone(),
+            owner: policy.embedding_owner.as_ref().map(|owner|owner.id()),
+            request_includes_credentials: response.request_includes_credentials,
+            status: response.status,
+            final_url: policy.url().without_fragment(),
+            reason: response.status_text.clone(),
+            headers: response.headers.iter().map(|(n, v)| (n.to_owned(), v.to_owned())).collect(),
+            referrer: referrer.unwrap_or_default().to_owned(),
+        })
+    }
+}
 #[derive(Debug)]
 pub struct ApiResponse {
+    pub(crate) credential_receipt: Option<crate::ResponseCredentialReceipt>,
     /// Trusted native-only CSP receipts and transport lineage; not a JS property.
     /// Synthetic Response constructors do not mint checked-request provenance.
     pub csp_provenance: Option<crate::CspResponseProvenance>,
+    pub(crate) navigation_metadata: Option<NavigationResponseMetadata>,
     pub response_type: ApiResponseType,
     pub url: String,
     /// Trusted URL chain; never exposed through the JavaScript Response interface.
@@ -563,6 +670,9 @@ pub struct ApiResponse {
     pub body: ApiBody,
 }
 impl ApiResponse {
+    pub fn credential_receipt(&self) -> Option<crate::ResponseCredentialReceipt> { self.credential_receipt }
+    /// Actual accepted native navigation fields, independent of Fetch-visible headers.
+    pub fn navigation_metadata(&self) -> Option<&NavigationResponseMetadata> { self.navigation_metadata.as_ref() }
     pub fn new(input: Option<BodyInput>, init: ApiResponseInit) -> Result<Self, ApiError> {
         let status = init.status.unwrap_or(200);
         if !(200..=599).contains(&status) {
@@ -601,6 +711,8 @@ impl ApiResponse {
         }
         Ok(Self {
             csp_provenance: None,
+            credential_receipt: None,
+            navigation_metadata: None,
             response_type: ApiResponseType::Default,
             url: String::new(),
             url_list: Vec::new(),
@@ -614,6 +726,8 @@ impl ApiResponse {
     pub fn error() -> Self {
         Self {
             csp_provenance: None,
+            credential_receipt: None,
+            navigation_metadata: None,
             response_type: ApiResponseType::Error,
             url: String::new(),
             url_list: Vec::new(),
@@ -672,6 +786,8 @@ impl ApiResponse {
         }
         Ok(Self {
             csp_provenance: self.csp_provenance.clone(),
+            credential_receipt: self.credential_receipt,
+            navigation_metadata: self.navigation_metadata.clone(),
             response_type: self.response_type,
             url: self.url.clone(),
             url_list: self.url_list.clone(),
@@ -683,6 +799,7 @@ impl ApiResponse {
         })
     }
     pub(crate) fn from_policy(response: crate::Response) -> Result<Self, ApiError> {
+        let credential_receipt = response.credential_receipt();
         let url_list = response.url_list.iter().map(HttpUrl::serialize).collect();
         let url = response
             .url_list
@@ -704,7 +821,9 @@ impl ApiResponse {
         };
         body.set_mime_type(mime);
         Ok(Self {
+            credential_receipt,
             csp_provenance: response.csp_provenance,
+            navigation_metadata: None,
             response_type,
             url,
             url_list,
@@ -734,6 +853,7 @@ pub fn fetch_api(
     site: &Site,
     abort: &impl AbortCheck,
 ) -> Result<ApiResponse, ApiError> {
+    if request.embedding_owner.is_some() { return Err(ApiError::Network(FetchError::FrameEmbedding)); }
     if abort.aborted() || request.signal_aborted {
         return Err(ApiError::Aborted);
     }
@@ -811,6 +931,7 @@ pub fn fetch_api(
 /// calls `Dispatcher::step` and routes matching events here; each hop remains
 /// asynchronous. The existing `fetch_api` entry point is unchanged.
 pub struct PendingFetchApi {
+    sent_referrer: Option<String>,
     policy: Request,
     wire_id: amazing_net::dispatch::RequestId,
     stage: DispatchStage,
@@ -830,6 +951,11 @@ enum DispatchStage {
 impl PendingFetchApi {
     pub fn id(&self) -> amazing_net::dispatch::RequestId {
         self.wire_id
+    }
+    /// The exact plan used by the successful main-hop dispatch, retained before
+    /// response/redirect processing mutates the policy. Preflight is separate.
+    pub(crate) fn sent_referrer(&self) -> Option<&str> {
+        self.sent_referrer.as_deref()
     }
     pub(crate) fn is_main(&self) -> bool {
         matches!(self.stage, DispatchStage::Main)
@@ -895,7 +1021,7 @@ impl PendingFetchApi {
         conditional_headers: Option<crate::HeaderList>,
         cache: Option<&mut crate::PreflightCache>,
     ) -> Result<Self, ApiError> {
-        Self::start_with_cache_progress(request,dispatcher,now,security,csp,csp_destination,cookie_header,conditional_headers,cache,&mut None)
+        Self::start_with_cache_progress(request,dispatcher,now,security,csp,csp_destination,cookie_header,conditional_headers,cache,&mut None,None)
     }
     pub(crate) fn start_with_cache_progress<
         R: amazing_net::dispatch::Resolver,
@@ -911,7 +1037,12 @@ impl PendingFetchApi {
         conditional_headers: Option<crate::HeaderList>,
         cache: Option<&mut crate::PreflightCache>,
         progress:&mut Option<crate::CspResponseProvenance>,
+        owner_service:Option<u64>,
     ) -> Result<Self, ApiError> {
+        if let Some(owner)=&request.embedding_owner {
+            owner.validate_service(owner_service.ok_or(ApiError::Network(FetchError::FrameEmbedding))?)
+                .map_err(|_|ApiError::Network(FetchError::FrameEmbedding))?;
+        }
         if request.signal_aborted {
             return Err(ApiError::Aborted);
         }
@@ -937,9 +1068,10 @@ impl PendingFetchApi {
             cache,
         );
         *progress=policy.csp_pre_request_checked.then(||crate::CspResponseProvenance::checked(&policy,Vec::new()));
-        let (wire_id,stage,request_includes_credentials)=started?;
+        let (wire_id,stage,sent_referrer,request_includes_credentials)=started?;
         Ok(Self {
             failure_provenance:progress.clone(),
+            sent_referrer,
             policy,
             wire_id,
             stage,
@@ -958,7 +1090,7 @@ impl PendingFetchApi {
         cookie_header: Option<&str>,
         conditional_headers: Option<&crate::HeaderList>,
         mut cache: Option<&mut crate::PreflightCache>,
-    ) -> Result<(amazing_net::dispatch::RequestId, DispatchStage, bool), ApiError> {
+    ) -> Result<(amazing_net::dispatch::RequestId, DispatchStage, Option<String>, bool), ApiError> {
         let plan = policy.prepare().map_err(ApiError::Network)?;
         if plan.preflight
             && !cache
@@ -975,7 +1107,7 @@ impl PendingFetchApi {
                     .map_err(ApiError::Network)?;
                 let probe_plan = probe.prepare().map_err(ApiError::Network)?;
                 let id = submit_policy(&probe, &probe_plan, dispatcher, now, None, None)?;
-                return Ok((id, DispatchStage::Preflight, false));
+                return Ok((id, DispatchStage::Preflight, None, false));
             }
         }
         Ok((
@@ -988,6 +1120,7 @@ impl PendingFetchApi {
                 conditional_headers,
             )?,
             DispatchStage::Main,
+            plan.referrer,
             plan.credentials,
         ))
     }
@@ -1093,6 +1226,7 @@ impl PendingFetchApi {
                                 self.wire_id = id;
                                 self.stage = DispatchStage::Main;
                                 self.request_includes_credentials = plan.credentials;
+                                self.sent_referrer = plan.referrer;
                                 None
                             }
                             Err(e) => Some(Err(e)),
@@ -1108,13 +1242,15 @@ impl PendingFetchApi {
                                 return Some(Err(ApiError::Network(e)));
                             }
                         }
+                        let metadata = NavigationResponseMetadata::capture(
+                            &self.policy, &response, self.sent_referrer());
                         let location = response.headers.get("location");
                         let redirect=crate::redirect_location_with_upgrade(
                             &mut self.policy, &response, location.as_deref(),
                             |url| hsts_upgrade(&url).unwrap_or(url),
                         );
                         self.failure_provenance=Some(crate::CspResponseProvenance::checked(&self.policy,Vec::new()));
-                        match redirect {
+                        let outcome = match redirect {
                             Ok(RedirectAction::Follow) => {
                                 // A new hop gets credentials for its own URL only.
                                 self.cookie_header = cookie_for(&self.policy);
@@ -1131,9 +1267,10 @@ impl PendingFetchApi {
                                     None,
                                     cache,
                                 ) {
-                                    Ok((id, stage, request_includes_credentials)) => {
+                                    Ok((id, stage, referrer, request_includes_credentials)) => {
                                         self.wire_id = id;
                                         self.stage = stage;
+                                        self.sent_referrer = referrer;
                                         self.request_includes_credentials = request_includes_credentials;
                                         None
                                     }
@@ -1152,7 +1289,11 @@ impl PendingFetchApi {
                                     .and_then(ApiResponse::from_policy),
                             ),
                             Err(e) => Some(Err(ApiError::Network(e))),
-                        }
+                        };
+                        outcome.map(|result| result.map(|mut response| {
+                            response.navigation_metadata = metadata.map(|head| head.with_csp_receipt(response.csp_provenance.as_ref()));
+                            response
+                        }))
                     }
                 }
             }
@@ -1226,4 +1367,23 @@ fn submit_policy<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::C
     dispatcher
         .submit(&request.url().serialize(), options, now)
         .map_err(|_| ApiError::Network(FetchError::Transport))
+}
+
+#[cfg(test)]
+mod child_initiator_tests {
+    use super::*;
+    #[test]
+    fn explicit_initiator_retains_parent_validation_and_nested_marker() {
+        let parent=HttpUrl::parse("https://parent.test/").unwrap();
+        let target=HttpUrl::parse("https://child.test/").unwrap();
+        let initiator=Origin::opaque_with_id(211);
+        let mut context=NavigableContext {top_level_origin:parent.origin().clone(),parent_origin:parent.origin().clone(),ancestor_origins:vec![parent.origin().clone()],sandbox_flags:1,frame_csp:Default::default(),referrer:parent.serialize(),referrer_policy:"strict-origin-when-cross-origin".into(),now_unix:10};
+        let request=ApiRequest::child_navigation_with_initiator(target.clone(),&context,&initiator).unwrap();
+        assert_eq!(request.origin(),&initiator);
+        assert!(request.policy_request().unwrap().nested_navigation);
+        assert_eq!(request.clone_request().unwrap().origin(),&initiator);
+        assert_eq!(ApiRequest::child_navigation(target.clone(),&context).unwrap().origin(),parent.origin());
+        context.ancestor_origins.clear();
+        assert!(ApiRequest::child_navigation_with_initiator(target,&context,&initiator).is_err());
+    }
 }

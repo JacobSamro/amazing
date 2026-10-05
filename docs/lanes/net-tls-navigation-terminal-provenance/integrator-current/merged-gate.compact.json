@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "qualified": true,
+  "tested_source": "31893bde6b5569774635e37c9672bf6d3e4d4aaf",
+  "shipping_code_commit": "4c176b05cef09620fa22c277818317069dc82d29",
+  "shipping_base": "d569d7f55748349d7be5463bee13994ac5e73def",
+  "engine_cargo_blobs_byte_exact": 5259,
+  "workspace_pass": 4885,
+  "doctests_pass": 30,
+  "native_network_pass": 615,
+  "native_network_gained": 17,
+  "native_network_lost": 0,
+  "csp_files": 32,
+  "csp_assertions": 81,
+  "csp_lost": 0,
+  "test262": {
+    "files": {
+      "fail": 706,
+      "pass": 52701,
+      "skipped": 294,
+      "unsupported": 171
+    },
+    "variants": {
+      "fail": 1363,
+      "pass": 101215,
+      "unsupported": 340
+    }
+  },
+  "lost_files": 0,
+  "lost_variants": 0,
+  "test262_native_pools": 4,
+  "test262_original_shards": 16,
+  "test262_baseline": {
+    "tested_source": "408cb841c0064c55e638a0d701f373e7e8d46020",
+    "local_path": ".agents/test262/t262-408cb841-net-css-producers-current-clean1.json",
+    "sha256": "06196670c52c98b1030718850bd1b1cc31f98597bebc37a842e7619c034e0f04"
+  },
+  "test262_merged_sha256": "ed964f2b19415418fe3736915bf1c5e38c39fa5dfae58b56767010971d511868",
+  "reviewed_utc": "2026-10-05T17:25:49.278437+00:00",
+  "prior_failed_runs_preserved": true
+}

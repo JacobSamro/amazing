@@ -43,6 +43,7 @@ pub fn redirect(
             }
             let mut filtered = Response::hidden(ResponseType::OpaqueRedirect);
             filtered.url_list = request.url_list().to_vec();
+            filtered.credential_receipt = Some(crate::ResponseCredentialReceipt::received(response));
             filtered.csp_provenance = Some(CspResponseProvenance::checked(request, Vec::new()));
             return Ok(RedirectAction::Manual(filtered));
         }

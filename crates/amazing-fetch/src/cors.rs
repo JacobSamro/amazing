@@ -273,6 +273,7 @@ pub(crate) fn filter_response_with_csp_progress(request:&Request,response:&Inter
     if plan.taint == ResponseType::Opaque {
         let mut filtered = Response::hidden(ResponseType::Opaque);
         filtered.csp_provenance = Some(provenance);
+        filtered.credential_receipt = Some(crate::ResponseCredentialReceipt::received(response));
         return Ok(filtered);
     }
     let mut headers = response.headers.clone();
@@ -296,6 +297,7 @@ pub(crate) fn filter_response_with_csp_progress(request:&Request,response:&Inter
     }
     Ok(Response {
         csp_provenance: Some(provenance),
+        credential_receipt: Some(crate::ResponseCredentialReceipt::received(response)),
         response_type: plan.taint,
         status: response.status,
         status_text: response.status_text.clone(),

@@ -38,10 +38,12 @@ interface! {pub interface NetworkRequests(8) => NetworkProxy, NetworkReceiver {
     fn cancel_request(request:RequestId) -> bool = 3;
 }}
 
-/// Version 3 adds redirect metadata and browser-only subresource starts. It
+/// Version 7 combines accepted navigation metadata and sealed credential facts; the negotiated
+/// interface version is 4. Earlier revisions added redirect metadata and
+/// browser-only subresource starts. It
 /// remains isolated from the IPC-2 demo interface (8). The browser
 /// constructs NetworkContext; page input must never supply its trust fields.
-pub const NETWORK_VERSION: u16 = 5;
+pub const NETWORK_VERSION: u16 = 7;
 pub const NETWORK_MAX_REQUEST_BODY: usize = 1024 * 1024;
 pub const NETWORK_MAX_RESPONSE_BODY: u32 = 32 * 1024 * 1024;
 pub const NETWORK_CHUNK: u32 = 32 * 1024;
@@ -67,10 +69,18 @@ wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkStarted {
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkRead {id:u64, client_id:u64, epoch:u64, credit:u32}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkCancel {id:u64, client_id:u64, epoch:u64}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkEpoch {client_id:u64, epoch:u64}}
+/// Accepted HTTP navigation metadata from the authenticated network role.
+/// The browser pairs this with NetworkHead's existing request/client/epoch
+/// identity; renderer input and creator policy must never populate it. The
+/// ordinary head remains Fetch-filtered, while this snapshot retains every
+/// ordered response field for document policy admission.
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NavigationResponseHead {
+    status:u16, url:String, reason:String, headers:Vec<HeaderField>, referrer:String
+}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkHead {
     id:u64, client_id:u64, epoch:u64, status:u16, url:String, reason:String,
     headers:Vec<HeaderField>, response_type:String, redirected:bool,
-    url_list:Vec<String>, redirect_tainted:bool
+    url_list:Vec<String>, redirect_tainted:bool, request_includes_credentials:bool, navigation:Option<NavigationResponseHead>
 }}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkBody {id:u64, epoch:u64, bytes:ByteBuf}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkComplete {id:u64, epoch:u64, error:Option<String>}}
