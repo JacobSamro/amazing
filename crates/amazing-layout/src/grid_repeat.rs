@@ -2,42 +2,44 @@
 //! Keep explicit line indices stable while sizing only non-collapsed tracks.
 use super::*;
 
+/// Count the complete explicit track list, including fixed siblings. A track
+/// without a definite counting breadth makes the auto repetition fall back to
+/// one; it must not silently contribute zero to the available-space budget.
 pub(super) fn repeat_counts(tokens: &[String], ctx: &RepeatCtx, allow_auto: bool) -> Vec<usize> {
-    let mut fixed_sum = 0.0;
-    let mut fixed_count = 0;
+    let floor = ctx.zoom; // One CSS pixel expressed in the used, zoomed coordinate system.
+    let mut fixed_sum = Some(0.0f32);
+    let mut fixed_count = 0usize;
     for token in tokens {
         if token.starts_with('[') { continue; }
-        if let Some((count, list)) = repeat_parts(token) {
-            if let Ok(count) = count.trim().parse::<usize>() {
-                let tracks = parse_track_list(list, ctx, false);
-                let count = count.min(MAX_GRID_TRACKS);
-                fixed_count += count * tracks.len();
-                fixed_sum += count as f32 * tracks.iter()
-                    .map(|t| t.repeat_size().unwrap_or(0.0)).sum::<f32>();
-            }
+        let (count, tracks) = if let Some((count, list)) = repeat_parts(token) {
+            let Ok(count) = count.trim().parse::<usize>() else { continue; };
+            (count.clamp(1, MAX_GRID_TRACKS), parse_track_list(list, ctx, false))
         } else {
-            fixed_count += 1;
-            fixed_sum += parse_track_size(token, ctx.font_px, ctx.content_w, ctx.zoom)
-                .repeat_size().unwrap_or(0.0);
-        }
+            (1, vec![parse_track_size(token, ctx.font_px, ctx.content_w, ctx.zoom)])
+        };
+        fixed_count = fixed_count.saturating_add(count.saturating_mul(tracks.len()));
+        let sum = tracks.iter().map(|track| track.repeat_size().map(|size| size.max(floor)))
+            .collect::<Option<Vec<_>>>().map(|sizes| sizes.iter().sum::<f32>());
+        fixed_sum = fixed_sum.zip(sum).map(|(total, sum)| total + count as f32 * sum);
     }
     tokens.iter().map(|token| {
         let Some((count, list)) = repeat_parts(token) else { return 1; };
         let count = count.trim();
-        if let Ok(count) = count.trim().parse::<usize>() {
+        if let Ok(count) = count.parse::<usize>() {
             return count.clamp(1, MAX_GRID_TRACKS);
         }
         if !allow_auto || !(count.eq_ignore_ascii_case("auto-fill") || count.eq_ignore_ascii_case("auto-fit")) {
             return 1;
         }
-        let Some(available) = ctx.repeat_available else { return 1; };
+        let Some((available, fixed_sum)) = ctx.repeat_available.zip(fixed_sum) else { return 1; };
         let tracks = parse_track_list(list, ctx, false);
         let Some(sizes) = tracks.iter().map(|t| t.repeat_size()).collect::<Option<Vec<_>>>() else {
             return 1;
         };
-        // A 1px floor is used only for counting, never for actual track sizing.
-        let unit = sizes.iter().map(|s| s.max(1.0)).sum::<f32>() + ctx.gap * sizes.len() as f32;
-        if unit <= 0.0 { return 1; }
+        // The counting floor applies to every track, including fixed siblings;
+        // actual sizing and line indices retain the original zero breadths.
+        let unit = sizes.iter().map(|s| s.max(floor)).sum::<f32>() + ctx.gap * sizes.len() as f32;
+        if unit <= 0.0 || !unit.is_finite() { return 1; }
         let available = available + ctx.gap - fixed_sum - ctx.gap * fixed_count as f32;
         ((available.max(0.0) / unit).floor() as usize).clamp(1, MAX_GRID_TRACKS)
     }).collect()
@@ -145,3 +147,7 @@ impl ActiveAxis {
         positions
     }
 }
+
+#[cfg(test)]
+#[path = "grid_repeat_tests.rs"]
+mod tests;

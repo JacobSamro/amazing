@@ -467,6 +467,7 @@ fn collect_line_names(
             }
             continue;
         }
+        if line > MAX_GRID_TRACKS as i32 { break; }
         if let Some((_, list)) = repeat_parts(&token) {
             let inner_tracks = parse_track_list(list, ctx, false);
             if inner_tracks.is_empty() {
@@ -475,8 +476,10 @@ fn collect_line_names(
             let inner_names = collect_line_names(list, ctx, false);
             for repetition in 0..repetitions {
                 let offset = line - 1 + (repetition * inner_tracks.len()) as i32;
+                if offset >= MAX_GRID_TRACKS as i32 { break; }
                 for (name, occurrences) in &inner_names {
                     for occurrence in occurrences {
+                        if offset + occurrence > MAX_GRID_TRACKS as i32 + 1 { continue; }
                         names
                             .entry(name.clone())
                             .or_default()
@@ -484,10 +487,11 @@ fn collect_line_names(
                     }
                 }
             }
-            line += (repetitions * inner_tracks.len()).min(MAX_GRID_TRACKS) as i32;
+            line = (line + (repetitions * inner_tracks.len()).min(MAX_GRID_TRACKS) as i32)
+                .min(MAX_GRID_TRACKS as i32 + 1);
             continue;
         }
-        line += 1;
+        line = (line + 1).min(MAX_GRID_TRACKS as i32 + 1);
     }
     names
 }

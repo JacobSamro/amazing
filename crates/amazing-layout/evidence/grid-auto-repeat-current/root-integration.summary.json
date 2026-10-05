@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "state": "ALL_REQUIRED_GATES_PASSED",
+  "tested_source": "6bf92426c78063dc9d7fc26ecb7258cbb2b25d8a",
+  "recorded_published_base": "68b1e6363be41f3867c684040326d54bf07af3af",
+  "lane_qualified_source": "e8a2a7cf5c16e02d56ce260d4884e177cd4f92f0",
+  "lane_fixed_base": "570b0718a22e6b5bc34a05ff0f13a6955e873973",
+  "workspace_counts": {
+    "doctests": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 34
+    },
+    "nextest": {
+      "failed": 0,
+      "passed": 4995,
+      "skipped": 17
+    }
+  },
+  "workspace_actual_and_fetch_exit": 0,
+  "full16_counts": {
+    "files": {
+      "fail": 702,
+      "pass": 52705,
+      "skipped": 294,
+      "unsupported": 171
+    },
+    "variants": {
+      "fail": 1355,
+      "pass": 101223,
+      "unsupported": 340
+    }
+  },
+  "full16_actual_and_all4_fetch_exit": 0,
+  "lost_files": [],
+  "lost_variants": [],
+  "lane_render8": {
+    "original_ids": 2421,
+    "before": {
+      "pass": 1216,
+      "mismatch": 1204,
+      "timeout": 1
+    },
+    "after": {
+      "pass": 1216,
+      "mismatch": 1204,
+      "timeout": 1
+    },
+    "lost": 0,
+    "gained": 0
+  },
+  "lane_native_groups": 15,
+  "raw_and_all_elf": "retained at captured native endpoints; no causal render gain inferred"
+}
