@@ -1,8 +1,10 @@
 //! Native document Reporting endpoints and CSP request delivery.
 //! The embedding supplies accepted response headers and binds each capability
 //! to its actual Document lifetime. A URL is never a document identity.
+mod prepared;
 pub mod structured;
 mod test_report;
+pub use prepared::PreparedCspReportPlan;
 pub use test_report::TestReportSnapshot;
 #[cfg(test)]
 mod tests;
@@ -94,6 +96,7 @@ pub(crate) struct ReportingState {
     documents: BTreeMap<u64, Document>,
     deliveries: BTreeMap<RequestId, Delivery>,
     retained_bytes: usize,
+    prepared_bytes: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 impl Default for ReportingState {
     fn default() -> Self {
@@ -103,6 +106,7 @@ impl Default for ReportingState {
             documents: BTreeMap::new(),
             deliveries: BTreeMap::new(),
             retained_bytes: 0,
+            prepared_bytes: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         }
     }
 }
@@ -263,7 +267,17 @@ impl NetworkService {
         queued_at: Instant,
         now: Instant,
     ) -> Result<Vec<ReportId>, ReportError> {
-        let saved = self.reporting.document(document)?.clone();
+        let plan = self.prepare_csp_report(document, violation, queued_at)?;
+        self.queue_prepared_csp_report(plan, now)
+    }
+    fn queue_saved_csp_report(
+        &mut self,
+        document: ReportingDocument,
+        saved: Document,
+        violation: &CspInlineViolation,
+        queued_at: Instant,
+        now: Instant,
+    ) -> Result<Vec<ReportId>, ReportError> {
         let modern = violation.report_to.is_some();
         let targets = if let Some(name) = &violation.report_to {
             vec![(

@@ -1,0 +1,87 @@
+{
+  "state": "native-qualified-zero-loss",
+  "source": "4d0c9de41c5c4ba9b9d0b6e932690de9f80bf877",
+  "base": "72512fbb63b7ec226587d3f6052e2592c6737c43",
+  "lane": "net-csp-prepared-report-20261005",
+  "gate_sha256": "0f3a0b7304eecaf1eb2bec7c6bf9833dbfb9bd28f2f9aa587f03884955ad8168",
+  "gate": {
+    "before": {
+      "ref": "72512fbb63b7ec226587d3f6052e2592c6737c43",
+      "root": "amazing/out/net-csp-prepared-report-20261005/csp-prepared-report-net-csp-prepared-report-20261005-before",
+      "command_sha256": "e32a505172ac72ff70208da3d67c4046e3768cfc2943fae95db1abb2ca967fea",
+      "launch_sha256": "1c9031f9a6e083025f111958f7a23d3eed92da8a0dbfa643b014e079360ba5c8"
+    },
+    "after": {
+      "ref": "4d0c9de41c5c4ba9b9d0b6e932690de9f80bf877",
+      "root": "amazing/out/net-csp-prepared-report-20261005/csp-prepared-report-net-csp-prepared-report-20261005-after",
+      "command_sha256": "d9f5c9e1635b21781933110d11bc0483666d22f695e129c36d5128160e58e91e",
+      "launch_sha256": "3c617f3edf6539cd689f3cc643ae2672fd49253ebf41221b5f81b4712af765a1"
+    }
+  },
+  "active_session": null,
+  "ttl_seconds": 7200,
+  "wrapper_sha256": "f3048a26c9a7ad1a6103784e374c319d057da8b89ea22da7d2ecf8dba9a7cd75",
+  "ready_base": "a035b2b558065d72664ce7617da0a7261027bb0d",
+  "actual_exit": {
+    "before": 0,
+    "after": 0
+  },
+  "coverage": "Native prepared CSP boundary and original CSP installed sweep; installed SPVE listener retirement remains consumer-owned",
+  "counts": {
+    "workspace": [
+      4742,
+      4745
+    ],
+    "doctests": [
+      15,
+      16
+    ],
+    "native_tls_net_fetch": [
+      520,
+      523
+    ],
+    "csp_passing_files": [
+      32,
+      32
+    ],
+    "csp_passing_subtests": [
+      81,
+      81
+    ],
+    "lost": []
+  },
+  "files": {
+    "after.completed.summary.json": {
+      "bytes": 571,
+      "sha256": "bbf632d41912e3ce30c0e93d64a9fbb89b5f60f74e690fab3d93040d72a71cad"
+    },
+    "after.csp.compact.json": {
+      "bytes": 35919,
+      "sha256": "388ac49e0286e2247eb690cce908867eaa0df9fe898a1ecf6711dc2b556a0ebc"
+    },
+    "after.endpoint.json": {
+      "bytes": 428,
+      "sha256": "ee13b6196ee29b546298ed889af938c89dc026e462efe6f88f81829396c80b49"
+    },
+    "after.summary.json": {
+      "bytes": 197248,
+      "sha256": "03295679fd975dc3ba0041a2b48774994f69d2241141b1fb419f138027947cba"
+    },
+    "before.completed.summary.json": {
+      "bytes": 572,
+      "sha256": "532d900378601b1cde0b4e833e8fb42110ee247da5770b94f03e46989d047429"
+    },
+    "before.csp.compact.json": {
+      "bytes": 35846,
+      "sha256": "f95384b5c441a6391d24dc8043abf2535c9406605d13c69fd603deaba8987b64"
+    },
+    "before.endpoint.json": {
+      "bytes": 429,
+      "sha256": "666951cd3ddbf2baa081c1ff27e385572feee53d36a3efac3e74a44353a7b95d"
+    },
+    "before.summary.json": {
+      "bytes": 196130,
+      "sha256": "5b14a6ed53a0d47257d8fc04394cdef3bfe76ad25ad59f886eae8c69859043a6"
+    }
+  }
+}

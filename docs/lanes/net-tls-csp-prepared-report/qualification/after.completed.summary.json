@@ -1,0 +1,15 @@
+{
+  "job": {
+    "schema": 1,
+    "lane": "net-csp-prepared-report-20261005",
+    "source_commit": "4d0c9de41c5c4ba9b9d0b6e932690de9f80bf877",
+    "box_id": "bx_3zy7cshe",
+    "host": "user@217.182.194.151",
+    "port": 19038,
+    "job_id": "bb3d14e6c10a49d08d4b5ba85f05db09",
+    "output_root": "amazing/out/net-csp-prepared-report-20261005/csp-prepared-report-net-csp-prepared-report-20261005-after",
+    "command_sha256": "f64ecf1acf5c2563a0409991cb1d8414e1d6fb81283fda0447e525b866f4418a"
+  },
+  "boot_id": "0fd7542d-030f-4db3-a4f8-5373e804fc0e",
+  "actual_exit": 0
+}

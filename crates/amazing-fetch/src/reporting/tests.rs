@@ -1000,3 +1000,165 @@ fn actual_same_global_reporting_handle_reuses_own_endpoints_without_fresh_child_
     assert_eq!(receipt.delivery, Err(ReportError::NoEndpoint));
     assert!(!service.has_pending_reporting_io());
 }
+
+#[test]
+fn prepared_report_preserves_original_global_after_native_callback_retirement_and_error() {
+    // Native event/report boundary control, not installed SPVE proof.
+    for modern in [false, true] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let url = HttpUrl::parse(&format!(
+            "http://{}/original",
+            listener.local_addr().unwrap()
+        ))
+        .unwrap();
+        let mut service = NetworkService::new(DispatchLimits::default());
+        let handle = service
+            .register_reporting_response(url.clone(), &headers(r#"csp="/report""#), context(&url))
+            .unwrap();
+        let mut v = violation(&url.serialize());
+        if !modern {
+            v.report_to = None;
+            v.report_uris = vec!["/legacy".into()];
+        }
+        let queued = Instant::now();
+        let plan = service.prepare_csp_report(handle, &v, queued).unwrap();
+        assert!(!service.has_pending_reporting_io());
+        assert_eq!(service.dispatcher.in_flight(), 0);
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        let author_callback = |service: &mut NetworkService| -> Result<(), &'static str> {
+            assert!(service.forget_reporting_document(handle));
+            Err("native callback exception")
+        };
+        assert!(author_callback(&mut service).is_err());
+        v.original_policy_units = "changed after event".encode_utf16().collect();
+        v.report_uris = vec!["/wrong-after-event".into()];
+        v.report_to = Some("wrong-after-event".into());
+        listener.set_nonblocking(false).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let peer = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            tx.send(read_request(&mut stream)).unwrap();
+            stream
+                .write_all(
+                    b"HTTP/1.1 204 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
+        });
+        let ids = service
+            .queue_prepared_csp_report(plan, queued + Duration::from_secs(2))
+            .unwrap();
+        let completed = run(&mut service, 1);
+        assert_eq!(completed[0].id, ids[0]);
+        assert_eq!(completed[0].document, handle);
+        assert_eq!(
+            completed[0].route,
+            if modern {
+                ReportRoute::ReportingApi
+            } else {
+                ReportRoute::LegacyCsp
+            }
+        );
+        let wire = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert!(wire.starts_with(if modern {
+            "POST /report HTTP/1.1"
+        } else {
+            "POST /legacy HTTP/1.1"
+        }));
+        assert!(!wire.contains("changed after event"));
+        assert!(wire.contains("default-src 'none'; report-to csp"));
+        if modern {
+            assert!(wire.contains("\"age\":2000"));
+        }
+        assert!(service.reporting.document(handle).is_err());
+        assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire), 0);
+        assert!(!service.has_pending_reporting_io());
+        peer.join().unwrap();
+    }
+}
+
+#[test]
+fn prepared_report_no_endpoint_does_not_restore_global_or_leak_to_fresh_about() {
+    let url = HttpUrl::parse("https://original.test/page").unwrap();
+    let mut service = NetworkService::new(DispatchLimits::default());
+    let original = service
+        .register_reporting_response(url.clone(), &HeaderList::default(), context(&url))
+        .unwrap();
+    let v = violation(&url.serialize());
+    let plan = service
+        .prepare_csp_report(original, &v, Instant::now())
+        .unwrap();
+    assert!(service.forget_reporting_document(original));
+    let client = receiving_client(&url, "about:blank");
+    let child = service.register_reporting_initial_client(&client).unwrap();
+    assert_eq!(
+        service.queue_prepared_csp_report(plan, Instant::now()),
+        Err(ReportError::NoEndpoint)
+    );
+    assert!(service.reporting.document(original).is_err());
+    assert!(
+        service
+            .reporting
+            .document(child)
+            .unwrap()
+            .endpoints
+            .is_empty()
+    );
+    assert!(matches!(
+        service.prepare_csp_report(original, &v, Instant::now()),
+        Err(ReportError::StaleDocument)
+    ));
+    assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire), 0);
+    assert_eq!(service.dispatcher.in_flight(), 0);
+}
+
+#[test]
+fn prepared_report_is_service_bound_and_drop_releases_bounded_snapshot_credit() {
+    let url = HttpUrl::parse("https://original.test/page").unwrap();
+    let mut service = NetworkService::new(DispatchLimits::default());
+    let handle = service
+        .register_reporting_response(url.clone(), &HeaderList::default(), context(&url))
+        .unwrap();
+    let mut v = violation(&url.serialize());
+    let plan = service
+        .prepare_csp_report(handle, &v, Instant::now())
+        .unwrap();
+    let mut other = NetworkService::new(DispatchLimits::default());
+    assert_eq!(
+        other.queue_prepared_csp_report(plan, Instant::now()),
+        Err(ReportError::StaleDocument)
+    );
+    assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire), 0);
+    assert_eq!(other.reporting.prepared_bytes.load(Ordering::Acquire), 0);
+    v.sample = vec![0xdfff; 3000];
+    let mut plans = Vec::new();
+    loop {
+        match service.prepare_csp_report(handle, &v, Instant::now()) {
+            Ok(plan) => plans.push(plan),
+            Err(ReportError::Limit) => break,
+            Err(error) => panic!("unexpected admission error: {error:?}"),
+        }
+        assert!(
+            plans.len() < 1024,
+            "prepared snapshot credit must bound admission"
+        );
+    }
+    assert!(!plans.is_empty());
+    assert!(service.reporting.prepared_bytes.load(Ordering::Acquire) <= MAX_REPORT_BYTES);
+    assert_eq!(service.dispatcher.in_flight(), 0);
+    drop(plans);
+    assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire), 0);
+    let plan = service
+        .prepare_csp_report(handle, &v, Instant::now())
+        .unwrap();
+    drop(plan);
+    v.original_policy_units = vec![0xd800; MAX_REPORT_BYTES];
+    assert!(matches!(
+        service.prepare_csp_report(handle, &v, Instant::now()),
+        Err(ReportError::Limit)
+    ));
+    assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire), 0);
+}
