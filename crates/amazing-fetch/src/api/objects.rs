@@ -78,6 +78,7 @@ pub enum ApiRequestInput<'a> {
 pub struct ApiRequest {
     pub(super) url: HttpUrl,
     pub(super) native_navigation_token: Option<std::sync::Arc<crate::model::NativeNavigationToken>>,
+    native_navigation_report_token: Option<std::sync::Arc<crate::model::NativeNavigationToken>>,
     pub(super) navigation_urls: Vec<HttpUrl>,
     pub(super) navigation_csp_violations: Vec<crate::CspViolation>,
     pub(super) method: String,
@@ -182,7 +183,7 @@ impl ApiRequest {
             &target,
             init.initiator_origin,
         )?;
-        request.native_navigation_token = Some(std::sync::Arc::new(crate::model::NativeNavigationToken));
+        request.native_navigation_token = Some(std::sync::Arc::new(crate::model::NativeNavigationToken::new()));
         request.navigation_urls = vec![request.url.clone()];
         request.mode = RequestMode::Navigate;
         request.destination = Destination::Document;
@@ -223,6 +224,7 @@ impl ApiRequest {
                 Self {
                     url,
                     native_navigation_token: None,
+                    native_navigation_report_token: None,
                     navigation_urls: Vec::new(),
                     navigation_csp_violations: Vec::new(),
                     method: "GET".into(),
@@ -257,6 +259,7 @@ impl ApiRequest {
                 Self {
                     url: other.url.clone(),
                     native_navigation_token: other.native_navigation_token.clone(),
+                    native_navigation_report_token: other.native_navigation_report_token.clone(),
                     navigation_urls: other.navigation_urls.clone(),
                     navigation_csp_violations: other.navigation_csp_violations.clone(),
                     method: other.method.clone(),
@@ -446,6 +449,7 @@ impl ApiRequest {
         Ok(Self {
             url: self.url.clone(),
             native_navigation_token: self.native_navigation_token.clone(),
+            native_navigation_report_token: self.native_navigation_report_token.clone(),
             navigation_urls: self.navigation_urls.clone(),
             navigation_csp_violations: self.navigation_csp_violations.clone(),
             method: self.method.clone(),
@@ -502,9 +506,29 @@ impl ApiRequest {
         }
         Ok(())
     }
+    pub(crate) fn claim_navigation_csp_reporting(&mut self)
+        -> Option<std::sync::Arc<crate::model::NativeNavigationToken>> {
+        if self.mode!=RequestMode::Navigate || self.redirect!=RedirectMode::Manual
+            || self.embedding_owner.is_none() || self.native_navigation_report_token.is_some() {return None;}
+        let token=self.native_navigation_token.as_ref()?;
+        if token.source_reporting_admitted.load(std::sync::atomic::Ordering::Acquire) {return None;}
+        token.source_reporting_claimed.compare_exchange(false,true,std::sync::atomic::Ordering::AcqRel,
+            std::sync::atomic::Ordering::Acquire).ok()?;
+        self.native_navigation_report_token=Some(token.clone());Some(token.clone())
+    }
+    pub(crate) fn claim_navigation_csp_admission(&self) -> bool {
+        if self.native_navigation_report_token.is_none() {
+            if let Some(token)=&self.native_navigation_token {token.source_reporting_admitted.store(true,std::sync::atomic::Ordering::Release);}
+            return true;
+        }
+        self.native_navigation_token.as_ref().is_some_and(|token|
+            token.source_reporting_admitted.compare_exchange(false,true,std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire).is_ok())
+    }
     pub(crate) fn policy_request(&self) -> Result<Request, ApiError> {
         let mut out = Request::new(self.url.clone(), self.origin.clone());
         out.native_navigation_token=self.native_navigation_token.clone();
+        out.native_navigation_report_token=self.native_navigation_report_token.clone();
         if !self.navigation_urls.is_empty() {
             out.url_list=self.navigation_urls.clone();
             *out.url_list.last_mut().unwrap()=self.url.clone();

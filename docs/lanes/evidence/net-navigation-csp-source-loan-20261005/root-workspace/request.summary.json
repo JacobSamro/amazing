@@ -1,0 +1,53 @@
+{
+  "admission_bytes": 30198988800.0,
+  "argv": [
+    "bash",
+    "/Users/jMac/Projects/OpenSource/amazing-wt/public-workspace-storage-20261006/scripts/linux-run.sh",
+    "integrator-net-loan-workspace-c294-20261006",
+    "--host",
+    "boat",
+    "--ref",
+    "4be257c938410d303f68c66324af68f1efcaa850",
+    "--setup-summary",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/integrator-primary/net-loan-current-workspace/qualified-launcher-c294/setup.manifest.json",
+    "--endpoint-receipt",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/integrator-primary/net-loan-current-workspace/qualified-launcher-c294/endpoint.manifest.json",
+    "--compact-root",
+    "amazing/out/integrator-net-loan-workspace-c294-20261006/workspace-a1e4894f952f4c0e86b54795f8f7b9ea/compact",
+    "--storage-plan",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/integrator-primary/net-loan-current-workspace/qualified-launcher-c294/storage-plan.json",
+    "--command-file",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/integrator-primary/net-loan-current-workspace/qualified-launcher-c294/command.sh"
+  ],
+  "command_sha256": "15b9324148d9dc09ef515cf1111da0c30d79075253e2f4f11f22d61f8b6d593f",
+  "compact_root": "amazing/out/integrator-net-loan-workspace-c294-20261006/workspace-a1e4894f952f4c0e86b54795f8f7b9ea/compact",
+  "config_sha256": "c2714fad8ecd85bb32609d6665599e4bc4847f3b0025647d950e7139439bb682",
+  "corpus_role": "standalone workspace candidate",
+  "endpoint_receipt": "/Users/jMac/Projects/OpenSource/amazing/.agents/integrator-primary/net-loan-current-workspace/qualified-launcher-c294/endpoint.manifest.json",
+  "ensure_may_renew_finite_ttl": true,
+  "fetch_paths": [
+    "amazing/out/integrator-net-loan-workspace-c294-20261006/workspace-a1e4894f952f4c0e86b54795f8f7b9ea/compact/workspace.manifest.json",
+    "amazing/out/integrator-net-loan-workspace-c294-20261006/workspace-a1e4894f952f4c0e86b54795f8f7b9ea/compact/nextest.phase.manifest.json",
+    "amazing/out/integrator-net-loan-workspace-c294-20261006/workspace-a1e4894f952f4c0e86b54795f8f7b9ea/compact/doctests.phase.manifest.json",
+    "amazing/out/integrator-net-loan-workspace-c294-20261006/workspace-a1e4894f952f4c0e86b54795f8f7b9ea/compact/storage.summary.json"
+  ],
+  "finite_run_ttl_seconds": 7200,
+  "helper_sha256": {
+    "completed-job.py": "9c2bde2eeaa2507e5a14d2cc17599908d1c2ea9b1418ba76a78d04a1ff3b15b1",
+    "gate-command.py": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b",
+    "gate-summary.py": "3e26631cb492c2e77808c7bc9a3354ab248d0e83cf8762b933892647fd7ce0f0",
+    "lane-fetch.sh": "fe4fa79beafef35bbce1ce853f4f3330ae8717b1a6e710675a3bd9892d0d84db",
+    "linux-run.sh": "6c960c2a394d659990484388a15bd887f4db4f0793244669d9f88aafe08a1c28",
+    "linux-workspace-native.py": "497fbb94e7357590846233118e56cc7c405505d6a272b014829f876b71a712b2",
+    "native-storage-plan.py": "3c4df2f01150f9da8b53695df781d2ee83fd7d79a92a1d9b33449d14bf763dbe",
+    "native-storage-retention.py": "2628dc352f594177a540961888f8157517ca9603847716731b04146f9033d489"
+  },
+  "job": "workspace-a1e4894f952f4c0e86b54795f8f7b9ea",
+  "lane": "integrator-net-loan-workspace-c294-20261006",
+  "machine": "default 4 vCPU / 8 GB",
+  "physical_storage_phase": "before",
+  "raw_root": "/tmp/amazing-workspace-raw/integrator-net-loan-workspace-c294-20261006/workspace-a1e4894f952f4c0e86b54795f8f7b9ea",
+  "schema": 1,
+  "source": "4be257c938410d303f68c66324af68f1efcaa850",
+  "storage_sha256": "3d7715ded13a674b1d38482152b7a8b5d75c62259318f344c249abd04a5c2036"
+}

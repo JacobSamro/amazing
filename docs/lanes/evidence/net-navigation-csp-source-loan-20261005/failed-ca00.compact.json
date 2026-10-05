@@ -1,0 +1,82 @@
+{
+  "source": "ca00e195cd928cac09a96cb532bd7a3366354d51",
+  "terminal": {
+    "job": {
+      "schema": 2,
+      "lane": "net-navigation-csp-source-loan-afteronly-20261005",
+      "source_commit": "ca00e195cd928cac09a96cb532bd7a3366354d51",
+      "box_id": "bx_qjyfm9xc",
+      "host": "user@5.39.75.110",
+      "port": 19034,
+      "job_id": "b4691d800f1c471599a961b6069aab48",
+      "output_root": "amazing/out/net-navigation-csp-source-loan-afteronly-20261005/coep-output-net-navigation-csp-source-loan-afteronly-20261005-after",
+      "command_sha256": "c57f70ab93be64fdad930005aad7632b54513e199d8fbe861ff31cc6f725e29c",
+      "execution_sha256": "a8fd442b5ad95b88be850f1fc3236a252e20fe557a7964dde6be125ddd5e3aa4",
+      "source_archive_sha256": "6260233725f2812a961dbcd5aeac251ac12ea86bdc8cafa4e09e2649fc430432"
+    },
+    "state": "TERMINAL",
+    "actual_exit": 1,
+    "runner_exit": 1,
+    "boot_id": "5fb98e7c-8a29-4f91-bc18-bea429934c64",
+    "reason": "authenticated actual command exit",
+    "owner": {
+      "pid": 36670,
+      "start_ticks": 132867,
+      "state": "R",
+      "parent_pid": 36667,
+      "cmdline_sha256": "f09e66612d02a314773c19f3d9f0c3843adc10b4e8d96cc3691a4d8994dea04a"
+    },
+    "started_ns": 1791223618829388262,
+    "catalog_error": null,
+    "execution_raw": {
+      "path": "/tmp/amazing-job-b4691d800f1c471599a961b6069aab48-_t8833ku/command.log",
+      "bytes": 16563,
+      "sha256": "69d01e1edd6c3cd0e9873d10661e2847568bf7d6e328410930583a018f3eca56"
+    },
+    "observer_pipe_closed": false,
+    "signals": [],
+    "command_returncode": 1,
+    "exited_ns": 1791223767866478825,
+    "diagnostic_error": null,
+    "native_diagnostics": {
+      "path": "/tmp/amazing-job-b4691d800f1c471599a961b6069aab48-_t8833ku/command.log",
+      "device": 64769
+    }
+  },
+  "authenticated_partial_compact_fetch_exit": 0,
+  "partial_compact_manifest": {
+    "job_id": "b4691d800f1c471599a961b6069aab48",
+    "source_commit": "ca00e195cd928cac09a96cb532bd7a3366354d51",
+    "actual_exit": 1,
+    "files": {
+      "amazing/out/net-navigation-csp-source-loan-afteronly-20261005/coep-output-net-navigation-csp-source-loan-afteronly-20261005-after/csp-wpt/compact.json": {
+        "bytes": 35945,
+        "sha256": "39744467fe503dd76aa08f230cd24e7a7bbd0a4858fab2a6d744c0b976cf7078"
+      },
+      "amazing/out/net-navigation-csp-source-loan-afteronly-20261005/coep-output-net-navigation-csp-source-loan-afteronly-20261005-after/space.summary.json": {
+        "bytes": 358,
+        "sha256": "9a5d381068d110d9704dc317464044661018935ea58ebafc2a077460f5b960a8"
+      }
+    }
+  },
+  "compiler_cluster": {
+    "file": "crates/amazing-fetch/src/reporting/navigation_csp_tests.rs",
+    "line": 43,
+    "message": "let chains are only allowed in Rust 2024 or later",
+    "workspace_engine_exit": 101,
+    "network_corpus_engine_exit": 101,
+    "measured_workspace_passes": null,
+    "measured_native_passes": null,
+    "assertions_changed": false
+  },
+  "partial_csp": {
+    "passed_files": 32,
+    "passed_subtests": 81,
+    "lost_files": [],
+    "lost_subtests": []
+  },
+  "secondary_evidence_failure": "Incomplete execution represented as all baseline losses; overflowed512KiB before after.summary.json publication. No recovered raw or whole gate success claimed.",
+  "first_compact_fetch_exit": 3,
+  "first_compact_fetch_reason": "public noncompact filename guard rejected .phase.json; no phase/raw transfer",
+  "tooling_unchanged_engine_rerun": false
+}

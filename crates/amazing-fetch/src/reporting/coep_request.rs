@@ -154,7 +154,7 @@ struct GraphReceiver {
 pub struct CoepGraphReportSettings { id:CoepGraphId, settings:CoepRequestReportSettings }
 impl CoepGraphReportSettings { pub fn id(&self)->CoepGraphId {self.id} }
 
-fn graph_credit(quota:&std::sync::Arc<std::sync::atomic::AtomicUsize>,bytes:usize)
+pub(super) fn graph_credit(quota:&std::sync::Arc<std::sync::atomic::AtomicUsize>,bytes:usize)
     ->Result<prepared::PreparedCredits,ReportError> {
     let mut used=quota.load(Ordering::Acquire);
     loop {

@@ -1,0 +1,100 @@
+{
+  "ready_recorded_base": "d265908ea158e34d82084d0c94e8b0f429751cd1",
+  "qualified_engine_source": "f18b8d17ea029f001aabe83fe05f3ae0925652b9",
+  "original_source_base": "31893bde6b5569774635e37c9672bf6d3e4d4aaf",
+  "shipping_paths": {
+    "crates/amazing-fetch/src/api/navigation_continuation.rs": {
+      "bytes": 17131,
+      "sha256": "d43cadfd4d74ba025aa99cac611bdbae319ca8d7135a2f535b5d749eb7e43cd0"
+    },
+    "crates/amazing-fetch/src/api/objects.rs": {
+      "bytes": 60777,
+      "sha256": "8bc967fa7b5ccede71a5d7b413ba58ce748fc51a3097473651d488750ea5d5b4"
+    },
+    "crates/amazing-fetch/src/csp/request_report.rs": {
+      "bytes": 7848,
+      "sha256": "ac0f2395ad161a6039134aeddf0905f55860311a739d7770501e019e2c9be1b1"
+    },
+    "crates/amazing-fetch/src/model.rs": {
+      "bytes": 12061,
+      "sha256": "7d27f328cd9ad5d45552d715eb879bc3fdbe028d85f60048829b855f80f915b4"
+    },
+    "crates/amazing-fetch/src/reporting/coep_request.rs": {
+      "bytes": 16626,
+      "sha256": "270ffdb0c5c18691f70be640acf247c57849352121888dd84908bd29516c67be"
+    },
+    "crates/amazing-fetch/src/reporting/mod.rs": {
+      "bytes": 31458,
+      "sha256": "37600ffad1d3959479b78cccefc6a9d8976863ec9ddb2261f385f31143987cc4"
+    },
+    "crates/amazing-fetch/src/reporting/navigation_csp.rs": {
+      "bytes": 7003,
+      "sha256": "4f9e650600d145a944c037ef576fe795a130a576255a7c4340372376663cf874"
+    },
+    "crates/amazing-fetch/src/reporting/navigation_csp_tests.rs": {
+      "bytes": 26714,
+      "sha256": "e5c5bd79f60eba8a7526d123a47ab11200dead8d4f09f9930a56b17e34e8ba0d"
+    },
+    "crates/amazing-fetch/src/reporting/prepared.rs": {
+      "bytes": 7752,
+      "sha256": "ece10332011be37c0a7140793bfcb6a03bf965d58f7d07e7c79f4666c8f8b08f"
+    },
+    "crates/amazing-fetch/src/service.rs": {
+      "bytes": 91974,
+      "sha256": "9f559c97e1e2865869409229967136b1f03dc0a948b931c276e70d8bf43474fb"
+    },
+    "crates/amazing-process/src/bin/ipc-demo-child.rs": {
+      "bytes": 7350,
+      "sha256": "f82e8bdc1af6b84188b9984559e4f18d4c93e2ccccdfd2af25aa1755f976303f"
+    },
+    "crates/amazing-process/src/lib.rs": {
+      "bytes": 28526,
+      "sha256": "ea072c093c88298fae392b6545a523abfcc4bcf6db0e55d22c572f4dbe614f9a"
+    },
+    "crates/amazing-process/src/network.rs": {
+      "bytes": 10217,
+      "sha256": "ab557532cde8ca309c467094dfd6dec4e1555595e5bbddfb40f0b250fa6555c7"
+    },
+    "crates/amazing-process/src/network_v2.rs": {
+      "bytes": 50386,
+      "sha256": "54c879577bfac6e02f8d92485060339d016aad0a8f5c3d406ff3dcfbf4f292cc"
+    },
+    "crates/amazing-process/src/network_v2/receiving_capture.rs": {
+      "bytes": 16344,
+      "sha256": "53090b114ebc079404b76faa4bd15ffea6e81780ad95d83f24c1331eaf5d2f59"
+    },
+    "crates/amazing-process/src/network_v2/receiving_csp.rs": {
+      "bytes": 9932,
+      "sha256": "c260a2a0ef077065dbd8bd43829fc393cc633e4d6265b6f0a721a094980f5148"
+    },
+    "crates/amazing-process/src/network_v2/receiving_endpoint.rs": {
+      "bytes": 15879,
+      "sha256": "3a5019ce3346fc858402a2b02f15f7ab0a76fab6199f79845382a3a10b727f37"
+    },
+    "crates/amazing-process/src/network_v2/receiving_registry.rs": {
+      "bytes": 16853,
+      "sha256": "50d464fd4dbdffeef23a60941a0a4d765f19238468c830866302d639c9c48d04"
+    },
+    "crates/amazing-process/src/network_v2/receiving_session.rs": {
+      "bytes": 11538,
+      "sha256": "58970ec3e758aa3a6dcf3dee01920181b7bc8d31dd9a0c85781be97d79a80061"
+    },
+    "crates/amazing-process/src/protocol.rs": {
+      "bytes": 15298,
+      "sha256": "57e02b48455918a7d08767da20a49995b0f85c857316da986c4b78a23b960304"
+    },
+    "crates/amazing-process/src/protocol_receiving.rs": {
+      "bytes": 7997,
+      "sha256": "54d0b3a7cc53c03794ea38a8f36c3f4964eb67db3808c569ffdae8cf884e6031"
+    },
+    "crates/amazing-process/tests/receiving_registration.rs": {
+      "bytes": 36858,
+      "sha256": "227bf3efa1d2364e25ca526f309a752a1f82e6e64da8bfba63bd81f5d029ea69"
+    }
+  },
+  "shipping_path_count": 22,
+  "prerequisite": "Published native carrier/owner/Manual/terminal family31893/d19; included original-source loan f434 +genuine receiving process c1f; no lane ancestry",
+  "only_engine_sourcefix": "Rust2021 equivalent nested-if test-helper expression; all original assertions retained",
+  "no410": true,
+  "noWireOrigin": true
+}

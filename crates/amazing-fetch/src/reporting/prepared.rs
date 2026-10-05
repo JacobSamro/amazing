@@ -20,6 +20,12 @@ pub struct PreparedCspReportPlan {
     queued_at: Instant,
     credits: PreparedCredits,
 }
+impl PreparedCspReportPlan {
+    /// Canonical immutable data for the original SPVE/observer task. Reading it
+    /// grants no endpoint authority and does not consume the network plan.
+    pub fn violation(&self)->&CspInlineViolation {&self.violation}
+    pub fn report_snapshot(&self)->crate::CspReportSnapshot {self.violation.report_snapshot()}
+}
 pub(super) struct PreparedCredits {
     pub(super) quota: Arc<AtomicUsize>,
     pub(super) bytes: usize,
@@ -93,7 +99,7 @@ impl NetworkService {
 /// Application snapshot content budget, separate from the existing serialized
 /// delivery-body queue budget. Counts owned scalar records and string/unit
 /// content before cloning, not total allocator/provider/socket memory.
-fn snapshot_bytes(settings: &Document, violation: &CspInlineViolation) -> Option<usize> {
+pub(super) fn snapshot_bytes(settings: &Document, violation: &CspInlineViolation) -> Option<usize> {
     let mut bytes =
         std::mem::size_of::<Document>().checked_add(std::mem::size_of::<CspInlineViolation>())?;
     let mut add = |amount: usize| -> Option<()> {
@@ -122,6 +128,20 @@ fn snapshot_bytes(settings: &Document, violation: &CspInlineViolation) -> Option
         add(std::mem::size_of::<String>())?;
         add(uri.len())?;
     }
+    let document_bytes=document_snapshot_bytes(settings)?.checked_sub(std::mem::size_of::<Document>())?;
+    add(document_bytes)?;
+    // Exact serialized report-body size is independently bounded before the
+    // immutable violation clone. Event-to-submit age may grow later; submission
+    // still checks the actual final body against the delivery queue budget.
+    if serialize(violation, violation.report_to.is_some(), 0).len() > MAX_REPORT_BYTES {
+        return None;
+    }
+    Some(bytes)
+}
+
+pub(super) fn document_snapshot_bytes(settings:&Document)->Option<usize> {
+    let mut bytes=std::mem::size_of::<Document>();
+    let mut add=|amount:usize|->Option<()> {bytes=bytes.checked_add(amount)?;(bytes<=MAX_REPORT_BYTES).then_some(())};
     add(settings.creation_url.serialize().len())?;
     add(settings.origin.serialize().len())?;
     for (name, url) in &settings.endpoints {
@@ -133,18 +153,24 @@ fn snapshot_bytes(settings: &Document, violation: &CspInlineViolation) -> Option
         add(std::mem::size_of::<(String, u64)>())?;
         add(name.len())?;
     }
-    if let crate::cookies::CookieSite::Origin(origin) = &settings.context.cookie_site {
+    add(client_context_bytes(&settings.context)?)?;
+    Some(bytes)
+}
+pub(super) fn client_context_bytes(context:&ClientContext)->Option<usize> {
+    let mut bytes=0usize;
+    let mut add=|amount:usize|->Option<()> {bytes=bytes.checked_add(amount)?;(bytes<=MAX_REPORT_BYTES).then_some(())};
+    if let crate::cookies::CookieSite::Origin(origin) = &context.cookie_site {
         add(origin.serialize().len())?;
     }
-    if let Some(crate::Site::Tuple { scheme, domain }) = &settings.context.partition_key {
+    if let Some(crate::Site::Tuple { scheme, domain }) = &context.partition_key {
         add(scheme.len())?;
         add(domain.len())?;
     }
-    for origin in &settings.context.frame_ancestors {
+    for origin in &context.frame_ancestors {
         add(std::mem::size_of::<Origin>())?;
         add(origin.serialize().len())?;
     }
-    for policy in &settings.context.csp.policies {
+    for policy in &context.csp.policies {
         add(std::mem::size_of::<crate::CspPolicy>())?;
         add(policy.original_policy.len())?;
         add(policy.original_policy_units.len().checked_mul(2)?)?;
@@ -157,11 +183,10 @@ fn snapshot_bytes(settings: &Document, violation: &CspInlineViolation) -> Option
             }
         }
     }
-    // Exact serialized report-body size is independently bounded before the
-    // immutable violation clone. Event-to-submit age may grow later; submission
-    // still checks the actual final body against the delivery queue budget.
-    if serialize(violation, violation.report_to.is_some(), 0).len() > MAX_REPORT_BYTES {
-        return None;
-    }
     Some(bytes)
+}
+
+pub(super) fn saved_plan(service:u64,document:ReportingDocument,settings:Document,
+    violation:CspInlineViolation,queued_at:Instant,credits:PreparedCredits)->PreparedCspReportPlan {
+    PreparedCspReportPlan {service,document,settings,violation,queued_at,credits}
 }

@@ -1,0 +1,41 @@
+{
+  "files": {
+    "after.summary.json": {
+      "bytes": 373096,
+      "sha256": "86c3b72d4eb3a16be2c767ca7848af5f79c2e4a0c57da503a7442baf996f0457"
+    },
+    "after-csp.compact.json": {
+      "bytes": 35945,
+      "sha256": "1e3432afe09c5786620c40770251ec43675d42cf921f1e4e00217c0933a9314c"
+    },
+    "before.summary.json": {
+      "bytes": 367058,
+      "sha256": "512ee43308a3ca5308c1cf250ac0f39c493bdcce7c826374533a656501ba6c6b"
+    },
+    "after-space.summary.json": {
+      "bytes": 358,
+      "sha256": "ce2be4e09d3045825065e6819de834b153393b8630b115227817c24b80714d64"
+    },
+    "qualification.compact.json": {
+      "bytes": 14462,
+      "sha256": "9f60f071230e04a68917ba0cfe501b3f34077fb7034f08c38e49fdb42269d5f8"
+    },
+    "failed-ca00.compact.json": {
+      "bytes": 3468,
+      "sha256": "7387dd11809860daab12ed28e630e2879f2fb662fb24c5e2bc4d3e6323e18f06"
+    },
+    "source-projection.compact.json": {
+      "bytes": 4316,
+      "sha256": "dfb2d946ecb54fab5ab5735e41f4224bc2bf0582e9621ec6df6340d523fd3132"
+    },
+    "initial-launch-failure.compact.json": {
+      "bytes": 453,
+      "sha256": "c5bfce4f9ccd5e27752c5db4cedaea922d79ebe85c404ecb74e429a3458662a0"
+    },
+    "before-csp.compact.json": {
+      "bytes": 35931,
+      "sha256": "86288541eedcb69a9e9616bb050cdcb250e878c57055abe8c1ecae4fcb99dbd6"
+    }
+  },
+  "raw_committed": false
+}

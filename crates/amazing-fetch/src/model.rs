@@ -34,7 +34,13 @@ pub enum Body {
 /// Identity is minted only by the native navigation constructor; it holds no
 /// Window roots or author-controlled values and is never serialized as trust.
 #[derive(Debug)]
-pub(crate) struct NativeNavigationToken;
+pub(crate) struct NativeNavigationToken {
+    pub(crate) source_reporting_claimed: std::sync::atomic::AtomicBool,
+    pub(crate) source_reporting_admitted: std::sync::atomic::AtomicBool,
+}
+impl NativeNavigationToken {
+    pub(crate) fn new() -> Self {Self {source_reporting_claimed:std::sync::atomic::AtomicBool::new(false),source_reporting_admitted:std::sync::atomic::AtomicBool::new(false)}}
+}
 impl PartialEq for NativeNavigationToken {
     fn eq(&self,other:&Self)->bool { std::ptr::eq(self,other) }
 }
@@ -43,6 +49,7 @@ impl Eq for NativeNavigationToken {}
 pub struct Request {
     pub(crate) url_list: Vec<HttpUrl>,
     pub(crate) native_navigation_token: Option<std::sync::Arc<NativeNavigationToken>>,
+    pub(crate) native_navigation_report_token: Option<std::sync::Arc<NativeNavigationToken>>,
     pub origin: Origin,
     method: String,
     pub headers: HeaderList,
@@ -76,6 +83,7 @@ impl Request {
         Self {
             url_list: vec![url],
             native_navigation_token: None,
+            native_navigation_report_token: None,
             csp_self_origin: origin.clone(),
             origin,
             method: "GET".into(),
@@ -233,6 +241,7 @@ pub struct InternalResponse {
 /// still retains authentic transport lineage rather than synthetic authority.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CspResponseProvenance {
+    pub(crate) native_navigation_report_token: Option<std::sync::Arc<NativeNavigationToken>>,
     url_list: Vec<HttpUrl>,
     violations: Vec<CspViolation>,
 }
@@ -242,7 +251,7 @@ impl CspResponseProvenance {
         for receipt in request.csp_violations.iter().cloned().chain(final_violations) {
             if !violations.contains(&receipt) { violations.push(receipt); }
         }
-        Self { url_list: request.url_list().to_vec(), violations }
+        Self { native_navigation_report_token:request.native_navigation_report_token.clone(),url_list: request.url_list().to_vec(), violations }
     }
     pub fn url_list(&self) -> &[HttpUrl] { &self.url_list }
     pub fn violations(&self) -> &[CspViolation] { &self.violations }

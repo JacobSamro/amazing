@@ -738,6 +738,9 @@ impl NetworkService {
             context.security.destination = Destination::Document;
             context.security.top_level_navigation = true;
         }
+        if !request.claim_navigation_csp_admission() {
+            return Err(ApiError::Network(FetchError::FrameEmbedding));
+        }
         if request.signal_aborted {
             return Err(ApiError::Aborted);
         }

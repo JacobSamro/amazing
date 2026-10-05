@@ -73,6 +73,20 @@ impl Request {
     }
 }
 impl CspViolation {
+    pub(crate) fn snapshot_content_bytes(&self)->Option<usize> {
+        let mut bytes=std::mem::size_of::<Self>();
+        let mut add=|n:usize|->Option<()> {bytes=bytes.checked_add(n)?;Some(())};
+        for value in [&self.directive,&self.blocked_url,&self.effective_directive,&self.source_directive,
+            &self.policy_snapshot.original_policy] {add(value.len())?;}
+        add(self.policy_snapshot.original_policy_units.len().checked_mul(2)?)?;
+        for directive in &self.policy_snapshot.directives {
+            add(std::mem::size_of::<CspDirective>())?;add(directive.name.len())?;
+            for source in &directive.sources {add(std::mem::size_of::<String>())?;add(source.len())?;}
+        }
+        for url in &self.request_urls {add(std::mem::size_of::<HttpUrl>())?;add(url.serialize().len())?;}
+        add(self.resource_url.serialize().len())?;add(self.request_origin.serialize().len())?;
+        add(self.csp_self_origin.serialize().len())?;Some(bytes)
+    }
     pub fn policy_index(&self) -> usize {
         self.policy_index
     }

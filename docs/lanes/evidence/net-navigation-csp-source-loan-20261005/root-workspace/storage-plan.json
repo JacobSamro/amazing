@@ -1,0 +1,19 @@
+{
+  "bootstrap_budget_bytes": 2147483648,
+  "build_budget_bytes": 25769803776,
+  "compact_root": "/home/user/amazing/out/integrator-net-loan-workspace-c294-20261006/workspace-a1e4894f952f4c0e86b54795f8f7b9ea/compact",
+  "elf_policy": "all",
+  "job": "workspace-a1e4894f952f4c0e86b54795f8f7b9ea",
+  "output_root": "/tmp/amazing-workspace-raw/integrator-net-loan-workspace-c294-20261006/workspace-a1e4894f952f4c0e86b54795f8f7b9ea",
+  "phase": "before",
+  "reserve_bytes": 2147483648,
+  "retained_root": "/tmp/amazing-workspace-raw/integrator-net-loan-workspace-c294-20261006/workspace-a1e4894f952f4c0e86b54795f8f7b9ea/retained",
+  "retention_budget_bytes": 134217728,
+  "retention_method": "hardlink-or-copy",
+  "retire_after_retention": false,
+  "schema": 1,
+  "scratch_parent": "/tmp/amazing-native-storage",
+  "source": "4be257c938410d303f68c66324af68f1efcaa850",
+  "summary_path": "/home/user/amazing/out/integrator-net-loan-workspace-c294-20261006/workspace-a1e4894f952f4c0e86b54795f8f7b9ea/compact/storage.summary.json",
+  "ticket": "integrator-net-loan-workspace-c294-20261006"
+}

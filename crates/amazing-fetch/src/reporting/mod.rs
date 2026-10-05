@@ -4,6 +4,8 @@
 mod native_report;
 pub use native_report::*;
 mod prepared;
+mod navigation_csp;
+pub use navigation_csp::NavigationCspSourceLoan;
 mod coep_request;
 pub use coep_request::{NavigationEmbeddingElement,NavigationEmbeddingOwnerId,PreparedNavigationEmbeddingOwner};
 pub(crate) use coep_request::NavigationEmbeddingOwnerSnapshot;

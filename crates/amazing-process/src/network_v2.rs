@@ -1,4 +1,11 @@
 //! Browser-authored Fetch requests over a bounded, pull-driven IPC contract.
+mod receiving_capture;
+mod receiving_registry;
+mod receiving_endpoint;
+mod receiving_session;
+mod receiving_csp;
+pub use receiving_session::{NativeReceivingIdentity,ReceivingGlobalHandle,ReceivingOwnerHandle};
+pub use receiving_endpoint::serve_with_receiving_client;
 use crate::protocol::*;
 use amazing_fetch::api::{
     ApiHeaders, ApiRequest, ApiRequestInit, ApiRequestInput, BodyInput, HeaderGuard,
@@ -353,6 +360,10 @@ struct State {
     service: NetworkService,
     active: BTreeMap<u64, Active>,
     epochs: BTreeMap<u64, u64>,
+    receiving_authority: Option<(u64,u128)>,
+    receiving: receiving_registry::ReceivingRegistry,
+    receiving_csp: receiving_csp::CspTransport,
+    retained_navigation: BTreeMap<u64,receiving_registry::RetainedNavigation>,
 }
 fn http_cache_dir() -> std::path::PathBuf {
     if let Some(path) = std::env::var_os("AMAZING_HTTP_CACHE_DIR") {
@@ -440,19 +451,27 @@ impl State {
             service,
             active: BTreeMap::new(),
             epochs: BTreeMap::new(),
+            receiving_authority: None,
+            receiving: Default::default(),
+            receiving_csp: Default::default(),
+            retained_navigation: BTreeMap::new(),
         }
     }
     fn collect(&mut self) {
         for event in self.service.step(64, Instant::now()) {
             match event {
+                ServiceEvent::CoepReport{id,document,report}=>self.receiving.observer_report(id,document,report),
+                ServiceEvent::ReportFinished(report)=>self.receiving.report_finished(report),
                 ServiceEvent::ResponseHead { id, head } => {
+                    self.receiving_csp_progress(id,head.csp_provenance.as_ref());
                     let Some(active) = self.active.get_mut(&id.0) else {
                         continue;
                     };
                     if active.seen_head || active.terminal {
                         continue;
                     }
-                    if let Ok(outgoing) = wire_head(id.0, active, head) {
+                    if let Ok(outgoing) = wire_head(id.0, active, head.clone()) {
+                        if let Some(saved)=self.retained_navigation.get_mut(&id.0) {saved.head=Some(head);}
                         active.seen_head = true;
                         active.events.push_back(NetworkReply::Head(outgoing));
                     } else {
@@ -513,6 +532,24 @@ impl State {
                                 epoch: active.epoch,
                                 error: (!active.seen_head).then(|| "missing response head".into()),
                             }));
+                    }
+                }
+                ServiceEvent::NavigationStreamFailed {id,failure}=> {
+                    self.receiving_csp_progress(id,failure.csp_provenance.as_ref());
+                    if let Some(saved)=self.retained_navigation.get(&id.0) {
+                        if let Some(protected)=saved.protected.as_ref() {
+                            self.receiving.queue_report(protected.reporting,ReceivingReportEvent::NavigationFailed(
+                                ReceivingNavigationFailure{source:protected.receipt.clone(),
+                                    request:Some(NetworkStarted{id:id.0,client_id:saved.client_id,epoch:saved.epoch}),
+                                    error:format!("{:?}",failure.error),checked:failure.csp_provenance.is_some(),
+                                    url_list:failure.csp_provenance.as_ref().map_or_else(Vec::new,|v|v.url_list().iter().map(HttpUrl::serialize).collect())}));
+                        }
+                    }
+                    if let Some(active)=self.active.get_mut(&id.0) {
+                        if !active.terminal {
+                            active.terminal=true;
+                            active.events.push_back(NetworkReply::Complete(NetworkComplete{id:id.0,epoch:active.epoch,error:Some(format!("{:?}",failure.error))}));
+                        }
                     }
                 }
                 ServiceEvent::StreamFailed { id, error } => {
@@ -601,15 +638,16 @@ impl State {
         }
     }
     fn start(&mut self, wire: NetworkStart) -> Result<NetworkStarted, Error> {
-        self.start_kind(wire, false)
+        self.start_kind(wire, false, false)
     }
     fn start_subresource(&mut self, wire: NetworkStart) -> Result<NetworkStarted, Error> {
-        self.start_kind(wire, true)
+        self.start_kind(wire, true, false)
     }
     fn start_kind(
         &mut self,
         wire: NetworkStart,
         subresource: bool,
+        retain_navigation: bool,
     ) -> Result<NetworkStarted, Error> {
         let client_id = wire.client_id;
         let epoch = wire.epoch;
@@ -643,6 +681,11 @@ impl State {
         if self.active.len() >= MAX_ACTIVE {
             return Err(invalid("too many active requests"));
         }
+        if retain_navigation && !navigation {return Err(invalid("receiving capture requires navigation"));}
+        let retained = if retain_navigation {
+            if self.retained_navigation.len()>=receiving_registry::MAX_ACCEPTED_NAVIGATIONS {return Err(invalid("retained navigation quota"));}
+            Some((request.clone_request().map_err(|e|invalid(&format!("navigation request retention: {e:?}")))?,context.clone()))
+        } else {None};
         let id = if subresource {
             self.service
                 .start_subresource(request, context, destination(&requested_destination)?.0)
@@ -652,6 +695,7 @@ impl State {
                 .map_err(|e| Error::Remote(format!("start: {e:?}")))?
         };
         self.epochs.insert(client_id, epoch);
+        if let Some((request,context))=retained {self.retained_navigation.insert(id.0,receiving_registry::RetainedNavigation{request,context,protected:None,client_id,epoch,head:None,frame:None,source:None,continuation_used:false});}
         self.active.insert(
             id.0,
             Active {
@@ -763,6 +807,7 @@ impl State {
 }
 
 enum Command {
+    Receiving(receiving_endpoint::ReceivingCommand),
     Start(NetworkStart, mpsc::Sender<Result<NetworkStarted, Error>>),
     Subresource(NetworkStart, mpsc::Sender<Result<NetworkStarted, Error>>),
     Read(NetworkRead, mpsc::Sender<Result<NetworkReply, Error>>),
@@ -770,16 +815,20 @@ enum Command {
     CancelEpoch(NetworkEpoch, mpsc::Sender<Vec<NetworkComplete>>),
     DocumentCookie(DocumentCookie, mpsc::Sender<Result<String, Error>>),
 }
+#[derive(Clone)]
 pub struct NetworkEndpointV2 {
     tx: mpsc::SyncSender<Command>,
 }
 impl NetworkEndpointV2 {
-    pub fn new() -> Self {
+    pub fn new() -> Self {Self::with_receiving_authority(None)}
+    fn with_receiving_authority(authority:Option<(u64,u128)>) -> Self {
         let (tx, rx) = mpsc::sync_channel(128);
         std::thread::spawn(move || {
             let mut state = State::new();
+            state.receiving_authority=authority;
             while let Ok(command) = rx.recv() {
                 match command {
+                    Command::Receiving(command)=>state.receiving_command(command),
                     Command::Start(v, out) => {
                         let _ = out.send(state.start(v));
                     }
@@ -847,6 +896,8 @@ pub struct NetworkSession {
     remote: NetworkProxyV2,
     client_id: u64,
     epoch: u64,
+    receiving_session:u128,
+    receiving_realms:std::sync::Mutex<std::collections::HashMap<amazing_js::interp::RealmHandle,u64>>,
     timeout: Duration,
 }
 pub struct NetworkResponse {
@@ -901,10 +952,16 @@ impl NetworkSession {
         if client_id == 0 || timeout.is_zero() {
             return Err(crate::Error::Limit);
         }
+        // This browser-minted native identity only binds this authenticated pipe;
+        // it is not a portable or cryptographic bearer token.
+        let receiving_session=Origin::opaque().opaque_id().ok_or(crate::Error::Limit)?;
+        let mut capabilities=BTreeMap::new();
+        capabilities.insert(receiving_endpoint::CLIENT_CAPABILITY.into(),client_id.to_string());
+        capabilities.insert(receiving_endpoint::SESSION_CAPABILITY.into(),receiving_session.to_string());
         let mut host = crate::ProcessHost::spawn(
             exe,
             crate::Role::Network,
-            crate::Capabilities(BTreeMap::new()),
+            crate::Capabilities(capabilities),
             crate::RestartPolicy::Never,
         )?;
         let ready_deadline = Instant::now() + timeout;
@@ -934,6 +991,8 @@ impl NetworkSession {
             remote,
             client_id,
             epoch: 1,
+            receiving_session,
+            receiving_realms:Default::default(),
             timeout,
         })
     }

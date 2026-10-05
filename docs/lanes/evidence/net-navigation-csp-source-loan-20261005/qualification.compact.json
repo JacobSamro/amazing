@@ -1,0 +1,239 @@
+{
+  "recorded_ready_base": "d265908ea158e34d82084d0c94e8b0f429751cd1",
+  "qualified_source": "f18b8d17ea029f001aabe83fe05f3ae0925652b9",
+  "source_base": "31893bde6b5569774635e37c9672bf6d3e4d4aaf",
+  "published_baseline": "d19cad834166c77d55c3d333523a4cbca77e0992",
+  "baseline_actual_terminal": {
+    "job": {
+      "schema": 2,
+      "lane": "integrator-net-navigation-current-20261005",
+      "source_commit": "31893bde6b5569774635e37c9672bf6d3e4d4aaf",
+      "box_id": "bx_tfjmy4mn",
+      "host": "user@5.135.136.234",
+      "port": 19047,
+      "job_id": "a291efb9dafa4f63892a3995ddaab7e7",
+      "output_root": "amazing/out/integrator-net-navigation-current-20261005/coep-output-integrator-net-navigation-current-20261005-after",
+      "command_sha256": "1800fb3c7c25015cbdc13a8c3ec33eacb8957bcd534f71bae0c4bf7b46d8c1ed",
+      "execution_sha256": "d918ee1d83886dee3e03199e9c26035b8bca8ca8d24cf15404ac2f17e6c0c2c9",
+      "source_archive_sha256": "50d9dda550212794d6a7e76cc147522eb4852fe748f1bcf1f83889bfa173a2b4"
+    },
+    "state": "TERMINAL",
+    "actual_exit": 0,
+    "runner_exit": 0,
+    "boot_id": "5d16c9a0-0d2f-4bb5-87d5-3c96478f496f",
+    "reason": "authenticated actual command exit",
+    "owner": {
+      "pid": 33365,
+      "start_ticks": 48306,
+      "state": "R",
+      "parent_pid": 33362,
+      "cmdline_sha256": "e75ec0334f2d2e601b0fb03de31e8212ef5a392b23032e7c99231b417c0f11f4"
+    },
+    "started_ns": 1791219724239213313,
+    "catalog_error": null,
+    "execution_raw": {
+      "path": "/tmp/amazing-job-a291efb9dafa4f63892a3995ddaab7e7-1trsdkgu/command.log",
+      "bytes": 9018,
+      "sha256": "664968ebd2b0c7586210ca82c35aeaab0576f649d3df8163183b661b52d98da3"
+    },
+    "observer_pipe_closed": false,
+    "signals": [],
+    "command_returncode": 0,
+    "exited_ns": 1791220021409549262,
+    "diagnostic_error": null,
+    "native_diagnostics": {
+      "path": "/tmp/amazing-job-a291efb9dafa4f63892a3995ddaab7e7-1trsdkgu/command.log",
+      "device": 64769
+    }
+  },
+  "after_actual_terminal": {
+    "job": {
+      "schema": 2,
+      "lane": "net-navigation-csp-source-loan-sourcefix-20261005",
+      "source_commit": "f18b8d17ea029f001aabe83fe05f3ae0925652b9",
+      "box_id": "bx_wy7mcsr7",
+      "host": "user@51.255.75.167",
+      "port": 19039,
+      "job_id": "4b811ec123e34278ad50b6941f319acf",
+      "output_root": "amazing/out/net-navigation-csp-source-loan-sourcefix-20261005/coep-output-net-navigation-csp-source-loan-sourcefix-20261005-after",
+      "command_sha256": "13217454e6869380131a7d4a1da99c2df9493afb5dde9f771d2dd0efa6da8a79",
+      "execution_sha256": "2750ecdbb2c75f0d8c14a2a7c4c272689ec784b7637b9c61b1e7f9c3cfe4b3b9",
+      "source_archive_sha256": "a46dec9c149d27f032b9265dadf437578278b73ce955912fca8017f8b1630238"
+    },
+    "state": "TERMINAL",
+    "actual_exit": 0,
+    "runner_exit": 0,
+    "boot_id": "fb3d9335-e305-4948-a33b-cf4eab0154fb",
+    "reason": "authenticated actual command exit",
+    "owner": {
+      "pid": 38130,
+      "start_ticks": 144336,
+      "state": "R",
+      "parent_pid": 38083,
+      "cmdline_sha256": "cebee402d956289fe56135844cd3c305e09d883727b7f910ee6920d18ff6ae8d"
+    },
+    "started_ns": 1791224672177717860,
+    "catalog_error": null,
+    "execution_raw": {
+      "path": "/tmp/amazing-job-4b811ec123e34278ad50b6941f319acf-7hajvinj/command.log",
+      "bytes": 8923,
+      "sha256": "06f72488e1892ded8ee23c9921ecb5db5a02fce2ea1f4d389525cf91200b1aac"
+    },
+    "observer_pipe_closed": false,
+    "signals": [],
+    "command_returncode": 0,
+    "exited_ns": 1791224968345786810,
+    "diagnostic_error": null,
+    "native_diagnostics": {
+      "path": "/tmp/amazing-job-4b811ec123e34278ad50b6941f319acf-7hajvinj/command.log",
+      "device": 64769
+    }
+  },
+  "before_authenticated_compact_fetch": {
+    "job_id": "a291efb9dafa4f63892a3995ddaab7e7",
+    "source_commit": "31893bde6b5569774635e37c9672bf6d3e4d4aaf",
+    "actual_exit": 0,
+    "files": {
+      "amazing/out/integrator-net-navigation-current-20261005/coep-output-integrator-net-navigation-current-20261005-after/after.summary.json": {
+        "bytes": 367058,
+        "sha256": "512ee43308a3ca5308c1cf250ac0f39c493bdcce7c826374533a656501ba6c6b"
+      },
+      "amazing/out/integrator-net-navigation-current-20261005/coep-output-integrator-net-navigation-current-20261005-after/csp-wpt/compact.json": {
+        "bytes": 35931,
+        "sha256": "86288541eedcb69a9e9616bb050cdcb250e878c57055abe8c1ecae4fcb99dbd6"
+      },
+      "amazing/out/integrator-net-navigation-current-20261005/coep-output-integrator-net-navigation-current-20261005-after/space.summary.json": {
+        "bytes": 351,
+        "sha256": "7a2e6e463d70e661bb1c9f7363dc0defc82aa7043c495939d07ac4eb1a46acef"
+      }
+    }
+  },
+  "after_authenticated_compact_fetch": {
+    "job_id": "4b811ec123e34278ad50b6941f319acf",
+    "source_commit": "f18b8d17ea029f001aabe83fe05f3ae0925652b9",
+    "actual_exit": 0,
+    "files": {
+      "amazing/out/net-navigation-csp-source-loan-sourcefix-20261005/coep-output-net-navigation-csp-source-loan-sourcefix-20261005-after/after.summary.json": {
+        "bytes": 373096,
+        "sha256": "86c3b72d4eb3a16be2c767ca7848af5f79c2e4a0c57da503a7442baf996f0457"
+      },
+      "amazing/out/net-navigation-csp-source-loan-sourcefix-20261005/coep-output-net-navigation-csp-source-loan-sourcefix-20261005-after/csp-wpt/compact.json": {
+        "bytes": 35945,
+        "sha256": "1e3432afe09c5786620c40770251ec43675d42cf921f1e4e00217c0933a9314c"
+      },
+      "amazing/out/net-navigation-csp-source-loan-sourcefix-20261005/coep-output-net-navigation-csp-source-loan-sourcefix-20261005-after/space.summary.json": {
+        "bytes": 358,
+        "sha256": "ce2be4e09d3045825065e6819de834b153393b8630b115227817c24b80714d64"
+      }
+    }
+  },
+  "baseline_engine_rerun": false,
+  "workspace": {
+    "before_pass": 4885,
+    "after_pass": 4908,
+    "after_skip": 17,
+    "after_fail": 0,
+    "gained": [
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_abort_deadline_and_early_policy_errors_retain_genuine_source_reports",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_foreign_owner_and_already_admitted_request_cannot_capture_original_settings",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_manual_hops_keep_one_original_source_without_duplicate_prefix_delivery",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_never_transfers_endpoints_to_a_fresh_about_global",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_no_endpoint_creation_is_independent_and_original_global_stays_retired",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_quota_and_release_preserve_shared_limits_without_new_global_registration",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_real_posts_after_retirement_and_listener_error_preserve_original_settings",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_rejects_changed_policy_receipts_and_foreign_report_plan_consumption",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_stale_foreign_unrelated_and_duplicate_admissions_have_no_reporting_authority",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_successful_buffered_and_zero_credit_streamed_heads_keep_actual_reporting_custody",
+      "amazing-process::receiving_registration accepted_head_is_retained_after_real_completion_and_registration_is_connection_bound",
+      "amazing-process::receiving_registration captured_owner_ancestry_frame_and_full_policy_are_validated",
+      "amazing-process::receiving_registration coep_observer_receipts_keep_original_global_and_report_only_disposition",
+      "amazing-process::receiving_registration csp_admission_failure_has_no_invented_service_id_and_keeps_original_document_snapshot",
+      "amazing-process::receiving_registration csp_connection_and_framing_failures_preserve_actual_checked_vs_accepted_progress",
+      "amazing-process::receiving_registration csp_manual_continuation_deduplicates_native_prefix_without_rechecking_redirect_url",
+      "amazing-process::receiving_registration csp_report_only_response_snapshots_keep_protecting_status_not_target_status",
+      "amazing-process::receiving_registration csp_source_settings_loan_survives_retirement_before_response_and_manual_continuation",
+      "amazing-process::receiving_registration fresh_initial_is_explicit_and_never_a_failed_http_response_fallback",
+      "amazing-process::receiving_registration full_native_context_units_are_carried_without_url_or_scalar_policy_substitution",
+      "amazing-process::receiving_registration global_identity_cannot_replace_accepted_creation_origin_or_full_coep",
+      "amazing-process::receiving_registration manual_redirect_uses_retained_private_head_and_admitted_loan_after_retirement",
+      "amazing-process::receiving_registration source_and_embedding_origin_are_distinct_and_retired_owner_loan_survives"
+    ],
+    "lost": [],
+    "comparison_status": "MEASURED"
+  },
+  "docs": {
+    "before_pass": 30,
+    "after_pass": 31,
+    "fail": 0
+  },
+  "native": {
+    "before_pass": 615,
+    "after_pass": 625,
+    "fail": 0,
+    "gained": [
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_abort_deadline_and_early_policy_errors_retain_genuine_source_reports",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_foreign_owner_and_already_admitted_request_cannot_capture_original_settings",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_manual_hops_keep_one_original_source_without_duplicate_prefix_delivery",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_never_transfers_endpoints_to_a_fresh_about_global",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_no_endpoint_creation_is_independent_and_original_global_stays_retired",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_quota_and_release_preserve_shared_limits_without_new_global_registration",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_real_posts_after_retirement_and_listener_error_preserve_original_settings",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_rejects_changed_policy_receipts_and_foreign_report_plan_consumption",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_stale_foreign_unrelated_and_duplicate_admissions_have_no_reporting_authority",
+      "amazing-fetch reporting::navigation_csp::tests::navigation_source_loan_successful_buffered_and_zero_credit_streamed_heads_keep_actual_reporting_custody"
+    ],
+    "lost": [],
+    "comparison_status": "MEASURED"
+  },
+  "process_receiving_ipc_groups": [
+    "amazing-process::receiving_registration accepted_head_is_retained_after_real_completion_and_registration_is_connection_bound",
+    "amazing-process::receiving_registration captured_owner_ancestry_frame_and_full_policy_are_validated",
+    "amazing-process::receiving_registration coep_observer_receipts_keep_original_global_and_report_only_disposition",
+    "amazing-process::receiving_registration csp_admission_failure_has_no_invented_service_id_and_keeps_original_document_snapshot",
+    "amazing-process::receiving_registration csp_connection_and_framing_failures_preserve_actual_checked_vs_accepted_progress",
+    "amazing-process::receiving_registration csp_manual_continuation_deduplicates_native_prefix_without_rechecking_redirect_url",
+    "amazing-process::receiving_registration csp_report_only_response_snapshots_keep_protecting_status_not_target_status",
+    "amazing-process::receiving_registration csp_source_settings_loan_survives_retirement_before_response_and_manual_continuation",
+    "amazing-process::receiving_registration fresh_initial_is_explicit_and_never_a_failed_http_response_fallback",
+    "amazing-process::receiving_registration full_native_context_units_are_carried_without_url_or_scalar_policy_substitution",
+    "amazing-process::receiving_registration global_identity_cannot_replace_accepted_creation_origin_or_full_coep",
+    "amazing-process::receiving_registration manual_redirect_uses_retained_private_head_and_admitted_loan_after_retirement",
+    "amazing-process::receiving_registration source_and_embedding_origin_are_distinct_and_retired_owner_loan_survives"
+  ],
+  "csp_original_11_directories": {
+    "passing_files": 32,
+    "passing_subtests": 81,
+    "lost_files": [],
+    "lost_subtests": [],
+    "gained_files": [],
+    "gained_subtests": []
+  },
+  "all_engine_phases_exit": {
+    "browser-build": 0,
+    "csp-wpt": 0,
+    "doctests": 0,
+    "network-corpus": 0,
+    "workspace": 0,
+    "wpt-setup": 0
+  },
+  "scope": "Native source-loan/process protocols and original installed CSP subset; no new installed browser Window/SPVE-retirement/worker/module-family completion claimed",
+  "profiles": "wholeworkspace/docs/browser/nativeTLS-net-fetch/original11CSP/process13groups via workspace;default4/8finite7200;DEV/TESTline-tables-only incremental0;actual/tmp12GiB guard",
+  "public_source": "65c24415cc8b9f3431a85b23a57588d431807093",
+  "public_tooling_sha256": {
+    "scripts/linux-run.sh": "6c960c2a394d659990484388a15bd887f4db4f0793244669d9f88aafe08a1c28",
+    "scripts/source-upload.py": "d5b9b8469b7eb160cc2bf923aac48470b6a71b2a040b3a08e19a4c915219e908",
+    "scripts/completed-job.py": "9c2bde2eeaa2507e5a14d2cc17599908d1c2ea9b1418ba76a78d04a1ff3b15b1",
+    "scripts/nextest-compact.py": "cddc4e6ec9f9ea5c253e50bb3ac7ff02d64389b9dc696370cb02dc417092cd80"
+  },
+  "after_command_sha256": "13217454e6869380131a7d4a1da99c2df9493afb5dde9f771d2dd0efa6da8a79",
+  "after_launch_sha256": "fc9b1fd2ccf1f5c66d0f769ed4497dfcf64e6ab18d7b9e2cb3cd588f5c1b965d",
+  "gate_body_sha256": "4f851bd07c586c9593e561948b26f31d76604d2fd80dfc7d9351c2228162cf8c",
+  "capacity_plan_sha256": "0a384616e3b268504d0bd8eda27aa2a84c46f33746665a607e25307e716afa72",
+  "failed_source_ca00_preserved": true,
+  "failed_ca00_actual_exit": 1,
+  "initial_local_freshness_guard_exit": 2,
+  "one_clean_tooling_allowance_used": true,
+  "compressed_failure_success_claim": false,
+  "raw_recovery": false,
+  "raw_locations": "See authenticated actual job receipts/raw hashes; raw source/logs/measured ELFs remain native"
+}

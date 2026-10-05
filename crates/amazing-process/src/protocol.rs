@@ -254,3 +254,5 @@ impl From<amazing_ipc_platform::FrameMetadata> for SharedFrameReady {
         }
     }
 }
+
+include!("protocol_receiving.rs");

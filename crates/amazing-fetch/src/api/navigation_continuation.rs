@@ -107,7 +107,7 @@ impl ApiRequest {
             .unwrap()
             .violations()
             .to_vec();
-        next.native_navigation_token = Some(Arc::new(crate::model::NativeNavigationToken));
+        next.native_navigation_token = Some(Arc::new(crate::model::NativeNavigationToken::new()));
         next.url = target;
         Ok(next)
     }

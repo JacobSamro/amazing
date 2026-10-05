@@ -164,6 +164,16 @@ pub fn serve_network(connection: &Arc<Connection>) {
     // interface before exposing it, so a successful launch cannot race V2.
     connection.bind(0, crate::Ping);
 }
+/// Bind receiving ownership only from the accepted browser bootstrap. An
+/// incomplete capability pair fails; it never creates an unrestricted registry.
+pub fn serve_network_captured(connection:&Arc<Connection>,parent:&crate::Capabilities)->Result<(),crate::Error> {
+    if parent.0.contains_key("__receiving_network_client") || parent.0.contains_key("__receiving_network_session") {
+        crate::network_v2::serve_with_receiving_client(connection,parent)?;
+        connection.bind(8,NetworkReceiver(NetworkEndpoint::new()));
+        connection.bind(0,crate::Ping);
+    } else {serve_network(connection);}
+    Ok(())
+}
 /// Entry point for the installed browser's `--type=network` dispatch. The
 /// browser main calls this before starting UI or renderer work; all Fetch
 /// state stays in this child until the authenticated IPC connection closes.
@@ -171,10 +181,7 @@ pub fn run_network_child() -> Result<(), crate::Error> {
     let connection = crate::bootstrap_child(
         crate::Role::Network,
         crate::Capabilities(BTreeMap::from([("network".into(), "1".into())])),
-        |connection, _, _| {
-            serve_network(connection);
-            Ok(())
-        },
+        |connection, parent, _| serve_network_captured(connection,parent),
     )?;
     while !connection.is_closed() {
         std::thread::sleep(Duration::from_millis(10));

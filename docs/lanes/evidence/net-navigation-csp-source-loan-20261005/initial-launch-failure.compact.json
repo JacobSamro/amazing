@@ -1,0 +1,10 @@
+{
+  "source": "f18b8d17ea029f001aabe83fe05f3ae0925652b9",
+  "shell_exit": 2,
+  "native_job_issued": false,
+  "native_engine_started": false,
+  "sandbox_allocated": false,
+  "reason": "launch endpoint and command paths accidentally retained prior afteronly packet; public fresh-receipt guard rejected before allocation",
+  "invalid_launcher_sha256": "0227a2629af48341903764fda2e8948a0dc7c0f0f1fef930f79c8778042596a5",
+  "one_clean_tooling_rerun": true
+}

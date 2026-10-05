@@ -166,7 +166,7 @@ fn main() {
         match role {
             Role::Renderer => amazing_process::renderer::serve_renderer(conn, channel),
             Role::Gpu => amazing_process::gpu::serve_gpu(conn),
-            Role::Network => amazing_process::network::serve_network(conn),
+            Role::Network => amazing_process::network::serve_network_captured(conn,parent)?,
             Role::Utility => {
                 conn.bind(17, EchoReceiver(EchoHandler));
                 amazing_process::utility::serve_utility(conn, channel);
