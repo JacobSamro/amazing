@@ -672,3 +672,78 @@ fn malformed_start_and_ownership_are_rejected_before_fetch() {
         })
         .is_err());
 }
+
+#[test]
+fn network_child_credentialless_executes_real_no_cors_and_preserves_other_policy_controls() {
+    for policy in ["unsafe-none", "require-corp", "credentialless"] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let target_origin = format!("http://{}", listener.local_addr().unwrap());
+        let client_origin = "http://127.0.0.1:9";
+        let (tx, rx) = std::sync::mpsc::channel();
+        let peer = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(10)))
+                .unwrap();
+            let mut head = Vec::new();
+            while !head.ends_with(b"\r\n\r\n") {
+                let mut byte = [0];
+                stream.read_exact(&mut byte).unwrap();
+                head.push(byte[0]);
+                assert!(head.len() < 64 * 1024);
+            }
+            tx.send(String::from_utf8(head).unwrap()).unwrap();
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: 5\r\nCross-Origin-Resource-Policy: cross-origin\r\nSet-Cookie: server=received;Path=/;SameSite=Lax\r\nConnection: close\r\n\r\nimage").unwrap();
+        });
+        let exe = std::path::Path::new(env!("CARGO_BIN_EXE_ipc-demo-child"));
+        let session = NetworkSession::launch(exe, 91, Duration::from_secs(5)).unwrap();
+        let cookie = DocumentCookie {
+            client_id: 0,
+            epoch: 0,
+            document_url: format!("{target_origin}/resource"),
+            top_level_origin: WireOrigin::Tuple(target_origin.clone()),
+            now_unix: 1_780_000_000,
+            assignment: Some("seed=present;Path=/;SameSite=Lax".into()),
+        };
+        session.document_cookie(cookie.clone()).unwrap();
+        let mut start = request(&format!("{target_origin}/resource"), client_origin);
+        start.destination = "image".into();
+        start.mode = "no-cors".into();
+        start.credentials = "include".into();
+        start.context.top_level_navigation = false;
+        start.context.embedder_policy = policy.into();
+        let response = session.fetch(start).unwrap();
+        assert_eq!(response.head.response_type, "Opaque");
+        let wire = rx
+            .recv_timeout(Duration::from_secs(10))
+            .unwrap()
+            .to_ascii_lowercase();
+        assert_eq!(
+            wire.contains("cookie: seed=present"),
+            policy != "credentialless"
+        );
+        let mut query = cookie;
+        query.assignment = None;
+        let cookie = session.document_cookie(query).unwrap();
+        assert!(cookie.contains("seed=present"));
+        assert_eq!(
+            cookie.contains("server=received"),
+            policy != "credentialless"
+        );
+        peer.join().unwrap();
+    }
+}
+
+#[test]
+fn network_embedder_policy_wire_rejects_unknown_and_malformed_authority_before_socket_admission() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let mut endpoint = NetworkEndpointV2::default();
+    for policy in ["", "Credentialless", "credentialless ", "credentialless,require-corp", "credentialless;report-to=\"x\"", "unknown", "credentialless\0"] {
+        let mut start = request(&format!("{origin}/authority"), &origin);
+        start.context.embedder_policy = policy.into();
+        assert!(endpoint.start(start).is_err(), "wire policy {policy:?}");
+        assert_eq!(listener.accept().unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
+    }
+}

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime};
 
-const MAGIC: &[u8; 8] = b"AMHC0001";
+const MAGIC: &[u8; 8] = b"AMHC0002";
 const MAX_FILE: u64 = 32 * 1024 * 1024;
 const MAX_FIELD: usize = 8 * 1024 * 1024;
 static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
@@ -29,8 +29,8 @@ impl DiskCache {
         discard_stale_temps(dir);
         let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
         let disk = Self {
-            path: dir.join("http-cache-v1.bin"),
-            temp: dir.join(format!("http-cache-v1.{}.{id}.tmp", std::process::id())),
+            path: dir.join("http-cache-v2.bin"),
+            temp: dir.join(format!("http-cache-v2.{}.{id}.tmp", std::process::id())),
         };
         let storage = match File::open(&disk.path) {
             Ok(file) => match read_snapshot(file) {
@@ -81,7 +81,7 @@ fn discard_stale_temps(dir: &Path) {
     for entry in entries.flatten() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if !name.starts_with("http-cache-v1.") || !name.ends_with(".tmp") {
+        if !name.starts_with("http-cache-v2.") || !name.ends_with(".tmp") {
             continue;
         }
         let old = entry
@@ -139,6 +139,7 @@ fn encode(store: &CacheStore) -> io::Result<Vec<u8>> {
                 put_string(&mut out, value)?;
             }
         }
+        out.push(u8::from(entry.response.request_includes_credentials));
         out.extend_from_slice(&entry.response.status.to_le_bytes());
         let headers: Vec<_> = entry.response.headers.iter().collect();
         put_u32(&mut out, headers.len())?;
@@ -225,6 +226,11 @@ fn read_snapshot(file: File) -> io::Result<MemoryCacheStorage> {
             };
             vary.push((name, value));
         }
+        let request_includes_credentials = match decoder.take(1)?[0] {
+            0 => false,
+            1 => true,
+            _ => return Err(invalid()),
+        };
         let status = u16::from_le_bytes(decoder.take(2)?.try_into().map_err(|_| invalid())?);
         let header_count = decoder.u32()?;
         if header_count > 4096 {
@@ -247,6 +253,7 @@ fn read_snapshot(file: File) -> io::Result<MemoryCacheStorage> {
             legacy_key,
             vary,
             response: amazing_fetch::cache::CacheResponse {
+                request_includes_credentials,
                 status,
                 headers,
                 body,

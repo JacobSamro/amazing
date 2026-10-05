@@ -38,6 +38,7 @@ fn request<'a>(uri: &'a str, headers: &'a HeaderList) -> CacheRequest<'a> {
 }
 fn response(body: &[u8], pairs: &[(&str, &str)]) -> CacheResponse {
     CacheResponse {
+        request_includes_credentials: true,
         status: 200,
         headers: headers(pairs),
         body: body.to_vec(),
@@ -149,7 +150,7 @@ fn bounded_snapshot_evicts_entries_and_rejects_corruption() {
     let (loaded, _) = DiskCache::open(&path, limits).unwrap();
     assert_eq!(loaded.len(), cache.len());
     assert_eq!(loaded.bytes(), cache.bytes());
-    fs::write(path.join("http-cache-v1.bin"), b"AMHC0001invalid").unwrap();
+    fs::write(path.join("http-cache-v2.bin"), b"AMHC0002invalid").unwrap();
     let (empty_cache, _) = DiskCache::open(&path, limits).unwrap();
     assert_eq!(empty_cache.len(), 0);
     fs::remove_dir_all(path).unwrap();
@@ -226,7 +227,7 @@ fn network_child_serves_disk_cache_after_restart() {
         assert_eq!(reply.body, b"persist");
     }
     server.join().unwrap();
-    assert!(path.join("http-cache-v1.bin").exists());
+    assert!(path.join("http-cache-v2.bin").exists());
     {
         let session = NetworkSession::launch(exe, 102, Duration::from_secs(5)).unwrap();
         let reply = session.fetch(make_request()).unwrap();
@@ -266,5 +267,73 @@ fn simultaneous_network_children_leave_a_valid_snapshot() {
     assert!(results.iter().any(Result::is_ok));
     let (loaded, _) = DiskCache::open(&path, CacheLimits::default()).unwrap();
     assert_eq!(loaded.len(), 1);
+    fs::remove_dir_all(path).unwrap();
+}
+
+#[test]
+fn cache_v2_preserves_actual_credentials_receipts_and_rejects_missing_v1_facts() {
+    let path = dir("coep-receipts");
+    let limits = CacheLimits::default();
+    let (mut cache, disk) = DiskCache::open(&path, limits).unwrap();
+    let empty = headers(&[]);
+    for includes in [false, true] {
+        let uri = format!("https://example.test/receipt/{includes}");
+        let mut candidate = response(b"image", &[("Cache-Control", "max-age=60")]);
+        candidate.request_includes_credentials = includes;
+        cache
+            .store(&request(&uri, &empty), candidate, 100, 100)
+            .unwrap();
+    }
+    disk.save(&cache).unwrap();
+    let (loaded, _) = DiskCache::open(&path, limits).unwrap();
+    for includes in [false, true] {
+        let uri = format!("https://example.test/receipt/{includes}");
+        let CacheLookup::Fresh(entry) = loaded.lookup(&request(&uri, &empty), 110).unwrap() else {
+            panic!("stored response missing");
+        };
+        assert_eq!(entry.response.request_includes_credentials, includes);
+    }
+    let snapshot = path.join("http-cache-v2.bin");
+    let mut bytes = fs::read(&snapshot).unwrap();
+    assert_eq!(&bytes[..8], b"AMHC0002");
+    bytes[..8].copy_from_slice(b"AMHC0001");
+    fs::write(&snapshot, &bytes).unwrap();
+    let (rejected, _) = DiskCache::open(&path, limits).unwrap();
+    assert_eq!(
+        rejected.len(),
+        0,
+        "missing old-format fact must not become false authority"
+    );
+    fs::remove_dir_all(path).unwrap();
+}
+
+#[test]
+fn invalid_persisted_credential_receipt_is_rejected_instead_of_becoming_false_authority() {
+    let path = dir("invalid-credential-receipt");
+    let empty = headers(&[]);
+    let limits = CacheLimits::default();
+    let (mut store, disk) = DiskCache::open(&path, limits).unwrap();
+    store.store(&request("https://example.test/receipt", &empty), response(b"body", &[("Cache-Control", "max-age=60")]), 100, 100).unwrap();
+    disk.save(&store).unwrap();
+    let file = path.join("http-cache-v2.bin");
+    let original = fs::read(&file).unwrap();
+    let mut offset = 12; // magic and entry count
+    for _ in 0..2 { // URI and legacy cache key
+        let count = u32::from_le_bytes(original[offset..offset+4].try_into().unwrap()) as usize;
+        offset += 4 + count;
+    }
+    assert_eq!(u32::from_le_bytes(original[offset..offset+4].try_into().unwrap()), 0, "fixture has no Vary fields");
+    offset += 4;
+    assert_eq!(original[offset], 1, "actual saved credentialed response");
+    for invalid in [2, 255] {
+        let mut malformed = original.clone();
+        malformed[offset] = invalid;
+        fs::write(&file, malformed).unwrap();
+        let (restored, _) = DiskCache::open(&path, limits).unwrap();
+        assert_eq!(restored.len(), 0, "invalid credential fact {invalid}");
+    }
+    fs::write(&file, &original[..offset]).unwrap();
+    let (missing, _) = DiskCache::open(&path, limits).unwrap();
+    assert_eq!(missing.len(), 0, "truncated missing credential fact");
     fs::remove_dir_all(path).unwrap();
 }

@@ -240,6 +240,9 @@ impl BrowserSession {
             && let Some(headers) = cache_response_headers(&response)
         {
             let candidate = CacheResponse {
+                // This legacy shell path calls ordinary low-level fetch with
+                // credentials permitted; it has no COEP client policy seam.
+                request_includes_credentials: true,
                 status: response.status,
                 headers,
                 body: response.body.clone(),

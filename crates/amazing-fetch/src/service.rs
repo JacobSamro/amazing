@@ -139,6 +139,9 @@ impl Default for ClientContext {
 #[derive(Debug)]
 pub enum ServiceEvent {
     ReportFinished(crate::reporting::ReportFinished),
+    /// Original-global observer receipt, independently of endpoint delivery.
+    CoepReport { id: ServiceId, document: crate::reporting::ReportingDocument,
+        report: Result<crate::reporting::NativeReportSnapshot, crate::reporting::ReportError> },
     ResponseHead { id: ServiceId, head: ApiResponseHead },
     BodyChunk { id: ServiceId, bytes: Vec<u8> },
     StreamFinished { id: ServiceId },
@@ -187,12 +190,11 @@ struct Task {
     cookie: String,
     cacheable: bool,
     revalidating: bool,
-    credentials: CredentialsMode,
-    client_origin: Origin,
     head: Option<(u16, HeaderList)>,
     head_reason: String,
     body: Vec<u8>,
     trusted_subresource: bool,
+    coep_reporting: Option<crate::reporting::CoepRequestReportSettings>,
 }
 
 pub const INITIAL_STREAM_CREDIT: u64 = 64 * 1024;
@@ -247,7 +249,7 @@ fn validated_stream_head(task: &Task, event: &NetEvent) -> Option<ApiResponseHea
     if policy.prepare().ok()?.taint == crate::ResponseType::Opaque { return None; }
     let mut fields = HeaderList::default();
     for (name, value) in headers.iter() { fields.append(name, value).ok()?; }
-    let internal = InternalResponse { status: *status, status_text: reason.clone(),
+    let internal = InternalResponse { request_includes_credentials: task.pending.request_includes_credentials(), status: *status, status_text: reason.clone(),
         headers: fields, body: Some(Vec::new()) };
     if navigation_redirect {
         crate::redirect_location(&mut policy, &internal, internal.headers.get("location").as_deref())
@@ -269,7 +271,7 @@ fn opaque_stream_head(task: &Task, event: &NetEvent)
     if policy.prepare().ok()?.taint != crate::ResponseType::Opaque { return None; }
     let mut fields = HeaderList::default();
     for (name, value) in headers.iter() { fields.append(name, value).ok()?; }
-    Some((policy, InternalResponse { status: *status, status_text: reason.clone(),
+    Some((policy, InternalResponse { request_includes_credentials: task.pending.request_includes_credentials(), status: *status, status_text: reason.clone(),
         headers: fields, body: Some(Vec::new()) }))
 }
 
@@ -303,6 +305,11 @@ pub struct NetworkService {
     pub(crate) reporting: crate::reporting::ReportingState,
 }
 impl NetworkService {
+    /// Transport-owned control output still requiring bounded network ticks,
+    /// including output retained after the last application terminal event.
+    pub fn has_pending_output(&self) -> bool {
+        self.dispatcher.has_pending_output()
+    }
     /// A service result already queued for delivery is not pending I/O.
     pub fn has_pending_request_io(&self, id: ServiceId) -> bool {
         self.active.get(&id).is_some_and(|task| self.dispatcher.has_pending_request_io(task.pending.id()))
@@ -389,9 +396,30 @@ impl NetworkService {
         }
         id
     }
+    /// Ordinary renderer subresource admission with original receiving-global
+    /// settings, captured before author callbacks or socket submission.
+    pub fn start_subresource_with_coep_reporting(&mut self, request: ApiRequest,
+        mut context: ClientContext, destination: Destination,
+        settings: crate::reporting::CoepRequestReportSettings,
+    ) -> Result<RequestId, crate::reporting::ReportError> {
+        context.security.destination=destination;
+        let mut policy=request.policy_request().map_err(|_|crate::reporting::ReportError::InvalidReport)?;
+        policy.security=context.security;
+        settings.validate(self,&policy)?;
+        let id=self.start_subresource(request,context,destination);
+        if let Some(task)=self.active.get_mut(&id) {task.coep_reporting=Some(settings);}
+        // Genuine local scheme or pre-admission failure has no HTTP CORP head.
+        // Dropping settings releases its bounded custody without registering a global.
+        Ok(id)
+    }
     pub fn new(limits: DispatchLimits) -> Self {
+        Self::with_tls_policy(limits, amazing_net::dispatch::ClientPolicy::default())
+    }
+    /// Immutable per-instance trust policy; normal certificate verification and
+    /// the full bounded PendingTls handshake remain mandatory for every socket.
+    pub fn with_tls_policy(limits: DispatchLimits, policy: amazing_net::dispatch::ClientPolicy) -> Self {
         Self {
-            dispatcher: Dispatcher::new(limits),
+            dispatcher: Dispatcher::with_tls_policy(limits, policy),
             cookies: CookieStore::new(crate::psl::PublicSuffixList, Default::default())
                 .expect("valid cookie limits"),
             cookie_persistence: None,
@@ -625,14 +653,38 @@ impl NetworkService {
         }
     }
     /// Deterministic clock entry point for the event-loop driver and tests.
-    pub fn start_at(&mut self,request:ApiRequest,context:ClientContext,now:Instant)->Result<ServiceId,ApiError> {
-        self.start_at_with_csp_progress(request,context,now,&mut None)
+    pub fn start_at(&mut self, request: ApiRequest, context: ClientContext, now: Instant)
+        -> Result<ServiceId, ApiError> {
+        self.start_at_inner(request,context,now,None,&mut None)
     }
-    fn start_at_with_csp_progress(
+    /// Full original-global Reporting admission for ordinary buffered Fetch,
+    /// including genuine fresh-cache and conditional revalidation responses.
+    pub fn start_at_with_coep_reporting(&mut self, request: ApiRequest, context: ClientContext,
+        now: Instant, settings: crate::reporting::CoepRequestReportSettings,
+    ) -> Result<ServiceId,crate::reporting::CoepRequestStartError> {
+        use crate::reporting::CoepRequestStartError as Error;
+        let mut policy=request.policy_request().map_err(Error::Fetch)?;
+        policy.security=context.security;
+        settings.validate(self,&policy).map_err(Error::Reporting)?;
+        self.start_at_inner(request,context,now,Some(settings),&mut None).map_err(Error::Fetch)
+    }
+    pub fn start_stream_with_coep_reporting(&mut self,request:ApiRequest,context:ClientContext,
+        initial_credit:u64, now:Instant, settings:crate::reporting::CoepRequestReportSettings,
+    ) -> Result<ServiceId,crate::reporting::CoepRequestStartError> {
+        let credit=usize::try_from(initial_credit).map_err(|_|crate::reporting::CoepRequestStartError::Fetch(ApiError::Network(FetchError::ResponseTooLarge)))?;
+        let id=self.start_at_with_coep_reporting(request,context,now,settings)?;
+        self.streams.insert(id,StreamTask::new(credit)); Ok(id)
+    }
+    fn start_at_with_csp_progress(&mut self,request:ApiRequest,context:ClientContext,now:Instant,
+        progress:&mut Option<crate::CspResponseProvenance>)->Result<ServiceId,ApiError> {
+        self.start_at_inner(request,context,now,None,progress)
+    }
+    fn start_at_inner(
         &mut self,
         mut request: ApiRequest,
         mut context: ClientContext,
         now: Instant,
+        coep_reporting:Option<crate::reporting::CoepRequestReportSettings>,
         progress:&mut Option<crate::CspResponseProvenance>,
     ) -> Result<ServiceId, ApiError> {
         if request.mode == crate::RequestMode::Navigate && context.frame_ancestors.is_empty() {
@@ -673,10 +725,16 @@ impl NetworkService {
         }
         let url = request.url().serialize();
         let method = request.method().to_owned();
-        let client_origin = request.origin().clone();
-        let credentials = request.credentials != CredentialsMode::Omit
-            && (request.credentials == CredentialsMode::Include
-                || request.url().origin() == request.origin());
+        let mut credential_policy = request.policy_request()?;
+        credential_policy.security = context.security;
+        credential_policy.csp = context.csp.clone();
+        credential_policy.csp_destination = context.csp_destination;
+        let credential_plan = credential_policy.prepare();
+        // Preparation can perform CSP before a later terminal policy error.
+        // Preserve only receipts minted by that actual native check.
+        *progress = credential_policy.csp_pre_request_checked.then(||
+            crate::CspResponseProvenance::checked(&credential_policy, Vec::new()));
+        let credentials = credential_plan.map_err(ApiError::Network)?.credentials;
         let cookie = if credentials {
             let access = CookieAccess {
                 url: request.url(),
@@ -736,13 +794,21 @@ impl NetworkService {
                     policy.security = context.security;
                     policy.csp = context.csp.clone();
                     policy.csp_destination = context.csp_destination;
-                    policy.prepare().map_err(ApiError::Network)?;
+                    let plan = policy.prepare().map_err(ApiError::Network)?;
                     let internal = InternalResponse {
+                        // Fetch HTTP-network-or-cache step14 applies the real
+                        // current hop decision after selecting a stored response.
+                        request_includes_credentials: plan.credentials,
                         status: cached.status,
                         status_text: String::new(),
                         headers: cached.headers,
                         body: Some(cached.body),
                     };
+                    if let Some(settings)=&coep_reporting {
+                        let mut reports=Vec::new();
+                        self.emit_coep_response_reports(id,settings,&policy,&internal.headers,internal.request_includes_credentials,internal.status,now,&mut reports);
+                        self.ready.extend(reports);
+                    }
                     let result = filter_response(&policy, &internal)
                         .map_err(ApiError::Network)
                         .and_then(ApiResponse::from_policy);
@@ -794,15 +860,22 @@ impl NetworkService {
                 cookie,
                 cacheable,
                 revalidating,
-                credentials: request.credentials,
-                client_origin,
                 head: None,
                 head_reason: String::new(),
                 body: Vec::new(),
                 trusted_subresource: false,
+                coep_reporting,
             },
         );
         Ok(id)
+    }
+    fn emit_coep_response_reports(&mut self,id:ServiceId,settings:&crate::reporting::CoepRequestReportSettings,
+        policy:&crate::Request,fields:&HeaderList,includes_credentials:bool,status:u16,now:Instant,result:&mut Vec<ServiceEvent>) {
+        let nested=policy.nested_navigation && !(matches!(status,301|302|303|307|308) && fields.get("location").is_some());
+        match self.check_request_coep_reporting(settings,policy,fields,includes_credentials,nested,now) {
+            Ok(reports)=>for report in reports {result.push(ServiceEvent::CoepReport{id,document:settings.document(),report:Ok(report)});},
+            Err(error)=>result.push(ServiceEvent::CoepReport{id,document:settings.document(),report:Err(error)}),
+        }
     }
     pub fn step(&mut self, budget: usize, now: Instant) -> Vec<ServiceEvent> {
         let mut result = Vec::new();
@@ -817,7 +890,8 @@ impl NetworkService {
         // A close event can precede the nonblocking write of its reply. Keep
         // stepping dispatcher-owned sockets after removing the service id.
         let wire_websockets = self.dispatcher.websockets_in_flight() != 0;
-        let has_http = self.dispatcher.in_flight() != 0;
+        let has_http = self.dispatcher.http_requests_in_flight() != 0
+            || self.dispatcher.has_pending_http_output();
         let both = wire_websockets && has_http;
         let http_budget = if !wire_websockets {
             budget
@@ -852,6 +926,25 @@ impl NetworkService {
                 }
                 continue;
             };
+            if let NetEvent::Head {status,headers,..}=&event {
+                // Preflight heads do not perform a main-response CORP check.
+                if self.active[&id].pending.is_main() && !(*status==304 && self.active[&id].revalidating) {
+                    let task=self.active.get_mut(&id).unwrap();
+                    let settings=task.coep_reporting.take();
+                    let policy=task.pending.policy().clone();
+                    let includes_credentials=task.pending.request_includes_credentials();
+                    if let Some(settings)=settings {
+                        let mut fields=HeaderList::default();
+                        let parsed=headers.iter().try_for_each(|(name,value)|fields.append(name,value));
+                        match parsed {
+                            Ok(())=>self.emit_coep_response_reports(id,&settings,&policy,&fields,includes_credentials,*status,now,&mut result),
+                            Err(error)=>result.push(ServiceEvent::CoepReport{id,document:settings.document(),report:Err(crate::reporting::ReportError::Policy(error))}),
+                        }
+                        // Keep the original settings for subsequent authentic redirect hops.
+                        self.active.get_mut(&id).unwrap().coep_reporting=Some(settings);
+                    }
+                }
+            }
             if let NetEvent::Head { url, status, headers, .. } = &event {
                 let ancestors = &self.active[&id].context.frame_ancestors;
                 let redirects = matches!(status, 301 | 302 | 303 | 307 | 308)
@@ -934,9 +1027,7 @@ impl NetworkService {
                                         }
                                     }
                                 }
-                                let accept = task.credentials == CredentialsMode::Include
-                                    || (task.credentials == CredentialsMode::SameOrigin
-                                        && parsed.origin() == &task.client_origin);
+                                let accept = task.pending.request_includes_credentials();
                                 if accept {
                                     let access = CookieAccess {
                                         url: &parsed,
@@ -974,8 +1065,6 @@ impl NetworkService {
                         _ => {}
                     }
                 }
-                let credentials = task.credentials;
-                let client_origin = task.client_origin.clone();
                 let site = task.context.cookie_site.clone();
                 let top_level = task.context.security.top_level_navigation;
                 let wall_time = task.context.now_unix;
@@ -985,10 +1074,7 @@ impl NetworkService {
                     &mut self.dispatcher,
                     now,
                     |policy| {
-                        if credentials == CredentialsMode::Omit
-                            || (credentials == CredentialsMode::SameOrigin
-                                && policy.url().origin() != &client_origin)
-                        {
+                        if !policy.credentials_allowed() {
                             return None;
                         }
                         let access = CookieAccess {
@@ -1058,11 +1144,15 @@ impl NetworkService {
                                 .ok_or(ApiError::Network(FetchError::Transport))
                                 .and_then(|merged| {
                                     let internal = InternalResponse {
+                                        request_includes_credentials: task.pending.request_includes_credentials(),
                                         status: merged.status,
                                         status_text: String::new(),
                                         headers: merged.headers,
                                         body: Some(merged.body),
                                     };
+                                    if let Some(settings)=&task.coep_reporting {
+                                        self.emit_coep_response_reports(id,settings,task.pending.policy(),&internal.headers,internal.request_includes_credentials,internal.status,now,&mut result);
+                                    }
                                     filter_response(task.pending.policy(), &internal)
                                         .map_err(ApiError::Network)
                                         .and_then(ApiResponse::from_policy)
@@ -1100,6 +1190,7 @@ impl NetworkService {
                                 cookie: &task.cookie,
                             };
                             let response = CacheResponse {
+                                request_includes_credentials: task.pending.request_includes_credentials(),
                                 status,
                                 headers: response_headers,
                                 body: task.body,

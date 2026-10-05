@@ -10,6 +10,7 @@ fn fields(values: &[(&str, &str)]) -> HeaderList {
 }
 fn response(values: &[(&str, &str)], body: &[u8]) -> CacheResponse {
     CacheResponse {
+        request_includes_credentials: true,
         status: 200,
         headers: fields(values),
         body: body.to_vec(),

@@ -18,6 +18,7 @@ fn response(status: u16, fields: &[(&str, &str)]) -> InternalResponse {
         headers.append(n, v).unwrap();
     }
     InternalResponse {
+        request_includes_credentials: true,
         status,
         status_text: "OK".into(),
         headers,

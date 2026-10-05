@@ -27,6 +27,7 @@ impl NetworkOrCache for Stub {
             headers.append("access-control-allow-origin", "*").unwrap();
         }
         Ok(InternalResponse {
+            request_includes_credentials: true,
             status: 200,
             status_text: "OK".into(),
             headers,

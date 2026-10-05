@@ -1,0 +1,59 @@
+{
+  "source": "5b711c22b32b940b16b9d4935a761e263ff94950",
+  "base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "failed_source": "d14a783360ad83c9efd9fa5e193f0be75ee88dc9",
+  "state": "qualified-native-coep-output-source-repair-zero-loss",
+  "alias_proposed": "net-coep-output-sourcefix-20261005",
+  "profile": "default4vCPU/8GB finite7200",
+  "rust_profiles": "DEV+TEST line-tables-only incremental0 bothsides",
+  "capacity": "24GiB before/12GiB after",
+  "corpus": "workspace/docs/browser/wholeTLS-test-support-net-fetch/original11CSP",
+  "installed_claim": false,
+  "phases": {
+    "before": {
+      "source": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+      "command_sha256": "e687a22640403abfbf88c85c2fe2ba191b21a72aee1cdc4344f2833c86bbee9d",
+      "launch_sha256": "f0b23930ab24f11296ff2df70a9af9fa632b88ec56d7de520a5221b081f2d37b"
+    },
+    "after": {
+      "source": "5b711c22b32b940b16b9d4935a761e263ff94950",
+      "command_sha256": "0be78e6baa19319ff7f2b5b1e5f9f104c9ba29523b5711e9aa91c4d7ac3fa622",
+      "launch_sha256": "8e0f8a817dd1e4c4d5f7d5166670831233dee328c9938d1b437559a1560bc16b"
+    }
+  },
+  "admission_sha256": "c131573069f7e85bf22c825901ecb6ebf76b0bd4722c472c994973ff14d5c0dd",
+  "before_session": 55014,
+  "decision": "Root approved 5b711c22 genuine source repair with exact frozen command hashes, whole corpus and matching profiles; initial plus one clean tooling rerun",
+  "after_session": 72654,
+  "before_result": {
+    "job": "32e345e0699d49d8a973b170c7d50f0a",
+    "actual_exit": 0,
+    "compact_fetch_exit": 0,
+    "workspace_pass": 4709,
+    "docs_pass": 4,
+    "native_pass": 482,
+    "free_native_bytes": 32472416256,
+    "before_compact_sha256": "78f595ec7dd49619c191214560c72e512b1bb73f5d31fcf746a40062c1a85799"
+  },
+  "after_result": {
+    "job": "69d536e191e54c95978340e802ac8d2d",
+    "actual_exit": 0,
+    "compact_fetch_exit": 0,
+    "workspace": {
+      "pass": 4829,
+      "skip": 17
+    },
+    "native": {
+      "pass": 598
+    },
+    "docs": {
+      "fail": 0,
+      "pass": 30
+    },
+    "csp_files": 32,
+    "csp_subtests": 81
+  },
+  "packaging_base": "97d9827bfb89477edb051f59b4e4dc49a3679152",
+  "qualification_base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "packaging": "Residual of genuine qualified source on already-published Reporting/CSP foundations; all42 changed shipping paths byte-exact5b; unrelated published sources preserved; integrator combined gate remains required"
+}

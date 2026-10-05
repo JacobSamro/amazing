@@ -1,0 +1,26 @@
+{
+  "source": "408cb841c0064c55e638a0d701f373e7e8d46020",
+  "root_verified_render_cohorts": 20,
+  "cases": 2214,
+  "lost": [],
+  "gained": [],
+  "correction_sha256": "2563356c3636cf0a45d202f09498b607348f494beffa66bda3e17f7803aa6412",
+  "resources": {
+    "cases": 491,
+    "rc21_entries": 226,
+    "passing": 318,
+    "lost": [],
+    "gained": []
+  },
+  "parsing": {
+    "selectors": 17,
+    "passed": 4330,
+    "total": 5126,
+    "identical_failure_multiset": true
+  },
+  "csp": {
+    "pass_files": 32,
+    "pass_assertions": 81,
+    "published_pass_subsets_retained": true
+  }
+}

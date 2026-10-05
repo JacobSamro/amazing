@@ -81,6 +81,8 @@ impl CacheRequest<'_> {
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CacheResponse {
+    /// Receipt from the stored response, never a later cache request.
+    pub request_includes_credentials: bool,
     pub status: u16,
     pub headers: HeaderList,
     pub body: Vec<u8>,

@@ -1,7 +1,11 @@
 //! Native document Reporting endpoints and CSP request delivery.
 //! The embedding supplies accepted response headers and binds each capability
 //! to its actual Document lifetime. A URL is never a document identity.
+mod native_report;
+pub use native_report::*;
 mod prepared;
+mod coep_request;
+pub use coep_request::{CoepRequestReportSettings, CoepRequestStartError, PreparedCoepInheritanceReport, CoepInheritanceReports, CoepGraphId, CoepGraphReportSettings};
 pub mod structured;
 mod test_report;
 pub use prepared::PreparedCspReportPlan;
@@ -46,6 +50,7 @@ pub enum ReportError {
     StaleDocument,
     NoEndpoint,
     InvalidEndpoint,
+    InvalidReport,
     Limit,
     Policy(FetchError),
     Transport,
@@ -85,6 +90,7 @@ struct Delivery {
     request: Request,
     context: ClientContext,
     preflight: bool,
+    request_includes_credentials: bool,
     main_ready: bool,
     deadline: Instant,
     head: Option<InternalResponse>,
@@ -93,6 +99,7 @@ struct Delivery {
 pub(crate) struct ReportingState {
     service: u64,
     next: u64,
+    next_graph: u64,
     documents: BTreeMap<u64, Document>,
     deliveries: BTreeMap<RequestId, Delivery>,
     retained_bytes: usize,
@@ -103,6 +110,7 @@ impl Default for ReportingState {
         Self {
             service: NEXT_SERVICE.fetch_add(1, Ordering::Relaxed),
             next: 1,
+            next_graph: 1,
             documents: BTreeMap::new(),
             deliveries: BTreeMap::new(),
             retained_bytes: 0,
@@ -378,6 +386,7 @@ impl NetworkService {
                 request,
                 context: saved.context.clone(),
                 preflight: false,
+                request_includes_credentials: false,
                 main_ready: false,
                 deadline: now + std::time::Duration::from_secs(10),
                 head: None,
@@ -444,6 +453,10 @@ impl NetworkService {
             None
         };
         delivery.preflight = preflight.is_some();
+        // Both native Reporting routes use same-origin credentials; preflight
+        // never accesses credentials. Capture the actual transport decision.
+        delivery.request_includes_credentials = !delivery.preflight
+            && delivery.request.url().origin() == &delivery.request.origin;
         delivery.main_ready = false;
         delivery.head = None;
         if let Some(preflight) = preflight {
@@ -480,7 +493,7 @@ impl NetworkService {
             if let Some(Body::Bytes(body)) = delivery.request.body() {
                 options.body = body.clone();
             }
-            if delivery.request.url().origin() == &delivery.request.origin {
+            if delivery.request_includes_credentials {
                 let access = crate::cookies::CookieAccess {
                     url: delivery.request.url(),
                     site_for_cookies: delivery.context.cookie_site.clone(),
@@ -533,8 +546,7 @@ impl NetworkService {
                 if valid.is_err() {
                     Some(ReportOutcome::Failed(ReportError::Transport))
                 } else {
-                    if !delivery.preflight
-                        && delivery.request.url().origin() == &delivery.request.origin
+                    if delivery.request_includes_credentials
                     {
                         let access = crate::cookies::CookieAccess {
                             url: delivery.request.url(),
@@ -559,6 +571,7 @@ impl NetworkService {
                         delivery.context.now_unix,
                     );
                     delivery.head = Some(InternalResponse {
+                        request_includes_credentials: delivery.request_includes_credentials,
                         status: *status,
                         status_text: reason.clone(),
                         headers: fields,
@@ -687,6 +700,7 @@ impl NetworkService {
                     request: delivery.request.clone(),
                     context: delivery.context.clone(),
                     preflight: delivery.preflight,
+                    request_includes_credentials: delivery.request_includes_credentials,
                     main_ready: false,
                     deadline: delivery.deadline,
                     head: None,

@@ -1,0 +1,66 @@
+{
+  "source": "408cb841c0064c55e638a0d701f373e7e8d46020",
+  "recorded_base": "64f5d9b86c1cda019f73aedb2dd4f7137a3b7663",
+  "engine_source_edits": false,
+  "lane": "integrator-net-css-producers-20261005",
+  "job": "net-css-producers-408-initial",
+  "default_profile": "4vCPU8GiB finite7200",
+  "Cargo_profile": {
+    "DEV_DEBUG": "line-tables-only",
+    "TEST_DEBUG": "line-tables-only",
+    "CARGO_INCREMENTAL": "0",
+    "DEV_INCREMENTAL": null,
+    "TEST_INCREMENTAL": null,
+    "RUST_MIN_STACK": "8388608"
+  },
+  "tools_source": "8c54229e5045de672e0185add8109b4b44929a8c",
+  "public_tools": {
+    "gate-summary.py": "3e26631cb492c2e77808c7bc9a3354ab248d0e83cf8762b933892647fd7ce0f0",
+    "csp-inline-qualified.py": "d2db31f0941e84548e572a09c65670260a937d5fd9116bc8930b2cd5f7983172",
+    "wpt_render_compare.py": "97bd438374544f3861ad79fafbc587aa0dbd8b7506b789cfbd5cc92e9ba8a8db",
+    "image-resource-corpus.py": "e4f678899d25b7bcba2f2995e1c10445a2ff1b55054a5c8d857b44a1c1302404",
+    "gate-command.py": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b",
+    "image-presentation-ferry.py": "cfcdfc464d2c69a5d993de11e95268674ba720f56c702c14db88e08d7b390a94",
+    "image-presentation-gate.py": "3b44a00fd8824b3c0ec4a30c595e2d6e9916d5b0963401c93f60b3efff01e57d"
+  },
+  "composition_command_sha256": "749cbf331122de1ee49a3738e6eac3e28dea42af8ab90f84a447fbf6ee343e6b",
+  "whole_command_sha256": "b4e60a7fcb5e57e8a5a595a2b7b3509c9b57d18c8b04a4f6ba105361415a80c6",
+  "whole_command_bytes": 163610,
+  "storage_plan_sha256": "91469b67c82090225d724dd05ce8d8e235fa37550ef086defbcd27427a76a58d",
+  "capacity": {
+    "target_budget_bytes": 12884901888,
+    "raw_budget_bytes": 12884901888,
+    "build_budget_includes_target_plus_raw": true,
+    "bootstrap_bytes": 2147483648,
+    "reserve_bytes": 2147483648,
+    "retention_metadata_bytes": 134217728,
+    "per_device_summed_required_if_shared": 30198988800,
+    "measured_provenance": "Rootqualified85 whole7.59GBtarget+11.66GBraw; conservative12+12GiB envelope. Native/tmp target+output share actualnative mount; no HOME/tmp hardlink/rename. Publishedsame-devicehardlink33 qualification retained; guard beforebootstrap. Target retired only afterqualifiedretention succeeds."
+  },
+  "native_output": "/tmp/amazing-native-retained/integrator-net-css-producers-20261005/net-css-producers-408-initial",
+  "compact_root": "amazing/out/integrator-net-css-producers-20261005/net-css-producers-408-initial/compact",
+  "corpus": {
+    "workspace_nextest": true,
+    "doctests": true,
+    "nativeTLS_net_fetch": 598,
+    "published_native_baseline": 540,
+    "CSP_directories": 11,
+    "CSP_files": 32,
+    "CSP_subtest_passIDs": 81,
+    "CSS_parsing": 17,
+    "render_cohorts": 20,
+    "resource_cases": 491,
+    "RC21_cases": 226,
+    "render_timeout_cli": "20 integer",
+    "render_jobs": 4,
+    "viewport": "800x600@1"
+  },
+  "baselines": {
+    "workspace_before": "Published4797/docs16 actual62 byteexact64",
+    "network": "Actual62b1540classificationmap and32/81CSP compact",
+    "CSS": "Authentic85 terminal0/runner0 and all20+491compacts copied inb7; public8clegacyembeddedreceipts verified byferry"
+  },
+  "root_owns_full16": true,
+  "initial_plus_one_clean": true,
+  "allocated": false
+}

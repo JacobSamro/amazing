@@ -140,6 +140,7 @@ fn redirected_path_is_ignored_but_host_is_checked() {
     r.mode = RequestMode::NoCors;
     assert!(!r.csp.pre_request(&r).blocked);
     let response = amazing_fetch::InternalResponse {
+        request_includes_credentials: true,
         status: 302,
         status_text: String::new(),
         headers: HeaderList::default(),
@@ -201,6 +202,7 @@ fn fetch_pre_and_post_checks_return_typed_violations() {
     assert_eq!(post.violations[0].directive, "img-src");
     assert_eq!(post.violations[0].blocked_url, "https://b.example/x");
     let response = amazing_fetch::InternalResponse {
+        request_includes_credentials: true,
         status: 200,
         status_text: String::new(),
         headers: HeaderList::default(),

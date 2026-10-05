@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "state": "qualified-native-coep-output-source-repair-zero-loss",
+  "base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "source": "5b711c22b32b940b16b9d4935a761e263ff94950",
+  "before": {
+    "job": "32e345e0699d49d8a973b170c7d50f0a",
+    "actual_exit": 0,
+    "compact_fetch_exit": 0,
+    "workspace": {
+      "pass": 4709,
+      "skip": 17
+    },
+    "native": {
+      "pass": 482
+    },
+    "docs": {
+      "fail": 0,
+      "pass": 4
+    },
+    "csp_files": 32,
+    "csp_subtests": 81
+  },
+  "after": {
+    "job": "69d536e191e54c95978340e802ac8d2d",
+    "actual_exit": 0,
+    "compact_fetch_exit": 0,
+    "workspace": {
+      "pass": 4829,
+      "skip": 17
+    },
+    "native": {
+      "pass": 598
+    },
+    "docs": {
+      "fail": 0,
+      "pass": 30
+    },
+    "csp_files": 32,
+    "csp_subtests": 81
+  },
+  "lost": [],
+  "native_lost": [],
+  "workspace_lost": [],
+  "csp_lost_files": [],
+  "csp_lost_subtests": [],
+  "raw_policy": "HOME native raw and measured source/executables remain; only authenticated compact files fetched",
+  "failed_source_preserved": "d14a783360ad83c9efd9fa5e193f0be75ee88dc9",
+  "failure_cluster_compact_sha256": "4ff598f10bf97d2173fe247b314beed2201388fc2543005b63f4ba8eea49fe5e",
+  "installed_claim": false,
+  "original_reporting_merged_native540_retained": true
+}

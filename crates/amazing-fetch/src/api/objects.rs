@@ -97,6 +97,7 @@ pub struct ApiRequest {
     stream_body: bool,
     force_preflight: bool,
     origin: Origin,
+    nested_navigation: bool,
     // Ordinary browser-owned element/policy metadata; no WebIDL setter exists.
     csp_nonce: Option<String>,
     csp_parser_inserted: bool,
@@ -142,6 +143,7 @@ impl ApiRequest {
             reload_or_history: false, client_reserved_id: None,
         })?;
         request.destination = Destination::Other; // wire destination: frame
+        request.nested_navigation = true;
         Ok(request)
     }
     pub fn navigation(target: HttpUrl, init: NavigationRequestInit) -> Result<Self, ApiError> {
@@ -221,6 +223,7 @@ impl ApiRequest {
                     stream_body: false,
                     force_preflight: false,
                     origin: origin.clone(),
+                    nested_navigation: false,
                     csp_nonce: None, csp_parser_inserted: false, csp_self_origin: None,
                 }
             }
@@ -250,6 +253,7 @@ impl ApiRequest {
                     stream_body: other.stream_body,
                     force_preflight: other.force_preflight,
                     origin: other.origin.clone(),
+                    nested_navigation: other.nested_navigation,
                     csp_nonce: other.csp_nonce.clone(), csp_parser_inserted: other.csp_parser_inserted, csp_self_origin: other.csp_self_origin.clone(),
                 }
             }
@@ -433,6 +437,7 @@ impl ApiRequest {
             stream_body: self.stream_body,
             force_preflight: self.force_preflight,
             origin: self.origin.clone(),
+            nested_navigation: self.nested_navigation,
             csp_nonce: self.csp_nonce.clone(), csp_parser_inserted: self.csp_parser_inserted, csp_self_origin: self.csp_self_origin.clone(),
         })
     }
@@ -456,6 +461,7 @@ impl ApiRequest {
     }
     pub(crate) fn policy_request(&self) -> Result<Request, ApiError> {
         let mut out = Request::new(self.url.clone(), self.origin.clone());
+        out.nested_navigation = self.nested_navigation;
         out.csp_nonce = self.csp_nonce.clone();
         out.csp_parser_inserted = self.csp_parser_inserted;
         if let Some(origin) = &self.csp_self_origin { out.csp_self_origin = origin.clone(); }
@@ -813,6 +819,7 @@ pub struct PendingFetchApi {
     stream_body: bool,
     cookie_header: Option<String>,
     conditional_headers: Option<crate::HeaderList>,
+    request_includes_credentials: bool,
     failure_provenance: Option<crate::CspResponseProvenance>,
 }
 #[derive(Clone, Copy)]
@@ -826,6 +833,9 @@ impl PendingFetchApi {
     }
     pub(crate) fn is_main(&self) -> bool {
         matches!(self.stage, DispatchStage::Main)
+    }
+    pub(crate) fn request_includes_credentials(&self) -> bool {
+        self.is_main() && self.request_includes_credentials
     }
     pub(crate) fn policy(&self) -> &Request {
         &self.policy
@@ -927,7 +937,7 @@ impl PendingFetchApi {
             cache,
         );
         *progress=policy.csp_pre_request_checked.then(||crate::CspResponseProvenance::checked(&policy,Vec::new()));
-        let (wire_id,stage)=started?;
+        let (wire_id,stage,request_includes_credentials)=started?;
         Ok(Self {
             failure_provenance:progress.clone(),
             policy,
@@ -938,6 +948,7 @@ impl PendingFetchApi {
             stream_body: request.stream_body,
             cookie_header,
             conditional_headers,
+            request_includes_credentials,
         })
     }
     fn start_hop<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::Connector>(
@@ -947,7 +958,7 @@ impl PendingFetchApi {
         cookie_header: Option<&str>,
         conditional_headers: Option<&crate::HeaderList>,
         mut cache: Option<&mut crate::PreflightCache>,
-    ) -> Result<(amazing_net::dispatch::RequestId, DispatchStage), ApiError> {
+    ) -> Result<(amazing_net::dispatch::RequestId, DispatchStage, bool), ApiError> {
         let plan = policy.prepare().map_err(ApiError::Network)?;
         if plan.preflight
             && !cache
@@ -964,7 +975,7 @@ impl PendingFetchApi {
                     .map_err(ApiError::Network)?;
                 let probe_plan = probe.prepare().map_err(ApiError::Network)?;
                 let id = submit_policy(&probe, &probe_plan, dispatcher, now, None, None)?;
-                return Ok((id, DispatchStage::Preflight));
+                return Ok((id, DispatchStage::Preflight, false));
             }
         }
         Ok((
@@ -977,6 +988,7 @@ impl PendingFetchApi {
                 conditional_headers,
             )?,
             DispatchStage::Main,
+            plan.credentials,
         ))
     }
     /// Returns `None` until the current hop completes. A redirect or
@@ -1028,6 +1040,7 @@ impl PendingFetchApi {
                     }
                 }
                 self.current = Some(crate::InternalResponse {
+                    request_includes_credentials: self.request_includes_credentials(),
                     status: *status,
                     status_text: reason.clone(),
                     headers: fields,
@@ -1079,6 +1092,7 @@ impl PendingFetchApi {
                             Ok(id) => {
                                 self.wire_id = id;
                                 self.stage = DispatchStage::Main;
+                                self.request_includes_credentials = plan.credentials;
                                 None
                             }
                             Err(e) => Some(Err(e)),
@@ -1117,9 +1131,10 @@ impl PendingFetchApi {
                                     None,
                                     cache,
                                 ) {
-                                    Ok((id, stage)) => {
+                                    Ok((id, stage, request_includes_credentials)) => {
                                         self.wire_id = id;
                                         self.stage = stage;
+                                        self.request_includes_credentials = request_includes_credentials;
                                         None
                                     }
                                     Err(e) => Some(Err(e)),
@@ -1182,7 +1197,7 @@ fn submit_policy<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::C
             .request_headers
             .push(("referer".into(), referrer.clone()));
     }
-    if let Some(cookie) = cookie_header {
+    if let Some(cookie) = cookie_header.filter(|_| plan.credentials) {
         options
             .request_headers
             .push(("cookie".into(), cookie.into()));

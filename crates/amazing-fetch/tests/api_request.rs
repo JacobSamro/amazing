@@ -182,6 +182,7 @@ impl NetworkOrCache for Stub {
     ) -> Result<InternalResponse, FetchError> {
         self.calls += 1;
         Ok(InternalResponse {
+            request_includes_credentials: true,
             status: 200,
             status_text: "OK".into(),
             headers: Default::default(),
@@ -239,6 +240,7 @@ fn fetch_does_not_replay_stream_body_on_redirect() {
             let mut headers = amazing_fetch::HeaderList::default();
             headers.append("location", "/next").unwrap();
             Ok(InternalResponse {
+                request_includes_credentials: true,
                 status: 307,
                 status_text: String::new(),
                 headers,

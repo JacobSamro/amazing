@@ -20,9 +20,9 @@ pub struct PreparedCspReportPlan {
     queued_at: Instant,
     credits: PreparedCredits,
 }
-struct PreparedCredits {
-    quota: Arc<AtomicUsize>,
-    bytes: usize,
+pub(super) struct PreparedCredits {
+    pub(super) quota: Arc<AtomicUsize>,
+    pub(super) bytes: usize,
 }
 impl Drop for PreparedCredits {
     fn drop(&mut self) {

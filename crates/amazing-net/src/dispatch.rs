@@ -8,6 +8,7 @@ use crate::{
     http, http2, NetError, ParsedUrl,
 };
 mod websocket;
+pub use amazing_net_tls::ClientPolicy;
 use std::{
     cell::Cell,
     collections::{BTreeMap, HashMap},
@@ -27,6 +28,7 @@ pub struct DispatchLimits {
     pub max_in_flight: usize,
     pub max_per_origin: usize,
     pub bytes_per_step: usize,
+    /// Application queues only; excludes TLS provider and kernel buffers.
     pub max_buffered_bytes: usize,
     pub connect_timeout: Duration,
 }
@@ -135,18 +137,66 @@ enum Transport {
     Tls(amazing_net_tls::TlsStream),
 }
 impl Transport {
-    fn read_step(&mut self, b: &mut [u8], budget: usize) -> io::Result<usize> {
+    fn read_step(&mut self, b: &mut [u8], remaining: &mut usize) -> io::Result<usize> {
+        let budget = *remaining;
         match self {
-            Self::Plain(s) => s.read(b),
-            Self::Tls(s) => s.read_step(b, budget),
+            Self::Plain(socket) => {
+                let end = b.len().min(budget);
+                if end == 0 {
+                    return Err(io::ErrorKind::WouldBlock.into());
+                }
+                let result = socket.read(&mut b[..end]);
+                if let Ok(n) = &result {
+                    *remaining -= *n;
+                }
+                result
+            }
+            Self::Tls(stream) => {
+                let step = stream.read_metered(b, budget);
+                *remaining -= step.socket_bytes;
+                step.result
+            }
         }
     }
-    fn write_step(&mut self, b: &[u8], budget: usize) -> io::Result<usize> {
+    fn write_step(&mut self, b: &[u8], remaining: &mut usize) -> io::Result<usize> {
+        let budget = *remaining;
         match self {
-            Self::Plain(s) => s.write(b),
-            Self::Tls(s) => s.write_step(b, budget),
+            Self::Plain(socket) => {
+                if budget == 0 {
+                    return Err(io::ErrorKind::WouldBlock.into());
+                }
+                let result = socket.write(&b[..b.len().min(budget)]);
+                if let Ok(n) = &result {
+                    *remaining -= *n;
+                }
+                result
+            }
+            Self::Tls(stream) => {
+                let step = stream.write_metered(b, budget);
+                *remaining -= step.socket_bytes;
+                step.result
+            }
         }
     }
+    fn flush_step(&mut self, remaining: &mut usize) -> io::Result<bool> {
+        match self {
+            Self::Plain(_) => Ok(true),
+            Self::Tls(stream) => {
+                let step = stream.flush_metered(*remaining);
+                *remaining -= step.socket_bytes;
+                step.result
+            }
+        }
+    }
+}
+
+fn connect_timeout(deadline: Instant, now: Instant, cap: Duration) -> io::Result<Duration> {
+    let left = deadline.saturating_duration_since(now.max(Instant::now()));
+    let timeout = left.min(cap);
+    if timeout.is_zero() {
+        return Err(io::ErrorKind::TimedOut.into());
+    }
+    Ok(timeout)
 }
 
 enum State {
@@ -195,6 +245,36 @@ impl H2Connection {
             self.outbound.extend(io.take_output());
         }
     }
+    fn drain_output(&mut self, remaining: &mut usize, limit: usize) -> Result<(), DispatchError> {
+        self.collect_output();
+        if self.outbound.len().saturating_add(self.inbound.len()) > limit {
+            return Err(DispatchError::BufferLimit);
+        }
+        if self.written < self.outbound.len() && *remaining > 0 {
+            let end = self
+                .outbound
+                .len()
+                .min(self.written.saturating_add(*remaining));
+            let step = self
+                .transport
+                .write_metered(&self.outbound[self.written..end], *remaining);
+            *remaining -= step.socket_bytes;
+            match step.result {
+                Ok(0) => return Err(io::Error::from(io::ErrorKind::WriteZero).into()),
+                Ok(n) => self.written += n,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {}
+                Err(e) => return Err(e.into()),
+            }
+            if self.written == self.outbound.len() {
+                self.outbound.clear();
+                self.written = 0;
+            }
+        }
+        let step = self.transport.flush_metered(*remaining);
+        *remaining -= step.socket_bytes;
+        step.result?;
+        Ok(())
+    }
     fn step(&mut self, remaining: &mut usize, limit: usize) -> Result<(), DispatchError> {
         if *remaining == 0 {
             return Ok(());
@@ -203,27 +283,8 @@ impl H2Connection {
         if self.outbound.len().saturating_add(self.inbound.len()) > limit {
             return Err(DispatchError::BufferLimit);
         }
-        if self.written < self.outbound.len() {
-            let end = self
-                .outbound
-                .len()
-                .min(self.written.saturating_add(*remaining));
-            match self
-                .transport
-                .write_step(&self.outbound[self.written..end], *remaining)
-            {
-                Ok(n) => {
-                    self.written += n;
-                    *remaining -= n;
-                }
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {}
-                Err(e) => return Err(e.into()),
-            }
-            if self.written == self.outbound.len() {
-                self.outbound.clear();
-                self.written = 0;
-            }
-            return Ok(());
+        if self.written < self.outbound.len() || !self.transport.output_drained() {
+            return self.drain_output(remaining, limit);
         }
         let cap = (*remaining)
             .min(8192)
@@ -232,11 +293,12 @@ impl H2Connection {
             return Err(DispatchError::BufferLimit);
         }
         let mut bytes = vec![0; cap];
-        match self.transport.read_step(&mut bytes, *remaining) {
+        let step = self.transport.read_metered(&mut bytes, *remaining);
+        *remaining -= step.socket_bytes;
+        match step.result {
             Ok(0) => return Err(NetError::IncompleteBody.into()),
             Ok(n) => {
                 self.inbound.extend_from_slice(&bytes[..n]);
-                *remaining -= n;
             }
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(()),
             Err(e) => return Err(e.into()),
@@ -300,6 +362,7 @@ pub struct Dispatcher<R = StdResolver, C = StdConnector> {
     resolver: R,
     connector: C,
     limits: DispatchLimits,
+    tls_policy: ClientPolicy,
     next_id: u64,
     active: BTreeMap<RequestId, Entry>,
     idle: HashMap<String, Transport>,
@@ -311,13 +374,25 @@ impl Dispatcher<StdResolver, StdConnector> {
     pub fn new(limits: DispatchLimits) -> Self {
         Self::with_io(limits, StdResolver, StdConnector)
     }
+    pub fn with_tls_policy(limits: DispatchLimits, policy: ClientPolicy) -> Self {
+        Self::with_io_and_tls_policy(limits, StdResolver, StdConnector, policy)
+    }
 }
 impl<R: Resolver, C: Connector> Dispatcher<R, C> {
     pub fn with_io(limits: DispatchLimits, resolver: R, connector: C) -> Self {
+        Self::with_io_and_tls_policy(limits, resolver, connector, ClientPolicy::default())
+    }
+    pub fn with_io_and_tls_policy(
+        limits: DispatchLimits,
+        resolver: R,
+        connector: C,
+        tls_policy: ClientPolicy,
+    ) -> Self {
         Self {
             resolver,
             connector,
             limits,
+            tls_policy,
             next_id: 1,
             active: BTreeMap::new(),
             idle: HashMap::new(),
@@ -328,6 +403,24 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
     }
     pub fn in_flight(&self) -> usize {
         self.active.len() + self.websockets.len()
+    }
+    /// HTTP requests only; WebSocket sockets have their own step budget.
+    pub fn http_requests_in_flight(&self) -> usize {
+        self.active.len()
+    }
+    /// Output needing further ticks after application terminal events. Includes
+    /// cancelled H2 control frames and WebSocket replies retained until drained.
+    pub fn has_pending_http_output(&self) -> bool {
+        self.h2
+            .values()
+            .any(|conn| conn.written < conn.outbound.len() || !conn.transport.output_drained())
+    }
+    pub fn has_pending_output(&self) -> bool {
+        self.has_pending_http_output()
+            || self
+                .websockets
+                .values()
+                .any(|conn| conn.has_pending_output())
     }
     /// Actual HTTP work; idle sockets, WebSockets and paused consumers do
     /// not require a driver to wait for a wall-clock I/O event.
@@ -455,17 +548,20 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
     }
     pub fn cancel(&mut self, id: RequestId) -> bool {
         if let Some(entry) = self.active.remove(&id) {
-            if let Some(stream) = entry.h2_stream {
-                if let Some(conn) = self.h2.get_mut(&entry.origin) {
-                    let _ = conn.client.cancel(stream);
-                    let _ = conn.client.next_event_ready(stream);
-                    conn.collect_output();
-                }
-            }
+            self.retire_h2_stream(&entry);
             self.cancelled.push(id);
             true
         } else {
             false
+        }
+    }
+    fn retire_h2_stream(&mut self, entry: &Entry) {
+        if let Some(stream) = entry.h2_stream {
+            if let Some(conn) = self.h2.get_mut(&entry.origin) {
+                let _ = conn.client.cancel(stream);
+                let _ = conn.client.next_event_ready(stream);
+                conn.collect_output();
+            }
         }
     }
     /// Pause socket reads for a consumer that has exhausted body credit.
@@ -511,6 +607,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 continue;
             };
             if now >= entry.deadline {
+                self.retire_h2_stream(&entry);
                 events.push(NetEvent::Error {
                     id,
                     error: DispatchError::Timeout,
@@ -521,7 +618,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 self.active.insert(id, entry);
                 continue;
             }
-            let result = self.advance(id, &mut entry, &mut remaining, &mut events);
+            let result = self.advance(id, &mut entry, &mut remaining, now, &mut events);
             match result {
                 Ok(done) => {
                     if !done {
@@ -532,7 +629,27 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                         }
                     }
                 }
-                Err(error) => events.push(NetEvent::Error { id, error }),
+                Err(error) => {
+                    self.retire_h2_stream(&entry);
+                    events.push(NetEvent::Error { id, error });
+                }
+            }
+        }
+        // An origin can own queued RST/SETTINGS output after its last request
+        // is cancelled. Drive output only; do not read idle origin sockets.
+        let origins: Vec<_> = self.h2.keys().cloned().collect();
+        for origin in origins {
+            if remaining == 0 {
+                break;
+            }
+            let failed = self
+                .h2
+                .get_mut(&origin)
+                .expect("origin retained")
+                .drain_output(&mut remaining, self.limits.max_buffered_bytes)
+                .is_err();
+            if failed {
+                self.h2.remove(&origin);
             }
         }
         events
@@ -542,6 +659,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         id: RequestId,
         e: &mut Entry,
         remaining: &mut usize,
+        now: Instant,
         events: &mut Vec<NetEvent>,
     ) -> Result<bool, DispatchError> {
         if *remaining == 0 {
@@ -586,14 +704,21 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
             }
             State::Connect(addresses) => {
                 let address = addresses.remove(0);
-                match self.connector.connect(address, self.limits.connect_timeout) {
+                match self.connector.connect(
+                    address,
+                    connect_timeout(e.deadline, now, self.limits.connect_timeout)?,
+                ) {
                     Ok(socket) => {
                         socket.set_nonblocking(true)?;
                         if e.url.scheme() == "https" {
                             let hostname = e.url.hostname();
                             let host = hostname.trim_start_matches('[').trim_end_matches(']');
-                            let tls = amazing_net_tls::PendingTls::new(host, socket)
-                                .map_err(|x| NetError::Tls(x.to_string()))?;
+                            let tls = amazing_net_tls::PendingTls::new_with_policy(
+                                host,
+                                socket,
+                                &self.tls_policy,
+                            )
+                            .map_err(|x| NetError::Tls(x.to_string()))?;
                             e.state = State::Handshake(tls);
                         } else {
                             e.transport = Some(Transport::Plain(socket));
@@ -613,9 +738,10 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                     return Ok(false);
                 }
                 let cap = *remaining;
-                match tls.step(cap).map_err(|x| NetError::Tls(x.to_string()))? {
+                let step = tls.step_metered(cap);
+                *remaining -= step.socket_bytes;
+                match step.result.map_err(|x| NetError::Tls(x.to_string()))? {
                     Some(stream) => {
-                        *remaining = 0;
                         if stream.protocol() == amazing_net_tls::Protocol::H2 {
                             if self.h2.len() >= self.limits.max_in_flight {
                                 let idle = self
@@ -641,9 +767,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                             e.state = State::Write;
                         }
                     }
-                    None => {
-                        *remaining = 0;
-                    }
+                    None => {}
                 }
                 Ok(false)
             }
@@ -656,14 +780,13 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                     .transport
                     .as_mut()
                     .expect("connected")
-                    .write_step(&e.request[e.written..end], *remaining)
+                    .write_step(&e.request[e.written..end], remaining)
                 {
                     Ok(0) => {
                         return Err(io::Error::new(io::ErrorKind::WriteZero, "request write").into())
                     }
                     Ok(n) => {
                         e.written += n;
-                        *remaining -= n;
                         if e.written == e.request.len() {
                             e.request.clear();
                             e.request.shrink_to_fit();
@@ -695,7 +818,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                     .transport
                     .as_mut()
                     .expect("connected")
-                    .read_step(&mut bytes, *remaining)
+                    .read_step(&mut bytes, remaining)
                 {
                     Ok(0) => {
                         if e.head.is_none() {
@@ -707,7 +830,6 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                         self.finish(id, e, events)
                     }
                     Ok(n) => {
-                        *remaining -= n;
                         e.buffer.extend_from_slice(&bytes[..n]);
                         self.consume(id, e, events)
                     }
@@ -1150,6 +1272,13 @@ mod tests {
 
     #[test]
     fn tls_h2_dispatch_multiplexes_and_aborts_one_stream() {
+        h2_cancel_or_timeout(false);
+    }
+    #[test]
+    fn tls_h2_timeout_resets_only_expired_stream() {
+        h2_cancel_or_timeout(true);
+    }
+    fn h2_cancel_or_timeout(expire: bool) {
         use amazing_net_tls::test_support;
         let (release, hold) = std::sync::mpsc::channel();
         let (port, thread) = test_support::serve(vec![b"h2".to_vec()], move |io| {
@@ -1211,6 +1340,7 @@ mod tests {
         let mut one = Vec::new();
         let mut two = Vec::new();
         let mut aborted = false;
+        let mut retiring = false;
         let mut done = false;
         for _ in 0..100_000 {
             for event in dispatcher.step(4096, Instant::now()) {
@@ -1219,12 +1349,21 @@ mod tests {
                     NetEvent::Body { id, bytes } if id == second => two.extend(bytes),
                     NetEvent::Aborted { id } if id == first => aborted = true,
                     NetEvent::Done { id } if id == second => done = true,
+                    NetEvent::Error {
+                        id,
+                        error: DispatchError::Timeout,
+                    } if id == first && expire => aborted = true,
                     NetEvent::Error { error, .. } => panic!("{error:?}"),
                     _ => {}
                 }
             }
-            if one == b"a" && two == b"b" && !aborted {
-                assert!(dispatcher.cancel(first));
+            if one == b"a" && two == b"b" && !retiring {
+                retiring = true;
+                if expire {
+                    dispatcher.active.get_mut(&first).unwrap().deadline = Instant::now();
+                } else {
+                    assert!(dispatcher.cancel(first));
+                }
             }
             if done && aborted {
                 break;
@@ -1236,6 +1375,173 @@ mod tests {
         assert!(aborted && done);
         release.send(()).unwrap();
         thread.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn tls_h2_last_cancelled_stream_drains_reset_without_active_request() {
+        use amazing_net_tls::test_support;
+        let (reset_seen, seen) = std::sync::mpsc::channel();
+        let (release, hold) = std::sync::mpsc::channel();
+        let (port, thread) = test_support::serve(vec![b"h2".to_vec()], move |io| {
+            let mut preface = [0; 24];
+            io.read_exact(&mut preface).unwrap();
+            assert_eq!(&preface, http2::PREFACE);
+            loop {
+                let (kind, stream, _) = h2_read(io);
+                if kind == 1 && stream == 1 {
+                    break;
+                }
+            }
+            loop {
+                let (kind, stream, bytes) = h2_read(io);
+                if kind == 3 && stream == 1 {
+                    assert_eq!(bytes, 8u32.to_be_bytes());
+                    reset_seen.send(()).unwrap();
+                    break;
+                }
+            }
+            hold.recv_timeout(Duration::from_secs(5)).unwrap();
+        });
+        let tls = test_support::connect_nonblocking(port).unwrap();
+        let mut dispatcher = Dispatcher::new(DispatchLimits::default());
+        let origin = format!("https://localhost:{port}");
+        dispatcher
+            .h2
+            .insert(origin.clone(), H2Connection::new(tls, 65536).unwrap());
+        let id = dispatcher
+            .submit(
+                &format!("{origin}/last"),
+                FetchOptions::default(),
+                Instant::now(),
+            )
+            .unwrap();
+        dispatcher.step(4096, Instant::now()); // H2Start allocates stream and queues HEADERS.
+        assert!(dispatcher.active[&id].h2_stream.is_some());
+        assert!(dispatcher.cancel(id));
+        assert_eq!(dispatcher.active.len(), 0);
+        assert!(dispatcher.has_pending_output());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while dispatcher.has_pending_output() {
+            assert!(Instant::now() < deadline);
+            dispatcher.step(1, Instant::now());
+            std::thread::yield_now();
+        }
+        seen.recv_timeout(Duration::from_secs(5)).unwrap();
+        release.send(()).unwrap();
+        thread.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn shared_tls_transport_budget_debits_ciphertext_before_would_block() {
+        use amazing_net_tls::test_support;
+        let mut peers = Vec::new();
+        let mut transports = Vec::new();
+        for _ in 0..2 {
+            let (port, thread) = test_support::serve(vec![b"http/1.1".to_vec()], |io| {
+                let mut bytes = [0; 1];
+                io.read_exact(&mut bytes).unwrap();
+                assert_eq!(&bytes, b"z");
+            });
+            transports.push(Transport::Tls(
+                test_support::connect_nonblocking(port).unwrap(),
+            ));
+            peers.push(thread);
+        }
+        let mut remaining = 1;
+        assert_eq!(transports[0].write_step(b"z", &mut remaining).unwrap(), 1);
+        assert_eq!(
+            remaining, 0,
+            "one encrypted socket byte consumed global budget"
+        );
+        assert_eq!(
+            transports[1]
+                .write_step(b"z", &mut remaining)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::WouldBlock
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        for (index, transport) in transports.iter_mut().enumerate() {
+            if index == 1 {
+                remaining = 1;
+                assert_eq!(transport.write_step(b"z", &mut remaining).unwrap(), 1);
+            }
+            loop {
+                assert!(Instant::now() < deadline);
+                remaining = 1;
+                if transport.flush_step(&mut remaining).unwrap() {
+                    break;
+                }
+                assert!(remaining <= 1);
+            }
+        }
+        for peer in peers {
+            peer.join().unwrap().unwrap();
+        }
+    }
+
+    #[test]
+    fn http_and_websocket_connectors_receive_only_remaining_deadline() {
+        struct ResolverFixture;
+        impl Resolver for ResolverFixture {
+            fn resolve(&mut self, _: &str, _: u16) -> io::Result<Vec<SocketAddr>> {
+                Ok(vec!["127.0.0.1:9".parse().unwrap()])
+            }
+        }
+        struct RecordingConnector(Rc<Cell<Duration>>);
+        impl Connector for RecordingConnector {
+            fn connect(&mut self, _: SocketAddr, timeout: Duration) -> io::Result<TcpStream> {
+                self.0.set(timeout);
+                Err(io::ErrorKind::ConnectionRefused.into())
+            }
+        }
+        for websocket in [false, true] {
+            for expire in [false, true] {
+                let recorded = Rc::new(Cell::new(Duration::ZERO));
+                let mut dispatcher = Dispatcher::with_io(
+                    DispatchLimits::default(),
+                    ResolverFixture,
+                    RecordingConnector(recorded.clone()),
+                );
+                let now = Instant::now();
+                if websocket {
+                    let mut options = crate::websocket::Options::default();
+                    options.timeout = Duration::from_millis(100);
+                    dispatcher
+                        .open_websocket("wss://example.invalid/", options, None, now)
+                        .unwrap();
+                    dispatcher.step_websockets(1024, now);
+                    dispatcher.step_websockets(
+                        1024,
+                        now + Duration::from_millis(if expire { 100 } else { 30 }),
+                    );
+                } else {
+                    let mut options = FetchOptions::default();
+                    options.timeout = Duration::from_millis(100);
+                    dispatcher
+                        .submit("https://example.invalid/", options, now)
+                        .unwrap();
+                    dispatcher.step(1024, now);
+                    dispatcher.step(
+                        1024,
+                        now + Duration::from_millis(if expire { 100 } else { 30 }),
+                    );
+                }
+                if expire {
+                    assert_eq!(
+                        recorded.get(),
+                        Duration::ZERO,
+                        "expired request never connects"
+                    );
+                } else {
+                    assert!(!recorded.get().is_zero());
+                    assert!(
+                        recorded.get() <= Duration::from_millis(70),
+                        "fixed 3s cap overran remaining request time"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

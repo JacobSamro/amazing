@@ -375,7 +375,7 @@ fn filtered_native_csp_provenance_retains_report_only_receipts_without_exposing_
         let mut fields = HeaderList::default();
         fields.append("content-type", "application/javascript").unwrap();
         fields.append("x-hidden", "secret").unwrap();
-        let response = InternalResponse { status: 200, status_text: "OK".into(), headers: fields, body: Some(b"1".to_vec()) };
+        let response = InternalResponse { request_includes_credentials: request.credentials_allowed(), status: 200, status_text: "OK".into(), headers: fields, body: Some(b"1".to_vec()) };
         let filtered = filter_response(&request, &response).unwrap();
         let provenance = filtered.csp_provenance.as_ref().unwrap();
         assert_eq!(provenance.url_list(), &[target]);
@@ -490,7 +490,7 @@ fn blocked_redirect_preserves_prior_report_only_receipts_and_each_authentic_chec
     let mut request = client.policy_request(first.clone(), CspDestination::ScriptElement);
     request.mode = RequestMode::NoCors;
     request.prepare().unwrap();
-    let response = InternalResponse { status: 302, status_text: "Found".into(), headers: HeaderList::default(), body: Some(Vec::new()) };
+    let response = InternalResponse { request_includes_credentials: request.credentials_allowed(), status: 302, status_text: "Found".into(), headers: HeaderList::default(), body: Some(Vec::new()) };
     assert_eq!(redirect(&mut request, &response, Some(blocked.clone())).unwrap(), RedirectAction::Follow);
     let FetchError::Csp(receipts) = request.prepare().unwrap_err() else { panic!("expected genuine CSP block") };
     assert_eq!(receipts.len(), 4);

@@ -163,6 +163,44 @@ mod tests {
         thread.join().unwrap().unwrap();
     }
     #[test]
+    fn metered_handshake_caps_every_cipher_step_and_retains_zero_budget() {
+        for budget in [1, 7, 31, 128, 1024] {
+            let (release, hold) = std::sync::mpsc::channel();
+            let (port, thread) = serve(vec![b"http/1.1".to_vec()], move |_| {
+                hold.recv_timeout(Duration::from_secs(5)).unwrap();
+            });
+            let socket = TcpStream::connect(("127.0.0.1", port)).unwrap();
+            socket.set_nonblocking(true).unwrap();
+            socket.set_nodelay(true).unwrap();
+            let mut pending =
+                PendingTls::with_config("localhost", socket, fixture_config(true)).unwrap();
+            let zero = pending.step_metered(0);
+            assert_eq!(zero.socket_bytes, 0);
+            assert!(zero.result.unwrap().is_none());
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            let mut bytes = 0;
+            let stream = loop {
+                assert!(std::time::Instant::now() < deadline);
+                let step = pending.step_metered(budget);
+                assert!(step.socket_bytes <= budget);
+                bytes += step.socket_bytes;
+                if let Some(stream) = step.result.unwrap() {
+                    break stream;
+                }
+                std::thread::yield_now();
+            };
+            assert_eq!(stream.protocol(), Protocol::Http11);
+            assert!(stream.output_drained());
+            assert!(bytes > 0);
+            let consumed = pending.step_metered(budget);
+            assert!(consumed.result.is_err());
+            assert_eq!(consumed.socket_bytes, 0);
+            release.send(()).unwrap();
+            thread.join().unwrap().unwrap();
+        }
+    }
+
+    #[test]
     fn alpn_h2_h1_and_absent_with_verified_fixture() {
         for (protocols, expected) in [
             (vec![b"h2".to_vec(), b"http/1.1".to_vec()], Protocol::H2),

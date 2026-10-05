@@ -29,6 +29,7 @@ fn request<'a>(uri: &'a str, fields: &'a HeaderList) -> CacheRequest<'a> {
 }
 fn response(fields: &[(&str, &str)], body: &[u8]) -> CacheResponse {
     CacheResponse {
+        request_includes_credentials: true,
         status: 200,
         headers: headers(fields),
         body: body.to_vec(),

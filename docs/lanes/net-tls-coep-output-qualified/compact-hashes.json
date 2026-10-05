@@ -1,0 +1,26 @@
+{
+  "before-compact/before.summary.json": {
+    "bytes": 194710,
+    "sha256": "78f595ec7dd49619c191214560c72e512b1bb73f5d31fcf746a40062c1a85799"
+  },
+  "before-compact/space.summary.json": {
+    "bytes": 345,
+    "sha256": "e1ea5a0787161421befb00baf248cb8f983858308d251be2e1e91a375449c4ee"
+  },
+  "before-compact/compact.json": {
+    "bytes": 35842,
+    "sha256": "f6df8d80d971cb04282f5c29f51864869ba7e4dadf1b904c1c42ce0d2e53215d"
+  },
+  "after-compact/after.summary.json": {
+    "bytes": 224112,
+    "sha256": "75e584197d25315eb363dceb7ee5cb460aea7b5e124b0bab0d2ed67141a8a59d"
+  },
+  "after-compact/space.summary.json": {
+    "bytes": 343,
+    "sha256": "ac356b01994a2484062c2a94052237f7c8b3c4fe9241d91984b48df11b1a52b7"
+  },
+  "after-compact/compact.json": {
+    "bytes": 35915,
+    "sha256": "af82cae95e210e94da64bb824c6b5f3501c3ee17b7d74ec19f768d5bb995f62a"
+  }
+}

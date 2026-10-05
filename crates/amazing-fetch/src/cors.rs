@@ -335,6 +335,7 @@ mod preflight_cache_tests {
             .unwrap();
         headers.append("access-control-max-age", "2").unwrap();
         let response = InternalResponse {
+            request_includes_credentials: true,
             status: 204,
             status_text: String::new(),
             headers,

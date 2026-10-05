@@ -4,8 +4,9 @@
 //!
 //! This crate is the Phase 5 vetted-TLS exception. It owns every rustls type
 //! and exposes a provider-neutral negotiated stream plus a legacy bounded
-//! HTTP/1.1 exchange. Certificate verification is always enabled with Mozilla's
-//! compiled root set. The network core owns the HTTP/2 protocol; ALPN negotiates
+//! HTTP/1.1 exchange. Certificate verification is always enabled; default
+//! instances use Mozilla's compiled roots and explicit instance policies may
+//! supply their own trust anchors. The network core owns the HTTP/2 protocol; ALPN negotiates
 //! h2 preferentially and retains HTTP/1.1 fallback.
 
 use std::io::{Read, Write};
@@ -13,7 +14,7 @@ use std::net::TcpStream;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use rustls::pki_types::ServerName;
+use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 
 static CLIENT_CONFIG: OnceLock<Arc<ClientConfig>> = OnceLock::new();
@@ -118,6 +119,60 @@ pub enum Protocol {
     H2,
 }
 
+/// Immutable per-instance trust policy. Every handshake still uses the vetted
+/// provider's normal chain, name, time, signature and ALPN verification.
+/// Explicit anchors replace the default roots for this policy only.
+#[derive(Clone)]
+pub struct ClientPolicy {
+    config: Arc<ClientConfig>,
+}
+impl Default for ClientPolicy {
+    fn default() -> Self {
+        Self {
+            config: client_config(),
+        }
+    }
+}
+impl ClientPolicy {
+    pub fn from_der_trust_anchors(
+        anchors: impl IntoIterator<Item = Vec<u8>>,
+    ) -> Result<Self, TlsError> {
+        let mut roots = RootCertStore::empty();
+        for anchor in anchors {
+            roots
+                .add(CertificateDer::from(anchor))
+                .map_err(|e| TlsError::Transport(e.to_string()))?;
+        }
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let mut config = ClientConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .expect("ring supports safe protocol versions")
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+        config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+        Ok(Self {
+            config: Arc::new(config),
+        })
+    }
+    fn config(&self, http1: bool) -> Arc<ClientConfig> {
+        if !http1 {
+            return self.config.clone();
+        }
+        let mut config = (*self.config).clone();
+        config.alpn_protocols = vec![b"http/1.1".to_vec()];
+        Arc::new(config)
+    }
+}
+
+/// Result and actual encrypted socket progress for one bounded operation.
+/// Socket bytes include reads and writes, including progress before an error.
+/// output_drained does not mean the peer has acknowledged or consumed data.
+pub struct IoStep<T, E = std::io::Error> {
+    pub result: Result<T, E>,
+    pub socket_bytes: usize,
+    pub output_drained: bool,
+}
+
 /// Opaque authenticated transport. Read/Write operate only on caller buffers;
 /// framing, stream state, and all HTTP allocation policy stay in amazing-net.
 pub struct TlsStream {
@@ -128,49 +183,109 @@ impl TlsStream {
     pub fn protocol(&self) -> Protocol {
         self.protocol
     }
-    /// Bounded transport work for a non-blocking dispatcher. A consumed
-    /// plaintext write remains queued in rustls across `WouldBlock`.
-    pub fn write_step(&mut self, bytes: &[u8], io_budget: usize) -> std::io::Result<usize> {
-        if io_budget == 0 {
-            return Err(std::io::ErrorKind::WouldBlock.into());
-        }
-        let n = self
-            .inner
-            .conn
-            .writer()
-            .write(&bytes[..bytes.len().min(io_budget)])?;
-        let mut io = BudgetIo {
-            socket: &mut self.inner.sock,
-            left: io_budget,
-        };
-        match self.inner.conn.complete_io(&mut io) {
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(e) => return Err(e),
-        }
-        Ok(n)
+    /// Whether every accepted plaintext byte has reached the socket transport.
+    /// This is transport drainage, not acknowledgement by the remote peer.
+    pub fn output_drained(&self) -> bool {
+        !self.inner.conn.wants_write()
     }
-    /// Reads available plaintext, advancing encrypted I/O within `io_budget`.
+
+    /// Compatibility wrapper; cooperative consumers should use the metered API.
+    pub fn write_step(&mut self, bytes: &[u8], io_budget: usize) -> std::io::Result<usize> {
+        self.write_metered(bytes, io_budget).result
+    }
     pub fn read_step(&mut self, bytes: &mut [u8], io_budget: usize) -> std::io::Result<usize> {
-        if io_budget == 0 {
-            return Err(std::io::ErrorKind::WouldBlock.into());
+        self.read_metered(bytes, io_budget).result
+    }
+
+    /// Accepts plaintext and advances encrypted I/O. Socket progress is retained
+    /// even when the result is WouldBlock or another error.
+    pub fn write_metered(&mut self, bytes: &[u8], budget: usize) -> IoStep<usize> {
+        let mut left = budget;
+        let result = (|| {
+            if budget == 0 {
+                return Err(std::io::ErrorKind::WouldBlock.into());
+            }
+            let n = self
+                .inner
+                .conn
+                .writer()
+                .write(&bytes[..bytes.len().min(budget)])?;
+            self.drive_io(&mut left)?;
+            if n == 0 && !bytes.is_empty() {
+                return Err(std::io::ErrorKind::WouldBlock.into());
+            }
+            Ok(n)
+        })();
+        IoStep {
+            result,
+            socket_bytes: budget - left,
+            output_drained: self.output_drained(),
         }
-        let limit = bytes.len().min(io_budget);
-        match self.inner.conn.reader().read(&mut bytes[..limit]) {
-            Ok(n) => return Ok(n),
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(e) => return Err(e),
+    }
+
+    pub fn read_metered(&mut self, bytes: &mut [u8], budget: usize) -> IoStep<usize> {
+        let mut left = budget;
+        let result = (|| {
+            if bytes.is_empty() {
+                return Ok(0);
+            }
+            if budget == 0 {
+                return Err(std::io::ErrorKind::WouldBlock.into());
+            }
+            let limit = bytes.len().min(budget);
+            match self.inner.conn.reader().read(&mut bytes[..limit]) {
+                Ok(n) => return Ok(n),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(e) => return Err(e),
+            }
+            self.drive_io(&mut left)?;
+            self.inner.conn.reader().read(&mut bytes[..limit])
+        })();
+        IoStep {
+            result,
+            socket_bytes: budget - left,
+            output_drained: self.output_drained(),
         }
+    }
+
+    fn drive_io(&mut self, left: &mut usize) -> std::io::Result<()> {
         let mut io = BudgetIo {
             socket: &mut self.inner.sock,
-            left: io_budget,
+            left: *left,
         };
-        match self.inner.conn.complete_io(&mut io) {
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(e) => return Err(e),
+        let result = self.inner.conn.complete_io(&mut io);
+        *left = io.left;
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(()),
+            Err(e) => Err(e),
         }
-        self.inner.conn.reader().read(&mut bytes[..limit])
+    }
+
+    /// Writes queued ciphertext only, within the socket budget. Never reads or
+    /// accepts additional plaintext. Ok(false) requires a later drain step.
+    pub fn flush_metered(&mut self, budget: usize) -> IoStep<bool> {
+        let mut io = BudgetIo {
+            socket: &mut self.inner.sock,
+            left: budget,
+        };
+        let result = (|| {
+            while self.inner.conn.wants_write() {
+                match self.inner.conn.write_tls(&mut io) {
+                    Ok(0) => return Err(std::io::ErrorKind::WriteZero.into()),
+                    Ok(_) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(false),
+                    Err(e) => return Err(e),
+                }
+            }
+            Ok(true)
+        })();
+        let socket_bytes = budget - io.left;
+        IoStep {
+            result,
+            socket_bytes,
+            output_drained: self.output_drained(),
+        }
     }
     pub fn exchange_http1(
         mut self,
@@ -231,6 +346,21 @@ impl PendingTls {
         Self::with_config(host, socket, client_config())
     }
 
+    pub fn new_with_policy(
+        host: &str,
+        socket: TcpStream,
+        policy: &ClientPolicy,
+    ) -> Result<Self, TlsError> {
+        Self::with_config(host, socket, policy.config(false))
+    }
+    pub fn new_http1_with_policy(
+        host: &str,
+        socket: TcpStream,
+        policy: &ClientPolicy,
+    ) -> Result<Self, TlsError> {
+        Self::with_config(host, socket, policy.config(true))
+    }
+
     fn with_config(
         host: &str,
         socket: TcpStream,
@@ -250,6 +380,26 @@ impl PendingTls {
     /// A fatal error closes the socket and consumes the handshake. Retrying
     /// cannot publish a stream from a connection whose authentication failed.
     pub fn step(&mut self, max_io_bytes: usize) -> Result<Option<TlsStream>, TlsError> {
+        self.step_metered(max_io_bytes).result
+    }
+    pub fn step_metered(&mut self, budget: usize) -> IoStep<Option<TlsStream>, TlsError> {
+        let mut left = budget;
+        let result = self.step_inner(budget, &mut left);
+        let output_drained = self
+            .inner
+            .as_ref()
+            .is_none_or(|inner| !inner.conn.wants_write());
+        IoStep {
+            result,
+            socket_bytes: budget - left,
+            output_drained,
+        }
+    }
+    fn step_inner(
+        &mut self,
+        max_io_bytes: usize,
+        left: &mut usize,
+    ) -> Result<Option<TlsStream>, TlsError> {
         let inner = self
             .inner
             .as_mut()
@@ -261,7 +411,9 @@ impl PendingTls {
             socket: &mut inner.sock,
             left: max_io_bytes,
         };
-        match inner.conn.complete_io(&mut io) {
+        let result = inner.conn.complete_io(&mut io);
+        *left = io.left;
+        match result {
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
             Err(error) => {
@@ -463,3 +615,7 @@ pub mod test_support;
 
 #[cfg(all(test, feature = "test-support"))]
 mod validation_tests;
+#[cfg(all(test, feature = "test-support"))]
+mod metered_io_tests;
+#[cfg(all(test, feature = "test-support"))]
+mod write_pressure_tests;

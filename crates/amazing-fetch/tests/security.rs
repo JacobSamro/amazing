@@ -17,6 +17,7 @@ fn headers(values: &[(&str, &str)]) -> HeaderList {
 }
 fn response(status: u16, values: &[(&str, &str)], body: &[u8]) -> InternalResponse {
     InternalResponse {
+        request_includes_credentials: true,
         status,
         status_text: "OK".into(),
         headers: headers(values),

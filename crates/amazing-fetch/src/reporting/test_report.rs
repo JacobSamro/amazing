@@ -111,58 +111,15 @@ impl NetworkService {
         report_url: &str,
         now: Instant,
     ) -> Result<ReportId, ReportError> {
-        if group.len() > MAX_REPORT_BYTES || group.iter().any(|unit| *unit > 0x7f) {
-            return Err(ReportError::NoEndpoint);
-        }
-        let name: String = group.iter().map(|unit| char::from(*unit as u8)).collect();
-        let registered_endpoint = saved
-            .endpoints
-            .get(&name)
-            .cloned()
-            .ok_or(ReportError::NoEndpoint)?;
-        let body = format!(
-            "[{{\"age\":0,\"type\":\"test\",\"url\":{},\"user_agent\":{},\"body\":{{\"body_message\":{}}}}}]",
-            quote(report_url), quote(amazing_net::http::USER_AGENT), quote_units(message),
-        ).into_bytes();
-        if body.len() > MAX_REPORT_BYTES.saturating_sub(self.reporting.retained_bytes) {
-            return Err(ReportError::Limit);
-        }
-        let endpoint = self
-            .hsts
-            .upgrade(&registered_endpoint, saved.context.now_unix)
-            .unwrap_or_else(|| registered_endpoint.clone());
-        let mut request = Request::new(endpoint, saved.origin.clone());
-        request
-            .set_method_body("POST", Some(Body::Bytes(body.clone())))
-            .map_err(ReportError::Policy)?;
-        request
-            .headers
-            .append("content-type", "application/reports+json")
-            .map_err(ReportError::Policy)?;
-        request.security = saved.context.security;
-        request.security.destination = crate::Destination::Other;
-        request.security.top_level_navigation = false;
-        request.credentials = CredentialsMode::SameOrigin;
-        request.mode = RequestMode::Cors;
-        request.redirect = RedirectMode::Follow;
-        let id = ReportId(self.reporting.allocate());
-        let mut delivery = Delivery {
-            id,
+        self.admit_native_report(
             document,
-            route: ReportRoute::ReportingApi,
-            endpoint_name: Some(name),
-            endpoint: registered_endpoint,
-            request,
-            context: saved.context.clone(),
-            preflight: false,
-            main_ready: false,
-            deadline: now + std::time::Duration::from_secs(10),
-            head: None,
-            bytes: body.len(),
-        };
-        let wire = self.submit_reporting(&mut delivery, now)?;
-        self.reporting.retained_bytes += delivery.bytes;
-        self.reporting.deliveries.insert(wire, delivery);
-        Ok(id)
+            saved,
+            "test",
+            &format!("{{\"body_message\":{}}}", quote_units(message)),
+            group,
+            report_url,
+            now,
+            now,
+        )
     }
 }

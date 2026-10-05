@@ -54,6 +54,8 @@ pub struct Request {
     pub csp_integrity: Vec<String>,
     pub csp_parser_inserted: bool,
     pub csp_violations: Vec<CspViolation>,
+    /// Minted only by the native child-navigation constructor.
+    pub(crate) nested_navigation: bool,
     pub(crate) csp_pre_request_checked: bool,
     pub(crate) response_body_limit: Option<usize>,
     pub integrity: String,
@@ -81,6 +83,7 @@ impl Request {
             csp_integrity: Vec::new(),
             csp_parser_inserted: false,
             csp_violations: Vec::new(),
+            nested_navigation: false,
             csp_pre_request_checked: false,
             response_body_limit: None,
             integrity: String::new(),
@@ -123,11 +126,27 @@ impl Request {
         self.body = body;
         Ok(())
     }
+    /// COEP affects effective network credentials, never the observable mode.
+    pub fn coep_allows_credentials(&self) -> bool {
+        self.mode != RequestMode::NoCors
+            || self.security.embedder_policy != EmbedderPolicy::Credentialless
+            || (self.origin == *self.url().origin() && self.redirect_taint_is_same_origin())
+    }
+    /// The redirect-taint becomes non-same-origin only at an origin transition
+    /// where the preceding URL also differs from the request origin. This uses
+    /// the actual URL chain, including a cross-origin bounce back to the origin.
+    pub fn redirect_taint_is_same_origin(&self) -> bool {
+        !self
+            .url_list
+            .windows(2)
+            .any(|pair| pair[0].origin() != pair[1].origin() && pair[0].origin() != &self.origin)
+    }
     pub fn credentials_allowed(&self) -> bool {
-        self.credentials == CredentialsMode::Include
-            || (self.credentials == CredentialsMode::SameOrigin
-                && self.taint == ResponseType::Basic
-                && self.origin == *self.url().origin())
+        self.coep_allows_credentials()
+            && (self.credentials == CredentialsMode::Include
+                || (self.credentials == CredentialsMode::SameOrigin
+                    && self.taint == ResponseType::Basic
+                    && self.origin == *self.url().origin()))
     }
     /// Call before each transport hop. Taint is sticky across redirects.
     pub fn prepare(&mut self) -> Result<FetchPlan, FetchError> {
@@ -190,6 +209,8 @@ pub struct FetchPlan {
 /// Internal response belongs to trusted transport/policy code, never JS.
 #[derive(Debug, Clone)]
 pub struct InternalResponse {
+    /// Actual main-hop transport decision; retained through cache storage.
+    pub request_includes_credentials: bool,
     pub status: u16,
     pub status_text: String,
     pub headers: HeaderList,

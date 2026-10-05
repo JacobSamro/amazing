@@ -1,0 +1,171 @@
+{
+  "source": "408cb841c0064c55e638a0d701f373e7e8d46020",
+  "files": [
+    {
+      "path": "engine-corpora/initial-compact-clean1/csp.compact.json",
+      "bytes": 35905,
+      "sha256": "70ec0e6c6e920812a01153c41540d65503a1f2d425c7704ab0d857c4252b9107"
+    },
+    {
+      "path": "engine-corpora/initial-compact-clean1/csp.phase.manifest.json",
+      "bytes": 2202,
+      "sha256": "bd42105642d840f671254869c4b30b8684d44b9c1ce492f65656979f2c7927e5"
+    },
+    {
+      "path": "engine-corpora/initial-compact-clean1/gate.summary.json",
+      "bytes": 41704,
+      "sha256": "ba9c8909ae555afa8af17a7945289b6890313fdb7f662a787956064b9919cf66"
+    },
+    {
+      "path": "engine-corpora/initial-compact-clean1/net-csp.summary.json",
+      "bytes": 47814,
+      "sha256": "9066a058fb2d4cba0522beb5f683b90b321515e908f775691ac3dc12d22c3df0"
+    },
+    {
+      "path": "engine-corpora/initial-compact-clean1/network.phase.manifest.json",
+      "bytes": 2615,
+      "sha256": "e1a53459d074904c04c39a0ea496f7445da2269b956ef8861085a54f1158eee7"
+    },
+    {
+      "path": "engine-corpora/initial-compact-clean1/network.summary.json",
+      "bytes": 118650,
+      "sha256": "3b9b1abb299ceb2dcad528aeba46e1d325884ceb7198cae3e64806f11b5f9a5a"
+    },
+    {
+      "path": "engine-corpora/initial-compact-clean1/storage.summary.json",
+      "bytes": 1902,
+      "sha256": "87d1e2c951b025567cd12bf000cf586904a6f57654aedd814a5c300525894c75"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-CSS2-floats.compact.json",
+      "bytes": 5154,
+      "sha256": "3f7f12d2d0650747a2ccbe73ec060c7591c7a918a08c39bacdcbc7f69d4ad297"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-CSS2-normal-flow.compact.json",
+      "bytes": 4728,
+      "sha256": "5480d4daea6ecfdab151f38dec11937c5b11c1a84415e04bf8881038d32c8d1e"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-CSS2-positioning.compact.json",
+      "bytes": 1623,
+      "sha256": "b85c2c3d628aea3eeb441c66b34699a195362af3d4f8a04b69dd63ccdef0cd55"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-backgrounds.compact.json",
+      "bytes": 19132,
+      "sha256": "112a63f541e9afebe141c1ae035e0361c9e81e45bd53a587a68f6302f98d506c"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-cascade.compact.json",
+      "bytes": 2864,
+      "sha256": "4daba0cf6c16f22c192c49182a902993db4bee3a689f29c798564ed9616cb179"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-color.compact.json",
+      "bytes": 20909,
+      "sha256": "5d6299aa5c3aa9c538b15be2992af28e0d715492589c7e1d782737ecb79d24db"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-conditional.compact.json",
+      "bytes": 9278,
+      "sha256": "00d89469cb7ff23b8ffc1d5e7375616b44d15cb0bbb9ee664f76bc7158f726cb"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-contain.compact.json",
+      "bytes": 26512,
+      "sha256": "7f9882de6d0bae9179110a1bf665ecd6030c07c6f228c72e2c95e272f8fa7b07"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-display.compact.json",
+      "bytes": 4786,
+      "sha256": "88ed18ba846312402b5d8343d79b67d455fd2a70b0501e02e655eac408883b26"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-fonts.compact.json",
+      "bytes": 3847,
+      "sha256": "180baf203532f06d70428d4b9d0e6c6a73d6b1537b9d850b48cb44a6a9547868"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-images.compact.json",
+      "bytes": 18469,
+      "sha256": "a9bb8b0844bdc9b54b1676ae6bd9a260ddf12af45fec2d3e61808c8bc0e90430"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-overflow.compact.json",
+      "bytes": 45406,
+      "sha256": "cce6b712c4df1e2fe2faf620ae75780c381b9a5ed4ca70a5fe83abe7123a8169"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-position.compact.json",
+      "bytes": 8517,
+      "sha256": "4ba25458962aef5a89f008852d46a31a46755461a09be1bac86873b7b0edab18"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-ruby.compact.json",
+      "bytes": 7617,
+      "sha256": "a251036dcde5a99509e8a25d1da156b17bac4e75c011e585805e8fbee83bf84f"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-shadow.compact.json",
+      "bytes": 4754,
+      "sha256": "fe2486131b12d7d117017e56157310920650b75529de87342eabb3a31c772665"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-sizing.compact.json",
+      "bytes": 19332,
+      "sha256": "4a8c83f5f9ee82bbebb584b3c939cdfcda586571ded8c523a775e4ddddc58a1d"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-tables.compact.json",
+      "bytes": 10568,
+      "sha256": "0b2c62fd88176498d180de4c0b9960fa53d611d66d0767eceb9f031282c4414a"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-transforms.compact.json",
+      "bytes": 43022,
+      "sha256": "40531bda0fe62caaed4ed2ee7f3fb99fea722b802e476451cffc1c6610b9e159"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-css-viewport.compact.json",
+      "bytes": 10359,
+      "sha256": "bc2bc302e59de06773c55be826f2a358151bb546ec4812eafc71349d71c4f522"
+    },
+    {
+      "path": "engine-corpora/css-compact/css-selectors.compact.json",
+      "bytes": 9902,
+      "sha256": "2d440228b0a0115a50472d874393b8fa64243f5febb8f994b43e515caec49b93"
+    },
+    {
+      "path": "engine-corpora/css-compact/image-resources.compact.json",
+      "bytes": 56174,
+      "sha256": "3e625cb00a074dd3e7dc17efcdfabd5b8b4c89200ec8f9ce2206bda29f52f249"
+    },
+    {
+      "path": "engine-corpora/css-compact/parsing.summary.json",
+      "bytes": 142579,
+      "sha256": "04a6e9b69ae1769d1dee1048a76ce5c0b801e5055a8ec1478441b75fe7f5924e"
+    },
+    {
+      "path": "engine-corpora/endpoint.manifest.json",
+      "bytes": 592,
+      "sha256": "6086f2da5174bf2fac560bae3ad79b86400ffb14ce2f1b1cc8b197e527a6174d"
+    },
+    {
+      "path": "engine-corpora/endpoint.manifest.json.observation.summary.json",
+      "bytes": 1173,
+      "sha256": "b9d68194474f0bf2088685be064d0b2dfa8b16fa1d66345a607ada8405f547e3"
+    },
+    {
+      "path": "engine-corpora/source-command.freeze.json",
+      "bytes": 3246,
+      "sha256": "c3bc137fecd34d3b2ad015829a42c2dba76da88686b4cff5619668b1d32b3178"
+    },
+    {
+      "path": "engine-corpora/compact-ferry.manifest.json",
+      "bytes": 7138,
+      "sha256": "971482a43e65cf372b345d4792910b5eafa6800824e0e4ccb67b051d7f4e694e"
+    }
+  ],
+  "qualification": "Only authenticated compact files; raw stays on native host. Original wrapper1 retained, actual enginephase0 and rootindependent zeroLoss comparisons."
+}

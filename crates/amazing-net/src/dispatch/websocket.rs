@@ -259,8 +259,10 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 id,
                 &mut self.resolver,
                 &mut self.connector,
+                &self.tls_policy,
                 limits,
                 &mut remaining,
+                now,
                 &mut events,
             ) {
                 Ok(done) => {
@@ -276,12 +278,21 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
 }
 
 impl WebSocketConnection {
+    pub(super) fn has_pending_output(&self) -> bool {
+        !self.outgoing.is_empty()
+    }
     pub(super) fn held(&self) -> usize {
         self.incoming.len()
             + self.message.len()
             + self.outgoing.iter().map(|(f, _)| f.len()).sum::<usize>()
     }
-    fn queue(&mut self, opcode: u8, bytes: &[u8], limit: usize, credit: u64) -> Result<(), ws::Error> {
+    fn queue(
+        &mut self,
+        opcode: u8,
+        bytes: &[u8],
+        limit: usize,
+        credit: u64,
+    ) -> Result<(), ws::Error> {
         let held = self.held();
         if held.saturating_add(bytes.len()).saturating_add(14) > limit {
             return Err(ws::Error::Limit);
@@ -312,12 +323,25 @@ impl WebSocketConnection {
         if *remaining == 0 {
             return Ok(());
         }
+        if self.written == frame.len() {
+            if self
+                .transport
+                .as_mut()
+                .expect("connected")
+                .flush_step(remaining)?
+            {
+                let (_, credit) = self.outgoing.pop_front().unwrap();
+                self.flushed_bytes += credit;
+                self.written = 0;
+            }
+            return Ok(());
+        }
         let end = frame.len().min(self.written.saturating_add(*remaining));
         match self
             .transport
             .as_mut()
             .expect("connected")
-            .write_step(&frame[self.written..end], *remaining)
+            .write_step(&frame[self.written..end], remaining)
         {
             Ok(0) => Err(ws::Error::Io(io::Error::new(
                 io::ErrorKind::WriteZero,
@@ -325,8 +349,13 @@ impl WebSocketConnection {
             ))),
             Ok(n) => {
                 self.written += n;
-                *remaining -= n;
-                if self.written == frame.len() {
+                if self.written == frame.len()
+                    && self
+                        .transport
+                        .as_mut()
+                        .expect("connected")
+                        .flush_step(remaining)?
+                {
                     let (_, credit) = self.outgoing.pop_front().unwrap();
                     self.flushed_bytes += credit;
                     self.written = 0;
@@ -353,12 +382,11 @@ impl WebSocketConnection {
             .transport
             .as_mut()
             .expect("connected")
-            .read_step(&mut bytes, *remaining)
+            .read_step(&mut bytes, remaining)
         {
             Ok(0) => Err(ws::Error::AbnormalClosure),
             Ok(n) => {
                 self.incoming.extend_from_slice(&bytes[..n]);
-                *remaining -= n;
                 Ok(())
             }
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(()),
@@ -371,8 +399,10 @@ impl WebSocketConnection {
         id: WebSocketId,
         resolver: &mut R,
         connector: &mut C,
+        tls_policy: &ClientPolicy,
         limits: DispatchLimits,
         remaining: &mut usize,
+        now: Instant,
         events: &mut Vec<WebSocketEvent>,
     ) -> Result<bool, ws::Error> {
         if *remaining == 0 {
@@ -396,15 +426,20 @@ impl WebSocketConnection {
             }
             Phase::Connect(addresses) => {
                 let address = addresses.remove(0);
-                match connector.connect(address, limits.connect_timeout) {
+                match connector.connect(
+                    address,
+                    super::connect_timeout(self.deadline, now, limits.connect_timeout)?,
+                ) {
                     Ok(socket) => {
                         socket.set_nonblocking(true)?;
                         if self.url.scheme() == "wss" {
                             let hostname = self.url.hostname();
                             let host = hostname.trim_start_matches('[').trim_end_matches(']');
                             self.phase = Phase::Tls(
-                                amazing_net_tls::PendingTls::new_http1(host, socket)
-                                    .map_err(|e| ws::Error::Tls(e.to_string()))?,
+                                amazing_net_tls::PendingTls::new_http1_with_policy(
+                                    host, socket, tls_policy,
+                                )
+                                .map_err(|e| ws::Error::Tls(e.to_string()))?,
                             );
                         } else {
                             self.transport = Some(Transport::Plain(socket));
@@ -418,10 +453,9 @@ impl WebSocketConnection {
                 }
             }
             Phase::Tls(tls) => {
-                let stream = tls
-                    .step(*remaining)
-                    .map_err(|e| ws::Error::Tls(e.to_string()))?;
-                *remaining = 0;
+                let step = tls.step_metered(*remaining);
+                *remaining -= step.socket_bytes;
+                let stream = step.result.map_err(|e| ws::Error::Tls(e.to_string()))?;
                 if let Some(stream) = stream {
                     self.transport = Some(Transport::Tls(stream));
                     self.phase = Phase::Request;
@@ -597,6 +631,68 @@ mod tests {
     use std::net::TcpListener;
     use std::thread;
 
+    #[test]
+    fn wss_frame_credit_and_close_reply_wait_for_ciphertext_drain() {
+        use amazing_net_tls::test_support;
+        for budget in [1, 7, 31, 128, 1024] {
+            let (peer_done, done) = std::sync::mpsc::channel();
+            let (port, peer) = test_support::serve(vec![b"http/1.1".to_vec()], move |io| {
+                let (opcode, payload) = client_frame(io);
+                assert_eq!(opcode, 1);
+                assert_eq!(payload, b"hello");
+                io.write_all(&[0x88, 2, 3, 232]).unwrap();
+                io.flush().unwrap();
+                let (opcode, payload) = client_frame(io);
+                assert_eq!(opcode, 8);
+                assert_eq!(payload, [3, 232]);
+                peer_done.send(()).unwrap();
+            });
+            let tls = test_support::connect_nonblocking(port).unwrap();
+            let mut dispatcher = Dispatcher::new(DispatchLimits::default());
+            let id = dispatcher
+                .open_websocket(
+                    &format!("wss://localhost:{port}/"),
+                    ws::Options::default(),
+                    None,
+                    Instant::now(),
+                )
+                .unwrap();
+            let connection = dispatcher.websockets.get_mut(&id).unwrap();
+            connection.transport = Some(Transport::Tls(tls));
+            connection.phase = Phase::Open;
+            connection.outgoing.clear();
+            dispatcher
+                .send_websocket(id, ws::Event::Text("hello".into()))
+                .unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut sent = 0;
+            let mut closed = 0;
+            while dispatcher.websockets_in_flight() != 0 {
+                assert!(Instant::now() < deadline, "WSS reply stalled");
+                for event in dispatcher.step_websockets(budget, Instant::now()) {
+                    match event {
+                        WebSocketEvent::Sent { bytes, .. } => {
+                            sent += bytes;
+                            if let Some(connection) = dispatcher.websockets.get(&id) {
+                                if let Some(Transport::Tls(tls)) = &connection.transport {
+                                    assert!(tls.output_drained(), "Sent preceded TLS drain");
+                                }
+                            }
+                        }
+                        WebSocketEvent::Close { .. } => closed += 1,
+                        WebSocketEvent::Error { error, .. } => panic!("{error:?}"),
+                        _ => {}
+                    }
+                }
+                std::thread::yield_now();
+            }
+            assert_eq!(sent, 5);
+            assert_eq!(closed, 1);
+            done.recv_timeout(Duration::from_secs(5)).unwrap();
+            peer.join().unwrap().unwrap();
+        }
+    }
+
     fn handshake(stream: &mut TcpStream) {
         stream
             .set_read_timeout(Some(Duration::from_secs(3)))
@@ -617,7 +713,7 @@ mod tests {
         stream.write_all(response.as_bytes()).unwrap();
     }
 
-    fn client_frame(stream: &mut TcpStream) -> (u8, Vec<u8>) {
+    fn client_frame(stream: &mut impl Read) -> (u8, Vec<u8>) {
         let mut head = [0; 2];
         stream.read_exact(&mut head).unwrap();
         assert_ne!(head[1] & 0x80, 0);

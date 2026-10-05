@@ -1,0 +1,893 @@
+{
+  "base": "64f5d9b86c1cda019f73aedb2dd4f7137a3b7663",
+  "csp": {
+    "baseline": {
+      "bytes": 35961,
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/csp-baseline.compact.json",
+      "sha256": "ffa3ba827523eb582fe73acb889fe977a0da94519712decc3631ba9495097ece"
+    },
+    "lost_files": [],
+    "lost_subtests": [],
+    "original": {
+      "bytes": 35905,
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/initial-compact-clean1/csp.compact.json",
+      "sha256": "70ec0e6c6e920812a01153c41540d65503a1f2d425c7704ab0d857c4252b9107"
+    },
+    "passing_files": 32,
+    "passing_subtests": 81
+  },
+  "css": {
+    "parsing": {
+      "after": {
+        "bytes": 142579,
+        "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/parsing.summary.json",
+        "sha256": "04a6e9b69ae1769d1dee1048a76ce5c0b801e5055a8ec1478441b75fe7f5924e"
+      },
+      "before": {
+        "bytes": 142513,
+        "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/parsing.summary.json",
+        "sha256": "7e3e4f7c09bf72fd68ad5bc53559a533cf268a4bfb9ffa6f0c6b56025fc340f5"
+      },
+      "comparison": {
+        "new_failures": {},
+        "removed_failures": {},
+        "same_cohort": true
+      },
+      "files": 514,
+      "passed": 4330,
+      "selectors": [
+        "css-logical",
+        "css-color",
+        "css-values",
+        "css-cascade",
+        "css-conditional",
+        "css-fonts",
+        "css-text",
+        "css-backgrounds",
+        "css-transforms",
+        "css-flexbox",
+        "css-grid",
+        "css-images",
+        "css-sizing",
+        "css-contain",
+        "css-display",
+        "selectors",
+        "css-shadow"
+      ],
+      "skipped_non_literal": 169,
+      "total": 5126
+    },
+    "render_counts": {
+      "crash": 0,
+      "error": 0,
+      "mismatch": 887,
+      "pass": 1327,
+      "timeout": 0,
+      "unsupported": 0
+    },
+    "render_maps": [
+      {
+        "after": {
+          "bytes": 5154,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-CSS2-floats.compact.json",
+          "sha256": "3f7f12d2d0650747a2ccbe73ec060c7591c7a918a08c39bacdcbc7f69d4ad297"
+        },
+        "before": {
+          "bytes": 2827,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-CSS2-floats.compact.json",
+          "sha256": "aa3c61ba36716a3c02388b9268bfc9bec4a6110148c47ee772cc73f931677649"
+        },
+        "cases": 39,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 9,
+          "pass": 30,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-CSS2-floats.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 4728,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-CSS2-normal-flow.compact.json",
+          "sha256": "5480d4daea6ecfdab151f38dec11937c5b11c1a84415e04bf8881038d32c8d1e"
+        },
+        "before": {
+          "bytes": 2571,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-CSS2-normal-flow.compact.json",
+          "sha256": "d7c3315b6eddb37a6b691053577b77be77ee0debbc12bad8c7fac4ff6b563ab3"
+        },
+        "cases": 29,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 5,
+          "pass": 24,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-CSS2-normal-flow.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 1623,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-CSS2-positioning.compact.json",
+          "sha256": "b85c2c3d628aea3eeb441c66b34699a195362af3d4f8a04b69dd63ccdef0cd55"
+        },
+        "before": {
+          "bytes": 935,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-CSS2-positioning.compact.json",
+          "sha256": "0bdbf45123028fa622b29a78d75009a53828279cce3915ee6f32535cd10fc8c4"
+        },
+        "cases": 7,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 2,
+          "pass": 5,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-CSS2-positioning.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 19132,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-backgrounds.compact.json",
+          "sha256": "112a63f541e9afebe141c1ae035e0361c9e81e45bd53a587a68f6302f98d506c"
+        },
+        "before": {
+          "bytes": 10243,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-backgrounds.compact.json",
+          "sha256": "e5b856c811cfa60b03ff551e6f097091c959a2b36ab60224cc560157e0c8de5a"
+        },
+        "cases": 134,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 56,
+          "pass": 78,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-backgrounds.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 2864,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-cascade.compact.json",
+          "sha256": "4daba0cf6c16f22c192c49182a902993db4bee3a689f29c798564ed9616cb179"
+        },
+        "before": {
+          "bytes": 1609,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-cascade.compact.json",
+          "sha256": "e83920e1b56775073f0e7a6f2a190b9de1add1bb250d05d3d91722c787cd5e5c"
+        },
+        "cases": 21,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 4,
+          "pass": 17,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-cascade.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 20909,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-color.compact.json",
+          "sha256": "5d6299aa5c3aa9c538b15be2992af28e0d715492589c7e1d782737ecb79d24db"
+        },
+        "before": {
+          "bytes": 11397,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-color.compact.json",
+          "sha256": "29e3a7e47abbf8b6773e8c490c1048c097c64d80b864a451deef36557fbd9526"
+        },
+        "cases": 236,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 10,
+          "pass": 226,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-color.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 9278,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-conditional.compact.json",
+          "sha256": "00d89469cb7ff23b8ffc1d5e7375616b44d15cb0bbb9ee664f76bc7158f726cb"
+        },
+        "before": {
+          "bytes": 5038,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-conditional.compact.json",
+          "sha256": "b91e029760feeea118095ddba7854b07322d52d6998b9b80a1a248d9d3a1f0c2"
+        },
+        "cases": 66,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 36,
+          "pass": 30,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-conditional.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 26512,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-contain.compact.json",
+          "sha256": "7f9882de6d0bae9179110a1bf665ecd6030c07c6f228c72e2c95e272f8fa7b07"
+        },
+        "before": {
+          "bytes": 14302,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-contain.compact.json",
+          "sha256": "e746089d2d60ed5cdf93050d5402ece2c24aec44bceb2e44af41d2455cac32ce"
+        },
+        "cases": 229,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 74,
+          "pass": 155,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-contain.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 4786,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-display.compact.json",
+          "sha256": "88ed18ba846312402b5d8343d79b67d455fd2a70b0501e02e655eac408883b26"
+        },
+        "before": {
+          "bytes": 2625,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-display.compact.json",
+          "sha256": "9f6a0de745c80ed64b6fea63e73b7bb491d9f36fe97ca1cfa77c2c78be756da8"
+        },
+        "cases": 35,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 7,
+          "pass": 28,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-display.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 3847,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-fonts.compact.json",
+          "sha256": "180baf203532f06d70428d4b9d0e6c6a73d6b1537b9d850b48cb44a6a9547868"
+        },
+        "before": {
+          "bytes": 2147,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-fonts.compact.json",
+          "sha256": "0d47f63cfcf3686c7e6bb47b54c71a4141a26d3b6d1505618e636d0614a79420"
+        },
+        "cases": 32,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 8,
+          "pass": 24,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-fonts.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 18469,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-images.compact.json",
+          "sha256": "a9bb8b0844bdc9b54b1676ae6bd9a260ddf12af45fec2d3e61808c8bc0e90430"
+        },
+        "before": {
+          "bytes": 9922,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-images.compact.json",
+          "sha256": "64775d59ab712f5082591d385db0b76c25e78fc00ce596fa7e2de05dabd04afe"
+        },
+        "cases": 141,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 49,
+          "pass": 92,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-images.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 45406,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-overflow.compact.json",
+          "sha256": "cce6b712c4df1e2fe2faf620ae75780c381b9a5ed4ca70a5fe83abe7123a8169"
+        },
+        "before": {
+          "bytes": 24520,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-overflow.compact.json",
+          "sha256": "8fe59330b52944f2de5fae8724b468452c9dde7ba12635af53be4c1588865388"
+        },
+        "cases": 343,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 260,
+          "pass": 83,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-overflow.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 8517,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-position.compact.json",
+          "sha256": "4ba25458962aef5a89f008852d46a31a46755461a09be1bac86873b7b0edab18"
+        },
+        "before": {
+          "bytes": 4561,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-position.compact.json",
+          "sha256": "d1d72fc60f785445ac8dcc11fede37d91633363b05ece80b33c150689e48d72b"
+        },
+        "cases": 54,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 9,
+          "pass": 45,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-position.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 7617,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-ruby.compact.json",
+          "sha256": "a251036dcde5a99509e8a25d1da156b17bac4e75c011e585805e8fbee83bf84f"
+        },
+        "before": {
+          "bytes": 4169,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-ruby.compact.json",
+          "sha256": "6b4ec0951f3e440ba583e830f52899f43fb3e5fa9a7fac3878b1abb638ef3065"
+        },
+        "cases": 67,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 15,
+          "pass": 52,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-ruby.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 4754,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-shadow.compact.json",
+          "sha256": "fe2486131b12d7d117017e56157310920650b75529de87342eabb3a31c772665"
+        },
+        "before": {
+          "bytes": 2665,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-shadow.compact.json",
+          "sha256": "be6548668582efa42e61e1e42ab6f39f31ec3e447e64b6068d16b2123ab474bf"
+        },
+        "cases": 35,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 35,
+          "pass": 0,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-shadow.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 19332,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-sizing.compact.json",
+          "sha256": "4a8c83f5f9ee82bbebb584b3c939cdfcda586571ded8c523a775e4ddddc58a1d"
+        },
+        "before": {
+          "bytes": 10323,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-sizing.compact.json",
+          "sha256": "5319f405ad73558ef69646821596b38dde89d63bda9f62e4176c02d64f2cc6aa"
+        },
+        "cases": 138,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 39,
+          "pass": 99,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-sizing.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 10568,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-tables.compact.json",
+          "sha256": "0b2c62fd88176498d180de4c0b9960fa53d611d66d0767eceb9f031282c4414a"
+        },
+        "before": {
+          "bytes": 5711,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-tables.compact.json",
+          "sha256": "85ba82d96d10620dfa8f6ae23064b4b2b0d83f0aecd0bcef056be637991abbcf"
+        },
+        "cases": 82,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 22,
+          "pass": 60,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-tables.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 43022,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-transforms.compact.json",
+          "sha256": "40531bda0fe62caaed4ed2ee7f3fb99fea722b802e476451cffc1c6610b9e159"
+        },
+        "before": {
+          "bytes": 23240,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-transforms.compact.json",
+          "sha256": "cfe1af9f9690e8194c2dfc4f45ebe134ca4d600287d4c14939d9e202e393474e"
+        },
+        "cases": 348,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 207,
+          "pass": 141,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-transforms.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 10359,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-css-viewport.compact.json",
+          "sha256": "bc2bc302e59de06773c55be826f2a358151bb546ec4812eafc71349d71c4f522"
+        },
+        "before": {
+          "bytes": 5642,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-css-viewport.compact.json",
+          "sha256": "0067c78bc16f8b09d69d1144561f6e5510beaafffdc73f7460134e238aa88d5a"
+        },
+        "cases": 87,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 31,
+          "pass": 56,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-css-viewport.compact.json"
+      },
+      {
+        "after": {
+          "bytes": 9902,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-compact/css-selectors.compact.json",
+          "sha256": "2d440228b0a0115a50472d874393b8fa64243f5febb8f994b43e515caec49b93"
+        },
+        "before": {
+          "bytes": 5383,
+          "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/css-baseline/css-selectors.compact.json",
+          "sha256": "e0a62dc2ced4ccb3db74ddcef32d0f43941c37eb7dce62c73d4d7e3a901a2c4f"
+        },
+        "cases": 91,
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 9,
+          "pass": 82,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "map": "css-selectors.compact.json"
+      }
+    ],
+    "resources": {
+      "binary_sha256": "13b270a5aac1f7a1b60bf896133aeb49f4934b5da92fa5ab582aa00a7df03930",
+      "cases": 491,
+      "counts": {
+        "crash": 38,
+        "mismatch": 112,
+        "pass": 318,
+        "unsupported": 23
+      },
+      "gained": [],
+      "lost": [],
+      "rc21_entries": 226,
+      "selection_sha256": "9f9965caa5f81378aad2b1e84edd4330f96627c21323526da28ff93954aea755"
+    }
+  },
+  "css_phase_exits": [
+    {
+      "actual_returncode": 0,
+      "phase": "nextest"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "doctests"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "ensure-wpt"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "release-build"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "parsing"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-fonts"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-transforms"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-images"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-CSS2-floats"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-CSS2-normal-flow"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-CSS2-positioning"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-backgrounds"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-contain"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-display"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-overflow"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-position"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-ruby"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-sizing"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-tables"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-viewport"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-color"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-cascade"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-conditional"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-selectors"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "css-css-shadow"
+    },
+    {
+      "actual_returncode": 0,
+      "phase": "image-resources"
+    }
+  ],
+  "net_csp_phase_exits": [
+    {
+      "engine_exit": 0,
+      "phase": "network-corpus"
+    },
+    {
+      "engine_exit": 0,
+      "phase": "csp-wpt"
+    }
+  ],
+  "normalization": {
+    "baseline": {
+      "bytes": 46731,
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/net-baseline.compact.json",
+      "sha256": "acf776969ae5b51cb6001091086b861dec9fa37d428d50315b29186755d2dd23"
+    },
+    "changed": 598,
+    "classifications_zlib_base64": "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",
+    "collisions": [],
+    "engine_exit": 0,
+    "gained": [
+      "amazing-fetch reporting::tests::coep_buffered_fresh_cache_uses_real_selected_response_and_original_report_only_settings",
+      "amazing-fetch reporting::tests::coep_corp_report_retains_all_current_fetch_destination_types_without_other_defaults",
+      "amazing-fetch reporting::tests::coep_graph_dependency_after_retirement_preserves_original_settings_and_real_posts",
+      "amazing-fetch reporting::tests::coep_graph_identity_quota_release_and_fresh_global_endpoint_isolation",
+      "amazing-fetch reporting::tests::coep_native_post_preserves_type_original_creation_and_response_chain_across_all_registered_bodies",
+      "amazing-fetch reporting::tests::coep_native_terminal_status_and_410_endpoint_retirement_preserve_observer_creation",
+      "amazing-fetch reporting::tests::coep_original_owner_prepared_inheritance_reports_preserve_retirement_enforcement_and_real_post",
+      "amazing-fetch reporting::tests::coep_owner_settings_noninheriting_types_no_endpoint_and_cross_service_remain_distinct_from_fresh_global_authority",
+      "amazing-fetch reporting::tests::coep_registered_body_creation_is_observer_visible_without_endpoint_and_rejects_missing_authority",
+      "amazing-fetch reporting::tests::coep_request_settings_reject_cross_service_and_client_mismatch_and_release_credit",
+      "amazing-fetch reporting::tests::coep_revalidation_reports_merged_response_once_and_retains_actual_conditional_requests",
+      "amazing-fetch reporting::tests::coep_saved_request_settings_real_main_hops_preserve_retirement_and_normative_report_order",
+      "amazing-fetch reporting::tests::coep_streamed_head_credit_and_retired_original_reporting_settings",
+      "amazing-fetch structured_fields::parser::tests::parse_boolean",
+      "amazing-fetch structured_fields::parser::tests::parse_byteseq",
+      "amazing-fetch structured_fields::parser::tests::parse_byteseq_generated",
+      "amazing-fetch structured_fields::parser::tests::parse_date",
+      "amazing-fetch structured_fields::parser::tests::parse_dict",
+      "amazing-fetch structured_fields::parser::tests::parse_dict_skip",
+      "amazing-fetch structured_fields::parser::tests::parse_dispstring",
+      "amazing-fetch structured_fields::parser::tests::parse_item_skip",
+      "amazing-fetch structured_fields::parser::tests::parse_key_generated",
+      "amazing-fetch structured_fields::parser::tests::parse_large_generated",
+      "amazing-fetch structured_fields::parser::tests::parse_list",
+      "amazing-fetch structured_fields::parser::tests::parse_list_skip",
+      "amazing-fetch structured_fields::parser::tests::parse_number",
+      "amazing-fetch structured_fields::parser::tests::parse_number_generated",
+      "amazing-fetch structured_fields::parser::tests::parse_string",
+      "amazing-fetch structured_fields::parser::tests::parse_string_generated",
+      "amazing-fetch structured_fields::parser::tests::parse_token",
+      "amazing-fetch structured_fields::parser::tests::parse_token_generated",
+      "amazing-fetch::coep coep_actual_secure_response_single_item_and_complete_parameter_parsing",
+      "amazing-fetch::coep coep_corp_uses_response_credentials_and_nested_navigation_receipts",
+      "amazing-fetch::coep coep_effective_credentials_preserve_observable_mode_and_actual_redirect_taint",
+      "amazing-fetch::coep coep_nested_document_and_dedicated_worker_isolation_compatibility_matrix",
+      "amazing-fetch::coep_network actual_304_without_matching_validator_cannot_replace_retained_body_or_credentials",
+      "amazing-fetch::coep_network actual_credentialless_304_reuses_body_with_current_hop_credentials",
+      "amazing-fetch::coep_network actual_credentialless_redirect_bounce_omits_credentials_at_cross_and_return_hops",
+      "amazing-fetch::coep_network actual_fresh_cache_applies_current_hop_credentials_without_losing_stored_receipt",
+      "amazing-fetch::coep_network actual_http_coep_cookie_set_cookie_and_stored_transport_receipt_matrix",
+      "amazing-fetch::coep_network actual_no_cors_missing_corp_applies_enforced_policy_with_real_response_receipt",
+      "amazing-fetch::coep_network genuine_native_child_navigation_corp_uses_constructor_custody_and_actual_parent_client_policy",
+      "amazing-fetch::coep_network genuine_native_no_cors_data_scheme_keeps_basic_responses_under_every_enforced_coep_policy",
+      "amazing-net dispatch::tests::http_and_websocket_connectors_receive_only_remaining_deadline",
+      "amazing-net dispatch::tests::shared_tls_transport_budget_debits_ciphertext_before_would_block",
+      "amazing-net dispatch::tests::tls_h2_last_cancelled_stream_drains_reset_without_active_request",
+      "amazing-net dispatch::tests::tls_h2_timeout_resets_only_expired_stream",
+      "amazing-net dispatch::websocket::tests::wss_frame_credit_and_close_reply_wait_for_ciphertext_drain",
+      "amazing-net-tls metered_io_tests::ciphertext_drain_reports_record_bytes_for_all_budgets",
+      "amazing-net-tls metered_io_tests::explicit_instance_policy_keeps_full_authentication_and_default_trust_isolated",
+      "amazing-net-tls metered_io_tests::failed_authentication_reports_progress_then_consumes_pending_socket",
+      "amazing-net-tls metered_io_tests::would_block_retains_cipher_progress_and_plaintext_retry_boundary",
+      "amazing-net-tls test_support::tests::metered_handshake_caps_every_cipher_step_and_retains_zero_budget",
+      "amazing-net-tls write_pressure_tests::bounded_write_pressure_matrix_delivers_exact_transcripts",
+      "amazing-net-tls write_pressure_tests::empty_writes_drain_queued_records_without_false_application_progress",
+      "amazing-net-tls write_pressure_tests::full_ciphertext_queue_is_would_block_not_closed_writer",
+      "amazing-net-tls write_pressure_tests::read_steps_finish_a_successfully_accepted_partial_ciphertext_write",
+      "amazing-net-tls write_pressure_tests::zero_budget_preserves_the_queue_and_accepts_no_application_bytes"
+    ],
+    "lost": [],
+    "original": {
+      "bytes": 118650,
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-inline-csp-net-css-integration/initial-compact-clean1/network.summary.json",
+      "sha256": "3b9b1abb299ceb2dcad528aeba46e1d325884ceb7198cae3e64806f11b5f9a5a"
+    },
+    "pass": 598,
+    "published_baseline": 540,
+    "regex": "^\\(\\s*\\d+/\\d+\\)\\s+",
+    "scope": "only anchored nextest progress prefix",
+    "unique_after_normalization": 598,
+    "unique_before_normalization": 598
+  },
+  "qualification": "Additive comparison correction from authenticated compact identities only. No engine rerun or raw recovery. Original wrapper/native exit remains 1; all recorded engine phases are 0. Full16 is owned separately by root.",
+  "schema": 1,
+  "source": "408cb841c0064c55e638a0d701f373e7e8d46020",
+  "storage": {
+    "actual_storage_exit": 1,
+    "artifact_manifest": {
+      "bytes": 213195,
+      "path": "/tmp/amazing-native-retained/integrator-net-css-producers-20261005/net-css-producers-408-initial/retained/manifests/net-css-producers-408-initial.json",
+      "sha256": "d31b3eab7cf409996e6aa71f6b8c83ae3676aa4fd049d7e8b81b3ea77d76fe06"
+    },
+    "baseline": null,
+    "capacity": {
+      "admitted": true,
+      "filesystems": [
+        {
+          "available_bytes": 32461078528,
+          "device": 64769,
+          "path": "/tmp/amazing-net-css-producers-scratch",
+          "required_bytes": 25769803776,
+          "total_bytes": 73635184640
+        },
+        {
+          "available_bytes": 32461078528,
+          "device": 64769,
+          "path": "/tmp/amazing-native-retained/integrator-net-css-producers-20261005/net-css-producers-408-initial",
+          "required_bytes": 134217728,
+          "total_bytes": 73635184640
+        }
+      ],
+      "shared_device_requirements": [
+        {
+          "available_bytes": 32461078528,
+          "required_bytes": 28051505152
+        }
+      ]
+    },
+    "command_exit": 1,
+    "copied_unique_bytes": 0,
+    "free_after": [
+      {
+        "available_bytes": 14561775616,
+        "device": 64769,
+        "path": "/tmp/amazing-net-css-producers-scratch",
+        "total_bytes": 73635184640
+      },
+      {
+        "available_bytes": 14561775616,
+        "device": 64769,
+        "path": "/tmp/amazing-native-retained/integrator-net-css-producers-20261005/net-css-producers-408-initial",
+        "total_bytes": 73635184640
+      }
+    ],
+    "job": "net-css-producers-408-initial",
+    "phase": "before",
+    "profile": {
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+    },
+    "recoverable_bytes": 2432070486,
+    "recoverable_files": 7346,
+    "retained_elf_files": 469,
+    "retained_files": 493,
+    "retained_logical_bytes": 7025324810,
+    "retention_capacity_required_bytes": 2032640,
+    "schema": 1,
+    "session_raw": {
+      "bytes": 2498,
+      "path": "/tmp/amazing-net-css-producers-scratch/net-css-producers-current/408cb841c0064c55e638a0d701f373e7e8d46020/before/net-css-producers-408-initial/session.json",
+      "sha256": "dc5aef0119df1eb8a9817e3334c533067da93d3459bfe52123bcf3c017cd1081"
+    },
+    "source": "408cb841c0064c55e638a0d701f373e7e8d46020",
+    "state": "TERMINAL",
+    "target_retired": true
+  },
+  "terminal": {
+    "actual_exit": 1,
+    "boot_id": "00f43085-46bc-4c38-beb9-f1e63ddd7dae",
+    "catalog_error": null,
+    "execution_raw": {
+      "bytes": 52184,
+      "path": "/home/user/.amazing-jobs/9ac06975a984434a8bde2b24acfc03b3/command.log",
+      "sha256": "314e48ac77471fc5adcaf692e43189e3f999d140314cb7a5ac3b181e1bde09a4"
+    },
+    "job": {
+      "box_id": "bx_5p45m8kb",
+      "command_sha256": "b4e60a7fcb5e57e8a5a595a2b7b3509c9b57d18c8b04a4f6ba105361415a80c6",
+      "execution_sha256": "a9af6fbc4808a86ebe1123d1836abc269f1c2753cf6f204d022e2efddfec7495",
+      "host": "user@51.255.76.140",
+      "job_id": "9ac06975a984434a8bde2b24acfc03b3",
+      "lane": "integrator-net-css-producers-20261005",
+      "output_root": "amazing/out/integrator-net-css-producers-20261005/net-css-producers-408-initial/compact",
+      "port": 19045,
+      "schema": 2,
+      "source_archive_sha256": "56ead446104e42a8c8018c3815992e77fcadb93983447181b407cf8535a6a67e",
+      "source_commit": "408cb841c0064c55e638a0d701f373e7e8d46020"
+    },
+    "observer_pipe_closed": false,
+    "owner": {
+      "cmdline_sha256": "5d2ff17d986d82ec7fd1fc8322719870b0719f5ae9d9dd31ca7d542ca44b5639",
+      "parent_pid": 37357,
+      "pid": 37360,
+      "start_ticks": 139992,
+      "state": "R"
+    },
+    "reason": "authenticated actual command exit",
+    "runner_exit": 1,
+    "started_ns": 1791210853264750387,
+    "state": "TERMINAL"
+  },
+  "transport": {
+    "clean_explicit_fetch_exit": 0,
+    "css_compact_fetch_exit": 0,
+    "initial_explicit_fetch_exit": 3,
+    "initial_failure": "requested absent merged-gate.summary.json; original request rejected",
+    "raw_recovery": false
+  },
+  "workspace_docs": {
+    "doctests": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 30
+    },
+    "nextest": {
+      "failed": 0,
+      "passed": 4863,
+      "skipped": 17
+    }
+  }
+}

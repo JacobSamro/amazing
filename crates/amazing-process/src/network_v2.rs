@@ -133,6 +133,7 @@ fn build_request(wire: NetworkStart) -> Result<(ApiRequest, ClientContext), Erro
     let embedder_policy = match wire.context.embedder_policy.as_str() {
         "unsafe-none" => EmbedderPolicy::UnsafeNone,
         "require-corp" => EmbedderPolicy::RequireCorp,
+        "credentialless" => EmbedderPolicy::Credentialless,
         _ => return Err(invalid("invalid embedder policy")),
     };
     let no_cors_media_state = match wire.context.no_cors_media_state.as_str() {

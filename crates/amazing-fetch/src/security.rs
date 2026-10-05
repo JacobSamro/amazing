@@ -39,6 +39,7 @@ impl Destination {
 pub enum EmbedderPolicy {
     UnsafeNone,
     RequireCorp,
+    Credentialless,
 }
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum NoCorsMediaState {
@@ -179,7 +180,22 @@ pub fn check_corp(
     headers: &HeaderList,
     domains: &impl RegistrableDomain,
 ) -> Result<(), FetchError> {
-    if request.mode != RequestMode::NoCors || request.origin == *request.url().origin() {
+    check_corp_with_credentials(request, headers, request.credentials_allowed(), false, domains)
+}
+/// CORP uses the authentic response's request-includes-credentials receipt,
+/// including stored responses. The navigation owner supplies for_navigation
+/// only for a true nested navigation; it is not inferred from a destination.
+pub fn check_corp_with_credentials(
+    request: &Request,
+    headers: &HeaderList,
+    request_includes_credentials: bool,
+    for_navigation: bool,
+    domains: &impl RegistrableDomain,
+) -> Result<(), FetchError> {
+    if for_navigation && request.security.embedder_policy == EmbedderPolicy::UnsafeNone {
+        return Ok(());
+    }
+    if (!for_navigation && request.mode != RequestMode::NoCors) || request.origin == *request.url().origin() {
         return Ok(());
     }
     let policy = headers.get("cross-origin-resource-policy");
@@ -187,7 +203,9 @@ pub fn check_corp(
         Some("same-origin") => "same-origin",
         Some("same-site") => "same-site",
         Some("cross-origin") => "cross-origin",
-        _ if request.security.embedder_policy == EmbedderPolicy::RequireCorp => "same-origin",
+        _ if request.security.embedder_policy == EmbedderPolicy::RequireCorp
+            || (request.security.embedder_policy == EmbedderPolicy::Credentialless
+                && (request_includes_credentials || for_navigation)) => "same-origin",
         _ => "cross-origin",
     };
     match policy {
@@ -219,7 +237,7 @@ pub fn check_redirect_corp(
     response: &InternalResponse,
     domains: &impl RegistrableDomain,
 ) -> Result<(), FetchError> {
-    check_corp(request, &response.headers, domains)
+    check_corp_with_credentials(request, &response.headers, response.request_includes_credentials, false, domains)
 }
 
 fn mime_essence(headers: &HeaderList) -> Option<String> {
@@ -506,13 +524,21 @@ pub(crate) fn response_security_csp_progress(
     }
     // HTTP fetch checks CORP on the internal response before main fetch's
     // MIME/nosniff checks or the opaque response can be exposed.
-    if request.mode == RequestMode::NoCors {
-        check_corp(request, &response.headers, domains)?;
+    // Actual child-navigation custody comes from the native constructor, not
+    // destination/URL heuristics. Redirect responses with Location belong to
+    // the navigation controller; enforce this response check at the final hop.
+    let nested_response = request.nested_navigation && !(matches!(response.status,301|302|303|307|308)
+        && response.headers.get("location").is_some());
+    // Fetch's data scheme branch produces a basic response even in no-cors
+    // mode. HTTP CORP/opaque checks must not turn that local response opaque.
+    let http_response = matches!(request.url().as_parsed().scheme(), "http" | "https");
+    if (request.mode == RequestMode::NoCors && http_response) || nested_response {
+        check_corp_with_credentials(request, &response.headers, response.request_includes_credentials, nested_response, domains)?;
     }
     check_script_mime(request.security.destination, &response.headers)?;
     check_nosniff(request.security.destination, &response.headers)?;
     if request.taint == ResponseType::Opaque
-        || (request.mode == RequestMode::NoCors && request.origin != *request.url().origin())
+        || (http_response && request.mode == RequestMode::NoCors && request.origin != *request.url().origin())
     {
         check_opaque_response(
             response.status,

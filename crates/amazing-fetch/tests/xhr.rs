@@ -75,6 +75,7 @@ impl Stub {
         Self {
             calls: 0,
             response: Some(InternalResponse {
+                request_includes_credentials: true,
                 status: 200,
                 status_text: "OK".into(),
                 headers,
@@ -643,6 +644,7 @@ fn upload_listener_forces_cross_origin_preflight() {
                 .append("access-control-allow-origin", "https://site.example")
                 .unwrap();
             Ok(InternalResponse {
+                request_includes_credentials: true,
                 status: 200,
                 status_text: "OK".into(),
                 headers,

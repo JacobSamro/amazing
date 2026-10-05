@@ -76,6 +76,8 @@ pub(crate) fn data_response_limited(
     let mut headers = HeaderList::default();
     headers.append("Content-Type", &data.mime_type.serialize())?;
     Ok(InternalResponse {
+        // Scheme response retains Fetch's initial response flag.
+        request_includes_credentials: true,
         status: 200,
         status_text: "OK".into(),
         headers,

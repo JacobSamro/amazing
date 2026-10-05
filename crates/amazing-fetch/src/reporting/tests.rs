@@ -1002,6 +1002,359 @@ fn actual_same_global_reporting_handle_reuses_own_endpoints_without_fresh_child_
 }
 
 #[test]
+fn coep_registered_body_creation_is_observer_visible_without_endpoint_and_rejects_missing_authority()
+ {
+    let url = HttpUrl::parse("https://receiving.test/current").unwrap();
+    let client = receiving_client(&url, "https://receiving.test/creation#fragment");
+    let mut service = NetworkService::new(DispatchLimits::default());
+    let handle = service.register_reporting_initial_client(&client).unwrap();
+    let response_urls = [
+        ParsedUrl::parse("https://user:secret@resource.test/initial#fragment").unwrap(),
+        ParsedUrl::parse("https://redirect.test/private-final").unwrap(),
+    ];
+    let now = Instant::now();
+    let receipt = service
+        .generate_coep_report(
+            handle,
+            CoepReportBody::Corp {
+                response_url_list: &response_urls,
+                disposition: CoepReportDisposition::Reporting,
+                destination: "image",
+            },
+            &[0xdfff],
+            now,
+            now,
+        )
+        .unwrap();
+    assert_eq!(
+        receipt.report_type,
+        "coep".encode_utf16().collect::<Vec<_>>()
+    );
+    assert_eq!(
+        receipt.report_url,
+        "https://receiving.test/creation"
+            .encode_utf16()
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(receipt.visibility, NativeReportVisibility::ObserverVisible);
+    assert_eq!(receipt.delivery, Err(ReportError::NoEndpoint));
+    let body: BTreeMap<_, _> = receipt
+        .body
+        .iter()
+        .map(|(key, value)| {
+            (
+                String::from_utf16(key).unwrap(),
+                String::from_utf16(value).unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(body["blockedURL"], "https://resource.test/initial");
+    assert_eq!(body["type"], "corp");
+    assert_eq!(body["disposition"], "reporting");
+    assert_eq!(body["destination"], "image");
+    assert_eq!(service.dispatcher.in_flight(), 0);
+    assert_eq!(
+        service.generate_coep_report(
+            handle,
+            CoepReportBody::Navigation {
+                response_url_list: &[],
+                disposition: CoepReportDisposition::Enforce
+            },
+            &[],
+            now,
+            now
+        ),
+        Err(ReportError::InvalidReport)
+    );
+    assert_eq!(
+        service.generate_coep_report(
+            handle,
+            CoepReportBody::Corp {
+                response_url_list: &response_urls,
+                disposition: CoepReportDisposition::Enforce,
+                destination: "guessed-other"
+            },
+            &[],
+            now,
+            now
+        ),
+        Err(ReportError::InvalidReport)
+    );
+    let mut other = NetworkService::new(DispatchLimits::default());
+    assert_eq!(
+        other.generate_coep_report(
+            handle,
+            CoepReportBody::Navigation {
+                response_url_list: &response_urls,
+                disposition: CoepReportDisposition::Enforce
+            },
+            &[],
+            now,
+            now
+        ),
+        Err(ReportError::StaleDocument)
+    );
+    assert!(service.forget_reporting_document(handle));
+    assert_eq!(
+        service.generate_coep_report(
+            handle,
+            CoepReportBody::Navigation {
+                response_url_list: &response_urls,
+                disposition: CoepReportDisposition::Enforce
+            },
+            &[],
+            now,
+            now
+        ),
+        Err(ReportError::StaleDocument)
+    );
+}
+
+#[test]
+fn coep_native_post_preserves_type_original_creation_and_response_chain_across_all_registered_bodies()
+ {
+    // Native report transport and body controls; not installed child/worker proof.
+    for kind in ["navigation", "worker initialization", "corp"] {
+        for disposition in [
+            CoepReportDisposition::Enforce,
+            CoepReportDisposition::Reporting,
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let url = HttpUrl::parse(&format!(
+                "http://{}/current",
+                listener.local_addr().unwrap()
+            ))
+            .unwrap();
+            let client = receiving_client(
+                &url,
+                &format!("http://{}/creation#old", listener.local_addr().unwrap()),
+            );
+            let (tx, rx) = mpsc::channel();
+            let peer = thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                tx.send(read_request(&mut stream)).unwrap();
+                stream
+                    .write_all(
+                        b"HTTP/1.1 204 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    )
+                    .unwrap();
+            });
+            let mut service = NetworkService::new(DispatchLimits::default());
+            let handle = service
+                .register_reporting_client_response(&client, &url, &headers(r#"coep="/reports""#))
+                .unwrap();
+            let response_urls = [
+                ParsedUrl::parse("https://user:secret@resource.test/initial#fragment").unwrap(),
+                ParsedUrl::parse("https://redirect.test/private-final").unwrap(),
+            ];
+            let body = match kind {
+                "navigation" => CoepReportBody::Navigation {
+                    response_url_list: &response_urls,
+                    disposition,
+                },
+                "worker initialization" => CoepReportBody::WorkerInitialization {
+                    response_url_list: &response_urls,
+                    disposition,
+                },
+                _ => CoepReportBody::Corp {
+                    response_url_list: &response_urls,
+                    disposition,
+                    destination: "script",
+                },
+            };
+            let now = Instant::now();
+            let receipt = service
+                .generate_coep_report(
+                    handle,
+                    body,
+                    &"coep".encode_utf16().collect::<Vec<_>>(),
+                    now,
+                    now + Duration::from_secs(2),
+                )
+                .unwrap();
+            let id = receipt.delivery.unwrap();
+            assert!(service.forget_reporting_document(handle));
+            let completed = run(&mut service, 1);
+            assert_eq!(completed[0].id, id);
+            assert_eq!(completed[0].document, handle);
+            assert_eq!(completed[0].route, ReportRoute::ReportingApi);
+            assert_eq!(
+                completed[0].outcome,
+                ReportOutcome::Response {
+                    status: 204,
+                    accepted: true
+                }
+            );
+            let wire = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+            assert!(wire.starts_with("POST /reports HTTP/1.1"));
+            assert!(
+                wire.to_ascii_lowercase()
+                    .contains("content-type: application/reports+json")
+            );
+            assert!(wire.contains("\"type\":\"coep\""));
+            assert!(wire.contains(&format!("\"type\":{}", quote(kind))));
+            assert!(wire.contains("\"blockedURL\":\"https://resource.test/initial\""));
+            assert!(wire.contains("\"age\":2000"));
+            assert!(wire.contains(&quote(&strip_url(&client.creation_url.serialize()))));
+            assert!(!wire.contains("private-final"));
+            assert!(!wire.contains("secret"));
+            assert!(!wire.contains("fragment"));
+            assert_eq!(wire.contains("\"destination\":\"script\""), kind == "corp");
+            assert!(wire.contains(&format!(
+                "\"disposition\":{}",
+                quote(if disposition == CoepReportDisposition::Enforce {
+                    "enforce"
+                } else {
+                    "reporting"
+                })
+            )));
+            assert!(service.reporting.document(handle).is_err());
+            assert!(!service.has_pending_reporting_io());
+            peer.join().unwrap();
+        }
+    }
+}
+
+#[test]
+fn coep_native_terminal_status_and_410_endpoint_retirement_preserve_observer_creation() {
+    for status in [200, 410, 500] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = HttpUrl::parse(&format!(
+            "http://{}/document",
+            listener.local_addr().unwrap()
+        ))
+        .unwrap();
+        let peer = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let wire = read_request(&mut stream);
+            assert!(wire.contains("\"type\":\"coep\""));
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 {status} Status\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    )
+                    .as_bytes(),
+                )
+                .unwrap();
+        });
+        let mut service = NetworkService::new(DispatchLimits::default());
+        let handle = service
+            .register_reporting_client_response(
+                &receiving_client(&url, &url.serialize()),
+                &url,
+                &headers(r#"coep="/reports""#),
+            )
+            .unwrap();
+        let urls = [url.as_parsed().clone()];
+        let now = Instant::now();
+        let receipt = service
+            .generate_coep_report(
+                handle,
+                CoepReportBody::Navigation {
+                    response_url_list: &urls,
+                    disposition: CoepReportDisposition::Enforce,
+                },
+                &"coep".encode_utf16().collect::<Vec<_>>(),
+                now,
+                now,
+            )
+            .unwrap();
+        assert!(receipt.delivery.is_ok());
+        let completed = run(&mut service, 1);
+        assert_eq!(
+            completed[0].outcome,
+            ReportOutcome::Response {
+                status,
+                accepted: status == 200
+            }
+        );
+        peer.join().unwrap();
+        assert_eq!(
+            service
+                .reporting
+                .document(handle)
+                .unwrap()
+                .endpoints
+                .contains_key("coep"),
+            status != 410
+        );
+        if status == 410 {
+            let receipt = service
+                .generate_coep_report(
+                    handle,
+                    CoepReportBody::Navigation {
+                        response_url_list: &urls,
+                        disposition: CoepReportDisposition::Enforce,
+                    },
+                    &"coep".encode_utf16().collect::<Vec<_>>(),
+                    now,
+                    now,
+                )
+                .unwrap();
+            assert_eq!(receipt.visibility, NativeReportVisibility::ObserverVisible);
+            assert_eq!(receipt.delivery, Err(ReportError::NoEndpoint));
+        }
+    }
+}
+
+#[test]
+fn coep_corp_report_retains_all_current_fetch_destination_types_without_other_defaults() {
+    let url = HttpUrl::parse("https://receiving.test/document").unwrap();
+    let mut service = NetworkService::new(DispatchLimits::default());
+    let handle = service
+        .register_reporting_initial_client(&receiving_client(&url, &url.serialize()))
+        .unwrap();
+    let urls = [url.as_parsed().clone()];
+    let now = Instant::now();
+    for destination in [
+        "",
+        "audio",
+        "audioworklet",
+        "document",
+        "embed",
+        "font",
+        "frame",
+        "iframe",
+        "image",
+        "json",
+        "manifest",
+        "object",
+        "paintworklet",
+        "report",
+        "script",
+        "serviceworker",
+        "sharedworker",
+        "style",
+        "text",
+        "track",
+        "video",
+        "webidentity",
+        "worker",
+        "xslt",
+    ] {
+        let receipt = service
+            .generate_coep_report(
+                handle,
+                CoepReportBody::Corp {
+                    response_url_list: &urls,
+                    disposition: CoepReportDisposition::Reporting,
+                    destination,
+                },
+                &[],
+                now,
+                now,
+            )
+            .unwrap();
+        assert_eq!(receipt.delivery, Err(ReportError::NoEndpoint));
+        assert!(receipt.body.contains(&(
+            "destination".encode_utf16().collect(),
+            destination.encode_utf16().collect()
+        )));
+    }
+    assert!(!service.has_pending_reporting_io());
+}
+
+#[test]
 fn prepared_report_preserves_original_global_after_native_callback_retirement_and_error() {
     // Native event/report boundary control, not installed SPVE proof.
     for modern in [false, true] {
@@ -1161,4 +1514,320 @@ fn prepared_report_is_service_bound_and_drop_releases_bounded_snapshot_credit() 
         Err(ReportError::Limit)
     ));
     assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire), 0);
+}
+
+#[test]
+fn coep_saved_request_settings_real_main_hops_preserve_retirement_and_normative_report_order() {
+    use crate::{EmbedderPolicy,EmbedderPolicyContainer,Destination,api::{ApiRequest,ApiRequestInit,ApiRequestInput}};
+    // Six whole native request cases; actual installed Window retirement is separate.
+    for (enforced,resource_corp,endpoint,expected_reports,blocked) in [
+        (EmbedderPolicy::UnsafeNone,"",true,1,false),
+        (EmbedderPolicy::RequireCorp,"",true,2,true),
+        (EmbedderPolicy::Credentialless,"",true,1,false),
+        (EmbedderPolicy::RequireCorp,"same-origin",true,0,true),
+        (EmbedderPolicy::RequireCorp,"cross-origin",true,0,false),
+        (EmbedderPolicy::UnsafeNone,"",false,1,false),
+    ] {
+        let listener=TcpListener::bind("127.0.0.1:0").unwrap();let port=listener.local_addr().unwrap().port();
+        let (tx,rx)=mpsc::channel();
+        let network_reports=if endpoint {expected_reports}else{0};
+        let peer=thread::spawn(move|| {
+            for index in 0..1+network_reports {
+                let (mut stream,_)=listener.accept().unwrap();let request=read_request(&mut stream);
+                tx.send(request).unwrap();
+                if index==0 {
+                    let corp=if resource_corp.is_empty(){String::new()}else{format!("Cross-Origin-Resource-Policy: {resource_corp}\r\n")};
+                    stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/javascript\r\n{corp}Content-Length: 4\r\nConnection: close\r\n\r\ntrue").as_bytes()).unwrap();
+                } else {stream.write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();}
+            }
+        });
+        let document=HttpUrl::parse(&format!("http://localhost:{port}/document")).unwrap();
+        let mut client=receiving_client(&document,&format!("http://localhost:{port}/creation#secret"));
+        client.context.security.embedder_policy=enforced;
+        let container=EmbedderPolicyContainer {value:enforced,reporting_endpoint:endpoint.then(||"coep".into()),
+            report_only_value:EmbedderPolicy::RequireCorp,report_only_reporting_endpoint:endpoint.then(||"coep".into())};
+        let mut service=NetworkService::new(DispatchLimits::default());
+        // Deliberately retain a default endpoint: absent COEP endpoint must not use it.
+        let handle=service.register_reporting_client_response(&client,&document,&headers(r#"coep="/report", default="/wrong-default""#)).unwrap();
+        let settings=service.prepare_coep_request_reporting(handle,&client,&container).unwrap();
+        let mut init=ApiRequestInit::default();init.mode=Some("no-cors".into());init.credentials=Some("include".into());
+        let request=ApiRequest::new(ApiRequestInput::Url(&format!("http://127.0.0.1:{port}/resource#private").encode_utf16().collect::<Vec<_>>()),init,&document,client.origin.clone()).unwrap();
+        let id=service.start_subresource_with_coep_reporting(request,client.context.clone(),Destination::Script,settings).unwrap();
+        assert!(service.forget_reporting_document(handle));
+        let deadline=Instant::now()+Duration::from_secs(15);let mut reports=Vec::new();let mut finished=None;let mut deliveries=Vec::new();
+        while Instant::now()<deadline && (finished.is_none()||service.has_pending_reporting_io()) {
+            for event in service.step(31,Instant::now()) {
+                match event {
+                    ServiceEvent::CoepReport{id:found,document:original,report}=>{assert_eq!(found,id);assert_eq!(original,handle);reports.push(report.unwrap());},
+                    ServiceEvent::SubresourceFinished{id:found,response}=>{assert_eq!(found,id);assert_eq!(response.body,b"true");finished=Some(false);},
+                    ServiceEvent::SubresourceFailed{id:found,failure}=>{assert_eq!(found,id);assert_eq!(failure.error,crate::api::ApiError::Network(FetchError::CrossOriginResourcePolicy));finished=Some(true);},
+                    ServiceEvent::ReportFinished(receipt)=>deliveries.push(receipt),_=>{}
+                }
+            }
+            thread::yield_now();
+        }
+        assert_eq!(finished,Some(blocked));assert_eq!(reports.len(),expected_reports);assert_eq!(deliveries.len(),network_reports);
+        assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+        assert!(service.reporting.document(handle).is_err());
+        for (index,report) in reports.iter().enumerate() {
+            let body:BTreeMap<_,_>=report.body.iter().map(|(k,v)|(String::from_utf16(k).unwrap(),String::from_utf16(v).unwrap())).collect();
+            assert_eq!(body["disposition"],if index==0 {"reporting"}else{"enforce"});
+            assert_eq!(body["blockedURL"],format!("http://127.0.0.1:{port}/resource"));assert_eq!(body["destination"],"script");
+            assert_eq!(String::from_utf16(&report.report_url).unwrap(),format!("http://localhost:{port}/creation"));
+            if endpoint {assert!(report.delivery.is_ok());}else{assert_eq!(report.delivery,Err(ReportError::NoEndpoint));}
+        }
+        let get=rx.recv_timeout(Duration::from_secs(10)).unwrap();assert!(get.starts_with("GET /resource HTTP/1.1"));
+        for _ in 0..network_reports {let post=rx.recv_timeout(Duration::from_secs(10)).unwrap();assert!(post.starts_with("POST /report HTTP/1.1"));assert!(post.contains("application/reports+json"));assert!(post.contains("\"type\":\"coep\""));assert!(!post.contains("#secret"));}
+        peer.join().unwrap();
+    }
+}
+#[test]
+fn coep_request_settings_reject_cross_service_and_client_mismatch_and_release_credit() {
+    use crate::{EmbedderPolicy,EmbedderPolicyContainer,api::{ApiRequest,ApiRequestInit,ApiRequestInput}};
+    let url=HttpUrl::parse("https://original.test/document").unwrap();let client=receiving_client(&url,"https://original.test/creation");
+    let mut service=NetworkService::new(DispatchLimits::default());let handle=service.register_reporting_initial_client(&client).unwrap();
+    let container=EmbedderPolicyContainer::default();
+    let mut wrong=container.clone();wrong.value=EmbedderPolicy::Credentialless;
+    assert!(matches!(service.prepare_coep_request_reporting(handle,&client,&wrong),Err(ReportError::InvalidReport)));
+    let settings=service.prepare_coep_request_reporting(handle,&client,&container).unwrap();assert!(service.reporting.prepared_bytes.load(Ordering::Acquire)>0);
+    let mut other=NetworkService::new(DispatchLimits::default());
+    let request=ApiRequest::new(ApiRequestInput::Url(&"https://resource.test/script".encode_utf16().collect::<Vec<_>>()),ApiRequestInit::default(),&url,client.origin.clone()).unwrap();
+    assert!(matches!(other.start_subresource_with_coep_reporting(request,client.context.clone(),crate::Destination::Script,settings),Err(ReportError::StaleDocument)));
+    assert_eq!(other.dispatcher.in_flight(),0);assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+    let settings=service.prepare_coep_request_reporting(handle,&client,&container).unwrap();drop(settings);assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+    service.forget_reporting_document(handle);assert!(matches!(service.prepare_coep_request_reporting(handle,&client,&container),Err(ReportError::StaleDocument)));
+}
+
+#[test]
+fn coep_buffered_fresh_cache_uses_real_selected_response_and_original_report_only_settings() {
+    use crate::{EmbedderPolicy,EmbedderPolicyContainer,api::{ApiRequest,ApiRequestInit,ApiRequestInput}};
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();let port=listener.local_addr().unwrap().port();
+    let (tx,rx)=mpsc::channel();let peer=thread::spawn(move||{
+        let (mut stream,_)=listener.accept().unwrap();tx.send(read_request(&mut stream)).unwrap();
+        stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/javascript\r\nCache-Control: max-age=600\r\nContent-Length: 4\r\nConnection: close\r\n\r\ntrue").unwrap();
+    });
+    let document=HttpUrl::parse(&format!("http://localhost:{port}/document")).unwrap();let client=receiving_client(&document,&document.serialize());
+    let container=EmbedderPolicyContainer{report_only_value:EmbedderPolicy::RequireCorp,..Default::default()};
+    let mut service=NetworkService::new(DispatchLimits::default());let handle=service.register_reporting_initial_client(&client).unwrap();
+    for phase in 0..2 {
+        let settings=service.prepare_coep_request_reporting(handle,&client,&container).unwrap();
+        let mut init=ApiRequestInit::default();init.mode=Some("no-cors".into());init.credentials=Some("include".into());
+        let input=format!("http://127.0.0.1:{port}/cached").encode_utf16().collect::<Vec<_>>();
+        let request=ApiRequest::new(ApiRequestInput::Url(&input),init,&document,client.origin.clone()).unwrap();
+        let id=service.start_at_with_coep_reporting(request,client.context.clone(),Instant::now(),settings).unwrap();
+        if phase==1 {assert_eq!(service.dispatcher.in_flight(),0,"fresh cache must not submit a request");}
+        let mut finished=false;let mut reports=0;let deadline=Instant::now()+Duration::from_secs(15);
+        while !finished && Instant::now()<deadline {
+            for event in service.step(4096,Instant::now()) {
+                match event {
+                    ServiceEvent::CoepReport{id:found,document:original,report}=>{assert_eq!(found,id);assert_eq!(original,handle);let receipt=report.unwrap();assert_eq!(receipt.delivery,Err(ReportError::NoEndpoint));reports+=1;},
+                    ServiceEvent::Finished{id:found,result}=>{assert_eq!(found,id);let response=result.unwrap();assert_eq!(response.response_type,crate::api::ApiResponseType::Opaque);assert_eq!(response.status,0);assert!(response.url.is_empty());finished=true;},_=>{}
+                }
+            }
+            thread::yield_now();
+        }
+        assert!(finished);assert_eq!(reports,1);assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+    }
+    assert!(rx.recv_timeout(Duration::from_secs(10)).unwrap().starts_with("GET /cached HTTP/1.1"));peer.join().unwrap();
+}
+
+#[test]
+fn coep_original_owner_prepared_inheritance_reports_preserve_retirement_enforcement_and_real_post() {
+    use crate::{EmbedderPolicy,EmbedderPolicyContainer,EmbedderPolicyOwner};
+    // Native owner-check/report boundary; not an installed worker constructor.
+    for owner in [EmbedderPolicyOwner::NestedNavigation,EmbedderPolicyOwner::DedicatedWorker] {
+        for parent_value in [EmbedderPolicy::UnsafeNone,EmbedderPolicy::RequireCorp,EmbedderPolicy::Credentialless] {
+            let listener=TcpListener::bind("127.0.0.1:0").unwrap();let port=listener.local_addr().unwrap().port();
+            let count=if parent_value==EmbedderPolicy::UnsafeNone {1}else{2};let (tx,rx)=mpsc::channel();
+            let peer=thread::spawn(move||{
+                for _ in 0..count {let (mut stream,_)=listener.accept().unwrap();tx.send(read_request(&mut stream)).unwrap();stream.write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();}
+            });
+            let url=HttpUrl::parse(&format!("http://127.0.0.1:{port}/parent")).unwrap();let mut client=receiving_client(&url,&format!("http://127.0.0.1:{port}/original#private"));client.context.security.embedder_policy=parent_value;
+            let parent=EmbedderPolicyContainer {value:parent_value,reporting_endpoint:Some("parent".into()),report_only_value:EmbedderPolicy::RequireCorp,report_only_reporting_endpoint:Some("parent".into())};
+            let mut service=NetworkService::new(DispatchLimits::default());let handle=service.register_reporting_client_response(&client,&url,&headers(r#"parent="/report""#)).unwrap();
+            let plan=service.prepare_coep_inheritance_reporting(handle,&client,&parent).unwrap();assert!(service.forget_reporting_document(handle));
+            let child=EmbedderPolicyContainer::from_response(&HeaderList::default(),true);
+            let response_urls=[ParsedUrl::parse("https://user:secret@child.test/first#private").unwrap(),ParsedUrl::parse("https://child.test/redirected").unwrap()];
+            let queued_at=Instant::now();let reports=service.queue_coep_inheritance_reports(plan,&child,owner,&response_urls,queued_at,queued_at+Duration::from_secs(2)).unwrap();
+            assert_eq!(reports.document,handle);assert_eq!(reports.check.allowed,parent_value==EmbedderPolicy::UnsafeNone);assert!(reports.check.report_only_violation);assert_eq!(reports.check.enforced_violation,parent_value!=EmbedderPolicy::UnsafeNone);
+            assert_eq!(reports.reports.len(),count);
+            for (index,report) in reports.reports.into_iter().enumerate() {let report=report.unwrap();assert!(report.delivery.is_ok());let fields:BTreeMap<_,_>=report.body.into_iter().map(|(k,v)|(String::from_utf16(&k).unwrap(),String::from_utf16(&v).unwrap())).collect();assert_eq!(fields["blockedURL"],"https://child.test/first");assert_eq!(fields["disposition"],if index==0 {"reporting"}else{"enforce"});assert_eq!(fields["type"],if owner==EmbedderPolicyOwner::NestedNavigation {"navigation"}else{"worker initialization"});}
+            assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);let finished=run(&mut service,count);assert!(finished.iter().all(|report|report.document==handle));
+            for _ in 0..count {let wire=rx.recv_timeout(Duration::from_secs(10)).unwrap();assert!(wire.starts_with("POST /report HTTP/1.1"));assert!(wire.contains("\"age\":2000"));assert!(!wire.contains("secret"));assert!(!wire.contains("redirected"));}
+            assert!(service.reporting.document(handle).is_err());peer.join().unwrap();
+        }
+    }
+}
+#[test]
+fn coep_owner_settings_noninheriting_types_no_endpoint_and_cross_service_remain_distinct_from_fresh_global_authority() {
+    use crate::{EmbedderPolicy,EmbedderPolicyContainer,EmbedderPolicyOwner};
+    let url=HttpUrl::parse("https://parent.test/current").unwrap();let mut client=receiving_client(&url,"https://parent.test/creation");client.context.security.embedder_policy=EmbedderPolicy::RequireCorp;
+    let parent=EmbedderPolicyContainer{value:EmbedderPolicy::RequireCorp,report_only_value:EmbedderPolicy::Credentialless,..Default::default()};let child=EmbedderPolicyContainer::default();
+    let mut service=NetworkService::new(DispatchLimits::default());let handle=service.register_reporting_initial_client(&client).unwrap();
+    for owner in [EmbedderPolicyOwner::TopLevelNavigation,EmbedderPolicyOwner::SharedWorker,EmbedderPolicyOwner::ServiceWorker,EmbedderPolicyOwner::Worklet] {
+        let plan=service.prepare_coep_inheritance_reporting(handle,&client,&parent).unwrap();let now=Instant::now();let reports=service.queue_coep_inheritance_reports(plan,&child,owner,&[],now,now).unwrap();assert!(reports.check.allowed);assert!(!reports.check.report_only_violation);assert!(!reports.check.enforced_violation);assert!(reports.reports.is_empty());
+    }
+    let plan=service.prepare_coep_inheritance_reporting(handle,&client,&parent).unwrap();let mut other=NetworkService::new(DispatchLimits::default());let now=Instant::now();assert!(matches!(other.queue_coep_inheritance_reports(plan,&child,EmbedderPolicyOwner::NestedNavigation,&[],now,now),Err(ReportError::StaleDocument)));assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+    let plan=service.prepare_coep_inheritance_reporting(handle,&client,&parent).unwrap();service.forget_reporting_document(handle);let urls=[ParsedUrl::parse("https://child.test/document").unwrap()];let reports=service.queue_coep_inheritance_reports(plan,&child,EmbedderPolicyOwner::NestedNavigation,&urls,now,now).unwrap();assert!(!reports.check.allowed);assert_eq!(reports.reports.len(),2);for report in reports.reports {assert_eq!(report.unwrap().delivery,Err(ReportError::NoEndpoint));}
+    assert_eq!(service.dispatcher.in_flight(),0);assert!(service.reporting.document(handle).is_err());assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+}
+#[test]
+fn coep_graph_dependency_after_retirement_preserves_original_settings_and_real_posts() {
+    use crate::{EmbedderPolicy,EmbedderPolicyContainer,Destination,api::{ApiRequest,ApiRequestInit,ApiRequestInput}};
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();let port=listener.local_addr().unwrap().port();
+    let (tx,rx)=mpsc::channel();
+    let peer=thread::spawn(move|| {
+        for _ in 0..4 {
+            let (mut stream,_)=listener.accept().unwrap();let text=read_request(&mut stream);
+            let get=text.starts_with("GET ");tx.send(text).unwrap();
+            stream.write_all(if get {b"HTTP/1.1 200 OK\r\nContent-Type: application/javascript\r\nContent-Length: 4\r\nConnection: close\r\n\r\ntrue".as_slice()}
+                else {b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice()}).unwrap();
+        }
+    });
+    let url=HttpUrl::parse(&format!("http://localhost:{port}/document")).unwrap();
+    let client=receiving_client(&url,&format!("http://localhost:{port}/creation#private"));
+    let container=EmbedderPolicyContainer {value:EmbedderPolicy::UnsafeNone,reporting_endpoint:None,
+        report_only_value:EmbedderPolicy::RequireCorp,report_only_reporting_endpoint:Some("coep".into())};
+    let mut service=NetworkService::new(DispatchLimits::default());
+    let handle=service.register_reporting_client_response(&client,&url,&headers(r#"coep="/report""#)).unwrap();
+    let mut graph=service.prepare_coep_graph_reporting(handle,&client,&container).unwrap();let graph_id=graph.id();
+    let initial_credit=service.reporting.prepared_bytes.load(Ordering::Acquire);
+    assert!(initial_credit>0);assert!(service.forget_reporting_document(handle));
+    for name in ["root","dependency"] {
+        // The second dependency is discovered only after actual first response
+        // completion; this is native producer coverage, not installed JS parsing.
+        let plan=service.issue_coep_graph_request_settings(&mut graph,graph_id).unwrap();
+        let mut init=ApiRequestInit::default();init.mode=Some("no-cors".into());
+        let request=ApiRequest::new(ApiRequestInput::Url(&format!("http://127.0.0.1:{port}/{name}").encode_utf16().collect::<Vec<_>>()),init,&url,client.origin.clone()).unwrap();
+        let id=service.start_subresource_with_coep_reporting(request,client.context.clone(),Destination::Script,plan).unwrap();
+        let deadline=Instant::now()+Duration::from_secs(15);let mut finished=false;let mut reports=0;let mut delivered=0;
+        while Instant::now()<deadline && (!finished||service.has_pending_reporting_io()) {
+            for event in service.step(31,Instant::now()) {match event {
+                ServiceEvent::SubresourceFinished{id:found,response}=>{assert_eq!(found,id);assert_eq!(response.body,b"true");finished=true;},
+                ServiceEvent::CoepReport{id:found,document,report}=>{assert_eq!(found,id);assert_eq!(document,handle);let report=report.unwrap();
+                    assert_eq!(String::from_utf16(&report.report_url).unwrap(),format!("http://localhost:{port}/creation"));assert!(report.delivery.is_ok());reports+=1;},
+                ServiceEvent::ReportFinished(receipt)=>{assert_eq!(receipt.document,handle);delivered+=1;},
+                ServiceEvent::SubresourceFailed{failure,..}=>panic!("genuine graph request failed: {:?}",failure.error),_=>{}
+            }}
+            thread::yield_now();
+        }
+        assert!(finished);assert_eq!(reports,1);assert_eq!(delivered,1);
+        assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),initial_credit);
+        assert!(rx.recv_timeout(Duration::from_secs(10)).unwrap().starts_with(&format!("GET /{name} HTTP/1.1")));
+        let post=rx.recv_timeout(Duration::from_secs(10)).unwrap();assert!(post.starts_with("POST /report HTTP/1.1"));assert!(post.contains("application/reports+json"));assert!(!post.contains("#private"));
+    }
+    service.release_coep_graph_reporting(graph,graph_id).unwrap();assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+    assert!(service.reporting.document(handle).is_err());peer.join().unwrap();
+}
+
+#[test]
+fn coep_graph_identity_quota_release_and_fresh_global_endpoint_isolation() {
+    use crate::{EmbedderPolicy,EmbedderPolicyContainer};
+    let url=HttpUrl::parse("https://original.test/document").unwrap();let client=receiving_client(&url,"https://original.test/creation");
+    let mut service=NetworkService::new(DispatchLimits::default());
+    let handle=service.register_reporting_client_response(&client,&url,&headers(r#"coep="/report""#)).unwrap();
+    let container=EmbedderPolicyContainer {value:EmbedderPolicy::UnsafeNone,reporting_endpoint:None,
+        report_only_value:EmbedderPolicy::RequireCorp,report_only_reporting_endpoint:Some("coep".into())};
+    let mut graph=service.prepare_coep_graph_reporting(handle,&client,&container).unwrap();let id=graph.id();
+    let other_graph=service.prepare_coep_graph_reporting(handle,&client,&container).unwrap();let wrong=other_graph.id();
+    let before=service.reporting.prepared_bytes.load(Ordering::Acquire);
+    assert!(matches!(service.issue_coep_graph_request_settings(&mut graph,wrong),Err(ReportError::StaleDocument)));
+    let mut other=NetworkService::new(DispatchLimits::default());
+    assert!(matches!(other.issue_coep_graph_request_settings(&mut graph,id),Err(ReportError::StaleDocument)));
+    assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),before);
+    service.release_coep_graph_reporting(other_graph,wrong).unwrap();
+    assert!(service.forget_reporting_document(handle));
+    assert!(matches!(service.prepare_coep_graph_reporting(handle,&client,&container),Err(ReportError::StaleDocument)));
+    // A fresh authentic global retains its own initial empty endpoint list.
+    let fresh=service.register_reporting_initial_client(&client).unwrap();let now=Instant::now();
+    let report=service.generate_coep_report(fresh,CoepReportBody::Corp {response_url_list:&[url.as_parsed().clone()],
+        disposition:CoepReportDisposition::Reporting,destination:"script"},&"coep".encode_utf16().collect::<Vec<_>>(),now,now).unwrap();
+    assert_eq!(report.delivery,Err(ReportError::NoEndpoint));assert_eq!(service.dispatcher.in_flight(),0);assert_eq!(other.dispatcher.in_flight(),0);
+    let mut loans=Vec::new();
+    loop {match service.issue_coep_graph_request_settings(&mut graph,id) {
+        Ok(plan)=>loans.push(plan),Err(ReportError::Limit)=>break,Err(error)=>panic!("unexpected loan error: {error:?}"),
+    }}
+    assert!(!loans.is_empty());assert!(service.reporting.prepared_bytes.load(Ordering::Acquire)<=MAX_REPORT_BYTES);
+    service.release_coep_graph_reporting(graph,id).unwrap();assert!(service.reporting.prepared_bytes.load(Ordering::Acquire)>0);
+    drop(loans);assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+}
+
+#[test]
+fn coep_streamed_head_credit_and_retired_original_reporting_settings() {
+    use crate::{EmbedderPolicy,EmbedderPolicyContainer,api::{ApiRequest,ApiRequestInit,ApiRequestInput}};
+    for (same_origin,enforced,reports_expected,blocked) in [
+        (true,EmbedderPolicy::RequireCorp,0,false),
+        (false,EmbedderPolicy::UnsafeNone,1,false),
+        (false,EmbedderPolicy::RequireCorp,2,true),
+    ] {
+        let listener=TcpListener::bind("127.0.0.1:0").unwrap();let port=listener.local_addr().unwrap().port();
+        let (tx,rx)=mpsc::channel();let peer=thread::spawn(move|| {
+            let (mut stream,_)=listener.accept().unwrap();tx.send(read_request(&mut stream)).unwrap();
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/javascript\r\nContent-Length: 4\r\nConnection: close\r\n\r\ntrue").unwrap();
+        });
+        let document=HttpUrl::parse(&format!("http://localhost:{port}/document")).unwrap();
+        let mut client=receiving_client(&document,&document.serialize());client.context.security.embedder_policy=enforced;
+        let container=EmbedderPolicyContainer {value:enforced,report_only_value:EmbedderPolicy::RequireCorp,..Default::default()};
+        let mut service=NetworkService::new(DispatchLimits::default());let handle=service.register_reporting_initial_client(&client).unwrap();
+        let settings=service.prepare_coep_request_reporting(handle,&client,&container).unwrap();
+        let mut init=ApiRequestInit::default();init.mode=Some("no-cors".into());init.credentials=Some("include".into());
+        let target=format!("http://{}:{port}/script",if same_origin {"localhost"}else{"127.0.0.1"}).encode_utf16().collect::<Vec<_>>();
+        let request=ApiRequest::new(ApiRequestInput::Url(&target),init,&document,client.origin.clone()).unwrap();
+        let id=service.start_stream_with_coep_reporting(request,client.context.clone(),0,Instant::now(),settings).unwrap();
+        assert!(service.forget_reporting_document(handle));let deadline=Instant::now()+Duration::from_secs(15);
+        let mut finished=false;let mut heads=0;let mut reports=0;let mut bytes=Vec::new();
+        while !finished && Instant::now()<deadline {
+            for event in service.step(31,Instant::now()) {match event {
+                ServiceEvent::CoepReport{id:found,document:original,report}=>{assert_eq!(found,id);assert_eq!(original,handle);assert_eq!(report.unwrap().delivery,Err(ReportError::NoEndpoint));reports+=1;},
+                ServiceEvent::ResponseHead{id:found,head}=>{assert_eq!(found,id);heads+=1;assert_eq!(head.status,if same_origin{200}else{0});if same_origin{assert!(service.grant_credit(id,4));}},
+                ServiceEvent::BodyChunk{id:found,bytes:chunk}=>{assert_eq!(found,id);assert!(same_origin);bytes.extend(chunk);},
+                ServiceEvent::StreamFinished{id:found}=>{assert_eq!(found,id);assert!(!blocked);finished=true;},
+                ServiceEvent::StreamFailed{id:found,error}=>{assert_eq!(found,id);assert!(blocked);assert_eq!(error,crate::api::ApiError::Network(FetchError::CrossOriginResourcePolicy));finished=true;},_=>{}
+            }}thread::yield_now();
+        }
+        assert!(finished);assert_eq!(heads,usize::from(!blocked));assert_eq!(reports,reports_expected);
+        assert_eq!(bytes,if same_origin {b"true".to_vec()}else{Vec::new()});
+        assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+        assert!(!service.has_pending_reporting_io());assert!(service.reporting.document(handle).is_err());
+        assert!(rx.recv_timeout(Duration::from_secs(10)).unwrap().starts_with("GET /script HTTP/1.1"));peer.join().unwrap();
+    }
+}
+
+#[test]
+fn coep_revalidation_reports_merged_response_once_and_retains_actual_conditional_requests() {
+    use crate::{EmbedderPolicy,EmbedderPolicyContainer,api::{ApiRequest,ApiRequestInit,ApiRequestInput}};
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();let port=listener.local_addr().unwrap().port();
+    let (tx,rx)=mpsc::channel();let peer=thread::spawn(move|| {
+        for phase in 0..3 {
+            let (mut stream,_)=listener.accept().unwrap();tx.send(read_request(&mut stream)).unwrap();
+            let response=match phase {
+                0=>"HTTP/1.1 200 OK\r\nContent-Type: application/javascript\r\nCache-Control: max-age=0\r\nETag: \"v1\"\r\nContent-Length: 4\r\nConnection: close\r\n\r\ntrue",
+                1=>"HTTP/1.1 304 Not Modified\r\nCache-Control: max-age=0\r\nETag: \"v1\"\r\nConnection: close\r\n\r\n",
+                _=>"HTTP/1.1 304 Not Modified\r\nCross-Origin-Resource-Policy: cross-origin\r\nCache-Control: max-age=600\r\nETag: \"v1\"\r\nConnection: close\r\n\r\n",
+            };stream.write_all(response.as_bytes()).unwrap();
+        }
+    });
+    let document=HttpUrl::parse(&format!("http://localhost:{port}/document")).unwrap();let mut client=receiving_client(&document,&document.serialize());
+    let container=EmbedderPolicyContainer {report_only_value:EmbedderPolicy::RequireCorp,..Default::default()};
+    let mut service=NetworkService::new(DispatchLimits::default());let handle=service.register_reporting_initial_client(&client).unwrap();
+    for phase in 0..3 {
+        client.context.now_unix=1800000000+phase;
+        let settings=service.prepare_coep_request_reporting(handle,&client,&container).unwrap();
+        let mut init=ApiRequestInit::default();init.mode=Some("no-cors".into());init.credentials=Some("include".into());
+        let target=format!("http://127.0.0.1:{port}/cached").encode_utf16().collect::<Vec<_>>();
+        let request=ApiRequest::new(ApiRequestInput::Url(&target),init,&document,client.origin.clone()).unwrap();
+        let id=service.start_at_with_coep_reporting(request,client.context.clone(),Instant::now(),settings).unwrap();
+        let deadline=Instant::now()+Duration::from_secs(15);let mut finished=false;let mut reports=0;
+        while !finished && Instant::now()<deadline {
+            for event in service.step(4096,Instant::now()) {match event {
+                ServiceEvent::CoepReport{id:found,report,..}=>{assert_eq!(found,id);assert_eq!(report.unwrap().delivery,Err(ReportError::NoEndpoint));reports+=1;},
+                ServiceEvent::Finished{id:found,result}=>{assert_eq!(found,id);let response=result.unwrap();assert_eq!(response.response_type,crate::api::ApiResponseType::Opaque);assert_eq!(response.status,0);finished=true;},_=>{}
+            }}thread::yield_now();
+        }
+        assert!(finished);assert_eq!(reports,usize::from(phase<2));
+        assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+        let wire=rx.recv_timeout(Duration::from_secs(10)).unwrap();assert!(wire.starts_with("GET /cached HTTP/1.1"));
+        if phase>0 {assert!(wire.to_ascii_lowercase().contains("if-none-match: \"v1\""));}
+    }
+    peer.join().unwrap();
 }

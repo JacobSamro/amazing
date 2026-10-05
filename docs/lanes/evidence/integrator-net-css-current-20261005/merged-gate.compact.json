@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "recorded_origin_dev": "44a6adf25457746066108eb2a846c8002cc1b033",
+  "previous_published_engine": "97d9827b",
+  "actual_tested_source": "408cb841c0064c55e638a0d701f373e7e8d46020",
+  "packaged_engine_source_before_proof": "79844a86d9ec151934f3ba46c5ff673f6dc58013",
+  "engine_cargo_byte_exact_paths": 5252,
+  "tickets": [
+    "CSS object-fit/image-rendering producer d26a0f93",
+    "COEP credentialfacts and bounded TLS output b749e749"
+  ],
+  "workspace": {
+    "pass": 4863,
+    "fail": 0,
+    "skip": 17
+  },
+  "doctests": {
+    "pass": 30,
+    "fail": 0
+  },
+  "test262": {
+    "files_pass": 52701,
+    "variants_pass": 101215,
+    "lost_files": [],
+    "lost_variants": [],
+    "native_jobs": 16,
+    "all_native_actual_exit": 0,
+    "controller_actual_exit": 0,
+    "timeout_seconds": 60
+  },
+  "native_network": {
+    "before_pass": 540,
+    "after_pass": 598,
+    "gained": 58,
+    "lost": []
+  },
+  "csp": {
+    "pass_files": 32,
+    "pass_assertions": 81,
+    "lost_files": [],
+    "lost_assertions": []
+  },
+  "css": {
+    "render_cohorts": 20,
+    "render_cases": 2214,
+    "pass": 1327,
+    "mismatch": 887,
+    "parsing_selectors": 17,
+    "parsing_passed": 4330,
+    "parsing_total": 5126,
+    "resource_cases": 491,
+    "resource_pass": 318,
+    "rc21_entries": 226,
+    "lost": []
+  },
+  "tooling_incidents_preserved": {
+    "initial_test262": "shard0 sourceupload124 beforejob; oneclean16allactual0",
+    "merged_wrapper_actual_exit": 1,
+    "comparison_fix": "Only anchored nextestprogress prefix removed from authenticated598 compactidentities; no collisions/published540 PASS retained, no engine rerun or raw recovery"
+  },
+  "gate_qualified": true,
+  "proof_scope": "Current merged engine byteexact to actualtested408; doc/proof/unrelatedqualifiedpublictool changes only. No fullbrowser-completeness claim."
+}
