@@ -813,6 +813,7 @@ pub struct PendingFetchApi {
     stream_body: bool,
     cookie_header: Option<String>,
     conditional_headers: Option<crate::HeaderList>,
+    failure_provenance: Option<crate::CspResponseProvenance>,
 }
 #[derive(Clone, Copy)]
 enum DispatchStage {
@@ -884,6 +885,23 @@ impl PendingFetchApi {
         conditional_headers: Option<crate::HeaderList>,
         cache: Option<&mut crate::PreflightCache>,
     ) -> Result<Self, ApiError> {
+        Self::start_with_cache_progress(request,dispatcher,now,security,csp,csp_destination,cookie_header,conditional_headers,cache,&mut None)
+    }
+    pub(crate) fn start_with_cache_progress<
+        R: amazing_net::dispatch::Resolver,
+        C: amazing_net::dispatch::Connector,
+    >(
+        request: &mut ApiRequest,
+        dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
+        now: std::time::Instant,
+        security: crate::SecurityContext,
+        csp: crate::CspPolicyList,
+        csp_destination: crate::CspDestination,
+        cookie_header: Option<String>,
+        conditional_headers: Option<crate::HeaderList>,
+        cache: Option<&mut crate::PreflightCache>,
+        progress:&mut Option<crate::CspResponseProvenance>,
+    ) -> Result<Self, ApiError> {
         if request.signal_aborted {
             return Err(ApiError::Aborted);
         }
@@ -900,15 +918,18 @@ impl PendingFetchApi {
                 .set_method_body(request.method(), Some(Body::Bytes(bytes)))
                 .map_err(ApiError::Network)?;
         }
-        let (wire_id, stage) = Self::start_hop(
+        let started = Self::start_hop(
             &mut policy,
             dispatcher,
             now,
             cookie_header.as_deref(),
             conditional_headers.as_ref(),
             cache,
-        )?;
+        );
+        *progress=policy.csp_pre_request_checked.then(||crate::CspResponseProvenance::checked(&policy,Vec::new()));
+        let (wire_id,stage)=started?;
         Ok(Self {
+            failure_provenance:progress.clone(),
             policy,
             wire_id,
             stage,
@@ -1074,10 +1095,12 @@ impl PendingFetchApi {
                             }
                         }
                         let location = response.headers.get("location");
-                        match crate::redirect_location_with_upgrade(
+                        let redirect=crate::redirect_location_with_upgrade(
                             &mut self.policy, &response, location.as_deref(),
                             |url| hsts_upgrade(&url).unwrap_or(url),
-                        ) {
+                        );
+                        self.failure_provenance=Some(crate::CspResponseProvenance::checked(&self.policy,Vec::new()));
+                        match redirect {
                             Ok(RedirectAction::Follow) => {
                                 // A new hop gets credentials for its own URL only.
                                 self.cookie_header = cookie_for(&self.policy);
@@ -1104,12 +1127,12 @@ impl PendingFetchApi {
                             }
                             Ok(RedirectAction::Manual(r)) => Some(ApiResponse::from_policy(r)),
                             Ok(RedirectAction::NavigationPending) => {
-                                Some(filter_response(&self.policy, &response)
+                                Some(crate::cors::filter_response_with_csp_progress(&self.policy, &response, &mut self.failure_provenance)
                                     .map_err(ApiError::Network)
                                     .and_then(ApiResponse::from_policy))
                             }
                             Ok(RedirectAction::NotRedirect) => Some(
-                                filter_response(&self.policy, &response)
+                                crate::cors::filter_response_with_csp_progress(&self.policy, &response, &mut self.failure_provenance)
                                     .map_err(ApiError::Network)
                                     .and_then(ApiResponse::from_policy),
                             ),
@@ -1119,6 +1142,10 @@ impl PendingFetchApi {
                 }
             }
         }
+    }
+    pub(crate) fn failure_csp_provenance(&self)->Option<crate::CspResponseProvenance> {
+        let final_receipts=self.failure_provenance.as_ref().map(|p|p.violations().to_vec()).unwrap_or_default();
+        self.policy.csp_pre_request_checked.then(||crate::CspResponseProvenance::checked(&self.policy,final_receipts))
     }
     pub fn cancel<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::Connector>(
         &self,

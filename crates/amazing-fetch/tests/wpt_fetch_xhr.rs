@@ -58,7 +58,7 @@ fn finish_subresource(service: &mut NetworkService, id: ServiceId)
         for event in service.step(8192, now + Duration::from_millis(tick)) {
             match event {
                 ServiceEvent::SubresourceFinished { id: found, response } if found == id => return Ok(response),
-                ServiceEvent::SubresourceFailed { id: found, error } if found == id => return Err(error),
+                ServiceEvent::SubresourceFailed { id: found, failure } if found == id => return Err(failure.error),
                 _ => {}
             }
         }

@@ -54,6 +54,7 @@ pub struct Request {
     pub csp_integrity: Vec<String>,
     pub csp_parser_inserted: bool,
     pub csp_violations: Vec<CspViolation>,
+    pub(crate) csp_pre_request_checked: bool,
     pub(crate) response_body_limit: Option<usize>,
     pub integrity: String,
     pub(crate) taint: ResponseType,
@@ -80,6 +81,7 @@ impl Request {
             csp_integrity: Vec::new(),
             csp_parser_inserted: false,
             csp_violations: Vec::new(),
+            csp_pre_request_checked: false,
             response_body_limit: None,
             integrity: String::new(),
             taint: ResponseType::Basic,
@@ -131,6 +133,7 @@ impl Request {
     pub fn prepare(&mut self) -> Result<FetchPlan, FetchError> {
         upgrade_mixed_content(self)?;
         let csp = self.csp.pre_request(self);
+        self.csp_pre_request_checked=true;
         self.csp_violations.extend(csp.violations.iter().cloned());
         if csp.blocked {
             return Err(FetchError::Csp(crate::CspResponseProvenance::checked(self, csp.violations).violations().to_vec()));

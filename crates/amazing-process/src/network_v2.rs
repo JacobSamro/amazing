@@ -551,7 +551,8 @@ impl State {
                         }
                     }
                 }
-                ServiceEvent::SubresourceFailed { id, error } => {
+                ServiceEvent::SubresourceFailed { id, failure } => {
+                    let error=failure.error;
                     let Some(active) = self.active.get_mut(&id.0) else {
                         continue;
                     };

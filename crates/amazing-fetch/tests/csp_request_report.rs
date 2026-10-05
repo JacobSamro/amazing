@@ -438,7 +438,8 @@ fn real_redirect_stream_cache_and_subresource_preserve_native_report_only_receip
                     ServiceEvent::ResponseHead { id: actual, head } if actual == id => { provenance = head.csp_provenance; }
                     ServiceEvent::StreamFinished { id: actual } if actual == id => done = true,
                     ServiceEvent::SubresourceFinished { id: actual, response } if actual == id => { assert_eq!(response.body, b"1"); provenance = response.head.csp_provenance; done = true; }
-                    ServiceEvent::StreamFailed { error, .. } | ServiceEvent::SubresourceFailed { error, .. } => panic!("{error:?}"),
+                    ServiceEvent::StreamFailed { error, .. } => panic!("{error:?}"),
+                    ServiceEvent::SubresourceFailed { failure, .. } => panic!("{:?}",failure.error),
                     _ => {}
                 }
             }
@@ -501,4 +502,126 @@ fn blocked_redirect_preserves_prior_report_only_receipts_and_each_authentic_chec
     }
     let groups: Vec<_> = receipts.iter().map(|receipt| receipt.enrich_saved_request_report(&client, &source()).unwrap().report_to.unwrap()).collect();
     assert_eq!(groups, ["reportonly", "reportonly", "enforce", "reportonly"]);
+}
+
+fn report_only_client() -> ReceivingDocumentClient<(u64,u64)> {
+    let mut fields=HeaderList::default();
+    fields.append("content-security-policy-report-only","script-src 'none';report-to reportonly").unwrap();
+    receiving(CspPolicyList::from_headers(&fields).unwrap())
+}
+fn read_native_get(stream:&mut std::net::TcpStream)->String {
+    stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+    let mut bytes=Vec::new();let mut buffer=[0;1024];
+    while !bytes.windows(4).any(|w|w==b"\r\n\r\n") {
+        let count=stream.read(&mut buffer).unwrap();assert_ne!(count,0);bytes.extend_from_slice(&buffer[..count]);
+    }
+    String::from_utf8(bytes).unwrap()
+}
+fn accept_native_preflight_then_get(listener:&TcpListener,path:&str)->(std::net::TcpStream,String) {
+    // Trusted loader NoStore adds Cache-Control/Pragma. A real Cors request
+    // must perform its native OPTIONS exchange before the retained GET control.
+    for _ in 0..2 {
+        let (mut stream,_)=listener.accept().unwrap();let request=read_native_get(&mut stream);
+        if request.starts_with("OPTIONS ") {
+            assert!(request.starts_with(&format!("OPTIONS {path} HTTP/1.1")));
+            let lower=request.to_ascii_lowercase();assert!(lower.contains("access-control-request-method: get\r\n"));
+            let fields=lower.lines().find_map(|line|line.strip_prefix("access-control-request-headers:")).unwrap();
+            assert!(fields.contains("cache-control"));assert!(fields.contains("pragma"));
+            let origin=request.lines().find_map(|line|line.split_once(':').filter(|(name,_)|name.eq_ignore_ascii_case("origin")).map(|(_,value)|value.trim())).unwrap();
+            stream.write_all(format!("HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: {origin}\r\nAccess-Control-Allow-Methods: GET\r\nAccess-Control-Allow-Headers: cache-control, pragma\r\nAccess-Control-Max-Age: 600\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).unwrap();
+        } else {assert!(request.starts_with(&format!("GET {path} HTTP/1.1")));return (stream,request);}
+    }
+    panic!("genuine native preflight did not lead to GET")
+}
+fn native_subresource_failure(service:&mut NetworkService,id:RequestId)->SubresourceFailure {
+    let deadline=Instant::now()+Duration::from_secs(15);
+    while Instant::now()<deadline {
+        for event in service.step(8192,Instant::now()) {
+            match event {
+                ServiceEvent::SubresourceFailed{id:found,failure} if found==id=>return failure,
+                ServiceEvent::SubresourceFinished{id:found,..} if found==id=>panic!("expected typed native failure"),
+                ServiceEvent::Finished{id:found,..} if found==id=>panic!("trusted native request must retain its terminal route"),_=>{}
+            }
+        }
+        std::thread::yield_now();
+    }
+    panic!("native terminal deadline")
+}
+fn assert_failure_receipts(failure:&SubresourceFailure,client:&ReceivingDocumentClient<(u64,u64)>,phases:&[CspRequestPhase],url_lengths:&[usize]) {
+    let provenance=failure.csp_provenance.as_ref().expect("genuine native checks retain receipts");
+    assert_eq!(provenance.violations().len(),phases.len());
+    for ((receipt,phase),length) in provenance.violations().iter().zip(phases).zip(url_lengths) {
+        assert_eq!(receipt.request_phase(),*phase);assert_eq!(receipt.request_url_list().len(),*length);
+        let report=receipt.enrich_saved_request_report(client,&source()).unwrap();
+        assert_eq!(report.disposition,CspDisposition::ReportOnly);assert_eq!(report.policy_index,0);
+        assert_eq!(report.original_policy_units,client.context.csp.policies[0].original_policy_units);
+        assert_eq!(report.report_to.as_deref(),Some("reportonly"));
+    }
+}
+#[test]
+fn native_subresource_failure_retains_actual_post_check_before_cors_mime_nosniff_integrity_and_transport() {
+    for (case,expected) in [("cors",FetchError::Cors),("mime",FetchError::MimeType),("nosniff",FetchError::Nosniff),("integrity",FetchError::Integrity),("transport",FetchError::Transport)] {
+        let listener=TcpListener::bind("127.0.0.1:0").unwrap();let port=listener.local_addr().unwrap().port();
+        let peer=std::thread::spawn(move||{
+            let (mut stream,request)=accept_native_preflight_then_get(&listener,"/script.js");assert!(request.starts_with("GET /script.js HTTP/1.1"));
+            if case!="transport" {
+                let mime=match case {"mime"=>"image/png","nosniff"=>"text/plain",_=>"application/javascript"};
+                let nosniff=if case=="nosniff" {"X-Content-Type-Options: nosniff\r\n"}else{""};
+                stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\n{nosniff}Content-Length: 4\r\nConnection: close\r\n\r\ntrue").as_bytes()).unwrap();
+            }
+        });
+        let client=report_only_client();let base=HttpUrl::parse(&client.base_url.serialize()).unwrap();
+        let mut init=ApiRequestInit::default();init.mode=Some(if case=="cors" {"cors"}else{"no-cors"}.into());
+        if case=="integrity" {init.integrity=Some("sha256-ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=".into());}
+        let input=units(&format!("http://127.0.0.1:{port}/script.js#private"));
+        let mut request=ApiRequest::new(ApiRequestInput::Url(&input),init,&base,client.origin.clone()).unwrap();request.apply_receiving_csp_client(&client).unwrap();
+        let mut service=NetworkService::new(DispatchLimits::default());let id=service.start_subresource(request,client.context.clone(),Destination::Script);
+        let failure=native_subresource_failure(&mut service,id);assert_eq!(failure.error,ApiError::Network(expected));
+        if case=="transport" {assert_failure_receipts(&failure,&client,&[CspRequestPhase::PreRequest],&[1]);}
+        else {assert_failure_receipts(&failure,&client,&[CspRequestPhase::PreRequest,CspRequestPhase::PostRequest],&[1,1]);}
+        assert_eq!(failure.csp_provenance.as_ref().unwrap().url_list().len(),1);peer.join().unwrap();
+    }
+}
+#[test]
+fn native_subresource_redirect_failure_retains_original_and_current_hop_check_lineages() {
+    for cors_failure in [false,true] {
+        let listener=TcpListener::bind("127.0.0.1:0").unwrap();let port=listener.local_addr().unwrap().port();
+        let peer=std::thread::spawn(move||{
+            let (mut first,request)=accept_native_preflight_then_get(&listener,"/first");assert!(request.starts_with("GET /first HTTP/1.1"));
+            first.write_all(b"HTTP/1.1 302 Found\r\nLocation: /second\r\nAccess-Control-Allow-Origin: https://receiving.test\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();drop(first);
+            let (mut second,request)=accept_native_preflight_then_get(&listener,"/second");assert!(request.starts_with("GET /second HTTP/1.1"));
+            if cors_failure {second.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/javascript\r\nContent-Length: 4\r\nConnection: close\r\n\r\ntrue").unwrap();}
+        });
+        let client=report_only_client();let base=HttpUrl::parse(&client.base_url.serialize()).unwrap();let input=units(&format!("http://127.0.0.1:{port}/first"));
+        let mut init=ApiRequestInit::default();init.mode=Some(if cors_failure {"cors"}else{"no-cors"}.into());
+        let request=ApiRequest::new(ApiRequestInput::Url(&input),init,&base,client.origin.clone()).unwrap();
+        let mut service=NetworkService::new(DispatchLimits::default());let id=service.start_subresource(request,client.context.clone(),Destination::Script);
+        let failure=native_subresource_failure(&mut service,id);assert_eq!(failure.error,ApiError::Network(if cors_failure {FetchError::Cors}else{FetchError::Transport}));
+        if cors_failure {assert_failure_receipts(&failure,&client,&[CspRequestPhase::PreRequest,CspRequestPhase::PostRequest,CspRequestPhase::PreRequest,CspRequestPhase::PostRequest],&[1,1,2,2]);}
+        else {assert_failure_receipts(&failure,&client,&[CspRequestPhase::PreRequest,CspRequestPhase::PostRequest,CspRequestPhase::PreRequest],&[1,1,2]);}
+        assert_eq!(failure.csp_provenance.as_ref().unwrap().url_list().len(),2);peer.join().unwrap();
+    }
+}
+#[test]
+fn native_subresource_admission_and_cancellation_keep_genuine_checked_receipts_without_fabricating_unchecked_authority() {
+    let client=report_only_client();let base=HttpUrl::parse(&client.base_url.serialize()).unwrap();let input=units("http://resource.test:1/script");
+    let request=ApiRequest::new(ApiRequestInput::Url(&input),no_cors_init(),&base,client.origin.clone()).unwrap();
+    let mut service=NetworkService::new(DispatchLimits::default());let id=service.start_subresource(request,client.context.clone(),Destination::Script);
+    let failure=native_subresource_failure(&mut service,id);assert_eq!(failure.error,ApiError::Network(FetchError::BadPort));assert!(!service.has_pending_request_io(id));
+    assert_failure_receipts(&failure,&client,&[CspRequestPhase::PreRequest],&[1]);
+    let mut request=ApiRequest::new(ApiRequestInput::Url(&input),no_cors_init(),&base,client.origin.clone()).unwrap();request.signal_aborted=true;
+    let id=service.start_subresource(request,client.context.clone(),Destination::Script);let failure=native_subresource_failure(&mut service,id);
+    assert_eq!(failure.error,ApiError::Aborted);assert!(failure.csp_provenance.is_none());
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();let port=listener.local_addr().unwrap().port();let (tx,rx)=std::sync::mpsc::channel();
+    let peer=std::thread::spawn(move||{
+        let (mut first,_)=listener.accept().unwrap();assert!(read_native_get(&mut first).starts_with("GET /first HTTP/1.1"));
+        first.write_all(b"HTTP/1.1 302 Found\r\nLocation: /second\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();drop(first);
+        let (mut second,_)=listener.accept().unwrap();assert!(read_native_get(&mut second).starts_with("GET /second HTTP/1.1"));tx.send(()).unwrap();
+        let mut byte=[0];let count=second.read(&mut byte).unwrap();assert_eq!(count,0,"actual canceled socket closes");
+    });
+    let input=units(&format!("http://127.0.0.1:{port}/first"));let request=ApiRequest::new(ApiRequestInput::Url(&input),no_cors_init(),&base,client.origin.clone()).unwrap();
+    let id=service.start_subresource(request,client.context.clone(),Destination::Script);let deadline=Instant::now()+Duration::from_secs(15);let mut admitted=false;
+    while Instant::now()<deadline {let events=service.step(8192,Instant::now());assert!(events.iter().all(|event|!matches!(event,ServiceEvent::SubresourceFinished{..}|ServiceEvent::SubresourceFailed{..})));if rx.try_recv().is_ok(){admitted=true;break;}std::thread::yield_now();}
+    assert!(admitted);assert!(service.abort(id));let failure=native_subresource_failure(&mut service,id);assert_eq!(failure.error,ApiError::Aborted);
+    assert_failure_receipts(&failure,&client,&[CspRequestPhase::PreRequest,CspRequestPhase::PostRequest,CspRequestPhase::PreRequest],&[1,1,2]);peer.join().unwrap();
 }

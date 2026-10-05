@@ -1,0 +1,59 @@
+{
+  "ready_commit": "302e0ad4eefb7ed559f240f900b38c2d72a5e600",
+  "engine_source": "1312ca0fef9459009cb73f68ac25c6cf0703b01a",
+  "preserved_qualification_files": {
+    "after.summary.json": {
+      "bytes": 199591,
+      "sha256": "049dbda2b04e2c133f80bb050e540ca47984f34ccabc10aae54b2b2aead2e329"
+    },
+    "before.summary.json": {
+      "bytes": 196408,
+      "sha256": "ec468cbb2bc7cf2cb5ab6180b0c28f12910c52f9f12654628ac872eed8425fe9"
+    },
+    "initial-failed-after.completed.summary.json": {
+      "bytes": 585,
+      "sha256": "e98fa41070f646e39912ea15606d4e85246f19b2a107ecde290204dfe766ecca"
+    },
+    "before.completed.summary.json": {
+      "bytes": 586,
+      "sha256": "38d633f109c36f4c566de9bb6322a51b2c994cba045ff2dcdf58c55b14d6aab4"
+    },
+    "initial-failed-after.endpoint.json": {
+      "bytes": 442,
+      "sha256": "dd635f802cb82b2a2b52efa5266b3c162d06f3e0dfb358c44f1697e732064c9a"
+    },
+    "before.csp.compact.json": {
+      "bytes": 35858,
+      "sha256": "592b3b1fbc7b3c7338781048d7dc80f4551a14e61f2880c215ca9e9995892e74"
+    },
+    "after.completed.summary.json": {
+      "bytes": 596,
+      "sha256": "5c6b6ab0c07fa04813aa62301c4e6244fb05a02f74e72bdeef758f0834732680"
+    },
+    "initial-failure-and-source-fix.json": {
+      "bytes": 2755,
+      "sha256": "5750b2f2db2c7bc60218d738514ecfddd0e748f75f56d484e537db8bdd6e48e0"
+    },
+    "before.endpoint.json": {
+      "bytes": 443,
+      "sha256": "f33901aee5cedf40159dece7168acc1f58b8ecf6772cb3eb9a168ba18dd775da"
+    },
+    "after.csp.compact.json": {
+      "bytes": 35942,
+      "sha256": "ed943dc6202d0b8d32c43bd20fe873075953e262a18262b7979651c3ac2479a3"
+    },
+    "manifest.json": {
+      "bytes": 2124,
+      "sha256": "76f08250e8b4abd51e48b4738f0f7b9e70ccfd3d654deab04ccccac582ba4be3"
+    },
+    "initial-failed-after.csp.compact.json": {
+      "bytes": 35931,
+      "sha256": "1d52b879cf1e6d96dcbb5173737ec3d5be9455c48643fd59e1f0e2aa70a7b8f9"
+    },
+    "after.endpoint.json": {
+      "bytes": 453,
+      "sha256": "f1277edf5163bfd938fe0685e53ed06a7364955f5eda032db878f013111c7d38"
+    }
+  },
+  "reason": "independent predecessor qualification preserved unchanged; do not duplicate it in this successor"
+}

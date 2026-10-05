@@ -160,9 +160,16 @@ pub enum ServiceEvent {
     },
     /// Browser-internal result; never convert this body into a JS Response.
     SubresourceFinished { id: RequestId, response: SubresourceResponse },
-    SubresourceFailed { id: RequestId, error: ApiError },
+    SubresourceFailed { id: RequestId, failure: SubresourceFailure },
 }
 
+/// Native terminal error and actual CSP processing receipts. None means no
+/// native CSP check occurred; it is not an empty receiving-policy authority.
+#[derive(Debug,Clone)]
+pub struct SubresourceFailure {
+    pub error: ApiError,
+    pub csp_provenance: Option<crate::CspResponseProvenance>,
+}
 /// Validated network bytes for a trusted renderer consumer.
 #[derive(Debug)]
 pub struct SubresourceResponse {
@@ -351,12 +358,13 @@ impl NetworkService {
             Destination::Document => CspDestination::Frame,
             Destination::Empty | Destination::Other => CspDestination::Connect,
         };
-        let id = match self.start_at(request, context, Instant::now()) {
+        let mut failure_provenance=None;
+        let id = match self.start_at_with_csp_progress(request, context, Instant::now(),&mut failure_provenance) {
             Ok(id) => id,
             Err(error) => {
                 let id = ServiceId(self.next_id);
                 self.next_id = self.next_id.wrapping_add(1).max(1);
-                self.ready.push(ServiceEvent::SubresourceFailed { id, error });
+                self.ready.push(ServiceEvent::SubresourceFailed { id, failure:SubresourceFailure{error,csp_provenance:failure_provenance} });
                 return id;
             }
         };
@@ -369,13 +377,14 @@ impl NetworkService {
                 unreachable!()
             };
             let result = result.and_then(|mut response| {
+                failure_provenance=response.csp_provenance.clone();
                 let head = ApiResponseHead::from_response(&response);
                 let body = response.body.bytes()?;
                 Ok(SubresourceResponse { response_type: policy_response_type(response.response_type), head, body })
             });
             *event = match result {
                 Ok(response) => ServiceEvent::SubresourceFinished { id, response },
-                Err(error) => ServiceEvent::SubresourceFailed { id, error },
+                Err(error) => ServiceEvent::SubresourceFailed { id, failure:SubresourceFailure{error,csp_provenance:failure_provenance} },
             };
         }
         id
@@ -616,11 +625,15 @@ impl NetworkService {
         }
     }
     /// Deterministic clock entry point for the event-loop driver and tests.
-    pub fn start_at(
+    pub fn start_at(&mut self,request:ApiRequest,context:ClientContext,now:Instant)->Result<ServiceId,ApiError> {
+        self.start_at_with_csp_progress(request,context,now,&mut None)
+    }
+    fn start_at_with_csp_progress(
         &mut self,
         mut request: ApiRequest,
         mut context: ClientContext,
         now: Instant,
+        progress:&mut Option<crate::CspResponseProvenance>,
     ) -> Result<ServiceId, ApiError> {
         if request.mode == crate::RequestMode::Navigate && context.frame_ancestors.is_empty() {
             context.security.destination = Destination::Document;
@@ -642,9 +655,9 @@ impl NetworkService {
             policy.security = context.security;
             policy.csp = context.csp;
             policy.csp_destination = context.csp_destination;
-            let result = policy
-                .prepare()
-                .and_then(|_| {
+            let prepared=policy.prepare();
+            *progress=policy.csp_pre_request_checked.then(||crate::CspResponseProvenance::checked(&policy,Vec::new()));
+            let result = prepared.and_then(|_| {
                     crate::data_url::data_response_limited(
                         policy.url().as_parsed(),
                         request
@@ -652,7 +665,7 @@ impl NetworkService {
                             .unwrap_or(crate::api::MAX_API_BODY_BYTES),
                     )
                 })
-                .and_then(|internal| filter_response(&policy, &internal))
+                .and_then(|internal|crate::cors::filter_response_with_csp_progress(&policy,&internal,progress))
                 .map_err(ApiError::Network)
                 .and_then(ApiResponse::from_policy);
             self.ready.push(ServiceEvent::Finished { id, result });
@@ -758,7 +771,7 @@ impl NetworkService {
                 CacheLookup::Miss => {}
             }
         }
-        let pending = PendingFetchApi::start_with_cache(
+        let pending = PendingFetchApi::start_with_cache_progress(
             &mut request,
             &mut self.dispatcher,
             now,
@@ -768,6 +781,7 @@ impl NetworkService {
             (!cookie.is_empty()).then(|| cookie.clone()),
             revalidating.then_some(conditional_headers),
             Some(&mut self.preflight_cache),
+            progress,
         )?;
         self.active.insert(
             id,
@@ -850,9 +864,11 @@ impl NetworkService {
                             .and_then(|parsed| crate::check_frame_embedding(&parsed, &fields, ancestors)));
                     if check.is_err() {
                         self.dispatcher.cancel(wire_id);
-                        self.active.remove(&id);
+                        let task=self.active.remove(&id).unwrap();
                         let error = ApiError::Network(FetchError::FrameEmbedding);
-                        if self.streams.contains_key(&id) {
+                        if task.trusted_subresource {
+                            result.push(ServiceEvent::SubresourceFailed{id,failure:SubresourceFailure{error,csp_provenance:task.pending.failure_csp_provenance()}});
+                        } else if self.streams.contains_key(&id) {
                             self.finish_stream(id, Err(error), &mut result);
                         } else {
                             result.push(ServiceEvent::Finished { id, result: Err(error) });
@@ -997,7 +1013,9 @@ impl NetworkService {
             if !self.streams.contains_key(&id) { result.push(ServiceEvent::Network { id, event }); }
             if let Some(mut outcome) = finished {
                 let mut subresource = None;
+                let mut failure_provenance=None;
                 if let Some(task) = self.active.remove(&id) {
+                    failure_provenance=task.pending.failure_csp_provenance();
                     if outcome.is_ok() {
                         if let Some((status, response_headers)) = &task.head {
                             let before = self.cache.len();
@@ -1100,7 +1118,7 @@ impl NetworkService {
                 if let Some(subresource) = subresource {
                     match subresource {
                         Ok(response) => result.push(ServiceEvent::SubresourceFinished { id, response }),
-                        Err(error) => result.push(ServiceEvent::SubresourceFailed { id, error }),
+                        Err(error) => result.push(ServiceEvent::SubresourceFailed { id, failure:SubresourceFailure{error,csp_provenance:failure_provenance} }),
                     }
                 } else if self.streams.contains_key(&id) {
                     self.finish_stream(id, outcome, &mut result);
@@ -1137,10 +1155,11 @@ impl NetworkService {
     pub fn abort(&mut self, id: ServiceId) -> bool {
         if let Some(task) = self.active.remove(&id) {
             task.pending.cancel(&mut self.dispatcher);
-            self.ready.push(ServiceEvent::Finished {
-                id,
-                result: Err(ApiError::Aborted),
-            });
+            if task.trusted_subresource {
+                self.ready.push(ServiceEvent::SubresourceFailed{id,failure:SubresourceFailure{error:ApiError::Aborted,csp_provenance:task.pending.failure_csp_provenance()}});
+            } else {
+                self.ready.push(ServiceEvent::Finished {id,result:Err(ApiError::Aborted)});
+            }
             true
         } else if let Some(index) = self.ready.iter().position(
             |event| matches!(event, ServiceEvent::Finished { id: found, .. } if *found == id),
@@ -1228,7 +1247,7 @@ mod tests {
                 let (id,result)=match event {
                     ServiceEvent::Finished {id,result}=>(id,result.and_then(|mut response|response.body.bytes())),
                     ServiceEvent::SubresourceFinished {id,response}=>(id,Ok(response.body)),
-                    ServiceEvent::SubresourceFailed {id,error}=>(id,Err(error)),_=>continue,
+                    ServiceEvent::SubresourceFailed {id,failure}=>(id,Err(failure.error)),_=>continue,
                 };
                 let expected=pending.remove(&id).expect("one terminal result per request");
                 if expected {assert_eq!(result.unwrap(),b"ok");}

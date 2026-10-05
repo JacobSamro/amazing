@@ -1,0 +1,88 @@
+{
+  "state": "whole-native-qualified-packaging-ready",
+  "lane": "net-csp-failure-provenance-20261005",
+  "source": "eb90bb47bdafbd6a4fb49ea411e7b3df59ccc9e8",
+  "engine_source": "cb6b4644abccde7fed905d733a60dd96acb79186",
+  "base": "1312ca0fef9459009cb73f68ac25c6cf0703b01a",
+  "gate_sha256": "8b749f9eaed66af3d2aa3c54554d8e05c113f38933f202b37b475be0ee8325ee",
+  "gate": {
+    "before": {
+      "ref": "1312ca0fef9459009cb73f68ac25c6cf0703b01a",
+      "root": "amazing/out/net-csp-failure-provenance-20261005/csp-failure-provenance-net-csp-failure-provenance-20261005-before",
+      "command_sha256": "be3fb937b568c929d64656fd42f2677c247aa8177fd58b844ad60d2743449610",
+      "launch_sha256": "dbb18061fee8f59bdec03b689ca7049215106d4bdb7d1f8c4e67ec9edbb32dd0",
+      "embedded_gate_sha256": "8b749f9eaed66af3d2aa3c54554d8e05c113f38933f202b37b475be0ee8325ee",
+      "space_check": "actual native /tmp disk_usage before engine; compact space.summary.json in exact root",
+      "exec_session": 15592,
+      "actual_exit": 0,
+      "job_id": "009831ac9128477dbd9a370e4535c9af",
+      "workspace_pass": 4750,
+      "doctest_pass": 15,
+      "native_pass": 528,
+      "csp_pass_ids": 81
+    },
+    "after": {
+      "ref": "4e8423e7135764fabad73a3e2eb658d644dd45bc",
+      "root": "amazing/out/net-csp-failure-provenance-20261005/csp-failure-provenance-net-csp-failure-provenance-20261005-after",
+      "command_sha256": "158cc6cb769996573fb84df0a063e25048e6b187a57dd2b415a0e909076ffcc9",
+      "launch_sha256": "386690599abe7092ad76fcaadb4c4ba66a7a3e352f22d2446b3a4fbc9e426d12",
+      "embedded_gate_sha256": "8b749f9eaed66af3d2aa3c54554d8e05c113f38933f202b37b475be0ee8325ee",
+      "space_check": "actual native /tmp disk_usage before engine; compact space.summary.json in exact root",
+      "exec_session": 14455
+    },
+    "after-sourcefix1": {
+      "ref": "eb90bb47bdafbd6a4fb49ea411e7b3df59ccc9e8",
+      "root": "amazing/out/net-csp-failure-provenance-20261005/csp-failure-provenance-net-csp-failure-provenance-20261005-after-sourcefix1",
+      "command_sha256": "db832783fb7708f197706d6d093c9d4c0b191551beb4abb39b12618b48ab2b54",
+      "launch_sha256": "e4d1e34fe81719247e07518d1b7c6723492ffd59f25fc6e11564f61b75ea7de1",
+      "embedded_gate_sha256": "52bc6dff667602be36dd729e375c65ad519a0feace2c74801b40f2bbd4004fce",
+      "baseline": "original authentic before1312",
+      "namespace_change_only": "after root sourcefix1, fresh target; collector and full gate suites unchanged",
+      "exec_session": 11938,
+      "actual_exit": 0,
+      "job_id": "ec9a2e0763f74d1c9bc2f1773e2bc957"
+    }
+  },
+  "allocation": "approved-exclusive-default4-8-finite7200",
+  "tooling_rerun_limit": 1,
+  "launcher": {
+    "source": "37ed04ad",
+    "path": "/Users/jMac/Projects/OpenSource/amazing-wt/public-job-large-command/scripts/linux-run.sh",
+    "sha256": "12a53ded66ab9333d9611664bd3f9d06b23eb406b1f39c5165069ba5ca3e64f3",
+    "receiver_sha256": "6a69c3460ff734b941c1f959c2d229cae20661c83a054500cf2a36a8928a5514"
+  },
+  "cache_retirement": "preserve all executable files; remove recoverable native rlib/rmeta/d/o and nonexecutable fingerprint/incremental only after baseline terminal+compact custody",
+  "cache_retirement_job": "4903eeac058a4bceb018e1de18c96138",
+  "cache_retirement_actual_exit": 0,
+  "native_free_after_baseline_cache_retirement_bytes": 25902354432,
+  "initial_after_actual_exit": 1,
+  "initial_after_counts": {
+    "workspace_pass": 4751,
+    "workspace_fail": 2,
+    "native_pass": 529,
+    "native_fail": 2,
+    "lost_original": []
+  },
+  "failure_cluster": "native trusted NoStore adds cache-control/pragma; Cors fixtures incorrectly expected GET before required OPTIONS",
+  "source_fix": {
+    "source": "eb90bb47bdafbd6a4fb49ea411e7b3df59ccc9e8",
+    "production_unchanged": true,
+    "original_assertions_preserved": true,
+    "genuine_native_preflight_controls_added": true,
+    "tooling_reruns_used": 0
+  },
+  "counts": {
+    "workspace_before": 4750,
+    "workspace_after": 4753,
+    "docs_before": 15,
+    "docs_after": 15,
+    "native_before": 528,
+    "native_after": 531,
+    "csp_files_before": 32,
+    "csp_files_after": 32,
+    "csp_ids_before": 81,
+    "csp_ids_after": 81,
+    "lost": []
+  },
+  "installed_full_family_qualified": false
+}

@@ -484,7 +484,16 @@ pub(crate) fn response_security_csp_receipts(
     prefix: &[u8],
     domains: &impl RegistrableDomain,
 ) -> Result<Vec<crate::CspViolation>, FetchError> {
+    let mut receipts=Vec::new();
+    response_security_csp_progress(request,response,prefix,domains,&mut receipts)?;
+    Ok(receipts)
+}
+pub(crate) fn response_security_csp_progress(
+    request:&Request,response:&InternalResponse,prefix:&[u8],domains:&impl RegistrableDomain,
+    receipts:&mut Vec<crate::CspViolation>,
+) -> Result<(),FetchError> {
     let csp = request.csp.post_request(request, request.url());
+    *receipts=csp.violations.clone();
     if csp.blocked {
         return Err(FetchError::Csp(crate::CspResponseProvenance::checked(request, csp.violations).violations().to_vec()));
     }
@@ -512,7 +521,7 @@ pub(crate) fn response_security_csp_receipts(
             request.security.no_cors_media_state,
         )?;
     }
-    Ok(csp.violations)
+    Ok(())
 }
 pub fn check_response_security(
     request: &Request,

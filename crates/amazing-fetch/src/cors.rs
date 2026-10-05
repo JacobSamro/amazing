@@ -252,13 +252,20 @@ pub fn filter_response(
     request: &Request,
     response: &InternalResponse,
 ) -> Result<Response, FetchError> {
+    filter_response_with_csp_progress(request,response,&mut None)
+}
+pub(crate) fn filter_response_with_csp_progress(request:&Request,response:&InternalResponse,
+    progress:&mut Option<CspResponseProvenance>) -> Result<Response,FetchError> {
     let mut copy = request.clone();
-    let plan = copy.prepare()?;
-    let final_receipts = crate::security::response_security_csp_receipts(
-        &copy, response, response.body.as_deref().unwrap_or_default(),
-        &crate::psl::PublicSuffixList,
-    )?;
-    let provenance = CspResponseProvenance::checked(&copy, final_receipts);
+    let preparation=copy.prepare();
+    *progress=copy.csp_pre_request_checked.then(||CspResponseProvenance::checked(&copy,Vec::new()));
+    let plan=preparation?;
+    let mut final_receipts=Vec::new();
+    let security=crate::security::response_security_csp_progress(
+        &copy,response,response.body.as_deref().unwrap_or_default(),&crate::psl::PublicSuffixList,&mut final_receipts);
+    let provenance=CspResponseProvenance::checked(&copy,final_receipts);
+    *progress=Some(provenance.clone());
+    security?;
     let metadata = crate::sri::Metadata::parse(&request.integrity);
     if !metadata.is_empty() && plan.taint == ResponseType::Opaque {
         return Err(FetchError::Integrity);
