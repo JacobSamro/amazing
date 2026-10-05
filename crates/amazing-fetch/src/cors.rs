@@ -254,13 +254,19 @@ pub fn filter_response(
 ) -> Result<Response, FetchError> {
     let mut copy = request.clone();
     let plan = copy.prepare()?;
-    check_response_security(&copy, response, &crate::psl::PublicSuffixList)?;
+    let final_receipts = crate::security::response_security_csp_receipts(
+        &copy, response, response.body.as_deref().unwrap_or_default(),
+        &crate::psl::PublicSuffixList,
+    )?;
+    let provenance = CspResponseProvenance::checked(&copy, final_receipts);
     let metadata = crate::sri::Metadata::parse(&request.integrity);
     if !metadata.is_empty() && plan.taint == ResponseType::Opaque {
         return Err(FetchError::Integrity);
     }
     if plan.taint == ResponseType::Opaque {
-        return Ok(Response::hidden(ResponseType::Opaque));
+        let mut filtered = Response::hidden(ResponseType::Opaque);
+        filtered.csp_provenance = Some(provenance);
+        return Ok(filtered);
     }
     let mut headers = response.headers.clone();
     if plan.taint == ResponseType::Cors {
@@ -282,6 +288,7 @@ pub fn filter_response(
         return Err(FetchError::Integrity);
     }
     Ok(Response {
+        csp_provenance: Some(provenance),
         response_type: plan.taint,
         status: response.status,
         status_text: response.status_text.clone(),

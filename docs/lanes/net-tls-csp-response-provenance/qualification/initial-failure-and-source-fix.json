@@ -1,0 +1,51 @@
+{
+  "state": "genuine-initial-after-source-failure-corrected-source-frozen",
+  "source": "8adbd1a790a599931cc60762417694ea6db1fced",
+  "base": "9de83d4a16f04e9beeb550a5405701b3e1755e63",
+  "lane": "net-csp-response-provenance-20261005",
+  "gate_sha256": "0c3e06a693c94c054d17c546a49cb4048ff647eb9ff576099e8069fe3d72e323",
+  "gate": {
+    "before": {
+      "ref": "9de83d4a16f04e9beeb550a5405701b3e1755e63",
+      "root": "amazing/out/net-csp-response-provenance-20261005/csp-response-provenance-net-csp-response-provenance-20261005-before",
+      "command_sha256": "77b944716d8a3828be096f1b812f27916df3763dae3096dad416d265704487be",
+      "launch_sha256": "5dcdc2940db43a067575f8566b5aada6c5eb8c34c538ae8373cb58f71aacbd8d",
+      "embedded_gate_sha256": "7c4a47389afd67c4d8c4e4c7439561974cba0813e08231b2435bdf413ca85860",
+      "exec_session": 56511,
+      "actual_exit": 0
+    },
+    "after": {
+      "ref": "8adbd1a790a599931cc60762417694ea6db1fced",
+      "root": "amazing/out/net-csp-response-provenance-20261005/csp-response-provenance-net-csp-response-provenance-20261005-after",
+      "command_sha256": "aa6128b35126e1c01486fc253363aa38704873bed8744743a1d8b60998ddc909",
+      "launch_sha256": "2cd9f55afac2d0f76dff35695c69932309c57b7fbf391be5c8ea68733dc255c2",
+      "embedded_gate_sha256": "7c4a47389afd67c4d8c4e4c7439561974cba0813e08231b2435bdf413ca85860",
+      "exec_session": 89779,
+      "actual_exit": 1,
+      "phases": {
+        "workspace": 101,
+        "doctests": 0,
+        "browser-build": 0,
+        "wpt-setup": 0,
+        "csp-wpt": 0,
+        "network-corpus": 101
+      },
+      "evidence": "after summary not published: initial compiler-empty classifications expand lost lists beyond compact limit; raw stays remote"
+    }
+  },
+  "allocation": "approved-default4-8-finite7200",
+  "native_directory_contract": "reviewed wrapper unique bootstrap source; per-side mkdtemp native Cargo target; source and target recorded in compact summaries",
+  "source_fix": {
+    "source": "1312ca0fef9459009cb73f68ac25c6cf0703b01a",
+    "parent": "8adbd1a790a599931cc60762417694ea6db1fced",
+    "cause": "genuine E0451 private field in authored fixture struct update",
+    "scope": "fixture initialization only; all assertions preserved",
+    "root": "amazing/out/net-csp-response-provenance-20261005/csp-response-provenance-net-csp-response-provenance-20261005-after-sourcefix1",
+    "launch_sha256": "19b916ef3be96c510c691d5c2c16befbb5c8919bfda6a8f96a0fe6b89dbf3f19",
+    "command_sha256": "87df06037b1422911058ff31fd512fd4d5ee4cef8a44fc3075f1d5739e461431",
+    "embedded_gate_sha256": "942379ddbb815d54c52aaa62cb208440e6c14c8c713db4a2e7adb510c7bc00ca",
+    "state": "completed-actual0",
+    "exec_session": 20886,
+    "actual_exit": 0
+  }
+}

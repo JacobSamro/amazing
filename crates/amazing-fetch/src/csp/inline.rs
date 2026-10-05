@@ -1,7 +1,7 @@
 //! CSP inline behavior and violation production. Implements CSP3 sections
 //! 4.2.3, 6.7.3 and 6.8.2 from the 16 September 2026 primary editor's draft.
 //! The embedder supplies native element metadata and queues returned violations.
-use super::{fallback, CspDisposition, CspPolicyList};
+use super::{CspDisposition, CspPolicyList, fallback};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CspInlineKind {
@@ -65,7 +65,7 @@ pub struct CspInlineContext<'a> {
     pub column_number: u32,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CspInlineViolation {
+pub struct CspReportViolation {
     pub effective_directive: String,
     /// Legacy event field equals effectiveDirective (CSP3 section 5.5).
     pub violated_directive: String,
@@ -93,6 +93,9 @@ pub struct CspInlineViolation {
     pub report_to: Option<String>,
     pub report_uris: Vec<String>,
 }
+/// Compatibility name for the original inline producer; request violations use
+/// the same genuine CSP event/report dictionary without fabricating inline data.
+pub type CspInlineViolation = CspReportViolation;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CspInlineCheck {
     pub blocked: bool,
@@ -164,11 +167,26 @@ impl CspPolicyList {
 /// CSP's nonceability check is deliberately separate from matching a nonce.
 /// Other native producers can use it before starting an external fetch.
 pub fn csp_inline_nonceable(context: &CspInlineContext<'_>) -> bool {
-    if !context.nonce_attribute_present || context.duplicate_attribute {
+    csp_element_nonceable(
+        context.kind == CspInlineKind::Script,
+        context.nonce_attribute_present,
+        context.attributes,
+        context.duplicate_attribute,
+    )
+}
+/// Shared CSP6.7.3.1 nonceability over native tokenizer/element provenance. It
+/// supplies no nonce itself and cannot convert a duplicate receipt into trust.
+pub fn csp_element_nonceable(
+    script: bool,
+    nonce_attribute_present: bool,
+    attributes: &[CspInlineAttribute<'_>],
+    duplicate_attribute: bool,
+) -> bool {
+    if !nonce_attribute_present || duplicate_attribute {
         return false;
     }
-    if context.kind == CspInlineKind::Script {
-        for attribute in context.attributes {
+    if script {
+        for attribute in attributes {
             for text in [attribute.name, attribute.value] {
                 if ["<script", "<style", "<link"]
                     .iter()
@@ -181,6 +199,7 @@ pub fn csp_inline_nonceable(context: &CspInlineContext<'_>) -> bool {
     }
     true
 }
+
 fn contains_ascii(text: &[u16], needle: &str) -> bool {
     text.windows(needle.len()).any(|part| {
         part.iter()
@@ -298,7 +317,7 @@ fn encode_base64(bytes: &[u8]) -> String {
 pub fn csp_strip_report_url(input: &str) -> String {
     strip_report_url(input)
 }
-fn strip_report_url(input: &str) -> String {
+pub(super) fn strip_report_url(input: &str) -> String {
     if input.is_empty() {
         return String::new();
     }

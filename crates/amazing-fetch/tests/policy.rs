@@ -223,6 +223,10 @@ fn redirect_modes_and_missing_location() {
     };
     let mut expected = Response::hidden(ResponseType::OpaqueRedirect);
     expected.url_list = r.url_list().to_vec();
+    let provenance = filtered.csp_provenance.as_ref().unwrap();
+    assert_eq!(provenance.url_list(), r.url_list());
+    assert!(provenance.violations().is_empty());
+    expected.csp_provenance = filtered.csp_provenance.clone();
     assert_eq!(filtered, expected);
     assert_eq!(r.url_list().len(), 1);
     assert_eq!(
@@ -574,10 +578,13 @@ fn opaque_filters_hide_everything() {
     r.mode = RequestMode::NoCors;
     let mut s = response(200, &[("x-secret", "value"), ("content-type", "image/png")]);
     s.body = Some(b"\x89PNG\r\n\x1a\nsecret".to_vec());
-    assert_eq!(
-        filter_response(&r, &s).unwrap(),
-        Response::hidden(ResponseType::Opaque)
-    );
+    let filtered = filter_response(&r, &s).unwrap();
+    let provenance = filtered.csp_provenance.as_ref().unwrap();
+    assert_eq!(provenance.url_list(), r.url_list());
+    assert!(provenance.violations().is_empty());
+    let mut expected = Response::hidden(ResponseType::Opaque);
+    expected.csp_provenance = filtered.csp_provenance.clone();
+    assert_eq!(filtered, expected);
 }
 #[test]
 fn cors_failure_never_returns_body() {

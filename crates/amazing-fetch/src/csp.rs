@@ -3,6 +3,8 @@
 use crate::{HeaderList, HttpUrl, Origin, Request};
 use amazing_net::ParsedUrl;
 mod inline;
+mod request_report;
+pub use request_report::*;
 mod meta_utf16;
 mod report_snapshot;
 pub use inline::*;
@@ -22,6 +24,17 @@ pub struct CspViolation {
     pub directive: String,
     pub disposition: CspDisposition,
     pub blocked_url: String,
+    // Native immutable custody; public legacy diagnostics do not authorize
+    // event/report enrichment or identify a policy by fallback name.
+    policy_index: usize,
+    effective_directive: String,
+    source_directive: String,
+    phase: CspRequestPhase,
+    policy_snapshot: CspPolicy,
+    request_urls: Vec<HttpUrl>,
+    resource_url: ParsedUrl,
+    request_origin: Origin,
+    csp_self_origin: Origin,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CspCheck {
@@ -114,7 +127,10 @@ impl CspPolicyList {
                     let mut policy = CspPolicy {
                         source: CspPolicySource::Header,
                         original_policy: serialized.trim_matches(is_ascii_whitespace).to_owned(),
-                        original_policy_units: serialized.trim_matches(is_ascii_whitespace).encode_utf16().collect(),
+                        original_policy_units: serialized
+                            .trim_matches(is_ascii_whitespace)
+                            .encode_utf16()
+                            .collect(),
                         disposition,
                         directives: Vec::new(),
                     };
@@ -160,19 +176,19 @@ impl CspPolicyList {
         Self::from_meta_utf16(&serialized.encode_utf16().collect::<Vec<_>>())
     }
     pub fn pre_request(&self, request: &Request) -> CspCheck {
-        self.check(request, request.url())
+        self.check(request, request.url(), CspRequestPhase::PreRequest)
     }
     pub fn post_request(&self, request: &Request, response_url: &HttpUrl) -> CspCheck {
-        self.check(request, response_url)
+        self.check(request, response_url, CspRequestPhase::PostRequest)
     }
-    fn check(&self, request: &Request, url: &HttpUrl) -> CspCheck {
-        self.check_parsed(request, url.as_parsed())
+    fn check(&self, request: &Request, url: &HttpUrl, phase: CspRequestPhase) -> CspCheck {
+        self.check_parsed(request, url.as_parsed(), phase)
     }
     /// Apply connect-src to the original ws/wss URL, preserving scheme sources.
     pub fn pre_websocket(&self, request: &Request, url: &ParsedUrl) -> CspCheck {
-        self.check_parsed(request, url)
+        self.check_parsed(request, url, CspRequestPhase::WebSocketPreRequest)
     }
-    fn check_parsed(&self, request: &Request, url: &ParsedUrl) -> CspCheck {
+    fn check_parsed(&self, request: &Request, url: &ParsedUrl, phase: CspRequestPhase) -> CspCheck {
         let mut result = CspCheck {
             blocked: false,
             violations: Vec::new(),
@@ -196,7 +212,7 @@ impl CspPolicyList {
             return result;
         };
         let redirected = request.url_list().len() > 1;
-        for policy in &self.policies {
+        for (policy_index, policy) in self.policies.iter().enumerate() {
             let Some(directive) = fallback(effective)
                 .iter()
                 .find_map(|name| policy.directives.iter().find(|d| d.name == *name))
@@ -211,6 +227,19 @@ impl CspPolicyList {
                 directive: directive.name.clone(),
                 disposition: policy.disposition,
                 blocked_url: url.serialize_without_fragment(),
+                policy_index,
+                effective_directive: effective.into(),
+                source_directive: directive.name.clone(),
+                phase,
+                policy_snapshot: policy.clone(),
+                request_urls: request.url_list().to_vec(),
+                resource_url: if phase == CspRequestPhase::WebSocketPreRequest {
+                    url.clone()
+                } else {
+                    request.url_list()[0].as_parsed().clone()
+                },
+                request_origin: request.origin.clone(),
+                csp_self_origin: request.csp_self_origin.clone(),
             });
         }
         result

@@ -24,7 +24,7 @@ pub fn redirect(
         .csp_violations
         .extend(csp.violations.iter().cloned());
     if csp.blocked {
-        return Err(FetchError::Csp(csp.violations));
+        return Err(FetchError::Csp(crate::CspResponseProvenance::checked(request, csp.violations).violations().to_vec()));
     }
     // Network redirect responses receive CORP checks before the next URL is
     // adopted, including same-origin redirects carrying their own policy.
@@ -43,6 +43,7 @@ pub fn redirect(
             }
             let mut filtered = Response::hidden(ResponseType::OpaqueRedirect);
             filtered.url_list = request.url_list().to_vec();
+            filtered.csp_provenance = Some(CspResponseProvenance::checked(request, Vec::new()));
             return Ok(RedirectAction::Manual(filtered));
         }
         RedirectMode::Follow => (),

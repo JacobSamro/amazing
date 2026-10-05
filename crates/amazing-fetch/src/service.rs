@@ -21,6 +21,9 @@ pub type RequestId = ServiceId;
 /// Script-visible response metadata after Fetch policy has accepted the head.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApiResponseHead {
+    /// Native policy receipts, including report-only and actual redirect lineage.
+    /// Independent of opaque/script-visible filtering.
+    pub csp_provenance: Option<crate::CspResponseProvenance>,
     pub status: u16,
     pub reason: String,
     pub headers: Vec<(String, String)>,
@@ -41,6 +44,7 @@ impl ApiResponseHead {
                     .map(|target| base.origin() != target.origin())))
             .unwrap_or(false);
         Self {
+            csp_provenance: response.csp_provenance.clone(),
             status: response.status,
             reason: response.status_text.clone(),
             headers: response.headers.raw_entries().to_vec(),

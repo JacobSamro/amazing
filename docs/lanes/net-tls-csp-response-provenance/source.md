@@ -1,0 +1,11 @@
+# Native external CSP response receipt custody
+
+Source successor to frozen 5a428802e9aa192a7ae9495d35247621fcd6ba76; recorded published foundation a035b2b558065d72664ce7617da0a7261027bb0d. Unbuilt and unqualified.
+
+`Response`, `ApiResponse`, and `ApiResponseHead` carry `Option<CspResponseProvenance>`. The native provenance constructor is private; read-only `url_list()` returns the authentic checked request chain and `violations()` returns policy-qualified pre/post receipts. Real policy filtering constructs Some even with zero violations. Synthetic Response/error constructors retain None. Native Response cloning preserves the receipt. The driver does not expose this capability as a JavaScript property.
+
+The original response security checks now return their actual successful post-check receipts to filtering; the compatibility checks still return Result<(), FetchError>. Original request/security enforcement and opaque filtering remain intact. Opaque native receipt lineage is independent of the hidden script-visible URL, headers, status and body. Buffered, streamed, deferred opaque heads, cache and renderer subresource consumers share the canonical filter/conversion/head producer. Manual redirects capture the actual request receipts. Repeated preparation snapshots are deduplicated by complete immutable receipt equality (policy index, phase and request lineage remain distinct). Typed CSP failures retain prior checked report-only receipts plus the blocking check, rather than discarding earlier hops. `CspViolation::request_url_list()` exposes each check's authentic lineage even when no response head exists.
+
+New controls cover exact pre/post receipts, saved receiving-client enrichment, opaque privacy and synthetic absence; genuine loopback redirects through buffered, streamed and renderer-subresource consumers; fresh cache recheck and native clone custody. Original provenance/nonce/UTF16 controls remain unchanged. No installed Script, full CSP family or browser consumer qualification is claimed.
+
+Whole paired gate uses qualified9de before and the complete successor after, with workspace nextest, workspace doctests, browser build, original11 CSP WPT numeric0 pass identities and the entire native TLS/net/fetch corpus. Commands and exact source must be frozen before allocation.

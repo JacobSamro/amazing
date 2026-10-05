@@ -476,9 +476,17 @@ pub fn check_response_security_with_prefix(
     prefix: &[u8],
     domains: &impl RegistrableDomain,
 ) -> Result<(), FetchError> {
+    response_security_csp_receipts(request, response, prefix, domains).map(|_| ())
+}
+pub(crate) fn response_security_csp_receipts(
+    request: &Request,
+    response: &InternalResponse,
+    prefix: &[u8],
+    domains: &impl RegistrableDomain,
+) -> Result<Vec<crate::CspViolation>, FetchError> {
     let csp = request.csp.post_request(request, request.url());
     if csp.blocked {
-        return Err(FetchError::Csp(csp.violations));
+        return Err(FetchError::Csp(crate::CspResponseProvenance::checked(request, csp.violations).violations().to_vec()));
     }
     if request.security.client_restricts_mixed_content
         && !a_priori_authenticated(request.url())
@@ -504,7 +512,7 @@ pub fn check_response_security_with_prefix(
             request.security.no_cors_media_state,
         )?;
     }
-    Ok(())
+    Ok(csp.violations)
 }
 pub fn check_response_security(
     request: &Request,

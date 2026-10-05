@@ -133,7 +133,7 @@ impl Request {
         let csp = self.csp.pre_request(self);
         self.csp_violations.extend(csp.violations.iter().cloned());
         if csp.blocked {
-            return Err(FetchError::Csp(csp.violations));
+            return Err(FetchError::Csp(crate::CspResponseProvenance::checked(self, csp.violations).violations().to_vec()));
         }
         check_request_security(self)?;
         if self.url().as_parsed().scheme() == "data" {
@@ -192,9 +192,29 @@ pub struct InternalResponse {
     pub headers: HeaderList,
     pub body: Option<Vec<u8>>,
 }
+/// Native policy receipts, never exposed by the JavaScript Response interface.
+/// Construction requires the actual checked request; an empty violation list
+/// still retains authentic transport lineage rather than synthetic authority.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CspResponseProvenance {
+    url_list: Vec<HttpUrl>,
+    violations: Vec<CspViolation>,
+}
+impl CspResponseProvenance {
+    pub(crate) fn checked(request: &Request, final_violations: Vec<CspViolation>) -> Self {
+        let mut violations = Vec::new();
+        for receipt in request.csp_violations.iter().cloned().chain(final_violations) {
+            if !violations.contains(&receipt) { violations.push(receipt); }
+        }
+        Self { url_list: request.url_list().to_vec(), violations }
+    }
+    pub fn url_list(&self) -> &[HttpUrl] { &self.url_list }
+    pub fn violations(&self) -> &[CspViolation] { &self.violations }
+}
 /// Filtered response has no pointer back to hidden headers or body.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Response {
+    pub csp_provenance: Option<CspResponseProvenance>,
     pub response_type: ResponseType,
     pub status: u16,
     pub status_text: String,
@@ -210,6 +230,7 @@ impl Response {
         ));
         Self {
             response_type,
+            csp_provenance: None,
             status: 0,
             status_text: String::new(),
             headers: HeaderList::default(),

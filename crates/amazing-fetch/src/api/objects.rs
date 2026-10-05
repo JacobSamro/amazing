@@ -97,6 +97,10 @@ pub struct ApiRequest {
     stream_body: bool,
     force_preflight: bool,
     origin: Origin,
+    // Ordinary browser-owned element/policy metadata; no WebIDL setter exists.
+    csp_nonce: Option<String>,
+    csp_parser_inserted: bool,
+    csp_self_origin: Option<Origin>,
 }
 /// Trusted browser navigation inputs. This constructor is outside WebIDL;
 /// JavaScript `new Request(..., { mode: "navigate" })` remains invalid.
@@ -217,6 +221,7 @@ impl ApiRequest {
                     stream_body: false,
                     force_preflight: false,
                     origin: origin.clone(),
+                    csp_nonce: None, csp_parser_inserted: false, csp_self_origin: None,
                 }
             }
             ApiRequestInput::Request(other) => {
@@ -245,6 +250,7 @@ impl ApiRequest {
                     stream_body: other.stream_body,
                     force_preflight: other.force_preflight,
                     origin: other.origin.clone(),
+                    csp_nonce: other.csp_nonce.clone(), csp_parser_inserted: other.csp_parser_inserted, csp_self_origin: other.csp_self_origin.clone(),
                 }
             }
         };
@@ -427,10 +433,32 @@ impl ApiRequest {
             stream_body: self.stream_body,
             force_preflight: self.force_preflight,
             origin: self.origin.clone(),
+            csp_nonce: self.csp_nonce.clone(), csp_parser_inserted: self.csp_parser_inserted, csp_self_origin: self.csp_self_origin.clone(),
         })
+    }
+    /// Native external HTML element preparation before ordinary Fetch dispatch.
+    /// The loader supplies its actual element kind/internal nonce/attributes.
+    /// Request constructors and clones retain this private native metadata.
+    pub fn apply_csp_request_element(&mut self, kind: crate::CspExternalElementKind, element: &crate::CspRequestElement<'_>) {
+        self.destination = match kind {crate::CspExternalElementKind::Script=>Destination::Script,crate::CspExternalElementKind::Style=>Destination::Style};
+        let mut policy = Request::new(self.url.clone(), self.origin.clone());
+        policy.security.destination = self.destination;
+        policy.apply_csp_request_element(element);
+        self.csp_nonce = policy.csp_nonce;
+        self.csp_parser_inserted = policy.csp_parser_inserted;
+    }
+    /// Preserve actual receiving origin separately from its protected policy
+    /// self-origin, including sandbox-opaque documents and inherited about.
+    pub fn apply_receiving_csp_client<Identity>(&mut self, receiving: &crate::ReceivingDocumentClient<Identity>) -> Result<(),crate::CspRequestEnrichmentError> {
+        if self.origin != receiving.origin { return Err(crate::CspRequestEnrichmentError::ReceivingClientMismatch); }
+        self.csp_self_origin = Some(receiving.csp_self_origin.clone());
+        Ok(())
     }
     pub(crate) fn policy_request(&self) -> Result<Request, ApiError> {
         let mut out = Request::new(self.url.clone(), self.origin.clone());
+        out.csp_nonce = self.csp_nonce.clone();
+        out.csp_parser_inserted = self.csp_parser_inserted;
+        if let Some(origin) = &self.csp_self_origin { out.csp_self_origin = origin.clone(); }
         out.mode = self.mode;
         out.security.destination = self.destination;
         out.security.top_level_navigation = self.mode == RequestMode::Navigate;
@@ -515,6 +543,9 @@ pub struct ApiResponseInit {
 }
 #[derive(Debug)]
 pub struct ApiResponse {
+    /// Trusted native-only CSP receipts and transport lineage; not a JS property.
+    /// Synthetic Response constructors do not mint checked-request provenance.
+    pub csp_provenance: Option<crate::CspResponseProvenance>,
     pub response_type: ApiResponseType,
     pub url: String,
     /// Trusted URL chain; never exposed through the JavaScript Response interface.
@@ -563,6 +594,7 @@ impl ApiResponse {
             body.set_mime_type(Some(mime));
         }
         Ok(Self {
+            csp_provenance: None,
             response_type: ApiResponseType::Default,
             url: String::new(),
             url_list: Vec::new(),
@@ -575,6 +607,7 @@ impl ApiResponse {
     }
     pub fn error() -> Self {
         Self {
+            csp_provenance: None,
             response_type: ApiResponseType::Error,
             url: String::new(),
             url_list: Vec::new(),
@@ -632,6 +665,7 @@ impl ApiResponse {
             return Err(ApiError::BodyUsed);
         }
         Ok(Self {
+            csp_provenance: self.csp_provenance.clone(),
             response_type: self.response_type,
             url: self.url.clone(),
             url_list: self.url_list.clone(),
@@ -664,6 +698,7 @@ impl ApiResponse {
         };
         body.set_mime_type(mime);
         Ok(Self {
+            csp_provenance: response.csp_provenance,
             response_type,
             url,
             url_list,

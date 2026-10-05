@@ -1,0 +1,15 @@
+{
+  "job": {
+    "schema": 1,
+    "lane": "net-csp-response-provenance-20261005",
+    "source_commit": "1312ca0fef9459009cb73f68ac25c6cf0703b01a",
+    "box_id": "bx_83tqugck",
+    "host": "user@46.105.118.96",
+    "port": 19035,
+    "job_id": "42d02ae5dfdb4687a0ec4bafea0cf74c",
+    "output_root": "amazing/out/net-csp-response-provenance-20261005/csp-response-provenance-net-csp-response-provenance-20261005-after-sourcefix1",
+    "command_sha256": "4e2bf3f38048998c9ee17a61ca43a80a9b4eab58c5a78297cfa02632713b9992"
+  },
+  "boot_id": "93cf36c1-b339-417f-8472-ef0ad038c088",
+  "actual_exit": 0
+}

@@ -1,0 +1,11 @@
+# Native CSP request and response provenance
+
+Qualified complete engine source `1312ca0fef9459009cb73f68ac25c6cf0703b01a` on recorded published `a035b2b558065d72664ce7617da0a7261027bb0d`; paired prior producer `9de83d4a16f04e9beeb550a5405701b3e1755e63` proof retained independently.
+
+Whole Linux pair: workspace **4742→4750 passed**,17 skipped; doctests **15→15**; whole native TLS/net/fetch **520→528 passed**; original11 CSP WPT **32 passing files /81 genuine numeric0 subtest identities unchanged**. Every lost list is empty. All required phases and endpoint-bound compact receivers completed actual0. Each side has distinct fresh native source and Cargo target directories recorded in compact summaries.
+
+Actual native enforcement now retains exact policy index, effective/source directive, pre/post/WebSocket phase, immutable policy units and authentic checked URL lineage. Receiving enrichment validates saved native origin independently of protected CSP self-origin. Exact source-element nonce/attribute/duplicate/parser custody reaches ordinary request construction and cloning. Successful buffered, streamed, opaque, manual-redirect, cache and subresource responses carry private native receipts independently of Fetch-visible filtering. Blocked redirects retain original report-only receipts plus their genuine blocking checks. Controls include real GET/redirect/cache service requests and pre-socket denial; original opaque hidden-field assertions remain intact.
+
+The initial frozen8ad AFTER completed actual1: two authored fixture initializations triggered private-field E0451. A separate fixture-only source fix preserved every assertion and production byte; the corrected full AFTER completed actual0. This is a genuine source correction, with zero tooling reruns. The initial oversized classification summary was not published; actual failure receipt and its genuine CSP compact are retained, with raw output on the recorded remote host.
+
+This qualifies native CSP provenance and preserves the original installed CSP corpus. It does not qualify the new installed classic/module consumers, complete Reporting/COEP consumers, or non-CSP failure receipt custody. Cors/Transport/MixedContent and other terminal failures retaining prior report-only receipts remain a distinct producer boundary. Root owns the combined candidate and16-shard Test262 gate.
