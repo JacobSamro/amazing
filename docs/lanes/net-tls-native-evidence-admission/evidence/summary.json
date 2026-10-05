@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "kind": "tooling-only",
+  "base": "6b3061f1dd51e6dbc5ece75478b15512564ffed2",
+  "qualified_source": "ff7d3a65e4cfc9ad7ee77ae433fb8a89c3b1cea0",
+  "actual_exit": 0,
+  "compact_fetch_exit": 0,
+  "counts": {
+    "pass": 14,
+    "fail": 0
+  },
+  "admission_sha256": "c131573069f7e85bf22c825901ecb6ebf76b0bd4722c472c994973ff14d5c0dd",
+  "controls_sha256": "03b6830363813d16e64eb959cd2d6dcfab8e3dfa1065d43e8db91e4b230e8eb3",
+  "command_sha256": "197d97804bdc5ff77ac6a097681d544cb7e4a4d44192d4af91b16f25a86d38f7",
+  "launch_sha256": "2059b40dd49d7f2ff09918b3958d8683369646962d79c8fa42ac2e98897c0dd3",
+  "job": {
+    "schema": 2,
+    "lane": "net-evidence-admission-tooling-20261005",
+    "source_commit": "ff7d3a65e4cfc9ad7ee77ae433fb8a89c3b1cea0",
+    "box_id": "bx_93bpt6vf",
+    "host": "user@213.32.27.68",
+    "port": 19032,
+    "job_id": "1f6ca31aeec6478a871fbf406a68d0b0",
+    "output_root": "amazing/out/net-evidence-admission-tooling-20261005/native-controls",
+    "command_sha256": "197d97804bdc5ff77ac6a097681d544cb7e4a4d44192d4af91b16f25a86d38f7",
+    "execution_sha256": "ffc405986bda9ea41fd2427d633293370b995946bf109434523bee9d344ec4f9",
+    "source_archive_sha256": "3eb4dcbf50bd2806f4bfff944a9bf700214f126d093bcd2bc5c8e7127b92f2f0"
+  },
+  "boot_id": "5caf777a-e37e-4293-8879-37066f82fd19",
+  "execution_raw": {
+    "path": "/home/user/.amazing-jobs/1f6ca31aeec6478a871fbf406a68d0b0/command.log",
+    "bytes": 6491,
+    "sha256": "dc76f5b056072408f7b0bd76655e81eb247f0ef0c7ca7c937b5a295b7426b3bb"
+  },
+  "compact": {
+    "bytes": 1056,
+    "sha256": "f6bd2a9c1ffb8cdd0f4dc12d73014ce6eeaeb5a620e6624d7224e71883e5c16c"
+  },
+  "engine_claim": false,
+  "original_failed_engine_receipts_preserved": true
+}
