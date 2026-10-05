@@ -42,6 +42,7 @@ import concurrent.futures
 import hashlib
 import html
 import json
+import math
 import os
 import re
 import shutil
@@ -368,7 +369,7 @@ def compare_ppm(actual_path: Path, reference_path: Path, diff_path: Path, allowe
     }
 
 
-def invoke_fixed_render(exe: Path, input_path: Path, output_path: Path, width: int, height: int, timeout: int, wpt_root: Path, log_stem: Path):
+def invoke_fixed_render(exe: Path, input_path: Path, output_path: Path, width: int, height: int, timeout: float, wpt_root: Path, log_stem: Path):
     env = dict(os.environ)
     env["AMAZING_WPT_ROOT"] = str(wpt_root)
     try:
@@ -404,7 +405,7 @@ def invoke_fixed_render(exe: Path, input_path: Path, output_path: Path, width: i
     return {"classification": "rendered", "detail": stdout.strip()}
 
 
-def run_one_test(candidate, exe: Path, wpt_root: Path, run_directory: Path, width: int, height: int, timeout: int):
+def run_one_test(candidate, exe: Path, wpt_root: Path, run_directory: Path, width: int, height: int, timeout: float):
     """Render once, then require any match and every mismatch reference.
 
     Pure function of its
@@ -551,7 +552,7 @@ def main() -> int:
     parser.add_argument("--out", required=True, help="output directory for report.json + per-test artifacts")
     parser.add_argument("--width", type=int, default=800)
     parser.add_argument("--height", type=int, default=600)
-    parser.add_argument("--timeout", type=int, default=20)
+    parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument("--limit", type=int, default=0, help="0 = every eligible reftest in the subdir")
     parser.add_argument(
         "--jobs", type=int, default=1,
@@ -584,8 +585,8 @@ def main() -> int:
         raise SystemExit(f"wpt_render_compare: amazing executable not found: {exe}")
     if args.width < 1 or args.width > 8192 or args.height < 1 or args.height > 8192:
         raise SystemExit("wpt_render_compare: width/height must be between 1 and 8192")
-    if args.timeout < 1 or args.timeout > 600:
-        raise SystemExit("wpt_render_compare: timeout must be between 1 and 600 seconds")
+    if not math.isfinite(args.timeout) or args.timeout < 1 or args.timeout > 600:
+        raise SystemExit("wpt_render_compare: timeout must be finite and between 1 and 600 seconds")
 
     revision = subprocess.run(
         ["git", "-C", str(wpt_root), "rev-parse", "HEAD"], capture_output=True, text=True
