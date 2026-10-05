@@ -67,6 +67,8 @@ if [ -n "$ENDPOINT_RECEIPT$COMPACT_ROOT" ]; then
   [ -n "$ENDPOINT_RECEIPT" ] && [ -n "$COMPACT_ROOT" ] && [ -n "$REF" ] && [ ! -e "$ENDPOINT_RECEIPT" ] || {
     echo 'linux-run: endpoint capture requires a fresh receipt, exact ref and compact root' >&2; exit 2;
   }
+  # Reuse the receiver contract before locks, source preparation or allocation.
+  python3 "$REPO/scripts/completed-job.py" validate-request --lane "$LANE" --root "$COMPACT_ROOT" || exit 2
 fi
 
 # Lane homes. Since 2026-09-26 lanes run on pooled Boat sandboxes
@@ -189,6 +191,22 @@ else
   echo "linux-run[$LANE]: $HOST from $SRC ($(git -C "$SRC" rev-parse --short HEAD)$(git -C "$SRC" diff --quiet HEAD || echo ', with uncommitted edits'))" >&2
 fi
 
+# Authenticate a complete canonical source packet before any remote job. Avoid
+# sending file-by-file writes through snapshot-backed HOME.
+SOURCE_ARCHIVE=""
+SOURCE_ARCHIVE_SHA=""
+if [ "$HOST" = boat ] && [ -z "$MISSION_PACKAGE" ]; then
+  SOURCE_ARCHIVE=$(mktemp /tmp/amazing-source-transport.XXXXXX) || exit 3
+  trap 'rm -f "${SOURCE_ARCHIVE:-}"; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"' EXIT
+  tar -czf "$SOURCE_ARCHIVE" --exclude=./.git --exclude=./target --exclude='./target-*' \
+    --exclude=./.agents --exclude=./out --exclude=./corpora -C "$SRC" . || exit 3
+  SOURCE_ARCHIVE_SHA=$(python3 - "$SOURCE_ARCHIVE" <<'PYHASH'
+import hashlib,sys
+with open(sys.argv[1],'rb') as stream: print(hashlib.file_digest(stream,'sha256').hexdigest())
+PYHASH
+  ) || exit 3
+fi
+
 if [ "$HOST" = boat ]; then
   # Resumed sandboxes serve /home/user from a lazy FUSE filesystem that can die
   # under load ("Transport endpoint is not connected"). Fail once; the caller
@@ -196,11 +214,8 @@ if [ "$HOST" = boat ]; then
   # A lease file marks the sandbox busy for boat-idle-reaper.py from before the
   # sync until the command exits; without it the reaper stopped a sandbox
   # mid-sync (low load, no cargo yet) and killed the run.
-  # A new lane tree is seeded on the sandbox from its own ~/amazing copy, so
-  # rsync sends only the lane's differences instead of the whole 85 MB tree.
-  # Pooled sandboxes host several lanes: each syncs into ~/amazing/wt/<lane>
-  # and builds into its own target dir (boat-lane.py target_of: a shared one
-  # linked another lane's stale artifacts).
+  # Source archives stage directly on native storage. Pooled sandboxes host
+  # several lanes, each with a separate source namespace and native target.
   LEASE=".amazing-busy/$LANE.$$"
   ok=0
   ATTEMPTS="1"
@@ -213,7 +228,7 @@ if [ "$HOST" = boat ]; then
     BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=2 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"
     # Drop the lease if we exit before the remote command's own trap takes
     # over (failed or interrupted sync); a stale lease keeps the sandbox billed.
-    trap '$BSSH "$BOAT_HOST" "rm -f $LEASE" 2>/dev/null; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"' EXIT
+    trap '$BSSH "$BOAT_HOST" "rm -f $LEASE" 2>/dev/null; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"; rm -f "${SOURCE_ARCHIVE:-}"' EXIT
     # Seed only from the canonical local source below. Snapshot-backed template
     # directories can change metadata during tar reads and fail fresh shard
     # setup; a partial template seed must never become build input.
@@ -231,13 +246,22 @@ if [ "$HOST" = boat ]; then
       echo "linux-run[$LANE]: native mission transport failed; no controller started" >&2
       break
     fi
-    setup_phase=remote-mkdir
-    $BSSH "$BOAT_HOST" "timeout --kill-after=5 60 bash -c 'mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE'"
+    NATIVE_SOURCE_DIR="/tmp/amazing-source-transport-$LANE.$$"
+    setup_phase=native-source-directory
+    $BSSH "$BOAT_HOST" "timeout --kill-after=5 60 bash -c 'mkdir -p amazing/out/$LANE .amazing-busy $NATIVE_SOURCE_DIR && touch $LEASE'"
     setup_rc=$?
     if [ "$setup_rc" = 0 ]; then
-      setup_phase=rsync
-      rsync -rlpDz --timeout=120 --checksum --delete --exclude .git --exclude /target --exclude '/target-*' --exclude /out --exclude /corpora \
-        --exclude /.agents --exclude /.opencode --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/wt/$LANE/"
+      setup_phase=native-source-upload
+      COMMIT="${COMMIT:-working-tree}" python3 "$REPO/scripts/native-inputs.py" --receipt "$SRC/source-transfer.manifest.json" transfer --seconds 900 -- \
+        scp -O -q -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=2 \
+        -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        -i "$HOME/.ssh/ascii_box_ed25519" -P "$BOAT_PORT" "$SOURCE_ARCHIVE" \
+        "$BOAT_HOST:$NATIVE_SOURCE_DIR/source.tar.gz"
+      setup_rc=$?
+    fi
+    if [ "$setup_rc" = 0 ]; then
+      setup_phase=native-source-sha256
+      $BSSH "$BOAT_HOST" "timeout --kill-after=5 60 bash -c 'printf \"%s  %s\\n\" $SOURCE_ARCHIVE_SHA $NATIVE_SOURCE_DIR/source.tar.gz | sha256sum -c -'"
       setup_rc=$?
     fi
     if [ "$setup_rc" = 0 ]; then ok=1; break; fi
@@ -257,6 +281,7 @@ if [ "$HOST" = boat ]; then
     CMD_Q=$(printf '%q' "$CMD")
     JOB_COMMAND="python3 -c \"\$(printf '%s' '$JOB_CODE' | base64 -d)\" run '$JOB_ROW' $CMD_Q"
   fi
+  NATIVE_INPUTS_B64="$(base64 < "$REPO/scripts/native-inputs.py" | tr -d '\n')"
   BOOTSTRAP_B64="$(base64 < "$REPO/scripts/linux-bootstrap.sh" | tr -d '\n')"
   REMOTE="trap 'timeout --kill-after=5 15 rm -f ~/$LEASE' EXIT
 export LANE='$LANE' COMMIT='${COMMIT:-working-tree}' OUT=\$HOME/amazing/out/$LANE
@@ -264,20 +289,24 @@ bootstrap=\$(mktemp /tmp/amazing-bootstrap-script.XXXXXX) || exit 3
 printf '%s' '$BOOTSTRAP_B64' | base64 -d > \"\$bootstrap\" || exit 3
 . \"\$bootstrap\"
 rm -f \"\$bootstrap\"
+bootstrap_clean_python_environment
+printf '%s' '$NATIVE_INPUTS_B64' | base64 -d > \"\$BOOTSTRAP_NATIVE/native-inputs.py\" || exit 3
+export NATIVE_SOURCE_ARCHIVE='${NATIVE_SOURCE_DIR:-}/source.tar.gz' NATIVE_SOURCE_SHA='$SOURCE_ARCHIVE_SHA'
 env_native=\$BOOTSTRAP_NATIVE/environment
 bootstrap_stage environment-copy 30 cp ~/.amazing-env \"\$env_native\"
 bootstrap_stage environment-load 30 bash -c '. \"\$1\" && export -p > \"\$2\"' bash \"\$env_native\" \"\$env_native.exports\"
 . \"\$env_native.exports\" || exit 3
+bootstrap_clean_python_environment
 bootstrap_native_cargo
 export JOBS=\$(nproc) CARGO_BUILD_JOBS=\$(nproc)
 export TEST262_ROOT=\$HOME/corpora/test262 RUSTUP_TOOLCHAIN=1.97.1 OUT=\$HOME/amazing/out/$LANE
 if [ -n '${NATIVE_MISSION_DIR:-}' ]; then
   cd '${NATIVE_MISSION_DIR:-}' || exit 3
 else
-cd ~/amazing/wt/$LANE || exit 3
 bootstrap_native_setup
 fi
 bootstrap_native_tools
+bootstrap_native_inputs
 export CARGO_TARGET_DIR=/tmp/amazing-native-target-$LANE CARGO_INCREMENTAL=0
 $JOB_COMMAND"
   ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"

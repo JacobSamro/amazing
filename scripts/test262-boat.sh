@@ -62,7 +62,7 @@ for K in $(seq 0 $((N - 1))); do
       export CARGO_TARGET_DIR=/tmp/amazing-target-t262-shard-$K CARGO_INCREMENTAL=0
       mkdir -p /tmp/amazing-src-t262-shard-$K
       rsync -a --delete --exclude /target --exclude '/target-*' --exclude /corpora --exclude /out ./ /tmp/amazing-src-t262-shard-$K/
-      ln -sfn \"\$HOME/corpora\" /tmp/amazing-src-t262-shard-$K/corpora
+      ln -sfn \"\$NATIVE_CORPORA_ROOT\" /tmp/amazing-src-t262-shard-$K/corpora
       cd /tmp/amazing-src-t262-shard-$K
       phase=build
       phase_receipt=\"\$OUT/shard-$SHA-$TAG-build.phase.manifest.json\"

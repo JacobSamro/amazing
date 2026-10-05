@@ -1,0 +1,668 @@
+{
+  "ticket": "storage-encoding-tls-native-integration",
+  "published_base": "a035b2b558065d72664ce7617da0a7261027bb0d",
+  "tested_source": "1f6226043afaecea79bbeb4b342af9705e153508",
+  "owner_review": [
+    {
+      "ready": "fe5874df",
+      "tested_source": "d520d81a66f7f02367afe4f73fa29c76b2036860",
+      "engine_files_byte_exact": [
+        "crates/amazing-storage/README.md",
+        "crates/amazing-storage/src/core.rs",
+        "crates/amazing-storage/src/lib.rs",
+        "crates/amazing-storage/src/transaction_tests.rs"
+      ],
+      "preflight": "passed"
+    },
+    {
+      "ready": "cdf4ea35",
+      "tested_source": "2dae426276df259243db23c503e934c23b7b5e88",
+      "engine_files_byte_exact": [
+        "crates/amazing-encoding/src/decoder.rs",
+        "crates/amazing-encoding/tests/codecs.rs"
+      ],
+      "preflight": "passed"
+    },
+    {
+      "ready": "51ac9685",
+      "tested_source": "8b93d32dee9f65d050c7d64c28dc0637d14adb3c",
+      "engine_files_byte_exact": [
+        "crates/amazing-net-tls/src/lib.rs",
+        "crates/amazing-net-tls/src/test_support.rs",
+        "crates/amazing-net-tls/src/validation_tests.rs",
+        "crates/amazing-net-tls/tests/fixtures/generate-validation.py",
+        "crates/amazing-net-tls/tests/fixtures/validation/bad-signature.der",
+        "crates/amazing-net-tls/tests/fixtures/validation/ca.der",
+        "crates/amazing-net-tls/tests/fixtures/validation/chained.der",
+        "crates/amazing-net-tls/tests/fixtures/validation/common-name-only.der",
+        "crates/amazing-net-tls/tests/fixtures/validation/critical.der",
+        "crates/amazing-net-tls/tests/fixtures/validation/dns-ip-only.der",
+        "crates/amazing-net-tls/tests/fixtures/validation/expired.der",
+        "crates/amazing-net-tls/tests/fixtures/validation/future.der",
+        "crates/amazing-net-tls/tests/fixtures/validation/intermediate.der",
+        "crates/amazing-net-tls/tests/fixtures/validation/key.der",
+        "crates/amazing-net-tls/tests/fixtures/validation/pin.json",
+        "crates/amazing-net-tls/tests/fixtures/validation/valid.der",
+        "crates/amazing-net-tls/tests/fixtures/validation/wildcard.der",
+        "crates/amazing-net-tls/tests/fixtures/validation/wrong-purpose.der"
+      ],
+      "preflight": "passed"
+    }
+  ],
+  "workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 4
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 4709,
+        "skipped": 17
+      }
+    },
+    "job_exit": 0,
+    "phase_details": [
+      {
+        "command": [
+          "cargo",
+          "nextest",
+          "run",
+          "--workspace",
+          "--locked",
+          "--no-fail-fast",
+          "--status-level",
+          "skip"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "        PASS [   0.003s] (4700/4709) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+          "        PASS [   0.003s] (4701/4709) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+          "        PASS [   0.008s] (4702/4709) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+          "        PASS [   0.010s] (4703/4709) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+          "        PASS [   0.010s] (4704/4709) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+          "        PASS [   0.004s] (4705/4709) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+          "        PASS [   0.019s] (4706/4709) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+          "        PASS [   0.012s] (4707/4709) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+          "        PASS [   8.412s] (4708/4709) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+          "        PASS [  26.470s] (4709/4709) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+          "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+          "     Summary [ 146.265s] 4709 tests run: 4709 passed (1 slow), 17 skipped"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-c81j5r1v/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-20261005T043049-37541/1f6226043afaecea79bbeb4b342af9705e153508/workspace-1f6226043afaecea79bbeb4b342af9705e153508-nextest.log",
+            "durable": {
+              "bytes": 670264,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T043049-37541/1f6226043afaecea79bbeb4b342af9705e153508/workspace-1f6226043afaecea79bbeb4b342af9705e153508-nextest.log",
+              "sha256": "01c0ce54fa6fa4eabb8509b8a1338a3e1cb64c120d0fe4c9dcfe637dd0346f10"
+            },
+            "native": {
+              "bytes": 670264,
+              "path": "/tmp/amazing-gate-command-c81j5r1v/output.log",
+              "sha256": "01c0ce54fa6fa4eabb8509b8a1338a3e1cb64c120d0fe4c9dcfe637dd0346f10"
+            },
+            "source": "/tmp/amazing-gate-command-c81j5r1v/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "nextest",
+        "raw_native": {
+          "bytes": 670264,
+          "path": "/tmp/amazing-gate-command-c81j5r1v/output.log",
+          "sha256": "01c0ce54fa6fa4eabb8509b8a1338a3e1cb64c120d0fe4c9dcfe637dd0346f10"
+        },
+        "schema": 1,
+        "source_commit": "1f6226043afaecea79bbeb4b342af9705e153508",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--workspace",
+          "--locked",
+          "--doc"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "   Doc-tests amazing_webrtc_codecs",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "",
+          "   Doc-tests amazing_webrtc_crypto",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          ""
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-f57h4eoc/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/home/user/amazing/out/integrator-primary/workspace-20261005T043049-37541/1f6226043afaecea79bbeb4b342af9705e153508/workspace-1f6226043afaecea79bbeb4b342af9705e153508-doctests.log",
+            "durable": {
+              "bytes": 18872,
+              "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T043049-37541/1f6226043afaecea79bbeb4b342af9705e153508/workspace-1f6226043afaecea79bbeb4b342af9705e153508-doctests.log",
+              "sha256": "159ce74acc75378a27cfc4b8f62b8aba0e6c9b29328f59e9de56939d4900f980"
+            },
+            "native": {
+              "bytes": 18872,
+              "path": "/tmp/amazing-gate-command-f57h4eoc/output.log",
+              "sha256": "159ce74acc75378a27cfc4b8f62b8aba0e6c9b29328f59e9de56939d4900f980"
+            },
+            "source": "/tmp/amazing-gate-command-f57h4eoc/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "doctests",
+        "raw_native": {
+          "bytes": 18872,
+          "path": "/tmp/amazing-gate-command-f57h4eoc/output.log",
+          "sha256": "159ce74acc75378a27cfc4b8f62b8aba0e6c9b29328f59e9de56939d4900f980"
+        },
+        "schema": 1,
+        "source_commit": "1f6226043afaecea79bbeb4b342af9705e153508",
+        "wrapper_exit": 0
+      }
+    ],
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "raw": [
+      {
+        "bytes": 670264,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T043049-37541/1f6226043afaecea79bbeb4b342af9705e153508/workspace-1f6226043afaecea79bbeb4b342af9705e153508-nextest.log",
+        "sha256": "01c0ce54fa6fa4eabb8509b8a1338a3e1cb64c120d0fe4c9dcfe637dd0346f10"
+      },
+      {
+        "bytes": 18872,
+        "path": "/home/user/amazing/out/integrator-primary/workspace-20261005T043049-37541/1f6226043afaecea79bbeb4b342af9705e153508/workspace-1f6226043afaecea79bbeb4b342af9705e153508-doctests.log",
+        "sha256": "159ce74acc75378a27cfc4b8f62b8aba0e6c9b29328f59e9de56939d4900f980"
+      }
+    ],
+    "schema": 1,
+    "source_commit": "1f6226043afaecea79bbeb4b342af9705e153508",
+    "summary_lines": [
+      "Summary [ 146.265s] 4709 tests run: 4709 passed (1 slow), 17 skipped",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "workspace_manifest": {
+    "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/integrator-primary/gates/workspace-20261005T043049-37541/1f6226043afaecea79bbeb4b342af9705e153508/workspace-1f6226043afaecea79bbeb4b342af9705e153508.manifest.json",
+    "bytes": 7985,
+    "sha256": "cb626d037eb23d0912e655d3bed834f1f61460e1f77fca2868c2d80b1c90585d"
+  },
+  "test262": {
+    "gained_files": 0,
+    "lost_files": [],
+    "lost_variants": [],
+    "provenance": {
+      "host_sha256": "27d24134832150414ca9aff5d2a58a40a10e8060d868b16e088ad4e41bf092e4",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "source_commit": "1f6226043afaecea79bbeb4b342af9705e153508",
+      "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+      "timeout_seconds": 60.0
+    },
+    "schema": 2,
+    "shard_sha256": {
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-0.json": "18d68eca0970395f576d8691b31722e68960d82254282121e66906cc863b7b60",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-1.json": "cb764bef9aae296066f85c6b247428739889c70b8d150ae760afbdb12e8c218a",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-10.json": "5eec8eba8300c56de10f005285523b2bb54d8c93c11b0700c2e92603ee3b1096",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-11.json": "1fb0988b46e044e2a892f91384a83ea31463c65a0ba198d0301ccab030fa13c9",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-12.json": "05fcc073e9bdd73d881d63749a6f97477d96bebd683cb484755629184e07a9d3",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-13.json": "3b58577c90eb3b21622e67902066b30b52f723906411d05f16e771f010f3b2ef",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-14.json": "f12b3ee10d38e639f8e5ccea254ffd742f3f27d9ef398c2e8accb21ee0efd83e",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-15.json": "d73de1dc05d7c8e69e2cd4b3792ef8935a5122c7c31a90d80e38c29c3c044ec7",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-2.json": "b00c01e9ed51c673b0cd6ba5f6b440472322f6754a6d034ebe0998a09ab29936",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-3.json": "9a85bb3edc3210631aacb2ab279d15a6671c932aa82d7a4fa27ce383adf030a0",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-4.json": "6ad62686857d393481fecb7e314b8f9fa7de92afa6fb753932035c1d674b92c2",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-5.json": "60283c20267d12006206e2790349c9374f05b96c5a984d36b5331364a0fbb94f",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-6.json": "cb4447ac51c9d1b9873ff18c8ae9a68d948d571c558b0732514880fb06eb5d8d",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-7.json": "35005ee5c29a278c82b6f5a8a3779cc6525d2c67af883ea7ea04ccdd01288659",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-8.json": "4ceed2a54c073ba297e1d608aa63223ce2410f3f1427785ea323448675ad5c18",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-9.json": "7e300a8b7c727752f38bc0ab663b17b3b8b6d5b5100c5be40b10b23a7192de0b"
+    },
+    "shards": [
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-0.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-1.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-2.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-3.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-4.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-5.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-6.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-7.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-8.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-9.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-10.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-11.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-12.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-13.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-14.json",
+      "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/.shard-1f622604-native-storage-encoding-tls-clean-15.json"
+    ],
+    "summary": {
+      "files": {
+        "fail": 740,
+        "pass": 52666,
+        "skipped": 294,
+        "timeout": 1,
+        "unsupported": 171
+      },
+      "variants": {
+        "fail": 1397,
+        "pass": 101179,
+        "timeout": 2,
+        "unsupported": 340
+      }
+    }
+  },
+  "shard_receipts": [
+    {
+      "shard": 0,
+      "bytes": 50589,
+      "sha256": "18d68eca0970395f576d8691b31722e68960d82254282121e66906cc863b7b60",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "322fa150cf0024bef60b0a607dbc6edca19c5d0a3fcf3833a5290bdfda2cb629",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "ddf88c3b044da837190cc00b30916e0f40a5dcfac307fbc05186a81018a5db32",
+          "raw_bytes": 10602
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 1,
+      "bytes": 50385,
+      "sha256": "cb764bef9aae296066f85c6b247428739889c70b8d150ae760afbdb12e8c218a",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "b53c102b19a193c9ec97c716d004ff45ffb86f98ef41dd57d8e26373734e1626",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "625047ddb2803b0ac94c5717bf7753c406db269ccaee94a64720009e54cf7c64",
+          "raw_bytes": 10628
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 2,
+      "bytes": 50556,
+      "sha256": "b00c01e9ed51c673b0cd6ba5f6b440472322f6754a6d034ebe0998a09ab29936",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "26dcfa3944de36c97f6e980ac17c81a178e3c094389f7603af734829d409451f",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "cd3ea2c679e140497e2209e3fdb65f725f58bf7186c0819706938f292cb45b65",
+          "raw_bytes": 10561
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 3,
+      "bytes": 50937,
+      "sha256": "9a85bb3edc3210631aacb2ab279d15a6671c932aa82d7a4fa27ce383adf030a0",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "e5a566a4f6d92fe94df08b6e6b5bba8923581eef1b510f82c8547c75b3ba1ee8",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "9477ee9dcf60b70270e8f312c95e77bf1bb17e70a6232007508dbc753b94c9cb",
+          "raw_bytes": 10653
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 4,
+      "bytes": 50704,
+      "sha256": "6ad62686857d393481fecb7e314b8f9fa7de92afa6fb753932035c1d674b92c2",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "0ce41ddb4ba54f9d7035a95bb4dfef857d97f2c84b24a9e17ce1006ba9ef0b62",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "99d7feb37e6023a197888d5f9c339b156c716303b77eadfd2b7d54a85729cd48",
+          "raw_bytes": 10579
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 5,
+      "bytes": 50877,
+      "sha256": "60283c20267d12006206e2790349c9374f05b96c5a984d36b5331364a0fbb94f",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "669114ae018a155c04cef45e64f9f991c66f875809910aeb83d98fcaf6366fae",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "0900f25ac115eb6482b25012d88b4ff17ae14ec2213e7bc8282279ad38e50d60",
+          "raw_bytes": 10576
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 6,
+      "bytes": 50980,
+      "sha256": "cb4447ac51c9d1b9873ff18c8ae9a68d948d571c558b0732514880fb06eb5d8d",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "4acdb258b123908465951844fc27740c19fa54d3ff6a4ff66c05322bf3941ca2",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "dc3f59c673d75e77a4d0daaa2cbaf3d6db3d3ba8244043eda3e0f7cc6c2b08f5",
+          "raw_bytes": 10584
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 7,
+      "bytes": 51064,
+      "sha256": "35005ee5c29a278c82b6f5a8a3779cc6525d2c67af883ea7ea04ccdd01288659",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "9e0f1397d3f384a33424132bf724fbe3e86327ba3b7c72c7ba53220c94795005",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "93edcaff5459bb9b601d0ba557d89c6624ce8fef7ed43327a8835d2e488c7aa5",
+          "raw_bytes": 10524
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 8,
+      "bytes": 50768,
+      "sha256": "4ceed2a54c073ba297e1d608aa63223ce2410f3f1427785ea323448675ad5c18",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "b975ee147f5046328f0a57cf0e8dda52f374b5352a69b0ecc8ef25b999ab350b",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "88aeb0ef7ed18bffed7994dd9647a72526c338caf6e10d58866f4e920aa266c4",
+          "raw_bytes": 10528
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 9,
+      "bytes": 50717,
+      "sha256": "7e300a8b7c727752f38bc0ab663b17b3b8b6d5b5100c5be40b10b23a7192de0b",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "e0aea1f1fbddc6faf931a3ccfd1a919f71043a18d5603ea2518f56037e6be254",
+          "raw_bytes": 10352
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "9f1639b4bc31f23446901b7da35c8fa8e69b0695dc15fd2ee7c75d16630a40d2",
+          "raw_bytes": 10534
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 10,
+      "bytes": 50934,
+      "sha256": "5eec8eba8300c56de10f005285523b2bb54d8c93c11b0700c2e92603ee3b1096",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "1c4135bbf844a5d62f4230b4a52e47f551b5dd53f2e7bb09a09b5152bd6c0e18",
+          "raw_bytes": 10354
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "1f2b2272a9432047a88d0c6e5b4b4617081c847f8be4065081e681cb69cbdabc",
+          "raw_bytes": 10561
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 11,
+      "bytes": 50535,
+      "sha256": "1fb0988b46e044e2a892f91384a83ea31463c65a0ba198d0301ccab030fa13c9",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "57c27ed85ccb41a740454d199503d3ae59e952d27f979b4bbf8de2f5afd8a3df",
+          "raw_bytes": 10354
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "fe1f2dabac8715644743073425103368b21e433dfed8670ce446a8624dfe8adc",
+          "raw_bytes": 10582
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 12,
+      "bytes": 50527,
+      "sha256": "05fcc073e9bdd73d881d63749a6f97477d96bebd683cb484755629184e07a9d3",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "dd17945e0a869df30abe26fb596a03571521b3221cdf4d793bfc8f803fcc2b87",
+          "raw_bytes": 10354
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "c4b25e7d2502933e9692f2f3eca33e186bf1af6a5ba1135fe581fd8bb498b234",
+          "raw_bytes": 10578
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 13,
+      "bytes": 50703,
+      "sha256": "3b58577c90eb3b21622e67902066b30b52f723906411d05f16e771f010f3b2ef",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "42f29feba440d21b5b2a5ad789bc025fdcec52e40677e9a5c4461195dee113ff",
+          "raw_bytes": 10354
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "4955badb00c2abc27c67acf55b10af8bfca059ee70e5645fd35a3db9e98f7d1f",
+          "raw_bytes": 10436
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 14,
+      "bytes": 50911,
+      "sha256": "f12b3ee10d38e639f8e5ccea254ffd742f3f27d9ef398c2e8accb21ee0efd83e",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "8993ce65b7a54030c10437095b8198738bbfee51732184a5f639bf6821380e30",
+          "raw_bytes": 10354
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "9a2b9ac24646863374f4b9ddfbbc1ea8fe5b86c78fd51ae91e8449d33e300182",
+          "raw_bytes": 10607
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    },
+    {
+      "shard": 15,
+      "bytes": 50767,
+      "sha256": "d73de1dc05d7c8e69e2cd4b3792ef8935a5122c7c31a90d80e38c29c3c044ec7",
+      "native_phases": {
+        "build": {
+          "engine_exit": 0,
+          "raw_sha256": "311f41d40740cddf12cb9cde137efe8e96b793e2cd4a039dbc0907090d97a23e",
+          "raw_bytes": 10354
+        },
+        "runner": {
+          "engine_exit": 1,
+          "raw_sha256": "6861f80d4051a4532435a4d698420963dfaf31e28058f196eb9d82b819299648",
+          "raw_bytes": 10603
+        },
+        "packaging": {
+          "engine_exit": 0,
+          "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_bytes": 0
+        }
+      }
+    }
+  ],
+  "native_shard_phases_authenticated": 48,
+  "independent_passset_comparison": {
+    "inventory": 53872,
+    "pass_files": 52666,
+    "pass_variants": 101179,
+    "lost_files": 0,
+    "lost_variants": 0,
+    "gained_files": 0,
+    "gained_variants": 0
+  },
+  "actual_workspace_exit": 0,
+  "actual_full16_exit": 0,
+  "runner_provenance_change": "Exactly three additive reporting fields: input_root, python_executable, pyyaml_origin. Classification functions unchanged; every shard runner hash matches tested source.",
+  "raw_policy": "Raw remains in sandbox HOME; compact evidence only. Three independently qualified engine tickets and public native transport source, gated together at exact source."
+}

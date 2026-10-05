@@ -26,7 +26,8 @@ class Bootstrap(unittest.TestCase):
   text=(S/'linux-bootstrap.sh').read_text();run=(S/'linux-run.sh').read_text()
   self.assertNotIn('ln -sfn ~/corpora',run.split('if [ "$HOST" = boat ]; then')[1].split('# Bulk transfers')[0])
   for label in ('environment-copy','environment-load'):self.assertIn('bootstrap_stage '+label+' 30',run)
-  self.assertIn('bootstrap_stage native-source-sync 600',text)
+  self.assertIn('bootstrap_stage native-source-extract 600',text)
+  self.assertNotIn('native-source-sync', text)
   self.assertIn('timeout --signal=TERM --kill-after=5',text)
  def test_cargo_dependencies_use_native_storage(self):
   with tempfile.TemporaryDirectory() as d:

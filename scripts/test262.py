@@ -500,6 +500,8 @@ def main() -> int:
     report = {"schema": 1, "test262_revision": revision, "input_sha256": manifest.hexdigest(),
               "host_sha256": sha(binary), "runner_sha256": sha(pathlib.Path(__file__)),
               "pyyaml": yaml.__version__, "python": sys.version, "capabilities": caps,
+              "input_root": str(root), "python_executable": sys.executable,
+              "pyyaml_origin": yaml.__file__,
               "timeout_seconds": args.timeout, "jobs": args.jobs, "filter": args.only, "limit": args.limit, "shard": args.shard,
               "elapsed_seconds": round(time.monotonic() - started, 3), "classification_sha256": digest,
               "summary": summarize(records), "records": records}

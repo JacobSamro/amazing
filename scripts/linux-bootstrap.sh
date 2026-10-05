@@ -24,12 +24,19 @@ PY
   [ "$publication" = 0 ] || echo "bootstrap receipt publication failed: phase=$label exit=$publication native=$receipt" >&2
   [ "$rc" = 0 ] && [ "$publication" = 0 ] || exit 3
 }
+bootstrap_clean_python_environment() {
+local name
+for name in "${!PYTHON@}" "${!_PYTHON@}"; do
+ [ -z "$name" ] || unset "$name"
+done
+}
+
 bootstrap_native_setup() {
-# Do not mutate snapshot-backed HOME corpora links. Only the native tree needs one.
-bootstrap_stage native-source-directory 30 mkdir -p "/tmp/amazing-native-src-$LANE"
-bootstrap_stage native-source-sync 600 rsync -a --delete --exclude /target --exclude '/target-*' --exclude /out --exclude /corpora ./ "/tmp/amazing-native-src-$LANE/"
-bootstrap_stage native-corpora-link 30 bash -c 'dest="$1/corpora"; expected="$2"; if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$expected" ]; then exit 0; fi; ln -sfn "$expected" "$dest"' bash "/tmp/amazing-native-src-$LANE" "$HOME/corpora"
-cd "/tmp/amazing-native-src-$LANE" || exit 3
+local destination="$BOOTSTRAP_NATIVE/source"
+bootstrap_stage native-source-extract 600 /usr/bin/python3 -s -S -P "$BOOTSTRAP_NATIVE/native-inputs.py" \
+ --receipt "$BOOTSTRAP_NATIVE/source-input.manifest.json" source \
+ "$NATIVE_SOURCE_ARCHIVE" "$NATIVE_SOURCE_SHA" "$destination"
+cd "$destination" || exit 3
 }
 bootstrap_native_tools() {
 bootstrap_stage native-tools-directory 30 mkdir -p /tmp/amazing-native-tools
@@ -62,4 +69,25 @@ for name in ('registry','git'):
 print(str(p))
 PY
 export CARGO_HOME="$cargo_native"
+}
+
+bootstrap_native_inputs() {
+# No ambient PyYAML C module is imported until its authentic installed bytes
+# have been copied to native storage. System stdlib remains the interpreter's.
+bootstrap_stage native-python-input 120 /usr/bin/python3 -s -S -P "$BOOTSTRAP_NATIVE/native-inputs.py" \
+ --receipt "$BOOTSTRAP_NATIVE/python-input.manifest.json" python "$BOOTSTRAP_NATIVE/python"
+unset PYTHONHOME PYTHONUSERBASE
+export PYTHONPATH="$BOOTSTRAP_NATIVE/python" PYTHONNOUSERSITE=1
+export PATH="$BOOTSTRAP_NATIVE/python:$PATH"
+bootstrap_stage native-test262-input 1200 python3 -s -S -P "$BOOTSTRAP_NATIVE/native-inputs.py" \
+ --receipt "$BOOTSTRAP_NATIVE/test262-input.manifest.json" corpus /tmp/amazing-test262-3655e746
+export TEST262_ROOT=/tmp/amazing-test262-3655e746
+export NATIVE_CORPORA_ROOT="$BOOTSTRAP_NATIVE/corpora"
+bootstrap_stage native-corpora-directory 30 mkdir -p "$NATIVE_CORPORA_ROOT"
+bootstrap_stage native-corpora-links 30 bash -c '
+ ln -s "$1" "$2/test262" && ln -s "$3/wpt" "$2/wpt"
+' bash "$TEST262_ROOT" "$BOOTSTRAP_NATIVE/corpora" "$HOME/corpora"
+if [ -z "${NATIVE_MISSION_DIR:-}" ]; then
+ bootstrap_stage native-source-corpora 30 ln -s "$BOOTSTRAP_NATIVE/corpora" corpora
+fi
 }

@@ -8,14 +8,19 @@ def digest(data):return hashlib.sha256(data).hexdigest()
 def encoded(row):return base64.b64encode(json.dumps(row,separators=(',',':')).encode()).decode()
 def decode(text):return json.loads(base64.b64decode(text))
 def marker(row):return pathlib.Path('/tmp')/('amazing-completed-'+row['job_id']+'.json')
+def valid_output_root(lane, root):
+    if not re.fullmatch(r'[A-Za-z0-9_-]+', lane):raise ValueError('invalid lane')
+    p=pathlib.PurePosixPath(root)
+    if p.is_absolute() or '..' in p.parts or not str(p).startswith('amazing/out/'+lane+'/'):raise ValueError('invalid job output root')
+    if not re.fullmatch(r'[A-Za-z0-9_./-]+',str(p)):raise ValueError('invalid job output root')
+    return root
+
 def valid(row):
     if row.get('schema')!=1:raise ValueError('unknown endpoint receipt schema')
     for key,pattern in [('lane',r'[A-Za-z0-9_-]+'),('source_commit',r'[0-9a-f]{40}'),('box_id',r'bx_[A-Za-z0-9]+'),('host',r'[A-Za-z0-9_.-]+@[A-Za-z0-9:.]+'),('job_id',r'[0-9a-f]{32}'),('command_sha256',r'[0-9a-f]{64}')]:
         if not re.fullmatch(pattern,row[key]):raise ValueError('invalid '+key)
     if not isinstance(row['port'],int) or not 1<=row['port']<=65535:raise ValueError('invalid port')
-    p=pathlib.PurePosixPath(row['output_root'])
-    if p.is_absolute() or '..' in p.parts or not str(p).startswith('amazing/out/'+row['lane']+'/'):raise ValueError('invalid job output root')
-    if not re.fullmatch(r'[A-Za-z0-9_./-]+',str(p)):raise ValueError('invalid job output root')
+    valid_output_root(row['lane'],row['output_root'])
     return row
 
 def capture(args):
@@ -95,6 +100,7 @@ def fetch(args):
 
 def main():
     p=argparse.ArgumentParser();subs=p.add_subparsers(dest='action',required=True)
+    a=subs.add_parser('validate-request');a.add_argument('--lane',required=True);a.add_argument('--root',required=True)
     a=subs.add_parser('capture')
     for name in ('receipt','lane','source','box','host','root','command'):a.add_argument('--'+name,required=True)
     a.add_argument('--port',type=int,required=True)
@@ -104,6 +110,7 @@ def main():
     for name in ('receipt','lane','source','destination'):a.add_argument('--'+name,required=True)
     a.add_argument('paths',nargs='+')
     args=p.parse_args()
+    if args.action=='validate-request':valid_output_root(args.lane,args.root);return 0
     if args.action=='capture':capture(args);return 0
     if args.action=='run':return run(decode(args.receipt),args.command)
     if args.action=='verify':print(json.dumps(verify(decode(args.receipt),args.lane,args.source,args.paths)));return 0
