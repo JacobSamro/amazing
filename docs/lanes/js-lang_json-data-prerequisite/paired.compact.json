@@ -1,0 +1,821 @@
+{
+  "schema": 1,
+  "sources": {
+    "before": "98d349298429480e106f63d3c6411a8a28c817ee",
+    "after": "f8ab24034388fda00feab5d7479258759c1c0846"
+  },
+  "base": "68b1e6363be41f3867c684040326d54bf07af3af",
+  "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "paired_selections": [
+    {
+      "mode": "default",
+      "selector": "built-ins/JSON/",
+      "before_summary": {
+        "files": {
+          "pass": 165,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 165,
+          "skipped": 294
+        }
+      },
+      "file_inventory": 459,
+      "variant_inventory": 330,
+      "lost": [],
+      "gained": [],
+      "before_compact_sha256": "abb0fccc1ef6c1539fc2e3e967a7dc63a516ca245256647573158aa2d28e2fc6",
+      "after_compact_sha256": "97eb7ea4a42eb7053c14b432b934e6b9b842754fa88280251819554a84f6dbd0",
+      "before_raw": {
+        "bytes": 7672115,
+        "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/default-00.report.json",
+        "sha256": "32d57d0344080e225e91f101edb9e7261b3316a354e207c4d775769c816f0fda"
+      },
+      "after_raw": {
+        "bytes": 7672115,
+        "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/default-00.report.json",
+        "sha256": "082199525fc44f4a107f9b1ee4301b1b74b0e64ef7f53a0b563e7b5c2e2148e4"
+      },
+      "before_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed",
+      "after_host_sha256": "731c7a06e1bf79942ae57270e6bcfc51a725da3f2608ffe0c029896ab866dee8",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "before_classification_sha256": "7b40eb0f3838c1118febb1bb23f0f986fad55714bae8ba1d45bcb6062127265b",
+      "after_classification_sha256": "7b40eb0f3838c1118febb1bb23f0f986fad55714bae8ba1d45bcb6062127265b",
+      "all_compact_records_identical": true
+    },
+    {
+      "mode": "default",
+      "selector": "language/import/",
+      "before_summary": {
+        "files": {
+          "fail": 21,
+          "pass": 108,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "fail": 21,
+          "pass": 108,
+          "skipped": 294
+        }
+      },
+      "file_inventory": 423,
+      "variant_inventory": 135,
+      "lost": [],
+      "gained": [],
+      "before_compact_sha256": "9c2e516cd9971ad46825f2994e3796f533a5317b1d89d06f474fc383fa004c10",
+      "after_compact_sha256": "62c1a28df63dca273c0d7a4a54a692d491d668aee7ff3be885f56feeb722ecc3",
+      "before_raw": {
+        "bytes": 7674987,
+        "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/default-01.report.json",
+        "sha256": "42cbda1e15db3282bc7725eebeecaaeca7330d5109d4b6962be275e21577b700"
+      },
+      "after_raw": {
+        "bytes": 7674987,
+        "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/default-01.report.json",
+        "sha256": "d052fac81dc5f75cf85ead663f1ac4fff6f9e0f71142d4d110eef28845cb6331"
+      },
+      "before_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed",
+      "after_host_sha256": "731c7a06e1bf79942ae57270e6bcfc51a725da3f2608ffe0c029896ab866dee8",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "before_classification_sha256": "bf6b852d9e14a3d3a595eed8779a33f5af948704b70c2c225bbdec9faf0cb353",
+      "after_classification_sha256": "bf6b852d9e14a3d3a595eed8779a33f5af948704b70c2c225bbdec9faf0cb353",
+      "all_compact_records_identical": true
+    },
+    {
+      "mode": "default",
+      "selector": "language/expressions/dynamic-import/",
+      "before_summary": {
+        "files": {
+          "fail": 2,
+          "pass": 1003,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "fail": 2,
+          "pass": 1003,
+          "skipped": 294
+        }
+      },
+      "file_inventory": 1299,
+      "variant_inventory": 1900,
+      "lost": [],
+      "gained": [],
+      "before_compact_sha256": "304cc52ba103353db14b4c7792e5d64df681d0084cd46c6e830865f1b56a2d7d",
+      "after_compact_sha256": "1b16f948d1aa9465af6e72ddac3fbc355d047b3d449c41928b9c8f0f923f535f",
+      "before_raw": {
+        "bytes": 8019259,
+        "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/default-02.report.json",
+        "sha256": "f7bf1330e1d2780b50f85aa43955c350f9b36edabdc89d1328d5ebae3973bd47"
+      },
+      "after_raw": {
+        "bytes": 8019258,
+        "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/default-02.report.json",
+        "sha256": "b0c6b06435788947a617be67ac226e0cbf2470c6a08444bf1bdc141b8d59d67f"
+      },
+      "before_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed",
+      "after_host_sha256": "731c7a06e1bf79942ae57270e6bcfc51a725da3f2608ffe0c029896ab866dee8",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "before_classification_sha256": "20690d8bd8d7ebd9f0375f02ca88ed8b90a21f91228ef3c3aa0f22902854f938",
+      "after_classification_sha256": "20690d8bd8d7ebd9f0375f02ca88ed8b90a21f91228ef3c3aa0f22902854f938",
+      "all_compact_records_identical": true
+    },
+    {
+      "mode": "default",
+      "selector": "language/module-code/",
+      "before_summary": {
+        "files": {
+          "fail": 3,
+          "pass": 596,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "fail": 3,
+          "pass": 596,
+          "skipped": 294
+        }
+      },
+      "file_inventory": 893,
+      "variant_inventory": 602,
+      "lost": [],
+      "gained": [],
+      "before_compact_sha256": "276bd37808d20f7b11d1ed9e3a519e2891dfbae92873d6625afb82c2fe91342b",
+      "after_compact_sha256": "36aa530b9b94bc0b2fa2677619c67786e93d83446e6b1e1835543fee9b3acd2b",
+      "before_raw": {
+        "bytes": 7770283,
+        "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/default-03.report.json",
+        "sha256": "d6fd1cbacf5cdca951c5fddf5d12a813f770843225180ed94ec82a54acef5768"
+      },
+      "after_raw": {
+        "bytes": 7770283,
+        "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/default-03.report.json",
+        "sha256": "112abaedc9da94ec9c1512a1ed70422f46035cae0ab8de967e7616bf24507e59"
+      },
+      "before_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed",
+      "after_host_sha256": "731c7a06e1bf79942ae57270e6bcfc51a725da3f2608ffe0c029896ab866dee8",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "before_classification_sha256": "103e698ab765f2dd49f6d47883708d63832203915d298716617e8a21bf5a3019",
+      "after_classification_sha256": "103e698ab765f2dd49f6d47883708d63832203915d298716617e8a21bf5a3019",
+      "all_compact_records_identical": true
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/JSON/",
+      "before_summary": {
+        "files": {
+          "pass": 165,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "pass": 165,
+          "skipped": 294
+        }
+      },
+      "file_inventory": 459,
+      "variant_inventory": 330,
+      "lost": [],
+      "gained": [],
+      "before_compact_sha256": "2941911271d36463f32af9f288fdeda56b86efc30c3fa3f7b2c457a23698e4e2",
+      "after_compact_sha256": "fbaf695e009675f8d51543682ce5a926f86b91499e651461e144b4ed65c48de6",
+      "before_raw": {
+        "bytes": 7672115,
+        "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/vm-00.report.json",
+        "sha256": "0b426f7943bb048ff0a2f4dad86526b9c071a3d80aa2ee5fe5aacb37a8246e08"
+      },
+      "after_raw": {
+        "bytes": 7672115,
+        "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/vm-00.report.json",
+        "sha256": "bbc2f859861f6ad23c07ae806fb82e067950a7d64b9d96cc9d439a91cf3f37ad"
+      },
+      "before_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed",
+      "after_host_sha256": "731c7a06e1bf79942ae57270e6bcfc51a725da3f2608ffe0c029896ab866dee8",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "before_classification_sha256": "7b40eb0f3838c1118febb1bb23f0f986fad55714bae8ba1d45bcb6062127265b",
+      "after_classification_sha256": "7b40eb0f3838c1118febb1bb23f0f986fad55714bae8ba1d45bcb6062127265b",
+      "all_compact_records_identical": true
+    },
+    {
+      "mode": "vm",
+      "selector": "language/import/",
+      "before_summary": {
+        "files": {
+          "fail": 21,
+          "pass": 108,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "fail": 21,
+          "pass": 108,
+          "skipped": 294
+        }
+      },
+      "file_inventory": 423,
+      "variant_inventory": 135,
+      "lost": [],
+      "gained": [],
+      "before_compact_sha256": "8b4da87e56b67fbd9edd311036c728892d20d79c7d4ff9184b35278604c60664",
+      "after_compact_sha256": "20da52c499b47f065e539ce41b987be2151a873da370be69e9dd6f5470e7fd90",
+      "before_raw": {
+        "bytes": 7674986,
+        "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/vm-01.report.json",
+        "sha256": "59c7ba16b83f9c4d7d0e913deca24b2edcc36fbb61326e34da49a7389dabcd1f"
+      },
+      "after_raw": {
+        "bytes": 7674987,
+        "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/vm-01.report.json",
+        "sha256": "8e3cf9974528e194d16f0eecb8d667f03031ae87fe2e2214df4353abb0234d84"
+      },
+      "before_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed",
+      "after_host_sha256": "731c7a06e1bf79942ae57270e6bcfc51a725da3f2608ffe0c029896ab866dee8",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "before_classification_sha256": "bf6b852d9e14a3d3a595eed8779a33f5af948704b70c2c225bbdec9faf0cb353",
+      "after_classification_sha256": "bf6b852d9e14a3d3a595eed8779a33f5af948704b70c2c225bbdec9faf0cb353",
+      "all_compact_records_identical": true
+    },
+    {
+      "mode": "vm",
+      "selector": "language/expressions/dynamic-import/",
+      "before_summary": {
+        "files": {
+          "fail": 2,
+          "pass": 1003,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "fail": 2,
+          "pass": 1003,
+          "skipped": 294
+        }
+      },
+      "file_inventory": 1299,
+      "variant_inventory": 1900,
+      "lost": [],
+      "gained": [],
+      "before_compact_sha256": "dbd4827850819cff184c828898b9ed601c72dcccbc29629e619c640a5ae1a166",
+      "after_compact_sha256": "2840b4d5720096d87d3b882372097344e5d6fcdae4847116d5f07770e95bc294",
+      "before_raw": {
+        "bytes": 8019259,
+        "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/vm-02.report.json",
+        "sha256": "01a675c72f0a2cc47c93e59a0085e33430ddda051a597926b472b765d6034a26"
+      },
+      "after_raw": {
+        "bytes": 8019259,
+        "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/vm-02.report.json",
+        "sha256": "064dedb4d323fb5140b2f7082d3c76078b5f47ab9b8e97acb8ef3b70b3eae6f6"
+      },
+      "before_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed",
+      "after_host_sha256": "731c7a06e1bf79942ae57270e6bcfc51a725da3f2608ffe0c029896ab866dee8",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "before_classification_sha256": "20690d8bd8d7ebd9f0375f02ca88ed8b90a21f91228ef3c3aa0f22902854f938",
+      "after_classification_sha256": "20690d8bd8d7ebd9f0375f02ca88ed8b90a21f91228ef3c3aa0f22902854f938",
+      "all_compact_records_identical": true
+    },
+    {
+      "mode": "vm",
+      "selector": "language/module-code/",
+      "before_summary": {
+        "files": {
+          "fail": 3,
+          "pass": 596,
+          "skipped": 294
+        }
+      },
+      "after_summary": {
+        "files": {
+          "fail": 3,
+          "pass": 596,
+          "skipped": 294
+        }
+      },
+      "file_inventory": 893,
+      "variant_inventory": 602,
+      "lost": [],
+      "gained": [],
+      "before_compact_sha256": "601b5a28d2ac86572bde3e1a6e219dc3da801fd2424c3dd86141ff4b95d45a45",
+      "after_compact_sha256": "207a4ba473947adaf3b529d1a00ecc5c34010d8952742a9ce8aae1d1025c8f62",
+      "before_raw": {
+        "bytes": 7770282,
+        "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/vm-03.report.json",
+        "sha256": "aa343ec5716889ad2bae38d378d3ce90db780b6644a128eec4d3159f21e9aa9f"
+      },
+      "after_raw": {
+        "bytes": 7770283,
+        "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/vm-03.report.json",
+        "sha256": "044d454226ab42dfb9b915839059604525cdb44be566549d2df2e822efcf0848"
+      },
+      "before_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed",
+      "after_host_sha256": "731c7a06e1bf79942ae57270e6bcfc51a725da3f2608ffe0c029896ab866dee8",
+      "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+      "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+      "before_classification_sha256": "103e698ab765f2dd49f6d47883708d63832203915d298716617e8a21bf5a3019",
+      "after_classification_sha256": "103e698ab765f2dd49f6d47883708d63832203915d298716617e8a21bf5a3019",
+      "all_compact_records_identical": true
+    }
+  ],
+  "core": {
+    "before": {
+      "counts": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 34
+        },
+        "nextest": {
+          "failed": 0,
+          "passed": 4984,
+          "skipped": 17
+        }
+      },
+      "job_exit": 0,
+      "phase_details": [
+        {
+          "command": [
+            "cargo",
+            "nextest",
+            "run",
+            "--workspace",
+            "--locked",
+            "--no-fail-fast",
+            "--status-level",
+            "skip"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "        PASS [   0.002s] (4975/4984) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames",
+            "        PASS [   0.003s] (4976/4984) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+            "        PASS [   0.009s] (4977/4984) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+            "        PASS [   0.014s] (4978/4984) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+            "        PASS [   0.010s] (4979/4984) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+            "        PASS [   0.006s] (4980/4984) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+            "        PASS [   0.024s] (4981/4984) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+            "        PASS [   0.017s] (4982/4984) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+            "        PASS [   9.176s] (4983/4984) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+            "        PASS [  29.222s] (4984/4984) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+            "     Summary [ 162.841s] 4984 tests run: 4984 passed (1 slow), 17 skipped"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-v71qsm4v/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/workspace.log",
+              "durable": {
+                "bytes": 715388,
+                "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/workspace.log",
+                "sha256": "d5a5ab0d6f53813e12153e205a4b894c319d3dd62023f0bcc1b225ce80b5dafa"
+              },
+              "native": {
+                "bytes": 715388,
+                "path": "/tmp/amazing-gate-command-v71qsm4v/output.log",
+                "sha256": "d5a5ab0d6f53813e12153e205a4b894c319d3dd62023f0bcc1b225ce80b5dafa"
+              },
+              "source": "/tmp/amazing-gate-command-v71qsm4v/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "workspace",
+          "raw_native": {
+            "bytes": 715388,
+            "path": "/tmp/amazing-gate-command-v71qsm4v/output.log",
+            "sha256": "d5a5ab0d6f53813e12153e205a4b894c319d3dd62023f0bcc1b225ce80b5dafa"
+          },
+          "schema": 1,
+          "source_commit": "98d349298429480e106f63d3c6411a8a28c817ee",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--workspace",
+            "--locked",
+            "--doc"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "   Doc-tests amazing_webrtc_codecs",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "",
+            "   Doc-tests amazing_webrtc_crypto",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            ""
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-zmstf1hw/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/docs.log",
+              "durable": {
+                "bytes": 27957,
+                "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/docs.log",
+                "sha256": "4e44724399402a680dc7ad061b78d7be167ae453f9afd9816b90853a74ae70d3"
+              },
+              "native": {
+                "bytes": 27957,
+                "path": "/tmp/amazing-gate-command-zmstf1hw/output.log",
+                "sha256": "4e44724399402a680dc7ad061b78d7be167ae453f9afd9816b90853a74ae70d3"
+              },
+              "source": "/tmp/amazing-gate-command-zmstf1hw/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "docs",
+          "raw_native": {
+            "bytes": 27957,
+            "path": "/tmp/amazing-gate-command-zmstf1hw/output.log",
+            "sha256": "4e44724399402a680dc7ad061b78d7be167ae453f9afd9816b90853a74ae70d3"
+          },
+          "schema": 1,
+          "source_commit": "98d349298429480e106f63d3c6411a8a28c817ee",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "build",
+            "-p",
+            "amazing-js",
+            "--example",
+            "test262_host",
+            "--release",
+            "--locked"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "warning: field `parent` is never read",
+            "   --> crates/amazing-js/src/value.rs:647:9",
+            "    |",
+            "646 | pub(crate) struct DerivedConstructor {",
+            "    |                   ------------------ field in this struct",
+            "647 |     pub parent: JsValue,",
+            "    |         ^^^^^^",
+            "    |",
+            "    = note: `DerivedConstructor` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis",
+            "",
+            "warning: `amazing-js` (lib) generated 37 warnings (run `cargo fix --lib -p amazing-js` to apply 8 suggestions)",
+            "    Finished `release` profile [optimized] target(s) in 52.15s"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-zfafkwao/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/release.log",
+              "durable": {
+                "bytes": 11968,
+                "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/release.log",
+                "sha256": "66f4d92a8a579ce1f3ff770471343dac312167c62788ca428b665b9d40fe004a"
+              },
+              "native": {
+                "bytes": 11968,
+                "path": "/tmp/amazing-gate-command-zfafkwao/output.log",
+                "sha256": "66f4d92a8a579ce1f3ff770471343dac312167c62788ca428b665b9d40fe004a"
+              },
+              "source": "/tmp/amazing-gate-command-zfafkwao/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "release",
+          "raw_native": {
+            "bytes": 11968,
+            "path": "/tmp/amazing-gate-command-zfafkwao/output.log",
+            "sha256": "66f4d92a8a579ce1f3ff770471343dac312167c62788ca428b665b9d40fe004a"
+          },
+          "schema": 1,
+          "source_commit": "98d349298429480e106f63d3c6411a8a28c817ee",
+          "wrapper_exit": 0
+        }
+      ],
+      "phase_exits": {
+        "docs": 0,
+        "release": 0,
+        "workspace": 0
+      },
+      "raw": [
+        {
+          "bytes": 715388,
+          "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/workspace.log",
+          "sha256": "d5a5ab0d6f53813e12153e205a4b894c319d3dd62023f0bcc1b225ce80b5dafa"
+        },
+        {
+          "bytes": 27957,
+          "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/docs.log",
+          "sha256": "4e44724399402a680dc7ad061b78d7be167ae453f9afd9816b90853a74ae70d3"
+        },
+        {
+          "bytes": 11968,
+          "path": "/tmp/amazing-json-data-evidence/98d349298429480e106f63d3c6411a8a28c817ee/before/release.log",
+          "sha256": "66f4d92a8a579ce1f3ff770471343dac312167c62788ca428b665b9d40fe004a"
+        }
+      ],
+      "schema": 1,
+      "source_commit": "98d349298429480e106f63d3c6411a8a28c817ee",
+      "summary_lines": [
+        "Summary [ 162.841s] 4984 tests run: 4984 passed (1 slow), 17 skipped",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.86s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    },
+    "after": {
+      "counts": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 34
+        },
+        "nextest": {
+          "failed": 0,
+          "passed": 4987,
+          "skipped": 17
+        }
+      },
+      "job_exit": 0,
+      "phase_details": [
+        {
+          "command": [
+            "cargo",
+            "nextest",
+            "run",
+            "--workspace",
+            "--locked",
+            "--no-fail-fast",
+            "--status-level",
+            "skip"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "        PASS [   0.003s] (4978/4987) amazing-webrtc video::tests::assembler_bounds_frames_and_recovers_after_marker",
+            "        PASS [   0.002s] (4979/4987) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+            "        PASS [   0.008s] (4980/4987) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+            "        PASS [   0.012s] (4981/4987) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+            "        PASS [   0.007s] (4982/4987) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+            "        PASS [   0.006s] (4983/4987) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+            "        PASS [   0.015s] (4984/4987) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+            "        PASS [   0.015s] (4985/4987) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+            "        PASS [   9.126s] (4986/4987) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid",
+            "        PASS [  30.044s] (4987/4987) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+            "     Summary [ 169.485s] 4987 tests run: 4987 passed (1 slow), 17 skipped"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-1vshvc9p/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/workspace.log",
+              "durable": {
+                "bytes": 707325,
+                "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/workspace.log",
+                "sha256": "cf3df0625fb6c5bcf0288db4dfa04c772519290f714859a238bf8b68f32969f3"
+              },
+              "native": {
+                "bytes": 707325,
+                "path": "/tmp/amazing-gate-command-1vshvc9p/output.log",
+                "sha256": "cf3df0625fb6c5bcf0288db4dfa04c772519290f714859a238bf8b68f32969f3"
+              },
+              "source": "/tmp/amazing-gate-command-1vshvc9p/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "workspace",
+          "raw_native": {
+            "bytes": 707325,
+            "path": "/tmp/amazing-gate-command-1vshvc9p/output.log",
+            "sha256": "cf3df0625fb6c5bcf0288db4dfa04c772519290f714859a238bf8b68f32969f3"
+          },
+          "schema": 1,
+          "source_commit": "f8ab24034388fda00feab5d7479258759c1c0846",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--workspace",
+            "--locked",
+            "--doc"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "   Doc-tests amazing_webrtc_codecs",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "",
+            "   Doc-tests amazing_webrtc_crypto",
+            "",
+            "running 0 tests",
+            "",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            ""
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-afyd2hph/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/docs.log",
+              "durable": {
+                "bytes": 27957,
+                "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/docs.log",
+                "sha256": "ea1d88c4451a478ed2f50e4173fe15587387248d66ab49fbf25425375b1194ac"
+              },
+              "native": {
+                "bytes": 27957,
+                "path": "/tmp/amazing-gate-command-afyd2hph/output.log",
+                "sha256": "ea1d88c4451a478ed2f50e4173fe15587387248d66ab49fbf25425375b1194ac"
+              },
+              "source": "/tmp/amazing-gate-command-afyd2hph/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "docs",
+          "raw_native": {
+            "bytes": 27957,
+            "path": "/tmp/amazing-gate-command-afyd2hph/output.log",
+            "sha256": "ea1d88c4451a478ed2f50e4173fe15587387248d66ab49fbf25425375b1194ac"
+          },
+          "schema": 1,
+          "source_commit": "f8ab24034388fda00feab5d7479258759c1c0846",
+          "wrapper_exit": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "build",
+            "-p",
+            "amazing-js",
+            "--example",
+            "test262_host",
+            "--release",
+            "--locked"
+          ],
+          "command_exit": 0,
+          "diagnostic_tail": [
+            "warning: field `parent` is never read",
+            "   --> crates/amazing-js/src/value.rs:647:9",
+            "    |",
+            "646 | pub(crate) struct DerivedConstructor {",
+            "    |                   ------------------ field in this struct",
+            "647 |     pub parent: JsValue,",
+            "    |         ^^^^^^",
+            "    |",
+            "    = note: `DerivedConstructor` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis",
+            "",
+            "warning: `amazing-js` (lib) generated 37 warnings (run `cargo fix --lib -p amazing-js` to apply 8 suggestions)",
+            "    Finished `release` profile [optimized] target(s) in 53.10s"
+          ],
+          "engine_exit": 0,
+          "native_receipt": "/tmp/amazing-gate-command-oxg_shl6/phase.manifest.json",
+          "output_copies": [
+            {
+              "copy_exit": 0,
+              "destination": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/release.log",
+              "durable": {
+                "bytes": 11968,
+                "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/release.log",
+                "sha256": "c67399bb45fd650daa00e176e1813bb656157c4e8c6c1b9d3c8913a3c1d2908b"
+              },
+              "native": {
+                "bytes": 11968,
+                "path": "/tmp/amazing-gate-command-oxg_shl6/output.log",
+                "sha256": "c67399bb45fd650daa00e176e1813bb656157c4e8c6c1b9d3c8913a3c1d2908b"
+              },
+              "source": "/tmp/amazing-gate-command-oxg_shl6/output.log"
+            }
+          ],
+          "output_copy_exit": 0,
+          "phase": "release",
+          "raw_native": {
+            "bytes": 11968,
+            "path": "/tmp/amazing-gate-command-oxg_shl6/output.log",
+            "sha256": "c67399bb45fd650daa00e176e1813bb656157c4e8c6c1b9d3c8913a3c1d2908b"
+          },
+          "schema": 1,
+          "source_commit": "f8ab24034388fda00feab5d7479258759c1c0846",
+          "wrapper_exit": 0
+        }
+      ],
+      "phase_exits": {
+        "docs": 0,
+        "release": 0,
+        "workspace": 0
+      },
+      "raw": [
+        {
+          "bytes": 707325,
+          "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/workspace.log",
+          "sha256": "cf3df0625fb6c5bcf0288db4dfa04c772519290f714859a238bf8b68f32969f3"
+        },
+        {
+          "bytes": 27957,
+          "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/docs.log",
+          "sha256": "ea1d88c4451a478ed2f50e4173fe15587387248d66ab49fbf25425375b1194ac"
+        },
+        {
+          "bytes": 11968,
+          "path": "/tmp/amazing-json-data-evidence/f8ab24034388fda00feab5d7479258759c1c0846/after/release.log",
+          "sha256": "c67399bb45fd650daa00e176e1813bb656157c4e8c6c1b9d3c8913a3c1d2908b"
+        }
+      ],
+      "schema": 1,
+      "source_commit": "f8ab24034388fda00feab5d7479258759c1c0846",
+      "summary_lines": [
+        "Summary [ 169.485s] 4987 tests run: 4987 passed (1 slow), 17 skipped",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.77s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    }
+  },
+  "lost_observations": 0,
+  "gained_observations": 0,
+  "zero_loss": true,
+  "scope": "JSON data prerequisite; no typed module-family implementation claim"
+}

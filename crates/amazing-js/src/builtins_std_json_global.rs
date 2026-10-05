@@ -125,147 +125,6 @@ mod json_semantic_tests {
     }
 }
 
-struct StdJsonParser<'a> {
-    units: &'a [u16],
-    position: usize,
-    depth: usize,
-    last_span: (usize, usize),
-    sources: HashMap<(usize, crate::value::JsString), (crate::value::JsString, JsValue)>,
-}
-impl<'a> StdJsonParser<'a> {
-    fn whitespace(&mut self) {
-        while self.units.get(self.position).is_some_and(|unit| matches!(unit, 0x20 | 0x09 | 0x0a | 0x0d)) {
-            self.position += 1;
-        }
-    }
-    fn take(&mut self, unit: u16) -> bool {
-        if self.units.get(self.position) == Some(&unit) { self.position += 1; true } else { false }
-    }
-    fn string(&mut self) -> Result<crate::value::JsString, Throw> {
-        if !self.take(b'"' as u16) { return Err(Throw::syntax_error("expected JSON string")); }
-        let mut out = Vec::new();
-        while let Some(&unit) = self.units.get(self.position) {
-            self.position += 1;
-            if unit == b'"' as u16 { return Ok(crate::value::JsString::from_units(out)); }
-            if unit < 0x20 { return Err(Throw::syntax_error("control character in JSON string")); }
-            if unit != b'\\' as u16 { out.push(unit); continue; }
-            let escaped = *self.units.get(self.position).ok_or_else(|| Throw::syntax_error("unfinished JSON escape"))?;
-            self.position += 1;
-            match escaped {
-                0x22 | 0x5c | 0x2f => out.push(escaped),
-                0x62 => out.push(0x08), 0x66 => out.push(0x0c), 0x6e => out.push(0x0a),
-                0x72 => out.push(0x0d), 0x74 => out.push(0x09),
-                0x75 => {
-                    let mut point = 0u16;
-                    for _ in 0..4 {
-                        let digit = *self.units.get(self.position).ok_or_else(|| Throw::syntax_error("short JSON Unicode escape"))?;
-                        self.position += 1;
-                        point = (point << 4) | (char::from_u32(digit as u32).and_then(|ch| ch.to_digit(16))
-                            .ok_or_else(|| Throw::syntax_error("invalid JSON Unicode escape"))? as u16);
-                    }
-                    out.push(point);
-                }
-                _ => return Err(Throw::syntax_error("invalid JSON escape")),
-            }
-        }
-        Err(Throw::syntax_error("unterminated JSON string"))
-    }
-    fn literal(&mut self, literal: &str, value: JsValue) -> Result<JsValue, Throw> {
-        let units = literal.encode_utf16().collect::<Vec<_>>();
-        if self.units[self.position..].starts_with(&units) { self.position += units.len(); Ok(value) }
-        else { Err(Throw::syntax_error("invalid JSON literal")) }
-    }
-    fn number(&mut self) -> Result<JsValue, Throw> {
-        let start = self.position;
-        self.take(b'-' as u16);
-        if self.take(b'0' as u16) {
-            if self.units.get(self.position).is_some_and(|unit| (b'0' as u16..=b'9' as u16).contains(unit)) {
-                return Err(Throw::syntax_error("leading zero in JSON number"));
-            }
-        } else {
-            let mut digits = 0;
-            while self.units.get(self.position).is_some_and(|unit| (b'0' as u16..=b'9' as u16).contains(unit)) {
-                self.position += 1; digits += 1;
-            }
-            if digits == 0 { return Err(Throw::syntax_error("invalid JSON number")); }
-        }
-        if self.take(b'.' as u16) {
-            let begin = self.position;
-            while self.units.get(self.position).is_some_and(|unit| (b'0' as u16..=b'9' as u16).contains(unit)) { self.position += 1; }
-            if begin == self.position { return Err(Throw::syntax_error("missing JSON fraction digits")); }
-        }
-        if self.take(b'e' as u16) || self.take(b'E' as u16) {
-            if !self.take(b'+' as u16) { self.take(b'-' as u16); }
-            let begin = self.position;
-            while self.units.get(self.position).is_some_and(|unit| (b'0' as u16..=b'9' as u16).contains(unit)) { self.position += 1; }
-            if begin == self.position { return Err(Throw::syntax_error("missing JSON exponent digits")); }
-        }
-        let text = String::from_utf16(&self.units[start..self.position]).unwrap_or_default();
-        Ok(JsValue::num(text.parse::<f64>().map_err(|_| Throw::syntax_error("invalid JSON number"))?))
-    }
-    fn value(&mut self, i: &mut Interpreter) -> Result<JsValue, Throw> {
-        self.whitespace();
-        let start = self.position;
-        self.depth += 1;
-        if self.depth > 512 { return Err(Throw::syntax_error("JSON nesting limit")); }
-        let result = match self.units.get(self.position).copied() {
-            Some(0x22) => Ok(JsValue::str(self.string()?)),
-            Some(0x74) => self.literal("true", JsValue::Bool(true)),
-            Some(0x66) => self.literal("false", JsValue::Bool(false)),
-            Some(0x6e) => self.literal("null", JsValue::Null),
-            Some(0x5b) => {
-                self.position += 1; self.whitespace();
-                let mut values = Vec::new();
-                let mut spans = Vec::new();
-                if !self.take(b']' as u16) {
-                    loop {
-                        values.push(self.value(i)?);
-                        spans.push(self.last_span);
-                        self.whitespace();
-                        if self.take(b']' as u16) { break; }
-                        if !self.take(b',' as u16) { return Err(Throw::syntax_error("expected JSON array comma")); }
-                    }
-                }
-                let array = array_values(i, values)?;
-                if let JsValue::Object(object) = &array {
-                    for (index, (begin, end)) in spans.into_iter().enumerate() {
-                        self.sources.insert((std_weak_id(object), crate::value::JsString::from(index.to_string())),
-                            (crate::value::JsString::from_units(self.units[begin..end].to_vec()),
-                             object.borrow().get_own(index.to_string()).unwrap_or(JsValue::Undefined)));
-                    }
-                }
-                Ok(array)
-            }
-            Some(0x7b) => {
-                self.position += 1; self.whitespace();
-                let object = i.object_value();
-                if !self.take(b'}' as u16) {
-                    loop {
-                        self.whitespace();
-                        let key = self.string()?; self.whitespace();
-                        if !self.take(b':' as u16) { return Err(Throw::syntax_error("expected JSON colon")); }
-                        let value = self.value(i)?;
-                        let (begin, end) = self.last_span;
-                        if let JsValue::Object(handle) = &object {
-                            handle.borrow_mut().set_own(key.clone(), value.clone());
-                            self.sources.insert((std_weak_id(handle), key),
-                                (crate::value::JsString::from_units(self.units[begin..end].to_vec()), value));
-                        }
-                        self.whitespace();
-                        if self.take(b'}' as u16) { break; }
-                        if !self.take(b',' as u16) { return Err(Throw::syntax_error("expected JSON object comma")); }
-                    }
-                }
-                Ok(object)
-            }
-            Some(0x2d | 0x30..=0x39) => self.number(),
-            _ => Err(Throw::syntax_error("invalid JSON token")),
-        };
-        self.depth -= 1;
-        self.last_span = (start, self.position);
-        result
-    }
-}
 
 fn std_json_revive(i: &mut Interpreter, holder: JsValue, key: crate::value::JsString,
     reviver: &JsValue, sources: &HashMap<(usize, crate::value::JsString), (crate::value::JsString, JsValue)>,
@@ -304,21 +163,20 @@ fn std_json_revive(i: &mut Interpreter, holder: JsValue, key: crate::value::JsSt
 }
 fn std_json_parse(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let source = i.to_js_string(&std_reflect_arg(&args, 0))?;
-    let mut parser = StdJsonParser { units: source.units(), position: 0, depth: 0,
-        last_span: (0, 0), sources: HashMap::new() };
-    let value = parser.value(i)?;
-    parser.whitespace();
-    if parser.position != source.len() { return Err(Throw::syntax_error("unexpected text after JSON value")); }
+    let document = crate::json_data::JsonDocument::parse_utf16(source.units())
+        .map_err(|error| Throw::syntax_error(error.to_string()))?;
+    let mut sources = HashMap::new();
+    let value = i.materialize_json_document(&document, &mut sources)?;
     let reviver = std_reflect_arg(&args, 1);
     if callable_function(&reviver).is_none() { return Ok(value); }
     let root = i.object_value();
     if let JsValue::Object(object) = &root {
         object.borrow_mut().set_own("", value.clone());
-        let (begin, end) = parser.last_span;
-        parser.sources.insert((std_weak_id(object), crate::value::JsString::from("")),
-            (crate::value::JsString::from_units(source.units()[begin..end].to_vec()), value));
+        let span = &document.root.span;
+        sources.insert((std_weak_id(object), crate::value::JsString::from("")),
+            (crate::value::JsString::from_units(source.units()[span.clone()].to_vec()), value));
     }
-    std_json_revive(i, root, crate::value::JsString::from(""), &reviver, &parser.sources, 0)
+    std_json_revive(i, root, crate::value::JsString::from(""), &reviver, &sources, 0)
 }
 
 fn is_array_value(i: &Interpreter, value: &JsValue) -> Result<bool, Throw> {
@@ -344,10 +202,9 @@ fn std_json_raw(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<J
         || source.units().last().is_some_and(whitespace) {
         return Err(Throw::syntax_error("raw JSON cannot have empty text or edge whitespace"));
     }
-    let mut parser = StdJsonParser { units: source.units(), position: 0, depth: 0,
-        last_span: (0, 0), sources: HashMap::new() };
-    let parsed = parser.value(i)?;
-    if parsed.is_object() || parser.position != source.len() {
+    let document = crate::json_data::JsonDocument::parse_utf16(source.units())
+        .map_err(|error| Throw::syntax_error(error.to_string()))?;
+    if !document.is_primitive() {
         return Err(Throw::syntax_error("raw JSON must be exactly one primitive JSON value"));
     }
     let mut object = JsObject::ordinary();

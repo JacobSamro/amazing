@@ -44,6 +44,7 @@ pub mod interp;
 pub mod lexer;
 mod lexer_source;
 pub mod module;
+pub mod json_data;
 pub mod parser;
 #[cfg(test)]
 mod regexp_tests;

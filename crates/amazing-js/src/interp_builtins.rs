@@ -1931,31 +1931,7 @@ fn native_json_parse(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let source = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    // JSONWhiteSpace is narrower than ECMAScript WhiteSpace. The script
-    // parser below accepts additional Unicode separators, so reject them
-    // outside quoted JSON strings before handing the text to it.
-    let mut in_string = false;
-    let mut escaped = false;
-    for ch in source.chars() {
-        if in_string {
-            if escaped {
-                escaped = false;
-            } else if ch == '\\' {
-                escaped = true;
-            } else if ch == '"' {
-                in_string = false;
-            }
-        } else if ch == '"' {
-            in_string = true;
-
-        } else if ch.is_whitespace() && !matches!(ch, ' ' | '\t' | '\n' | '\r') {
-            return Err(Throw::syntax_error("invalid JSON whitespace"));
-        }
-    }
-    let program = crate::parse_script(&format!("({source})"))
-        .map_err(|error| Throw::syntax_error(error.to_string()))?;
-    i.run_program(&program)
+    std_json_parse(i, JsValue::Undefined, args)
 }
 
 fn json_escape(value: &crate::value::JsString) -> String {
