@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Native byte/exit/fault controls; synthetic packets, not engine results."""
+import concurrent.futures
 import hashlib
 import importlib.util
 import io
@@ -208,6 +209,90 @@ class Sender(unittest.TestCase):
         self.assertIn('source-upload.py" --receipt "$SOURCE_TRANSFER_RECEIPT" describe', source)
         self.assertIn('native-source-sha256', source)
         self.assertIn('sha256sum -c -', source)
+
+
+class FiniteStreaming(unittest.TestCase):
+    def packet(self, root):
+        path = root / 'full-size-immutable.packet'
+        with path.open('xb') as stream:
+            for _ in range(64): stream.write(bytes(range(256)) * 4096)
+        return path
+
+    def receiver_command(self, path, packet, seconds):
+        return [sys.executable, '-I', str(S / 'source-upload.py'), 'receive',
+                str(path), str(packet.stat().st_size), stage.sha(packet), SOURCE,
+                '--seconds', str(seconds)]
+
+    def test_full_size_immutable_transfer_and_native_stage_diagnostics(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as d:
+            root=Path(d);packet=self.packet(root);destination=root/'received.packet'
+            before=stage.describe(packet,SOURCE)
+            row=stage.upload(packet,SOURCE,self.receiver_command(destination,packet,60),60)
+            self.assertTrue(row['ready']);self.assertEqual(row['actual_exit'],0)
+            self.assertEqual(stage.sha(destination),before['archive_sha256'])
+            self.assertEqual(destination.stat().st_size,64*1024*1024)
+            self.assertEqual(stage.describe(packet,SOURCE),before)
+            self.assertIn('hash-readback',row['diagnostics']['stderr_tail'])
+            self.assertIn('publishing',row['diagnostics']['stderr_tail'])
+            CONTROL_RECEIPTS.append({'control':self._testMethodName,'transfer':row})
+
+    def test_receiver_cutoff_while_waiting_for_eof_never_publishes(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as d:
+            root=Path(d);packet=root/'small.packet';packet.write_bytes(b'bytes')
+            child=subprocess.Popen(self.receiver_command(root/'received.packet',packet,1),
+                                   stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            child.stdin.write(b'bytes');child.stdin.flush()
+            # Keep writer open: the previous receiver would remain blocked
+            # until an unrelated SSH lifecycle ended it, with no native bound.
+            actual=child.wait(timeout=10)
+            child.stdin.close();child.stdin=None
+            stdout,stderr=child.communicate(timeout=5)
+            self.assertEqual(actual,124)
+            reply=json.loads(stdout);self.assertEqual(reply['actual_exit'],124)
+            self.assertFalse(reply['ready']);self.assertIsNone(reply['published'])
+            self.assertFalse((root/'received.packet').exists())
+            self.assertEqual(len(list(root.glob('*.partial'))),1)
+            self.assertIn('awaiting-eof',stderr.decode())
+            CONTROL_RECEIPTS.append({'control':self._testMethodName,'receiver':reply})
+
+    def test_receiver_cutoff_before_first_byte_is_finite(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as d:
+            root=Path(d);packet=root/'small.packet';packet.write_bytes(b'bytes')
+            child=subprocess.Popen(self.receiver_command(root/'received.packet',packet,1),
+                                   stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            actual=child.wait(timeout=10);child.stdin.close();child.stdin=None
+            stdout,stderr=child.communicate(timeout=5)
+            self.assertEqual(actual,124);self.assertEqual(json.loads(stdout)['actual_exit'],124)
+            self.assertFalse((root/'received.packet').exists())
+            CONTROL_RECEIPTS.append({'control':self._testMethodName,'actual_exit':actual})
+
+    def test_three_concurrent_full_size_packets_preserve_source_and_distinct_namespace(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as d:
+            root=Path(d);packet=self.packet(root);before=stage.describe(packet,SOURCE)
+            def transfer(number):
+                destination=root/f'received-{number}.packet'
+                return stage.upload(packet,SOURCE,self.receiver_command(destination,packet,60),60)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+                rows=list(pool.map(transfer,range(3)))
+            self.assertTrue(all(row['ready'] and row['actual_exit']==0 for row in rows))
+            self.assertEqual(stage.describe(packet,SOURCE),before)
+            self.assertEqual({row['receiver']['archive_sha256'] for row in rows},{before['archive_sha256']})
+            self.assertEqual(len({row['receiver']['native_packet'] for row in rows}),3)
+            CONTROL_RECEIPTS.append({'control':self._testMethodName,'transfers':rows})
+
+    def test_receiver_deadline_restores_only_its_owned_timer_and_handler(self):
+        old=signal.getsignal(signal.SIGALRM)
+        with stage.receiver_deadline(1):self.assertNotEqual(signal.getitimer(signal.ITIMER_REAL),(0.0,0.0))
+        self.assertEqual(signal.getsignal(signal.SIGALRM),old)
+        self.assertEqual(signal.getitimer(signal.ITIMER_REAL),(0.0,0.0))
+        for seconds in [0,-1,1201]:
+            with self.assertRaises(ValueError):
+                with stage.receiver_deadline(seconds):pass
+        signal.setitimer(signal.ITIMER_REAL,60)
+        try:
+            with self.assertRaises(ValueError):
+                with stage.receiver_deadline(1):pass
+        finally:signal.setitimer(signal.ITIMER_REAL,0)
 
 
 if __name__ == '__main__':

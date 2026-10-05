@@ -1,0 +1,253 @@
+{
+  "schema": 1,
+  "status": "QUALIFIED_NATIVE_TOOLING",
+  "tested_source": "f661bbb2b0d866d00858598c40461edd14fdb1d7",
+  "recorded_base": "68b1e6363be41f3867c684040326d54bf07af3af",
+  "shipping_production_and_controls_sha256": {
+    "scripts/source-upload.py": "f71d53c90623d8a58ce7c243cef7fbcd045c1d277efe24e3b7d842303fac1191",
+    "scripts/source-upload-tests.py": "b12cf6b90f5321db9a3b7d7a012b302cfd19905da3125ca86dbe5fdd9e7233a5"
+  },
+  "native_controls": {
+    "tests": 20,
+    "passed": 20,
+    "failed": 0,
+    "errors": 0,
+    "lost_original_controls": [],
+    "original_groups": 15,
+    "added_groups": 5,
+    "identities": [
+      "Packets.test_native_packet_is_private_and_byteexact_before_publish",
+      "Packets.test_truncation_extra_bytes_and_mismatch_never_publish",
+      "Packets.test_prior_packet_and_symlink_namespace_are_preserved",
+      "Packets.test_HOME_receiver_and_insufficient_native_capacity_are_rejected",
+      "Packets.test_archive_modes_bytes_and_nonzero_staging_timestamps_remain_identical",
+      "Sender.test_real_native_receiver_and_local_sender_preserve_exact_packet",
+      "Sender.test_actual_lost_connection_255_is_not_a_timeout_or_receiver_success",
+      "Sender.test_deadline_terminates_and_reaps_only_owned_transfer",
+      "Sender.test_zero_process_exit_requires_real_receiver_identity",
+      "Sender.test_native_receiver_failure_keeps_actual_exit_and_error_metadata",
+      "Sender.test_real_receiver_filesystem_disconnect_has_truthful_nonzero_metadata",
+      "Sender.test_directory_sync_failure_does_not_claim_packet_was_never_published",
+      "Sender.test_local_packet_mutation_is_not_qualified_after_receiver_zero",
+      "Sender.test_compact_setup_failure_retains_pre_job_packet_provenance",
+      "Sender.test_public_wrapper_uses_one_bounded_native_receiver_and_keeps_hash_guard",
+      "FiniteStreaming.test_full_size_immutable_transfer_and_native_stage_diagnostics",
+      "FiniteStreaming.test_receiver_cutoff_while_waiting_for_eof_never_publishes",
+      "FiniteStreaming.test_receiver_cutoff_before_first_byte_is_finite",
+      "FiniteStreaming.test_three_concurrent_full_size_packets_preserve_source_and_distinct_namespace",
+      "FiniteStreaming.test_receiver_deadline_restores_only_its_owned_timer_and_handler"
+    ],
+    "actual_exit": 0,
+    "compact_receipt": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/js-vm/source-upload-finite-prepared/native-first/fetched/controls.summary.json",
+      "bytes": 24942,
+      "sha256": "58c066c99c05ac365dccded1dda8fedecf721c0d0df252e1da2af43188e1e4e1"
+    }
+  },
+  "outer": {
+    "actual_exit": 0,
+    "source_commit": "f661bbb2b0d866d00858598c40461edd14fdb1d7",
+    "archive_bytes": 47127822,
+    "archive_sha256": "09d82310a5a751a3532f959f6f4281d2234b17f97d1e7d95724bf0914259fc93",
+    "elapsed_seconds": 376.189462,
+    "receiver": {
+      "schema": 1,
+      "actual_exit": 0,
+      "source_commit": "f661bbb2b0d866d00858598c40461edd14fdb1d7",
+      "archive_bytes": 47127822,
+      "archive_sha256": "09d82310a5a751a3532f959f6f4281d2234b17f97d1e7d95724bf0914259fc93",
+      "native_packet": "/tmp/amazing-source-transport-gate-source-upload-finite-20261006.88749/source.tar.gz",
+      "native_device": 64769,
+      "admitted_free_bytes": 47970729984,
+      "published": true
+    },
+    "receipt": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/js-vm/source-upload-finite-prepared/native-first/setup.manifest.json.source-transfer.summary.json",
+      "bytes": 20301,
+      "sha256": "7f9e6ee4777bd351d75f4f332dd7ead65616c1cfb1b12c234a9bf57461672ed9"
+    }
+  },
+  "remote": {
+    "controller_actual_exit": 0,
+    "full_packet_bytes": 67108864,
+    "full_packet_sha256": "281e519df3077b557c6b03f5da83c4e8d397219259615dd7c3308f89cae8f2a6",
+    "concurrent": 3,
+    "transfers": [
+      {
+        "actual_exit": 0,
+        "ready": true,
+        "command_exit": 0,
+        "receiver": {
+          "schema": 1,
+          "actual_exit": 0,
+          "source_commit": "f661bbb2b0d866d00858598c40461edd14fdb1d7",
+          "archive_bytes": 67108864,
+          "archive_sha256": "281e519df3077b557c6b03f5da83c4e8d397219259615dd7c3308f89cae8f2a6",
+          "native_packet": "/tmp/source-upload-owned-f661-20261006-clean/parallel-0.packet",
+          "native_device": 64769,
+          "admitted_free_bytes": 32874016768,
+          "published": true
+        },
+        "elapsed_seconds": 276.668277
+      },
+      {
+        "actual_exit": 0,
+        "ready": true,
+        "command_exit": 0,
+        "receiver": {
+          "schema": 1,
+          "actual_exit": 0,
+          "source_commit": "f661bbb2b0d866d00858598c40461edd14fdb1d7",
+          "archive_bytes": 67108864,
+          "archive_sha256": "281e519df3077b557c6b03f5da83c4e8d397219259615dd7c3308f89cae8f2a6",
+          "native_packet": "/tmp/source-upload-owned-f661-20261006-clean/parallel-1.packet",
+          "native_device": 64769,
+          "admitted_free_bytes": 32874016768,
+          "published": true
+        },
+        "elapsed_seconds": 255.690784
+      },
+      {
+        "actual_exit": 0,
+        "ready": true,
+        "command_exit": 0,
+        "receiver": {
+          "schema": 1,
+          "actual_exit": 0,
+          "source_commit": "f661bbb2b0d866d00858598c40461edd14fdb1d7",
+          "archive_bytes": 67108864,
+          "archive_sha256": "281e519df3077b557c6b03f5da83c4e8d397219259615dd7c3308f89cae8f2a6",
+          "native_packet": "/tmp/source-upload-owned-f661-20261006-clean/parallel-2.packet",
+          "native_device": 64769,
+          "admitted_free_bytes": 32874016768,
+          "published": true
+        },
+        "elapsed_seconds": 269.97496
+      }
+    ],
+    "held_eof": {
+      "control": "real-SSH-held-EOF-native-cutoff",
+      "actual_exit": 124,
+      "receiver": {
+        "schema": 1,
+        "phase": "receive",
+        "source_commit": "f661bbb2b0d866d00858598c40461edd14fdb1d7",
+        "actual_exit": 124,
+        "ready": false,
+        "error": {
+          "type": "TimeoutError",
+          "errno": null,
+          "message": "native source receiver deadline expired"
+        },
+        "archive_bytes": 8,
+        "archive_sha256": "a1e333e2af9cd9c0bfbe05436d7126c199ed4e38b305eee83cc285387fea97cd",
+        "native_packet": "/tmp/source-upload-owned-f661-20261006-clean/held-eof.packet",
+        "published": null
+      },
+      "stderr": "{\"phase\":\"source-receiver\",\"stage\":\"started\",\"monotonic_ns\":788186291230,\"expected_bytes\":8}\n{\"phase\":\"source-receiver\",\"stage\":\"capacity-admitted\",\"monotonic_ns\":788186405744,\"received\":0,\"admitted_free_bytes\":32147374080}\n{\"phase\":\"source-receiver\",\"stage\":\"streaming\",\"monotonic_ns\":788186490494,\"received\":0,\"partial\":\"/tmp/source-upload-owned-f661-20261006-clean/held-eof.packet.4499d0d0a240451a8c6602aee66a9175.partial\"}\n{\"phase\":\"source-receiver\",\"stage\":\"awaiting-eof\",\"monotonic_ns\":788386148504,\"received\":8,\"partial\":\"/tmp/source-upload-owned-f661-20261006-clean/held-eof.packet.4499d0d0a240451a8c6602aee66a9175.partial\"}\n"
+    },
+    "native_readback": {
+      "files": [
+        {
+          "path": "/tmp/source-upload-owned-f661-20261006-clean/held-eof.packet.4499d0d0a240451a8c6602aee66a9175.partial",
+          "bytes": 8,
+          "sha256": "a1e333e2af9cd9c0bfbe05436d7126c199ed4e38b305eee83cc285387fea97cd"
+        },
+        {
+          "path": "/tmp/source-upload-owned-f661-20261006-clean/parallel-0.packet",
+          "bytes": 67108864,
+          "sha256": "281e519df3077b557c6b03f5da83c4e8d397219259615dd7c3308f89cae8f2a6"
+        },
+        {
+          "path": "/tmp/source-upload-owned-f661-20261006-clean/parallel-1.packet",
+          "bytes": 67108864,
+          "sha256": "281e519df3077b557c6b03f5da83c4e8d397219259615dd7c3308f89cae8f2a6"
+        },
+        {
+          "path": "/tmp/source-upload-owned-f661-20261006-clean/parallel-2.packet",
+          "bytes": 67108864,
+          "sha256": "281e519df3077b557c6b03f5da83c4e8d397219259615dd7c3308f89cae8f2a6"
+        }
+      ],
+      "held_destination_exists": false
+    },
+    "receipt": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/js-vm/source-upload-finite-prepared/remote-clean/remote-controls.summary.json",
+      "bytes": 64175,
+      "sha256": "1ed6e756bff32809ccbdf435d3f96c8d9aea6364ff01481c4c3a5ede84766683"
+    }
+  },
+  "preserved_initial": {
+    "actual_exit": 1,
+    "budget_seconds": 120,
+    "cause": "Control budget undersized for measured continuing throughput; threepartial streams, no publication. ONEclean uses production900 without reducing bytes/concurrency/assertions.",
+    "receipt": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/js-vm/source-upload-finite-prepared/remote-first/remote-controls.summary.json",
+      "bytes": 63275,
+      "sha256": "deb611262008b9ca579b2f009d5cfd4f570728e09baacf78353bfadda0a9864e"
+    }
+  },
+  "old_gc_timeout": {
+    "actual_exit": 124,
+    "command_exit": 255,
+    "archive_bytes": 44213462,
+    "physical_cause": "UNPROVEN; no retroactive cause or success claim"
+  },
+  "endpoint": {
+    "schema": 2,
+    "lane": "gate-source-upload-finite-20261006",
+    "source_commit": "f661bbb2b0d866d00858598c40461edd14fdb1d7",
+    "box_id": "bx_tctscgy7",
+    "host": "user@51.255.76.114",
+    "port": 19045,
+    "job_id": "5f286c67bc4644cb991a97cdc659273c",
+    "output_root": "amazing/out/gate-source-upload-finite-20261006/finite-first/compact",
+    "command_sha256": "8c0a37ce69d0908896311124b6b5392b3ae7d9b379f5c4f7bf18c7546244e7f5",
+    "execution_sha256": "c9f809eef5f48630ad804b880cb38fef60a0666df228da8db06efa32c233ce94",
+    "source_archive_sha256": "09d82310a5a751a3532f959f6f4281d2234b17f97d1e7d95724bf0914259fc93"
+  },
+  "profile": {
+    "lane": "gate-source-upload-finite-20261006",
+    "pool": "gate-source-upload-finite-20261006",
+    "queried_at_epoch": 1791238146.087223,
+    "sandbox": {
+      "archiveAfter": "2026-10-06T00:08:04.944Z",
+      "health": "ok",
+      "id": "bx_tctscgy7",
+      "lastSnapshotStatus": "completed",
+      "machineProvider": "baremetal",
+      "memoryGB": 8,
+      "state": "idle",
+      "type": "default",
+      "vcpu": 4
+    }
+  },
+  "qualification_limits": "Linux/native byte and receiver lifecycle only, not engine or universal throughput guarantee; archive contents and retention semantics unchanged.",
+  "raw_home": "/home/user/amazing/out/gate-source-upload-finite-20261006/finite-first/controls.log",
+  "command": {
+    "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/js-vm/source-upload-finite-prepared/native-first/command.sh",
+    "bytes": 1209,
+    "sha256": "8c0a37ce69d0908896311124b6b5392b3ae7d9b379f5c4f7bf18c7546244e7f5"
+  },
+  "native_remote_prefix": "/tmp/source-upload-owned-f661-20261006-clean",
+  "native_home_receipt_copies": {
+    "actual_exit": 0,
+    "files": [
+      {
+        "path": "/home/user/amazing/out/gate-source-upload-finite-20261006/remote-qualification/initial-remote.summary.json",
+        "bytes": 63275,
+        "sha256": "deb611262008b9ca579b2f009d5cfd4f570728e09baacf78353bfadda0a9864e"
+      },
+      {
+        "path": "/home/user/amazing/out/gate-source-upload-finite-20261006/remote-qualification/clean-remote.summary.json",
+        "bytes": 64175,
+        "sha256": "1ed6e756bff32809ccbdf435d3f96c8d9aea6364ff01481c4c3a5ede84766683"
+      },
+      {
+        "path": "/home/user/amazing/out/gate-source-upload-finite-20261006/remote-qualification/outer-upload.summary.json",
+        "bytes": 20301,
+        "sha256": "7f9e6ee4777bd351d75f4f332dd7ead65616c1cfb1b12c234a9bf57461672ed9"
+      }
+    ]
+  }
+}

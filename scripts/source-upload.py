@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """One finite source upload; native receiver publishes only exact bytes."""
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -32,7 +33,7 @@ def describe(path, source):
             'archive_sha256': identity, 'archive_mtime_ns': after.st_mtime_ns}
 
 
-def receive(destination, size, expected, source, stream):
+def receive(destination, size, expected, source, stream, progress=None):
     destination = Path(destination)
     directory = destination.parent.resolve(strict=True)
     if not directory.is_relative_to(Path('/tmp')) or directory.stat().st_dev != Path('/tmp').stat().st_dev:
@@ -44,26 +45,37 @@ def receive(destination, size, expected, source, stream):
     free = shutil.disk_usage(directory).free
     if free < size:
         raise OSError(28, 'native source packet capacity unavailable')
+    if progress: progress('capacity-admitted', received=0, admitted_free_bytes=free)
     partial = destination.with_name(destination.name + '.' + uuid.uuid4().hex + '.partial')
     identity = hashlib.sha256()
     total = 0
+    last_progress = time.monotonic()
     with partial.open('xb') as output:
+        if progress: progress('streaming', received=0, partial=str(partial))
         while total < size:
-            chunk = stream.read(min(1024 * 1024, size - total))
+            read = getattr(stream, 'read1', stream.read)
+            chunk = read(min(1024 * 1024, size - total))
             if not chunk:
                 raise ValueError(f'source packet truncated: received {total} of {size} bytes; partial {partial}')
             if output.write(chunk) != len(chunk):
                 raise OSError(5, f'short native source write; partial {partial}')
             identity.update(chunk)
             total += len(chunk)
+            if progress and time.monotonic() - last_progress >= 5:
+                progress('streaming', received=total, partial=str(partial))
+                last_progress = time.monotonic()
+        if progress: progress('awaiting-eof', received=total, partial=str(partial))
         if stream.read(1):
             raise ValueError(f'source packet has extra bytes; partial {partial}')
+        if progress: progress('syncing', received=total, partial=str(partial))
         output.flush()
         os.fsync(output.fileno())
+    if progress: progress('hash-readback', received=total, partial=str(partial))
     actual = sha(partial)
     if identity.hexdigest() != expected or actual != expected or partial.stat().st_size != size:
         raise ValueError(f'source packet SHA256 mismatch; partial {partial}')
     # A fresh destination must not overwrite another run even after streaming.
+    if progress: progress('publishing', received=total, partial=str(partial))
     os.link(partial, destination)
     partial.unlink()
     fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
@@ -74,6 +86,37 @@ def receive(destination, size, expected, source, stream):
     return {'source_commit': source, 'archive_bytes': total, 'archive_sha256': actual,
             'native_packet': str(destination), 'native_device': directory.stat().st_dev,
             'admitted_free_bytes': free, 'published': True}
+
+
+@contextlib.contextmanager
+def receiver_deadline(seconds):
+    """Receiver-local cutoff covers read, EOF, sync, readback and publication.
+
+    The production SSH command also uses native timeout as an outer kill bound.
+    No deadline failure is a qualified publication, even if bytes arrived.
+    """
+    if not 1 <= seconds <= 1200:
+        raise ValueError('invalid receiver deadline')
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_timer = signal.getitimer(signal.ITIMER_REAL)
+    if previous_timer != (0.0, 0.0):
+        raise ValueError('receiver requires its own unarmed process timer')
+    def expired(signum, frame):
+        raise TimeoutError('native source receiver deadline expired')
+    signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
+def receiver_progress(stage, **facts):
+    # Diagnostic only; qualification still requires the exact final stdout row.
+    print(json.dumps({'phase': 'source-receiver', 'stage': stage,
+                      'monotonic_ns': time.monotonic_ns(), **facts},
+                     separators=(',', ':')), file=sys.stderr, flush=True)
 
 
 def upload(archive, source, command, seconds):
@@ -170,32 +213,37 @@ def main():
     parser.add_argument('--receipt')
     sub = parser.add_subparsers(dest='phase', required=True)
     p = sub.add_parser('describe'); p.add_argument('archive'); p.add_argument('source')
-    p = sub.add_parser('receive'); p.add_argument('destination'); p.add_argument('bytes', type=int); p.add_argument('sha256'); p.add_argument('source')
+    p = sub.add_parser('receive'); p.add_argument('destination'); p.add_argument('bytes', type=int); p.add_argument('sha256'); p.add_argument('source'); p.add_argument('--seconds', type=int, default=900)
     p = sub.add_parser('send'); p.add_argument('archive'); p.add_argument('source'); p.add_argument('host'); p.add_argument('port', type=int); p.add_argument('key'); p.add_argument('destination'); p.add_argument('--seconds', type=int, default=900)
     args = parser.parse_args()
     try:
         if args.phase == 'describe':
             facts = describe(args.archive, args.source)
         elif args.phase == 'receive':
-            facts = {'actual_exit': 0, **receive(args.destination, args.bytes, args.sha256, args.source, sys.stdin.buffer)}
+            receiver_progress('started', expected_bytes=args.bytes)
+            with receiver_deadline(args.seconds):
+                facts = {'actual_exit': 0, **receive(args.destination, args.bytes, args.sha256, args.source, sys.stdin.buffer, receiver_progress)}
         else:
             facts = describe(args.archive, args.source)
             code = Path(__file__).read_text()
-            remote = shlex.join(['/usr/bin/python3', '-I', '-c', code, 'receive', args.destination,
-                                 str(facts['archive_bytes']), facts['archive_sha256'], args.source])
+            remote = shlex.join(['/usr/bin/timeout', '--kill-after=5', str(args.seconds),
+                                 '/usr/bin/python3', '-I', '-c', code, 'receive', args.destination,
+                                 str(facts['archive_bytes']), facts['archive_sha256'], args.source,
+                                 '--seconds', str(args.seconds)])
             command = ['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=30',
                        '-o', 'ServerAliveInterval=30', '-o', 'ServerAliveCountMax=2',
                        '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null',
                        '-o', 'LogLevel=ERROR', '-i', args.key, '-p', str(args.port), args.host, remote]
             facts = upload(args.archive, args.source, command, args.seconds)
     except Exception as error:
+        error_exit = 124 if args.phase == 'receive' and isinstance(error, TimeoutError) else 3
         write_receipt(args.receipt, {'phase': args.phase, 'source_commit': getattr(args, 'source', None),
-                      'actual_exit': 3, 'ready': False, 'error': {'type': type(error).__name__,
+                      'actual_exit': error_exit, 'ready': False, 'error': {'type': type(error).__name__,
                       'errno': getattr(error, 'errno', None), 'message': str(error)},
                       **({'archive_bytes': args.bytes, 'archive_sha256': args.sha256,
                           'native_packet': args.destination, 'published': None}
                          if args.phase == 'receive' else {})})
-        return 3
+        return error_exit
     write_receipt(args.receipt, facts)
     return facts.get('runner_exit', facts.get('actual_exit', 0))
 
