@@ -60,7 +60,7 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "fill-opacity" |
         "fill-rule" |
         "font-palette" |
-        "image-orientation" |
+        "image-orientation" | "image-rendering" |
         "mask" |
         "object-fit" |
         "object-position" |
@@ -281,7 +281,7 @@ mod tests {
         // `background-position-x`/`-y`, all PaintOnly. CSS39 adds thirteen
         // registered text policy axes, all Layout. CSS42 adds six image-border
         // properties, all PaintOnly.
-        assert_eq!(counts, [19, 52, 142, 34]);
+        assert_eq!(counts, [19, 53, 142, 34]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }

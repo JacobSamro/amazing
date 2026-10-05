@@ -1,0 +1,53 @@
+{
+  "source": "d1204e6a4fcc2a5309aa67c3d369f71e532e0b50",
+  "base": "a035b2b558065d72664ce7617da0a7261027bb0d",
+  "command": [
+    "python3",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/run-image-fit-rendering.py"
+  ],
+  "wrapper_source": "1f6226043afaecea79bbeb4b342af9705e153508",
+  "files": {
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/remote.py": {
+      "sha256": "2a7c60a15b9afe2f7a247566c19c7980641241dabee748dbf172a73189bd464d",
+      "bytes": 2948
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/render-timeout-ready/scripts/render-gate.py": {
+      "sha256": "e6a7a0bf25a5bc801ab7f173c417f4d72eaa60493434793f1e061e603a67f69e",
+      "bytes": 4846
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/render-timeout-ready/scripts/gate-command.py": {
+      "sha256": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b",
+      "bytes": 4909
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/render-timeout-ready/scripts/gate-summary.py": {
+      "sha256": "3e26631cb492c2e77808c7bc9a3354ab248d0e83cf8762b933892647fd7ce0f0",
+      "bytes": 6347
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/integrator-join-20261005/scripts/linux-run.sh": {
+      "sha256": "f3048a26c9a7ad1a6103784e374c319d057da8b89ea22da7d2ecf8dba9a7cd75",
+      "bytes": 20499
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/integrator-join-20261005/scripts/lane-fetch.sh": {
+      "sha256": "fe4fa79beafef35bbce1ce853f4f3330ae8717b1a6e710675a3bd9892d0d84db",
+      "bytes": 2602
+    },
+    "/Users/jMac/Projects/OpenSource/amazing-wt/integrator-join-20261005/scripts/completed-job.py": {
+      "sha256": "fffa0b5a6f2904dfc115943db985cd95583d6c4a9a1398f60e965f21fe1f37df",
+      "bytes": 8458
+    },
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/run-image-fit-rendering.py": {
+      "bytes": 2601,
+      "sha256": "9935469bf8a23704057bd5c5f7c269c12a5720c747d0a0293309bc0fff9077e9"
+    }
+  },
+  "state": "authorized initial whole paired native gate; frozen before allocation",
+  "updated": "2026-10-05T07:15:19.924320+00:00",
+  "reason": "Independent complete object-fit and image-rendering value/cascade producer",
+  "baseline_tag": "image-fit-rendering-d1204e6a-20261005-before",
+  "alias": "css-image-fit-rendering-20261005",
+  "resources": {
+    "vcpu": 4,
+    "memory_gb": 8,
+    "ttl_seconds": 7200
+  }
+}
