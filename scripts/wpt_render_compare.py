@@ -113,6 +113,25 @@ def sha256_hex(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+class CorpusReadFailure(RuntimeError):
+    """An exhausted filesystem read is tooling failure, never an engine result."""
+
+
+def read_wpt_text(path, *, _reader=None):
+    reader = _reader or (lambda value: value.read_text(errors="replace"))
+    for attempt in range(2):
+        try:
+            text = reader(path)
+            if attempt:
+                print(json.dumps({'tooling':'pinned-wpt-read','path':str(path),'attempt':2,'state':'read-succeeded-after-one-clean-retry'}),file=sys.stderr,flush=True)
+            return text
+        except OSError as error:
+            print(json.dumps({'tooling':'pinned-wpt-read','path':str(path),'attempt':attempt+1,'errno':error.errno,'state':'read-error'}),file=sys.stderr,flush=True)
+            if error.errno not in (103,107) or attempt == 1:
+                raise CorpusReadFailure(f"pinned WPT tooling read failed: {path}; attempts={attempt+1}; errno={error.errno}") from error
+    raise AssertionError("unreachable bounded WPT read")
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
@@ -160,7 +179,7 @@ def classify_candidate(test_path: Path, wpt_root: Path):
     Eligible candidates carry all resolved links. An unsupported alternate
     cannot silently disappear from a test's match/mismatch requirements.
     """
-    source = test_path.read_text(errors="replace")
+    source = read_wpt_text(test_path)
     testharness = bool(TESTHARNESS_RE.search(source))
     link = reftest_links(test_path, source, wpt_root)
     if not link["supported"]:
@@ -174,7 +193,7 @@ def classify_candidate(test_path: Path, wpt_root: Path):
             return {"eligible": False, "reason": "missing-reference", "testharness": testharness}
         if reference_path.suffix.lower() in XML_EXTENSIONS:
             return {"eligible": False, "reason": "xml-reference-mode", "testharness": testharness}
-        sources.append(reference_path.read_text(errors="replace"))
+        sources.append(read_wpt_text(reference_path))
     combined = "\n".join(sources)
     if SCRIPT_RE.search(combined) or INLINE_EVENT_HANDLER_RE.search(combined):
         reason = "scripted"
@@ -430,7 +449,7 @@ def run_one_test(candidate, exe: Path, wpt_root: Path, run_directory: Path, widt
             "classification": actual_run["classification"],
             "detail": actual_run["detail"],
         }
-    test_source = test_path.read_text(errors="replace")
+    test_source = read_wpt_text(test_path)
     test_url = test_path.as_uri()
     try:
         metadata = fuzzy_metadata(test_source, test_url, {
