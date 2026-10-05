@@ -6,7 +6,7 @@
 
 use super::*;
 use amazing_paint::display_list_view::{
-    DisplayListView, PaintBounds, RawRasterError, RetainedPaintView,
+    DisplayListView, PaintBounds, PaintItemKind, RawRasterError, RetainedPaintView,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,7 +65,11 @@ impl<'view, 'paint> PaintViewSource<'view, 'paint> {
             Ok(provider) => (mode, provider.filter_inputs().to_vec()),
             Err(_) => (PaintViewRasterMode::BakedFallback, Vec::new()),
         };
-        Self { view, mode, filter_inputs }
+        Self {
+            view,
+            mode,
+            filter_inputs,
+        }
     }
 
     /// Attach producer-resolved filters to raw paint groups. Construction is
@@ -132,11 +136,36 @@ impl<'view, 'paint> PaintViewSource<'view, 'paint> {
     }
 
     pub fn compositor(&self, width: u32, height: u32) -> Result<Compositor, SceneError> {
+        if self
+            .view
+            .raster_viewport()
+            .is_some_and(|viewport| viewport.physical_size() != (width, height))
+        {
+            return Err(SceneError::InvalidState);
+        }
         match self.mode {
             PaintViewRasterMode::RawLocal => {
-                let (trees, chunks) = paint_view_metadata_with_filters(self.view, &self.filter_inputs)?;
+                let (trees, chunks) =
+                    paint_view_metadata_with_filters(self.view, &self.filter_inputs)?;
                 let mut grouped: Vec<PaintChunk> = Vec::new();
                 for chunk in chunks {
+                    // Keep the public one-record-per-item metadata contract.
+                    // Only scene emission omits finite Content records with no
+                    // owned ink; stable view keys and item ranges are unchanged.
+                    let item = self
+                        .view
+                        .items()
+                        .get(chunk.items.start)
+                        .ok_or(SceneError::InvalidState)?;
+                    let b = chunk.bounds;
+                    if item.kind == PaintItemKind::Content
+                        && [b.x, b.y, b.w, b.h].iter().all(|v| v.is_finite())
+                        && b.w >= 0.
+                        && b.h >= 0.
+                        && (b.w == 0. || b.h == 0.)
+                    {
+                        continue;
+                    }
                     if let Some(last) = grouped.last_mut() {
                         if last.state == chunk.state && last.items.end == chunk.items.start {
                             last.items.end = chunk.items.end;
@@ -148,6 +177,7 @@ impl<'view, 'paint> PaintViewSource<'view, 'paint> {
                     grouped.push(chunk);
                 }
                 Compositor::new(trees, grouped, self.view.items().len())
+                    .map(|scene| scene.with_raster_sampling(RasterSampling::Nearest))
             }
             PaintViewRasterMode::BakedFallback => {
                 baked_paint_view_compositor(self.view, width, height)
@@ -161,7 +191,25 @@ impl<'view, 'paint> PaintViewSource<'view, 'paint> {
         width: u32,
         height: u32,
     ) -> Result<CompositorFrame, SceneError> {
-        let frame = compositor.build_frame(self, width, height)?;
+        if self
+            .view
+            .raster_viewport()
+            .is_some_and(|viewport| viewport.physical_size() != (width, height))
+        {
+            return Err(SceneError::InvalidState);
+        }
+        // The genuine baked scene has one full-view range. An embedding may
+        // supply another compositor; optimize a shared range only, retaining
+        // original dispatch for mixed-range scenes rather than combining them.
+        let common = compositor.chunks.first().map(|chunk| chunk.items.clone())
+            .filter(|range| compositor.chunks.iter().all(|chunk| chunk.items == *range));
+        let frame = if self.mode == PaintViewRasterMode::BakedFallback {
+            if let Some(range) = common {
+                let source = FrameBakedSource { view: self.view, range,
+                    pixels: std::cell::RefCell::new(None) };
+                compositor.build_frame(&source, width, height)?
+            } else { compositor.build_frame(self, width, height)? }
+        } else { compositor.build_frame(self, width, height)? };
         Ok(self.with_canvas_background(frame))
     }
 
@@ -173,6 +221,13 @@ impl<'view, 'paint> PaintViewSource<'view, 'paint> {
         width: u32,
         height: u32,
     ) -> Result<CompositorFrame, SceneError> {
+        if self
+            .view
+            .raster_viewport()
+            .is_some_and(|viewport| viewport.physical_size() != (width, height))
+        {
+            return Err(SceneError::InvalidState);
+        }
         let frame = compositor.build_cached_frame(width, height)?;
         Ok(self.with_canvas_background(frame))
     }
@@ -204,6 +259,30 @@ impl<'view, 'paint> PaintViewSource<'view, 'paint> {
     ) -> Result<(CompositorFrame, TileRasterBatch), SceneError> {
         let (frame, batch) = compositor.build_parallel_frame(retained, request)?;
         Ok((self.with_canvas_background(frame), batch))
+    }
+}
+
+// Borrowed for exactly one build_frame call. Lazy preparation avoids replay
+// on an unchanged cached frame. Drop releases pixels before returning a frame.
+struct FrameBakedSource<'view, 'paint> {
+    view: &'view DisplayListView<'paint>,
+    range: Range<usize>,
+    pixels: std::cell::RefCell<Option<amazing_paint::display_list_view::PreparedBakedRaster>>,
+}
+impl PaintSource for FrameBakedSource<'_, '_> {
+    fn item_count(&self) -> usize { self.view.items().len() }
+    fn rasterize(&self, items: Range<usize>, tile: Rect, out: &mut Surface) {
+        assert_eq!(items, self.range, "frame baked range changed");
+        let mut pixels = self.pixels.borrow_mut();
+        if pixels.is_none() {
+            *pixels = Some(self.view.prepare_baked_range(items)
+                .expect("paint view range raster failed"));
+        }
+        out.clear([255; 4]);
+        assert!(pixels.as_ref().unwrap().copy_to(out,
+            (-(tile.x as i32), -(tile.y as i32)),
+            PaintBounds { x: 0., y: 0., width: tile.w, height: tile.h }),
+            "paint view range copy failed");
     }
 }
 
@@ -309,11 +388,24 @@ pub(crate) fn paint_view_metadata_base(
             )
             .map_err(|_| SceneError::InvalidState)?;
     }
+    for node in view.scrolls().iter().skip(1) {
+        let bounds = rect(node.bounds);
+        trees
+            .add_scroll_with_owner(
+                ScrollId(node.parent as usize),
+                node.initial_offset,
+                bounds,
+                rect(node.contents),
+                Some(TransformId(node.transform as usize)),
+            )
+            .map_err(|_| SceneError::InvalidState)?;
+    }
     for node in view.clips().iter().skip(1) {
         trees
-            .add_clip(
+            .add_clip_with_scroll(
                 ClipId(node.parent as usize),
-                TransformId(0),
+                TransformId(node.transform as usize),
+                ScrollId(node.scroll as usize),
                 ClipShape::Rect(rect(node.bounds)),
             )
             .map_err(|_| SceneError::InvalidState)?;
@@ -329,20 +421,14 @@ pub(crate) fn paint_view_metadata_base(
             .map_err(|_| SceneError::InvalidState)?;
         // RC-24 exports CSS blend values; retain them on the same effect ID
         // so ancestry, opacity bindings and cached frames preserve the group.
-        trees.set_effect_operations(id, EffectOperations {
-            blend: resolve_css_blend(node.blend).map_err(|_| SceneError::InvalidState)?,
-            isolate: node.isolate,
-            ..Default::default()
-        }).map_err(|_| SceneError::InvalidState)?;
-    }
-    for node in view.scrolls().iter().skip(1) {
-        let bounds = rect(node.bounds);
         trees
-            .add_scroll(
-                ScrollId(node.parent as usize),
-                node.initial_offset,
-                bounds,
-                rect(node.contents),
+            .set_effect_operations(
+                id,
+                EffectOperations {
+                    blend: resolve_css_blend(node.blend).map_err(|_| SceneError::InvalidState)?,
+                    isolate: node.isolate,
+                    ..Default::default()
+                },
             )
             .map_err(|_| SceneError::InvalidState)?;
     }

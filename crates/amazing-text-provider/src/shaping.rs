@@ -6,7 +6,9 @@
 //! of `lib.rs` (TEXT-27).
 
 use super::font_selection::is_default_ignorable;
-use super::{FontRecord, MAX_GLYPH_BYTES, MAX_GLYPH_DIMENSION, font_variant_synthesis, font_variations};
+use super::{
+    FontRecord, MAX_GLYPH_BYTES, MAX_GLYPH_DIMENSION, font_variant_synthesis, font_variations,
+};
 use amazing_text::{
     Direction, FallbackTextSystem, FontAttributes, FontMetrics, FontSynthesis, GlyphContent,
     GlyphFlags, GlyphId, GlyphImage, GlyphOrientation, GlyphRasterRequest, Paragraph, ShapedGlyph,
@@ -439,8 +441,10 @@ fn cluster_end_map(
 pub(super) fn rasterize_font_glyph(
     font: &FontRecord,
     request: &GlyphRasterRequest<'_>,
+    raster: amazing_text::GlyphRasterScale,
 ) -> Result<Option<GlyphImage>, TextError> {
     let key = request.key;
+    let device_size = raster.device_size(key)?;
     let glyph_id = u16::try_from(key.glyph.0).map_err(|_| TextError::MalformedFont)?;
     catch_unwind(AssertUnwindSafe(|| {
         let face = SwashFontRef::from_index(&font.sfnt, 0).ok_or(TextError::MalformedFont)?;
@@ -457,7 +461,7 @@ pub(super) fn rasterize_font_glyph(
             .collect::<Vec<_>>();
         let mut scaler = context
             .builder(face)
-            .size(key.size())
+            .size(device_size)
             .hint(true)
             .variations(
                 variation_tags
@@ -471,11 +475,11 @@ pub(super) fn rasterize_font_glyph(
             Source::Outline,
         ]);
         render.format(zeno::Format::Alpha).offset(zeno::Vector::new(
-            key.subpixel_x_64 as f32 / 64.0,
-            key.subpixel_y_64 as f32 / 64.0,
+            raster.phase_x_64 as f32 / 64.0,
+            raster.phase_y_64 as f32 / 64.0,
         ));
         if request.synthesis.weight {
-            render.embolden(key.size() / 32.0);
+            render.embolden(device_size / 32.0);
         }
         // Style (oblique skew), small-caps, and position synthesis compose:
         // e.g. an italic face with a synthesized small-caps letter needs
@@ -493,13 +497,17 @@ pub(super) fn rasterize_font_glyph(
             needs_transform = true;
         }
         if request.synthesis.small_caps {
-            transform =
-                transform.then_scale(font_variant_synthesis::SMALL_CAPS_SCALE, font_variant_synthesis::SMALL_CAPS_SCALE);
+            transform = transform.then_scale(
+                font_variant_synthesis::SMALL_CAPS_SCALE,
+                font_variant_synthesis::SMALL_CAPS_SCALE,
+            );
             needs_transform = true;
         }
         if request.synthesis.position {
-            transform =
-                transform.then_scale(font_variant_synthesis::POSITION_SCALE, font_variant_synthesis::POSITION_SCALE);
+            transform = transform.then_scale(
+                font_variant_synthesis::POSITION_SCALE,
+                font_variant_synthesis::POSITION_SCALE,
+            );
             needs_transform = true;
         }
         if needs_transform {

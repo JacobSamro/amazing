@@ -4,6 +4,9 @@ use super::*;
 use std::collections::HashSet;
 
 pub const SNAPSHOT_VERSION: u16 = 1;
+/// V1 lacked scrollport owner transforms; V2 marks stripped effects and
+/// remains unsupported by the plain-tree decoder. V3 carries owners.
+pub const PROPERTY_TREES_SNAPSHOT_VERSION: u16 = 3;
 const MAX_DIMENSION: u32 = 16_384;
 const MAX_FRAME_PIXELS: u64 = 64 * 1024 * 1024;
 const MAX_PASSES: usize = 1_024;
@@ -112,7 +115,7 @@ impl PropertyTrees {
             version: if self.has_composited_effects() {
                 EFFECT_SNAPSHOT_VERSION
             } else {
-                SNAPSHOT_VERSION
+                PROPERTY_TREES_SNAPSHOT_VERSION
             },
             transforms: self.transforms.clone(),
             clips: self.clips.clone(),
@@ -123,7 +126,7 @@ impl PropertyTrees {
         }
     }
     pub fn from_snapshot(s: PropertyTreesSnapshot) -> Result<Self, SnapshotError> {
-        if s.version != SNAPSHOT_VERSION {
+        if s.version != PROPERTY_TREES_SNAPSHOT_VERSION {
             return Err(SnapshotError::UnsupportedVersion);
         }
         if [
@@ -172,28 +175,6 @@ impl PropertyTrees {
                 return Err(SnapshotError::InvalidTree);
             }
         }
-        for (i, node) in s.clips.iter().enumerate().skip(1) {
-            if node.parent.0 >= i
-                || node.transform.0 >= trees.transforms.len()
-                || !valid_clip(node.shape)
-            {
-                return Err(SnapshotError::InvalidTree);
-            }
-            trees
-                .add_clip(node.parent, node.transform, node.shape)
-                .map_err(|_| SnapshotError::InvalidTree)?;
-        }
-        for (i, node) in s.effects.iter().enumerate().skip(1) {
-            if node.parent.0 >= i || !unit(node.opacity) || !unit(node.accumulated_opacity) {
-                return Err(SnapshotError::InvalidTree);
-            }
-            trees
-                .add_effect(node.parent, node.opacity, node.blend, node.filter)
-                .map_err(|_| SnapshotError::InvalidTree)?;
-            if trees.effects[i] != *node {
-                return Err(SnapshotError::InvalidTree);
-            }
-        }
         for (i, node) in s.scrolls.iter().enumerate().skip(1) {
             if node.parent.0 >= i
                 || !valid_rect(node.container)
@@ -205,9 +186,37 @@ impl PropertyTrees {
                 return Err(SnapshotError::InvalidTree);
             }
             trees
-                .add_scroll(node.parent, node.offset, node.container, node.contents)
+                .add_scroll_with_owner(
+                    node.parent,
+                    node.offset,
+                    node.container,
+                    node.contents,
+                    node.container_transform,
+                )
                 .map_err(|_| SnapshotError::InvalidTree)?;
             if trees.scrolls[i] != *node {
+                return Err(SnapshotError::InvalidTree);
+            }
+        }
+        for (i, node) in s.clips.iter().enumerate().skip(1) {
+            if node.parent.0 >= i
+                || node.transform.0 >= trees.transforms.len()
+                || !valid_clip(node.shape)
+            {
+                return Err(SnapshotError::InvalidTree);
+            }
+            trees
+                .add_clip_with_scroll(node.parent, node.transform, node.scroll, node.shape)
+                .map_err(|_| SnapshotError::InvalidTree)?;
+        }
+        for (i, node) in s.effects.iter().enumerate().skip(1) {
+            if node.parent.0 >= i || !unit(node.opacity) || !unit(node.accumulated_opacity) {
+                return Err(SnapshotError::InvalidTree);
+            }
+            trees
+                .add_effect(node.parent, node.opacity, node.blend, node.filter)
+                .map_err(|_| SnapshotError::InvalidTree)?;
+            if trees.effects[i] != *node {
                 return Err(SnapshotError::InvalidTree);
             }
         }
@@ -241,6 +250,7 @@ pub struct TileResourceSnapshot {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompositorFrameSnapshot {
+    pub raster_sampling: RasterSampling,
     pub version: u16,
     pub width: u32,
     pub height: u32,
@@ -260,6 +270,7 @@ impl CompositorFrame {
             .collect::<Vec<_>>();
         tile_lookup.sort_by_key(|item| (item.layer, item.x, item.y));
         CompositorFrameSnapshot {
+            raster_sampling: self.raster_sampling,
             version: SNAPSHOT_VERSION,
             width: self.width,
             height: self.height,
@@ -381,6 +392,7 @@ impl CompositorFrame {
             return Err(SnapshotError::InvalidLookup);
         }
         Ok(Self {
+            raster_sampling: s.raster_sampling,
             width: s.width,
             height: s.height,
             passes: s.passes,

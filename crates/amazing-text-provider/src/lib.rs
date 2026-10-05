@@ -23,21 +23,21 @@ pub use font_decode::decode_web_font_to_sfnt;
 
 use amazing_text::{
     BreakKind, BreakOpportunity, Direction, FallbackTextSystem, FontAttributes, FontKey,
-    FontSizeAdjustMetric, FontSlant, GlyphCacheKey, GlyphImage, GlyphRasterRequest, LineRequest,
-    Paragraph, ShapedLine, ShapedParagraph, ShapedRun, ShapingBoundary, TextError, TextStyle,
-    TextSystem,
+    FontSizeAdjustMetric, FontSlant, GlyphCacheKey, GlyphImage, GlyphRasterRequest,
+    GlyphRasterScale, LineRequest, Paragraph, ShapedLine, ShapedParagraph, ShapedRun,
+    ShapingBoundary, TextError, TextStyle, TextSystem,
 };
-use icu_segmenter::options::{LineBreakOptions, LineBreakStrictness, LineBreakWordOption};
-use icu_segmenter::{GraphemeClusterSegmenter, LineSegmenter};
-use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use unicode_bidi::{BidiClass, BidiInfo, Level, bidi_class};
 use font_decode::{parse_font_format_hint, sniff_font_format, supported_font_technology};
 use font_selection::font_covers;
+use icu_segmenter::options::{LineBreakOptions, LineBreakStrictness, LineBreakWordOption};
+use icu_segmenter::{GraphemeClusterSegmenter, LineSegmenter};
 use shaping::{
     cluster_orientation, fallback_grapheme_run, font_metrics, hard_context_range,
     rasterize_font_glyph, runs_in_visual_cluster_order, shape_range,
 };
+use std::cell::{Cell, RefCell};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use unicode_bidi::{BidiClass, BidiInfo, Level, bidi_class};
 // These four exist only so `tests.rs`'s `use super::*;` (and
 // `web_font_decode_tests.rs`, spliced into it via `include!`) can still name
 // them bare, the way they could before the TEXT-27 module split. A plain
@@ -50,13 +50,13 @@ use amazing_text::{
     TextOrientation, WritingMode,
 };
 #[allow(unused_imports)]
-use std::panic::{AssertUnwindSafe, catch_unwind};
-#[allow(unused_imports)]
 use emoji_presentation::{EmojiPresentation, emoji_presentation_intent, has_color_glyph_tables};
 #[allow(unused_imports)]
 use font_decode::sfnt_checksum;
 #[allow(unused_imports)]
 use font_selection::font_covers_space;
+#[allow(unused_imports)]
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 const MAX_COMPRESSED_FONT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_SFNT_FONT_BYTES: usize = 32 * 1024 * 1024;
@@ -325,7 +325,7 @@ pub struct TextProvider {
     face_rules: Vec<FontFaceRegistration>,
     font_set_bytes: usize,
     pending_font_loads: Vec<FontDisplay>,
-    raster_cache: RefCell<HashMap<GlyphCacheKey, Option<GlyphImage>>>,
+    raster_cache: RefCell<HashMap<(GlyphCacheKey, GlyphRasterScale), Option<GlyphImage>>>,
     raster_cache_bytes: Cell<usize>,
     fallback: FallbackTextSystem,
 }
@@ -520,7 +520,11 @@ impl TextProvider {
     /// Physical first-available-font aspect ratio for CSS font-size-adjust.
     /// This ignores paragraph orientation and returns None without an actual
     /// selected font. Missing metric/glyph fallbacks follow CSS Fonts.
-    pub fn font_size_adjust_ratio(&self, style: &TextStyle, metric: FontSizeAdjustMetric) -> Option<f32> {
+    pub fn font_size_adjust_ratio(
+        &self,
+        style: &TextStyle,
+        metric: FontSizeAdjustMetric,
+    ) -> Option<f32> {
         let index = self.matching_font_with_space_policy(style, Some(" "), true)?;
         font_relative_metrics::aspect_ratio(&self.fonts[index], style, metric)
     }
@@ -691,32 +695,45 @@ impl TextSystem for TextProvider {
     }
 
     fn rasterize(&self, request: GlyphRasterRequest<'_>) -> Result<Option<GlyphImage>, TextError> {
+        let scale = GlyphRasterScale::unscaled(request.key);
+        self.rasterize_at_scale(request, scale)
+    }
+
+    fn rasterize_at_scale(
+        &self,
+        request: GlyphRasterRequest<'_>,
+        scale: GlyphRasterScale,
+    ) -> Result<Option<GlyphImage>, TextError> {
         let key = request.key;
+        scale.device_size(key)?;
         if key.generation != self.generation {
             return Err(TextError::MissingFont);
         }
-        if let Some(cached) = self.raster_cache.borrow().get(&key) {
+        let cache_key = (key, scale);
+        if let Some(cached) = self.raster_cache.borrow().get(&cache_key) {
             return Ok(cached.clone());
         }
         let image = if key.font == FontKey(0) {
-            let fallback_key = GlyphCacheKey {
-                generation: 0,
-                ..key
-            };
-            self.fallback.rasterize(GlyphRasterRequest {
-                key: fallback_key,
-                variations: request.variations,
-                synthesis: request.synthesis,
-            })?
+            self.fallback.rasterize_at_scale(
+                GlyphRasterRequest {
+                    key: GlyphCacheKey {
+                        generation: 0,
+                        ..key
+                    },
+                    variations: request.variations,
+                    synthesis: request.synthesis,
+                },
+                scale,
+            )?
         } else {
             let font = self
                 .fonts
                 .iter()
                 .find(|font| font.key == key.font)
                 .ok_or(TextError::MissingFont)?;
-            rasterize_font_glyph(font, &request)?
+            rasterize_font_glyph(font, &request, scale)?
         };
-        self.cache_raster(key, image.clone());
+        self.cache_device_raster(cache_key, image.clone());
         Ok(image)
     }
 }
@@ -793,8 +810,18 @@ impl TextProvider {
         Ok(runs)
     }
 
+    #[cfg(test)]
     fn cache_raster(&self, key: GlyphCacheKey, image: Option<GlyphImage>) {
-        let entry_overhead = std::mem::size_of::<(GlyphCacheKey, Option<GlyphImage>)>();
+        self.cache_device_raster((key, GlyphRasterScale::unscaled(key)), image);
+    }
+
+    fn cache_device_raster(
+        &self,
+        key: (GlyphCacheKey, GlyphRasterScale),
+        image: Option<GlyphImage>,
+    ) {
+        let entry_overhead =
+            std::mem::size_of::<((GlyphCacheKey, GlyphRasterScale), Option<GlyphImage>)>();
         let charge =
             entry_overhead.saturating_add(image.as_ref().map_or(0, |image| image.data.capacity()));
         let cache = self.raster_cache.borrow();
@@ -1262,3 +1289,5 @@ fn paragraph_break_ranges(text: &str) -> Vec<std::ops::Range<usize>> {
     breaks
 }
 
+#[cfg(test)]
+mod device_raster_tests;

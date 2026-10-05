@@ -69,7 +69,7 @@ fn write_sfnt_checksums(bytes: &mut [u8]) {
     }
 }
 
-fn synthetic_font(mapped: char) -> Vec<u8> {
+pub(super) fn synthetic_font(mapped: char) -> Vec<u8> {
     synthetic_font_with_feature(mapped, None)
 }
 

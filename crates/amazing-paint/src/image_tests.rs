@@ -87,6 +87,7 @@ fn position_moves_unscaled_object_and_preserves_transparent_layer_alpha() {
 fn fitted_pixels_obey_ancestor_clip_and_bad_buffers_do_not_panic() {
     let mut surface = Surface::new(8, 8);
     let clip = ClipRect {
+        lattice: crate::raster_viewport::RasterLattice::UNIT,
         x0: 3.0,
         y0: 0.0,
         x1: 4.0,
@@ -139,7 +140,7 @@ fn flagged_fits_draw_unscaled_or_downscaled_pixels_and_keep_both_clips() {
     let image=amazing_media::Image{width:8,height:16,pixels:[255,0,0,255].repeat(128)};
     let style:ComputedStyle=[("object-fit".to_owned(),"cover scale-down".to_owned())].into_iter().collect();
     let presentation=ImagePresentation::from_style(&style);surface.clear([255;4]);
-    let clip=ClipRect{x0:4.0,y0:0.0,x1:6.0,y1:12.0};
+    let clip=ClipRect{x0:4.0,y0:0.0,x1:6.0,y1:12.0,lattice:crate::raster_viewport::RasterLattice::UNIT};
     paint_image(&mut surface,&Rect{x:2.0,y:2.0,w:4.0,h:4.0},&image,presentation,clip);
     assert_eq!(surface.get_pixel(3,3),Some([255;4]));assert_eq!(surface.get_pixel(4,2),Some([255,0,0,255]));assert_eq!(surface.get_pixel(5,2),Some([255,0,0,255]));
     assert_eq!(surface.get_pixel(4,1),Some([255;4]));assert_eq!(surface.get_pixel(4,6),Some([255;4]));

@@ -4,6 +4,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import math
 import os
 import pathlib
 import re
@@ -19,11 +20,23 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def exact_path(path, lane):
+def exact_path(path, lane, native_output_root=None):
     if not re.fullmatch(r'[a-z0-9-]+', lane): raise ValueError('invalid lane')
     if not re.fullmatch(r'[A-Za-z0-9_./-]+', path) or '..' in pathlib.PurePosixPath(path).parts:
         raise ValueError('explicit image path required; no globs or traversal')
-    if not path.startswith(f'/home/user/amazing/out/{lane}/') or not path.endswith('.png'):
+    owner = f'/home/user/amazing/out/{lane}'
+    if native_output_root is not None:
+        root = pathlib.PurePosixPath(native_output_root)
+        if (not re.fullmatch(r'[A-Za-z0-9_./-]+', native_output_root)
+                or str(root) != native_output_root or '..' in root.parts
+                or pathlib.PurePosixPath('/tmp') not in root.parents
+                or root.name != lane):
+            raise ValueError('native image owner must be an exact lane directory beneath /tmp')
+        if str(pathlib.PurePosixPath(path)) != path:
+            raise ValueError('native image path must be normalized')
+        owner = native_output_root
+    if not path.startswith(owner + '/') or not path.endswith('.png'):
+
         raise ValueError('image must be an exact PNG under the lane output directory')
     return path
 
@@ -35,6 +48,46 @@ def png_size(path):
     return list(struct.unpack('>II', header[16:24]))
 
 
+def float32(value):
+    try: return struct.unpack('f', struct.pack('f', value))[0]
+    except (OverflowError, struct.error) as error: raise ValueError('unrepresentable measured float') from error
+
+
+def validate_engine_viewport(facts, image):
+    if facts['pid'] != image['pid'] or facts['source_commit'] != image['source_commit']:
+        raise ValueError('engine viewport identity mismatch')
+    keys = ('css_width', 'css_height', 'device_scale', 'window_css_width', 'window_css_height')
+    if any(not isinstance(facts[k], (int, float)) or not math.isfinite(facts[k]) or facts[k] <= 0 for k in keys):
+        raise ValueError('invalid measured engine viewport')
+    for axis in ('width', 'height'):
+        if facts['css_' + axis] > facts['window_css_' + axis]:
+            raise ValueError('engine CSS viewport exceeds measured window')
+        physical = facts['raster_' + axis]
+        if not isinstance(physical, int) or physical != math.ceil(float32(facts['css_' + axis]) * float32(facts['device_scale'])):
+            raise ValueError('engine raster extent differs from measured scale')
+    measured_window = [round(facts['window_css_width'] * facts['device_scale']),
+                       round(facts['window_css_height'] * facts['device_scale'])]
+    if measured_window != image['viewport']['window_size']:
+        raise ValueError('engine measurement belongs to different window geometry')
+
+
+def engine_viewport(args):
+    if not getattr(args, 'engine_log', ''): return None
+    lines = pathlib.Path(args.engine_log).read_text(errors='strict').splitlines()
+    records = [line for line in lines if line.startswith(('AMAZING_VIEWPORT ', 'AMAZING_VIEWPORT_FAILURE '))]
+    if not records: raise ValueError('actual measured engine viewport missing')
+    line = records[-1]
+    if line.startswith('AMAZING_VIEWPORT_FAILURE '): raise ValueError('latest measured frame failed')
+    fields = dict(word.split('=', 1) for word in line.split()[1:])
+    expected = {'pid','css_width','css_height','device_scale','raster_width','raster_height','window_css_width','window_css_height'}
+    if set(fields) != expected: raise ValueError('invalid actual viewport record fields')
+    value = {key: (int(raw) if key in ('pid','raster_width','raster_height') else float(raw)) for key,raw in fields.items()}
+    value['source_commit'] = args.source_commit
+    if value['device_scale'] != float(args.device_scale):
+        raise ValueError('actual GPUI device scale differs from requested platform scale')
+    return value
+
+
 def validate(proof, lane):
     if proof.get('schema') != 1 or proof.get('kind') != 'actual-window-proof' or proof.get('lane') != lane:
         raise ValueError('invalid window proof manifest')
@@ -44,7 +97,8 @@ def validate(proof, lane):
     total = len((json.dumps(proof, separators=(',', ':')) + '\n').encode())
     if total > IMAGE_LIMIT: raise ValueError('manifest exceeds 512 KiB')
     for image in images:
-        path = exact_path(image['path'], lane)
+        path = (exact_path(image['path'], lane, proof['native_output_root'])
+                if 'native_output_root' in proof else exact_path(image['path'], lane))
         name = pathlib.PurePosixPath(path).name
         if path in paths or name in names: raise ValueError('duplicate image path/name')
         paths.add(path); names.add(name)
@@ -69,6 +123,7 @@ def validate(proof, lane):
         check_geometry(after['geometry'], after['display_size'], image['viewport']['display_size'])
         if after['geometry'][2:] != image['viewport']['window_size']:
             raise ValueError('window geometry differs from viewport')
+        if 'engine_viewport' in image: validate_engine_viewport(image['engine_viewport'], image)
         captured = datetime.datetime.fromisoformat(image['captured_at'].replace('Z', '+00:00'))
         began = datetime.datetime.fromisoformat(capture_facts['began_at'].replace('Z', '+00:00'))
         if captured.utcoffset() is None or began.utcoffset() is None: raise ValueError('capture timestamp requires timezone')
@@ -110,9 +165,16 @@ def check_geometry(geometry, display, requested):
 
 def capture(args):
     path = pathlib.Path(args.image).resolve()
-    exact_path(str(path), args.lane)
+    native_root = getattr(args, 'native_output_root', None)
+    if native_root is not None:
+        if str(pathlib.Path(native_root).resolve()) != native_root:
+            raise ValueError('native image owner contains a symlink')
+        exact_path(str(path), args.lane, native_root)
+    else:
+        exact_path(str(path), args.lane)
     if path.exists(): raise ValueError('capture image already exists')
     before = snapshot(args)
+    engine_before = engine_viewport(args)
     requested = [int(n) for n in args.size.split('x')]
     check_geometry(before['geometry'], before['display_size'], requested)
     began = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -121,6 +183,7 @@ def capture(args):
     command = ['import', '-silent', '+frame', '+border', '-window', args.window, str(path)]
     subprocess.run(command, check=True)
     after = snapshot(args)
+    if engine_viewport(args) != engine_before: raise ValueError("engine viewport changed during capture")
     if after != before: raise ValueError(f'window identity/geometry changed during capture: {before} -> {after}')
     dimensions = after['geometry'][2:]
     if png_size(path) != dimensions:
@@ -133,8 +196,13 @@ def capture(args):
              'capture': {'backend': 'ImageMagick import +frame +border -window',
                          'before': before, 'after': after, 'began_at': began},
              'captured_at': datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    if engine_before is not None: image['engine_viewport'] = engine_before
     manifest = pathlib.Path(args.manifest)
     proof = json.loads(manifest.read_text()) if manifest.exists() else {'schema': 1, 'kind': 'actual-window-proof', 'lane': args.lane, 'images': []}
+    if native_root is not None:
+        if proof.get('native_output_root', native_root) != native_root:
+            raise ValueError('native image owner changed within one proof')
+        proof['native_output_root'] = native_root
     proof['images'].append(image)
     validate(proof, args.lane)
     manifest.write_text(json.dumps(proof, separators=(',', ':')) + '\n')
@@ -155,7 +223,13 @@ def failure(args, error):
         facts['image_bytes'] = path.stat().st_size; facts['image_sha256'] = digest(path)
         try: facts['png_size'] = png_size(path)
         except ValueError as image_error: facts['image_error'] = str(image_error)
-    exact_path(str(path.resolve()), args.lane)
+    native_root = getattr(args, 'native_output_root', None)
+    if native_root is not None:
+        if str(pathlib.Path(native_root).resolve()) != native_root:
+            raise ValueError('native image owner contains a symlink')
+        exact_path(str(path.resolve()), args.lane, native_root)
+    else:
+        exact_path(str(path.resolve()), args.lane)
     diagnostic = path.with_suffix('.failure.manifest.json')
     diagnostic.write_text(json.dumps(facts, separators=(',', ':')) + '\n')
     print(json.dumps(facts, separators=(',', ':')), file=__import__('sys').stderr)
@@ -168,6 +242,9 @@ def main():
     for name in ('lane', 'manifest', 'image', 'exe', 'window', 'source-commit', 'fixture', 'size'):
         r.add_argument('--' + name, required=True)
     r.add_argument('--pid', required=True, type=int)
+    r.add_argument('--native-output-root', default=None)
+    r.add_argument('--engine-log', default='')
+    r.add_argument('--device-scale', default='1')
     v = sub.add_parser('validate'); v.add_argument('manifest'); v.add_argument('lane')
     c = sub.add_parser('verify'); c.add_argument('manifest'); c.add_argument('lane'); c.add_argument('directory')
     args = parser.parse_args()

@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use amazing_compositor::{
     CompositorFrame, DrawQuad, Presenter, PresenterError, Rect, ReferenceCpuPresenter, ResourceId,
-    SolidColorQuad, TileQuad,
+    SolidColorQuad, TileQuad, RasterSampling,
 };
 use gpui::{div, img, px, rgba, AnyElement, IntoElement, ParentElement, RenderImage, Styled};
 use image::{Frame, RgbaImage};
@@ -46,16 +46,23 @@ impl GpuiFrame {
     /// draws cached tile images directly; GPUI's color-sprite API cannot
     /// transform them, so complex frames use the exact composed image.
     pub fn element(&self) -> AnyElement {
+        self.element_with_device_scale(1.)
+    }
+
+    /// Incoming frame coordinates are physical raster pixels. GPUI expects
+    /// logical pixels and applies its own display scale during presentation.
+    pub fn element_with_device_scale(&self, device_scale: f32) -> AnyElement {
+        assert!(device_scale.is_finite() && device_scale > 0.);
         if !self.direct_tiles {
             return img(self.composed.as_ref().expect("fallback image").clone())
-                .w(px(self.width as f32))
-                .h(px(self.height as f32))
+                .w(px((self.width as f32) / device_scale))
+                .h(px((self.height as f32) / device_scale))
                 .into_any_element();
         }
         let mut root = div()
             .relative()
-            .w(px(self.width as f32))
-            .h(px(self.height as f32))
+            .w(px((self.width as f32) / device_scale))
+            .h(px((self.height as f32) / device_scale))
             .overflow_hidden();
         for draw in &self.draws {
             if let GpuiDraw::Solid(quad) = draw {
@@ -70,10 +77,10 @@ impl GpuiFrame {
                     root = root.child(
                         div()
                             .absolute()
-                            .left(px(x))
-                            .top(px(y))
-                            .w(px(right - x))
-                            .h(px(bottom - y))
+                            .left(px((x) / device_scale))
+                            .top(px((y) / device_scale))
+                            .w(px((right - x) / device_scale))
+                            .h(px((bottom - y) / device_scale))
                             .bg(rgba(color))
                             .opacity(quad.opacity),
                     );
@@ -96,18 +103,18 @@ impl GpuiFrame {
             root = root.child(
                 div()
                     .absolute()
-                    .left(px(x))
-                    .top(px(y))
-                    .w(px(right - x))
-                    .h(px(bottom - y))
+                    .left(px((x) / device_scale))
+                    .top(px((y) / device_scale))
+                    .w(px((right - x) / device_scale))
+                    .h(px((bottom - y) / device_scale))
                     .overflow_hidden()
                     .child(
                         img(tile.image.clone())
                             .absolute()
-                            .left(px(world.x - x))
-                            .top(px(world.y - y))
-                            .w(px(world.w))
-                            .h(px(world.h))
+                            .left(px((world.x - x) / device_scale))
+                            .top(px((world.y - y) / device_scale))
+                            .w(px((world.w) / device_scale))
+                            .h(px((world.h) / device_scale))
                             .opacity(tile.quad.opacity),
                     ),
             );
@@ -121,6 +128,7 @@ pub struct GpuiPresenter {
     cpu: ReferenceCpuPresenter,
     tiles: HashMap<ResourceId, Arc<RenderImage>>,
     last_composed: Option<Arc<RenderImage>>,
+    last_sampling: Option<RasterSampling>,
 }
 
 fn render_image(width: u32, height: u32, mut rgba: Vec<u8>) -> Arc<RenderImage> {
@@ -134,7 +142,13 @@ fn render_image(width: u32, height: u32, mut rgba: Vec<u8>) -> Arc<RenderImage> 
     Arc::new(RenderImage::new([Frame::new(image)]))
 }
 
-fn axis_aligned_unit_transform(quad: &TileQuad) -> bool {
+fn axis_aligned_unit_transform(quad: &TileQuad, sampling: RasterSampling) -> bool {
+    // GPUI has no nearest texture-sampler selector. A fractional physical
+    // translation must use the policy-aware CPU composition. The existing
+    // Bilinear admission also stays conservative: only whole-pixel placement.
+    let requires_integer_translation = match sampling {
+        RasterSampling::Nearest | RasterSampling::Bilinear => true,
+    };
     let m = quad.transform.0;
     m[0][0] == 1.
         && m[0][1] == 0.
@@ -142,8 +156,8 @@ fn axis_aligned_unit_transform(quad: &TileQuad) -> bool {
         && m[1][1] == 1.
         && m[2] == [0., 0., 1., 0.]
         && m[3] == [0., 0., 0., 1.]
-        && m[0][3].fract() == 0.
-        && m[1][3].fract() == 0.
+        && (!requires_integer_translation
+            || (m[0][3].fract() == 0. && m[1][3].fract() == 0.))
 }
 
 fn intersect_rects(a: Rect, b: Rect) -> Rect {
@@ -252,7 +266,7 @@ impl GpuiPresenter {
         for quad in &pass.quads {
             match quad {
                 DrawQuad::Tile(tile) => {
-                    if !axis_aligned_unit_transform(tile)
+                    if !axis_aligned_unit_transform(tile, frame.raster_sampling)
                         || tile.blend != amazing_compositor::BlendMode::Normal
                     {
                         return Ok(None);
@@ -311,6 +325,10 @@ impl Presenter for GpuiPresenter {
     type Error = PresenterError;
 
     fn present(&mut self, frame: &CompositorFrame) -> Result<Self::Output, Self::Error> {
+        if self.last_sampling != Some(frame.raster_sampling) {
+            self.last_composed = None;
+            self.last_sampling = Some(frame.raster_sampling);
+        }
         for id in &frame.resources.evictions {
             self.tiles.remove(id);
         }
@@ -339,7 +357,7 @@ impl Presenter for GpuiPresenter {
                         .get(&tile.resource_id)
                         .ok_or(PresenterError::MissingResource(tile.resource_id))?
                         .clone();
-                    direct_tiles &= axis_aligned_unit_transform(tile)
+                    direct_tiles &= axis_aligned_unit_transform(tile, frame.raster_sampling)
                         && tile.blend == amazing_compositor::BlendMode::Normal;
                     let draw = GpuiTile {
                         quad: tile.clone(),
@@ -555,6 +573,59 @@ mod tests {
         let again = gpui.present(&next).unwrap();
         assert!(again.composed.is_none());
         assert!(Arc::ptr_eq(&actual.tiles[0].image, &again.tiles[0].image));
+    }
+
+    #[test]
+    fn nearest_fractional_tiles_and_hoisted_passes_use_exact_composition() {
+        for translation in [(2., 3.), (2.5, 3.75), (-1.25, 2.5)] {
+            for grouped in [false, true] {
+                let mut trees = PropertyTrees::new();
+                let transform = trees.add_transform(
+                    TransformId(0), Matrix4::translation(translation.0, translation.1, 0.),
+                    (0., 0., 0.), false,
+                ).unwrap();
+                let effect = if grouped {
+                    trees.add_effect(EffectId(0), 0.5,
+                        amazing_compositor::BlendMode::Normal, None).unwrap()
+                } else { EffectId(0) };
+                let mut scene = Compositor::new(trees, vec![PaintChunk {
+                    items: 0..1,
+                    state: PropertyTreeState { transform, effect, ..Default::default() },
+                    bounds: Rect::new(2., 3., 270., 7.),
+                    reasons: CompositingReasons::WILL_CHANGE,
+                }], 1).unwrap();
+                let mut frame = scene.build_frame(&Paint, 300, 32).unwrap();
+                frame.raster_sampling = RasterSampling::Nearest;
+                let expected = ReferenceCpuPresenter::default().present(&frame).unwrap();
+                let mut presenter = GpuiPresenter::default();
+                let actual = presenter.present(&frame).unwrap();
+                let integral = translation.0.fract() == 0. && translation.1.fract() == 0.;
+                assert_eq!(actual.direct_tiles, integral, "{translation:?}/{grouped}");
+                if !integral {
+                    let mut bytes = actual.composed.as_ref().unwrap().as_bytes(0).unwrap().to_vec();
+                    for pixel in bytes.chunks_exact_mut(4) { pixel.swap(0, 2); }
+                    assert_eq!(bytes, expected.pixels, "{translation:?}/{grouped}");
+                    let mut cached = frame.clone();
+                    cached.damage.clear();
+                    cached.resources.uploads.clear();
+                    let again = presenter.present(&cached).unwrap();
+                    assert!(Arc::ptr_eq(actual.composed.as_ref().unwrap(),
+                        again.composed.as_ref().unwrap()));
+                    let mut changed = frame.clone();
+                    changed.raster_sampling = RasterSampling::Bilinear;
+                    let changed_expected = ReferenceCpuPresenter::default().present(&changed).unwrap();
+                    changed.damage.clear();
+                    changed.resources.uploads.clear();
+                    let changed_actual = presenter.present(&changed).unwrap();
+                    assert!(!Arc::ptr_eq(again.composed.as_ref().unwrap(),
+                        changed_actual.composed.as_ref().unwrap()));
+                    let mut changed_bytes = changed_actual.composed.as_ref().unwrap()
+                        .as_bytes(0).unwrap().to_vec();
+                    for pixel in changed_bytes.chunks_exact_mut(4) { pixel.swap(0, 2); }
+                    assert_eq!(changed_bytes, changed_expected.pixels);
+                }
+            }
+        }
     }
 
     #[test]

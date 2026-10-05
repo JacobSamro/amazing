@@ -242,6 +242,7 @@ impl ClipShape {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ClipNode {
     pub parent: ClipId,
+    pub scroll: ScrollId,
     pub transform: TransformId,
     pub shape: ClipShape,
 }
@@ -271,6 +272,9 @@ fn nested_effect_opacity(parent: f32, child: f32) -> f32 {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScrollNode {
     pub parent: ScrollId,
+    /// Explicit scrollport owner. None preserves the generic source API
+    /// whose container is expressed in each item's transform space.
+    pub container_transform: Option<TransformId>,
     pub offset: (f32, f32),
     pub container: Rect,
     pub contents: Rect,
@@ -330,6 +334,7 @@ impl PropertyTrees {
             }],
             clips: vec![ClipNode {
                 parent: ClipId(0),
+                scroll: ScrollId(0),
                 transform: TransformId(0),
                 shape: ClipShape::Rect(Rect::new(-1e9, -1e9, 2e9, 2e9)),
             }],
@@ -342,6 +347,7 @@ impl PropertyTrees {
             }],
             scrolls: vec![ScrollNode {
                 parent: ScrollId(0),
+                container_transform: None,
                 offset: (0., 0.),
                 container: Rect::new(-1e9, -1e9, 2e9, 2e9),
                 contents: Rect::new(-1e9, -1e9, 2e9, 2e9),
@@ -411,12 +417,26 @@ impl PropertyTrees {
         transform: TransformId,
         shape: ClipShape,
     ) -> Result<ClipId, TreeError> {
-        if parent.0 >= self.clips.len() || transform.0 >= self.transforms.len() {
+        self.add_clip_with_scroll(parent, transform, ScrollId(0), shape)
+    }
+    /// A clip scrolls with its owner's ancestors, not its own contents.
+    pub fn add_clip_with_scroll(
+        &mut self,
+        parent: ClipId,
+        transform: TransformId,
+        scroll: ScrollId,
+        shape: ClipShape,
+    ) -> Result<ClipId, TreeError> {
+        if parent.0 >= self.clips.len()
+            || transform.0 >= self.transforms.len()
+            || scroll.0 >= self.scrolls.len()
+        {
             return Err(TreeError::InvalidParent);
         }
         let id = ClipId(self.clips.len());
         self.clips.push(ClipNode {
             parent,
+            scroll,
             transform,
             shape,
         });
@@ -469,7 +489,21 @@ impl PropertyTrees {
         container: Rect,
         contents: Rect,
     ) -> Result<ScrollId, TreeError> {
-        if parent.0 >= self.scrolls.len() {
+        self.add_scroll_with_owner(parent, offset, container, contents, None)
+    }
+    /// Import an authenticated scrollport owner separately from an item's
+    /// transform. Updating descendant transforms cannot move this viewport.
+    pub fn add_scroll_with_owner(
+        &mut self,
+        parent: ScrollId,
+        offset: (f32, f32),
+        container: Rect,
+        contents: Rect,
+        container_transform: Option<TransformId>,
+    ) -> Result<ScrollId, TreeError> {
+        if parent.0 >= self.scrolls.len()
+            || container_transform.is_some_and(|id| id.0 >= self.transforms.len())
+        {
             return Err(TreeError::InvalidParent);
         }
         if !offset.0.is_finite() || !offset.1.is_finite() || container.empty() || contents.empty() {
@@ -479,6 +513,7 @@ impl PropertyTrees {
         let p = self.scrolls[parent.0].accumulated;
         self.scrolls.push(ScrollNode {
             parent,
+            container_transform,
             offset,
             container,
             contents,
@@ -626,10 +661,20 @@ impl PropertyTrees {
         let node = self.scrolls.get(id.0)?;
         let parent_offset = self.scrolls.get(node.parent.0)?.accumulated;
         self.transforms
-            .get(transform.0)?
+            .get(node.container_transform.unwrap_or(transform).0)?
             .accumulated
             .mul(Matrix4::translation(-parent_offset.0, -parent_offset.1, 0.))
             .map_bounds(node.container)
+    }
+    pub(crate) fn clip_world_matrix(&self, id: ClipId) -> Option<Matrix4> {
+        let node = self.clips.get(id.0)?;
+        let offset = self.scrolls.get(node.scroll.0)?.accumulated;
+        Some(
+            self.transforms
+                .get(node.transform.0)?
+                .accumulated
+                .mul(Matrix4::translation(-offset.0, -offset.1, 0.)),
+        )
     }
     pub fn visible(&self, s: PropertyTreeState, x: f32, y: f32) -> bool {
         let mut id = s.clip;
@@ -637,7 +682,7 @@ impl PropertyTrees {
             let Some(n) = self.clips.get(id.0) else {
                 return false;
             };
-            let Some((u, v)) = self.transforms[n.transform.0].accumulated.unmap(x, y) else {
+            let Some((u, v)) = self.clip_world_matrix(id).and_then(|m| m.unmap(x, y)) else {
                 return false;
             };
             if !n.shape.contains(u, v) {

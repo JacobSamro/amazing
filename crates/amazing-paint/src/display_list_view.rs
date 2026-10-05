@@ -3,21 +3,23 @@
 //! Indices and property IDs are stable for one built view. Rebuild the view
 //! after layout or style changes; no layout ownership escapes through items.
 
-use std::ops::Range;
 use std::collections::HashMap;
+use std::ops::Range;
 
 use amazing_dom::NodeIdx;
 use amazing_layout::{Flow, LayoutBox};
 use amazing_text::TextSystem;
 
 use crate::controls::ControlProvider;
-use crate::display_list::{build_display_list, Affine, PaintCommand};
+use crate::display_list::{Affine, PaintCommand, build_display_list};
 use crate::paint::{self, ImageProvider};
 use crate::surface::Surface;
 
 #[path = "display_list_delta.rs"]
 mod delta;
-pub use delta::{PaintFallbackReason, PaintItemChange, PaintResourceKey, PaintViewDelta, PaintViewUpdate};
+pub use delta::{
+    PaintFallbackReason, PaintItemChange, PaintResourceKey, PaintViewDelta, PaintViewUpdate,
+};
 #[path = "retained_paint.rs"]
 mod retained;
 pub use retained::{PaintDamage, RetainedPaintDelta, RetainedPaintView, RetainedRaster};
@@ -34,6 +36,15 @@ pub enum RawRasterError {
     /// separated from its command context without changing its pixels.
     UnseparableItem(usize),
     RasterFailed(usize),
+}
+
+/// Frame-scoped baked pixels; never a cache across views or provider changes.
+/// Composition uses the same source-over operation as `raster_range`.
+pub struct PreparedBakedRaster { surface: Option<Surface> }
+impl PreparedBakedRaster {
+    pub fn copy_to(&self, target: &mut Surface, offset: (i32, i32), clip: PaintBounds) -> bool {
+        self.surface.as_ref().is_none_or(|surface| paint::copy_baked_surface(surface, target, offset, clip))
+    }
 }
 
 /// Bounds in untransformed document paint coordinates.
@@ -174,6 +185,10 @@ pub struct TransformNode {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ClipNode {
     pub parent: u32,
+    /// Ancestor scroll state at the clip owner, excluding its own contents.
+    pub scroll: u32,
+    /// Transform of the authentic clip owner, independent of descendants.
+    pub transform: u32,
     pub bounds: PaintBounds,
 }
 
@@ -213,6 +228,8 @@ pub struct EffectNode {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScrollNode {
     pub parent: u32,
+    /// Transform of the scrollport owner; the layout viewport uses identity.
+    pub transform: u32,
     /// Stable DOM owner; absent only for the synthetic root in a bindable view.
     pub owner: Option<PaintNodeKey>,
     pub bounds: PaintBounds,
@@ -236,6 +253,7 @@ pub struct DisplayListView<'a> {
     scrolls: Vec<ScrollNode>,
     width: u32,
     height: u32,
+    raster_viewport: Option<crate::RasterViewport>,
     text: &'a dyn TextSystem,
     images: &'a dyn ImageProvider,
     controls: &'a dyn ControlProvider,
@@ -252,6 +270,94 @@ pub struct PropertyOwnerMapping {
 }
 
 impl<'a> DisplayListView<'a> {
+    /// Physical raster metadata; commands still borrow the original CSS tree.
+    pub fn with_raster_viewport(
+        mut self,
+        viewport: crate::RasterViewport,
+    ) -> Result<Self, crate::RasterError> {
+        if self.raster_viewport.is_some() {
+            return Err(crate::RasterError::InvalidViewport);
+        }
+        let fits = |v: f32| {
+            let result = f64::from(v) * viewport.device_scale();
+            result.is_finite() && result.abs() <= f32::MAX as f64
+        };
+        if self.items.iter().any(|i| {
+            ![
+                i.local_bounds.x,
+                i.local_bounds.y,
+                i.local_bounds.width,
+                i.local_bounds.height,
+            ]
+            .into_iter()
+            .all(fits)
+        }) {
+            return Err(crate::RasterError::ResourceLimit);
+        }
+        let scale = viewport.device_scale() as f32;
+        let bounds = |b: PaintBounds| PaintBounds {
+            x: b.x * scale,
+            y: b.y * scale,
+            width: b.width * scale,
+            height: b.height * scale,
+        };
+        for item in &mut self.items {
+            item.local_bounds = bounds(item.local_bounds);
+            if let Some(sticky) = &mut item.sticky {
+                sticky.normal = bounds(sticky.normal);
+                sticky.containing_block = bounds(sticky.containing_block);
+                for v in [
+                    &mut sticky.top,
+                    &mut sticky.right,
+                    &mut sticky.bottom,
+                    &mut sticky.left,
+                ] {
+                    *v = v.map(|x| x * scale);
+                }
+            }
+        }
+        for t in &mut self.transforms {
+            t.matrix[4] *= scale;
+            t.matrix[5] *= scale;
+        }
+        for c in &mut self.clips {
+            c.bounds = bounds(c.bounds);
+        }
+        for e in &mut self.effects {
+            e.filter = e.filter.scaled(scale);
+            e.backdrop_filter = e.backdrop_filter.scaled(scale);
+            e.backdrop_bounds = bounds(e.backdrop_bounds);
+            e.mask_bounds = bounds(e.mask_bounds);
+            e.clip = e.clip.map(|m| m.scaled(scale));
+        }
+        for scroll in &mut self.scrolls {
+            scroll.bounds = bounds(scroll.bounds);
+            scroll.contents = bounds(scroll.contents);
+            scroll.initial_offset.0 *= scale;
+            scroll.initial_offset.1 *= scale;
+        }
+        (self.width, self.height) = viewport.physical_size();
+        let output = viewport.logical_output_size();
+        self.clips[0].bounds = PaintBounds {
+            x: 0.0,
+            y: 0.0,
+            width: (output.0 * viewport.device_scale()) as f32,
+            height: (output.1 * viewport.device_scale()) as f32,
+        };
+        let css=viewport.css_viewport_size();
+        let css_bounds=PaintBounds{x:0.0,y:0.0,width:(css.0*viewport.device_scale()) as f32,height:(css.1*viewport.device_scale()) as f32};
+        for scroll in self.scrolls.iter_mut().take(2) {scroll.bounds=css_bounds;}
+        self.raster_viewport = Some(viewport);
+        Ok(self)
+    }
+    pub fn raster_viewport(&self) -> Option<crate::RasterViewport> {
+        self.raster_viewport
+    }
+    pub fn device_scale(&self) -> f64 {
+        self.raster_viewport
+            .map_or(1.0, crate::RasterViewport::device_scale)
+    }
+
     pub fn new(
         root: &'a LayoutBox,
         width: u32,
@@ -273,7 +379,16 @@ impl<'a> DisplayListView<'a> {
         controls: &'a dyn ControlProvider,
         is_video: &dyn Fn(NodeIdx) -> bool,
     ) -> Self {
-        Self::with_scroll_offsets(root, width, height, text, images, controls, is_video, &|_| None)
+        Self::with_scroll_offsets(
+            root,
+            width,
+            height,
+            text,
+            images,
+            controls,
+            is_video,
+            &|_| None,
+        )
     }
 
     /// The embedding adapter can supply live scroll positions without adding
@@ -320,9 +435,9 @@ impl<'a> DisplayListView<'a> {
         controls: &'a dyn ControlProvider,
         dom: &amazing_dom::Dom,
     ) -> Self {
-        Self::with_node_generations(
-            root, width, height, text, images, controls, &|node| dom.node_generation(node),
-        )
+        Self::with_node_generations(root, width, height, text, images, controls, &|node| {
+            dom.node_generation(node)
+        })
     }
 
     /// Combined adapter entry point for retained scroll state and identity.
@@ -339,9 +454,14 @@ impl<'a> DisplayListView<'a> {
     ) -> Self {
         let commands = build_display_list(root);
         let mut containing_blocks = HashMap::new();
-        collect_containing_blocks(root, PaintBounds::viewport(width, height), &mut containing_blocks);
-        let root_owner = root.node.and_then(|node| generation(node)
-            .map(|generation| PaintNodeKey { node, generation }));
+        collect_containing_blocks(
+            root,
+            PaintBounds::viewport(width, height),
+            &mut containing_blocks,
+        );
+        let root_owner = root
+            .node
+            .and_then(|node| generation(node).map(|generation| PaintNodeKey { node, generation }));
         let mut view = Self {
             commands,
             item_commands: Vec::new(),
@@ -355,6 +475,8 @@ impl<'a> DisplayListView<'a> {
             }],
             clips: vec![ClipNode {
                 parent: 0,
+                scroll: 0,
+                transform: 0,
                 bounds: PaintBounds::viewport(width, height),
             }],
             effects: vec![EffectNode {
@@ -373,6 +495,7 @@ impl<'a> DisplayListView<'a> {
             scrolls: vec![
                 ScrollNode {
                     parent: 0,
+                    transform: 0,
                     owner: None,
                     bounds: PaintBounds::viewport(width, height),
                     contents: PaintBounds::viewport(width, height),
@@ -384,6 +507,7 @@ impl<'a> DisplayListView<'a> {
                 // represented here rather than as a second element scroller.
                 ScrollNode {
                     parent: 0,
+                    transform: 0,
                     owner: root_owner,
                     bounds: PaintBounds::viewport(width, height),
                     contents: scrollable_extent(root, PaintBounds::viewport(width, height), true),
@@ -392,6 +516,7 @@ impl<'a> DisplayListView<'a> {
             ],
             width,
             height,
+            raster_viewport: None,
             text,
             images,
             controls,
@@ -410,7 +535,9 @@ impl<'a> DisplayListView<'a> {
             match &view.commands[command_index] {
                 PaintCommand::BeginGroup(group) => {
                     group_stack.push(state);
-                    let owner = group.owner.and_then(|node| generation(node).map(|generation| PaintNodeKey { node, generation }));
+                    let owner = group.owner.and_then(|node| {
+                        generation(node).map(|generation| PaintNodeKey { node, generation })
+                    });
                     let next = view.effects.len() as u32;
                     view.effects.push(EffectNode {
                         parent: state.effect,
@@ -453,17 +580,23 @@ impl<'a> DisplayListView<'a> {
                     let next = view.clips.len() as u32;
                     view.clips.push(ClipNode {
                         parent: state.clip,
+                        scroll: if std::ptr::eq(*box_, root) { 0 } else { state.scroll },
+                        transform: if std::ptr::eq(*box_, root) { 0 } else { state.transform },
                         bounds,
                     });
                     state.clip = next;
                     if is_scroller(box_) && !std::ptr::eq(*box_, root) {
-                        let owner = box_.node.and_then(|node| generation(node).map(|generation| PaintNodeKey { node, generation }));
-                        let next = match owner.and_then(|owner| scroll_owners.get(&owner).copied()) {
+                        let owner = box_.node.and_then(|node| {
+                            generation(node).map(|generation| PaintNodeKey { node, generation })
+                        });
+                        let next = match owner.and_then(|owner| scroll_owners.get(&owner).copied())
+                        {
                             Some(existing) => existing,
                             None => {
                                 let next = view.scrolls.len() as u32;
                                 view.scrolls.push(ScrollNode {
                                     parent: state.scroll,
+                                    transform: state.transform,
                                     owner,
                                     bounds,
                                     contents: scrollable_extent(box_, bounds, false),
@@ -492,8 +625,11 @@ impl<'a> DisplayListView<'a> {
                         if box_.style.get("box-shadow").is_some() {
                             PaintBounds::viewport(width, height)
                         } else {
-                            PaintBounds::from_layout(crate::border_image::BorderImagePlan::from_style(&box_.style)
-                                .and_then(|plan| plan.ink_bounds(box_)).unwrap_or(box_.border_box))
+                            PaintBounds::from_layout(
+                                crate::border_image::BorderImagePlan::from_style(&box_.style)
+                                    .and_then(|plan| plan.ink_bounds(box_))
+                                    .unwrap_or(box_.border_box),
+                            )
                         },
                         state,
                         hints(box_, is_video),
@@ -524,16 +660,26 @@ impl<'a> DisplayListView<'a> {
                 }
             }
             if let Some((command_index, node, kind, bounds, properties, hints, sticky)) = item {
-                let key = node.and_then(|node| generation(node).map(|generation| {
-                    if view.node_generations.insert(node, generation).is_some_and(|old| old != generation) {
-                        view.ambiguous_generation = true;
-                    }
-                    let node = PaintNodeKey { node, generation };
-                    let ordinal = ordinals.entry((node, kind)).or_insert(0u32);
-                    let key = StablePaintItemKey { node, phase: kind, ordinal: *ordinal };
-                    *ordinal = ordinal.saturating_add(1);
-                    key
-                }));
+                let key = node.and_then(|node| {
+                    generation(node).map(|generation| {
+                        if view
+                            .node_generations
+                            .insert(node, generation)
+                            .is_some_and(|old| old != generation)
+                        {
+                            view.ambiguous_generation = true;
+                        }
+                        let node = PaintNodeKey { node, generation };
+                        let ordinal = ordinals.entry((node, kind)).or_insert(0u32);
+                        let key = StablePaintItemKey {
+                            node,
+                            phase: kind,
+                            ordinal: *ordinal,
+                        };
+                        *ordinal = ordinal.saturating_add(1);
+                        key
+                    })
+                });
                 view.push_item(command_index, key, kind, bounds, properties, hints, sticky);
             }
         }
@@ -647,10 +793,12 @@ impl<'a> DisplayListView<'a> {
         }
         let first = self.item_commands[items.start];
         let last = self.item_commands[items.end - 1] + 1;
-        paint::raster_command_range(
+        paint::raster_command_range_at_scale(
             &self.commands,
             first..last,
             (self.width, self.height),
+            self.device_scale(),
+            self.raster_viewport.map(crate::RasterViewport::logical_output_size),
             self.text,
             self.images,
             self.controls,
@@ -658,6 +806,22 @@ impl<'a> DisplayListView<'a> {
             offset,
             clip,
         )
+    }
+
+    /// Prepare one baked command range for one compositor frame. The returned
+    /// pixels own no scene/provider references and retain the ordinary replay's
+    /// clip/group/control/resource semantics and per-raster budget.
+    pub fn prepare_baked_range(&self, items: Range<usize>) -> Option<PreparedBakedRaster> {
+        if items.start > items.end || items.end > self.items.len() { return None; }
+        let selected = if items.is_empty() { 0..0 } else {
+            self.item_commands[items.start]..self.item_commands[items.end - 1] + 1
+        };
+        if items.is_empty() { return Some(PreparedBakedRaster { surface: None }); }
+        paint::raster_command_surface_at_scale(&self.commands, selected,
+            (self.width, self.height), self.device_scale(),
+            self.raster_viewport.map(crate::RasterViewport::logical_output_size),
+            self.text, self.images, self.controls)
+            .map(|surface| PreparedBakedRaster { surface: Some(surface) })
     }
 
     /// Rasterize separable items into a tile whose top-left is `tile_origin`
@@ -694,7 +858,14 @@ impl<'a> DisplayListView<'a> {
         let mut result = target.clone();
         for index in items {
             let command = &self.commands[self.item_commands[index]];
-            if !paint::raster_raw_item(command, &mut result, tile_origin, self.text, self.images) {
+            if !paint::raster_raw_item_at_scale(
+                command,
+                &mut result,
+                tile_origin,
+                self.text,
+                self.images,
+                self.device_scale(),
+            ) {
                 return Err(RawRasterError::RasterFailed(index));
             }
         }
@@ -725,10 +896,20 @@ fn content_ink_bounds(box_: &LayoutBox, width: u32, height: u32) -> PaintBounds 
     };
     for line in &box_.lines {
         for fragment in &line.replaced {
-            include(PaintBounds { x: fragment.x, y: fragment.y, width: fragment.width, height: fragment.height });
+            include(PaintBounds {
+                x: fragment.x,
+                y: fragment.y,
+                width: fragment.width,
+                height: fragment.height,
+            });
         }
         for decoration in &line.decorations {
-            include(PaintBounds { x: decoration.x, y: decoration.y, width: decoration.width, height: decoration.height });
+            include(PaintBounds {
+                x: decoration.x,
+                y: decoration.y,
+                width: decoration.width,
+                height: decoration.height,
+            });
         }
         for glyph in &line.glyphs {
             // Text raster metrics are provider-owned. Four em around the pen
@@ -745,13 +926,26 @@ fn content_ink_bounds(box_: &LayoutBox, width: u32, height: u32) -> PaintBounds 
         }
         for word in &line.words {
             let radius = word.font_size * 2.0;
-            include(PaintBounds { x: word.x - radius, y: line.baseline - radius, width: word.width + radius * 2.0, height: radius * 2.0 });
+            include(PaintBounds {
+                x: word.x - radius,
+                y: line.baseline - radius,
+                width: word.width + radius * 2.0,
+                height: radius * 2.0,
+            });
         }
     }
     for edge in &box_.table_decoration().borders {
         include(PaintBounds::from_layout(edge.rect));
     }
-    finite_bounds(result.unwrap_or(PaintBounds { x: box_.content_box.x, y: box_.content_box.y, width: 0.0, height: 0.0 }), viewport)
+    finite_bounds(
+        result.unwrap_or(PaintBounds {
+            x: box_.content_box.x,
+            y: box_.content_box.y,
+            width: 0.0,
+            height: 0.0,
+        }),
+        viewport,
+    )
 }
 
 fn collect_containing_blocks(
@@ -791,13 +985,29 @@ fn scrollable_extent(box_: &LayoutBox, port: PaintBounds, stop_at_clips: bool) -
             return;
         }
         for line in &box_.lines {
-            let own = PaintBounds { x: box_.content_box.x, y: line.y_top, width: box_.content_box.w, height: line.height };
-            if [own.x, own.y, own.width, own.height].into_iter().all(f32::is_finite) {
+            let own = PaintBounds {
+                x: box_.content_box.x,
+                y: line.y_top,
+                width: box_.content_box.w,
+                height: line.height,
+            };
+            if [own.x, own.y, own.width, own.height]
+                .into_iter()
+                .all(f32::is_finite)
+            {
                 *bounds = bounds.union(own);
             }
             for fragment in &line.replaced {
-                let own = PaintBounds { x: fragment.x, y: fragment.y, width: fragment.width, height: fragment.height };
-                if [own.x, own.y, own.width, own.height].into_iter().all(f32::is_finite) {
+                let own = PaintBounds {
+                    x: fragment.x,
+                    y: fragment.y,
+                    width: fragment.width,
+                    height: fragment.height,
+                };
+                if [own.x, own.y, own.width, own.height]
+                    .into_iter()
+                    .all(f32::is_finite)
+                {
                     *bounds = bounds.union(own);
                 }
             }
@@ -824,9 +1034,13 @@ fn sticky_metadata(
     let cb = *containing_blocks.get(&(box_ as *const LayoutBox as usize))?;
     let port = scrolls.get(scroll as usize)?.bounds;
     let side = |name: &str, basis: f32| -> Option<f32> {
-        amazing_layout::values::parse_length_percentage(box_.style.get(name)?, box_.font_size, box_.font_size * 0.5)?
-            .resolve(Some(basis))
-            .filter(|value| value.is_finite())
+        amazing_layout::values::parse_length_percentage(
+            box_.style.get(name)?,
+            box_.font_size,
+            box_.font_size * 0.5,
+        )?
+        .resolve(Some(basis))
+        .filter(|value| value.is_finite())
     };
     Some(StickyMetadata {
         normal: PaintBounds::from_layout(box_.border_box),

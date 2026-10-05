@@ -1,0 +1,15 @@
+# Same genuine status document: real window resize, input and scroll.
+wait 1
+shot 00-measured
+resize 900x600
+wait 2
+shot 01-resized
+click 800 350
+key End
+wait 1
+shot 02-scrolled
+resize 1280x800
+wait 2
+key Home
+wait 1
+shot 03-restored

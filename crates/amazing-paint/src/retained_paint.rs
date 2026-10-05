@@ -62,6 +62,7 @@ pub struct RetainedPaintView {
     items: Vec<OwnedItem>,
     ids: HashMap<StablePaintItemKey, usize>,
     property_counts: (usize, usize, usize, usize),
+    raster_viewport: Option<crate::RasterViewport>,
 }
 
 impl RetainedPaintView {
@@ -106,6 +107,7 @@ impl RetainedPaintView {
         Ok(Self {
             items,
             ids,
+            raster_viewport: view.raster_viewport(),
             property_counts: (
                 view.transforms().len(),
                 view.clips().len(),
@@ -227,7 +229,15 @@ impl RetainedPaintView {
                             PaintItemKind::Content => PaintCommand::PaintContent(box_),
                             PaintItemKind::Control => unreachable!(),
                         };
-                        if !paint::raster_raw_item(&command, &mut surface, origin, text, images) {
+                        if !paint::raster_raw_item_at_scale(
+                            &command,
+                            &mut surface,
+                            origin,
+                            text,
+                            images,
+                            self.raster_viewport
+                                .map_or(1.0, crate::RasterViewport::device_scale),
+                        ) {
                             return Err(PaintFallbackReason::UnseparableGroup);
                         }
                     }
@@ -399,13 +409,21 @@ fn resources_for_box(
         for layer in BackgroundPlan::from_style(&box_.style).layers {
             if let Some(url)=layer.url {
                 resources.insert(match layer.source_base {
-                    Some(base)=>PaintResourceKey::BackgroundUrlWithBase {url,source_base:base},
-                    None=>PaintResourceKey::BackgroundUrl(url),
+                    Some(base) => PaintResourceKey::BackgroundUrlWithBase {
+                        url,
+                        source_base: base,
+                    },
+                    None => PaintResourceKey::BackgroundUrl(url),
                 });
             }
         }
-        if let Some(plan)=crate::border_image::BorderImagePlan::from_style(&box_.style) {
-            if let Some(url)=plan.url {resources.insert(PaintResourceKey::BorderImageUrl{url,source_base:plan.source_base});}
+        if let Some(plan) = crate::border_image::BorderImagePlan::from_style(&box_.style) {
+            if let Some(url) = plan.url {
+                resources.insert(PaintResourceKey::BorderImageUrl {
+                    url,
+                    source_base: plan.source_base,
+                });
+            }
         }
         if box_.replaced_size.is_some() || box_.svg_root.is_some() {
             resources.insert(PaintResourceKey::ReplacedNode(key.node));
@@ -609,9 +627,10 @@ mod tests {
             delta.retired_resources,
             [PaintResourceKey::BackgroundUrl("old".into())]
         );
-        assert!(scene.items().all(|item| item
-            .key
-            .is_none_or(|key| key.node.node != NodeIdx(2) && key.node.node != NodeIdx(3))));
+        assert!(scene.items().all(|item| {
+            item.key
+                .is_none_or(|key| key.node.node != NodeIdx(2) && key.node.node != NodeIdx(3))
+        }));
     }
 
     #[test]

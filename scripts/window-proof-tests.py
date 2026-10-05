@@ -31,6 +31,32 @@ class WindowProof(unittest.TestCase):
                           'began_at':'2026-10-04T12:00:00+00:00'}
         return {'schema':1,'kind':'actual-window-proof','lane':'js-date','images':[image]},raw
 
+    def test_actual_engine_viewport_and_fractional_density_metadata(self):
+        manifest,_=self.fixture()
+        image=manifest['images'][0]
+        image['engine_viewport']={'pid':123,'source_commit':'b'*40,'css_width':380.5,
+            'css_height':250.25,'device_scale':2.,'raster_width':761,'raster_height':501,
+            'window_css_width':400.,'window_css_height':300.}
+        proof.validate(manifest,'js-date')
+        for key,value in [('pid',124),('source_commit','c'*40),('raster_width',760),
+                          ('window_css_width',401.),('device_scale',float('nan'))]:
+            bad=copy.deepcopy(manifest);bad['images'][0]['engine_viewport'][key]=value
+            with self.assertRaises(ValueError):proof.validate(bad,'js-date')
+
+    def test_actual_frame_log_requires_success_pid_fields_and_platform_scale(self):
+        with tempfile.TemporaryDirectory() as d:
+            path=pathlib.Path(d)/'shell.log'
+            args=types.SimpleNamespace(engine_log=str(path),device_scale='2',source_commit='b'*40)
+            line='AMAZING_VIEWPORT pid=123 css_width=380.5 css_height=250.25 device_scale=2 raster_width=761 raster_height=501 window_css_width=400 window_css_height=300'
+            path.write_text(line+'\n')
+            self.assertEqual(proof.engine_viewport(args)['raster_width'],761)
+            path.write_text(line+'\nAMAZING_VIEWPORT_FAILURE pid=123\n')
+            with self.assertRaises(ValueError):proof.engine_viewport(args)
+            path.write_text(line+'\n');args.device_scale='1'
+            with self.assertRaises(ValueError):proof.engine_viewport(args)
+            path.write_text('not a native frame\n')
+            with self.assertRaises(ValueError):proof.engine_viewport(args)
+
     def test_valid_exact_window_metadata_and_bytes(self):
         manifest,raw=self.fixture()
         proof.validate(manifest,'js-date')
@@ -45,6 +71,45 @@ class WindowProof(unittest.TestCase):
                      '/home/user/amazing/out/js-date/raw.log',
                      '/home/user/amazing/out/js-date/x.png;echo']:
             with self.subTest(path=path),self.assertRaises(ValueError):proof.exact_path(path,'js-date')
+
+    def test_native_owner_requires_exact_lane_tmp_path_and_retains_png_budgets(self):
+        owner='/tmp/amazing-viewport-baked-output/js-date'
+        manifest,_=self.fixture();manifest['native_output_root']=owner
+        manifest['images'][0]['path']=owner+'/captures/run/run.png'
+        proof.validate(manifest,'js-date')
+        for root in ['/tmp','/tmp/js-date/..','/home/user/js-date','/tmp/owner/net',owner+'/']:
+            bad=copy.deepcopy(manifest);bad['native_output_root']=root
+            with self.subTest(root=root),self.assertRaises(ValueError):proof.validate(bad,'js-date')
+        for path in ['/tmp/amazing-viewport-baked-output/net/x.png',owner+'-other/x.png',owner+'/../x.png',owner+'/./x.png',owner+'/x.log']:
+            with self.subTest(path=path),self.assertRaises(ValueError):proof.exact_path(path,'js-date',owner)
+        bad=copy.deepcopy(manifest);bad['images'][0]['bytes']=proof.IMAGE_LIMIT+1
+        with self.assertRaisesRegex(ValueError,'512 KiB'):proof.validate(bad,'js-date')
+
+    def test_native_capture_records_original_window_identity_and_all_ten_shots(self):
+        manifest,raw=self.fixture();observed=manifest['images'][0]['capture']['before']
+        with tempfile.TemporaryDirectory(dir='/tmp') as d:
+            owner=pathlib.Path(d)/'js-date';owner.mkdir();stored=owner/'proof.window.manifest.json'
+            def imported(command,check):pathlib.Path(command[-1]).write_bytes(raw)
+            with mock.patch.object(proof,'snapshot',return_value=observed),mock.patch.object(proof.subprocess,'run',side_effect=imported),mock.patch.object(proof.subprocess,'check_output',return_value='Amazing'):
+                for n in range(10):
+                    args=types.SimpleNamespace(image=str(owner/f'shot-{n}.png'),native_output_root=str(owner),lane='js-date',size='800x600',window='456',pid=123,source_commit='b'*40,fixture=f'original-actions shot={n}',manifest=str(stored))
+                    proof.capture(args)
+            recorded=__import__('json').loads(stored.read_text());proof.validate(recorded,'js-date')
+            self.assertEqual(recorded['native_output_root'],str(owner));self.assertEqual(len(recorded['images']),10)
+            for image in recorded['images']:
+                self.assertEqual(image['capture']['before'],image['capture']['after'])
+                proof.verify_image(image,owner/pathlib.Path(image['path']).name)
+
+    def test_native_failure_publishes_diagnostic_and_symlink_escape_is_rejected(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as d:
+            owner=pathlib.Path(d)/'js-date';owner.mkdir();image=owner/'shot.png'
+            args=types.SimpleNamespace(image=str(image),native_output_root=str(owner),lane='js-date',source_commit='b'*40,fixture='actual fixture',pid=123,window='456')
+            with mock.patch.object(proof,'snapshot',side_effect=ValueError('actual failed window')):
+                proof.failure(args,ValueError('original failure'))
+            self.assertTrue(image.with_suffix('.failure.manifest.json').is_file())
+            outside=pathlib.Path(d)/'outside';outside.mkdir();link=owner/'escape';link.symlink_to(outside,target_is_directory=True)
+            args.image=str(link/'shot.png')
+            with self.assertRaises(ValueError):proof.capture(args)
 
     def test_image_and_whole_proof_budget(self):
         manifest,_=self.fixture(proof.IMAGE_LIMIT+1)
@@ -169,7 +234,7 @@ print(f.stat().st_size)
         with tempfile.TemporaryDirectory() as d:
             root=pathlib.Path(d); target=root/'scripts';target.mkdir()
             subprocess.run(['git','init','-q',str(root)],check=True)
-            for name in ('linux-shell-capture.sh','linux-shell-capture-remote.sh','window-proof.py'):
+            for name in ('linux-shell-capture.sh','linux-shell-capture-remote.sh','window-proof.py','linux-capture-session.py'):
                 (target/name).write_bytes((scripts/name).read_bytes())
             (root/'fixture').write_text('source')
             subprocess.run(['git','-C',d,'add','.'],check=True)

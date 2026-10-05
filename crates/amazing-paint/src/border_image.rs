@@ -1,6 +1,6 @@
 //! CSS Backgrounds 3 §5: nine-piece border images from actual decoded pixels.
 //! No fetching or invented intrinsic dimensions; unsupported values fall back.
-use crate::{paint::ImageProvider, Surface};
+use crate::{Surface, paint::ImageProvider};
 use amazing_css::ComputedStyle;
 use amazing_layout::{LayoutBox, Rect};
 
@@ -222,6 +222,7 @@ pub(crate) enum Outcome {
     Unavailable,
     Painted,
     BudgetExceeded,
+    RasterFailure,
 }
 #[derive(Clone, Copy)]
 struct Axis {
@@ -287,6 +288,23 @@ pub(crate) fn paint(
     clip: [i64; 4],
     budget: &mut usize,
 ) -> Outcome {
+    paint_at_lattice(
+        surface,
+        b,
+        images,
+        clip,
+        budget,
+        crate::raster_viewport::RasterLattice::UNIT,
+    )
+}
+pub(crate) fn paint_at_lattice(
+    surface: &mut Surface,
+    b: &LayoutBox,
+    images: &dyn ImageProvider,
+    clip: [i64; 4],
+    budget: &mut usize,
+    lattice: crate::raster_viewport::RasterLattice,
+) -> Outcome {
     if b.table_decoration().suppress_border {
         return Outcome::Unavailable;
     }
@@ -298,7 +316,10 @@ pub(crate) fn paint(
         let Some(area) = plan.ink_bounds(b) else {
             return Outcome::Unavailable;
         };
-        let (w, h) = (area.w.ceil().max(1.0) as u32, area.h.ceil().max(1.0) as u32);
+        let (w, h) = (
+            (f64::from(area.w) * lattice.scale).ceil().max(1.0) as u32,
+            (f64::from(area.h) * lattice.scale).ceil().max(1.0) as u32,
+        );
         let Some(cost) = (w as usize).checked_mul(h as usize) else {
             return Outcome::BudgetExceeded;
         };
@@ -306,8 +327,15 @@ pub(crate) fn paint(
             return Outcome::BudgetExceeded;
         }
         *budget -= cost;
-        let Some(img) = crate::gradient::raster(css, w, h, b.font_size) else {
-            return Outcome::Unavailable;
+        let Some(img) = crate::gradient::raster_at_scale(css, w, h, if lattice.scale==1.0 {(w as f32,h as f32)} else {(area.w,area.h)}, b.font_size,lattice.scale)
+        else {
+            // Unit entrypoints keep their established ordinary-border fallback.
+            // A checked device raster must not certify an omitted generated image.
+            return if lattice.scale == 1.0 {
+                Outcome::Unavailable
+            } else {
+                Outcome::RasterFailure
+            };
         };
         generated = img;
         &generated
@@ -328,17 +356,25 @@ pub(crate) fn paint(
     {
         return Outcome::Unavailable;
     }
-    let Some(g) = plan.geometry(b, (image.width, image.height)) else {
+    let density = if plan.gradient.is_some() {
+        lattice.scale
+    } else {
+        1.0
+    };
+    let Some(g) = plan.geometry(
+        b,
+        (
+            (f64::from(image.width) / density).ceil() as u32,
+            (f64::from(image.height) / density).ceil() as u32,
+        ),
+    ) else {
         return Outcome::Unavailable;
     };
-    let x0 = clip[0].max(0).max(g.area.x.floor() as i64);
-    let y0 = clip[1].max(0).max(g.area.y.floor() as i64);
-    let x1 = clip[2]
-        .min(surface.width as i64)
-        .min((g.area.x + g.area.w).ceil() as i64);
-    let y1 = clip[3]
-        .min(surface.height as i64)
-        .min((g.area.y + g.area.h).ceil() as i64);
+    let bounds = lattice.bounds([g.area.x, g.area.y, g.area.x + g.area.w, g.area.y + g.area.h]);
+    let x0 = clip[0].max(0).max(bounds[0]);
+    let y0 = clip[1].max(0).max(bounds[1]);
+    let x1 = clip[2].min(i64::from(surface.width)).min(bounds[2]);
+    let y1 = clip[3].min(i64::from(surface.height)).min(bounds[3]);
     let cost = (x1 - x0).max(0) as usize * (y1 - y0).max(0) as usize;
     if cost > *budget {
         return Outcome::BudgetExceeded;
@@ -393,17 +429,21 @@ pub(crate) fn paint(
                 },
             );
             for y in y0..y1 {
-                let py = y as f64 + 0.5 - g.dy[row];
+                let py = lattice.css_point(0.0, y as f64 + 0.5).1 - g.dy[row];
                 let Some(v) = ay.sample(py) else {
                     continue;
                 };
                 for x in x0..x1 {
-                    let px = x as f64 + 0.5 - g.dx[col];
+                    let px = lattice.css_point(x as f64 + 0.5, 0.0).0 - g.dx[col];
                     let Some(u) = ax.sample(px) else {
                         continue;
                     };
-                    let sx = (g.sx[col] + u * sw).floor().min(image.width as f64 - 1.0) as usize;
-                    let sy = (g.sy[row] + v * sh).floor().min(image.height as f64 - 1.0) as usize;
+                    let sx = ((g.sx[col] + u * sw) * density)
+                        .floor()
+                        .min(image.width as f64 - 1.0) as usize;
+                    let sy = ((g.sy[row] + v * sh) * density)
+                        .floor()
+                        .min(image.height as f64 - 1.0) as usize;
                     let i = (sy * image.width as usize + sx) * 4;
                     let src = image.pixels[i..i + 4].try_into().unwrap();
                     let dst = surface.get_pixel(x as u32, y as u32).unwrap();

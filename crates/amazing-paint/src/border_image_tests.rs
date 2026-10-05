@@ -405,3 +405,29 @@ fn changed_urls_or_stylesheet_bases_retire_the_actual_resource_identity() {
         assert!(!delta.changes.is_empty());
     }
 }
+
+#[test]
+fn device_generated_border_failures_are_explicit_and_leave_target_unwritten() {
+    for (css, extent) in [("linear-gradient(red, blue)", 1500.0),
+                          ("linear-gradient(unsupported-color, blue)", 30.0)] {
+        let mut b = box_(&[("border-image-source", css)]);
+        b.border_box.w = extent;
+        b.border_box.h = extent;
+        let mut target = Surface::new(60, 60);
+        target.clear([20, 30, 40, 255]);
+        let original = target.pixels.clone();
+        let mut budget = 16 * 1024 * 1024;
+        let result = paint_at_lattice(&mut target, &b, &crate::paint::NoImages,
+            [0, 0, 60, 60], &mut budget,
+            crate::raster_viewport::RasterLattice { scale: 2.0, offset: (0.0, 0.0) });
+        assert_eq!(result, Outcome::RasterFailure);
+        assert_eq!(target.pixels, original);
+    }
+    let b = box_(&[("border-image-source", "linear-gradient(unsupported-color, blue)")]);
+    assert_eq!(render(&b, &crate::paint::NoImages).1, Outcome::Unavailable);
+    let b = box_(&[("border-image-source", "linear-gradient(red, blue)")]);
+    let mut target = Surface::new(120, 120);
+    assert_eq!(paint_at_lattice(&mut target, &b, &crate::paint::NoImages,
+        [0, 0, 120, 120], &mut 100000,
+        crate::raster_viewport::RasterLattice { scale: 2.0, offset: (0.0, 0.0) }), Outcome::Painted);
+}

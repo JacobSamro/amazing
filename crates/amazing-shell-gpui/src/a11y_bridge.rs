@@ -37,7 +37,7 @@
 //!   so it cannot represent an arbitrarily deep page's AX tree without
 //!   giving every single node two parents (the flattening bug this module
 //!   avoids). The div-tree route is the one that supports real nesting, so
-//!   it is what this module builds: one real, zero-size, off-screen `div`
+//!   it is what this module builds: one real, unpainted, absolutely positioned `div`
 //!   per exposed [`AxNode`], nested exactly like the [`AxTree`] itself.
 //! - The trade-off: `div()`'s public accessibility builder methods
 //!   (`.aria_label`, `.aria_selected`, `.aria_toggled`, `.aria_numeric_value`,
@@ -97,6 +97,8 @@ pub struct AxNodeAttrs {
     /// Stable id across rebuilds — see the module doc's "Identity" section.
     pub id: String,
     pub role: gpui::accesskit::Role,
+    /// Actual border/text union in document CSS pixels, from this layout.
+    pub bounds: Option<amazing_a11y::AxRect>,
     pub label: Option<String>,
     pub description: Option<String>,
     pub value: Option<String>,
@@ -332,6 +334,7 @@ fn node_attrs_with(
     Some(AxNodeAttrs {
         id: stable_id(node),
         role: map_role(node.role),
+        bounds: node.bounds,
         label: non_empty(&node.name),
         description: non_empty(&node.description),
         value: props.value_text.clone(),
@@ -356,20 +359,39 @@ fn node_attrs_with(
     })
 }
 
-/// Builds the real, zero-size, off-screen GPUI element tree for `attrs`,
+/// Builds an unpainted GPUI element tree with actual layout geometry for `attrs`,
 /// recursively. Every node is a real `div()` so GPUI's own per-frame walk
 /// derives correct parent/child AccessKit edges from real element nesting
 /// (see the module doc's design section for why this, and not the flat
 /// synthetic-children hook, is the only one of GPUI's two public mechanisms
 /// that supports an arbitrarily deep tree).
 pub fn build_element(attrs: &AxNodeAttrs) -> gpui::AnyElement {
+    build_element_at(attrs, (0., 0.))
+}
+
+fn geometry_at(attrs: &AxNodeAttrs, parent_origin: (f32, f32))
+    -> (amazing_a11y::AxRect, (f32, f32))
+{
+    let bounds = attrs.bounds.filter(|r| [r.x, r.y, r.width, r.height]
+        .iter().all(|value| value.is_finite()))
+        .unwrap_or_default();
+    (amazing_a11y::AxRect {
+        x: bounds.x - parent_origin.0, y: bounds.y - parent_origin.1,
+        width: bounds.width.max(0.), height: bounds.height.max(0.),
+    }, (bounds.x, bounds.y))
+}
+
+fn build_element_at(attrs: &AxNodeAttrs, parent_origin: (f32, f32)) -> gpui::AnyElement {
+    let (geometry, child_origin) = geometry_at(attrs, parent_origin);
     let bare = div()
-        // Never painted or hit-tested: this subtree exists only to carry
-        // accessibility data to GPUI's a11y walk, not to render anything or
-        // occupy layout space in the real page viewport.
+        // Hidden absolute shadows preserve the semantic parent structure.
+        // GPUI collects AX bounds during prepaint before hidden paint returns;
+        // they occupy no flow space and install no input handlers.
         .absolute()
-        .w(px(0.))
-        .h(px(0.))
+        .left(px(geometry.x))
+        .top(px(geometry.y))
+        .w(px(geometry.width))
+        .h(px(geometry.height))
         .invisible();
     // `amazing_a11y::Role::Generic` (ARIA's own catch-all, kept in the tree
     // for structural reasons even with no name of its own — see
@@ -381,7 +403,7 @@ pub fn build_element(attrs: &AxNodeAttrs) -> gpui::AnyElement {
     // normally, exactly like any ordinary non-accessible wrapper `div` in a
     // ordinary GPUI app.
     if attrs.role == gpui::accesskit::Role::GenericContainer {
-        return bare.children(attrs.children.iter().map(build_element)).into_any_element();
+        return bare.children(attrs.children.iter().map(|child| build_element_at(child, child_origin))).into_any_element();
     }
     let mut el = bare.id(SharedString::from(attrs.id.clone())).role(attrs.role);
     if let Some(label) = &attrs.label {
@@ -444,15 +466,21 @@ pub fn build_element(attrs: &AxNodeAttrs) -> gpui::AnyElement {
     if attrs.report_as_active_descendant {
         el = el.aria_active_descendant();
     }
-    el.children(attrs.children.iter().map(build_element)).into_any_element()
+    el.children(attrs.children.iter().map(|child| build_element_at(child, child_origin))).into_any_element()
 }
 
 /// Convenience entry point for a caller that only holds an [`AxTree`]: builds
 /// the attribute tree from its root and the real element tree from that, or
 /// an empty (no-op) element if the tree has no root.
 pub fn ax_tree_element(tree: &AxTree) -> gpui::AnyElement {
+    ax_tree_element_with_scroll(tree, (0., 0.))
+}
+
+/// GPUI applies the actual display scale to AccessKit bounds in prepaint.
+/// Supply CSS scroll only here; multiplying by DPR would apply it twice.
+pub fn ax_tree_element_with_scroll(tree: &AxTree, scroll: (f32, f32)) -> gpui::AnyElement {
     match tree.root().and_then(|root| node_attrs(tree, root)) {
-        Some(attrs) => build_element(&attrs),
+        Some(attrs) => build_element_at(&attrs, scroll),
         None => div().into_any_element(),
     }
 }
@@ -464,6 +492,36 @@ mod tests {
 
     fn tree_for(html: &str) -> AxTree {
         build_document(html, "", 800.0, Some(600.0)).tree
+    }
+
+    #[test]
+    fn actual_ax_geometry_translates_scroll_once_and_preserves_parent_offsets() {
+        let tree = tree_for("<a href='/'>link</a>");
+        let mut attrs = node_attrs(&tree, tree.root().unwrap()).unwrap();
+        attrs.bounds = Some(amazing_a11y::AxRect { x: 30., y: 200., width: 80., height: 20. });
+        let original = (attrs.id.clone(), attrs.role, attrs.label.clone());
+        let (translated, origin) = geometry_at(&attrs, (5., 150.));
+        assert_eq!(translated, amazing_a11y::AxRect { x: 25., y: 50., width: 80., height: 20. });
+        assert_eq!(origin, (30., 200.));
+        let mut child = attrs.clone();
+        child.bounds = Some(amazing_a11y::AxRect { x: 35., y: 203., width: 20., height: 10. });
+        assert_eq!(geometry_at(&child, origin).0,
+            amazing_a11y::AxRect { x: 5., y: 3., width: 20., height: 10. });
+        assert_eq!((attrs.id, attrs.role, attrs.label), original);
+    }
+
+    #[test]
+    fn missing_ax_geometry_keeps_document_origin_and_invalid_bounds_do_not_escape() {
+        let tree = tree_for("<p>text</p>");
+        let mut attrs = node_attrs(&tree, tree.root().unwrap()).unwrap();
+        for bounds in [None, Some(amazing_a11y::AxRect {
+            x: f32::NAN, y: 0., width: 10., height: 10.,
+        })] {
+            attrs.bounds = bounds;
+            let (geometry, origin) = geometry_at(&attrs, (4., 100.));
+            assert_eq!(origin, (0., 0.));
+            assert_eq!(geometry, amazing_a11y::AxRect { x: -4., y: -100., width: 0., height: 0. });
+        }
     }
 
     /// Depth-first search for the first node with the given role. Real pages

@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use amazing_net::{FetchOptions, Url, fetch, resolve};
 use amazing_paint::Surface;
@@ -12,6 +12,7 @@ use crate::engine_compositor::EngineCompositor;
 use crate::compositor_presenter::{GpuiFrame, GpuiPresenter};
 use crate::session_state::BrowserSession;
 use amazing_compositor::Presenter;
+use crate::viewport_metrics::ViewportMetrics;
 
 const VIEWPORT_WIDTH: u32 = 960;
 const VIEWPORT_HEIGHT: u32 = 570;
@@ -40,6 +41,7 @@ struct PageResources {
     images: Vec<PageImage>,
     deferred_images: Vec<DeferredImage>,
     backgrounds: Vec<(String, amazing_media::Image)>,
+    metrics: ViewportMetrics,
 }
 
 impl amazing_layout::ReplacedElementProvider for PageResources {
@@ -60,6 +62,7 @@ impl amazing_layout::ReplacedElementProvider for PageResources {
 }
 
 impl amazing_paint::ImageProvider for PageResources {
+    fn device_scale(&self) -> f32 { self.metrics.device_scale }
     fn background_image(&self, _node: amazing_dom::NodeIdx, url: &str) -> Option<&amazing_media::Image> {
         self.backgrounds.iter().find(|(key,_)| key == url).map(|(_,image)| image)
     }
@@ -84,7 +87,7 @@ const DEMO_HTML: &str = r#"
         <article><strong>CSS</strong><p>Cascade, flex, grid, and intrinsic layout.</p></article>
         <article><strong>PAINT</strong><p>Software rasterization into a native GPUI viewport.</p></article>
       </section>
-      <p class="proof">LIVE ENGINE SURFACE  ·  960 × 570 RGBA8  ·  WIN-001</p>
+      <p class="proof">LIVE ENGINE SURFACE  ·  NATIVE SOFTWARE RASTER</p>
     </main>
   </body>
 </html>
@@ -148,6 +151,8 @@ article p { display: block; margin: 10px 0px 0px 0px; color: #5f6368; font-size:
 #[derive(Clone)]
 pub struct EngineViewport {
     pub image: Arc<RenderImage>,
+    pub metrics: ViewportMetrics,
+    static_document: Option<Rc<StaticDocument>>,
     pub compositor: Option<Rc<RefCell<EngineCompositor>>>,
     scroll_controller: Rc<RefCell<amazing_compositor::ScrollController>>,
     scroll_presenter: Rc<RefCell<GpuiPresenter>>,
@@ -157,6 +162,26 @@ pub struct EngineViewport {
     pub height: u32,
     links: Arc<Vec<LinkRegion>>,
     controls: Arc<Vec<ControlRegion>>,
+}
+
+#[derive(Clone)]
+pub struct ViewportIdentity {
+    pub metrics: ViewportMetrics,
+    static_document: Option<Weak<StaticDocument>>,
+    page: Option<Weak<RetainedPage>>,
+}
+
+impl ViewportIdentity {
+    pub fn is_document(&self) -> bool { self.static_document.is_some() || self.page.is_some() }
+}
+
+struct StaticDocument {
+    dom: amazing_dom::Dom,
+    css: String,
+    font_sheets: Vec<(String, String)>,
+    document_url: Option<String>,
+    options: FetchOptions,
+    session: Option<Rc<RefCell<BrowserSession>>>,
 }
 
 struct RetainedPage {
@@ -197,6 +222,8 @@ struct FormField {
 
 #[derive(Debug, Clone)]
 struct ControlRegion {
+    node: u32,
+    generation: u64,
     x: f32,
     y: f32,
     width: f32,
@@ -226,7 +253,9 @@ pub struct LoadedPage {
 }
 
 pub struct RuntimeUpdate {
-    pub viewport: EngineViewport,
+    pub viewport: Option<EngineViewport>,
+    pub render_failure: Option<String>,
+    pub metrics: ViewportMetrics,
     pub title: Option<String>,
     pub favicon: Option<Arc<RenderImage>>,
     pub navigation: Option<String>,
@@ -236,6 +265,7 @@ pub struct RuntimeUpdate {
 }
 
 pub struct PageRuntime {
+    metrics: ViewportMetrics,
     host: Rc<RefCell<ShellDomHost>>,
     interpreter: amazing_js::Interpreter,
     document_url: String,
@@ -244,6 +274,24 @@ pub struct PageRuntime {
 }
 
 impl PageRuntime {
+    #[cfg(test)]
+    pub(super) fn failure_fixture() -> Self {
+        Self::new_with_metrics(amazing_html::parse(
+            "<style>html,body{margin:0} #target{width:40px;height:40px;border:4px solid red} p{height:1000px}</style><div id=target></div><a href=next>Link</a><p>Scroll</p>"),
+            "https://example.test/failure".into(), FetchOptions::default(), Vec::new(),
+            Rc::new(RefCell::new(BrowserSession::ephemeral())),
+            ViewportMetrics::new(120.0, 100.0, 2.0).unwrap())
+    }
+
+    #[cfg(test)]
+    pub(super) fn metrics_for_fixture(&self) -> ViewportMetrics { self.metrics }
+
+    #[cfg(test)]
+    pub(super) fn fixture_update(&mut self, source: &str) -> RuntimeUpdate {
+        self.interpreter.run_script(source).expect("actual fixture script");
+        self.snapshot(false)
+    }
+
     /// Conservative listener gate until shell hit testing maps a pixel to a
     /// DOM event target. A non-passive listener anywhere keeps wheel on the
     /// main-thread path.
@@ -257,7 +305,7 @@ impl PageRuntime {
     }
     /// Fetch lazy images the viewport scrolled into view using this page's
     /// session, then repaint the retained scroll frame.
-    pub fn load_deferred_lazy_images(&self, viewport: &mut EngineViewport) -> bool {
+    pub fn load_deferred_lazy_images(&self, viewport: &mut EngineViewport) -> Result<bool, String> {
         viewport.load_deferred_lazy_images(Some(&self.session), &self.options)
     }
 
@@ -268,6 +316,13 @@ impl PageRuntime {
         scripts: Vec<String>,
         session: Rc<RefCell<BrowserSession>>,
     ) -> Self {
+        Self::new_with_metrics(dom, document_url, options, scripts, session, ViewportMetrics::default())
+    }
+
+    fn new_with_metrics(
+        dom: amazing_dom::Dom, document_url: String, options: FetchOptions,
+        scripts: Vec<String>, session: Rc<RefCell<BrowserSession>>, metrics: ViewportMetrics,
+    ) -> Self {
         let host = Rc::new(RefCell::new(ShellDomHost::new(
             dom,
             document_url.clone(),
@@ -276,6 +331,8 @@ impl PageRuntime {
         let mut interpreter = amazing_js::Interpreter::new();
         interpreter.set_dom_host(host.clone());
         interpreter.set_location_url(document_url.clone());
+        interpreter.set_viewport_metrics(metrics.css_width as u32, metrics.css_height as u32,
+            f64::from(metrics.device_scale)).expect("validated actual viewport metrics");
         for source in scripts {
             let _ = interpreter.run_script(&source);
         }
@@ -286,6 +343,7 @@ impl PageRuntime {
             }
         }
         Self {
+            metrics,
             host,
             interpreter,
             document_url,
@@ -301,29 +359,14 @@ impl PageRuntime {
             .interpreter
             .take_history_update()
             .map(|(url, replace, _)| (url, replace));
+        let (viewport, render_failure) = match self.render_viewport() {
+            Ok(viewport) => (Some(viewport), None),
+            Err(error) => (None, Some(error)),
+        };
         let host = self.host.borrow();
         let dom = &host.dom;
-        let (css, font_sheets) = load_document_styles(
-            dom,
-            &self.document_url,
-            &self.options,
-            Some(&self.session),
-        );
-        let resources = load_page_resources(
-            dom,
-            &css,
-            &self.document_url,
-            &self.options,
-            Some(&self.session),
-        );
         RuntimeUpdate {
-            viewport: EngineViewport::from_dom_with_style_sources(
-                dom,
-                &css,
-                resources,
-                Some(&self.document_url),
-                &font_sheets,
-            ),
+            viewport, render_failure, metrics: self.metrics,
             title: document_title(dom),
             favicon: load_favicon(
                 dom,
@@ -336,6 +379,25 @@ impl PageRuntime {
             history_update,
             default_prevented,
         }
+    }
+
+    fn render_viewport(&self) -> Result<EngineViewport, String> {
+        let host = self.host.borrow();
+        let (css, font_sheets) = load_document_styles(&host.dom, &self.document_url,
+            &self.options, Some(&self.session));
+        let resources = load_page_resources_with_metrics(&host.dom, &css, &self.document_url,
+            &self.options, Some(&self.session), self.metrics);
+        EngineViewport::from_dom_with_style_sources_and_metrics(&host.dom, &css, resources,
+            Some(&self.document_url), &font_sheets, self.metrics)
+    }
+
+    /// Reflow the authentic runtime DOM without consuming navigation/history
+    /// directives, pumping timers, or evaluating author script.
+    pub fn reflow(&mut self, metrics: ViewportMetrics) -> Result<EngineViewport, String> {
+        self.metrics = metrics;
+        self.interpreter.set_viewport_metrics(metrics.css_width as u32, metrics.css_height as u32,
+            f64::from(metrics.device_scale)).expect("validated actual viewport metrics");
+        self.render_viewport()
     }
 
     pub fn dispatch_click(&mut self, node: u32) -> RuntimeUpdate {
@@ -385,9 +447,16 @@ impl EngineViewport {
         body: Vec<u8>,
         session: Rc<RefCell<BrowserSession>>,
     ) -> Result<LoadedPage, String> {
+        Self::load_request_with_metrics(address, method, body, session, ViewportMetrics::default())
+    }
+
+    pub fn load_request_with_metrics(
+        address: &str, method: &str, body: Vec<u8>,
+        session: Rc<RefCell<BrowserSession>>, metrics: ViewportMetrics,
+    ) -> Result<LoadedPage, String> {
         if address == "amazing://status" {
             return Ok(LoadedPage {
-                viewport: Self::demo(),
+                viewport: Self::demo().try_reflow_static(metrics)?.ok_or("missing demo document")?,
                 final_address: address.to_string(),
                 title: Some("Amazing — Phase 9 status".into()),
                 favicon: None,
@@ -396,7 +465,7 @@ impl EngineViewport {
         }
         if address == "amazing://newtab" {
             return Ok(LoadedPage {
-                viewport: Self::new_tab(),
+                viewport: Self::new_tab().try_reflow_static(metrics)?.ok_or("missing newtab document")?,
                 final_address: address.to_string(),
                 title: Some("New tab".into()),
                 favicon: None,
@@ -442,16 +511,12 @@ impl EngineViewport {
         let dom = amazing_html::parse(&html);
         let scripts = collect_document_scripts(&dom, &final_address, &options, Some(&session));
         if !scripts.is_empty() {
-            let mut runtime = PageRuntime::new(
-                dom,
-                final_address.clone(),
-                options,
-                scripts,
-                session,
+            let mut runtime = PageRuntime::new_with_metrics(
+                dom, final_address.clone(), options, scripts, session, metrics,
             );
             let update = runtime.snapshot(false);
             return Ok(LoadedPage {
-                viewport: update.viewport,
+                viewport: update.viewport.ok_or_else(|| update.render_failure.unwrap_or_else(|| "initial runtime render unavailable".into()))?,
                 final_address,
                 title: update.title,
                 favicon: update.favicon,
@@ -459,17 +524,17 @@ impl EngineViewport {
             });
         }
         let (css, font_sheets) = load_document_styles(&dom, &final_address, &options, Some(&session));
-        let resources = load_page_resources(&dom, &css, &final_address, &options, Some(&session));
+        let resources = load_page_resources_with_metrics(&dom, &css, &final_address, &options, Some(&session), metrics);
         let title = document_title(&dom);
         let favicon = load_favicon(&dom, &final_address, &options, Some(&session));
+        let mut viewport = Self::from_dom_with_style_sources_and_metrics(
+            &dom, &css, resources, Some(&final_address), &font_sheets, metrics)?;
+        viewport.static_document = Some(Rc::new(StaticDocument {
+            dom, css, font_sheets, document_url: Some(final_address.clone()),
+            options, session: Some(session),
+        }));
         Ok(LoadedPage {
-            viewport: Self::from_dom_with_style_sources(
-                &dom,
-                &css,
-                resources,
-                Some(&final_address),
-                &font_sheets,
-            ),
+            viewport,
             final_address,
             title,
             favicon,
@@ -542,6 +607,8 @@ impl EngineViewport {
             ));
             frames.push(Self {
                 image,
+                metrics: ViewportMetrics::new(decoded.width as f32, decoded.height as f32, 1.).expect("video extent"),
+                static_document: None,
                 compositor: None,
                 scroll_controller: Rc::new(RefCell::new(amazing_compositor::ScrollController::default())),
                 scroll_presenter: Rc::new(RefCell::new(GpuiPresenter::default())),
@@ -566,6 +633,8 @@ impl EngineViewport {
         }
         Ok(Self {
             image: Arc::new(rgba_to_render_image(width, height, rgba)),
+            metrics: ViewportMetrics::new(width as f32, height as f32, 1.).ok_or("invalid RGBA extent")?,
+            static_document: None,
             compositor: None,
             scroll_controller: Rc::new(RefCell::new(amazing_compositor::ScrollController::default())),
             scroll_presenter: Rc::new(RefCell::new(GpuiPresenter::default())),
@@ -580,7 +649,12 @@ impl EngineViewport {
 
     fn from_document(html: &str, css: &str) -> Self {
         let dom = amazing_html::parse(html);
-        Self::from_dom(&dom, css)
+        let mut viewport = Self::from_dom(&dom, css);
+        viewport.static_document = Some(Rc::new(StaticDocument {
+            dom, css: css.into(), font_sheets: Vec::new(), document_url: None,
+            options: FetchOptions::default(), session: None,
+        }));
+        viewport
     }
 
     fn from_dom(dom: &amazing_dom::Dom, css: &str) -> Self {
@@ -603,8 +677,16 @@ impl EngineViewport {
         document_url: Option<&str>,
         font_sheets: &[(String, String)],
     ) -> Self {
+        Self::from_dom_with_style_sources_and_metrics(dom, css, resources, document_url,
+            font_sheets, ViewportMetrics::default()).expect("unit shell document render")
+    }
+
+    fn from_dom_with_style_sources_and_metrics(
+        dom: &amazing_dom::Dom, css: &str, resources: PageResources,
+        document_url: Option<&str>, font_sheets: &[(String, String)], metrics: ViewportMetrics,
+    ) -> Result<Self, String> {
         let (surface, links, controls, scene) =
-            render_dom_with_resources(dom, css, resources, document_url, font_sheets);
+            render_dom_with_resources(dom, css, resources, document_url, font_sheets, metrics)?;
         let width = surface.width;
         let height = surface.height;
         let image = Arc::new(surface_to_render_image(surface));
@@ -615,8 +697,10 @@ impl EngineViewport {
             ),
             None => (None, None),
         };
-        Self {
+        Ok(Self {
             image,
+            metrics,
+            static_document: None,
             compositor,
             scroll_controller: Rc::new(RefCell::new(amazing_compositor::ScrollController::default())),
             scroll_presenter: Rc::new(RefCell::new(GpuiPresenter::default())),
@@ -626,6 +710,59 @@ impl EngineViewport {
             height,
             links: Arc::new(links),
             controls: Arc::new(controls),
+        })
+    }
+
+    /// Static reflow retains the actual originally parsed arena. Runtime pages
+    /// instead reflow through their authentic ShellDomHost owner.
+    pub fn reflow_static(&self, metrics: ViewportMetrics) -> Option<Self> {
+        self.try_reflow_static(metrics).expect("static shell render")
+    }
+
+    pub fn try_reflow_static(&self, metrics: ViewportMetrics) -> Result<Option<Self>, String> {
+        let Some(input) = self.static_document.as_ref() else { return Ok(None) };
+        let resources = if let Some(url) = &input.document_url {
+            load_page_resources_with_metrics(&input.dom, &input.css, url, &input.options,
+                input.session.as_ref(), metrics)
+        } else { PageResources { metrics, ..Default::default() } };
+        let mut next = Self::from_dom_with_style_sources_and_metrics(&input.dom, &input.css,
+            resources, input.document_url.as_deref(), &input.font_sheets, metrics)?;
+        next.static_document = Some(input.clone());
+        Ok(Some(next))
+    }
+
+    /// The new root owns its own scroll IDs; only the logical offset crosses
+    /// a reflow. The compositor clamps against the newly laid-out extents.
+    pub fn restore_root_scroll(&self, offset: (f32, f32)) -> Result<(), String> {
+        if let Some(node) = self.root_scroll_id() {
+            self.scroll_input(amazing_compositor::ScrollInput::ScrollTo {
+                node, target: offset, behavior: amazing_compositor::ScrollBehavior::Instant,
+            }, false)?;
+        }
+        Ok(())
+    }
+
+    pub fn identity(&self) -> ViewportIdentity {
+        ViewportIdentity {
+            metrics: self.metrics,
+            static_document: self.static_document.as_ref().map(Rc::downgrade),
+            page: self.page.as_ref().map(Rc::downgrade),
+        }
+    }
+
+    pub fn accepts_identity(&self, other: &ViewportIdentity) -> bool {
+        if self.metrics != other.metrics { return false; }
+        match (&self.static_document, &other.static_document) {
+            (Some(a), Some(b)) => Weak::ptr_eq(&Rc::downgrade(a), b),
+            _ => self.page.as_ref().zip(other.page.as_ref())
+                .is_some_and(|(a, b)| Weak::ptr_eq(&Rc::downgrade(a), b)),
+        }
+    }
+
+    pub fn same_document_owner(&self, other: &Self) -> bool {
+        match (&self.static_document, &other.static_document) {
+            (Some(a), Some(b)) => Rc::ptr_eq(a, b),
+            _ => self.page.as_ref().zip(other.page.as_ref()).is_some_and(|(a, b)| Rc::ptr_eq(a, b)),
         }
     }
 
@@ -650,7 +787,8 @@ impl EngineViewport {
             &page.text,
             &images,
             &amazing_paint::controls::NoControls,
-        );
+        ).with_raster_viewport(self.metrics.raster_viewport()?)
+            .map_err(|error| format!("retained paint view: {error:?}"))?;
         let mut scene = scene.borrow_mut();
         change(scene.compositor_mut())?;
         scene.update(&view)
@@ -668,6 +806,7 @@ impl EngineViewport {
         let (Some(_), Some(scene)) = (&self.page, &self.compositor) else { return Ok(false) };
         let result = {
             let mut scene = scene.borrow_mut();
+            let input = self.device_scroll_input(input, scene.compositor_mut())?;
             self.scroll_controller.borrow_mut()
                 .handle_input(scene.compositor_mut(), input, blocking_listener, now_ms)
                 .map_err(|error| error.to_string())?
@@ -679,6 +818,33 @@ impl EngineViewport {
         Ok(true)
     }
 
+    /// Input and DOM event offsets remain CSS pixels; the retained scene is physical.
+    fn device_scroll_input(
+        &self, input: amazing_compositor::ScrollInput,
+        compositor: &amazing_compositor::Compositor,
+    ) -> Result<amazing_compositor::ScrollInput, String> {
+        use amazing_compositor::{ScrollInput as I, ScrollKey as K, ScrollBehavior};
+        let viewport = self.metrics.raster_viewport()?;
+        let pair = |value| viewport.css_scroll_to_device(value)
+            .ok_or_else(|| "nonfinite device scroll input".to_string());
+        Ok(match input {
+            I::Wheel { x, y, delta } => { let (x,y)=pair((x,y))?; I::Wheel{x,y,delta:pair(delta)?} }
+            I::Trackpad { x, y, delta } => { let (x,y)=pair((x,y))?; I::Trackpad{x,y,delta:pair(delta)?} }
+            I::TouchPan { x, y, delta } => { let (x,y)=pair((x,y))?; I::TouchPan{x,y,delta:pair(delta)?} }
+            I::ScrollTo { node, target, behavior } => I::ScrollTo{node,target:pair(target)?,behavior},
+            I::Momentum { node, velocity } => I::Momentum{node,velocity:pair(velocity)?},
+            I::Keyboard { node, key } if matches!(key,K::ArrowUp|K::ArrowDown|K::ArrowLeft|K::ArrowRight) => {
+                let old = compositor.trees().scroll(node).ok_or("missing scroll node")?.offset;
+                let delta = match key { K::ArrowUp=>(0.,-40.), K::ArrowDown=>(0.,40.),
+                    K::ArrowLeft=>(-40.,0.), _=>(40.,0.) };
+                let delta = pair(delta)?;
+                I::ScrollTo{node,target:(old.0+delta.0,old.1+delta.1),behavior:ScrollBehavior::Instant}
+            }
+            // Page distance and endpoints already derive from physical scene bounds.
+            other => other,
+        })
+    }
+
     /// Animates a transform property (e.g. a CSS `transform` transition) on
     /// the live viewport through the same retained, cached-tile frame path
     /// `scroll_input` uses, instead of a full DOM-to-paint repaint (COMP-18).
@@ -688,6 +854,14 @@ impl EngineViewport {
         matrix: amazing_compositor::Matrix4,
     ) -> Result<(), String> {
         let Some(scene) = &self.compositor else { return Ok(()) };
+        let mut matrix = matrix;
+        let axes = [self.metrics.device_scale, self.metrics.device_scale, 1., 1.];
+        for (row, factor) in axes.iter().enumerate() {
+            for (column, inverse) in axes.iter().enumerate() {
+                matrix.0[row][column] *= factor / inverse;
+                if !matrix.0[row][column].is_finite() { return Err("nonfinite device transform".into()); }
+            }
+        }
         scene
             .borrow_mut()
             .compositor_mut()
@@ -737,7 +911,8 @@ impl EngineViewport {
                     let view = amazing_paint::display_list_view::DisplayListView::new(
                         &page.root, self.width, self.height, &page.text, &images,
                         &amazing_paint::controls::NoControls,
-                    );
+                    ).with_raster_viewport(self.metrics.raster_viewport()?)
+                        .map_err(|error| format!("retained raster viewport: {error:?}"))?;
                     scene.update(&view)?;
                     scene.compositor_mut().build_cached_frame(self.width, self.height)
                         .map_err(|error| error.to_string())?
@@ -760,6 +935,11 @@ impl EngineViewport {
         Ok(())
     }
 
+    pub fn load_static_deferred_images(&mut self) -> Result<bool, String> {
+        let Some(input) = self.static_document.clone() else { return Ok(false) };
+        self.load_deferred_lazy_images(input.session.as_ref(), &input.options)
+    }
+
     /// Fetch deferred lazy images the root scroll offset has brought into view,
     /// then repaint the scrolled frame. Layout already reserved each deferred
     /// box, so the fetched pixels paint into it; the next DOM snapshot relayouts
@@ -768,19 +948,19 @@ impl EngineViewport {
         &mut self,
         session: Option<&Rc<RefCell<BrowserSession>>>,
         options: &FetchOptions,
-    ) -> bool {
+    ) -> Result<bool, String> {
         let (scroll_x, scroll_y) = self.root_scroll_offset();
         let viewport = amazing_media::loading::ViewportRect {
             x: scroll_x,
             y: scroll_y,
-            width: self.width as f32,
-            height: self.height as f32,
+            width: self.metrics.css_width,
+            height: self.metrics.css_height,
         };
         let loaded = {
-            let Some(page) = self.page.as_mut() else { return false };
-            let Some(page) = Rc::get_mut(page) else { return false };
+            let Some(page) = self.page.as_mut() else { return Ok(false) };
+            let Some(page) = Rc::get_mut(page) else { return Ok(false) };
             if page.resources.deferred_images.is_empty() {
-                return false;
+                return Ok(false);
             }
             let pending = std::mem::take(&mut page.resources.deferred_images);
             let mut loaded = false;
@@ -842,10 +1022,10 @@ impl EngineViewport {
             loaded
         };
         if !loaded {
-            return false;
+            return Ok(false);
         }
-        let _ = self.repaint_scroll_frame();
-        true
+        self.repaint_scroll_frame()?;
+        Ok(true)
     }
 
     /// Repaint the retained scroll frame from the current page resources.
@@ -866,7 +1046,8 @@ impl EngineViewport {
                 &page.text,
                 &images,
                 &amazing_paint::controls::NoControls,
-            );
+            ).with_raster_viewport(self.metrics.raster_viewport()?)
+                .map_err(|error| format!("retained paint view: {error:?}"))?;
             scene.update(&view)?;
             scene
                 .compositor_mut()
@@ -894,7 +1075,7 @@ impl EngineViewport {
     }
 
     pub fn scroll_element(&self) -> Option<gpui::AnyElement> {
-        self.scroll_frame.borrow().as_ref().map(GpuiFrame::element)
+        self.scroll_frame.borrow().as_ref().map(|frame| frame.element_with_device_scale(self.metrics.device_scale))
     }
 
     /// A11Y-11: the accessibility tree for this page, if one was retained
@@ -910,7 +1091,8 @@ impl EngineViewport {
 
     pub fn root_scroll_offset(&self) -> (f32, f32) {
         self.compositor.as_ref().map_or((0., 0.), |scene|
-            scene.borrow_mut().compositor_mut().root_scroll_offset())
+            { let offset = scene.borrow_mut().compositor_mut().root_scroll_offset();
+              (offset.0 / self.metrics.device_scale, offset.1 / self.metrics.device_scale) })
     }
 
     pub fn root_scroll_fraction(&self) -> Option<f32> {
@@ -933,7 +1115,12 @@ impl EngineViewport {
     }
 
     pub fn take_scroll_events(&self) -> Vec<amazing_compositor::AsyncScrollEvent> {
-        self.scroll_controller.borrow_mut().take_scroll_events()
+        let mut events = self.scroll_controller.borrow_mut().take_scroll_events();
+        for event in &mut events {
+            event.offset.0 /= self.metrics.device_scale;
+            event.offset.1 /= self.metrics.device_scale;
+        }
+        events
     }
 
     pub fn link_hit_at(&self, x: f32, y: f32) -> Option<(u32, &str)> {
@@ -964,6 +1151,16 @@ impl EngineViewport {
             control.value.as_str(),
             (control.x, control.y, control.width, control.height),
         ))
+    }
+
+    pub fn control_identity(&self, index: usize) -> Option<(u32, u64)> {
+        self.controls.get(index).map(|control| (control.node, control.generation))
+    }
+
+    pub fn text_control_by_identity(&self, identity: (u32, u64)) -> Option<(usize, ControlRect)> {
+        let index = self.controls.iter().position(|control|
+            control.kind == ControlKind::Text && (control.node, control.generation) == identity)?;
+        self.text_control(index).map(|(_, rect)| (index, rect))
     }
 
     pub fn form_request(&self, index: usize, edited_value: Option<&str>) -> Option<FormRequest> {
@@ -1031,7 +1228,7 @@ fn render_demo_surface() -> Surface {
 #[cfg(test)]
 fn render_surface(html: &str, css: &str) -> Surface {
     let dom = amazing_html::parse(html);
-    render_dom_with_resources(&dom, css, PageResources::default(), None, &[]).0
+    render_dom_with_resources(&dom, css, PageResources::default(), None, &[], ViewportMetrics::default()).expect("unit document render").0
 }
 
 fn render_dom_with_resources(
@@ -1040,47 +1237,33 @@ fn render_dom_with_resources(
     resources: PageResources,
     document_url: Option<&str>,
     font_sheets: &[(String, String)],
-) -> (Surface, Vec<LinkRegion>, Vec<ControlRegion>, Option<(RetainedPage, EngineCompositor)>) {
+    metrics: ViewportMetrics,
+) -> Result<(Surface, Vec<LinkRegion>, Vec<ControlRegion>, Option<(RetainedPage, EngineCompositor)>), String> {
     let text = load_page_text(css, document_url.unwrap_or("amazing://newtab"), font_sheets);
-    let root = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
-        dom,
-        css,
-        VIEWPORT_WIDTH as f32,
-        Some(VIEWPORT_HEIGHT as f32),
-        &text,
-        &resources,
-    );
+    let environment = amazing_css::MediaEnvironment {
+        viewport_width_px: metrics.css_width, viewport_height_px: metrics.css_height,
+        device_pixel_ratio: metrics.device_scale, ..Default::default()
+    };
+    let styles = amazing_css::compute_with_environment(dom,
+        &[amazing_css::parse_stylesheet(css)], &environment);
+    let root = amazing_layout::layout_styled_document_from_root(dom, amazing_dom::NodeIdx(0),
+        &styles, &text, &resources, metrics.css_width, Some(metrics.css_height))
+        .expect("shell renders its actual Document root");
     let links = document_url
         .map(|url| collect_link_regions(dom, &root, url))
         .unwrap_or_default();
     let controls = document_url
         .map(|url| collect_control_regions(dom, &root, url))
         .unwrap_or_default();
-    let styles = amazing_css::compute(dom, &[amazing_css::parse_stylesheet(css)]);
     let images = amazing_paint::image::StyledImages { images: &resources, styles: &styles };
-    let surface = amazing_paint::paint_document_with_text_resources_and_controls(
-        &root,
-        VIEWPORT_WIDTH,
-        VIEWPORT_HEIGHT,
-        &text,
-        &images,
-        &amazing_paint::controls::NoControls,
-    );
-    let view = amazing_paint::display_list_view::DisplayListView::new(
-        &root,
-        VIEWPORT_WIDTH,
-        VIEWPORT_HEIGHT,
-        &text,
-        &images,
-        &amazing_paint::controls::NoControls,
-    );
-    let compositor = match EngineCompositor::new(&view, VIEWPORT_WIDTH, VIEWPORT_HEIGHT) {
-        Ok(scene) => Some(scene),
-        Err(error) => {
-            eprintln!("amazing shell: compositor scene failed: {error}");
-            None
-        }
-    };
+    let raster = metrics.raster_viewport()?;
+    let (physical_width, physical_height) = raster.physical_size();
+    let surface = amazing_paint::paint_document_at_viewport(&root, raster, &text,
+        &images, &amazing_paint::controls::NoControls).map_err(|error| format!("raster: {error:?}"))?;
+    let view = amazing_paint::display_list_view::DisplayListView::new(&root,
+        physical_width, physical_height, &text, &images, &amazing_paint::controls::NoControls)
+        .with_raster_viewport(raster).map_err(|error| format!("paint view: {error:?}"))?;
+    let compositor = Some(EngineCompositor::new(&view, physical_width, physical_height)?);
     drop(view);
     drop(images);
     let accessibility = amazing_a11y::build(dom, &styles, &root);
@@ -1088,7 +1271,7 @@ fn render_dom_with_resources(
         RetainedPage { root, text, styles, resources, accessibility },
         compositor,
     ));
-    (surface, links, controls, scene)
+    Ok((surface, links, controls, scene))
 }
 
 fn collect_link_regions(
@@ -1276,10 +1459,13 @@ fn collect_control_regions(
         if let Some(node) = layout.node
             && let Some((kind, name, value, action, method, fields)) =
                 descriptor(dom, node, document_url)
+            && let Some(generation) = dom.node_generation(node)
             && layout.border_box.w > 0.0
             && layout.border_box.h > 0.0
         {
             controls.push(ControlRegion {
+                node: node.0,
+                generation,
                 x: layout.border_box.x,
                 y: layout.border_box.y,
                 width: layout.border_box.w,
@@ -1584,11 +1770,18 @@ fn load_page_resources(
     options: &FetchOptions,
     session: Option<&Rc<RefCell<BrowserSession>>>,
 ) -> PageResources {
+    load_page_resources_with_metrics(dom, css, document_url, options, session, ViewportMetrics::default())
+}
+
+fn load_page_resources_with_metrics(
+    dom: &amazing_dom::Dom, css: &str, document_url: &str, options: &FetchOptions,
+    session: Option<&Rc<RefCell<BrowserSession>>>, metrics: ViewportMetrics,
+) -> PageResources {
     fn attr<'a>(dom: &'a amazing_dom::Dom, node: amazing_dom::NodeIdx, name: &str) -> Option<&'a str> {
         dom.attrs_of(node)?.iter().find(|(key, _)| key.eq_ignore_ascii_case(name))
             .map(|(_, value)| value.as_str())
     }
-    fn source_for(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx) -> Option<amazing_media::responsive::SelectedSource> {
+    fn source_for(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, metrics: ViewportMetrics) -> Option<amazing_media::responsive::SelectedSource> {
         use amazing_media::responsive::{ImageSources, PictureSource, SourceEnvironment, select_source_with_sizes};
         let mut picture = Vec::new();
         if let Some(parent) = dom.get(node).parent.filter(|parent| dom.name(*parent) == Some("picture")) {
@@ -1608,13 +1801,13 @@ fn load_page_resources(
             src: attr(dom, node, "src"), srcset: attr(dom, node, "srcset"),
             sizes: attr(dom, node, "sizes"), picture: &picture,
         }, SourceEnvironment {
-            viewport_width: VIEWPORT_WIDTH as f32, device_pixel_ratio: 1.0,
+            viewport_width: metrics.css_width, device_pixel_ratio: metrics.device_scale,
             slot_width: None, allow_auto_sizes: false,
         }, |query| {
             amazing_css::evaluate_media_query(&amazing_css::MediaQueryList::parse(query),
                 &amazing_css::MediaEnvironment {
-                    viewport_width_px: VIEWPORT_WIDTH as f32,
-                    viewport_height_px: VIEWPORT_HEIGHT as f32,
+                    viewport_width_px: metrics.css_width,
+                    viewport_height_px: metrics.css_height,
                     ..Default::default()
                 })
         }, |mime| matches!(mime.to_ascii_lowercase().as_str(),
@@ -1624,7 +1817,7 @@ fn load_page_resources(
                 amazing_css::parse_sizes_attribute(sizes.unwrap_or(""),
                     &amazing_css::MediaEnvironment {
                         viewport_width_px: env.viewport_width,
-                        viewport_height_px: VIEWPORT_HEIGHT as f32,
+                        viewport_height_px: metrics.css_height,
                         device_pixel_ratio: env.device_pixel_ratio,
                         ..Default::default()
                     }, env.allow_auto_sizes.then_some(env.slot_width).flatten())
@@ -1637,12 +1830,13 @@ fn load_page_resources(
         options: &FetchOptions,
         session: Option<&Rc<RefCell<BrowserSession>>>,
         resources: &mut PageResources,
+        metrics: ViewportMetrics,
     ) {
         if resources.images.len() + resources.deferred_images.len() >= MAX_PAGE_IMAGES {
             return;
         }
         if dom.name(node) == Some("img")
-            && let Some(source) = source_for(dom, node)
+            && let Some(source) = source_for(dom, node, metrics)
             && let Some(address) = resolve_resource_address(document_url, &source.url) {
             if attr(dom, node, "loading").is_some_and(|value| value.eq_ignore_ascii_case("lazy")) {
                 resources.deferred_images.push(DeferredImage { node, address, density: source.density });
@@ -1674,11 +1868,11 @@ fn load_page_resources(
         }
 
         for child in dom.children(node) {
-            walk(dom, child, document_url, options, session, resources);
+            walk(dom, child, document_url, options, session, resources, metrics);
         }
     }
 
-    let mut resources = PageResources::default();
+    let mut resources = PageResources { metrics, ..Default::default() };
     walk(
         dom,
         amazing_dom::NodeIdx(0),
@@ -1686,14 +1880,19 @@ fn load_page_resources(
         options,
         session,
         &mut resources,
+        metrics,
     );
     if !resources.deferred_images.is_empty() {
-        let preliminary = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
-            dom, css, VIEWPORT_WIDTH as f32, Some(VIEWPORT_HEIGHT as f32),
-            &amazing_text::FallbackTextSystem::new(), &resources,
-        );
+        let environment = amazing_css::MediaEnvironment {
+            viewport_width_px: metrics.css_width, viewport_height_px: metrics.css_height,
+            device_pixel_ratio: metrics.device_scale, ..Default::default()
+        };
+        let styled = amazing_css::compute_with_environment(dom, &[amazing_css::parse_stylesheet(css)], &environment);
+        let preliminary = amazing_layout::layout_styled_document_from_root(dom, amazing_dom::NodeIdx(0),
+            &styled, &amazing_text::FallbackTextSystem::new(), &resources,
+            metrics.css_width, Some(metrics.css_height)).expect("actual lazy-image Document");
         let viewport = amazing_media::loading::ViewportRect {
-            x: 0.0, y: 0.0, width: VIEWPORT_WIDTH as f32, height: VIEWPORT_HEIGHT as f32,
+            x: 0.0, y: 0.0, width: metrics.css_width, height: metrics.css_height,
         };
         let pending = std::mem::take(&mut resources.deferred_images);
         for entry in pending {
@@ -2013,12 +2212,125 @@ fn rgba_to_render_image(width: u32, height: u32, mut bgra: Vec<u8>) -> RenderIma
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn physical_dpr_reflow_keeps_css_scroll_and_hit_geometry() {
+        use super::*;
+        let mut original = EngineViewport::from_document(
+            "<a href='/target'>target</a><div>tall</div>",
+            "body{margin:0}a{display:block;width:120px;height:40px;background:red}div{height:1800px}",
+        );
+        Rc::get_mut(original.static_document.as_mut().unwrap()).unwrap().document_url = Some("https://example.test/".into());
+        for scale in [1., 1.25, 2., 3.] {
+            let metrics = ViewportMetrics::new(400., 300., scale).unwrap();
+            let viewport = original.try_reflow_static(metrics).unwrap().unwrap();
+            assert_eq!((viewport.width,viewport.height),(metrics.raster_width,metrics.raster_height));
+            assert_eq!(viewport.link_hit_at(10.,10.).unwrap().1,"https://example.test/target");
+            let node = viewport.root_scroll_id().unwrap();
+            viewport.scroll_input(amazing_compositor::ScrollInput::Keyboard {
+                node,key:amazing_compositor::ScrollKey::ArrowDown,
+            },false).unwrap();
+            assert!((viewport.root_scroll_offset().1-40.).abs()<0.01);
+            let events = viewport.take_scroll_events();
+            assert!(events.iter().any(|event| (event.offset.1-40.).abs()<0.01));
+            viewport.restore_root_scroll((0.,120.)).unwrap();
+            assert!((viewport.root_scroll_offset().1-120.).abs()<0.01);
+        }
+    }
     use super::*;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::path::Path;
     use std::time::{Duration, Instant};
     use amazing_compositor::PaintViewRasterMode;
+
+    #[test]
+    fn measured_static_reflow_retains_document_and_changes_media_layout() {
+        let original = EngineViewport::from_document(
+            "<body><div id='box'>responsive</div></body>",
+            "body{margin:0}#box{width:50vw;height:10vh;background:red}@media(min-width:1000px){#box{height:80px}}",
+        );
+        let owner = original.identity();
+        let small = original.reflow_static(ViewportMetrics::new(800., 600., 1.).unwrap()).unwrap();
+        let large = small.reflow_static(ViewportMetrics::new(1200., 700., 1.).unwrap()).unwrap();
+        assert!(original.same_document_owner(&small));
+        assert!(small.same_document_owner(&large));
+        assert!(!small.accepts_identity(&owner));
+        let input = large.static_document.as_ref().unwrap();
+        let box_node = (0..input.dom.node_count()).map(|i| amazing_dom::NodeIdx(i as u32))
+            .find(|node| input.dom.attrs_of(*node).is_some_and(|attrs|
+                attrs.iter().any(|(key, value)| key == "id" && value == "box"))).unwrap();
+        let small_rect = image_rect(&small.page.as_ref().unwrap().root, box_node).unwrap();
+        let large_rect = image_rect(&large.page.as_ref().unwrap().root, box_node).unwrap();
+        assert!((small_rect.w - 400.).abs() < 0.01);
+        assert!((small_rect.h - 60.).abs() < 0.01);
+        assert!((large_rect.w - 600.).abs() < 0.01);
+        assert!((large_rect.h - 80.).abs() < 0.01);
+        let other = EngineViewport::from_document("<body>different</body>", "");
+        assert!(!other.accepts_identity(&large.identity()));
+    }
+
+    #[test]
+    fn reflow_remaps_an_editable_control_by_native_node_generation() {
+        let dom = amazing_html::parse("<body><form><input id=first value=old><input id=second value=edit></form></body>");
+        let css = "body{margin:0}input{display:block;width:50vw;height:30px}@media(max-width:800px){#first{display:none}}";
+        let mut original = EngineViewport::from_dom_with_resources(&dom, css,
+            &PageResources::default(), Some("https://example.test/form"));
+        let identity = original.control_identity(1).unwrap();
+        original.static_document = Some(Rc::new(StaticDocument {
+            dom, css: css.into(), font_sheets: Vec::new(),
+            document_url: Some("https://example.test/form".into()), options: FetchOptions::default(), session: None,
+        }));
+        let resized = original.reflow_static(ViewportMetrics::new(700., 500., 1.).unwrap()).unwrap();
+        let (index, rect) = resized.text_control_by_identity(identity).unwrap();
+        assert_eq!(index, 0);
+        assert!((rect.2 - 350.).abs() < 0.01);
+        assert_eq!(resized.text_control(index).unwrap().0, "edit");
+        assert!(resized.text_control_by_identity((identity.0, identity.1 + 1)).is_none());
+    }
+
+    #[test]
+    fn measurement_receipt_does_not_keep_retained_page_mutably_shared() {
+        let viewport = EngineViewport::from_document("<body>page</body>", "");
+        let receipt = viewport.identity();
+        assert!(viewport.accepts_identity(&receipt));
+        assert_eq!(Rc::strong_count(viewport.page.as_ref().unwrap()), 1);
+        assert!(ViewportMetrics::new(0., 600., 1.).is_none());
+        assert!(viewport.accepts_identity(&receipt));
+    }
+
+    #[test]
+    fn resize_reprojects_logical_scroll_into_the_new_root_extent() {
+        let original = EngineViewport::from_document("<body><div>tall</div></body>",
+            "body{margin:0}div{height:3000px;background:red}");
+        original.restore_root_scroll((0., 2000.)).unwrap();
+        let previous = original.root_scroll_offset();
+        assert!(previous.1 > 0.);
+        let resized = original.reflow_static(ViewportMetrics::new(800., 2000., 1.).unwrap()).unwrap();
+        resized.restore_root_scroll(previous).unwrap();
+        let offset = resized.root_scroll_offset();
+        assert!(offset.1 <= 1000. && offset.1 >= 0.);
+        assert_eq!(offset.0, 0.);
+        assert_eq!(resized.metrics.css_height, 2000.);
+    }
+
+    #[test]
+    fn runtime_resize_preserves_pending_navigation_and_actual_arena() {
+        let session = Rc::new(RefCell::new(BrowserSession::ephemeral()));
+        let mut runtime = PageRuntime::new(amazing_html::parse("<body>page</body>"),
+            "https://example.test/start".into(), FetchOptions::default(), Vec::new(), session);
+        runtime.interpreter.run_script("location.href = 'https://example.test/next'").unwrap();
+        runtime.interpreter.run_script("var resizeTimer = 0; setTimeout(function(){ resizeTimer = 1; }, 0)").unwrap();
+        let node_count = runtime.host.borrow().dom.node_count();
+        let resized = runtime.reflow(ViewportMetrics::new(700., 400., 1.).unwrap()).unwrap();
+        assert_eq!(runtime.host.borrow().dom.node_count(), node_count);
+        assert_eq!(runtime.interpreter.run_script("resizeTimer").unwrap(), amazing_js::value::JsValue::num(0.));
+        assert!(runtime.interpreter.pump_timers().unwrap());
+        assert_eq!(runtime.interpreter.run_script("resizeTimer").unwrap(), amazing_js::value::JsValue::num(1.));
+        assert_eq!(resized.metrics.css_width, 700.);
+        assert_eq!(runtime.interpreter.take_navigation().as_deref(), Some("https://example.test/next"));
+        let update = runtime.snapshot(false);
+        assert_eq!(update.viewport.as_ref().unwrap().metrics, resized.metrics);
+    }
 
     #[test]
     fn engine_demo_produces_an_opaque_non_white_surface() {
@@ -2473,7 +2785,7 @@ mod tests {
             Rc::new(RefCell::new(BrowserSession::ephemeral())),
         );
         let initial = runtime.snapshot(false);
-        let node = initial.viewport.links.first().unwrap().node;
+        let node = initial.viewport.as_ref().unwrap().links.first().unwrap().node;
         let clicked = runtime.dispatch_click(node);
         assert!(clicked.default_prevented);
         assert_eq!(clicked.title.as_deref(), Some("Event handled"));
@@ -2583,7 +2895,7 @@ mod tests {
             )
             .unwrap());
         assert!(viewport.root_scroll_offset().1 > 0.0, "End scroll moved the root");
-        let loaded = viewport.load_deferred_lazy_images(None, &options);
+        let loaded = viewport.load_deferred_lazy_images(None, &options).unwrap();
         let page = viewport.page.as_ref().expect("retained page");
         assert!(
             loaded,

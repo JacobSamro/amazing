@@ -17,8 +17,14 @@ const MAX_DIFF_PIXELS: usize = 1_048_576;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PaintResourceKey {
     BackgroundUrl(String),
-    BackgroundUrlWithBase {url:String,source_base:String},
-    BorderImageUrl { url: String, source_base: Option<String> },
+    BackgroundUrlWithBase {
+        url: String,
+        source_base: String,
+    },
+    BorderImageUrl {
+        url: String,
+        source_base: Option<String>,
+    },
     GeneratedUrl(String),
     ReplacedNode(PaintNodeKey),
 }
@@ -96,7 +102,10 @@ impl DisplayListView<'_> {
         if self.property_owner_mapping().is_none() || next.property_owner_mapping().is_none() {
             return fallback(PaintFallbackReason::AmbiguousPropertyOwner);
         }
-        if self.width != next.width || self.height != next.height {
+        if self.width != next.width
+            || self.height != next.height
+            || self.raster_viewport != next.raster_viewport
+        {
             return fallback(PaintFallbackReason::ViewportChanged);
         }
         let Some(pixels) = (self.width as usize).checked_mul(self.height as usize) else {
@@ -209,13 +218,23 @@ impl DisplayListView<'_> {
                     for layer in &plan.layers {
                         if let Some(url)=&layer.url {
                             resources.insert(match &layer.source_base {
-                                Some(base)=>PaintResourceKey::BackgroundUrlWithBase {url:url.clone(),source_base:base.clone()},
-                                None=>PaintResourceKey::BackgroundUrl(url.clone()),
+                                Some(base) => PaintResourceKey::BackgroundUrlWithBase {
+                                    url: url.clone(),
+                                    source_base: base.clone(),
+                                },
+                                None => PaintResourceKey::BackgroundUrl(url.clone()),
                             });
                         }
                     }
-                    if let Some(plan)=crate::border_image::BorderImagePlan::from_style(&box_.style) {
-                        if let Some(url)=plan.url {resources.insert(PaintResourceKey::BorderImageUrl{url,source_base:plan.source_base});}
+                    if let Some(plan) =
+                        crate::border_image::BorderImagePlan::from_style(&box_.style)
+                    {
+                        if let Some(url) = plan.url {
+                            resources.insert(PaintResourceKey::BorderImageUrl {
+                                url,
+                                source_base: plan.source_base,
+                            });
+                        }
                     }
                     if let Some(key) = item.key {
                         if box_.replaced_size.is_some() || box_.svg_root.is_some() {

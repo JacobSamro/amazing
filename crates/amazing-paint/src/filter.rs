@@ -41,7 +41,12 @@ pub enum FilterOp {
     Blur(f32),
     /// Drop shadow: offset and blur standard deviation in device pixels, and
     /// the resolved straight-alpha shadow color.
-    DropShadow { dx: f32, dy: f32, std: f32, color: [u8; 4] },
+    DropShadow {
+        dx: f32,
+        dy: f32,
+        std: f32,
+        color: [u8; 4],
+    },
 }
 
 /// A bounded, `Copy` filter list. At most `MAX_FILTERS` functions are
@@ -62,6 +67,23 @@ impl Default for FilterPlan {
 }
 
 impl FilterPlan {
+    pub fn scaled(self, scale: f32) -> Self {
+        let mut plan = self;
+        for op in &mut plan.ops {
+            *op = op.map(|v| match v {
+                FilterOp::Blur(std) => FilterOp::Blur(std * scale),
+                FilterOp::DropShadow { dx, dy, std, color } => FilterOp::DropShadow {
+                    dx: dx * scale,
+                    dy: dy * scale,
+                    std: std * scale,
+                    color,
+                },
+                other => other,
+            });
+        }
+        plan
+    }
+
     /// Parse a computed `filter`/`backdrop-filter` value. `current_color` is
     /// the element's resolved `color`, used for `drop-shadow()`'s default and
     /// explicit `currentcolor` shadow color.
@@ -285,7 +307,13 @@ fn gaussian_blur(surface: &Surface, std: f32) -> Surface {
     }
     let mut data = to_premultiplied(surface);
     for (radius_left, radius_right) in blur_pass_radii(d) {
-        data = box_blur_2d(&data, surface.width, surface.height, radius_left, radius_right);
+        data = box_blur_2d(
+            &data,
+            surface.width,
+            surface.height,
+            radius_left,
+            radius_right,
+        );
     }
     from_premultiplied(&data, surface.width, surface.height)
 }
@@ -320,7 +348,12 @@ fn to_premultiplied(surface: &Surface) -> Vec<[f32; 4]> {
         .map(|p| {
             let a = p[3] as f32;
             let scale = a / 255.0;
-            [p[0] as f32 * scale, p[1] as f32 * scale, p[2] as f32 * scale, a]
+            [
+                p[0] as f32 * scale,
+                p[1] as f32 * scale,
+                p[2] as f32 * scale,
+                a,
+            ]
         })
         .collect()
 }

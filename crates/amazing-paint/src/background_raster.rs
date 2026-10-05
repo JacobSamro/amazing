@@ -167,11 +167,24 @@ pub(super) fn paint(
             if !w.is_finite() || !h.is_finite() || w <= 0.0 || h <= 0.0 {
                 continue;
             }
-            let (rw, rh) = (w.ceil().max(1.0) as u32, h.ceil().max(1.0) as u32);
-            let Some(rastered) = crate::gradient::raster(gradient, rw, rh, b.font_size) else {
+            let (rw, rh) = (
+                (w * clip.lattice.scale).ceil().max(1.0) as u32,
+                (h * clip.lattice.scale).ceil().max(1.0) as u32,
+            );
+            let used = if clip.lattice.scale == 1.0 {
+                (rw as f32, rh as f32)
+            } else {
+                (w as f32, h as f32)
+            };
+            let Some(rastered) =
+                crate::gradient::raster_at_scale(gradient, rw, rh, used, b.font_size,clip.lattice.scale)
+            else {
+                if clip.lattice.scale != 1.0 {
+                    return false;
+                }
                 continue;
             };
-            tile = (rw as f64, rh as f64);
+            tile = (f64::from(used.0), f64::from(used.1));
             gradient_image = rastered;
             &gradient_image
         } else if let Some(url) = layer.url.as_deref() {
@@ -233,9 +246,15 @@ pub(super) fn paint(
             layer.position.1,
             layer.repeat_y,
         );
+        let precise_gradient=if clip.lattice.scale!=1.0 {
+            if let Some(css)=layer.gradient.as_deref() {
+                let Some(prepared)=crate::gradient::PreparedGradient::new(css,(w as f32,h as f32),b.font_size) else {return false;};
+                Some(prepared)
+            } else {None}
+        } else {None};
         let bounds = clip
             .intersect(painting.x, painting.y, painting.width, painting.height)
-            .intersect(0.0, 0.0, surface.width as f32, surface.height as f32)
+            .surface_bounds(surface)
             .pixels();
         let [x0, y0, x1, y1] = bounds;
         if x1 <= x0 || y1 <= y0 {
@@ -247,31 +266,37 @@ pub(super) fn paint(
         };
         *budget = remaining;
         for y in y0..y1 {
-            let Some(v) = y_axis.sample(y as f64 + 0.5) else {
+            let Some(v) = y_axis.sample(clip.lattice.css_point(0.0, y as f64 + 0.5).1) else {
                 continue;
             };
             let iy = (v * image.height as f64)
                 .floor()
                 .min(image.height as f64 - 1.0) as usize;
             for x in x0..x1 {
-                if !painting.contains(x as f32 + 0.5, y as f32 + 0.5) {
+                if !{
+                    let (cx, cy) = clip.point(x, y);
+                    painting.contains(cx, cy)
+                } {
                     continue;
                 }
                 if b.table_decoration().background_holes.iter().any(|hole| {
-                    let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+                    let (px, py) = clip.point(x, y);
                     px >= hole.x && px < hole.x + hole.w && py >= hole.y && py < hole.y + hole.h
                 }) {
                     continue;
                 }
-                let Some(u) = x_axis.sample(x as f64 + 0.5) else {
+                let Some(u) = x_axis.sample(clip.lattice.css_point(x as f64 + 0.5, 0.0).0) else {
                     continue;
                 };
                 let ix = (u * image.width as f64)
                     .floor()
                     .min(image.width as f64 - 1.0) as usize;
-                let offset = (iy * image.width as usize + ix) * 4;
-                let source = &image.pixels[offset..offset + 4];
-                let source = [source[0], source[1], source[2], source[3]];
+                let source=if let Some(gradient)=&precise_gradient {
+                    let Some(color)=gradient.sample((u*w) as f32,(v*h) as f32) else {return false;};color
+                } else {
+                    let offset=(iy*image.width as usize+ix)*4;
+                    let source=&image.pixels[offset..offset+4];[source[0],source[1],source[2],source[3]]
+                };
                 let dest = surface.get_pixel(x as u32, y as u32).unwrap_or([0; 4]);
                 surface.set_pixel(x as u32, y as u32, source_over(source, dest, 1.0));
             }
