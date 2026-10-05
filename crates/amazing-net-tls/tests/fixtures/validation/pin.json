@@ -1,0 +1,18 @@
+{
+  "generator": "cryptography 49.0.0",
+  "sha256": {
+    "ca.der": "0764ad63bdbf47c7d879544d5bf0f5a0959c47c0e0b4cd945219a9617d53c01e",
+    "intermediate.der": "d6d3149f001d1b858c5c9fdf0c1488c785429e264dd84901d5164a07f3de65c2",
+    "valid.der": "7c84804ca1c6b28e964edd87580caa9a36b4fa3c6090dfa3c5be9bd34a4e9fe0",
+    "expired.der": "845bf2371a36ced9735b5057152f48a77ab91c6d0b74016cde1ae04b7c2ce4ad",
+    "future.der": "40b1ad5aea09dea54a6048233912c382ff60d08e6b9b42885cffaed9bcc844d7",
+    "wrong-purpose.der": "f619b9554b2b3e04924b01576f46950fac717ec7f92bb83ff4f7c25d36f0b614",
+    "critical.der": "20e118aa0fa9dc9104ff62f0349ed80af113c48a2ff85316c5b738f08b3b5276",
+    "common-name-only.der": "7c061068c48b6160f7017085e7d345af581dbd9d6bb43c2f47e564132ec0174e",
+    "wildcard.der": "4d75a34938a42702d8e1974628bbb55042e28a97da2387197fc8446af044e117",
+    "dns-ip-only.der": "cc71f2573d78d58e390bb1904afcc083db7f9ed3a8b75c8297f36be57f392715",
+    "chained.der": "a59070eff7124d32def0388b19dfe0b4e815a9247dc34e9d58f390192b953465",
+    "key.der": "66a7e742ab1f4978248c3bc0eb3859e024bdf423d905e2657e4be15ccfdce509",
+    "bad-signature.der": "fd73b17971926b720d7aee664bf49bda3419c8979aecad21bc8a8632498fab23"
+  }
+}

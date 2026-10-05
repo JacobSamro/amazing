@@ -21,21 +21,78 @@ static CLIENT_CONFIG: OnceLock<Arc<ClientConfig>> = OnceLock::new();
 #[derive(Debug)]
 pub enum TlsError {
     InvalidServerName,
+    Certificate(CertificateError),
+    NoApplicationProtocol,
     Transport(String),
     ResponseTooLarge,
+}
+
+/// Stable browser-facing rejection reasons, independent of the TLS provider.
+/// These report the verifier's decision; they never allow overriding it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CertificateError {
+    Expired,
+    NotValidYet,
+    HostnameMismatch,
+    UnknownIssuer,
+    Revoked,
+    InvalidPurpose,
+    BadSignature,
+    UnsupportedSignatureAlgorithm,
+    BadEncoding,
+    UnhandledCriticalExtension,
+    UnknownRevocationStatus,
+    InvalidOcspResponse,
+    Missing,
+    Other,
+}
+
+impl std::fmt::Display for CertificateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Expired => "expired",
+            Self::NotValidYet => "not valid yet",
+            Self::HostnameMismatch => "hostname mismatch",
+            Self::UnknownIssuer => "unknown issuer",
+            Self::Revoked => "revoked",
+            Self::InvalidPurpose => "invalid server authentication purpose",
+            Self::BadSignature => "invalid signature",
+            Self::UnsupportedSignatureAlgorithm => "unsupported signature algorithm",
+            Self::BadEncoding => "invalid encoding",
+            Self::UnhandledCriticalExtension => "unhandled critical extension",
+            Self::UnknownRevocationStatus => "unknown revocation status",
+            Self::InvalidOcspResponse => "invalid OCSP response",
+            Self::Missing => "missing peer certificate",
+            Self::Other => "verification failed",
+        })
+    }
 }
 
 impl std::fmt::Display for TlsError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidServerName => formatter.write_str("invalid TLS server name"),
+            Self::Certificate(reason) => write!(formatter, "TLS certificate error: {reason}"),
+            Self::NoApplicationProtocol => {
+                formatter.write_str("TLS has no common application protocol")
+            }
             Self::Transport(error) => write!(formatter, "TLS transport error: {error}"),
             Self::ResponseTooLarge => formatter.write_str("TLS response exceeded the size cap"),
         }
     }
 }
 
-impl std::error::Error for TlsError {}
+impl std::error::Error for CertificateError {}
+
+impl std::error::Error for TlsError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Certificate(reason) => Some(reason),
+            _ => None,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct TlsResponse {
@@ -190,6 +247,8 @@ impl PendingTls {
 
     /// Performs at most `max_io_bytes` of socket I/O. `Ok(None)` means the
     /// handshake needs another step; cancellation is dropping this value.
+    /// A fatal error closes the socket and consumes the handshake. Retrying
+    /// cannot publish a stream from a connection whose authentication failed.
     pub fn step(&mut self, max_io_bytes: usize) -> Result<Option<TlsStream>, TlsError> {
         let inner = self
             .inner
@@ -205,7 +264,10 @@ impl PendingTls {
         match inner.conn.complete_io(&mut io) {
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(error) => return Err(transport_error(error)),
+            Err(error) => {
+                self.inner = None;
+                return Err(transport_error(error));
+            }
         }
         if inner.conn.is_handshaking() || inner.conn.wants_write() {
             return Ok(None);
@@ -213,7 +275,10 @@ impl PendingTls {
         let protocol = match inner.conn.alpn_protocol() {
             Some(b"h2") => Protocol::H2,
             Some(b"http/1.1") | None => Protocol::Http11,
-            _ => return Err(TlsError::Transport("unsupported ALPN".into())),
+            _ => {
+                self.inner = None;
+                return Err(TlsError::NoApplicationProtocol);
+            }
         };
         Ok(Some(TlsStream {
             inner: self.inner.take().expect("handshake retained"),
@@ -268,7 +333,59 @@ fn client_config() -> Arc<ClientConfig> {
 }
 
 fn transport_error(error: std::io::Error) -> TlsError {
+    if let Some(tls) = error
+        .get_ref()
+        .and_then(|e| e.downcast_ref::<rustls::Error>())
+    {
+        match tls {
+            rustls::Error::InvalidCertificate(reason) => {
+                return TlsError::Certificate(certificate_error(reason));
+            }
+            rustls::Error::NoCertificatesPresented => {
+                return TlsError::Certificate(CertificateError::Missing);
+            }
+            rustls::Error::NoApplicationProtocol
+            | rustls::Error::AlertReceived(rustls::AlertDescription::NoApplicationProtocol) => {
+                return TlsError::NoApplicationProtocol;
+            }
+            _ => {}
+        }
+    }
     TlsError::Transport(error.to_string())
+}
+
+#[allow(deprecated)] // The pinned provider can still produce the legacy variants.
+fn certificate_error(error: &rustls::CertificateError) -> CertificateError {
+    use rustls::CertificateError as Provider;
+    match error {
+        Provider::Expired | Provider::ExpiredContext { .. } => CertificateError::Expired,
+        Provider::NotValidYet | Provider::NotValidYetContext { .. } => {
+            CertificateError::NotValidYet
+        }
+        Provider::NotValidForName | Provider::NotValidForNameContext { .. } => {
+            CertificateError::HostnameMismatch
+        }
+        Provider::UnknownIssuer => CertificateError::UnknownIssuer,
+        Provider::Revoked => CertificateError::Revoked,
+        Provider::InvalidPurpose | Provider::InvalidPurposeContext { .. } => {
+            CertificateError::InvalidPurpose
+        }
+        Provider::BadSignature => CertificateError::BadSignature,
+        Provider::UnsupportedSignatureAlgorithm
+        | Provider::UnsupportedSignatureAlgorithmContext { .. }
+        | Provider::UnsupportedSignatureAlgorithmForPublicKeyContext { .. } => {
+            CertificateError::UnsupportedSignatureAlgorithm
+        }
+        Provider::BadEncoding => CertificateError::BadEncoding,
+        Provider::UnhandledCriticalExtension => CertificateError::UnhandledCriticalExtension,
+        Provider::UnknownRevocationStatus
+        | Provider::ExpiredRevocationList
+        | Provider::ExpiredRevocationListContext { .. } => {
+            CertificateError::UnknownRevocationStatus
+        }
+        Provider::InvalidOcspResponse => CertificateError::InvalidOcspResponse,
+        _ => CertificateError::Other,
+    }
 }
 
 #[cfg(test)]
@@ -343,3 +460,6 @@ fn connect_config(
 }
 #[cfg(feature = "test-support")]
 pub mod test_support;
+
+#[cfg(all(test, feature = "test-support"))]
+mod validation_tests;
