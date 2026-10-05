@@ -815,10 +815,22 @@ impl Interpreter {
     }
 
     pub fn set_viewport_size(&mut self, width: u32, height: u32) {
+        self.set_viewport_metrics(width, height, 1.).expect("unit device scale");
+    }
+
+    /// Install native embedding metrics without running author script or
+    /// consuming pending navigation/history/timer state. Width and height are
+    /// logical CSS pixels; device density does not change them.
+    pub fn set_viewport_metrics(
+        &mut self, width: u32, height: u32, device_pixel_ratio: f64,
+    ) -> Result<(), &'static str> {
+        if !device_pixel_ratio.is_finite() || device_pixel_ratio <= 0. {
+            return Err("device pixel ratio must be finite and positive");
+        }
         for (name, value) in [
             ("innerWidth", JsValue::num(width as f64)),
             ("innerHeight", JsValue::num(height as f64)),
-            ("devicePixelRatio", JsValue::num(1.0)),
+            ("devicePixelRatio", JsValue::num(device_pixel_ratio)),
         ] {
             self.global_obj.borrow_mut().set_own(name, value.clone());
             if self.global_env.has(name) {
@@ -827,6 +839,7 @@ impl Interpreter {
                 let _ = self.global_env.declare_var(name, value);
             }
         }
+        Ok(())
     }
 
     pub fn take_navigation(&mut self) -> Option<String> {
@@ -1911,3 +1924,7 @@ include!("runtime_eval_global_tests.rs");
 #[cfg(test)]
 #[path = "interp_tail_call_tests.rs"]
 mod tail_call_tests;
+
+#[cfg(test)]
+#[path = "interp_viewport_metrics_tests.rs"]
+mod viewport_metrics_tests;

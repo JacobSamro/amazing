@@ -275,6 +275,7 @@ fn valid_seeds() -> Vec<Vec<u8>> {
         .unwrap(),
         amazing_process::gpu_snapshot_wire::encode_snapshot(
             &amazing_compositor::CompositorFrameSnapshot {
+                raster_sampling: amazing_compositor::RasterSampling::Bilinear,
                 version: amazing_compositor::SNAPSHOT_VERSION,
                 width: 16,
                 height: 16,

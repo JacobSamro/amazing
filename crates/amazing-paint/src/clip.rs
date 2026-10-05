@@ -74,6 +74,40 @@ pub enum ClipMask {
 }
 
 impl ClipMask {
+    pub fn scaled(self, scale: f32) -> Self {
+        match self {
+            Self::Rect {
+                x,
+                y,
+                width,
+                height,
+                radii,
+            } => Self::Rect {
+                x: x * scale,
+                y: y * scale,
+                width: width * scale,
+                height: height * scale,
+                radii: radii.map(|(x, y)| (x * scale, y * scale)),
+            },
+            Self::Polygon {
+                mut points,
+                len,
+                even_odd,
+            } => {
+                for p in &mut points {
+                    p.0 *= scale;
+                    p.1 *= scale;
+                }
+                Self::Polygon {
+                    points,
+                    len,
+                    even_odd,
+                }
+            }
+        }
+    }
+
+
     /// `boxes` gives every `<geometry-box>` this value might name; the one
     /// actually named (or the border box, its default) is what the shape's
     /// percentages/keywords resolve against -- see [`GeometryBoxes`].

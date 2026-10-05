@@ -2,7 +2,7 @@
 //! color parsing and preservation of the generated image value; this module
 //! resolves the image function against its concrete replaced-fragment size.
 
-use amazing_css::syntax::{serialize, tokenize, Token};
+use amazing_css::syntax::{Token, serialize, tokenize};
 use amazing_media::Image;
 
 #[derive(Clone, Copy)]
@@ -29,11 +29,25 @@ struct Stop {
 
 /// A gradient has no intrinsic dimensions. The generated fragment supplies
 /// the concrete raster size, with a bounded allocation like other paint layers.
-pub(crate) fn raster(css: &str, width: u32, height: u32, font_size: f32) -> Option<Image> {
-    let pixels = (width as usize).checked_mul(height as usize)?;
-    if pixels == 0 || pixels > 4 * 1024 * 1024 {
-        return None;
-    }
+pub(crate) fn raster(css:&str,width:u32,height:u32,font_size:f32)->Option<Image> {
+    raster_at_scale(css,width,height,(width as f32,height as f32),font_size,1.0)
+}
+pub(crate) fn raster_at_scale(css:&str,pixel_width:u32,pixel_height:u32,used_size:(f32,f32),font_size:f32,scale:f64)->Option<Image> {
+    if !scale.is_finite() || scale<=0.0 {return None;}
+    let pixels=(pixel_width as usize).checked_mul(pixel_height as usize)?;
+    if pixels==0 || pixels>4*1024*1024 {return None;}
+    let sampler=PreparedGradient::new(css,used_size,font_size)?;
+    let mut output=Vec::with_capacity(pixels*4);
+    for y in 0..pixel_height {for x in 0..pixel_width {
+        output.extend_from_slice(&sampler.sample(((f64::from(x)+0.5)/scale) as f32,((f64::from(y)+0.5)/scale) as f32)?);
+    }}
+    Some(Image{width:pixel_width,height:pixel_height,pixels:output})
+}
+pub(crate) struct PreparedGradient {kind:Kind,repeating:bool,stops:Vec<Stop>,extent:f32,width:f32,height:f32}
+impl PreparedGradient {
+    pub fn new(css:&str,used_size:(f32,f32),font_size:f32)->Option<Self> {
+        let (width,height)=used_size;
+        if !width.is_finite() || !height.is_finite() || width<=0.0 || height<=0.0 {return None;}
     let tokens = tokenize(css);
     let Some(Token::Function(name)) = tokens.first() else {
         return None;
@@ -107,16 +121,14 @@ pub(crate) fn raster(css: &str, width: u32, height: u32, font_size: f32) -> Opti
             position: position.unwrap_or(0.0),
         })
         .collect();
-    let mut output = Vec::with_capacity(pixels * 4);
-    for y in 0..height {
-        for x in 0..width {
-            let cx = x as f32 + 0.5;
-            let cy = y as f32 + 0.5;
-            let t = match kind {
+        Some(Self{kind,repeating,stops,extent,width,height})
+    }
+    pub fn sample(&self,cx:f32,cy:f32)->Option<[u8;4]> {
+        let t = match self.kind {
                 Kind::Linear(dx, dy) => {
-                    let px = cx - width as f32 * 0.5;
-                    let py = cy - height as f32 * 0.5;
-                    0.5 + (px * dx + py * dy) / extent
+                    let px = cx - self.width * 0.5;
+                    let py = cy - self.height * 0.5;
+                    0.5 + (px * dx + py * dy) / self.extent
                 }
                 Kind::Radial { center, radius } => {
                     if radius.0 <= 0.0 || radius.1 <= 0.0 {
@@ -131,14 +143,8 @@ pub(crate) fn raster(css: &str, width: u32, height: u32, font_size: f32) -> Opti
                     (angle - start).rem_euclid(360.0) / 360.0
                 }
             };
-            output.extend_from_slice(&sample(&stops, t, repeating));
-        }
+        Some(sample(&self.stops,t,self.repeating))
     }
-    Some(Image {
-        width,
-        height,
-        pixels: output,
-    })
 }
 
 fn comma_parts(tokens: &[Token]) -> Option<Vec<&[Token]>> {
@@ -168,7 +174,7 @@ fn comma_parts(tokens: &[Token]) -> Option<Vec<&[Token]>> {
     Some(parts)
 }
 
-fn default_radial(width: u32, height: u32) -> Kind {
+fn default_radial(width: f32, height: f32) -> Kind {
     let center = (width as f32 * 0.5, height as f32 * 0.5);
     Kind::Radial {
         center,
@@ -183,7 +189,7 @@ fn farthest_corner(center: (f32, f32), width: f32, height: f32) -> (f32, f32) {
     (distance, distance)
 }
 
-fn geometry(tokens: &[Token], kind: Kind, width: u32, height: u32, font_size: f32) -> Option<Kind> {
+fn geometry(tokens: &[Token], kind: Kind, width: f32, height: f32, font_size: f32) -> Option<Kind> {
     let text = serialize(tokens).trim().to_ascii_lowercase();
     if text.is_empty() {
         return None;
@@ -224,7 +230,7 @@ fn split_at(text: &str) -> (&str, Option<&str>) {
     }
 }
 
-fn parse_radial(text: &str, width: u32, height: u32, font_size: f32) -> Option<Kind> {
+fn parse_radial(text: &str, width: f32, height: f32, font_size: f32) -> Option<Kind> {
     let (shape_size, position) = split_at(text);
     let center = resolve_position(position, width, height)?;
     let (w, h) = (width as f32, height as f32);
@@ -277,7 +283,7 @@ fn parse_radial(text: &str, width: u32, height: u32, font_size: f32) -> Option<K
     Some(Kind::Radial { center, radius })
 }
 
-fn parse_conic(text: &str, width: u32, height: u32) -> Option<Kind> {
+fn parse_conic(text: &str, width: f32, height: f32) -> Option<Kind> {
     let (from_part, position) = split_at(text);
     let center = resolve_position(position, width, height)?;
     let from_part = from_part.trim();
@@ -291,7 +297,7 @@ fn parse_conic(text: &str, width: u32, height: u32) -> Option<Kind> {
 
 /// Resolves an `at <position>` tail in raster pixels. `None` means the default
 /// box center; an empty tail is invalid.
-fn resolve_position(position: Option<&str>, width: u32, height: u32) -> Option<(f32, f32)> {
+fn resolve_position(position: Option<&str>, width: f32, height: f32) -> Option<(f32, f32)> {
     let Some(position) = position else {
         return Some((width as f32 * 0.5, height as f32 * 0.5));
     };
@@ -510,16 +516,32 @@ mod tests {
 
         // An explicit radius holds the first stop inside and reaches the last
         // stop outside.
-        let image =
-            raster("radial-gradient(circle 2px at center, red, blue)", 8, 8, 16.0).unwrap();
+        let image = raster(
+            "radial-gradient(circle 2px at center, red, blue)",
+            8,
+            8,
+            16.0,
+        )
+        .unwrap();
         assert!(pixel(&image, 3, 3)[0] > pixel(&image, 3, 3)[2]);
         assert!(pixel(&image, 7, 3)[2] > pixel(&image, 7, 3)[0]);
 
         // `from 90deg` starts the first stop to the east and trails north.
-        let image =
-            raster("conic-gradient(from 90deg at center, red, blue)", 8, 8, 16.0).unwrap();
-        assert!(pixel(&image, 7, 4)[0] > pixel(&image, 7, 4)[2], "east is red");
-        assert!(pixel(&image, 4, 0)[2] > pixel(&image, 4, 0)[0], "north trails blue");
+        let image = raster(
+            "conic-gradient(from 90deg at center, red, blue)",
+            8,
+            8,
+            16.0,
+        )
+        .unwrap();
+        assert!(
+            pixel(&image, 7, 4)[0] > pixel(&image, 7, 4)[2],
+            "east is red"
+        );
+        assert!(
+            pixel(&image, 4, 0)[2] > pixel(&image, 4, 0)[0],
+            "north trails blue"
+        );
     }
 
     #[test]

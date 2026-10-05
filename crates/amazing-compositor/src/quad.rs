@@ -110,6 +110,9 @@ pub struct RenderPass {
 }
 #[derive(Debug, Clone)]
 pub struct CompositorFrame {
+    /// Sampling of source tiles under property transforms. Presenters must
+    /// preserve this policy, including when hoisting tiles out of passes.
+    pub raster_sampling: RasterSampling,
     pub width: u32,
     pub height: u32,
     pub passes: Vec<RenderPass>,
@@ -176,7 +179,7 @@ pub(super) fn clip_rect(trees: &PropertyTrees, state: PropertyTreeState, viewpor
             ClipShape::Rect(r) => r,
             ClipShape::RoundedRect { rect, .. } => rect,
         };
-        if let Some(world) = trees.transforms[node.transform.0].accumulated.map_bounds(r) {
+        if let Some(world) = trees.clip_world_matrix(id).and_then(|m| m.map_bounds(r)) {
             result = intersect(result, world)
         }
         id = node.parent
@@ -288,12 +291,11 @@ impl Compositor {
             );
             for (li, layer) in self.layers.iter().enumerate() {
                 let matrix = self.trees.matrix(layer.state).unwrap_or(Matrix4::IDENTITY);
-                let scissor =
-                    if self.trees.has_composited_effects() || halo > 0. {
-                        viewport
-                    } else {
-                        clip_rect(&self.trees, layer.state, viewport)
-                    };
+                let scissor = if self.trees.has_composited_effects() || halo > 0. {
+                    viewport
+                } else {
+                    clip_rect(&self.trees, layer.state, viewport)
+                };
                 for key in tile_keys(li, layer.bounds) {
                     if matrix
                         .map_bounds(tile_rect(key))
@@ -526,6 +528,7 @@ impl Compositor {
         self.previous_quad_layers = snapshots;
         self.previous_quad_size = Some((width, height));
         Ok(CompositorFrame {
+            raster_sampling: self.raster_sampling,
             width,
             height,
             passes,
@@ -742,6 +745,15 @@ impl ReferenceCpuPresenter {
                     if self.resources.get(q.resource_id).is_none() {
                         return Err(PresenterError::MissingResource(q.resource_id));
                     }
+                    let local_effect = pass
+                        .effect_node
+                        .and_then(|id| frame.trees.effect_operations(id))
+                        .is_some_and(|op| op.local_transform.is_some());
+                    let visibility_matrix = if local_effect {
+                        frame.trees.matrix(q.state)
+                    } else {
+                        Some(Matrix4::IDENTITY)
+                    };
                     let local = intersect(q.rect, q.content_rect);
                     let Some(world) = q.transform.map_bounds(local) else {
                         continue;
@@ -758,7 +770,12 @@ impl ReferenceCpuPresenter {
                         {
                             let dx = x as f32 + 0.5;
                             let dy = y as f32 + 0.5;
-                            if !frame.trees.visible(q.state, dx, dy) {
+                            // Local effect surfaces sample in source space,
+                            // but property-tree visibility remains world-space.
+                            let visible_point = visibility_matrix.and_then(|m| m.map(dx, dy));
+                            if !visible_point
+                                .is_some_and(|(x, y)| frame.trees.visible(q.state, x, y))
+                            {
                                 continue;
                             }
                             let Some((sx, sy)) = q.transform.unmap(dx, dy) else {
@@ -775,7 +792,8 @@ impl ReferenceCpuPresenter {
                                 q.layer,
                                 sx,
                                 sy,
-                                integer_translation(q.transform),
+                                frame.raster_sampling == RasterSampling::Nearest
+                                    || integer_translation(q.transform),
                             );
                             if src[3] == 0 {
                                 continue;
@@ -881,7 +899,11 @@ impl ReferenceCpuPresenter {
                                 let mut backdrop = if let Some((_, plan)) = op.painter_filters {
                                     plan.apply_to_surface(&source)
                                 } else {
-                                    super::effect_pixels::backdrop_filters(&source, &op.backdrop_filters, bounds)
+                                    super::effect_pixels::backdrop_filters(
+                                        &source,
+                                        &op.backdrop_filters,
+                                        bounds,
+                                    )
                                 };
                                 for y in 0..out.height {
                                     for x in 0..out.width {
@@ -933,8 +955,12 @@ impl ReferenceCpuPresenter {
                                 continue;
                             }
                             let src = if let Some(m) = local_transform {
-                                let Some((sx, sy)) = m.unmap(dx, dy) else { continue };
-                                if operations.is_some_and(|op| !super::effect_clip::clip_path_contains(op, sx, sy)) {
+                                let Some((sx, sy)) = m.unmap(dx, dy) else {
+                                    continue;
+                                };
+                                if operations.is_some_and(|op| {
+                                    !super::effect_clip::clip_path_contains(op, sx, sy)
+                                }) {
                                     continue;
                                 }
                                 sample_surface(&sub, sx, sy)
@@ -1024,6 +1050,7 @@ mod tests {
         pixels[3] = 145;
         pixels[4..8].copy_from_slice(&[0, 0, 0, 255]);
         let frame = CompositorFrame {
+            raster_sampling: RasterSampling::Bilinear,
             width: 3,
             height: 1,
             passes: vec![RenderPass {

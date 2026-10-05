@@ -18,7 +18,7 @@ impl CompositorFrame {
             .collect::<Vec<_>>();
         operations.sort_by_key(|(id, _)| id.0);
         let mut frame = self.to_snapshot();
-        frame.trees.version = SNAPSHOT_VERSION;
+        frame.trees.version = PROPERTY_TREES_SNAPSHOT_VERSION;
         EffectsFrameSnapshot {
             version: EFFECT_SNAPSHOT_VERSION,
             frame,

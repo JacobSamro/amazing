@@ -2,6 +2,26 @@
 use amazing_compositor::*;
 use amazing_ipc::codec::{self, ByteBuf, Decoder, Encoder, Wire};
 
+/// GPU snapshot payload version, distinct from the outer IPC codec and the
+/// compositor resource/property snapshot versions. V1 lacked a sampling
+/// contract; V2 lacked clip/scroll owner identity. Both are rejected rather
+/// than guessed by a new receiver.
+pub const SNAPSHOT_WIRE_VERSION: u16 = 3;
+
+fn put_sampling(e: &mut Encoder, sampling: RasterSampling) -> Result<(), codec::Error> {
+    match sampling {
+        RasterSampling::Bilinear => 0u8.encode(e),
+        RasterSampling::Nearest => 1u8.encode(e),
+    }
+}
+fn get_sampling(d: &mut Decoder<'_>) -> Result<RasterSampling, codec::Error> {
+    match u8::decode(d)? {
+        0 => Ok(RasterSampling::Bilinear),
+        1 => Ok(RasterSampling::Nearest),
+        _ => Err(codec::Error::Invalid),
+    }
+}
+
 fn put_u(e: &mut Encoder, value: usize) -> Result<(), codec::Error> {
     u32::try_from(value)
         .map_err(|_| codec::Error::Limit)?
@@ -181,6 +201,7 @@ fn put_trees(e: &mut Encoder, s: &PropertyTreesSnapshot) -> Result<(), codec::Er
     put_vec(e, &s.clips, |e, n| {
         put_u(e, n.parent.0)?;
         put_u(e, n.transform.0)?;
+        put_u(e, n.scroll.0)?;
         put_shape(e, &n.shape)
     })?;
     put_vec(e, &s.effects, |e, n| {
@@ -192,6 +213,10 @@ fn put_trees(e: &mut Encoder, s: &PropertyTreesSnapshot) -> Result<(), codec::Er
     })?;
     put_vec(e, &s.scrolls, |e, n| {
         put_u(e, n.parent.0)?;
+        n.container_transform.is_some().encode(e)?;
+        if let Some(id) = n.container_transform {
+            put_u(e, id.0)?;
+        }
         put_f(e, n.offset.0)?;
         put_f(e, n.offset.1)?;
         put_rect(e, &n.container)?;
@@ -230,6 +255,7 @@ fn get_trees(d: &mut Decoder<'_>) -> Result<PropertyTreesSnapshot, codec::Error>
         Ok(ClipNode {
             parent: ClipId(get_u(d)?),
             transform: TransformId(get_u(d)?),
+            scroll: ScrollId(get_u(d)?),
             shape: get_shape(d)?,
         })
     })?;
@@ -245,6 +271,11 @@ fn get_trees(d: &mut Decoder<'_>) -> Result<PropertyTreesSnapshot, codec::Error>
     let scrolls = get_vec(d, |d| {
         Ok(ScrollNode {
             parent: ScrollId(get_u(d)?),
+            container_transform: if bool::decode(d)? {
+                Some(TransformId(get_u(d)?))
+            } else {
+                None
+            },
             offset: (get_f(d)?, get_f(d)?),
             container: get_rect(d)?,
             contents: get_rect(d)?,
@@ -394,6 +425,8 @@ fn get_pass(d: &mut Decoder<'_>) -> Result<RenderPass, codec::Error> {
 /// Encode a versioned compositor snapshot under the IPC frame budget.
 pub fn encode_snapshot(s: &CompositorFrameSnapshot) -> Result<Vec<u8>, codec::Error> {
     let mut e = Encoder::new();
+    SNAPSHOT_WIRE_VERSION.encode(&mut e)?;
+    put_sampling(&mut e, s.raster_sampling)?;
     s.version.encode(&mut e)?;
     s.width.encode(&mut e)?;
     s.height.encode(&mut e)?;
@@ -412,6 +445,10 @@ pub fn encode_snapshot(s: &CompositorFrameSnapshot) -> Result<Vec<u8>, codec::Er
 /// Decode syntax only; `CompositorFrame::from_snapshot` validates semantics.
 pub fn decode_snapshot(bytes: &[u8]) -> Result<CompositorFrameSnapshot, codec::Error> {
     let mut d = Decoder::new(bytes)?;
+    if u16::decode(&mut d)? != SNAPSHOT_WIRE_VERSION {
+        return Err(codec::Error::Version);
+    }
+    let raster_sampling = get_sampling(&mut d)?;
     let version = u16::decode(&mut d)?;
     let width = u32::decode(&mut d)?;
     let height = u32::decode(&mut d)?;
@@ -429,6 +466,7 @@ pub fn decode_snapshot(bytes: &[u8]) -> Result<CompositorFrameSnapshot, codec::E
     })?;
     d.finish()?;
     Ok(CompositorFrameSnapshot {
+        raster_sampling,
         version,
         width,
         height,
@@ -438,4 +476,145 @@ pub fn decode_snapshot(bytes: &[u8]) -> Result<CompositorFrameSnapshot, codec::E
         trees,
         tile_lookup,
     })
+}
+
+#[cfg(test)]
+mod sampling_tests {
+    use super::*;
+
+    fn frame() -> CompositorFrame {
+        let mut trees = PropertyTrees::new();
+        let transform = trees
+            .add_transform(
+                TransformId(0),
+                Matrix4::translation(0.25, 0.25, 0.),
+                (0., 0., 0.),
+                true,
+            )
+            .unwrap();
+        let mut scene = Compositor::new(
+            trees,
+            vec![PaintChunk {
+                items: 0..1,
+                state: PropertyTreeState {
+                    transform,
+                    ..Default::default()
+                },
+                bounds: Rect::new(0., 0., 2., 2.),
+                reasons: CompositingReasons::WILL_CHANGE,
+            }],
+            1,
+        )
+        .unwrap();
+        let mut source = amazing_paint::Surface::new(2, 2);
+        source.clear([200, 30, 90, 255]);
+        scene.build_frame(&source, 4, 4).unwrap()
+    }
+
+    #[test]
+    fn gpu_wire_preserves_each_real_sampling_policy_and_presented_pixels() {
+        let original = frame();
+        let mut outputs = Vec::new();
+        for policy in [RasterSampling::Bilinear, RasterSampling::Nearest] {
+            let mut frame = original.clone();
+            frame.raster_sampling = policy;
+            let request = crate::protocol::GpuFrame::from_compositor(7, &frame).unwrap();
+            assert_eq!(request.sequence, 7);
+            let decoded = decode_snapshot(&request.snapshot.0).unwrap();
+            assert_eq!(decoded, frame.to_snapshot());
+            let restored = CompositorFrame::from_snapshot(decoded).unwrap();
+            assert_eq!(restored.raster_sampling, policy);
+            let expected = ReferenceCpuPresenter::default().present(&frame).unwrap();
+            let actual = ReferenceCpuPresenter::default().present(&restored).unwrap();
+            assert_eq!(actual, expected);
+            outputs.push(actual);
+        }
+        assert_ne!(
+            outputs[0], outputs[1],
+            "fractional edge must observe the actual policy"
+        );
+    }
+
+    #[test]
+    fn gpu_wire_preserves_authenticated_scrollport_and_clip_owners() {
+        let mut frame = frame();
+        let owner = frame
+            .trees
+            .add_transform(
+                TransformId(0),
+                Matrix4::translation(1., 2., 0.),
+                (0., 0., 0.),
+                false,
+            )
+            .unwrap();
+        let scroll = frame
+            .trees
+            .add_scroll_with_owner(
+                ScrollId(0),
+                (0., 0.),
+                Rect::new(0., 0., 4., 4.),
+                Rect::new(0., 0., 8., 8.),
+                Some(owner),
+            )
+            .unwrap();
+        let clip = frame
+            .trees
+            .add_clip_with_scroll(
+                ClipId(0),
+                owner,
+                scroll,
+                ClipShape::Rect(Rect::new(0., 0., 4., 4.)),
+            )
+            .unwrap();
+        let saved = frame.to_snapshot();
+        let decoded = decode_snapshot(&encode_snapshot(&saved).unwrap()).unwrap();
+        assert_eq!(decoded, saved);
+        let restored = CompositorFrame::from_snapshot(decoded).unwrap();
+        assert_eq!(
+            restored.trees.scroll(scroll).unwrap().container_transform,
+            Some(owner)
+        );
+        assert_eq!(restored.trees.clip(clip).unwrap().scroll, scroll);
+        let mut bad = saved;
+        bad.trees.scrolls[scroll.0].container_transform = Some(TransformId(999));
+        let decoded = decode_snapshot(&encode_snapshot(&bad).unwrap()).unwrap();
+        assert!(matches!(
+            CompositorFrame::from_snapshot(decoded),
+            Err(SnapshotError::InvalidTree)
+        ));
+    }
+
+    #[test]
+    fn historical_policyless_wire_is_explicitly_rejected() {
+        let snapshot = frame().to_snapshot();
+        let current = encode_snapshot(&snapshot).unwrap();
+        // Old payload: IPC codec version followed immediately by compositor
+        // snapshot version and the unchanged snapshot fields. Removing only
+        // the new wire header/policy reconstructs that actual V1 layout.
+        let mut old = current[..2].to_vec();
+        old.extend_from_slice(&current[5..]);
+        let mut decoder = Decoder::new(&old).unwrap();
+        assert_eq!(u16::decode(&mut decoder).unwrap(), SNAPSHOT_VERSION);
+        assert_eq!(u32::decode(&mut decoder).unwrap(), snapshot.width);
+        assert_eq!(decode_snapshot(&old), Err(codec::Error::Version));
+        for unsupported in [0u16, 2, u16::MAX] {
+            let mut bytes = current.clone();
+            bytes[2..4].copy_from_slice(&unsupported.to_le_bytes());
+            assert_eq!(decode_snapshot(&bytes), Err(codec::Error::Version));
+        }
+    }
+
+    #[test]
+    fn unknown_and_missing_sampling_bytes_fail_without_defaulting() {
+        let bytes = encode_snapshot(&frame().to_snapshot()).unwrap();
+        for policy in 2u8..=u8::MAX {
+            let mut invalid = bytes.clone();
+            invalid[4] = policy;
+            assert_eq!(decode_snapshot(&invalid), Err(codec::Error::Invalid));
+        }
+        assert_eq!(decode_snapshot(&bytes[..4]), Err(codec::Error::Eof));
+        let mut extra = bytes;
+        extra.push(0);
+        assert_eq!(decode_snapshot(&extra), Err(codec::Error::Trailing));
+    }
 }

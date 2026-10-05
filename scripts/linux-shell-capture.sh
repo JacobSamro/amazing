@@ -4,7 +4,8 @@
 # Usage: linux-shell-capture.sh LANE --ref REF [--size WxH] [--wait S]
 #   [--name N] [--release] [--scroll N] [--actions FILE] -- [shell args...]
 #   or: ... --real-pages [--limit N] [--only SLUG] [--baseline auto|DIR] [--fuzz PCT]
-# Action lines: key TEXT / type TEXT / wait SECONDS / shot NAME.
+# --device-scale uses the genuine GPUI X11 platform density and requires measured engine metadata.
+# Action lines: key TEXT / type TEXT / wait SECONDS / shot NAME / resize WxH / click X Y.
 # Each image <=512 KiB; the complete manifest and images <=2 MiB. Use --only
 # or --limit for a bounded real-pages proof. Logs, diffs and full reports stay
 # on Boat. Local artifacts are explicit PNGs and *.window.manifest.json only.
@@ -13,7 +14,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")"
 LANE="${1:?lane required}"; shift
 REF= SIZE=1280x800 WAIT=8 NAME="capture-$(date -u +%Y%m%dT%H%M%SZ)" PROFILE=debug SCROLL=0
-REAL_PAGES=0 LIMIT=0 ONLY= BASELINE= FUZZ=1 ACTIONS=
+REAL_PAGES=0 LIMIT=0 ONLY= BASELINE= FUZZ=1 ACTIONS= DEVICE_SCALE=
 while [ $# -gt 0 ]; do
   case "$1" in
     --ref) REF="$2"; shift 2;;
@@ -23,6 +24,7 @@ while [ $# -gt 0 ]; do
     --release) PROFILE=release; shift;;
     --scroll) SCROLL="$2"; shift 2;;
     --actions) ACTIONS="$2"; shift 2;;
+    --device-scale) DEVICE_SCALE="$2"; shift 2;;
     --real-pages) REAL_PAGES=1; BASELINE=auto; shift;;
     --limit) LIMIT="$2"; shift 2;;
     --only) ONLY="$2"; shift 2;;
@@ -33,21 +35,30 @@ while [ $# -gt 0 ]; do
   esac
 done
 [[ "$LANE" =~ ^[a-z0-9-]+$ && "$NAME" =~ ^[A-Za-z0-9_-]+$ && "$SIZE" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]] || { echo 'invalid lane/name/size' >&2; exit 2; }
+if [ -n "$DEVICE_SCALE" ]; then
+  python3 - "$DEVICE_SCALE" <<'PYVALID'
+import math,sys
+scale=float(sys.argv[1])
+if not math.isfinite(scale) or not 0 < scale <= 4:raise SystemExit('invalid device scale')
+PYVALID
+fi
 [ -n "$REF" ] || { echo 'actual window proof requires --ref REF' >&2; exit 2; }
 SOURCE="$(git -C "$REPO" rev-parse --verify "$REF^{commit}")"
 # Quote every supplied argument before constructing the remote command.
-ASSIGN="$(python3 - "$LANE" "$SOURCE" "$SIZE" "$WAIT" "$NAME" "$PROFILE" "$SCROLL" "$REAL_PAGES" "$LIMIT" "$ONLY" "$BASELINE" "$FUZZ" "$ACTIONS" "$@" <<'PY'
+ASSIGN="$(python3 - "$LANE" "$SOURCE" "$SIZE" "$WAIT" "$NAME" "$PROFILE" "$SCROLL" "$REAL_PAGES" "$LIMIT" "$ONLY" "$BASELINE" "$FUZZ" "$ACTIONS" "$DEVICE_SCALE" "$@" <<'PY'
 import shlex, sys
-names = 'LANE SOURCE SIZE WAIT NAME PROFILE SCROLL REAL_PAGES LIMIT ONLY BASELINE FUZZ ACTIONS'.split()
-for name, value in zip(names, sys.argv[1:14]): print(name + '=' + shlex.quote(value))
-print('SHELL_ARGS=(' + shlex.join(sys.argv[14:]) + ')')
+names = 'LANE SOURCE SIZE WAIT NAME PROFILE SCROLL REAL_PAGES LIMIT ONLY BASELINE FUZZ ACTIONS DEVICE_SCALE'.split()
+for name, value in zip(names, sys.argv[1:15]): print(name + '=' + shlex.quote(value))
+print('SHELL_ARGS=(' + shlex.join(sys.argv[15:]) + ')')
 PY
 )"
 HELPER="$(base64 < "$REPO/scripts/window-proof.py" | tr -d '\n')"
+SESSION_HELPER="$(base64 < "$REPO/scripts/linux-capture-session.py" | tr -d '\n')"
 REMOTE_BODY="$(cat "$REPO/scripts/linux-shell-capture-remote.sh")"
 STATUS=0
 bash "$REPO/scripts/linux-run.sh" "$LANE" --ref "$SOURCE" -- "$ASSIGN
 HELPER='$HELPER'
+SESSION_HELPER='$SESSION_HELPER'
 $REMOTE_BODY" || STATUS=$?
 if [ "$REAL_PAGES" = 1 ]; then SUBDIR=real-pages; else SUBDIR=captures; fi
 # A comparator mismatch may still have valid actual-window artifacts; fetch

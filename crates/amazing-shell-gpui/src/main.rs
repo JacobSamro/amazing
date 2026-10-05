@@ -5,6 +5,7 @@ mod audio_output;
 mod dom_runtime;
 mod engine_compositor;
 mod engine_viewport;
+mod viewport_metrics;
 mod compositor_presenter;
 mod playback_clock;
 mod session_state;
@@ -24,7 +25,8 @@ use gpui::{
 use gpui_platform::application;
 
 use audio_output::AudioDeviceClock;
-use engine_viewport::{EngineViewport, FormRequest, PageRuntime, RuntimeUpdate};
+use engine_viewport::{EngineViewport, FormRequest, PageRuntime, RuntimeUpdate, ViewportIdentity};
+use viewport_metrics::ViewportMetrics;
 use playback_clock::{PlaybackUpdate, VideoPlaybackClock};
 use session_state::BrowserSession;
 use secure_video::{FRAME_EVENT_CAPACITY, SecureVideoEvent, spawn_secure_video_source};
@@ -87,6 +89,8 @@ struct Tab {
     bookmarked: bool,
     favicon: Option<Arc<RenderImage>>,
     viewport: Option<EngineViewport>,
+    render_failure: Option<String>,
+    failed_metrics: Option<ViewportMetrics>,
     history: Vec<String>,
     history_index: usize,
 }
@@ -105,6 +109,7 @@ struct TabSpec<'a> {
 #[derive(Clone)]
 struct PageInputState {
     tab: usize,
+    node_identity: (u32, u64),
     control: usize,
     value: String,
     rect: (f32, f32, f32, f32),
@@ -133,6 +138,8 @@ impl Tab {
             bookmarked: false,
             favicon: None,
             viewport,
+            render_failure: None,
+            failed_metrics: None,
             history: vec![spec.url.into()],
             history_index: 0,
         }
@@ -140,6 +147,8 @@ impl Tab {
 }
 
 struct BrowserShell {
+    last_viewport_receipt: Option<(ViewportMetrics, (f32, f32))>,
+    viewport_metrics: ViewportMetrics,
     tabs: Vec<Tab>,
     page_runtimes: Vec<Option<PageRuntime>>,
     video_frames: Vec<EngineViewport>,
@@ -185,6 +194,8 @@ impl BrowserShell {
         };
         let session = Rc::new(RefCell::new(session));
         let mut shell = Self {
+            last_viewport_receipt: None,
+            viewport_metrics: ViewportMetrics::default(),
             tabs: vec![
                 Tab::from_spec(
                     TabSpec {
@@ -464,7 +475,7 @@ impl BrowserShell {
     fn find_is_available(&self) -> bool {
         self.tabs
             .get(self.active)
-            .is_some_and(|tab| tab.viewport.is_some())
+            .is_some_and(|tab| tab.viewport.is_some() && tab.render_failure.is_none())
     }
 
     fn open_find(&mut self, _: &FindInPage, window: &mut Window, cx: &mut Context<Self>) {
@@ -536,6 +547,9 @@ impl BrowserShell {
     }
 
     fn run_find_search(&mut self, cx: &mut Context<Self>) {
+        if !self.document_interaction_available(self.active) {
+            self.find_matches.clear(); self.find_active = 0; cx.notify(); return;
+        }
         self.find_active = 0;
         self.find_matches = self
             .tabs
@@ -561,6 +575,7 @@ impl BrowserShell {
     /// centered, jumping directly (no animation) so a capture taken right
     /// after next/prev shows the settled frame.
     fn scroll_to_find_active(&mut self, cx: &mut Context<Self>) {
+        if !self.document_interaction_available(self.active) { return; }
         let Some(rect) = self.find_matches.get(self.find_active).copied() else {
             return;
         };
@@ -570,7 +585,7 @@ impl BrowserShell {
         let Some(node) = viewport.root_scroll_id() else {
             return;
         };
-        let target_y = (rect.y - ((viewport.height as f32 - rect.height) / 2.0).max(0.0)).max(0.0);
+        let target_y = (rect.y - ((viewport.metrics.css_height - rect.height) / 2.0).max(0.0)).max(0.0);
         self.scroll_active_viewport(
             ScrollInput::ScrollTo {
                 node,
@@ -696,6 +711,111 @@ impl BrowserShell {
         cx.notify();
     }
 
+    fn reconcile_page_input(&mut self, index: usize) {
+        if !self.document_interaction_available(index) {
+            if self.page_input.as_ref().is_some_and(|input| input.tab == index) { self.page_input = None; }
+            return;
+        }
+        let Some(input) = self.page_input.as_mut().filter(|input| input.tab == index) else { return };
+        let remapped = self.tabs.get(index).and_then(|tab| tab.viewport.as_ref())
+            .and_then(|viewport| viewport.text_control_by_identity(input.node_identity));
+        match remapped {
+            Some((control, rect)) => { input.control = control; input.rect = rect; }
+            None => self.page_input = None,
+        }
+    }
+
+    fn record_measured_frame(&mut self, measured: ViewportMetrics, window_css: (f32, f32)) {
+        let receipt = (measured, window_css);
+        if self.last_viewport_receipt == Some(receipt) { return; }
+        eprintln!("AMAZING_VIEWPORT pid={} css_width={} css_height={} device_scale={} raster_width={} raster_height={} window_css_width={} window_css_height={}",
+            std::process::id(), measured.css_width, measured.css_height, measured.device_scale,
+            measured.raster_width, measured.raster_height, window_css.0, window_css.1);
+        self.last_viewport_receipt = Some(receipt);
+    }
+
+    fn apply_viewport_measurement(
+        &mut self, index: usize, presented: &ViewportIdentity, measured: ViewportMetrics,
+        window_css: (f32, f32), cx: &mut Context<Self>,
+    ) {
+        if self.active != index { return; }
+        let Some(current) = self.tabs.get(index).and_then(|tab| tab.viewport.as_ref()) else { return };
+        if !current.accepts_identity(presented) { return; }
+        self.viewport_metrics = measured;
+        if current.metrics == measured {
+            if self.tabs[index].render_failure.is_none() { self.record_measured_frame(measured, window_css); }
+            return;
+        }
+        if self.tabs[index].failed_metrics == Some(measured) { return; }
+        let next = match self.page_runtimes.get_mut(index).and_then(Option::as_mut) {
+            Some(runtime) => runtime.reflow(measured).map(Some),
+            None => current.try_reflow_static(measured),
+        };
+        if self.publish_checked_viewport(index, next, measured) {
+            self.record_measured_frame(measured, window_css);
+            self.find_matches = self.tabs[index].viewport.as_ref()
+                .and_then(EngineViewport::accessibility_tree)
+                .map(|tree| Self::find_matches_in_tree(tree, &self.find_query)).unwrap_or_default();
+            self.find_active = self.find_active.min(self.find_matches.len().saturating_sub(1));
+        }
+        cx.notify();
+    }
+
+    fn document_interaction_available(&self, index: usize) -> bool {
+        self.tabs.get(index).is_some_and(|tab| tab.viewport.is_some() && tab.render_failure.is_none())
+    }
+
+    fn record_render_failure(&mut self, index: usize, error: String, metrics: ViewportMetrics) {
+        self.last_viewport_receipt = None;
+        self.tabs[index].render_failure = Some(error);
+        self.tabs[index].failed_metrics = Some(metrics);
+        self.reconcile_page_input(index);
+        if self.active == index {
+            self.find_matches.clear();
+            self.find_active = 0;
+        }
+        eprintln!("AMAZING_VIEWPORT_FAILURE pid={} device_scale={}", std::process::id(), metrics.device_scale);
+    }
+
+    /// Only a checked replacement built from the current document can recover
+    /// a failed frame. Retained movement and absent replacements cannot do so.
+    fn publish_checked_viewport(&mut self, index: usize,
+        result: Result<Option<EngineViewport>, String>, metrics: ViewportMetrics,
+    ) -> bool {
+        let result = result.and_then(|next| {
+            if let (Some(next), Some(previous)) = (&next, &self.tabs[index].viewport) {
+                next.restore_root_scroll(previous.root_scroll_offset())?;
+            }
+            Ok(next)
+        });
+        match result {
+            Ok(Some(next)) => {
+                self.tabs[index].viewport = Some(next);
+                self.tabs[index].render_failure = None;
+                self.tabs[index].failed_metrics = None;
+                self.last_viewport_receipt = None;
+                self.reconcile_page_input(index);
+                true
+            }
+            Ok(None) => false,
+            Err(error) => { self.record_render_failure(index, error, metrics); false }
+        }
+    }
+
+    fn record_cached_movement(&mut self, index: usize, result: Result<bool, String>) -> bool {
+        match result {
+            Ok(moved) => moved,
+            Err(error) => {
+                let metrics = self.tabs[index].viewport.as_ref().map(|view| view.metrics)
+                    .unwrap_or(self.viewport_metrics);
+                if self.tabs[index].render_failure.is_none() {
+                    self.record_render_failure(index, error, metrics);
+                }
+                false
+            }
+        }
+    }
+
     fn scroll_active_viewport(&mut self, input: ScrollInput, cx: &mut Context<Self>) -> bool {
         let pointer_input = matches!(input,
             ScrollInput::Wheel { .. } | ScrollInput::Trackpad { .. } | ScrollInput::TouchPan { .. });
@@ -703,10 +823,9 @@ impl BrowserShell {
             .and_then(Option::as_ref)
             .is_some_and(PageRuntime::has_blocking_scroll_listener);
         let Some(viewport) = self.tabs[self.active].viewport.as_ref() else { return false };
-        if !matches!(viewport.scroll_input(input, blocking), Ok(true)) {
-            return false;
-        }
-        self.load_scrolled_lazy_images();
+        let result = viewport.scroll_input(input, blocking);
+        if !self.record_cached_movement(self.active, result) { cx.notify(); return false; }
+        if self.document_interaction_available(self.active) { self.load_scrolled_lazy_images(); }
         cx.notify();
         true
     }
@@ -714,9 +833,14 @@ impl BrowserShell {
     /// After the compositor moves the document, lazy images whose retained
     /// layout box entered the viewport are fetched and repainted.
     fn load_scrolled_lazy_images(&mut self) {
-        let Some(runtime) = self.page_runtimes.get(self.active).and_then(Option::as_ref) else { return };
         let Some(viewport) = self.tabs[self.active].viewport.as_mut() else { return };
-        runtime.load_deferred_lazy_images(viewport);
+        let result = match self.page_runtimes.get(self.active).and_then(Option::as_ref) {
+            Some(runtime) => runtime.load_deferred_lazy_images(viewport),
+            None => viewport.load_static_deferred_images(),
+        };
+        if let Err(error) = result {
+            self.record_render_failure(self.active, error, self.viewport_metrics);
+        }
     }
 
     fn on_shell_key_down(
@@ -725,6 +849,7 @@ impl BrowserShell {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.reconcile_page_input(self.active);
         if self.page_input.is_none() {
             let key = match event.keystroke.key.as_str() {
                 "up" => Some(ScrollKey::ArrowUp),
@@ -835,11 +960,12 @@ impl BrowserShell {
     fn load_request(&mut self, address: &str, method: &str, body: Vec<u8>) {
         self.page_input = None;
         let (viewport, final_address, title, favicon, runtime) =
-            match EngineViewport::load_request(
+            match EngineViewport::load_request_with_metrics(
                 address,
                 method,
                 body,
                 self.session.clone(),
+                self.viewport_metrics,
             ) {
             Ok(page) => (
                 page.viewport,
@@ -848,13 +974,19 @@ impl BrowserShell {
                 page.favicon,
                 page.runtime,
             ),
-            Err(error) => (
-                EngineViewport::error(address, &error),
-                address.to_string(),
-                None,
-                None,
-                None,
-            ),
+            Err(error) => {
+                let viewport = match EngineViewport::error(address, &error)
+                    .try_reflow_static(self.viewport_metrics) {
+                    Ok(Some(viewport)) => viewport,
+                    result => {
+                        let reason = result.err().unwrap_or_else(|| "missing error document".into());
+                        self.tabs[self.active].render_failure = Some(format!("{error}; error page: {reason}"));
+                        self.tabs[self.active].failed_metrics = Some(self.viewport_metrics);
+                        return;
+                    }
+                };
+                (viewport, address.to_string(), None, None, None)
+            },
             };
         self.address = final_address.clone();
         self.committed_address = final_address.clone();
@@ -862,6 +994,8 @@ impl BrowserShell {
         tab.url = final_address.clone();
         tab.kind = TabKind::Engine;
         tab.viewport = Some(viewport);
+        tab.render_failure = None;
+        tab.failed_metrics = None;
         tab.title = title.unwrap_or_else(|| navigation_title(&final_address));
         tab.mono = site_initial(&final_address).to_string();
         tab.favicon = favicon;
@@ -910,17 +1044,26 @@ impl BrowserShell {
             history_delta: update.history_delta,
             history_update: update.history_update,
         };
+        let result = match update.render_failure {
+            Some(error) => Err(error),
+            None => Ok(update.viewport),
+        };
+        self.publish_checked_viewport(index, result, update.metrics);
         let tab = &mut self.tabs[index];
-        tab.viewport = Some(update.viewport);
         if let Some(title) = update.title {
             tab.title = title;
         }
         tab.favicon = update.favicon;
+        self.reconcile_page_input(index);
         directive
     }
 
     fn dispatch_runtime_click(&mut self, node: u32) -> RuntimeDirective {
         let index = self.active;
+        if !self.document_interaction_available(index) {
+            return RuntimeDirective { default_prevented: true, navigation: None,
+                history_delta: None, history_update: None };
+        }
         let update = self.page_runtimes[index]
             .as_mut()
             .map(|runtime| runtime.dispatch_click(node));
@@ -2076,6 +2219,7 @@ impl BrowserShell {
             )
         };
         let page_url = tab.url.clone();
+        let measured_tab = self.active;
         div()
             .relative()
             .flex_1()
@@ -2083,6 +2227,7 @@ impl BrowserShell {
             .overflow_hidden()
             .bg(rgb(SURFACE))
             .when_some(tab.viewport.as_ref(), |page, viewport| {
+                let painted_owner = viewport.identity();
                 page.child(
                     div()
                         .relative()
@@ -2106,33 +2251,61 @@ impl BrowserShell {
                                 .child(
                                     div()
                                         .relative()
-                                        .w(px(viewport.width as f32))
-                                        .h(px(viewport.height as f32))
+                                        .size_full()
                                         .child(match &viewport.compositor {
                                             Some(scene) => viewport.scroll_element()
-                                                .unwrap_or_else(|| scene.borrow().frame().element()),
+                                                .unwrap_or_else(|| scene.borrow().frame().element_with_device_scale(viewport.metrics.device_scale)),
                                             None => img(viewport.image.clone())
-                                                .w(px(viewport.width as f32))
-                                                .h(px(viewport.height as f32))
+                                                .w(px(viewport.metrics.css_width))
+                                                .h(px(viewport.metrics.css_height))
                                                 .into_any_element(),
                                         })
+                                        .when_some(self.tabs[self.active].render_failure.as_ref(), |el, error| {
+                                            el.child(div().absolute().top_0().left_0().p_2()
+                                                .bg(rgb(0x7f1d1d)).text_color(rgb(0xffffff))
+                                                .child(format!("Render failure: {error}")))
+                                        })
                                         // A11Y-11: the live page's accessibility tree, as an
-                                        // invisible off-screen sibling (see `a11y_bridge`'s
-                                        // `build_element` — it never paints or occupies layout
+                                        // unpainted geometry sibling (see `a11y_bridge`'s
+                                        // `build_element` — it never paints or occupies flow
                                         // space) so GPUI's own AccessKit walk exposes it over
                                         // AT-SPI2 on Linux, matching A11Y-9's proof.
-                                        .when_some(viewport.accessibility_tree(), |el, tree| {
-                                            el.child(a11y_bridge::ax_tree_element(tree))
+                                        .when_some(self.document_interaction_available(self.active).then(|| viewport.accessibility_tree()).flatten(), |el, tree| {
+                                            el.child(a11y_bridge::ax_tree_element_with_scroll(tree, viewport.root_scroll_offset()))
                                         })
                                         .child(
                                             canvas(
-                                                |bounds, _, _| bounds,
+                                                {
+                                                    let entity = entity.clone();
+                                                    let presented = viewport.identity();
+                                                    move |bounds, window, app| {
+                                                        if let Some(measured) = ViewportMetrics::new(
+                                                            bounds.size.width.as_f32(), bounds.size.height.as_f32(),
+                                                            window.scale_factor(),
+                                                        ) {
+                                                            let size = window.viewport_size();
+                                                            let window_css = (size.width.as_f32(), size.height.as_f32());
+                                                            if presented.is_document() {
+                                                                window.defer(app, move |_, app| {
+                                                                    entity.update(app, |this, cx| {
+                                                                        this.apply_viewport_measurement(measured_tab,
+                                                                            &presented, measured, window_css, cx);
+                                                                    });
+                                                                });
+                                                            }
+                                                        }
+                                                        bounds
+                                                    }
+                                                },
                                                 move |bounds, _, window, _| {
                                                     let wheel_entity = entity.clone();
                                                     let drag_entity = entity.clone();
                                                     let wheel_bounds = bounds.clone();
                                                     let drag_bounds = bounds.clone();
                                                     let entity = entity.clone();
+                                                    let click_owner = painted_owner.clone();
+                                                    let wheel_owner = painted_owner.clone();
+                                                    let drag_owner = painted_owner.clone();
                                                     window.on_mouse_event(move |event: &MouseDownEvent, _, _, app| {
                                                         if event.button != MouseButton::Left
                                                             || !bounds.contains(&event.position)
@@ -2141,9 +2314,11 @@ impl BrowserShell {
                                                             return;
                                                         }
                                                         entity.update(app, |this, cx| {
-                                                            let Some(viewport) = this.tabs[this.active].viewport.as_ref() else {
-                                                                return;
-                                                            };
+                                                            if this.active != measured_tab || !this.document_interaction_available(measured_tab) { return; }
+                                                            let Some(viewport) = this.tabs[this.active].viewport.as_ref() else { return; };
+                                                            if !viewport.accepts_identity(&click_owner)
+                                                                || !viewport.metrics.matches_logical_bounds(bounds.size.width.as_f32(), bounds.size.height.as_f32())
+                                                            { return; }
                                                             let local_x = (event.position.x - bounds.origin.x).as_f32();
                                                             if local_x >= bounds.size.width.as_f32() - 12. {
                                                                 if let Some(node) = viewport.root_scroll_id() {
@@ -2155,11 +2330,12 @@ impl BrowserShell {
                                                                 }
                                                                 return;
                                                             }
-                                                            let scale = viewport.width as f32
-                                                                / bounds.size.width.as_f32();
-                                                            let (scroll_x, scroll_y) = viewport.root_scroll_offset();
-                                                            let x = (event.position.x - bounds.origin.x).as_f32() * scale + scroll_x;
-                                                            let y = (event.position.y - bounds.origin.y).as_f32() * scale + scroll_y;
+                                                            let Some((x, y)) = viewport.metrics.document_point(
+                                                                ((event.position.x - bounds.origin.x).as_f32(),
+                                                                 (event.position.y - bounds.origin.y).as_f32()),
+                                                                (bounds.size.width.as_f32(), bounds.size.height.as_f32()),
+                                                                viewport.root_scroll_offset(),
+                                                            ) else { return; };
                                                             let link = viewport
                                                                 .link_hit_at(x, y)
                                                                 .map(|(node, target)| {
@@ -2167,8 +2343,9 @@ impl BrowserShell {
                                                                 });
                                                             let control = viewport.control_at(x, y);
                                                             let text_control = control.and_then(|index| {
-                                                                viewport.text_control(index).map(|(value, rect)| {
-                                                                    (index, value.to_string(), rect)
+                                                                viewport.text_control(index).and_then(|(value, rect)| {
+                                                                    viewport.control_identity(index).map(|identity|
+                                                                        (index, identity, value.to_string(), rect))
                                                                 })
                                                             });
                                                             let submit_request = control
@@ -2191,9 +2368,10 @@ impl BrowserShell {
                                                                 }
                                                             } else if let Some(request) = submit_request {
                                                                 this.submit_form(request);
-                                                            } else if let Some((control, value, rect)) = text_control {
+                                                            } else if let Some((control, node_identity, value, rect)) = text_control {
                                                                 this.page_input = Some(PageInputState {
                                                                     tab: this.active,
+                                                                    node_identity,
                                                                     control,
                                                                     value,
                                                                     rect,
@@ -2207,11 +2385,15 @@ impl BrowserShell {
                                                         if !wheel_bounds.contains(&event.position) { return; }
                                                         let delta = event.delta.pixel_delta(window.line_height());
                                                         wheel_entity.update(app, |this, cx| {
+                                                            if this.active != measured_tab || !this.document_interaction_available(measured_tab) { return; }
                                                             let Some(viewport) = this.tabs[this.active].viewport.as_ref() else { return; };
+                                                            if !viewport.accepts_identity(&wheel_owner)
+                                                                || !viewport.metrics.matches_logical_bounds(wheel_bounds.size.width.as_f32(), wheel_bounds.size.height.as_f32())
+                                                            { return; }
                                                             let x = (event.position.x - wheel_bounds.origin.x).as_f32()
-                                                                * viewport.width as f32 / wheel_bounds.size.width.as_f32();
+                                                                * viewport.metrics.css_width / wheel_bounds.size.width.as_f32();
                                                             let y = (event.position.y - wheel_bounds.origin.y).as_f32()
-                                                                * viewport.height as f32 / wheel_bounds.size.height.as_f32();
+                                                                * viewport.metrics.css_height / wheel_bounds.size.height.as_f32();
                                                             let delta = (-delta.x.as_f32(), -delta.y.as_f32());
                                                             let input = if event.delta.precise() {
                                                                 ScrollInput::Trackpad { x, y, delta }
@@ -2227,7 +2409,11 @@ impl BrowserShell {
                                                             || (event.position.x - drag_bounds.origin.x).as_f32()
                                                                 < drag_bounds.size.width.as_f32() - 12. { return; }
                                                         drag_entity.update(app, |this, cx| {
+                                                            if this.active != measured_tab || !this.document_interaction_available(measured_tab) { return; }
                                                             let Some(viewport) = this.tabs[this.active].viewport.as_ref() else { return; };
+                                                            if !viewport.accepts_identity(&drag_owner)
+                                                                || !viewport.metrics.matches_logical_bounds(drag_bounds.size.width.as_f32(), drag_bounds.size.height.as_f32())
+                                                            { return; }
                                                             let Some(node) = viewport.root_scroll_id() else { return; };
                                                             let fraction = ((event.position.y - drag_bounds.origin.y).as_f32()
                                                                 / drag_bounds.size.height.as_f32()).clamp(0., 1.);
@@ -2259,10 +2445,10 @@ impl BrowserShell {
                                             surface.child(
                                                 div()
                                                     .absolute()
-                                                    .left(gpui::relative((x - scroll_x) / viewport.width as f32))
-                                                    .top(gpui::relative((y - scroll_y) / viewport.height as f32))
-                                                    .w(gpui::relative(width / viewport.width as f32))
-                                                    .h(gpui::relative(height / viewport.height as f32))
+                                                    .left(px(x - scroll_x))
+                                                    .top(px(y - scroll_y))
+                                                    .w(px(width))
+                                                    .h(px(height))
                                                     .flex()
                                                     .items_center()
                                                     .px_2()
@@ -2285,10 +2471,10 @@ impl BrowserShell {
                                                 div()
                                                     .id(SharedString::from(format!("find-match-{index}")))
                                                     .absolute()
-                                                    .left(gpui::relative((rect.x - scroll_x) / viewport.width as f32))
-                                                    .top(gpui::relative((rect.y - scroll_y) / viewport.height as f32))
-                                                    .w(gpui::relative(rect.width / viewport.width as f32))
-                                                    .h(gpui::relative(rect.height / viewport.height as f32))
+                                                    .left(px(rect.x - scroll_x))
+                                                    .top(px(rect.y - scroll_y))
+                                                    .w(px(rect.width))
+                                                    .h(px(rect.height))
                                                     .when(active, |el| {
                                                         el.bg(gpui::rgba(0xff8c0088))
                                                             .border_2()
@@ -3394,4 +3580,84 @@ mod tests {
         assert!(shell.find_matches.is_empty());
         assert_eq!(shell.find_active, 0);
     }
+
+    #[test]
+    fn actual_failed_runtime_keeps_error_through_cached_movement_and_recovers_only_checked() {
+        let mut shell = BrowserShell::new(None, None);
+        let mut runtime = PageRuntime::failure_fixture();
+        let initial = runtime.fixture_update("");
+        assert!(initial.render_failure.is_none());
+        shell.apply_runtime_update(0, initial);
+        let old_image = shell.tabs[0].viewport.as_ref().unwrap().image.clone();
+        let failed = runtime.fixture_update("document.querySelector('#target').setAttribute('style','width:1500px;height:1500px;border:4px solid red;border-image-source:linear-gradient(red,blue)');");
+        assert!(failed.viewport.is_none());
+        assert!(failed.render_failure.is_some(), "genuine nonunit generated source admission fails");
+        shell.apply_runtime_update(0, failed);
+        assert!(Arc::ptr_eq(&old_image, &shell.tabs[0].viewport.as_ref().unwrap().image));
+        let error = shell.tabs[0].render_failure.clone();
+        assert!(!shell.document_interaction_available(0));
+        assert!(!shell.find_is_available());
+        assert!(shell.dispatch_runtime_click(0).default_prevented);
+        assert!(!shell.publish_checked_viewport(0, Ok(None), runtime.metrics_for_fixture()));
+        for y in [0.0, 30.0, 30.0, 0.0] {
+            let view = shell.tabs[0].viewport.as_ref().unwrap();
+            let node = view.root_scroll_id().expect("real scroll root");
+            let result = view.scroll_input(ScrollInput::ScrollTo { node, target:(0.0,y),
+                behavior: ScrollBehavior::Instant }, false);
+            assert!(result.is_ok());
+            shell.record_cached_movement(0, result);
+            assert_eq!(shell.tabs[0].render_failure, error);
+            assert!(!shell.document_interaction_available(0));
+        }
+        let recovered = runtime.fixture_update("document.querySelector('#target').setAttribute('style','width:40px;height:40px;border:4px solid red');");
+        assert!(recovered.viewport.is_some());
+        shell.apply_runtime_update(0, recovered);
+        assert!(shell.tabs[0].render_failure.is_none());
+        assert!(shell.document_interaction_available(0));
+        assert!(!Arc::ptr_eq(&old_image, &shell.tabs[0].viewport.as_ref().unwrap().image));
+    }
+
+    #[test]
+    fn failed_current_dom_reflow_preserves_directives_and_rejects_stale_frame_interaction() {
+        let mut shell = BrowserShell::new(None, None);
+        let mut runtime = PageRuntime::failure_fixture();
+        shell.apply_runtime_update(0, runtime.fixture_update(""));
+        let old_owner = shell.tabs[0].viewport.as_ref().unwrap().identity();
+        let failed = runtime.fixture_update("document.querySelector('#target').setAttribute('style','width:1500px;height:1500px;border:4px solid red;border-image-source:linear-gradient(red,blue)');history.pushState({},'', 'failed-current');");
+        assert!(failed.render_failure.is_some());
+        let directive = shell.apply_runtime_update(0, failed);
+        assert!(directive.history_update.is_some(), "render failure must not discard real directives");
+        assert!(shell.tabs[0].viewport.as_ref().unwrap().accepts_identity(&old_owner));
+        assert!(!shell.document_interaction_available(0), "old frame identity alone cannot authorize hits");
+        let metrics = ViewportMetrics::new(140.0, 100.0, 2.0).unwrap();
+        let reflow = runtime.reflow(metrics).map(Some);
+        assert!(reflow.is_err());
+        assert!(!shell.publish_checked_viewport(0, reflow, metrics));
+        assert_eq!(shell.tabs[0].failed_metrics, Some(metrics));
+        assert!(!shell.document_interaction_available(0));
+        runtime.fixture_update("document.querySelector('#target').setAttribute('style','width:40px;height:40px;border:4px solid red');");
+        let checked = runtime.reflow(metrics).map(Some);
+        assert!(shell.publish_checked_viewport(0, checked, metrics));
+        assert!(shell.tabs[0].render_failure.is_none());
+        assert!(shell.document_interaction_available(0));
+        assert!(!shell.tabs[0].viewport.as_ref().unwrap().accepts_identity(&old_owner));
+    }
+
+
+    #[test]
+    fn current_render_failure_does_not_suspend_real_runtime_timer_recovery() {
+        let mut shell = BrowserShell::new(None, None);
+        let mut runtime = PageRuntime::failure_fixture();
+        shell.apply_runtime_update(0, runtime.fixture_update(""));
+        let failed = runtime.fixture_update("document.querySelector('#target').setAttribute('style','width:1500px;height:1500px;border:4px solid red;border-image-source:linear-gradient(red,blue)');setTimeout(function(){document.querySelector('#target').setAttribute('style','width:40px;height:40px;border:4px solid red');document.title='Recovered by timer';},20);");
+        assert!(failed.render_failure.is_some());
+        shell.apply_runtime_update(0, failed);
+        shell.page_runtimes[0] = Some(runtime);
+        std::thread::sleep(Duration::from_millis(30));
+        shell.pump_active_runtime();
+        assert!(shell.tabs[0].render_failure.is_none());
+        assert_eq!(shell.tabs[0].title, "Recovered by timer");
+        assert!(shell.document_interaction_available(0));
+    }
+
 }

@@ -622,6 +622,37 @@ fn variation_hash(variations: &[VariationSetting]) -> u64 {
     hash
 }
 
+/// Device raster identity independent of the glyph's CSS shaping size.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GlyphRasterScale {
+    scale_bits: u64,
+    pub phase_x_64: u8,
+    pub phase_y_64: u8,
+}
+
+impl GlyphRasterScale {
+    pub fn new(scale: f64, phase_x_64: u8, phase_y_64: u8) -> Option<Self> {
+        (scale.is_finite() && scale > 0.0 && phase_x_64 < 64 && phase_y_64 < 64).then_some(Self {
+            scale_bits: scale.to_bits(),
+            phase_x_64,
+            phase_y_64,
+        })
+    }
+    pub fn scale(self) -> f64 {
+        f64::from_bits(self.scale_bits)
+    }
+    pub fn unscaled(key: GlyphCacheKey) -> Self {
+        Self::new(1.0, key.subpixel_x_64, key.subpixel_y_64).unwrap()
+    }
+    pub fn device_size(self, key: GlyphCacheKey) -> Result<f32, TextError> {
+        let size = f64::from(key.size()) * self.scale();
+        if !size.is_finite() || size <= 0.0 || size > 4096.0 {
+            return Err(TextError::ResourceLimit);
+        }
+        Ok(size as f32)
+    }
+}
+
 pub struct GlyphRasterRequest<'a> {
     pub key: GlyphCacheKey,
     pub variations: &'a [VariationSetting],
@@ -678,6 +709,17 @@ pub trait TextSystem {
     fn shape(&self, paragraph: Paragraph<'_>) -> Result<ShapedParagraph, TextError>;
     fn shape_line(&self, request: LineRequest<'_>) -> Result<ShapedLine, TextError>;
     fn rasterize(&self, request: GlyphRasterRequest<'_>) -> Result<Option<GlyphImage>, TextError>;
+    /// Non-unit raster support must be supplied by a genuine device rasterizer.
+    fn rasterize_at_scale(
+        &self,
+        request: GlyphRasterRequest<'_>,
+        scale: GlyphRasterScale,
+    ) -> Result<Option<GlyphImage>, TextError> {
+        if scale != GlyphRasterScale::unscaled(request.key) {
+            return Err(TextError::InvalidStyle);
+        }
+        self.rasterize(request)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -904,6 +946,58 @@ impl TextSystem for FallbackTextSystem {
             height,
             bearing_x: 0,
             bearing_y: height as i32,
+        }))
+    }
+    fn rasterize_at_scale(
+        &self,
+        request: GlyphRasterRequest<'_>,
+        scale: GlyphRasterScale,
+    ) -> Result<Option<GlyphImage>, TextError> {
+        if scale == GlyphRasterScale::unscaled(request.key) {
+            return self.rasterize(request);
+        }
+        let key = request.key;
+        if key.generation != self.generation() || key.font != FontKey(0) {
+            return Err(TextError::MissingFont);
+        }
+        let ch = char::from_u32(key.glyph.0).ok_or(TextError::InvalidParagraph)?;
+        if ch.is_whitespace() || is_default_ignorable(ch) {
+            return Ok(None);
+        }
+        let size = scale.device_size(key)?;
+        let left = f64::from(scale.phase_x_64) / 64.0;
+        let bottom = f64::from(scale.phase_y_64) / 64.0;
+        let right = left + f64::from(fallback_advance(ch, key.size())) * scale.scale();
+        let top = bottom - f64::from(size) * 0.7;
+        let x0 = left.floor();
+        let y0 = top.floor();
+        let width = (right.ceil() - x0).max(1.0) as u32;
+        let height = (bottom.ceil() - y0).max(1.0) as u32;
+        if width > 4096 || height > 4096 {
+            return Err(TextError::ResourceLimit);
+        }
+        let mut data = vec![
+            0;
+            (width as usize)
+                .checked_mul(height as usize)
+                .ok_or(TextError::ResourceLimit)?
+        ];
+        for y in 0..height {
+            for x in 0..width {
+                let px = x0 + f64::from(x);
+                let py = y0 + f64::from(y);
+                let coverage = (right.min(px + 1.0) - left.max(px)).clamp(0.0, 1.0)
+                    * (bottom.min(py + 1.0) - top.max(py)).clamp(0.0, 1.0);
+                data[(y * width + x) as usize] = (coverage * 255.0).round() as u8;
+            }
+        }
+        Ok(Some(GlyphImage {
+            content: GlyphContent::Mask,
+            data,
+            width,
+            height,
+            bearing_x: x0 as i32,
+            bearing_y: -y0 as i32,
         }))
     }
 }
@@ -1573,3 +1667,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod device_raster_tests;

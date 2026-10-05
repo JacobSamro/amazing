@@ -76,7 +76,7 @@ fn native_chrome(
     }
     let bounds = clip
         .intersect(r.x, r.y, r.w, r.h)
-        .intersect(0.0, 0.0, surface.width as f32, surface.height as f32)
+        .surface_bounds(surface)
         .pixels();
     let [x0, y0, x1, y1] = bounds;
     if x1 <= x0 || y1 <= y0 {
@@ -153,8 +153,7 @@ fn native_chrome(
     };
     for y in y0..y1 {
         for x in x0..x1 {
-            let px = x as f32 + 0.5;
-            let py = y as f32 + 0.5;
+            let (px, py) = clip.point(x, y);
             if !outer.contains(px, py) {
                 continue;
             }

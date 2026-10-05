@@ -424,7 +424,8 @@ impl Compositor {
             if draw.empty() {
                 continue;
             }
-            let integer = is_integer_translation(snap.matrix);
+            let integer = self.raster_sampling == RasterSampling::Nearest
+                || is_integer_translation(snap.matrix);
             let opacity = amazing_paint::quantize_opacity(snap.opacity);
             for y in draw.y0..draw.y1 {
                 for x in draw.x0..draw.x1 {

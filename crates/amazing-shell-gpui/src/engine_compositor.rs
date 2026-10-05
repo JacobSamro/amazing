@@ -14,6 +14,7 @@ pub struct EngineCompositor {
     presenter: GpuiPresenter,
     frame: GpuiFrame,
     mode: PaintViewRasterMode,
+    raster_viewport: Option<amazing_paint::RasterViewport>,
     width: u32,
     height: u32,
     work: FrameWork,
@@ -71,6 +72,7 @@ impl EngineCompositor {
             presenter,
             frame,
             mode,
+            raster_viewport: view.raster_viewport(),
             width,
             height,
             work,
@@ -109,6 +111,9 @@ impl EngineCompositor {
     /// Rebuilds from the same scene after property or item changes. Returns
     /// whether GPUI needs a notification for pixel damage.
     pub fn update(&mut self, view: &DisplayListView<'_>) -> Result<bool, String> {
+        if view.raster_viewport() != self.raster_viewport {
+            return Err("raster viewport changed; rebuild the scene".into());
+        }
         let source = PaintViewSource::new(view);
         if source.mode() != self.mode {
             return Err("paint-view raster mode changed; rebuild the scene".into());

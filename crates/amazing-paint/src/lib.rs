@@ -63,9 +63,17 @@ pub mod text;
 pub use color::parse_css_color;
 pub use blend::{blend_source_over, quantize_opacity};
 pub use paint::{
-    paint_document, paint_document_with, paint_document_with_resources,
+    paint_document_at_viewport, paint_document, paint_document_with, paint_document_with_resources,
     paint_document_with_text_resources, paint_document_with_text_resources_and_controls,
     ImageProvider, NoImages,
 };
 pub use surface::Surface;
 pub use text::{draw_fragment, GlyphBitmap, GlyphProvider, OutlineGlyphProvider, RectInkProvider};
+
+pub mod raster_viewport;
+pub use raster_viewport::{RasterViewport, RasterError};
+#[cfg(test)]
+mod device_raster_tests;
+
+#[cfg(test)]
+mod baked_range_tests;

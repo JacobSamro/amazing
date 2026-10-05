@@ -36,16 +36,16 @@
 //!   propagation rules.
 
 use amazing_css::ComputedStyle;
-use amazing_layout::font::FontSource;
 use amazing_layout::LayoutBox;
+use amazing_layout::font::FontSource;
 use amazing_text::{GlyphCacheKey, GlyphContent, GlyphImage, TextSystem};
 use std::ops::Range;
 
 use crate::color::parse_css_color;
-use crate::display_list::{build_display_list, GroupEffect, PaintCommand};
+use crate::display_list::{GroupEffect, PaintCommand, build_display_list};
 use crate::image::ImagePresentation;
 use crate::surface::Surface;
-use crate::text::{draw_fragment_clipped, GlyphProvider, RectInkProvider};
+use crate::text::{GlyphProvider, RectInkProvider, draw_fragment_clipped};
 
 const CANVAS_WHITE: [u8; 4] = [255, 255, 255, 255];
 const MAX_LAYER_PIXELS: usize = 16 * 1024 * 1024;
@@ -60,6 +60,7 @@ struct ClipRect {
     y0: f32,
     x1: f32,
     y1: f32,
+    lattice: crate::raster_viewport::RasterLattice,
 }
 
 impl ClipRect {
@@ -69,6 +70,7 @@ impl ClipRect {
             y0: 0.0,
             x1: surface.width as f32,
             y1: surface.height as f32,
+            lattice: crate::raster_viewport::RasterLattice::UNIT,
         }
     }
 
@@ -78,16 +80,28 @@ impl ClipRect {
             y0: self.y0.max(y),
             x1: self.x1.min(x + width),
             y1: self.y1.min(y + height),
+            lattice: self.lattice,
         }
     }
 
     fn pixels(self) -> [i64; 4] {
-        [
-            self.x0.round() as i64,
-            self.y0.round() as i64,
-            self.x1.round() as i64,
-            self.y1.round() as i64,
-        ]
+        self.lattice.bounds([self.x0, self.y0, self.x1, self.y1])
+    }
+    fn point(self, x: i64, y: i64) -> (f32, f32) {
+        let (x, y) = self.lattice.css_point(x as f64 + 0.5, y as f64 + 0.5);
+        (x as f32, y as f32)
+    }
+    fn surface_bounds(self, surface: &Surface) -> Self {
+        let a = self.lattice.css_point(0.0, 0.0);
+        let b = self
+            .lattice
+            .css_point(f64::from(surface.width), f64::from(surface.height));
+        self.intersect(
+            a.0 as f32,
+            a.1 as f32,
+            (b.0 - a.0) as f32,
+            (b.1 - a.1) as f32,
+        )
     }
 }
 
@@ -99,16 +113,22 @@ impl ClipRect {
 #[derive(Clone, Copy)]
 enum RasterMask {
     Rounded(RoundedRect),
-    Polygon { points: [(f32, f32); crate::clip::MAX_CLIP_POINTS], len: u8, even_odd: bool },
+    Polygon {
+        points: [(f32, f32); crate::clip::MAX_CLIP_POINTS],
+        len: u8,
+        even_odd: bool,
+    },
 }
 
 impl RasterMask {
     fn contains(&self, x: f32, y: f32) -> bool {
         match self {
             RasterMask::Rounded(rounded) => rounded.contains(x, y),
-            RasterMask::Polygon { points, len, even_odd } => {
-                crate::clip::point_in_polygon(&points[..*len as usize], x, y, *even_odd)
-            }
+            RasterMask::Polygon {
+                points,
+                len,
+                even_odd,
+            } => crate::clip::point_in_polygon(&points[..*len as usize], x, y, *even_odd),
         }
     }
 }
@@ -116,7 +136,13 @@ impl RasterMask {
 impl From<crate::clip::ClipMask> for RasterMask {
     fn from(clip: crate::clip::ClipMask) -> Self {
         match clip {
-            crate::clip::ClipMask::Rect { x, y, width, height, radii } => RasterMask::Rounded(RoundedRect {
+            crate::clip::ClipMask::Rect {
+                x,
+                y,
+                width,
+                height,
+                radii,
+            } => RasterMask::Rounded(RoundedRect {
                 x,
                 y,
                 width,
@@ -128,9 +154,15 @@ impl From<crate::clip::ClipMask> for RasterMask {
                     bottom_left: radii[3],
                 },
             }),
-            crate::clip::ClipMask::Polygon { points, len, even_odd } => {
-                RasterMask::Polygon { points, len, even_odd }
-            }
+            crate::clip::ClipMask::Polygon {
+                points,
+                len,
+                even_odd,
+            } => RasterMask::Polygon {
+                points,
+                len,
+                even_odd,
+            },
         }
     }
 }
@@ -150,6 +182,7 @@ struct RasterState {
     layer_pixels: usize,
     background_samples: usize,
     failed: bool,
+    error:Option<crate::RasterError>,
 }
 
 impl RasterState {
@@ -165,6 +198,7 @@ impl RasterState {
             layer_pixels: 0,
             background_samples: 64 * 1024 * 1024,
             failed: false,
+            error:None,
         }
     }
 
@@ -199,11 +233,40 @@ impl RasterState {
         // box's own (possibly semi-transparent) painting blends over it
         // exactly as it would blend over any other backdrop.
         if !effect.backdrop_filter.is_empty() {
-            let filtered = effect.backdrop_filter.apply_to_surface(&self.surface);
-            copy_rect(&filtered, &mut transparent, effect.backdrop_bounds);
+            let filtered = effect
+                .backdrop_filter
+                .scaled(self.clip().lattice.scale as f32)
+                .apply_to_surface(&self.surface);
+            let l = self.clip().lattice;
+            let (x, y) = l.device_point(
+                f64::from(effect.backdrop_bounds.x),
+                f64::from(effect.backdrop_bounds.y),
+            );
+            copy_rect(
+                &filtered,
+                &mut transparent,
+                amazing_layout::Rect {
+                    x: x as f32,
+                    y: y as f32,
+                    w: effect.backdrop_bounds.w * l.scale as f32,
+                    h: effect.backdrop_bounds.h * l.scale as f32,
+                },
+            );
         }
         let parent = std::mem::replace(&mut self.surface, transparent);
-        let clips = std::mem::replace(&mut self.clips, vec![ClipRect::viewport(&self.surface)]);
+        let lattice = self.clip().lattice;
+        let mut viewport = ClipRect::viewport(&self.surface);
+        viewport.lattice = lattice;
+        let a = lattice.css_point(0.0, 0.0);
+        let b = lattice.css_point(
+            f64::from(self.surface.width),
+            f64::from(self.surface.height),
+        );
+        viewport.x0 = a.0 as f32;
+        viewport.y0 = a.1 as f32;
+        viewport.x1 = b.0 as f32;
+        viewport.y1 = b.1 as f32;
+        let clips = std::mem::replace(&mut self.clips, vec![viewport]);
         self.groups.push(RasterGroup {
             parent,
             clips,
@@ -222,7 +285,14 @@ impl RasterState {
             .saturating_sub(child.width as usize * child.height as usize);
         self.clips = group.clips;
         let clip = self.clip();
-        composite_group(&mut self.surface, &child, group.effect, group.mask, clip, images);
+        composite_group(
+            &mut self.surface,
+            &child,
+            group.effect,
+            group.mask,
+            clip,
+            images,
+        );
     }
 
     fn push_overflow_clip(&mut self, box_: &LayoutBox) {
@@ -312,7 +382,12 @@ fn composite_group(
     let filtered = if effect.filter.is_empty() {
         None
     } else {
-        Some(effect.filter.apply_to_surface(source))
+        Some(
+            effect
+                .filter
+                .scaled(clip.lattice.scale as f32)
+                .apply_to_surface(source),
+        )
     };
     let source = filtered.as_ref().unwrap_or(source);
     let mask_image = effect
@@ -325,9 +400,15 @@ fn composite_group(
     let y1 = clip_y1.max(0).min(destination.height as i64);
     for y in y0..y1 {
         for x in x0..x1 {
-            let (source_x, source_y) = inverse.map(x as f32 + 0.5, y as f32 + 0.5);
-            let sx = source_x.floor() as i64;
-            let sy = source_y.floor() as i64;
+            let (source_x, source_y) = {
+                let (cx, cy) = clip.point(x, y);
+                inverse.map(cx, cy)
+            };
+            let (sx, sy) = clip
+                .lattice
+                .device_point(f64::from(source_x), f64::from(source_y));
+            let sx = sx.floor() as i64;
+            let sy = sy.floor() as i64;
             if sx < 0 || sy < 0 || sx >= source.width as i64 || sy >= source.height as i64 {
                 continue;
             }
@@ -387,7 +468,12 @@ pub trait ImageProvider {
         None
     }
     /// Decoded border source, resolved by the embedding loader from its winning CSS base.
-    fn border_image(&self, _node: Option<amazing_dom::NodeIdx>, url: &str, _base: Option<&str>) -> Option<&amazing_media::Image> {
+    fn border_image(
+        &self,
+        _node: Option<amazing_dom::NodeIdx>,
+        url: &str,
+        _base: Option<&str>,
+    ) -> Option<&amazing_media::Image> {
         self.image_by_url(url)
     }
     /// Rasterize an inline SVG root for this content viewport. The embedding
@@ -414,9 +500,13 @@ pub trait ImageProvider {
     }
     /// Winning stylesheet provenance distinguishes equal relative URLs in
     /// principal and generated styles. Existing providers remain compatible.
-    fn background_image_with_base(&self,node:amazing_dom::NodeIdx,url:&str,_base:Option<&str>)
-        ->Option<&amazing_media::Image> {
-        self.background_image(node,url)
+    fn background_image_with_base(
+        &self,
+        node: amazing_dom::NodeIdx,
+        url: &str,
+        _base: Option<&str>,
+    ) -> Option<&amazing_media::Image> {
+        self.background_image(node, url)
     }
     /// Selected HTML source density. Sampling stays in decoded pixels while
     /// natural-size fitting uses CSS dimensions. Plain and generated resources
@@ -599,8 +689,58 @@ pub fn paint_document_with_text_resources_and_controls(
     images: &dyn ImageProvider,
     controls: &dyn crate::controls::ControlProvider,
 ) -> Surface {
+    paint_document_at_lattice(
+        root,
+        viewport_w,
+        viewport_h,
+        text,
+        images,
+        controls,
+        crate::raster_viewport::RasterLattice::UNIT,
+        (f64::from(viewport_w), f64::from(viewport_h)),
+    )
+    .0
+}
+
+pub fn paint_document_at_viewport(
+    root: &LayoutBox,
+    viewport: crate::RasterViewport,
+    text: &dyn TextSystem,
+    images: &dyn ImageProvider,
+    controls: &dyn crate::controls::ControlProvider,
+) -> Result<Surface, crate::RasterError> {
+    let (w, h) = viewport.physical_size();
+    let (surface, failed) = paint_document_at_lattice(
+        root,
+        w,
+        h,
+        text,
+        images,
+        controls,
+        crate::raster_viewport::RasterLattice {
+            scale: viewport.device_scale(),
+            offset: (0.0, 0.0),
+        },
+        viewport.logical_output_size(),
+    );
+    if let Some(error)=failed {Err(error)} else {Ok(surface)}
+}
+
+fn paint_document_at_lattice(
+    root: &LayoutBox,
+    viewport_w: u32,
+    viewport_h: u32,
+    text: &dyn TextSystem,
+    images: &dyn ImageProvider,
+    controls: &dyn crate::controls::ControlProvider,
+    lattice: crate::raster_viewport::RasterLattice,
+    logical_output: (f64, f64),
+) -> (Surface, Option<crate::RasterError>) {
     let commands = build_display_list(root);
     let mut state = RasterState::new(viewport_w, viewport_h);
+    state.clips[0].lattice = lattice;
+    state.clips[0].x1 = logical_output.0 as f32;
+    state.clips[0].y1 = logical_output.1 as f32;
     for command in commands {
         if state.failed {
             break;
@@ -638,12 +778,12 @@ pub fn paint_document_with_text_resources_and_controls(
                 let rect = control.geometry.content_box;
                 let text_clip = clip.intersect(rect.x, rect.y, rect.w, rect.h);
                 for line in content.lines {
-                    paint_line_glyphs(&mut state.surface, line, text, images, text_clip);
+                    if let Err(error)=paint_line_glyphs(&mut state.surface,line,text,images,text_clip) {state.failed=true;state.error=Some(error);}
                 }
             }
             PaintCommand::PaintContent(box_) => {
                 let clip = state.clip();
-                paint_shaped_lines(&mut state.surface, box_, text, images, clip);
+                if let Err(error)=paint_shaped_lines(&mut state.surface,box_,text,images,clip) {state.failed=true;state.error=Some(error);}
                 paint_table_borders(&mut state.surface, box_, clip);
             }
             PaintCommand::PushOverflowClip(box_) => state.push_overflow_clip(box_),
@@ -651,7 +791,8 @@ pub fn paint_document_with_text_resources_and_controls(
             PaintCommand::EndGroup => state.end_group(images),
         }
     }
-    state.finish()
+    let error=if state.failed {Some(state.error.unwrap_or(crate::RasterError::RasterFailure))} else {None};
+    (state.finish(), error)
 }
 
 /// Replays the command stream so clips and effect groups around the selected
@@ -668,13 +809,42 @@ pub(crate) fn raster_command_range(
     offset: (i32, i32),
     target_clip: crate::display_list_view::PaintBounds,
 ) -> bool {
+    raster_command_range_at_scale(
+        commands,
+        selected,
+        viewport,
+        1.0,
+        None,
+        text,
+        images,
+        controls,
+        target,
+        offset,
+        target_clip,
+    )
+}
+
+pub(crate) fn raster_command_surface_at_scale(
+    commands: &[PaintCommand<'_>],
+    selected: Range<usize>,
+    viewport: (u32, u32),
+    scale: f64,
+    logical_output:Option<(f64,f64)>,
+    text: &dyn TextSystem,
+    images: &dyn ImageProvider,
+    controls: &dyn crate::controls::ControlProvider,
+) -> Option<Surface> {
     let Some(pixels) = (viewport.0 as usize).checked_mul(viewport.1 as usize) else {
-        return false;
+        return None;
     };
     if pixels > MAX_LAYER_PIXELS || selected.start > selected.end || selected.end > commands.len() {
-        return false;
+        return None;
     }
     let mut state = RasterState::new(viewport.0, viewport.1);
+    state.clips[0].lattice.scale = scale;
+    let output=logical_output.unwrap_or((f64::from(viewport.0)/scale,f64::from(viewport.1)/scale));
+    state.clips[0].x1=output.0 as f32;
+    state.clips[0].y1=output.1 as f32;
     state.surface.clear([0, 0, 0, 0]);
     for (index, command) in commands.iter().enumerate() {
         if state.failed {
@@ -717,20 +887,46 @@ pub(crate) fn raster_command_range(
                 let rect = control.geometry.content_box;
                 let text_clip = clip.intersect(rect.x, rect.y, rect.w, rect.h);
                 for line in content.lines {
-                    paint_line_glyphs(&mut state.surface, line, text, images, text_clip);
+                    if let Err(error)=paint_line_glyphs(&mut state.surface,line,text,images,text_clip) {state.failed=true;state.error=Some(error);}
                 }
             }
             PaintCommand::PaintContent(box_) if draw => {
                 let clip = state.clip();
-                paint_shaped_lines(&mut state.surface, box_, text, images, clip);
+                if let Err(error)=paint_shaped_lines(&mut state.surface,box_,text,images,clip) {state.failed=true;state.error=Some(error);}
                 paint_table_borders(&mut state.surface, box_, clip);
             }
             _ => {}
         }
     }
     if state.failed || !state.groups.is_empty() {
-        return false;
+        return None;
     }
+    Some(state.surface)
+}
+
+pub(crate) fn raster_command_range_at_scale(
+    commands: &[PaintCommand<'_>],
+    selected: Range<usize>,
+    viewport: (u32, u32),
+    scale: f64,
+    logical_output:Option<(f64,f64)>,
+    text: &dyn TextSystem,
+    images: &dyn ImageProvider,
+    controls: &dyn crate::controls::ControlProvider,
+    target: &mut Surface,
+    offset: (i32, i32),
+    target_clip: crate::display_list_view::PaintBounds,
+) -> bool {
+    let Some(surface) = raster_command_surface_at_scale(commands, selected, viewport, scale,
+        logical_output, text, images, controls) else { return false; };
+    copy_baked_surface(&surface, target, offset, target_clip)
+}
+
+pub(crate) fn copy_baked_surface(
+    source_surface: &Surface, target: &mut Surface, offset: (i32, i32),
+    target_clip: crate::display_list_view::PaintBounds,
+) -> bool {
+    let viewport = (source_surface.width, source_surface.height);
     if !target_clip.x.is_finite()
         || !target_clip.y.is_finite()
         || !target_clip.width.is_finite()
@@ -754,7 +950,7 @@ pub(crate) fn raster_command_range(
     let sy1 = (y1 - dy).max(0).min(i64::from(viewport.1));
     for sy in sy0..sy1 {
         for sx in sx0..sx1 {
-            let source = state.surface.get_pixel(sx as u32, sy as u32).unwrap();
+            let source = source_surface.get_pixel(sx as u32, sy as u32).unwrap();
             if source[3] == 0 {
                 continue;
             }
@@ -765,6 +961,63 @@ pub(crate) fn raster_command_range(
         }
     }
     true
+}
+
+pub(crate) fn raster_raw_item_at_scale(
+    command: &PaintCommand<'_>,
+    target: &mut Surface,
+    tile_origin: (i32, i32),
+    text: &dyn TextSystem,
+    images: &dyn ImageProvider,
+    scale: f64,
+) -> bool {
+    if scale == 1.0 {
+        return raster_raw_item(command, target, tile_origin, text, images);
+    }
+    let mut clip = ClipRect::viewport(target);
+    clip.lattice = crate::raster_viewport::RasterLattice {
+        scale,
+        offset: (f64::from(tile_origin.0), f64::from(tile_origin.1)),
+    };
+    let a = clip.lattice.css_point(0.0, 0.0);
+    let b = clip
+        .lattice
+        .css_point(f64::from(target.width), f64::from(target.height));
+    clip.x0 = a.0 as f32;
+    clip.y0 = a.1 as f32;
+    clip.x1 = b.0 as f32;
+    clip.y1 = b.1 as f32;
+    match command {
+        PaintCommand::PaintDecorations(box_, background) => {
+            if box_.table_decoration().suppress_background
+                || box_.table_decoration().suppress_border
+                || !box_.table_decoration().background_holes.is_empty()
+            {
+                return false;
+            }
+            let mut budget = if background.layers.iter().any(|l| l.gradient.is_some()) {
+                return false;
+            } else {
+                MAX_LAYER_PIXELS
+            };
+            paint_decorations(
+                target,
+                box_,
+                resolve_text_color(&box_.style),
+                images,
+                background,
+                clip,
+                &mut budget,
+            )
+        }
+        PaintCommand::PaintContent(box_) => {
+            if !box_.table_decoration().borders.is_empty() {
+                return false;
+            }
+            paint_shaped_lines(target, box_, text, images, clip).is_ok()
+        }
+        _ => false,
+    }
 }
 
 /// Paint one independent command directly into a tile in untransformed
@@ -804,18 +1057,13 @@ pub(crate) fn raster_raw_item(
             let clip = ClipRect::viewport(target);
             // Border-image decorations use the same bounded pixel accounting as
             // full raster. Keep the existing background-only raw-item policy.
-            let mut budget = if crate::border_image::BorderImagePlan::from_style(&local.style).is_some() {
-                MAX_LAYER_PIXELS
-            } else { 0 };
-            paint_decorations(
-                target,
-                &local,
-                color,
-                images,
-                background,
-                clip,
-                &mut budget,
-            )
+            let mut budget =
+                if crate::border_image::BorderImagePlan::from_style(&local.style).is_some() {
+                    MAX_LAYER_PIXELS
+                } else {
+                    0
+                };
+            paint_decorations(target, &local, color, images, background, clip, &mut budget)
         }
         PaintCommand::PaintContent(box_) => {
             if !box_.table_decoration().borders.is_empty() { return false; }
@@ -858,7 +1106,7 @@ pub(crate) fn raster_raw_item(
             // inline flow of its own.
             for (line, local_line) in box_.lines.iter().zip(local.lines.iter()) {
                 paint_replaced_fragments(target, box_, line, images, clip, (ox, oy));
-                paint_line_glyphs(target, local_line, text, images, clip);
+                let _=paint_line_glyphs(target, local_line, text, images, clip);
             }
             true
         }
@@ -883,14 +1131,21 @@ fn paint_decorations(
         }
     }
     paint_inset_box_shadow(surface, box_, text_color, clip);
-    match crate::border_image::paint(surface, box_, images, clip.pixels(), budget) {
+    match crate::border_image::paint_at_lattice(
+        surface,
+        box_,
+        images,
+        clip.pixels(),
+        budget,
+        clip.lattice,
+    ) {
         crate::border_image::Outcome::Unavailable => paint_borders(surface, box_, text_color, clip),
-        crate::border_image::Outcome::BudgetExceeded => return false,
-        crate::border_image::Outcome::Painted => {},
+        crate::border_image::Outcome::BudgetExceeded | crate::border_image::Outcome::RasterFailure => return false,
+        crate::border_image::Outcome::Painted => {}
     }
     paint_outline(surface, box_, text_color, clip);
     if let Some(node) = box_.svg_root {
-        if let Some(svg) = svg_for_rect(images, node, &box_.content_box) {
+        if let Some(svg) = svg_for_rect(images, node, &box_.content_box, clip.lattice.scale) {
             paint_image(
                 surface,
                 &box_.content_box,
@@ -998,10 +1253,12 @@ fn fill_rounded_rect_clipped(
     let [x0, y0, x1, y1] = clipped.pixels();
     for y in y0.max(0)..y1.min(surface.height as i64) {
         for x in x0.max(0)..x1.min(surface.width as i64) {
-            let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-            if !rounded.contains(px, py) || holes.iter().any(|hole| {
-                px >= hole.x && px < hole.x + hole.w && py >= hole.y && py < hole.y + hole.h
-            }) {
+            let (px, py) = clip.point(x, y);
+            if !rounded.contains(px, py)
+                || holes.iter().any(|hole| {
+                    px >= hole.x && px < hole.x + hole.w && py >= hole.y && py < hole.y + hole.h
+                })
+            {
                 continue;
             }
             let destination = surface
@@ -1230,11 +1487,14 @@ fn paint_shaped_lines(
     text: &dyn TextSystem,
     images: &dyn ImageProvider,
     clip: ClipRect,
-) {
+) -> Result<(),crate::RasterError> {
     for line in &box_.lines {
-        paint_replaced_fragments(surface, box_, line, images, clip, (0.0, 0.0));
-        paint_line_glyphs(surface, line, text, images, clip);
+        if !paint_replaced_fragments(surface, box_, line, images, clip, (0.0, 0.0)) {
+            return Err(crate::RasterError::RasterFailure);
+        }
+        paint_line_glyphs(surface,line,text,images,clip)?;
     }
+    Ok(())
 }
 
 /// Paints one line's inline replaced fragments using `box_`'s styled fragment
@@ -1249,7 +1509,7 @@ fn paint_replaced_fragments(
     images: &dyn ImageProvider,
     clip: ClipRect,
     offset: (f32, f32),
-) {
+) -> bool {
     for replaced in &line.replaced {
         let rect = amazing_layout::Rect {
             x: replaced.x - offset.0,
@@ -1258,10 +1518,12 @@ fn paint_replaced_fragments(
             h: replaced.height,
         };
         if let Some((url, presentation, font_size)) = generated_image_url(box_, replaced) {
-            paint_generated_image(surface, &rect, &url, presentation, font_size, images, clip);
+            if !paint_generated_image(surface, &rect, &url, presentation, font_size, images, clip) {
+                return false;
+            }
             continue;
         }
-        if let Some(svg) = svg_for_rect(images, replaced.node, &rect) {
+        if let Some(svg) = svg_for_rect(images, replaced.node, &rect, clip.lattice.scale) {
             paint_image(
                 surface,
                 &rect,
@@ -1280,6 +1542,7 @@ fn paint_replaced_fragments(
             );
         }
     }
+    true
 }
 
 fn generated_image_url(
@@ -1291,7 +1554,11 @@ fn generated_image_url(
             && fragment.source_order == replaced.source_order)
             .then(|| {
                 fragment.generated_url.map(|url| {
-                    (url, ImagePresentation::from_style(fragment.style), fragment.font_size)
+                    (
+                        url,
+                        ImagePresentation::from_style(fragment.style),
+                        fragment.font_size,
+                    )
                 })
             })
             .flatten()
@@ -1317,15 +1584,52 @@ fn paint_generated_image(
     font_size: f32,
     images: &dyn ImageProvider,
     clip: ClipRect,
-) {
+) -> bool {
+    if clip.lattice.scale!=1.0 {
+        let Some(gradient)=crate::gradient::PreparedGradient::new(key,(rect.w,rect.h),font_size) else {return false;};
+        let w=(f64::from(rect.w)*clip.lattice.scale).ceil();let h=(f64::from(rect.h)*clip.lattice.scale).ceil();
+        if !w.is_finite() || !h.is_finite() || w*h>4.0*1024.0*1024.0 {return false;}
+        let Some(destination)=presentation.destination(*rect,(rect.w.ceil() as u32,rect.h.ceil() as u32)) else {return false;};
+        let clipped=clip.intersect(rect.x,rect.y,rect.w,rect.h).intersect(destination.x,destination.y,destination.w,destination.h).surface_bounds(surface);
+        let [x0,y0,x1,y1]=clipped.pixels();
+        for y in y0..y1 {for x in x0..x1 {
+            let (cx,cy)=clip.point(x,y);
+            let Some(source)=gradient.sample((cx-destination.x)/destination.w*rect.w,(cy-destination.y)/destination.h*rect.h) else {return false;};
+            let dest=surface.get_pixel(x as u32,y as u32).unwrap();
+            surface.set_pixel(x as u32,y as u32,source_over(source,dest,1.0));
+        }}
+        return true;
+    }
     if let Some(image) = images.image_by_url(key) {
         paint_image(surface, rect, image, presentation, clip);
-        return;
+        return true;
     }
-    if !rect.w.is_finite() || !rect.h.is_finite() || rect.w <= 0.0 || rect.h <= 0.0
-        || rect.w > u32::MAX as f32 || rect.h > u32::MAX as f32 { return; }
-    if let Some(image) = crate::gradient::raster(key, rect.w.ceil() as u32, rect.h.ceil() as u32, font_size) {
-        paint_image(surface, rect, &image, presentation, clip);
+    if !rect.w.is_finite()
+        || !rect.h.is_finite()
+        || rect.w <= 0.0
+        || rect.h <= 0.0
+        || rect.w > u32::MAX as f32
+        || rect.h > u32::MAX as f32
+    {
+        return clip.lattice.scale == 1.0;
+    }
+    let used = if clip.lattice.scale == 1.0 {
+        (rect.w.ceil(), rect.h.ceil())
+    } else {
+        (rect.w, rect.h)
+    };
+    if let Some(image) = crate::gradient::raster_at_scale(
+        key,
+        (f64::from(rect.w) * clip.lattice.scale).ceil() as u32,
+        (f64::from(rect.h) * clip.lattice.scale).ceil() as u32,
+        used,
+        font_size,
+        clip.lattice.scale,
+    ) {
+        paint_image_with_natural(surface, rect, &image, (rect.w.ceil() as u32,rect.h.ceil() as u32), presentation, clip);
+        true
+    } else {
+        clip.lattice.scale == 1.0
     }
 }
 
@@ -1335,7 +1639,7 @@ fn paint_line_glyphs(
     text: &dyn TextSystem,
     images: &dyn ImageProvider,
     clip: ClipRect,
-) {
+) -> Result<(),crate::RasterError> {
     for decoration in &line.decorations {
         if let Some(color) = parse_css_color(&decoration.color) {
             if color[3] != 0 {
@@ -1370,19 +1674,40 @@ fn paint_line_glyphs(
             continue;
         };
         let key = key.with_style(&glyph.variations, glyph.synthesis);
-        let Ok(Some(image)) = text.rasterize(amazing_text::GlyphRasterRequest {
-            key,
-            variations: &glyph.variations,
-            synthesis: glyph.synthesis,
-        }) else {
-            continue;
+        let (device_x, device_y) = clip
+            .lattice
+            .device_point(f64::from(glyph.x), f64::from(baseline));
+        let device_phase =
+            |value: f64| ((value - value.floor()) * 64.0).round().clamp(0.0, 63.0) as u8;
+        let raster = amazing_text::GlyphRasterScale::new(
+            clip.lattice.scale,
+            device_phase(device_x),
+            device_phase(device_y),
+        )
+        .unwrap();
+        let image = match text.rasterize_at_scale(
+            amazing_text::GlyphRasterRequest {
+                key,
+                variations: &glyph.variations,
+                synthesis: glyph.synthesis,
+            },
+            raster,
+        ) {
+            Ok(Some(image)) => image,
+            Ok(None) => continue,
+            Err(error) => {
+                if clip.lattice.scale == 1.0 {
+                    continue;
+                }
+                return Err(if error==amazing_text::TextError::ResourceLimit {crate::RasterError::ResourceLimit} else {crate::RasterError::UnsupportedText});
+            }
         };
         blit_text_image(
             surface,
             &image,
             GlyphBlit {
-                origin_x: glyph.x.floor() as i64,
-                origin_y: baseline.floor() as i64,
+                origin_x: device_x.floor() as i64,
+                origin_y: device_y.floor() as i64,
                 orientation: glyph.orientation,
                 scale_x: glyph.scale_x,
                 scale_y: glyph.scale_y,
@@ -1406,6 +1731,7 @@ fn paint_line_glyphs(
             paint_emphasis_mark(surface, line, glyph, mark, clip);
         }
     }
+    Ok(())
 }
 
 /// One mark, centered horizontally over `glyph`'s own advance box and
@@ -1435,7 +1761,16 @@ fn paint_emphasis_mark(
         // Approximate descent at 0.25em below the baseline.
         baseline + font_size * 0.25 + radius + gap
     };
-    fill_mark_shape(surface, mark.shape, mark.filled, cx, cy, radius, mark.color, clip);
+    fill_mark_shape(
+        surface,
+        mark.shape,
+        mark.filled,
+        cx,
+        cy,
+        radius,
+        mark.color,
+        clip,
+    );
 }
 
 /// Fills (or, for `filled: false`, strokes a ring/outline of) one mark
@@ -1460,8 +1795,7 @@ fn fill_mark_shape(
     let [x0, y0, x1, y1] = clip.intersect(cx - radius, cy - radius, radius * 2.0, radius * 2.0).pixels();
     for y in y0.max(0)..y1.min(surface.height as i64) {
         for x in x0.max(0)..x1.min(surface.width as i64) {
-            let px = x as f32 + 0.5;
-            let py = y as f32 + 0.5;
+            let (px, py) = clip.point(x, y);
             if !mark_shape_contains(shape, px, py, cx, cy, radius) {
                 continue;
             }
@@ -1474,7 +1808,14 @@ fn fill_mark_shape(
     }
 }
 
-fn mark_shape_contains(shape: EmphasisShape, px: f32, py: f32, cx: f32, cy: f32, radius: f32) -> bool {
+fn mark_shape_contains(
+    shape: EmphasisShape,
+    px: f32,
+    py: f32,
+    cx: f32,
+    cy: f32,
+    radius: f32,
+) -> bool {
     if radius <= 0.0 {
         return false;
     }
@@ -1494,7 +1835,11 @@ fn mark_shape_contains(shape: EmphasisShape, px: f32, py: f32, cx: f32, cy: f32,
 /// `radius` around `(cx, cy)`.
 fn triangle_vertices(cx: f32, cy: f32, radius: f32) -> [(f32, f32); 3] {
     use std::f32::consts::PI;
-    let angles = [-PI / 2.0, -PI / 2.0 + 2.0 * PI / 3.0, -PI / 2.0 + 4.0 * PI / 3.0];
+    let angles = [
+        -PI / 2.0,
+        -PI / 2.0 + 2.0 * PI / 3.0,
+        -PI / 2.0 + 4.0 * PI / 3.0,
+    ];
     angles.map(|angle| (cx + radius * angle.cos(), cy + radius * angle.sin()))
 }
 
@@ -1632,6 +1977,7 @@ fn overflow_clip(box_: &LayoutBox, inherited: ClipRect) -> ClipRect {
         } else {
             inherited.y1
         },
+        lattice: inherited.lattice,
     }
 }
 
@@ -1760,7 +2106,13 @@ fn paint_background(
         Some(c) => c,
         None => return,
     };
-    fill_rounded_rect_clipped(surface, background_raster::area(b, area), bg, clip, &b.table_decoration().background_holes);
+    fill_rounded_rect_clipped(
+        surface,
+        background_raster::area(b, area),
+        bg,
+        clip,
+        &b.table_decoration().background_holes,
+    );
 }
 
 fn inset_radii(
@@ -1956,10 +2308,31 @@ fn paint_outline(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4], clip
         return;
     }
     paint_border_strip(surface, [x, y, w, width], color, double, true, clip);
-    paint_border_strip(surface, [x, y + h - width, w, width], color, double, true, clip);
+    paint_border_strip(
+        surface,
+        [x, y + h - width, w, width],
+        color,
+        double,
+        true,
+        clip,
+    );
     let middle = (h - 2.0 * width).max(0.0);
-    paint_border_strip(surface, [x, y + width, width, middle], color, double, false, clip);
-    paint_border_strip(surface, [x + w - width, y + width, width, middle], color, double, false, clip);
+    paint_border_strip(
+        surface,
+        [x, y + width, width, middle],
+        color,
+        double,
+        false,
+        clip,
+    );
+    paint_border_strip(
+        surface,
+        [x + w - width, y + width, width, middle],
+        color,
+        double,
+        false,
+        clip,
+    );
 }
 
 /// `outline-width` accepts the same `thin`/`medium`/`thick` keywords as
@@ -2052,8 +2425,7 @@ fn paint_rounded_border(
     let [x0, y0, x1, y1] = clipped.pixels();
     for y in y0.max(0)..y1.min(surface.height as i64) {
         for x in x0.max(0)..x1.min(surface.width as i64) {
-            let px = x as f32 + 0.5;
-            let py = y as f32 + 0.5;
+            let (px, py) = clip.point(x, y);
             if !outer.contains(px, py) || inner.contains(px, py) {
                 continue;
             }
@@ -2107,11 +2479,7 @@ fn paint_lines(
                 paint_generated_image(surface, &rect, &url, presentation, font_size, images, clip);
                 continue;
             }
-            if let Some(svg) = svg_for_rect(
-                images,
-                replaced.node,
-                &rect,
-            ) {
+            if let Some(svg) = svg_for_rect(images, replaced.node, &rect, clip.lattice.scale) {
                 paint_image(
                     surface,
                     &rect,
@@ -2150,6 +2518,7 @@ fn svg_for_rect(
     images: &dyn ImageProvider,
     node: amazing_dom::NodeIdx,
     rect: &amazing_layout::Rect,
+    device_scale: f64,
 ) -> Option<amazing_media::Image> {
     if !rect.w.is_finite() || !rect.h.is_finite() || rect.w <= 0.0 || rect.h <= 0.0 {
         return None;
@@ -2159,7 +2528,14 @@ fn svg_for_rect(
     if width > u32::MAX as f32 || height > u32::MAX as f32 {
         return None;
     }
-    images.svg(node, width as u32, height as u32, images.device_scale())
+    // Preserve the legacy provider density contract for unit-lattice entrypoints.
+    // A nonunit physical lattice supplies its authenticated raster density directly.
+    let density = if device_scale == 1.0 {
+        images.device_scale()
+    } else {
+        device_scale as f32
+    };
+    images.svg(node, width as u32, height as u32, density)
 }
 
 /// Nearest-neighbor image scaling with clipped, source-over RGBA pixels.
@@ -2182,6 +2558,17 @@ fn paint_image_at_density(
     clip: ClipRect,
 ) {
     if !density.is_finite() || density <= 0.0 { return; }
+    paint_image_with_natural_size(surface, rect, image,
+        (image.width as f64 / density as f64, image.height as f64 / density as f64), presentation, clip);
+}
+
+fn paint_image_with_natural(surface: &mut Surface, rect: &amazing_layout::Rect,
+    image: &amazing_media::Image, natural: (u32, u32), presentation: ImagePresentation, clip: ClipRect) {
+    paint_image_with_natural_size(surface, rect, image, (natural.0 as f64, natural.1 as f64), presentation, clip);
+}
+
+fn paint_image_with_natural_size(surface: &mut Surface, rect: &amazing_layout::Rect,
+    image: &amazing_media::Image, natural: (f64, f64), presentation: ImagePresentation, clip: ClipRect) {
     let Some(expected) = (image.width as usize)
         .checked_mul(image.height as usize)
         .and_then(|n| n.checked_mul(4))
@@ -2192,17 +2579,25 @@ fn paint_image_at_density(
         return;
     }
     let clip = clip.intersect(rect.x, rect.y, rect.w, rect.h);
-    let Some(destination) = presentation.destination_with_natural_size(*rect, (image.width as f64 / density as f64, image.height as f64 / density as f64)) else {
+    let Some(destination) = presentation.destination_with_natural_size(*rect, natural) else {
         return;
     };
     let rect = &destination;
     if image.width == 0 || image.height == 0 || rect.w <= 0.0 || rect.h <= 0.0 {
         return;
     }
-    let x0 = (rect.x as f64 - 0.5).ceil() as i64;
-    let y0 = (rect.y as f64 - 0.5).ceil() as i64;
-    let x1 = (rect.x as f64 + rect.w as f64 - 0.5).ceil() as i64;
-    let y1 = (rect.y as f64 + rect.h as f64 - 0.5).ceil() as i64;
+    let (a, b) = (
+        clip.lattice
+            .device_point(f64::from(rect.x), f64::from(rect.y)),
+        clip.lattice
+            .device_point(f64::from(rect.x + rect.w), f64::from(rect.y + rect.h)),
+    );
+    let (x0, y0, x1, y1) = (
+        (a.0 - 0.5).ceil() as i64,
+        (a.1 - 0.5).ceil() as i64,
+        (b.0 - 0.5).ceil() as i64,
+        (b.1 - 0.5).ceil() as i64,
+    );
     if x1 <= x0 || y1 <= y0 {
         return;
     }
@@ -2212,11 +2607,15 @@ fn paint_image_at_density(
     let clipped_x1 = x1.max(0).min(pixel_clip[2]).min(surface.width as i64);
     let clipped_y1 = y1.max(0).min(pixel_clip[3]).min(surface.height as i64);
     for y in clipped_y0..clipped_y1 {
-        let source_y = (((y as f64 + 0.5 - rect.y as f64) / rect.h as f64) * image.height as f64)
+        let source_y = (((clip.lattice.css_point(0.0, y as f64 + 0.5).1 - rect.y as f64)
+            / rect.h as f64)
+            * image.height as f64)
             .floor()
             .clamp(0.0, image.height.saturating_sub(1) as f64) as u32;
         for x in clipped_x0..clipped_x1 {
-            let source_x = (((x as f64 + 0.5 - rect.x as f64) / rect.w as f64) * image.width as f64)
+            let source_x = (((clip.lattice.css_point(x as f64 + 0.5, 0.0).0 - rect.x as f64)
+                / rect.w as f64)
+                * image.width as f64)
                 .floor()
                 .clamp(0.0, image.width.saturating_sub(1) as f64) as u32;
             let source_index = ((source_y as usize * image.width as usize + source_x as usize) * 4)
@@ -2261,8 +2660,16 @@ mod tests {
             }
         }
         let provider = Both {
-            node_image: amazing_media::Image { width: 1, height: 1, pixels: vec![0, 0, 255, 255] },
-            url_image: amazing_media::Image { width: 1, height: 1, pixels: vec![255, 0, 0, 255] },
+            node_image: amazing_media::Image {
+                width: 1,
+                height: 1,
+                pixels: vec![0, 0, 255, 255],
+            },
+            url_image: amazing_media::Image {
+                width: 1,
+                height: 1,
+                pixels: vec![255, 0, 0, 255],
+            },
         };
         let node = amazing_dom::NodeIdx(1);
         assert_eq!(resolved_replaced_image(&provider, node, Some("https://example.test/generated.png")).unwrap().pixels, provider.url_image.pixels);
@@ -2297,8 +2704,16 @@ mod tests {
         assert_eq!(fragments.len(), 2);
         assert_ne!(fragments[0].source_order, fragments[1].source_order);
         let provider = TwoUrls {
-            red: amazing_media::Image { width: 1, height: 1, pixels: vec![255, 0, 0, 255] },
-            blue: amazing_media::Image { width: 1, height: 1, pixels: vec![0, 0, 255, 255] },
+            red: amazing_media::Image {
+                width: 1,
+                height: 1,
+                pixels: vec![255, 0, 0, 255],
+            },
+            blue: amazing_media::Image {
+                width: 1,
+                height: 1,
+                pixels: vec![0, 0, 255, 255],
+            },
         };
         let surface = paint_document_with_text_resources(&root, 700, 200, &text, &provider);
         let pixel = |index: usize| {
@@ -2332,8 +2747,15 @@ mod tests {
         assert!(fragment.generated_url.as_deref().is_some_and(|key| key.starts_with("linear-gradient")));
         let surface = paint_document_with_text_resources(&root, 100, 50, &text, &NoImages);
         let y = (fragment.content_box.y + 2.0) as u32;
-        let left = surface.get_pixel((fragment.content_box.x + 2.0) as u32, y).unwrap();
-        let right = surface.get_pixel((fragment.content_box.x + fragment.content_box.w - 3.0) as u32, y).unwrap();
+        let left = surface
+            .get_pixel((fragment.content_box.x + 2.0) as u32, y)
+            .unwrap();
+        let right = surface
+            .get_pixel(
+                (fragment.content_box.x + fragment.content_box.w - 3.0) as u32,
+                y,
+            )
+            .unwrap();
         assert!(left[0] > left[2], "left gradient pixel: {left:?}");
         assert!(right[2] > right[0], "right gradient pixel: {right:?}");
     }
@@ -2366,10 +2788,18 @@ mod tests {
         let (key, rect) = generated(&root).expect("gradient list marker");
         assert!(key.starts_with("linear-gradient"));
         let surface = paint_document_with_text_resources(&root, 500, 300, &text, &NoImages);
-        let point = surface.get_pixel((rect.x + rect.w * 0.5) as u32, (rect.y + rect.h * 0.25) as u32).unwrap();
-        assert!(point[0] > point[2] && point[2] > 0, "gradient marker pixel: {point:?}");
+        let point = surface
+            .get_pixel(
+                (rect.x + rect.w * 0.5) as u32,
+                (rect.y + rect.h * 0.25) as u32,
+            )
+            .unwrap();
+        assert!(
+            point[0] > point[2] && point[2] > 0,
+            "gradient marker pixel: {point:?}"
+        );
     }
-    use crate::text::{draw_fragment, RectInkProvider};
+    use crate::text::{RectInkProvider, draw_fragment};
     use amazing_layout::{Flow, Rect};
 
     const WHITE: [u8; 4] = [255, 255, 255, 255];
@@ -2750,7 +3180,10 @@ mod tests {
     #[test]
     fn calc_border_radius_uses_layouts_axis_specific_used_values() {
         let b = block(
-            &[("border-radius", "calc((1/32 * 100%) + 5px) calc((1/64 * 100%) - 2px) calc(10px + (1/256 * 100%)) calc((1/16 * 100%) - 3px) / calc((1/32 * 100%) - (1px + (1/128 * 100%))) calc(1/16 * 100%) calc(10px) 3px")],
+            &[(
+                "border-radius",
+                "calc((1/32 * 100%) + 5px) calc((1/64 * 100%) - 2px) calc(10px + (1/256 * 100%)) calc((1/16 * 100%) - 3px) / calc((1/32 * 100%) - (1px + (1/128 * 100%))) calc(1/16 * 100%) calc(10px) 3px",
+            )],
             0.0,
             0.0,
             512.0,
@@ -2805,6 +3238,43 @@ mod tests {
                 height: 1,
                 pixels: vec![255, 0, 0, 255, 0, 255, 0, 255],
             })
+        }
+    }
+
+    #[test]
+    fn svg_density_preserves_legacy_provider_and_uses_nonunit_lattice() {
+        struct DensitySvg(std::cell::Cell<f32>);
+        impl ImageProvider for DensitySvg {
+            fn image(&self, _: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> { None }
+            fn device_scale(&self) -> f32 { 2.5 }
+            fn svg(&self, _: amazing_dom::NodeIdx, width: u32, height: u32, density: f32)
+                -> Option<amazing_media::Image> {
+                assert_eq!((width, height), (2, 1));
+                self.0.set(density);
+                Some(amazing_media::Image { width: 2, height: 1,
+                    pixels: vec![255, 0, 0, 255, 255, 0, 0, 255] })
+            }
+        }
+        let images = DensitySvg(std::cell::Cell::new(0.0));
+        let mut root = block(&[], 0.0, 0.0, 4.0, 2.0);
+        root.lines.push(amazing_layout::LineBox {
+            source_edges: Vec::new(), y_top: 0.0, height: 1.0, baseline: 1.0,
+            words: Vec::new(), glyphs: Vec::new(), decorations: Vec::new(),
+            replaced: vec![amazing_layout::ReplacedFrag {
+                node: amazing_dom::NodeIdx(7), source_order: None,
+                x: 0.0, y: 0.0, width: 2.0, height: 1.0,
+            }],
+        });
+        let legacy = paint_document_with_resources(&root, 4, 2,
+            &FontSource::fallback(), &RectInkProvider, &images);
+        assert_eq!(images.0.get(), 2.5);
+        assert_eq!(legacy.get_pixel(0, 0), Some([255, 0, 0, 255]));
+        for density in [1.0, 1.25, 1.5, 2.0, 3.0] {
+            let painted = paint_document_at_viewport(&root,
+                crate::RasterViewport::new((4.0, 2.0), (4.0, 2.0), density).unwrap(),
+                &amazing_text::FallbackTextSystem, &images, &crate::controls::NoControls).unwrap();
+            assert_eq!(images.0.get(), if density == 1.0 { 2.5 } else { density as f32 });
+            assert_eq!(painted.get_pixel(0, 0), Some([255, 0, 0, 255]));
         }
     }
 
@@ -2975,7 +3445,10 @@ mod tests {
     fn clip_path_circle_clips_the_elements_own_content_to_the_disc() {
         let mut parent = block(&[("background-color", "white")], 0.0, 0.0, 10.0, 10.0);
         let child = block(
-            &[("background-color", "black"), ("clip-path", "circle(3px at center)")],
+            &[
+                ("background-color", "black"),
+                ("clip-path", "circle(3px at center)"),
+            ],
             2.0,
             2.0,
             6.0,
@@ -2994,7 +3467,10 @@ mod tests {
     fn clip_path_polygon_clips_the_elements_own_content_to_the_triangle() {
         let mut parent = block(&[("background-color", "white")], 0.0, 0.0, 10.0, 10.0);
         let child = block(
-            &[("background-color", "black"), ("clip-path", "polygon(0 0, 6px 0, 0 6px)")],
+            &[
+                ("background-color", "black"),
+                ("clip-path", "polygon(0 0, 6px 0, 0 6px)"),
+            ],
             2.0,
             2.0,
             6.0,
@@ -3024,7 +3500,10 @@ mod tests {
         }
         let mut root = block(&[], 0.0, 0.0, 4.0, 2.0);
         let child = block(
-            &[("background-color", "black"), ("mask-image", "url(https://example.test/mask.png)")],
+            &[
+                ("background-color", "black"),
+                ("mask-image", "url(https://example.test/mask.png)"),
+            ],
             0.0,
             0.0,
             4.0,
@@ -3041,11 +3520,34 @@ mod tests {
                 pixels: vec![255, 255, 255, 255, 255, 255, 255, 0],
             },
         };
-        let surface = paint_document_with_resources(&root, 4, 2, &FontSource::fallback(), &RectInkProvider, &images);
-        assert_eq!(surface.get_pixel(0, 0), Some([0, 0, 0, 255]), "left half is unmasked");
-        assert_eq!(surface.get_pixel(0, 1), Some([0, 0, 0, 255]), "left half is unmasked");
-        assert_eq!(surface.get_pixel(3, 0), Some([255, 255, 255, 255]), "right half is masked out to the canvas");
-        assert_eq!(surface.get_pixel(3, 1), Some([255, 255, 255, 255]), "right half is masked out to the canvas");
+        let surface = paint_document_with_resources(
+            &root,
+            4,
+            2,
+            &FontSource::fallback(),
+            &RectInkProvider,
+            &images,
+        );
+        assert_eq!(
+            surface.get_pixel(0, 0),
+            Some([0, 0, 0, 255]),
+            "left half is unmasked"
+        );
+        assert_eq!(
+            surface.get_pixel(0, 1),
+            Some([0, 0, 0, 255]),
+            "left half is unmasked"
+        );
+        assert_eq!(
+            surface.get_pixel(3, 0),
+            Some([255, 255, 255, 255]),
+            "right half is masked out to the canvas"
+        );
+        assert_eq!(
+            surface.get_pixel(3, 1),
+            Some([255, 255, 255, 255]),
+            "right half is masked out to the canvas"
+        );
     }
 
     #[test]
@@ -3213,16 +3715,30 @@ mod tests {
     #[test]
     fn outline_none_or_zero_width_paints_nothing() {
         let mut b = block(&[], 2.0, 2.0, 4.0, 4.0);
-        b.style = style(&[("outline-style", "none"), ("outline-color", "red"), ("outline-width", "9px")]);
+        b.style = style(&[
+            ("outline-style", "none"),
+            ("outline-color", "red"),
+            ("outline-width", "9px"),
+        ]);
         let surf = paint_document(&b, 12, 12, &FontSource::fallback());
         assert_eq!(surf.get_pixel(1, 1), Some(WHITE));
 
-        b.style = style(&[("outline-style", "solid"), ("outline-color", "red"), ("outline-width", "0px")]);
+        b.style = style(&[
+            ("outline-style", "solid"),
+            ("outline-color", "red"),
+            ("outline-width", "0px"),
+        ]);
         let surf = paint_document(&b, 12, 12, &FontSource::fallback());
         assert_eq!(surf.get_pixel(1, 1), Some(WHITE));
 
         // No outline-style at all defaults to `none`, same as the initial value.
-        let plain = block(&[("outline-color", "red"), ("outline-width", "9px")], 2.0, 2.0, 4.0, 4.0);
+        let plain = block(
+            &[("outline-color", "red"), ("outline-width", "9px")],
+            2.0,
+            2.0,
+            4.0,
+            4.0,
+        );
         let surf = paint_document(&plain, 12, 12, &FontSource::fallback());
         assert_eq!(surf.get_pixel(1, 1), Some(WHITE));
     }

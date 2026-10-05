@@ -47,6 +47,16 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 pub use tile_raster::*;
 
+/// Sampling of an already-rasterized source under a property transform.
+/// Generic sources retain premultiplied bilinear interpolation. The real
+/// painter selects nearest to match its inverse-mapped group composition.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RasterSampling {
+    #[default]
+    Bilinear,
+    Nearest,
+}
+
 pub const TILE_SIZE: i32 = 256;
 const MAX_VISIBLE_TILES: usize = 1024;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -220,6 +230,7 @@ pub struct FrameStats {
 /// Retains raster tiles while property nodes change. `render` never asks the
 /// source to rebuild display items for scroll, transform or opacity changes.
 pub struct Compositor {
+    raster_sampling: RasterSampling,
     trees: PropertyTrees,
     chunks: Vec<PaintChunk>,
     item_count: usize,
@@ -302,6 +313,7 @@ impl Compositor {
             property_bindings: HashMap::new(),
             layers,
             tiles: HashMap::new(),
+            raster_sampling: RasterSampling::Bilinear,
             tile_budget: 256,
             tile_clock: 0,
             raster_epoch: 0,
@@ -318,6 +330,15 @@ impl Compositor {
             previous_quad_layers: Vec::new(),
             previous_quad_size: None,
         })
+    }
+    /// Set the source's immutable sampling contract before any frame or tile
+    /// has been produced. A scene cannot reinterpret cached raster pixels.
+    pub(crate) fn with_raster_sampling(mut self, sampling: RasterSampling) -> Self {
+        self.raster_sampling = sampling;
+        self
+    }
+    pub fn raster_sampling(&self) -> RasterSampling {
+        self.raster_sampling
     }
     pub fn trees(&self) -> &PropertyTrees {
         &self.trees
