@@ -1,0 +1,1 @@
+{"actual_returncode":0,"argv":["cargo","test","--workspace","--locked","--doc"],"phase":"doctests","raw":{"bytes":25205,"path":"/tmp/amazing-native-retained/integrator-css-current-1af-20261005/css-current-1af30cd3-initial/raw/doctests.log","sha256":"23bc4725d6ba2bf468335de261037de83f855b9d8261d23a66d4cc247078d2c4"},"source_commit":"1af30cd39b94f4c57d26a8d95ed140da9087f9b7"}

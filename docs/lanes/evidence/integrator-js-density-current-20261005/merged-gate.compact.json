@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "recorded_dev_base": "65c24415cc8b9f3431a85b23a57588d431807093",
+  "engine_baseline": "d19cad834166c77d55c3d333523a4cbca77e0992",
+  "tested_source": "1af30cd39b94f4c57d26a8d95ed140da9087f9b7",
+  "shipping_code_head": "5d24fe4ef3bf034e676b9f424d46d3e427017442",
+  "engine_cargo_blobs_byte_exact": 5266,
+  "qualified": true,
+  "workspace": {
+    "failed": 0,
+    "passed": 4933,
+    "skipped": 17
+  },
+  "doctests": {
+    "failed": 0,
+    "ignored": 0,
+    "passed": 30
+  },
+  "test262": {
+    "pass_files": 52705,
+    "pass_variants": 101223,
+    "gained_files": 4,
+    "gained_variants": 8,
+    "lost_files": 0,
+    "lost_variants": 0,
+    "shards": 16,
+    "timeout_seconds": 60,
+    "jobs": 4,
+    "native_pool_jobs": 4,
+    "all_actual_exit": 0
+  },
+  "css": {
+    "native_job": "069e07f1ca5144469ae997754e014e07",
+    "all26_actual_exit": 0,
+    "parser_selectors": 17,
+    "static_dirs": 20,
+    "static_ids": 2214,
+    "resource_ids": 491,
+    "rc21_ids": 226,
+    "lost": [],
+    "gate_sha256": "d89988ea4ed3b5cf28bd3eb4fb8cac3c38fe208be32aa076158e0ad342592b6b"
+  },
+  "vm46": {
+    "before": "b154e868",
+    "after": "ac897953",
+    "shipping_js_byte_exact": true,
+    "lost_files_or_variants": [],
+    "summary_sha256": "dacaa91451e3163d8de73e8ec3f8e07ba7c9a01b18e3b0ef072d839c6295ef58"
+  },
+  "raw_retained_on_boat": true,
+  "viewport_not_included": true
+}

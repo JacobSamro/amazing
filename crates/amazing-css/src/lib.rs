@@ -90,3 +90,4 @@ pub use imports::{ImportRule, ImportLayer, SupportsCondition, LoadedStylesheet,
 #[cfg(test)] mod import_tests;
 
 mod image_policy;
+pub use image_policy::ObjectFitValue;

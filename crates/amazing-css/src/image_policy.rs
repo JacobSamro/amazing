@@ -2,6 +2,33 @@
 //! remain owned by the image, layout and paint consumers.
 use crate::syntax::{Token, tokenize};
 
+/// Canonical computed fitting policy shared with replaced-image consumers.
+/// Geometry is resolved against the layout content box by paint.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ObjectFitValue {
+    #[default]
+    Fill,
+    Contain,
+    Cover,
+    None,
+    ScaleDown,
+    CoverScaleDown,
+}
+impl crate::ComputedStyle {
+    /// Read the canonical producer result. Synthetic styles use the same parser,
+    /// so comments, escaped identifiers and flag order cannot drift in paint.
+    pub fn object_fit(&self) -> ObjectFitValue {
+        match canonical("object-fit", self.get("object-fit").unwrap_or("fill")).as_deref() {
+            Some("contain") => ObjectFitValue::Contain,
+            Some("cover") => ObjectFitValue::Cover,
+            Some("none") => ObjectFitValue::None,
+            Some("scale-down" | "contain scale-down") => ObjectFitValue::ScaleDown,
+            Some("cover scale-down") => ObjectFitValue::CoverScaleDown,
+            _ => ObjectFitValue::Fill,
+        }
+    }
+}
+
 pub(crate) fn supported(property: &str) -> bool {
     matches!(property, "object-fit" | "image-rendering")
 }

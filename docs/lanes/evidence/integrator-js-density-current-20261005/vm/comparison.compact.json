@@ -1,0 +1,1468 @@
+{
+  "base": "b154e868b5124e1cb53606814a32fd62c1cd0965",
+  "source": "ac897953d5fa5ed338b1a167c2f320df474e61ac",
+  "pairs": [
+    {
+      "mode": "default",
+      "selector": "language/",
+      "before": {
+        "files": 24511,
+        "variants": 45300
+      },
+      "after": {
+        "files": 24512,
+        "variants": 45302
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [
+        "language/expressions/super/call-proto-not-ctor.js"
+      ],
+      "gained_variants": [
+        [
+          "language/expressions/super/call-proto-not-ctor.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/super/call-proto-not-ctor.js",
+          "strict"
+        ]
+      ],
+      "before_compact_sha256": "a8d26b694b04b54559357ec768ada58dc283bd6e4402eeff7bc515990d746e2b",
+      "after_compact_sha256": "a29061def3adb767d5ef7eab13702e124d652a95f24f2c2f566cd12d2f63a72e",
+      "before_raw": {
+        "bytes": 14476944,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-language-.json",
+        "sha256": "392dda877b618f61f249b18cadb717e77198ee797870b2c531193b6dc2530644"
+      },
+      "after_raw": {
+        "bytes": 14476436,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-language-.json",
+        "sha256": "710a3c4ed11c00d442c2d2b241cfd12080c09cab8421d68534da101cb1326961"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/eval/",
+      "before": {
+        "files": 9,
+        "variants": 18
+      },
+      "after": {
+        "files": 9,
+        "variants": 18
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "df46a646694002f90668c9a6dd65da5b9e9e570b530319d0aadef82737c9fa01",
+      "after_compact_sha256": "b085d6a99f1974501a5884be3200ef55820c74f5b6bd909b55d93a1911590761",
+      "before_raw": {
+        "bytes": 7647793,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-built-ins-eval-.json",
+        "sha256": "506bf1b000e32b40977fa041e1c71ba25afa4fdd09a0d47fee45b0742c6a2e5f"
+      },
+      "after_raw": {
+        "bytes": 7647793,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-built-ins-eval-.json",
+        "sha256": "e109085470120e9077d61cc16f2aafdee508a2b4e0a06d492e467e0dc4a8c04e"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/Promise/",
+      "before": {
+        "files": 732,
+        "variants": 1458
+      },
+      "after": {
+        "files": 732,
+        "variants": 1458
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "46b590f92c69fce2e354621993e8f79a7579836effd0b2fe3a5448032dc7b224",
+      "after_compact_sha256": "b4bed33694fbbf1027daf37b00e9f7ea114d32958b2ecfcb275026d17ca18fc8",
+      "before_raw": {
+        "bytes": 7779881,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-built-ins-Promise-.json",
+        "sha256": "9a5b79d7f8ff266e1df4b66c0d8a02f2fd8b9ce432f58e7f1ee0b9ab3dd0254d"
+      },
+      "after_raw": {
+        "bytes": 7779880,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-built-ins-Promise-.json",
+        "sha256": "0145693ace98e6911f357bac2ab8e53c66df8cd0a62e620e98528b1429dbd2ad"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/Iterator/",
+      "before": {
+        "files": 654,
+        "variants": 1308
+      },
+      "after": {
+        "files": 654,
+        "variants": 1308
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "27822f5aeaea82ed9aa550178e0c41ab94f80ce7bdbe83c5d1313653a95b88f1",
+      "after_compact_sha256": "5b449584c26a70b3238d1da151ad65311f081f7da4c2146b4df147eec5189e09",
+      "before_raw": {
+        "bytes": 7778563,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-built-ins-Iterator-.json",
+        "sha256": "588d1b2711f7c52327d9ecc96f99b11d381132bb974542dbdee31526c06261a4"
+      },
+      "after_raw": {
+        "bytes": 7778562,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-built-ins-Iterator-.json",
+        "sha256": "d296c73e23e4d91a64baef0c462d48228762d45220641a3c0e9c9cd18108fe72"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/Object/",
+      "before": {
+        "files": 3413,
+        "variants": 6806
+      },
+      "after": {
+        "files": 3413,
+        "variants": 6806
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "e731c81a459efa778da3cd83abe810b55adee0a7a34cf38fc16c96e44a79cac6",
+      "after_compact_sha256": "146f139c093d99c4d7ac220e43c957aa3bbe3254d34fb8b12b77989226f5f7bf",
+      "before_raw": {
+        "bytes": 8116518,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-built-ins-Object-.json",
+        "sha256": "8a8b5f5148d29e1af075e4542a6c0c4accc802045713c4ae362b5d9818f50a2b"
+      },
+      "after_raw": {
+        "bytes": 8116518,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-built-ins-Object-.json",
+        "sha256": "db9be0ac85625d5d0be6357c2252f6a53acaa65a2c0039d31525140a7abf19df"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/Reflect/",
+      "before": {
+        "files": 154,
+        "variants": 308
+      },
+      "after": {
+        "files": 154,
+        "variants": 308
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "2fb124f7dc816b6037c8512cd320a6494773bc0f22a6ebd89c0b371ac06db2f2",
+      "after_compact_sha256": "1013e177a6e717b1a2f68a279a2ec5ceaea727ecde854dffd9d2d9ee419dc909",
+      "before_raw": {
+        "bytes": 7672376,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-built-ins-Reflect-.json",
+        "sha256": "53fb3c15f293d68ab1f0202d39dc564a9fcd8321a615068bc1d0f5c2b8a3fa57"
+      },
+      "after_raw": {
+        "bytes": 7672376,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-built-ins-Reflect-.json",
+        "sha256": "3f51c70809f0ab9aa56eb33a0dfc7b904e843161573216ce13df6543cdffb4ab"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/Proxy/",
+      "before": {
+        "files": 311,
+        "variants": 607
+      },
+      "after": {
+        "files": 311,
+        "variants": 607
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "a2307a1082326e2693e7db08b4441aa14c45660917de0aa3f6ae51b6add892e6",
+      "after_compact_sha256": "ad2efc76c51574db6621458968028efab43a2ac305dec7567d176e9d77c1f572",
+      "before_raw": {
+        "bytes": 7704571,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-built-ins-Proxy-.json",
+        "sha256": "5e01f9b2a71a240cc273f33a27bec315883c2a17e4505c3058b6a8d9c2b1a039"
+      },
+      "after_raw": {
+        "bytes": 7704571,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-built-ins-Proxy-.json",
+        "sha256": "c9fbb23d8305bbf5f4e69e5e74f4843522ff2600eec90160a500e6fe326942ea"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/Function/",
+      "before": {
+        "files": 514,
+        "variants": 903
+      },
+      "after": {
+        "files": 515,
+        "variants": 905
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [
+        "built-ins/Function/internals/Call/class-ctor-realm.js"
+      ],
+      "gained_variants": [
+        [
+          "built-ins/Function/internals/Call/class-ctor-realm.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/Function/internals/Call/class-ctor-realm.js",
+          "strict"
+        ]
+      ],
+      "before_compact_sha256": "3ef9f4f75b6179f09467d0f01a92e66e9a7ea6399bbd944d3bce1330363415ec",
+      "after_compact_sha256": "947ffbbc3175ecfe57a8fbfce0b1d7e4837380e4f14f0e6bf2e0ad8a63da4794",
+      "before_raw": {
+        "bytes": 7716796,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-built-ins-Function-.json",
+        "sha256": "014db66b135d7c8ca8ec68aaf89858de88817acdb699f1782b59d404ae993d50"
+      },
+      "after_raw": {
+        "bytes": 7716265,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-built-ins-Function-.json",
+        "sha256": "659d9bcb619760989ab8486582bf54dadb34c3c0c2a165c0864dfe451f00ae2d"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/AsyncFunction/",
+      "before": {
+        "files": 18,
+        "variants": 36
+      },
+      "after": {
+        "files": 18,
+        "variants": 36
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "872e3cce364936e44ceb03b810a80cb515d8f9d0c2f66107be9c8fe10e02eaa5",
+      "after_compact_sha256": "f197dcf2faeafc4258cfa23f1ddd984558606d7f7feef8f4d9221ee7e9fcbe0f",
+      "before_raw": {
+        "bytes": 7649126,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-built-ins-AsyncFunction-.json",
+        "sha256": "2e8c8cac3d5ccebec92a1c8b79eba090c9ef65251feb36a2cf365ff4674c8f39"
+      },
+      "after_raw": {
+        "bytes": 7649126,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-built-ins-AsyncFunction-.json",
+        "sha256": "3e067324a74c183ff96c0d29b74906a3084cc9cb8e3c1e182c8c593ec49f2216"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/GeneratorFunction/",
+      "before": {
+        "files": 23,
+        "variants": 46
+      },
+      "after": {
+        "files": 23,
+        "variants": 46
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "90a4764521f83264a5291f62cfcc7f5ce313945a71566b01ae62ee990e8288ec",
+      "after_compact_sha256": "a81f4e254d41ae34a0713432db3401ba25489a931316b2fa399d06a06cef8826",
+      "before_raw": {
+        "bytes": 7650124,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-built-ins-GeneratorFunction-.json",
+        "sha256": "d5633bce27a63b097969a3f0c92e0b52cc793ce2f2604e95713c8755a13082e5"
+      },
+      "after_raw": {
+        "bytes": 7650124,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-built-ins-GeneratorFunction-.json",
+        "sha256": "143c369947f8f0da79beafa8c6b5b1e482736c32e90a3e80dd77ef8a23152d5b"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/AsyncGeneratorFunction/",
+      "before": {
+        "files": 23,
+        "variants": 46
+      },
+      "after": {
+        "files": 23,
+        "variants": 46
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "32cf7088432ce9c7eae999e13d2a17d3e8421bb1b10c8fcd8701c280716156f7",
+      "after_compact_sha256": "b2b3696c6c8a8d9067f2091d2f9cebdd3ed133b9f5ad1441e85590710d6ec1fb",
+      "before_raw": {
+        "bytes": 7650775,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-built-ins-AsyncGeneratorFunction-.json",
+        "sha256": "c58ee1394727b1e57c78dae04123b7d364fd1e89591d2a0d820ad5e8fbf53b1d"
+      },
+      "after_raw": {
+        "bytes": 7650775,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-built-ins-AsyncGeneratorFunction-.json",
+        "sha256": "57dc9a622b3e2633a31093198c8903fdb052b46e82b201ec4b244d3d74c7097a"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/AbstractModuleSource/",
+      "before": {
+        "files": 3,
+        "variants": 3
+      },
+      "after": {
+        "files": 3,
+        "variants": 3
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "47ba7d155d5f95a3b62510868a126bc9ff8d84318adbd787066767466df57c51",
+      "after_compact_sha256": "f2ee0237607e01d7de7f482b992d9ccf664579f823bbea149fca605d87d18706",
+      "before_raw": {
+        "bytes": 7648251,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-built-ins-AbstractModuleSource-.json",
+        "sha256": "e3ce7a788851273e7035edf7744754df1916dddd0319da078045f10974f22e53"
+      },
+      "after_raw": {
+        "bytes": 7648251,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-built-ins-AbstractModuleSource-.json",
+        "sha256": "de1b1583b0d0dbb7f396765d05023561012fade3d4370c0627bbd271587b06ce"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "language/expressions/class/",
+      "before": {
+        "files": 4059,
+        "variants": 8027
+      },
+      "after": {
+        "files": 4059,
+        "variants": 8027
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "7abad4cae77b13f4d33e71010c66b8e5e458b7aa82ef63d6888aea9d6e7e240a",
+      "after_compact_sha256": "b0d98a192a2649035efbd847a9fde984bb0645e5aa70075b128906e12df22000",
+      "before_raw": {
+        "bytes": 8913530,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-language-expressions-class-.json",
+        "sha256": "bd4bea715d32406755842b39c4ddee22b16a6a7c016479640c8ae4d227602295"
+      },
+      "after_raw": {
+        "bytes": 8913530,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-language-expressions-class-.json",
+        "sha256": "cc6e8826800d3c8cc8e3740cf129771b092f2a272820e2884828edd86107fbfa"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "language/statements/class/",
+      "before": {
+        "files": 4365,
+        "variants": 8660
+      },
+      "after": {
+        "files": 4365,
+        "variants": 8660
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "988d43732bb9325b77df7b0cf656a39b2ceb0c8897464a8209495ce1f7a37991",
+      "after_compact_sha256": "49b8daa182db73eb916ba720f2f70380949548a715670f86866f92ff82f5dc5d",
+      "before_raw": {
+        "bytes": 8988801,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-language-statements-class-.json",
+        "sha256": "e99d58766450825d5319bee236fd8e9c0609b2934e30fc3979541294962628dc"
+      },
+      "after_raw": {
+        "bytes": 8988801,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-language-statements-class-.json",
+        "sha256": "561d0d0caae4ddb1f6981518ad3016321f370078e99206d8055b36dc0c30af87"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "language/expressions/optional-chaining/",
+      "before": {
+        "files": 38,
+        "variants": 76
+      },
+      "after": {
+        "files": 38,
+        "variants": 76
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "d2154e981e6229acc11c0ee9738b60a448be1db3c41df07758e055735bcad0bc",
+      "after_compact_sha256": "ee49cd12403b2140416b18ba8847be64443e625809f84b0219b80ab0551e8a21",
+      "before_raw": {
+        "bytes": 7657540,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-language-expressions-optional-chaining-.json",
+        "sha256": "5c8088ddf3c6cda0a4116c0932ee492b4c99ac0c2e173fc98cad724c07b804a3"
+      },
+      "after_raw": {
+        "bytes": 7657540,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-language-expressions-optional-chaining-.json",
+        "sha256": "11f6777a201c0e2d953aa3cfa7377fcd954364e139adfb3db731519578776091"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "language/expressions/delete/",
+      "before": {
+        "files": 67,
+        "variants": 99
+      },
+      "after": {
+        "files": 67,
+        "variants": 99
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "0ec9710e12908f660145a8997fb63f2d851bfd2d46258f52294f4ec804b52da5",
+      "after_compact_sha256": "db73f9c5ad19384a06e544642d5b852e8354237c75cde0b27edcd40749cf1976",
+      "before_raw": {
+        "bytes": 7657925,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-language-expressions-delete-.json",
+        "sha256": "b7248486e37f630b5678bf6b224a9eeeafc2b973533d60bc611012dc060ef31b"
+      },
+      "after_raw": {
+        "bytes": 7657924,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-language-expressions-delete-.json",
+        "sha256": "99e40feec3c2efe249be3a3de47dd25507dd9f8023a11076939269b9c3588865"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "language/expressions/super/",
+      "before": {
+        "files": 93,
+        "variants": 182
+      },
+      "after": {
+        "files": 94,
+        "variants": 184
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [
+        "language/expressions/super/call-proto-not-ctor.js"
+      ],
+      "gained_variants": [
+        [
+          "language/expressions/super/call-proto-not-ctor.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/super/call-proto-not-ctor.js",
+          "strict"
+        ]
+      ],
+      "before_compact_sha256": "a2deabc9a6071764d0892bae942b0f347eb0b8257e707f70489396cb576fd18f",
+      "after_compact_sha256": "f23ac82a40ccca146234a0444f3971dfe58a5a9ce38877c9eec0882f1b980d7b",
+      "before_raw": {
+        "bytes": 7664119,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-language-expressions-super-.json",
+        "sha256": "94ec5de5b9bed1112123506e15520477775b738caabd0e429b5e0fd1eba737ea"
+      },
+      "after_raw": {
+        "bytes": 7663578,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-language-expressions-super-.json",
+        "sha256": "ae9c49cd71c4e4223479bc3c498b47dfc847010888f0b74f9bfdce7189e5398a"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "language/expressions/assignment/",
+      "before": {
+        "files": 485,
+        "variants": 850
+      },
+      "after": {
+        "files": 485,
+        "variants": 850
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "6dac848f9318d08bc419a333e1afcb6ef13aed43ee8ab10d198fd4b6f1a1cf61",
+      "after_compact_sha256": "a0fffaf5e199464ca0854c2721c97c54169f59ea52c151176152c7831a86586e",
+      "before_raw": {
+        "bytes": 7776143,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-language-expressions-assignment-.json",
+        "sha256": "417a544c2559425e86f9213ac2b0acefc50b8158d6dc7b571cd51886b35c120b"
+      },
+      "after_raw": {
+        "bytes": 7776143,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-language-expressions-assignment-.json",
+        "sha256": "f0aca413c85082795c878e5bbdd2dda3a5238407c236e21763d065ed2a326d98"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "language/expressions/postfix-increment/",
+      "before": {
+        "files": 38,
+        "variants": 66
+      },
+      "after": {
+        "files": 38,
+        "variants": 66
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "01f4c79f404a34ea7c21322ff7f12aab2536ef2889f2dec0a666e962a5346ab9",
+      "after_compact_sha256": "b5b2837b5698d5bde5410f60e9bc08e256b238667295c788a46026c444ab484e",
+      "before_raw": {
+        "bytes": 7654262,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-language-expressions-postfix-increment-.json",
+        "sha256": "033cbd6ae981f7b979806c15fb1eb75b1b046b8cd27d6edd83ec3ff61ac3cd73"
+      },
+      "after_raw": {
+        "bytes": 7654261,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-language-expressions-postfix-increment-.json",
+        "sha256": "87c4c1cf32770b7ce7526d7e4bd2c12be54c24b294daa55110095eadbbf48d1c"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "language/expressions/prefix-increment/",
+      "before": {
+        "files": 33,
+        "variants": 57
+      },
+      "after": {
+        "files": 33,
+        "variants": 57
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "26d37d3dbcb0f68cdc4def4aaa2a2a6e521f4ef311905ac478bb2fa868e7bab7",
+      "after_compact_sha256": "1989cd3e0d1b1a14ad5409801521ff4a08e85ff25bd341fe83da97ca289a2011",
+      "before_raw": {
+        "bytes": 7652000,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-language-expressions-prefix-increment-.json",
+        "sha256": "fa4a7ffa4115c56e3c38e18b445756c037e24dd25e0e20e135e4cd9f9a9f4183"
+      },
+      "after_raw": {
+        "bytes": 7652000,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-language-expressions-prefix-increment-.json",
+        "sha256": "b31a279d8a7549f4e4733f69c30fba4febf8a2728af34504556af70d9838c4d5"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "language/expressions/postfix-decrement/",
+      "before": {
+        "files": 37,
+        "variants": 65
+      },
+      "after": {
+        "files": 37,
+        "variants": 65
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "475560ac091df39e086fdf8142138d3d9993bfebb40f29cfa3107dccfcd98b6e",
+      "after_compact_sha256": "8b938e36abf31045ae8a98d1eae07692403ec5aaeddc4cfef413d3fbb6c779d8",
+      "before_raw": {
+        "bytes": 7653927,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-language-expressions-postfix-decrement-.json",
+        "sha256": "ae7ef71951eb03881d982fcdb715f306b695962ab608eb19fbcb4c81d9bb6612"
+      },
+      "after_raw": {
+        "bytes": 7653927,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-language-expressions-postfix-decrement-.json",
+        "sha256": "7d2a989a83a0ed64eab980d174dc50f9498c02d0e287ead4fab87f4591c49bd9"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "language/expressions/prefix-decrement/",
+      "before": {
+        "files": 34,
+        "variants": 58
+      },
+      "after": {
+        "files": 34,
+        "variants": 58
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "d3f1a2d39ebbace9a8d1db34864ea3e197dbd90796d810e4e0d36d03ca23fe42",
+      "after_compact_sha256": "e6daf91a555644d85d33e5b7c75eb587b199a19bbefe7059be337167cf9315c9",
+      "before_raw": {
+        "bytes": 7652293,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-language-expressions-prefix-decrement-.json",
+        "sha256": "07122da9f838dd13fffbfb62046df937aeac69b5859293fa61c98f118e05aeb3"
+      },
+      "after_raw": {
+        "bytes": 7652293,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-language-expressions-prefix-decrement-.json",
+        "sha256": "6e3c187131d9ad5df2a57241c78d7bfbd4b3466834dd198020f5f850bf2ddf8e"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "default",
+      "selector": "built-ins/BigInt/",
+      "before": {
+        "files": 77,
+        "variants": 154
+      },
+      "after": {
+        "files": 77,
+        "variants": 154
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "5eb2736986fcc088408677289368e35b736489de9e718d246dd2937efa724dd7",
+      "after_compact_sha256": "40e92797953c399fbaf111315f4b854e425b9ab1016c9380b3501f06ae841e6d",
+      "before_raw": {
+        "bytes": 7661115,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/default-built-ins-BigInt-.json",
+        "sha256": "689c6e0b935443af7a57c95c2c48cc9e502a78233b4c6232d10d889ea99f12ea"
+      },
+      "after_raw": {
+        "bytes": 7661115,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/default-built-ins-BigInt-.json",
+        "sha256": "d5a626db458646055fb9b6e05ece81ae8f07a56a73a024964438ff89f6285e4a"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "language/",
+      "before": {
+        "files": 24511,
+        "variants": 45300
+      },
+      "after": {
+        "files": 24512,
+        "variants": 45302
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [
+        "language/expressions/super/call-proto-not-ctor.js"
+      ],
+      "gained_variants": [
+        [
+          "language/expressions/super/call-proto-not-ctor.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/super/call-proto-not-ctor.js",
+          "strict"
+        ]
+      ],
+      "before_compact_sha256": "71205eb68df794044e32a8aa659e5f5c24566e6144b3572b35b36a8db0e3a0a2",
+      "after_compact_sha256": "bb55fafdcdf79ea7a2b9818a873e784f48d75144fc6ead438d70c04214722b68",
+      "before_raw": {
+        "bytes": 14476944,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-language-.json",
+        "sha256": "e3394a975e5a6d2bf5cbba60f92fdd51efd6ddf9c19bc40850c1077879c58ce3"
+      },
+      "after_raw": {
+        "bytes": 14476436,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-language-.json",
+        "sha256": "80ae95ed89a7dd2d321c1173de6f234f15f366121763d8f0a87b4e93af8bb50d"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/eval/",
+      "before": {
+        "files": 9,
+        "variants": 18
+      },
+      "after": {
+        "files": 9,
+        "variants": 18
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "a473d7546f1bba989d10581c39e52cf858aedc1344d2d4f4f161e5b027afadab",
+      "after_compact_sha256": "2201d272aa10353fa5bbf11a86e8b90dcbf25f608edbbcd33f90990d7ee66e80",
+      "before_raw": {
+        "bytes": 7647793,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-built-ins-eval-.json",
+        "sha256": "8f047bfcee510ced73c24f7b1092f0a703a3bab285d2382172aa04b82c74251e"
+      },
+      "after_raw": {
+        "bytes": 7647793,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-built-ins-eval-.json",
+        "sha256": "4f8b7cc99ce858b4f27fac963b64cd1382adac0bf2324837b242e132a11aa898"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/Promise/",
+      "before": {
+        "files": 732,
+        "variants": 1458
+      },
+      "after": {
+        "files": 732,
+        "variants": 1458
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "723264dd8dc4d322a08abfd495b59ea608d4b1d328addf572dab59914b0d2b87",
+      "after_compact_sha256": "32bacf9fae231c0568f004d491c7361f82ef7c3bab98a11c9b3700e02e8ad0ff",
+      "before_raw": {
+        "bytes": 7779881,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-built-ins-Promise-.json",
+        "sha256": "ce9ff1f0d4f2c7a3d67c2a5bccc0dd8224493f2f346314308b0b3154f9e622bf"
+      },
+      "after_raw": {
+        "bytes": 7779881,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-built-ins-Promise-.json",
+        "sha256": "bdfa237dc29195bd9c2baf21edfc2820f036d5a6eaf4c725bf52dfcee0db11bd"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/Iterator/",
+      "before": {
+        "files": 654,
+        "variants": 1308
+      },
+      "after": {
+        "files": 654,
+        "variants": 1308
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "2b303daf4ab7c5156c3fd5635c90970c67061757f67ebb60da05b924389fda46",
+      "after_compact_sha256": "87bcc60b65507d02d219a205861ddb4799b71e26c42054a930881eb8d4fbe962",
+      "before_raw": {
+        "bytes": 7778563,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-built-ins-Iterator-.json",
+        "sha256": "75143837e0a70afd6c127ea4f5cd3d416011685c1e99bc4129deb51b53690323"
+      },
+      "after_raw": {
+        "bytes": 7778563,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-built-ins-Iterator-.json",
+        "sha256": "d6368c33fb4c70ce2e8c0ce416697724e3e3802934d623cc5d097efd8441d109"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/Object/",
+      "before": {
+        "files": 3413,
+        "variants": 6806
+      },
+      "after": {
+        "files": 3413,
+        "variants": 6806
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "256c08a6cc09e3eebd12f740dc836a5c8ab93309d35925ff78e5f51f1f962c8d",
+      "after_compact_sha256": "0b4897e41c9feb8e0e649586846feb7b2eedfa4ef2fbb7dd6f3daa3d53ce365c",
+      "before_raw": {
+        "bytes": 8116518,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-built-ins-Object-.json",
+        "sha256": "bb4f170763cdaeef6d1faf63cabfe78e37bca8d92fc97e0f2204a7aa1f826171"
+      },
+      "after_raw": {
+        "bytes": 8116518,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-built-ins-Object-.json",
+        "sha256": "7b5ef305f48f56021b7d338161659d7910ee51da7c420480a9dbf5861a61d580"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/Reflect/",
+      "before": {
+        "files": 154,
+        "variants": 308
+      },
+      "after": {
+        "files": 154,
+        "variants": 308
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "e6246483b8bfa3342dd9809dcba71d995e92fcd55d64d7e175259ac603831ec2",
+      "after_compact_sha256": "8b4f764d16711076ec02f68f0055eb6ba71497e9bb1c7c000ae760a6ab4cd9b3",
+      "before_raw": {
+        "bytes": 7672376,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-built-ins-Reflect-.json",
+        "sha256": "689798caf2252b486a0a8a6c622ae3218fad350aa718e8e48a25c46b6793743d"
+      },
+      "after_raw": {
+        "bytes": 7672376,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-built-ins-Reflect-.json",
+        "sha256": "82665cf08ea8a38088de11396deecbd1e59f3280a6466c900973618a7f433754"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/Proxy/",
+      "before": {
+        "files": 311,
+        "variants": 607
+      },
+      "after": {
+        "files": 311,
+        "variants": 607
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "4f7ae6c943eae650136576114e30c3e8e127cf28c45e53258924dd9d013ef32f",
+      "after_compact_sha256": "655c33231942519c1610d5290b4d66e4ef77175b45e4958539309f775f3a8db1",
+      "before_raw": {
+        "bytes": 7704571,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-built-ins-Proxy-.json",
+        "sha256": "ab5a5e5ffff5dfb1ef7cd1b8f220e1570ff77f6cac1c5afb5dd69bfef65df66c"
+      },
+      "after_raw": {
+        "bytes": 7704571,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-built-ins-Proxy-.json",
+        "sha256": "15fd9248494bd20bc72789a7a7ca8502dcda1db7f088b68a204167a22a6bbe49"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/Function/",
+      "before": {
+        "files": 514,
+        "variants": 903
+      },
+      "after": {
+        "files": 515,
+        "variants": 905
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [
+        "built-ins/Function/internals/Call/class-ctor-realm.js"
+      ],
+      "gained_variants": [
+        [
+          "built-ins/Function/internals/Call/class-ctor-realm.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/Function/internals/Call/class-ctor-realm.js",
+          "strict"
+        ]
+      ],
+      "before_compact_sha256": "615241a251f39514d6b55279de7308bd1e071fef9ea16d504fd0cacbb375d9be",
+      "after_compact_sha256": "0c1fc54b62e19e142dce47609c9c8fcec10d6482e39f1230a98039c7a6b0de55",
+      "before_raw": {
+        "bytes": 7716796,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-built-ins-Function-.json",
+        "sha256": "ee7b7be66e5d6b6227a83df9b55d31e4c6c7a23551a79cbfe83c42e2cee4a611"
+      },
+      "after_raw": {
+        "bytes": 7716265,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-built-ins-Function-.json",
+        "sha256": "619beff6810725142568c13e81addbd5d8018f5581bcab491d1eaf7f16733e6c"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/AsyncFunction/",
+      "before": {
+        "files": 18,
+        "variants": 36
+      },
+      "after": {
+        "files": 18,
+        "variants": 36
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "58b632828a3b6353b325cf87f1c29312fee688c086f0b88090177dc5e8279910",
+      "after_compact_sha256": "3ecad379e1118c6fd684567c55f3a912046f6d09c2d764bcc2ee57be086effa7",
+      "before_raw": {
+        "bytes": 7649126,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-built-ins-AsyncFunction-.json",
+        "sha256": "b2927b8f7cb46ce834293d5b89c0a90d7ffcf331664df3e5c5433d5294f453d5"
+      },
+      "after_raw": {
+        "bytes": 7649126,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-built-ins-AsyncFunction-.json",
+        "sha256": "81dcbda15f9c8f76046e5fd5fa29716015f79e11725717096e2863c06518deff"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/GeneratorFunction/",
+      "before": {
+        "files": 23,
+        "variants": 46
+      },
+      "after": {
+        "files": 23,
+        "variants": 46
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "7edd2e83690f2fa9db9d6fec4e83f8f919ccd88889574e73620020e3a4b67d5f",
+      "after_compact_sha256": "5019f60eb18759bf9174bc32baeb8491c724f63dd0dcba8703140d12092e2409",
+      "before_raw": {
+        "bytes": 7650124,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-built-ins-GeneratorFunction-.json",
+        "sha256": "c7577b1cd143301d34a383a86ae8e907d481fd11919fe123f4be7767a9069d09"
+      },
+      "after_raw": {
+        "bytes": 7650124,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-built-ins-GeneratorFunction-.json",
+        "sha256": "aafd1f4257b319cead3d5e25be1666fb8c4a3e613a1258734cad7f17e42e01f6"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/AsyncGeneratorFunction/",
+      "before": {
+        "files": 23,
+        "variants": 46
+      },
+      "after": {
+        "files": 23,
+        "variants": 46
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "9d5d1bdc04593d966bb27e50b94907738f176b032c2d53d1d1178a07472adf7a",
+      "after_compact_sha256": "ba207604bdf82603b2cfabed81d98702c007c0343d1c9fc0f63ab748706e5609",
+      "before_raw": {
+        "bytes": 7650775,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-built-ins-AsyncGeneratorFunction-.json",
+        "sha256": "489182cecf0b42e01a05e847acabd03796fb855e6ee78c85cafeb167c1546f6a"
+      },
+      "after_raw": {
+        "bytes": 7650775,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-built-ins-AsyncGeneratorFunction-.json",
+        "sha256": "4494ec843de284079ed91d6e6e4216fe940b27c1843e739011ad546b3ed32621"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/AbstractModuleSource/",
+      "before": {
+        "files": 3,
+        "variants": 3
+      },
+      "after": {
+        "files": 3,
+        "variants": 3
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "b280b71eac81af512f6f90acb3be746df2bf4d642aa0e240d23ccad7612b5cdd",
+      "after_compact_sha256": "5821ab40e4f20fab3b760878e569080a493aca96a7e00d487f8e0ae5caf8fe6c",
+      "before_raw": {
+        "bytes": 7648251,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-built-ins-AbstractModuleSource-.json",
+        "sha256": "74428092c6e393f8e710bf2ba55b227117be19b23d861a7c0813b52984942299"
+      },
+      "after_raw": {
+        "bytes": 7648251,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-built-ins-AbstractModuleSource-.json",
+        "sha256": "9d71258897b82936b4cace192be2e2353c15b5dbf150d4a0098c0b614e82cc87"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "language/expressions/class/",
+      "before": {
+        "files": 4059,
+        "variants": 8027
+      },
+      "after": {
+        "files": 4059,
+        "variants": 8027
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "0c1d36709ce81c30fb71f7685085a564b83bd761f458ccb4d4dbf99504fdac52",
+      "after_compact_sha256": "505eb8b682a61d6cdc3a333fe1296cca3a60adb62984152009c5e00a5bdccee5",
+      "before_raw": {
+        "bytes": 8913530,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-language-expressions-class-.json",
+        "sha256": "b9e622589f564a43b510c59b5f48dc956b8d4b57a88aaa3ac7ac237c07ddde4c"
+      },
+      "after_raw": {
+        "bytes": 8913530,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-language-expressions-class-.json",
+        "sha256": "4cc72b64e3c146c121863a9d92a167f99caa9bfca68ea0614247a1658e2a5528"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "language/statements/class/",
+      "before": {
+        "files": 4365,
+        "variants": 8660
+      },
+      "after": {
+        "files": 4365,
+        "variants": 8660
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "a319b569419e47775e4aa43656c636380d1e91d05292670eb57e447c8bbccc99",
+      "after_compact_sha256": "e518843dc477dbe58fd7561d968f8c43855fdbd7624d6aaa2ec5c639c14064b9",
+      "before_raw": {
+        "bytes": 8988801,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-language-statements-class-.json",
+        "sha256": "7ffb6025a5ec383c7036e06b1d85212e421ad04ed17d25e8b6684f7497fe67f0"
+      },
+      "after_raw": {
+        "bytes": 8988800,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-language-statements-class-.json",
+        "sha256": "e9699438a40a4d7faf370cd6eb39e10703f7cc81cacda40e21984a17039f2443"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "language/expressions/optional-chaining/",
+      "before": {
+        "files": 38,
+        "variants": 76
+      },
+      "after": {
+        "files": 38,
+        "variants": 76
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "c4e582d4f956bb121087510468af4bffe03f32daac78366b5d10b4c51c9100db",
+      "after_compact_sha256": "d040c9ff8bbf7010e8237cb296410b25c472c9518a99c3e63e5d3e1defafdc5a",
+      "before_raw": {
+        "bytes": 7657540,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-language-expressions-optional-chaining-.json",
+        "sha256": "e72d09a696d137d489fabe63537ea93c35632d5b64f6791a4c467223b920ac91"
+      },
+      "after_raw": {
+        "bytes": 7657540,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-language-expressions-optional-chaining-.json",
+        "sha256": "4175d05548b3069b0531144750c6c07c71dfb00ceceea834fe285ceda85e9544"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "language/expressions/delete/",
+      "before": {
+        "files": 67,
+        "variants": 99
+      },
+      "after": {
+        "files": 67,
+        "variants": 99
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "f6e671112cb45a124b20c39ffb05c2adffa81c0fad734c934fcc1945704b0a9e",
+      "after_compact_sha256": "3bee883a97660b393298f23300c44b68b460a4da0e57eb24fcd23798041c4aee",
+      "before_raw": {
+        "bytes": 7657925,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-language-expressions-delete-.json",
+        "sha256": "4f4b4c1e017b394550cb06c0064b042afadca8c48a757bc58d08cd2cfb899c9b"
+      },
+      "after_raw": {
+        "bytes": 7657925,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-language-expressions-delete-.json",
+        "sha256": "14214236f80aa0535810f5e39c8a13fac11f5474983034d7def1cf4a0880f33d"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "language/expressions/super/",
+      "before": {
+        "files": 93,
+        "variants": 182
+      },
+      "after": {
+        "files": 94,
+        "variants": 184
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [
+        "language/expressions/super/call-proto-not-ctor.js"
+      ],
+      "gained_variants": [
+        [
+          "language/expressions/super/call-proto-not-ctor.js",
+          "non-strict"
+        ],
+        [
+          "language/expressions/super/call-proto-not-ctor.js",
+          "strict"
+        ]
+      ],
+      "before_compact_sha256": "6022afae461b8255684fe57242fd96899d7455414aa6d9e75e4698c2dde91803",
+      "after_compact_sha256": "d3dfc35e479c328c593c7c2796693895abb84117497b08781833aed96af28a19",
+      "before_raw": {
+        "bytes": 7664118,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-language-expressions-super-.json",
+        "sha256": "936462a46ba4a3a951c7fc720d60395dcc2c078260e891eaefaa2d7229f4d672"
+      },
+      "after_raw": {
+        "bytes": 7663578,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-language-expressions-super-.json",
+        "sha256": "8fbc6a1cf69c5ed0a26f664c97527be924b41c3f1d04e50167b36ef926ce797c"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "language/expressions/assignment/",
+      "before": {
+        "files": 485,
+        "variants": 850
+      },
+      "after": {
+        "files": 485,
+        "variants": 850
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "fa92435a2da905365e0fa1a675c5841f003d2555fd8a481e682f1ad52bc52a39",
+      "after_compact_sha256": "b5729bd5863262ea847e5170e8289b33e4e1c5e6e1db4823ee7a9af832e5f9f8",
+      "before_raw": {
+        "bytes": 7776143,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-language-expressions-assignment-.json",
+        "sha256": "428809d08eb90db9a43bb1667f3ea7a039edf554e99d0ff02c0dfff0631c2214"
+      },
+      "after_raw": {
+        "bytes": 7776143,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-language-expressions-assignment-.json",
+        "sha256": "b928d3a17c6ace8f9f98f4887716d6678ff9a140eac6d95652d03abef478cfdb"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "language/expressions/postfix-increment/",
+      "before": {
+        "files": 38,
+        "variants": 66
+      },
+      "after": {
+        "files": 38,
+        "variants": 66
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "718eb9c83846b21d3270ab315027a8a992404859cef429457f624b36bf23a168",
+      "after_compact_sha256": "dd6526790b12c0f972facde770edad6816bf26d172547529c7aa2cb6eadb0b31",
+      "before_raw": {
+        "bytes": 7654262,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-language-expressions-postfix-increment-.json",
+        "sha256": "79005f6f58bbb01011341bda87deb91fa227a5ec0a28a9fa8b794848763fe669"
+      },
+      "after_raw": {
+        "bytes": 7654262,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-language-expressions-postfix-increment-.json",
+        "sha256": "ba63bfb693de99ac539c51df389c930064a5e1c42f356985c77eb82abc446980"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "language/expressions/prefix-increment/",
+      "before": {
+        "files": 33,
+        "variants": 57
+      },
+      "after": {
+        "files": 33,
+        "variants": 57
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "f9672b41eff8df412a5015cdff4eab5c9497f0e9227d01a14ef896cbea0465af",
+      "after_compact_sha256": "7babcb8e6e2f78e0ebcb46900b222ab7fde820f2a984f58609129c8a242a159b",
+      "before_raw": {
+        "bytes": 7652000,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-language-expressions-prefix-increment-.json",
+        "sha256": "c2120f720b31c9965fd09feae21cda97fbf8e7ff29a6757c4959a233753833a5"
+      },
+      "after_raw": {
+        "bytes": 7652000,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-language-expressions-prefix-increment-.json",
+        "sha256": "63d94fa603ae30e4f0e2e4d2036b2d41dc74e1219cad6e035f84cd4c012b0d0b"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "language/expressions/postfix-decrement/",
+      "before": {
+        "files": 37,
+        "variants": 65
+      },
+      "after": {
+        "files": 37,
+        "variants": 65
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "1e5161b3c9aea4c1631370a6fc93c682a591e735f5b40f40ef26f31d21aecb67",
+      "after_compact_sha256": "488ef49fe076c81d525fc736cc24e0698db2303ada286d1e663a7a4c70ce8e5a",
+      "before_raw": {
+        "bytes": 7653927,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-language-expressions-postfix-decrement-.json",
+        "sha256": "260d4324541cee7c200d321c3a3f2449ff83b11a29ed47b161a18af5e007ac6e"
+      },
+      "after_raw": {
+        "bytes": 7653927,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-language-expressions-postfix-decrement-.json",
+        "sha256": "c27d8eb1bd0f4d6ea4e6b9b5224001554b62d8afc01b812dc4ebd69903a09e49"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "language/expressions/prefix-decrement/",
+      "before": {
+        "files": 34,
+        "variants": 58
+      },
+      "after": {
+        "files": 34,
+        "variants": 58
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "be0f4b7a90edd350d549b4209168f3a8d329330f823ca7f5bde94fda9848e69c",
+      "after_compact_sha256": "2499500e28308d6c36cc75d8cd88e35bf5683312bfbb07cbc4cb6f4b75cf45b9",
+      "before_raw": {
+        "bytes": 7652293,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-language-expressions-prefix-decrement-.json",
+        "sha256": "6eb7860269d45270398035da21468a1a675b48944fc41c92252135bae3a5508a"
+      },
+      "after_raw": {
+        "bytes": 7652293,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-language-expressions-prefix-decrement-.json",
+        "sha256": "df27bb4a4b824acc79238168d58b2aa1a8cf1f0d79f8bb7ff58e8538484a0b0d"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    },
+    {
+      "mode": "vm",
+      "selector": "built-ins/BigInt/",
+      "before": {
+        "files": 77,
+        "variants": 154
+      },
+      "after": {
+        "files": 77,
+        "variants": 154
+      },
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_compact_sha256": "2d7ad5ce99cb2d5d5509df101e38f8ea6f9a85a0b0401391df9601355c03ebbb",
+      "after_compact_sha256": "e19c203732298f0abb21b0be3270ccc4b21e8ad8777450bbe37122611965609d",
+      "before_raw": {
+        "bytes": 7661115,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-before-b154e868-02/vm-built-ins-BigInt-.json",
+        "sha256": "4acdda18a039bf7c5020a12e47fd785a7219d29e756ae64c881c61e0c36638f1"
+      },
+      "after_raw": {
+        "bytes": 7661115,
+        "path": "/home/user/amazing/out/js-vm-prerequisites-current-20261005-retry/prerequisites-current-after-ac897953-02/vm-built-ins-BigInt-.json",
+        "sha256": "98470f6c7214827f2498f174d27fd7e77873514446bffdecfa4013292ad6f776"
+      },
+      "before_host_sha256": "6a1857ea2b72f8581109489d70c73a93ebc84ad4e2e7bfdf524769d4c42f0403",
+      "after_host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed"
+    }
+  ],
+  "unions": {
+    "default": {
+      "before_files": 30442,
+      "after_files": 30444,
+      "before_variants": 56993,
+      "after_variants": 56997
+    },
+    "vm": {
+      "before_files": 30442,
+      "after_files": 30444,
+      "before_variants": 56993,
+      "after_variants": 56997
+    }
+  },
+  "lost_files_or_variants": [],
+  "qualification": "corpus-only; exact-source workspace/docs attachments required"
+}

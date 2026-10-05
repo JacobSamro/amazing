@@ -1,0 +1,570 @@
+{
+  "source_commit": "1af30cd39b94f4c57d26a8d95ed140da9087f9b7",
+  "recorded_published_base": "d19cad834166c77d55c3d333523a4cbca77e0992",
+  "baseline_source": "408cb841c0064c55e638a0d701f373e7e8d46020",
+  "baseline_original_role": "after",
+  "baseline_original_outer_exit": 1,
+  "baseline_CSS_job_exit": 0,
+  "state": "DONE",
+  "actual_controller": {
+    "handle": 71246,
+    "exit": 0
+  },
+  "actual_native": {
+    "job": {
+      "schema": 2,
+      "lane": "integrator-css-current-1af-20261005",
+      "source_commit": "1af30cd39b94f4c57d26a8d95ed140da9087f9b7",
+      "box_id": "bx_veze57ky",
+      "host": "user@5.135.137.33",
+      "port": 19041,
+      "job_id": "069e07f1ca5144469ae997754e014e07",
+      "output_root": "amazing/out/integrator-css-current-1af-20261005/css-current-1af30cd3-initial/compact",
+      "command_sha256": "36b560a09cfdc12e6bda5d94106c8ede38c6a1ead9bdb0fa7a4abfa7ceb75cd4",
+      "execution_sha256": "674b9b3a510fcc61b2da468138b8cf17104ade7fcbf5a2b48088895cc092cf76",
+      "source_archive_sha256": "c454264b7ac2c8352dd9d1dcfbcc160800650035473aef2ab09fba5d45703de5"
+    },
+    "state": "TERMINAL",
+    "actual_exit": 0,
+    "runner_exit": 0,
+    "boot_id": "894349eb-d15c-4e04-a765-9caeb24dd997",
+    "reason": "authenticated actual command exit",
+    "owner": {
+      "pid": 36364,
+      "start_ticks": 101469,
+      "state": "R",
+      "parent_pid": 36361,
+      "cmdline_sha256": "187eb6e9d03a4d4adfeb3221360aaf14fc2008c4f445a85123d600f166f27bbe"
+    },
+    "started_ns": 1791223305747189770,
+    "catalog_error": null,
+    "execution_raw": {
+      "path": "/tmp/amazing-job-069e07f1ca5144469ae997754e014e07-ifm05sz6/command.log",
+      "bytes": 9232,
+      "sha256": "c15780465f82a8f617d8d8e20f1f78fe6908cd27a66bd51a6b2960bc8a515cb2"
+    },
+    "observer_pipe_closed": false,
+    "signals": [],
+    "command_returncode": 0,
+    "exited_ns": 1791224351088711133,
+    "diagnostic_error": null,
+    "native_diagnostics": {
+      "path": "/tmp/amazing-job-069e07f1ca5144469ae997754e014e07-ifm05sz6/command.log",
+      "device": 64769
+    }
+  },
+  "actual_terminal_status": {
+    "handle": 24207,
+    "exit": 0
+  },
+  "actual_compact_fetches": [
+    {
+      "handle": 22117,
+      "exit": 0,
+      "scope": "summary/publication/storage"
+    },
+    {
+      "handle": 80655,
+      "exit": 0,
+      "scope": "all48 hashlisted phase/classification compacts"
+    }
+  ],
+  "rejected_first_fetch": {
+    "handle": 73020,
+    "exit": 3,
+    "reason": "Short relative paths rejected by supported endpoint; corrected full captured paths used. No native rerun."
+  },
+  "counts": {
+    "doctests": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 30
+    },
+    "nextest": {
+      "failed": 0,
+      "passed": 4933,
+      "skipped": 17
+    }
+  },
+  "all26_phase_exits": [
+    {
+      "phase": "nextest",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "doctests",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "ensure-wpt",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "release-build",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "parsing",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-fonts",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-transforms",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-images",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-CSS2-floats",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-CSS2-normal-flow",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-CSS2-positioning",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-backgrounds",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-contain",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-display",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-overflow",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-position",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-ruby",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-sizing",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-tables",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-viewport",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-color",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-cascade",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-conditional",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-selectors",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "css-css-shadow",
+      "actual_returncode": 0
+    },
+    {
+      "phase": "image-resources",
+      "actual_returncode": 0
+    }
+  ],
+  "parsing": {
+    "passed": 4330,
+    "total": 5126,
+    "files": 514,
+    "skipped_non_literal": 169,
+    "comparison": {
+      "new_failures": {},
+      "removed_failures": {},
+      "same_cohort": true
+    }
+  },
+  "static20_counts": {
+    "crash": 0,
+    "error": 0,
+    "mismatch": 887,
+    "pass": 1327,
+    "timeout": 0,
+    "unsupported": 0
+  },
+  "resource491_counts": {
+    "mismatch": 112,
+    "pass": 318,
+    "unsupported": 23,
+    "crash": 38
+  },
+  "RC21_original_entries": 226,
+  "all_original_IDs_preserved": true,
+  "lost": [],
+  "gained": [],
+  "corpora": [
+    {
+      "file": "css-CSS2-floats.compact.json",
+      "cases": 39,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 9,
+        "pass": 30,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "0ade3d061270c71d132f8bf5ef76e41e1ca3e956d5db74e38985e7aea1013871",
+      "baseline_sha256": "3f7f12d2d0650747a2ccbe73ec060c7591c7a918a08c39bacdcbc7f69d4ad297"
+    },
+    {
+      "file": "css-CSS2-normal-flow.compact.json",
+      "cases": 29,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 5,
+        "pass": 24,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "155ec65aea48f1381243bc7c566e3c8503222d20a11b4825476282647126c6cb",
+      "baseline_sha256": "5480d4daea6ecfdab151f38dec11937c5b11c1a84415e04bf8881038d32c8d1e"
+    },
+    {
+      "file": "css-CSS2-positioning.compact.json",
+      "cases": 7,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 2,
+        "pass": 5,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "f339293476933cd1469687aae20b2a520406cfd5b204ed11830dca19196f2558",
+      "baseline_sha256": "b85c2c3d628aea3eeb441c66b34699a195362af3d4f8a04b69dd63ccdef0cd55"
+    },
+    {
+      "file": "css-css-backgrounds.compact.json",
+      "cases": 134,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 56,
+        "pass": 78,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "44690843431e8ded4c5014c9692c5cf13d09b21f77937874ebbdcd075b6997d1",
+      "baseline_sha256": "112a63f541e9afebe141c1ae035e0361c9e81e45bd53a587a68f6302f98d506c"
+    },
+    {
+      "file": "css-css-cascade.compact.json",
+      "cases": 21,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 4,
+        "pass": 17,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "365ffa2d4998ab6cac01f00b101bf4748a1e7297055693dd5fd06ed57f065305",
+      "baseline_sha256": "4daba0cf6c16f22c192c49182a902993db4bee3a689f29c798564ed9616cb179"
+    },
+    {
+      "file": "css-css-color.compact.json",
+      "cases": 236,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 10,
+        "pass": 226,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "c51a0858e318f03f8491dfe74e2801f7155158a53c1aec946980a86f05f119b6",
+      "baseline_sha256": "5d6299aa5c3aa9c538b15be2992af28e0d715492589c7e1d782737ecb79d24db"
+    },
+    {
+      "file": "css-css-conditional.compact.json",
+      "cases": 66,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 36,
+        "pass": 30,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "299feb09c5164acab5c2d9561b2774723d9c528ce7a8148307fbbffcc6913dd9",
+      "baseline_sha256": "00d89469cb7ff23b8ffc1d5e7375616b44d15cb0bbb9ee664f76bc7158f726cb"
+    },
+    {
+      "file": "css-css-contain.compact.json",
+      "cases": 229,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 74,
+        "pass": 155,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "687d99b35e9f9928eb0e38b2e31f9cc9aa0db856388d654a5afa3077aa12e2d4",
+      "baseline_sha256": "7f9882de6d0bae9179110a1bf665ecd6030c07c6f228c72e2c95e272f8fa7b07"
+    },
+    {
+      "file": "css-css-display.compact.json",
+      "cases": 35,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 7,
+        "pass": 28,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "6664944f93ee9b55788b818acca524962ffbd1add8d16597bb3d518d15868fa3",
+      "baseline_sha256": "88ed18ba846312402b5d8343d79b67d455fd2a70b0501e02e655eac408883b26"
+    },
+    {
+      "file": "css-css-fonts.compact.json",
+      "cases": 32,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 8,
+        "pass": 24,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "6b70aa532b3784183eb77ad05fa887cd38e15e173eb1fc5846c5d0a3dc9a50cd",
+      "baseline_sha256": "180baf203532f06d70428d4b9d0e6c6a73d6b1537b9d850b48cb44a6a9547868"
+    },
+    {
+      "file": "css-css-images.compact.json",
+      "cases": 141,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 49,
+        "pass": 92,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "85d595bd3ba78f881551bcb300881b39db50360c6fe92b88439484c61909434f",
+      "baseline_sha256": "a9bb8b0844bdc9b54b1676ae6bd9a260ddf12af45fec2d3e61808c8bc0e90430"
+    },
+    {
+      "file": "css-css-overflow.compact.json",
+      "cases": 343,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 260,
+        "pass": 83,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "b2bfe8df4d473c01268551bc15de073ebd3e65239eb0ae2c991ea1c506b0a500",
+      "baseline_sha256": "cce6b712c4df1e2fe2faf620ae75780c381b9a5ed4ca70a5fe83abe7123a8169"
+    },
+    {
+      "file": "css-css-position.compact.json",
+      "cases": 54,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 9,
+        "pass": 45,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "638bba1cd5000270a7f9de7c7cda9c66ca3209a6d2daea68ff5f77ab4f62371e",
+      "baseline_sha256": "4ba25458962aef5a89f008852d46a31a46755461a09be1bac86873b7b0edab18"
+    },
+    {
+      "file": "css-css-ruby.compact.json",
+      "cases": 67,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 15,
+        "pass": 52,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "e5c01a6db0647ea886a72e849b8b16f6067822d33432cdd9e3952119c3a18dbf",
+      "baseline_sha256": "a251036dcde5a99509e8a25d1da156b17bac4e75c011e585805e8fbee83bf84f"
+    },
+    {
+      "file": "css-css-shadow.compact.json",
+      "cases": 35,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 35,
+        "pass": 0,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "dc0f38ac2284f0fb9183e61a4b7cc9f47ba7c5090d58a2da9b1eb9fca1af6694",
+      "baseline_sha256": "fe2486131b12d7d117017e56157310920650b75529de87342eabb3a31c772665"
+    },
+    {
+      "file": "css-css-sizing.compact.json",
+      "cases": 138,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 39,
+        "pass": 99,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "88acabf1a74dbfea92813540f5289e64ecbfb40a041a69222dcffa7cf60a37c9",
+      "baseline_sha256": "4a8c83f5f9ee82bbebb584b3c939cdfcda586571ded8c523a775e4ddddc58a1d"
+    },
+    {
+      "file": "css-css-tables.compact.json",
+      "cases": 82,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 22,
+        "pass": 60,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "f2570bea2159cdffe983f216ba6f5fb60652bf68c6d9d0baf485edb5f5407caa",
+      "baseline_sha256": "0b2c62fd88176498d180de4c0b9960fa53d611d66d0767eceb9f031282c4414a"
+    },
+    {
+      "file": "css-css-transforms.compact.json",
+      "cases": 348,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 207,
+        "pass": 141,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "b217ae064fc50caf4781e38e819d39b994b1af66cd3b9740b449670b184d5137",
+      "baseline_sha256": "40531bda0fe62caaed4ed2ee7f3fb99fea722b802e476451cffc1c6610b9e159"
+    },
+    {
+      "file": "css-css-viewport.compact.json",
+      "cases": 87,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 31,
+        "pass": 56,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "b6e6b0cbfa158ded783f5e0c3624ce0f0b16a274557452d630a0565cae4c285c",
+      "baseline_sha256": "bc2bc302e59de06773c55be826f2a358151bb546ec4812eafc71349d71c4f522"
+    },
+    {
+      "file": "css-selectors.compact.json",
+      "cases": 91,
+      "counts": {
+        "crash": 0,
+        "error": 0,
+        "mismatch": 9,
+        "pass": 82,
+        "timeout": 0,
+        "unsupported": 0
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "395e1840e673b08caeabc8675640ba6621075d5085cfc42ae0025e687334fd42",
+      "baseline_sha256": "2d440228b0a0115a50472d874393b8fa64243f5febb8f994b43e515caec49b93"
+    },
+    {
+      "file": "image-resources.compact.json",
+      "cases": 491,
+      "counts": {
+        "mismatch": 112,
+        "pass": 318,
+        "unsupported": 23,
+        "crash": 38
+      },
+      "gained": [],
+      "lost": [],
+      "sha256": "a0279e40885ede864eb55d13a82feaa669a218ddb9c0c8192094a412293a78f0",
+      "baseline_sha256": "3e625cb00a074dd3e7dc17efcdfabd5b8b4c89200ec8f9ce2206bda29f52f249"
+    }
+  ],
+  "engine_summary": {
+    "bytes": 42735,
+    "sha256": "d89988ea4ed3b5cf28bd3eb4fb8cac3c38fe208be32aa076158e0ad342592b6b"
+  },
+  "proof_bytes": 563041,
+  "max_file_bytes": 142572,
+  "previous_c810_actual1_preserved": true,
+  "no_historical_maps_combined": true,
+  "raw_ELF_source_native_preserved": true,
+  "updated_utc": "2026-10-05T18:21:50.189337+00:00"
+}

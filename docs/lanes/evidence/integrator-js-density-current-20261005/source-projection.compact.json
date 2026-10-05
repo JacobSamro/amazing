@@ -1,0 +1,10 @@
+{
+  "tested_source": "1af30cd39b94f4c57d26a8d95ed140da9087f9b7",
+  "base": "65c24415",
+  "engine_cargo_blobs": 5266,
+  "byte_exact": true,
+  "qualified": true,
+  "pending": [],
+  "shipping_code_head": "5d24fe4ef3bf034e676b9f424d46d3e427017442",
+  "qualification": "Full16 and exact-source workspace/docs/CSS actual0; fixed-base own VM46 zero loss on byte-exact JS tree"
+}

@@ -1,0 +1,124 @@
+{
+  "schema": 1,
+  "source_commit": "1af30cd39b94f4c57d26a8d95ed140da9087f9b7",
+  "shards": [
+    0,
+    4,
+    8,
+    12
+  ],
+  "shard_total": 16,
+  "jobs": 4,
+  "timeout_seconds": 60,
+  "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+  "native_source": "/tmp/amazing-t262-pool-js-density-net-pooled-initial-20261005T173006-1791221406721924000-integrator-js-density-pooled1-pool-0/source",
+  "native_target": "/tmp/amazing-t262-pool-js-density-net-pooled-initial-20261005T173006-1791221406721924000-integrator-js-density-pooled1-pool-0/target",
+  "native_raw": "/tmp/amazing-t262-pool-js-density-net-pooled-initial-20261005T173006-1791221406721924000-integrator-js-density-pooled1-pool-0/raw",
+  "started_ns": 1791221966013303988,
+  "phases": [
+    {
+      "phase": "build",
+      "wrapper_exit": 0,
+      "receipt": "/home/user/amazing/out/integrator-js-density-pooled1-pool-0/test262-js-density-net-pooled-initial-20261005T173006-1791221406721924000/1af30cd39b94f4c57d26a8d95ed140da9087f9b7/build.phase.manifest.json",
+      "receipt_sha256": "9bf9ac13e2c374963599186e2e701c64a4f30ce8f3efbecf9157a1497d38e112"
+    },
+    {
+      "phase": "shard-0-runner",
+      "wrapper_exit": 1,
+      "receipt": "/home/user/amazing/out/integrator-js-density-pooled1-pool-0/test262-js-density-net-pooled-initial-20261005T173006-1791221406721924000/1af30cd39b94f4c57d26a8d95ed140da9087f9b7/shard-0-runner.phase.manifest.json",
+      "receipt_sha256": "fb41ad73f8086f4a6f1fb2e464d225e88898a174a94326b0e6232658f7ee65fd"
+    },
+    {
+      "phase": "shard-0-packaging",
+      "wrapper_exit": 0,
+      "receipt": "/home/user/amazing/out/integrator-js-density-pooled1-pool-0/test262-js-density-net-pooled-initial-20261005T173006-1791221406721924000/1af30cd39b94f4c57d26a8d95ed140da9087f9b7/shard-0-packaging.phase.manifest.json",
+      "receipt_sha256": "0efa91e855075b420198f7beed881df20f6c166f6a9aefc35e6080df4ed771c3"
+    },
+    {
+      "phase": "shard-4-runner",
+      "wrapper_exit": 1,
+      "receipt": "/home/user/amazing/out/integrator-js-density-pooled1-pool-0/test262-js-density-net-pooled-initial-20261005T173006-1791221406721924000/1af30cd39b94f4c57d26a8d95ed140da9087f9b7/shard-4-runner.phase.manifest.json",
+      "receipt_sha256": "f1ee313cb1e8d8794790330404974f033e0578ebad7fa4ed8c29395f872feb11"
+    },
+    {
+      "phase": "shard-4-packaging",
+      "wrapper_exit": 0,
+      "receipt": "/home/user/amazing/out/integrator-js-density-pooled1-pool-0/test262-js-density-net-pooled-initial-20261005T173006-1791221406721924000/1af30cd39b94f4c57d26a8d95ed140da9087f9b7/shard-4-packaging.phase.manifest.json",
+      "receipt_sha256": "9f6106a33daa016ca25e753c659ffd036155e656dc738bb960cb3adf9073d99e"
+    },
+    {
+      "phase": "shard-8-runner",
+      "wrapper_exit": 1,
+      "receipt": "/home/user/amazing/out/integrator-js-density-pooled1-pool-0/test262-js-density-net-pooled-initial-20261005T173006-1791221406721924000/1af30cd39b94f4c57d26a8d95ed140da9087f9b7/shard-8-runner.phase.manifest.json",
+      "receipt_sha256": "e98796d315723c18aab40ff2aca284db5efd2b550d1d0c834d55157a477a37e5"
+    },
+    {
+      "phase": "shard-8-packaging",
+      "wrapper_exit": 0,
+      "receipt": "/home/user/amazing/out/integrator-js-density-pooled1-pool-0/test262-js-density-net-pooled-initial-20261005T173006-1791221406721924000/1af30cd39b94f4c57d26a8d95ed140da9087f9b7/shard-8-packaging.phase.manifest.json",
+      "receipt_sha256": "52002e47a5a52c5b8bbb9dc24828aee5eb298eeebae43e3fa45306edfa706f78"
+    },
+    {
+      "phase": "shard-12-runner",
+      "wrapper_exit": 1,
+      "receipt": "/home/user/amazing/out/integrator-js-density-pooled1-pool-0/test262-js-density-net-pooled-initial-20261005T173006-1791221406721924000/1af30cd39b94f4c57d26a8d95ed140da9087f9b7/shard-12-runner.phase.manifest.json",
+      "receipt_sha256": "fd1794d61c7b4c4f28d49a1421f9c7d4f1b5648763d0f92a3fa666cf3fa4e816"
+    },
+    {
+      "phase": "shard-12-packaging",
+      "wrapper_exit": 0,
+      "receipt": "/home/user/amazing/out/integrator-js-density-pooled1-pool-0/test262-js-density-net-pooled-initial-20261005T173006-1791221406721924000/1af30cd39b94f4c57d26a8d95ed140da9087f9b7/shard-12-packaging.phase.manifest.json",
+      "receipt_sha256": "013365f1f22ce96038e72a2eb369e7d5aa0cad3f5d1ce355c2a3f6359bbcd583"
+    }
+  ],
+  "shard_results": [
+    {
+      "shard": "0/16",
+      "compact_path": "/home/user/amazing/out/integrator-js-density-pooled1-pool-0/test262-js-density-net-pooled-initial-20261005T173006-1791221406721924000/1af30cd39b94f4c57d26a8d95ed140da9087f9b7/shard-0.compact.json",
+      "compact_sha256": "3c05c9e59d5ce0e93ab2c163ac4b241c5d0251c3c29c7cae287ae74849994e12",
+      "raw": {
+        "bytes": 8443619,
+        "path": "/tmp/amazing-t262-pool-js-density-net-pooled-initial-20261005T173006-1791221406721924000-integrator-js-density-pooled1-pool-0/raw/shard-0.json",
+        "sha256": "ff227a61b997cb13a6905854e03dabeb3881f9df2ff2bb917f979431ef55ed81"
+      },
+      "profile_verified": true
+    },
+    {
+      "shard": "4/16",
+      "compact_path": "/home/user/amazing/out/integrator-js-density-pooled1-pool-0/test262-js-density-net-pooled-initial-20261005T173006-1791221406721924000/1af30cd39b94f4c57d26a8d95ed140da9087f9b7/shard-4.compact.json",
+      "compact_sha256": "d66d19124b1c2ca7aa5c2c554b4ee1b6cdb6a2084202e660f77d41e954903633",
+      "raw": {
+        "bytes": 8444654,
+        "path": "/tmp/amazing-t262-pool-js-density-net-pooled-initial-20261005T173006-1791221406721924000-integrator-js-density-pooled1-pool-0/raw/shard-4.json",
+        "sha256": "3f9704fd6494296f7c06dc66bd15f07ab1f112a11ba427ce4ea7cd2d975c41a3"
+      },
+      "profile_verified": true
+    },
+    {
+      "shard": "8/16",
+      "compact_path": "/home/user/amazing/out/integrator-js-density-pooled1-pool-0/test262-js-density-net-pooled-initial-20261005T173006-1791221406721924000/1af30cd39b94f4c57d26a8d95ed140da9087f9b7/shard-8.compact.json",
+      "compact_sha256": "f8e601cfa9b92fff2431d4db83c6e9e1d98e63cdb6be8c66c4698e0c9bd4b87a",
+      "raw": {
+        "bytes": 8442789,
+        "path": "/tmp/amazing-t262-pool-js-density-net-pooled-initial-20261005T173006-1791221406721924000-integrator-js-density-pooled1-pool-0/raw/shard-8.json",
+        "sha256": "12dc350356e70a248b11b2fec949f488d03bd52fb1588474521b5a2117fa79af"
+      },
+      "profile_verified": true
+    },
+    {
+      "shard": "12/16",
+      "compact_path": "/home/user/amazing/out/integrator-js-density-pooled1-pool-0/test262-js-density-net-pooled-initial-20261005T173006-1791221406721924000/1af30cd39b94f4c57d26a8d95ed140da9087f9b7/shard-12.compact.json",
+      "compact_sha256": "53442d5ed48c07781c815116b2a0fdec23759cde570969df5af0f52d26ae50f7",
+      "raw": {
+        "bytes": 8451285,
+        "path": "/tmp/amazing-t262-pool-js-density-net-pooled-initial-20261005T173006-1791221406721924000-integrator-js-density-pooled1-pool-0/raw/shard-12.json",
+        "sha256": "d1c829341f796c10af7068ee3dcf3ba9212ba857cd6292857ce5c09141fc51f6"
+      },
+      "profile_verified": true
+    }
+  ],
+  "qualification_scope": "engine corpus",
+  "host_sha256": "6e77c8d7d0dcac31fe3fe12830cdd5934390e99b6b68b1a895a0edb5f042d1ed",
+  "finished_ns": 1791222404701962710,
+  "actual_exit": 0
+}

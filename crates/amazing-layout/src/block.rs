@@ -217,6 +217,16 @@ fn layout_block_in_context(
     let pl = b.padding.left;
     let pr = b.padding.right;
 
+    let constraint_style = b.style.clone();
+    let containing_block_height = b.containing_block_height;
+    let vertical_chrome=bt+pt(b)+pb(b)+bb;
+    let declared_content_height=|height:f32| if constraint_style.get("box-sizing")==Some("border-box") {
+        (height-vertical_chrome).max(0.0)
+    } else {height.max(0.0)};
+    let height_constraint = |property| values::style_length_percentage_with_units(&constraint_style, property, font_units)
+        .and_then(|length| length.resolve(containing_block_height))
+        .map(declared_content_height);
+
     // Intrinsic queries use the same provider as painting. Avoid measuring
     // ordinary fill-width paragraphs twice; only shrink-to-fit, ruby keyword
     // constraints, an explicit width keyword and vertical flow need this
@@ -298,7 +308,15 @@ fn layout_block_in_context(
                         || mode.eq_ignore_ascii_case("sideways-lr")
                 });
             if let Some(size) = b.replaced_size {
-                content_w = size.width;
+                // CSS2.2 10.3.2/10.3.4: an auto width follows the used
+                // definite height and natural ratio, in content-box units.
+                // The ordinary min/max-width pass below still runs afterward.
+                content_w = replaced_auto_width(
+                    size,
+                    used.height.or_else(|| height_constraint("height")),
+                    height_constraint("min-height").unwrap_or(0.0),
+                    height_constraint("max-height"),
+                );
             } else if floating || vertical_flex || (b.inline_atomic && is_inline_block(&b.style)) {
                 let chrome = bl + pl + pr + br_;
                 let available =
@@ -456,15 +474,6 @@ fn layout_block_in_context(
     let content_x = border_x + bl + pl;
     let content_y = border_y + bt + pt(b);
 
-    let constraint_style = b.style.clone();
-    let containing_block_height = b.containing_block_height;
-    let vertical_chrome=bt+pt(b)+pb(b)+bb;
-    let declared_content_height=|height:f32| if constraint_style.get("box-sizing")==Some("border-box") {
-        (height-vertical_chrome).max(0.0)
-    } else {height.max(0.0)};
-    let height_constraint = |property| values::style_length_percentage_with_units(&constraint_style, property, font_units)
-        .and_then(|length| length.resolve(containing_block_height))
-        .map(declared_content_height);
     // `contain-intrinsic-size`'s height half only fills in for a `height`
     // that isn't already a definite length -- an explicit `height:300px`
     // still wins over containment, matching width's treatment in
@@ -878,6 +887,25 @@ fn size_constraint(b: &LayoutBox, property: &str, font_px: f32) -> Option<f32> {
     values::style_length_percentage(&b.style, property, font_px, font_px * 0.6)?
         .resolve(b.containing_block_height)
         .map(|size| size.max(0.0))
+}
+
+// Adapt the project's existing InlineReplaced natural-ratio transfer to
+// ordinary block replaced sizing; no external algorithm is copied here.
+// Height constraints precede transfer because CSS2.2 uses the *used* height.
+fn replaced_auto_width(
+    natural: crate::IntrinsicSize,
+    definite_height: Option<f32>,
+    min_height: f32,
+    max_height: Option<f32>,
+) -> f32 {
+    definite_height
+        .filter(|height| height.is_finite())
+        .filter(|_| natural.width.is_finite() && natural.width > 0.0
+            && natural.height.is_finite() && natural.height > 0.0)
+        .map(|height| constrain_height(height.max(0.0), min_height, max_height)
+            * (natural.width / natural.height))
+        .filter(|width| width.is_finite())
+        .unwrap_or(natural.width)
 }
 
 fn constrain_height(tentative: f32, min_height: f32, max_height: Option<f32>) -> f32 {
