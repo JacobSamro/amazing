@@ -1,0 +1,13 @@
+{
+  "utc": "2026-10-05T11:20:07.628163+00:00",
+  "source": "a3aef6fde7b4eba91162cb81449fecf5b86667c6",
+  "base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "command_sha256": "ae8d67086ccfc8c4e95c5f8f2eb09288d95388f2148a173cdaf9732241136dbe",
+  "original_controls": 18,
+  "initial_owner_exit": 1,
+  "initial_fetch_exit": 0,
+  "initial_pass": 17,
+  "initial_fail": 1,
+  "change": "tools before and after share actual launcher source; corruption control must assert AFTER phase target absent while preserving BEFORE directory. Native helper bytes unchanged; bounded diagnostic summaries added",
+  "engine_build_or_gate": false
+}

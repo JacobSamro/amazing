@@ -1,0 +1,38 @@
+{
+  "classifications": {
+    "test_baseline_commit_identity_is_exact": "pass",
+    "test_before_after_profile_change_rejects_before_execution": "pass",
+    "test_changed_retained_baseline_bytes_reject_new_after_target": "pass",
+    "test_failed_native_command_records_actual_exit_and_keeps_measured_elf": "pass",
+    "test_fresh_pair_preserves_frozen_executable_and_source_after_terminal_cache_release": "pass",
+    "test_live_lease_refuses_cache_mutation_then_real_terminal_releases_it": "pass",
+    "test_native_launcher_source_mismatch_refuses_allocation": "pass",
+    "test_native_signal_exit_is_recorded_without_claiming_success": "pass",
+    "test_no_elf_baseline_cannot_authorize_after_execution": "pass",
+    "test_no_space_budget_refuses_command_and_target_creation": "pass",
+    "test_prebootstrap_check_allocates_no_target_or_output": "pass",
+    "test_raw_home_style_output_is_untouched_by_target_retirement": "pass",
+    "test_raw_output_cannot_be_inside_managed_scratch": "pass",
+    "test_retained_root_cannot_escape_raw_output_owner": "pass",
+    "test_shared_filesystem_budgets_are_summed_before_admission": "pass",
+    "test_source_phase_job_target_identity_cannot_be_reused": "pass",
+    "test_target_symlink_leaves_terminal_cache_intact": "pass",
+    "test_unknown_state_refuses_retirement_even_without_a_live_lock": "pass"
+  },
+  "controls_sha256": "cf2c14c4afe8a9fa16ea64effe81cccc95bbab888b7438091885a09bbe0506ce",
+  "diagnostics": {},
+  "engine_build_or_gate": false,
+  "errors": 0,
+  "failures": 0,
+  "fixture_root": "/tmp/native-retention-controls.mrvzlck7",
+  "helper_sha256": "c9b109c32ddc53199a69780af9dd77a26546313704e14919e8cb82b53f4b8229",
+  "native_elf": {
+    "bytes": 26936,
+    "path": "/usr/bin/true",
+    "sha256": "4b5a5694e3c0e8b1d58fc52ac6ef076e55e72c2f53195243ac86d5ff517cc2f6"
+  },
+  "schema": 1,
+  "source": "a3aef6fde7b4eba91162cb81449fecf5b86667c6",
+  "tests_run": 18,
+  "ticket": "native-storage-retention"
+}

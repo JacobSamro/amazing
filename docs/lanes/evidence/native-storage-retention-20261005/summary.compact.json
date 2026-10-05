@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "utc": "2026-10-05T11:27:27.421736+00:00",
+  "ticket": "native-storage-retention",
+  "qualified_source": "a3aef6fde7b4eba91162cb81449fecf5b86667c6",
+  "base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "source_initial": "8ab27f8c4ea1fbb57b8f70ffa9efe54da484e977",
+  "before": {
+    "pass_count": 17,
+    "fail_count": 1,
+    "controls": 18
+  },
+  "after": {
+    "pass_count": 18,
+    "fail_count": 0,
+    "controls": 18
+  },
+  "lost": [],
+  "gained": [
+    "test_changed_retained_baseline_bytes_reject_new_after_target"
+  ],
+  "actual_wrapper_exit": 0,
+  "compact_fetch_exit": 0,
+  "helper_sha256": "c9b109c32ddc53199a69780af9dd77a26546313704e14919e8cb82b53f4b8229",
+  "controls_sha256": "cf2c14c4afe8a9fa16ea64effe81cccc95bbab888b7438091885a09bbe0506ce",
+  "engine_build_or_gate": false,
+  "wrapper_edits": false,
+  "opt_in_adoption": "separate reviewed wrapper follow-up; helper already callable within native linux-run command",
+  "removed_logical_bytes": 7774866887,
+  "actual_free_after_cleanup_bytes": 7773958144,
+  "retention": "all old target ELF/source rehashed and retained; raw/HOME/source untouched; full cleanup manifest retained on box HOME",
+  "preserved_reporting_source": "895beba19509f419a37fd4c65df8abbcb5b1143a UNQUALIFIED"
+}
