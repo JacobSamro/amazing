@@ -738,6 +738,9 @@ impl NetworkService {
             context.security.destination = Destination::Document;
             context.security.top_level_navigation = true;
         }
+        if !request.claim_script_csp_admission(self.reporting.service_id(),&context) {
+            return Err(ApiError::InvalidWindow);
+        }
         if !request.claim_navigation_csp_admission() {
             return Err(ApiError::Network(FetchError::FrameEmbedding));
         }

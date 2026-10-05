@@ -1,0 +1,255 @@
+{
+  "schema": 1,
+  "recorded_ready_base": "dbce1e3dd368e9d4e654feee5256d7daae8568de",
+  "qualified_source": "1b03be0947ff4903b71ff388dc76b42766dbbeaa",
+  "qualified_fixed_base": "570b0718a22e6b5bc34a05ff0f13a6955e873973",
+  "source_projection": [
+    {
+      "path": "crates/amazing-fetch/src/api/objects.rs",
+      "bytes": 64005,
+      "sha256": "3ee011dc1346a1dff99efdd8eb107a3555cb08ac69b56d2ad564131a8b7193c1"
+    },
+    {
+      "path": "crates/amazing-fetch/src/model.rs",
+      "bytes": 12395,
+      "sha256": "ba2ba04cfe23fe5e56176262da78c08985080a21858649456d866bc41d3e42a3"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/mod.rs",
+      "bytes": 31615,
+      "sha256": "3eb794b6c9b639a33ee8b1fb768f3bd46be6f37cb712cd74018cf59c4abe991d"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/script_csp.rs",
+      "bytes": 10367,
+      "sha256": "2c8eb75f9cc1d16a0ab83cf39d11526093e4a9cfeae077cbd284e68bda9c3d71"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/script_csp_tests.rs",
+      "bytes": 29297,
+      "sha256": "66e3d9bd413c8e88544843d098edd8ef6027dc7b54ac19a22b4fcdcb8c5f3748"
+    },
+    {
+      "path": "crates/amazing-fetch/src/service.rs",
+      "bytes": 92120,
+      "sha256": "db2475eb59973ff02010463881ac9d9b0d2ed0bf853ac4ab23150ed79045cd6e"
+    },
+    {
+      "path": "docs/lanes/net-script-csp-source-settings.md",
+      "bytes": 4896,
+      "sha256": "1b9eb083cacf2d451936845ce8a752d77888efe3b6301eb6a1cbc9724032984f"
+    }
+  ],
+  "all_fetch_source_byteexact_qualified": true,
+  "source_prerequisites": "Current base already contains qualified navigation original-source loan570 and router68; ready has only this seven-path delta, no historical lane ancestry/410/wire-origin/driver/process code. Root current merged-head workspace/full16 remains authoritative.",
+  "before": {
+    "workspace": 4956,
+    "docs": 31,
+    "native": 625,
+    "csp_files": 32,
+    "csp_subtests": 81,
+    "custody": "authentic published570 full engine projection and fresh570 browser/CSP measurement"
+  },
+  "after": {
+    "workspace": 4967,
+    "skip": 17,
+    "docs": 33,
+    "native": 636,
+    "csp_files": 32,
+    "csp_subtests": 81
+  },
+  "actual_native_exit": 0,
+  "compact_fetch_exit": 0,
+  "native_job": "46544921f41a4770a08d810ad38a6c54",
+  "initial_source_failure": {
+    "source": "79ed7df1f25f24c504f54ad09183998e1607a06d",
+    "job": "57f837422a264e92b36523332caef471",
+    "actual_exit": 1,
+    "workspace": {
+      "pass": 4966,
+      "fail": 1
+    },
+    "native": {
+      "pass": 635,
+      "fail": 1
+    },
+    "docs": 33,
+    "original_lost": [],
+    "failed_id": "amazing-fetch reporting::script_csp::tests::script_source_cors_terminal_failure_retains_original_receipt_and_reporting_endpoint",
+    "cause": "Test peer denied real OPTIONS before asserted main GET; typedCors/receipt/reportPOST/quota assertions passed; genuine protocol peer correction retains all original assertions and expands preflight/main outcomes"
+  },
+  "diagnostic_provenance": {
+    "initial_wrapper_preflight_exit": 2,
+    "initial_helper_exit": 0,
+    "initial_helper_map": "UNMEASURED empty cargo-style markers; no test/build rerun",
+    "one_clean_classifier_repair": true,
+    "corrected_helper_job": "3d967f6dd74249aebda7ba69a5ae0605",
+    "corrected_actual_exit": 0,
+    "corrected_fetch_exit": 0,
+    "raw_hashes_verified_native": true,
+    "raw_not_recovered": true
+  },
+  "initial_compact_fetch_incident": "Bare names rejected3; corrected exact rooted fivecompact paths fetch0, no extra engine rerun",
+  "process_original_13": {
+    "amazing-process::receiving_registration accepted_head_is_retained_after_real_completion_and_registration_is_connection_bound": "pass",
+    "amazing-process::receiving_registration captured_owner_ancestry_frame_and_full_policy_are_validated": "pass",
+    "amazing-process::receiving_registration coep_observer_receipts_keep_original_global_and_report_only_disposition": "pass",
+    "amazing-process::receiving_registration csp_admission_failure_has_no_invented_service_id_and_keeps_original_document_snapshot": "pass",
+    "amazing-process::receiving_registration csp_connection_and_framing_failures_preserve_actual_checked_vs_accepted_progress": "pass",
+    "amazing-process::receiving_registration csp_manual_continuation_deduplicates_native_prefix_without_rechecking_redirect_url": "pass",
+    "amazing-process::receiving_registration csp_report_only_response_snapshots_keep_protecting_status_not_target_status": "pass",
+    "amazing-process::receiving_registration csp_source_settings_loan_survives_retirement_before_response_and_manual_continuation": "pass",
+    "amazing-process::receiving_registration fresh_initial_is_explicit_and_never_a_failed_http_response_fallback": "pass",
+    "amazing-process::receiving_registration full_native_context_units_are_carried_without_url_or_scalar_policy_substitution": "pass",
+    "amazing-process::receiving_registration global_identity_cannot_replace_accepted_creation_origin_or_full_coep": "pass",
+    "amazing-process::receiving_registration manual_redirect_uses_retained_private_head_and_admitted_loan_after_retirement": "pass",
+    "amazing-process::receiving_registration source_and_embedding_origin_are_distinct_and_retired_owner_loan_survives": "pass"
+  },
+  "gained_native": [
+    "amazing-fetch reporting::script_csp::tests::script_graph_abort_deadline_early_transport_and_enforced_policy_keep_true_native_receipts",
+    "amazing-fetch reporting::script_csp::tests::script_graph_can_issue_genuine_later_dependency_after_retirement_without_new_global",
+    "amazing-fetch reporting::script_csp::tests::script_graph_source_quota_is_shared_bounded_and_explicit_cleanup_releases_it",
+    "amazing-fetch reporting::script_csp::tests::script_source_admission_rejects_changed_client_and_preclaim_clones_without_poisoning_original",
+    "amazing-fetch reporting::script_csp::tests::script_source_cors_terminal_failure_retains_original_receipt_and_reporting_endpoint",
+    "amazing-fetch reporting::script_csp::tests::script_source_genuine_receipts_reject_foreign_request_service_and_duplicate_consumption",
+    "amazing-fetch reporting::script_csp::tests::script_source_loan_keeps_native_prior_hop_receipts_on_non_csp_terminal_error",
+    "amazing-fetch reporting::script_csp::tests::script_source_no_endpoint_snapshot_survives_original_retirement_and_fresh_about_is_empty",
+    "amazing-fetch reporting::script_csp::tests::script_source_preserves_nonceability_and_exact_original_policy_from_received_header",
+    "amazing-fetch reporting::script_csp::tests::script_source_receipts_report_real_success_after_original_retirement_and_author_error",
+    "amazing-fetch reporting::script_csp::tests::script_source_wrong_graph_service_receiver_and_navigation_cannot_mint_loans"
+  ],
+  "lost": [],
+  "native_vs_installed": "Native service classic/module graph producer and original installed CSP subset only. Actual saved-realm/Docgen/node membership, trusted SPVE/Window retirement, worker/full module graph and shipping HTML consumers remain HTML-owned and unqualified here.",
+  "storage": "Actual guarded native/tmp source/raw/generated/allELF retention; first physical cold target BEFORE metadata is comparative AFTER only; all successful/failed original sources and artifacts preserved; compact HOME only.",
+  "evidence": {
+    "failure-classification-clean1-request.json": {
+      "bytes": 584,
+      "sha256": "024599bd91424b12e69ecc1d895ee30aab0d79cc29e06b453806d7a15fbd65ac"
+    },
+    "initial-after.endpoint.json": {
+      "bytes": 599,
+      "sha256": "dd67978bde34e0b04b11452e8f483e5bc66f62915ff32aa3139823e6b3736aba"
+    },
+    "failure-classification.clean1.endpoint.json": {
+      "bytes": 596,
+      "sha256": "52f9dca0cda7542e016977eb20e06293ce062a06f586d7dd32848fc70c13378e"
+    },
+    "initial-first-cold-after-storage-plan.json": {
+      "bytes": 1019,
+      "sha256": "76d0d1bddc47e1d618cc2531d6f291e8a0bd1cabc632755897f02563c8737793"
+    },
+    "sourcefix-after.endpoint.json.observation.summary.json": {
+      "bytes": 1410,
+      "sha256": "8bc85970aff03c0d67d381b48c4e4bb41346af4937de53c1d2eaaf3bae07ed7d"
+    },
+    "failure-classification.clean1.endpoint.json.observation.summary.json": {
+      "bytes": 1388,
+      "sha256": "ce50af388dcaf0f0f93b0f0cc55e611b8cdcbf58f33551e94a322a5e4182a9e4"
+    },
+    "sourcefix-first-cold-after-storage-plan.json": {
+      "bytes": 1079,
+      "sha256": "0ccede4e6e8e87c0d47f4ca524f9f062e1947de0bfe4ff52db711b392390ed41"
+    },
+    "initial-native-failure.summary.json": {
+      "bytes": 5891,
+      "sha256": "ee3a6136c5f5654a73ad515a66c0829bf784581015434fdf80bc6b9c48159c1a"
+    },
+    "initial-after.endpoint.json.observation.summary.json": {
+      "bytes": 1390,
+      "sha256": "cda7cc571ac1d8cb251b24416acba4923062a79500cbdff95ff2fb9e7bc40aa5"
+    },
+    "initial-source-plan.json": {
+      "bytes": 5684,
+      "sha256": "b47112232a687c84ddcffd67cd3cb1c7cff73c2643c30eea5910586f9ef6f5f1"
+    },
+    "failure-classification-request.json": {
+      "bytes": 530,
+      "sha256": "03c3856c8896c9d5ed1f34c329213ff19fb6b69c11e244bd10f367bf6d2dc582"
+    },
+    "sourcefix-after.endpoint.json": {
+      "bytes": 619,
+      "sha256": "6191b847396afcbac49681838b43eede1456ff0b79c01bbd1ac8bd573fb10e77"
+    },
+    "compact-fetch-request.json": {
+      "bytes": 1354,
+      "sha256": "df9c0987d497a892c7a3f98fb9616a575c40fbf78f74a11c1be3921d654c404a"
+    },
+    "initial-history.compact.json": {
+      "bytes": 165520,
+      "sha256": "3635a5ef3e18f26edfe33f3b2979395c06d9af5a4bfa6e73c485f9b3e3f26d09"
+    },
+    "sourcefix-source-plan.json": {
+      "bytes": 6628,
+      "sha256": "253f002fc35a9bfc869c581ad2a7a923477626864c5d2431d2ce37413dac2d76"
+    },
+    "before.compact/before.summary.json": {
+      "bytes": 85392,
+      "sha256": "f781963f1b41a744859dcc46524d5b1c73c9a60f8f95cc37b71811f94e8f53d7"
+    },
+    "before.compact/network-corpus.compact.json": {
+      "bytes": 20295,
+      "sha256": "43b093dfc41a852a5b3eb1a3c2335d787829853c961d5851e9105389a3d95c3c"
+    },
+    "before.compact/csp-wpt.compact.json": {
+      "bytes": 35906,
+      "sha256": "425d279d32138c2543ba8563569b67eff70317353ee95fbe9526a059502470a5"
+    },
+    "sourcefix.compact/after.summary.json": {
+      "bytes": 371711,
+      "sha256": "f2e85d8f2f4cf483382dfc276e419e9fe2c936beac3cd7fb214cb4494b490dc8"
+    },
+    "sourcefix.compact/network-corpus.compact.json": {
+      "bytes": 20571,
+      "sha256": "f62df602409ca6d436a4adc40858bed632fd136a9dcc523b915db393df113ab4"
+    },
+    "sourcefix.compact/workspace.compact.json": {
+      "bytes": 141486,
+      "sha256": "2d1693b3d9bf21d383a0c11652cd38c3cfd61b990fea461388d624250f284838"
+    },
+    "sourcefix.compact/csp-wpt.compact.json": {
+      "bytes": 35922,
+      "sha256": "4da8fa626f4dc67b4548047fc908ee9d453d89c0a8cc4ad22c52dd9a35889aa6"
+    },
+    "sourcefix.compact/storage.summary.json": {
+      "bytes": 2445,
+      "sha256": "48f035d790599e572ef776294c0a88c36f988cf8d909b755069afe04930aedc3"
+    }
+  },
+  "historical_evidence_repack": {
+    "preserved_original_ready": "6744d614178fc507dd53994083c07a83052d34b2",
+    "reason": "Existing2MiB totalticket limit reserves root16/workspace proof; only five repeated historical failed79 compact files changed representation",
+    "envelope": "initial-history.compact.json",
+    "decode": "decoded=lzma.decompress(base64.b85decode(envelope['payload_xz_base85']),memlimit=16777216); verify decoded_bytes+SHA, slice by offsets, compare all five original per-file SHA256",
+    "decoded_files": {
+      "initial.compact/after.summary.json": {
+        "offset": 0,
+        "bytes": 371374,
+        "sha256": "a4e7f1df4e1a05ed1997cba26ee1a8ec53b63209983df2b17ce6930b285583ed"
+      },
+      "initial.compact/csp-wpt.compact.json": {
+        "offset": 371374,
+        "bytes": 35910,
+        "sha256": "7212a8e4fd059a8d75003f1101eac27c4a92ff06ed29b5e976f37002054b4ee6"
+      },
+      "initial.compact/network-corpus.compact.json": {
+        "offset": 407284,
+        "bytes": 20414,
+        "sha256": "0cecc865bbbb8794226bc41107d8766a4d26cbc8a43f6ba48ec02f3429ef2a9c"
+      },
+      "initial.compact/storage.summary.json": {
+        "offset": 427698,
+        "bytes": 2381,
+        "sha256": "661e6184bbf173d6da6dcda6510adb6b1ddb7ef7cebfc17018deb78a10688b3b"
+      },
+      "initial.compact/workspace.compact.json": {
+        "offset": 430079,
+        "bytes": 141471,
+        "sha256": "cb3fcbdae67193d019a5a01ddbec551fc678a4daaa6a1c81ec85f879aafcf093"
+      }
+    },
+    "decoded_payload_sha256": "43cbc49f149ee426a095605b2ee8cd91a130db0bc7db0b86d614cd95cead2c93",
+    "decode_hash_verification": "all five original files byteexact; no code/count/assertion/receipt/classification changes",
+    "source_or_test_rerun": false,
+    "compression": "Standard-library xz8MiB dictionary reuses exact repeated maps across five original files; bounded16MiB decoder, source unchanged"
+  }
+}

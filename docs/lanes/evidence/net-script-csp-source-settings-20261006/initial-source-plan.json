@@ -1,0 +1,118 @@
+{
+  "schema": 1,
+  "state": "whole-source-commands-capacity-frozen-unallocated",
+  "source": "79ed7df1f25f24c504f54ad09183998e1607a06d",
+  "base": "570b0718a22e6b5bc34a05ff0f13a6955e873973",
+  "shipping": [
+    {
+      "path": "crates/amazing-fetch/src/api/objects.rs",
+      "bytes": 64005,
+      "sha256": "3ee011dc1346a1dff99efdd8eb107a3555cb08ac69b56d2ad564131a8b7193c1"
+    },
+    {
+      "path": "crates/amazing-fetch/src/model.rs",
+      "bytes": 12395,
+      "sha256": "ba2ba04cfe23fe5e56176262da78c08985080a21858649456d866bc41d3e42a3"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/mod.rs",
+      "bytes": 31615,
+      "sha256": "3eb794b6c9b639a33ee8b1fb768f3bd46be6f37cb712cd74018cf59c4abe991d"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/script_csp.rs",
+      "bytes": 10367,
+      "sha256": "2c8eb75f9cc1d16a0ab83cf39d11526093e4a9cfeae077cbd284e68bda9c3d71"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/script_csp_tests.rs",
+      "bytes": 27335,
+      "sha256": "8d585301cb6f512d818e5fea433dce46745028853f728886971c608a159cbfc1"
+    },
+    {
+      "path": "crates/amazing-fetch/src/service.rs",
+      "bytes": 92120,
+      "sha256": "db2475eb59973ff02010463881ac9d9b0d2ed0bf853ac4ab23150ed79045cd6e"
+    },
+    {
+      "path": "docs/lanes/net-script-csp-source-settings.md",
+      "bytes": 4123,
+      "sha256": "17aa3527ee3d36e95fb35c353d41d0371fe8d6646dde8e56b6a5674c9a97de8d"
+    }
+  ],
+  "authored_groups": 11,
+  "native_measured": false,
+  "installed_measured": false,
+  "recorded_at": "2026-10-05T20:56:20.179241+00:00",
+  "proposed_baseline_reuse": {
+    "source": "570b0718a22e6b5bc34a05ff0f13a6955e873973",
+    "native": 625,
+    "workspace": 4956,
+    "docs": 31,
+    "csp_files": 32,
+    "csp_subtests": 81,
+    "receipts": {
+      "before.summary.json": {
+        "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/local-response-provenance/before.compact/before.summary.json",
+        "bytes": 85392,
+        "sha256": "f781963f1b41a744859dcc46524d5b1c73c9a60f8f95cc37b71811f94e8f53d7"
+      },
+      "network-corpus.compact.json": {
+        "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/local-response-provenance/before.compact/network-corpus.compact.json",
+        "bytes": 20295,
+        "sha256": "43b093dfc41a852a5b3eb1a3c2335d787829853c961d5851e9105389a3d95c3c"
+      },
+      "csp-wpt.compact.json": {
+        "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/local-response-provenance/before.compact/csp-wpt.compact.json",
+        "bytes": 35906,
+        "sha256": "425d279d32138c2543ba8563569b67eff70317353ee95fbe9526a059502470a5"
+      }
+    },
+    "projection": "Base is exact published570; existing original native625 and genuine fresh570 CSP comparison. No716 router source prerequisite or claim. Workspace original entirecrates/Cargo custody retained in before.summary."
+  },
+  "proposed_whole_after_scope": [
+    "cargo nextest run --workspace --locked --no-fail-fast",
+    "cargo test --workspace --locked --doc",
+    "cargo build -p amazing --locked",
+    "bash scripts/ensure-wpt.sh",
+    "cargo nextest run -p amazing-net -p amazing-net-tls -p amazing-fetch --features amazing-net-tls/test-support --locked --no-fail-fast",
+    "same original pinned11CSP WPT directories and exact original81 passing subtest IDs"
+  ],
+  "process_controls": "all original13 receiving groups retained through workspace",
+  "profile": "DEV/TEST line-tables-only incremental0 default4/8 finite7200",
+  "storage": "Canonical native /tmp raw/source/generatedsource/all ELF retention; bounded HOME compacts, supported relativecompactroot/publicstorageplan/statvfsbeforebootstrap. First cold AFTER-only physical placement needs explicit admission, no invented baseline executable manifest.",
+  "capacity_design": {
+    "build_gib": 10,
+    "bootstrap_gib": 2,
+    "reserve_gib": 2,
+    "retention_gib": 0.125,
+    "prebootstrap_gib": 14.125,
+    "inside_engine_minimum_actual_tmp_gib": 12
+  },
+  "commands_frozen": true,
+  "allocation": false,
+  "separate_sources_excluded": [
+    "716 router ticket",
+    "Reporting410",
+    "wire-origin",
+    "driver/process consumer code"
+  ],
+  "public_source": "c2942529f9c2df4dfc8f1fa3b4494d4d42878e50",
+  "alias_proposed": "net-script-csp-source-settings-20261006",
+  "job_proposed": "script-settings-79ed7df1-initial",
+  "storage_phase_boundary": "Public schema before means first physical cold target; actual engine/corpus comparison AFTER reads authentic published570 maps. No previous-source ELF artifact manifest is invented. Admission required before launch.",
+  "packet_hashes": {
+    "whole-gate-body.py": "d7150ced082dc5c87036ebb50fddaabc9f25c8230a013d37f517a82d74f4993e",
+    "after-command.txt": "517b16352095134207ab104ba628e1f34d51c996642be2b49e5b5a70aec8282d",
+    "after-launch.sh": "52e5defa83c2b0f774da27d8acf4a0f67c5a98af38eff9f97037f14c0c88d6bf",
+    "first-cold-after-storage-plan.json": "76d0d1bddc47e1d618cc2531d6f291e8a0bd1cabc632755897f02563c8737793"
+  },
+  "public_helpers": {
+    "scripts/linux-run.sh": "6c960c2a394d659990484388a15bd887f4db4f0793244669d9f88aafe08a1c28",
+    "scripts/source-upload.py": "d5b9b8469b7eb160cc2bf923aac48470b6a71b2a040b3a08e19a4c915219e908",
+    "scripts/completed-job.py": "9c2bde2eeaa2507e5a14d2cc17599908d1c2ea9b1418ba76a78d04a1ff3b15b1",
+    "scripts/nextest-compact.py": "cddc4e6ec9f9ea5c253e50bb3ac7ff02d64389b9dc696370cb02dc417092cd80",
+    "scripts/native-storage-plan.py": "3c4df2f01150f9da8b53695df781d2ee83fd7d79a92a1d9b33449d14bf763dbe",
+    "scripts/native-storage-retention.py": "2628dc352f594177a540961888f8157517ca9603847716731b04146f9033d489"
+  }
+}

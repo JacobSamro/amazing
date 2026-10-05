@@ -1,0 +1,10 @@
+{
+  "source": "79ed7df1f25f24c504f54ad09183998e1607a06d",
+  "initial_helper_job": "247abb15142c4825904e5b9b39710860",
+  "initial_helper_actual_exit": 0,
+  "initial_result": "UNMEASURED empty panic map because helper expected cargo stdout markers; actual nextest format differs",
+  "helper_correction": "Bulk all panic/assertion anchors with bounded surrounding context, reject empty diagnostic map; raw hashes/source unchanged",
+  "clean_helper_allowance_used": 1,
+  "command_sha256": "9cd3760492a9830b30f3600f1e42e4ab155d337aaa98a8eaceb20a20b9224ac9",
+  "engine_test_rerun": false
+}

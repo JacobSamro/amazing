@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "ticket": "net-script-csp-source-settings-20261006",
+  "source": "79ed7df1f25f24c504f54ad09183998e1607a06d",
+  "phase": "before",
+  "job": "script-settings-79ed7df1-initial",
+  "scratch_parent": "/tmp/amazing-native-storage",
+  "output_root": "/tmp/amazing-native-retained/net-script-csp-source-settings-20261006/script-settings-79ed7df1-initial",
+  "retained_root": "/tmp/amazing-native-retained/net-script-csp-source-settings-20261006/script-settings-79ed7df1-initial/retained",
+  "build_budget_bytes": 10737418240,
+  "retention_budget_bytes": 134217728,
+  "bootstrap_budget_bytes": 2147483648,
+  "reserve_bytes": 2147483648,
+  "retention_method": "hardlink-or-copy",
+  "elf_policy": "all",
+  "retire_after_retention": false,
+  "compact_root": "/home/user/amazing/out/net-script-csp-source-settings-20261006/script-settings-79ed7df1-initial/compact",
+  "summary_path": "/home/user/amazing/out/net-script-csp-source-settings-20261006/script-settings-79ed7df1-initial/compact/storage.summary.json"
+}

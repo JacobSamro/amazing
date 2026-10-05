@@ -1,0 +1,9 @@
+{
+  "source": "79ed7df1f25f24c504f54ad09183998e1607a06d",
+  "initial_wrapper_exit": 2,
+  "initial_reason": "Existing-box requires guarded mission transport; no allocation/job/engine occurred",
+  "mission_sha256": "75fd1bbe9686c29e8eab6b5719d5e769df3e62f4fa16003eddf717c89b36756b",
+  "mission_bytes": 271,
+  "supported_launch_sha256": "b2f314f7a6887f08681b10a171808bc954c744a93976711dffee259642adf1d2",
+  "scope": "Bounded compact failure diagnostics derived natively from own authenticated raw; no raw-file recovery/test rerun"
+}

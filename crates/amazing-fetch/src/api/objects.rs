@@ -79,6 +79,9 @@ pub struct ApiRequest {
     pub(super) url: HttpUrl,
     pub(super) native_navigation_token: Option<std::sync::Arc<crate::model::NativeNavigationToken>>,
     native_navigation_report_token: Option<std::sync::Arc<crate::model::NativeNavigationToken>>,
+    native_script_report_token: Option<std::sync::Arc<crate::reporting::NativeScriptCspBinding>>,
+    native_script_reporting_state: std::sync::Arc<std::sync::atomic::AtomicU8>,
+    native_script_service_admitted: bool,
     pub(super) navigation_urls: Vec<HttpUrl>,
     pub(super) navigation_csp_violations: Vec<crate::CspViolation>,
     pub(super) method: String,
@@ -225,6 +228,9 @@ impl ApiRequest {
                     url,
                     native_navigation_token: None,
                     native_navigation_report_token: None,
+                    native_script_report_token: None,
+                    native_script_reporting_state: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0)),
+                    native_script_service_admitted: false,
                     navigation_urls: Vec::new(),
                     navigation_csp_violations: Vec::new(),
                     method: "GET".into(),
@@ -260,6 +266,9 @@ impl ApiRequest {
                     url: other.url.clone(),
                     native_navigation_token: other.native_navigation_token.clone(),
                     native_navigation_report_token: other.native_navigation_report_token.clone(),
+                    native_script_report_token: other.native_script_report_token.clone(),
+                    native_script_reporting_state: other.native_script_reporting_state.clone(),
+                    native_script_service_admitted: false,
                     navigation_urls: other.navigation_urls.clone(),
                     navigation_csp_violations: other.navigation_csp_violations.clone(),
                     method: other.method.clone(),
@@ -450,6 +459,9 @@ impl ApiRequest {
             url: self.url.clone(),
             native_navigation_token: self.native_navigation_token.clone(),
             native_navigation_report_token: self.native_navigation_report_token.clone(),
+            native_script_report_token: self.native_script_report_token.clone(),
+            native_script_reporting_state: self.native_script_reporting_state.clone(),
+            native_script_service_admitted: false,
             navigation_urls: self.navigation_urls.clone(),
             navigation_csp_violations: self.navigation_csp_violations.clone(),
             method: self.method.clone(),
@@ -506,6 +518,37 @@ impl ApiRequest {
         }
         Ok(())
     }
+    pub(crate) fn can_claim_script_csp_reporting(&self)->bool {
+        self.mode!=RequestMode::Navigate && self.embedding_owner.is_none()
+            && matches!(self.destination,Destination::Empty|Destination::Script)
+            && self.native_script_report_token.is_none()
+            && self.native_script_reporting_state.load(std::sync::atomic::Ordering::Acquire)==0
+    }
+    pub(crate) fn claim_script_csp_reporting(&mut self,
+        binding:std::sync::Arc<crate::reporting::NativeScriptCspBinding>) -> bool {
+        if !self.can_claim_script_csp_reporting() {return false;}
+        if self.native_script_reporting_state.compare_exchange(0,2,std::sync::atomic::Ordering::AcqRel,
+            std::sync::atomic::Ordering::Acquire).is_err() {return false;}
+        self.destination=Destination::Script;
+        self.native_script_report_token=Some(binding);true
+    }
+    pub(crate) fn claim_script_csp_admission(&mut self,service:u64,context:&crate::ClientContext)->bool {
+        use std::sync::atomic::Ordering::{Acquire,AcqRel};
+        if let Some(binding)=&self.native_script_report_token {
+            if !binding.matches_admission(service,&self.origin,self.csp_self_origin.as_ref(),self.mode,
+                self.destination,self.embedding_owner.is_some(),context) {return false;}
+            if self.native_script_reporting_state.compare_exchange(2,3,AcqRel,Acquire).is_err() {return false;}
+            binding.mark_admitted();self.native_script_service_admitted=true;true
+        } else {
+            // Existing ordinary requests may be reused. A clone predating a
+            // source claim cannot bypass or consume that claim's one-shot loan.
+            loop {match self.native_script_reporting_state.load(Acquire) {
+                0=>if self.native_script_reporting_state.compare_exchange(0,1,AcqRel,Acquire).is_ok(){return true;},
+                1=>return true,
+                _=>return false,
+            }}
+        }
+    }
     pub(crate) fn claim_navigation_csp_reporting(&mut self)
         -> Option<std::sync::Arc<crate::model::NativeNavigationToken>> {
         if self.mode!=RequestMode::Navigate || self.redirect!=RedirectMode::Manual
@@ -529,6 +572,10 @@ impl ApiRequest {
         let mut out = Request::new(self.url.clone(), self.origin.clone());
         out.native_navigation_token=self.native_navigation_token.clone();
         out.native_navigation_report_token=self.native_navigation_report_token.clone();
+        // Only the actual service-owned admitted object can project reporting
+        // authority. Public clones and legacy synchronous calls cannot bypass
+        // the one-shot native service admission through policy projection.
+        out.native_script_report_token=self.native_script_service_admitted.then(||self.native_script_report_token.clone()).flatten();
         if !self.navigation_urls.is_empty() {
             out.url_list=self.navigation_urls.clone();
             *out.url_list.last_mut().unwrap()=self.url.clone();

@@ -50,6 +50,7 @@ pub struct Request {
     pub(crate) url_list: Vec<HttpUrl>,
     pub(crate) native_navigation_token: Option<std::sync::Arc<NativeNavigationToken>>,
     pub(crate) native_navigation_report_token: Option<std::sync::Arc<NativeNavigationToken>>,
+    pub(crate) native_script_report_token: Option<std::sync::Arc<crate::reporting::NativeScriptCspBinding>>,
     pub origin: Origin,
     method: String,
     pub headers: HeaderList,
@@ -84,6 +85,7 @@ impl Request {
             url_list: vec![url],
             native_navigation_token: None,
             native_navigation_report_token: None,
+            native_script_report_token: None,
             csp_self_origin: origin.clone(),
             origin,
             method: "GET".into(),
@@ -242,6 +244,7 @@ pub struct InternalResponse {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CspResponseProvenance {
     pub(crate) native_navigation_report_token: Option<std::sync::Arc<NativeNavigationToken>>,
+    pub(crate) native_script_report_token: Option<std::sync::Arc<crate::reporting::NativeScriptCspBinding>>,
     url_list: Vec<HttpUrl>,
     violations: Vec<CspViolation>,
 }
@@ -251,7 +254,7 @@ impl CspResponseProvenance {
         for receipt in request.csp_violations.iter().cloned().chain(final_violations) {
             if !violations.contains(&receipt) { violations.push(receipt); }
         }
-        Self { native_navigation_report_token:request.native_navigation_report_token.clone(),url_list: request.url_list().to_vec(), violations }
+        Self { native_navigation_report_token:request.native_navigation_report_token.clone(),native_script_report_token:request.native_script_report_token.clone(),url_list: request.url_list().to_vec(), violations }
     }
     pub fn url_list(&self) -> &[HttpUrl] { &self.url_list }
     pub fn violations(&self) -> &[CspViolation] { &self.violations }

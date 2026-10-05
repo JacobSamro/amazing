@@ -1,0 +1,23 @@
+{
+  "source": "79ed7df1f25f24c504f54ad09183998e1607a06d",
+  "initial_request_exit": 3,
+  "reason": "Bare filenames rejected outside rooted job namespace; corrected exact five rooted compact paths",
+  "corrected_command": [
+    "python3",
+    "/Users/jMac/Projects/OpenSource/amazing-wt/public-workspace-storage-20261006/scripts/completed-job.py",
+    "fetch",
+    "--receipt",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/script-csp-source-settings/after.endpoint.json",
+    "--lane",
+    "net-script-csp-source-settings-20261006",
+    "--source",
+    "79ed7df1f25f24c504f54ad09183998e1607a06d",
+    "--destination",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/script-csp-source-settings/after.compact",
+    "amazing/out/net-script-csp-source-settings-20261006/script-settings-79ed7df1-initial/compact/after.summary.json",
+    "amazing/out/net-script-csp-source-settings-20261006/script-settings-79ed7df1-initial/compact/csp-wpt.compact.json",
+    "amazing/out/net-script-csp-source-settings-20261006/script-settings-79ed7df1-initial/compact/network-corpus.compact.json",
+    "amazing/out/net-script-csp-source-settings-20261006/script-settings-79ed7df1-initial/compact/workspace.compact.json",
+    "amazing/out/net-script-csp-source-settings-20261006/script-settings-79ed7df1-initial/compact/storage.summary.json"
+  ]
+}

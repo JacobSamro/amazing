@@ -4,6 +4,9 @@
 mod native_report;
 pub use native_report::*;
 mod prepared;
+mod script_csp;
+pub use script_csp::{ScriptCspGraphId,ScriptCspGraphReportSettings,ScriptCspRequestLoan};
+pub(crate) use script_csp::NativeScriptCspBinding;
 mod navigation_csp;
 pub use navigation_csp::NavigationCspSourceLoan;
 mod coep_request;
