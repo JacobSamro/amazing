@@ -1,0 +1,688 @@
+{
+  "source": "ceb4cbffe0090719f3b947062fe65cb8d7e61add",
+  "base": "d265908ea158e34d82084d0c94e8b0f429751cd1",
+  "tool_source": "7df1309440501fc216c5017018cf4d324ae44ce9",
+  "qualified_tool_source": "75c3d5a21f5fc5d89c370ba51aef351da7c183f5",
+  "state": "prepared corrected caller; NO ALLOCATION",
+  "alias": "js-source-entry-utf16-corrected-20261006",
+  "fresh_box_reason": "Original failed674a retains6.28GB protected native artifacts; fresh paired owner avoids reusing failed baseline or assuming two additional full targets fit",
+  "resources": {
+    "type": "default",
+    "vcpus": 4,
+    "memory_gib": 8,
+    "ttl_seconds": 7200
+  },
+  "same_box_sequential": true,
+  "sources_physical": "exact d265 BEFORE and ceb4 AFTER, each separately archived by qualified public linux-run",
+  "profiles": {
+    "DEV_DEBUG": "line-tables-only",
+    "TEST_DEBUG": "line-tables-only",
+    "INCREMENTAL": 0,
+    "release": "Cargo default release",
+    "RUST_MIN_STACK": 8388608,
+    "jobs": 4
+  },
+  "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "selectors": [
+    "built-ins/AbstractModuleSource/",
+    "built-ins/AsyncFunction/",
+    "built-ins/AsyncGeneratorFunction/",
+    "built-ins/BigInt/",
+    "built-ins/Function/",
+    "built-ins/GeneratorFunction/",
+    "built-ins/Iterator/",
+    "built-ins/Object/",
+    "built-ins/Promise/",
+    "built-ins/Proxy/",
+    "built-ins/Reflect/",
+    "built-ins/RegExp/",
+    "built-ins/String/",
+    "built-ins/eval/",
+    "language/",
+    "language/expressions/assignment/",
+    "language/expressions/class/",
+    "language/expressions/delete/",
+    "language/expressions/optional-chaining/",
+    "language/expressions/postfix-decrement/",
+    "language/expressions/postfix-increment/",
+    "language/expressions/prefix-decrement/",
+    "language/expressions/prefix-increment/",
+    "language/expressions/super/",
+    "language/statements/class/"
+  ],
+  "identities": [
+    {
+      "role": "before",
+      "selector": "built-ins/AbstractModuleSource/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/AbstractModuleSource/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/AsyncFunction/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/AsyncFunction/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/AsyncGeneratorFunction/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/AsyncGeneratorFunction/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/BigInt/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/BigInt/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/Function/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/Function/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/GeneratorFunction/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/GeneratorFunction/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/Iterator/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/Iterator/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/Object/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/Object/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/Promise/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/Promise/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/Proxy/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/Proxy/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/Reflect/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/Reflect/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/RegExp/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/RegExp/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/String/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/String/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/eval/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "built-ins/eval/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "language/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "language/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/assignment/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/assignment/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/class/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/class/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/delete/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/delete/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/optional-chaining/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/optional-chaining/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/postfix-decrement/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/postfix-decrement/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/postfix-increment/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/postfix-increment/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/prefix-decrement/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/prefix-decrement/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/prefix-increment/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/prefix-increment/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/super/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "language/expressions/super/",
+      "mode": "vm"
+    },
+    {
+      "role": "before",
+      "selector": "language/statements/class/",
+      "mode": "default"
+    },
+    {
+      "role": "before",
+      "selector": "language/statements/class/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/AbstractModuleSource/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/AbstractModuleSource/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/AsyncFunction/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/AsyncFunction/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/AsyncGeneratorFunction/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/AsyncGeneratorFunction/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/BigInt/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/BigInt/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/Function/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/Function/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/GeneratorFunction/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/GeneratorFunction/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/Iterator/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/Iterator/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/Object/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/Object/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/Promise/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/Promise/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/Proxy/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/Proxy/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/Reflect/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/Reflect/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/RegExp/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/RegExp/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/String/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/String/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/eval/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "built-ins/eval/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "language/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "language/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/assignment/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/assignment/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/class/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/class/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/delete/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/delete/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/optional-chaining/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/optional-chaining/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/postfix-decrement/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/postfix-decrement/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/postfix-increment/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/postfix-increment/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/prefix-decrement/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/prefix-decrement/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/prefix-increment/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/prefix-increment/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/super/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "language/expressions/super/",
+      "mode": "vm"
+    },
+    {
+      "role": "after",
+      "selector": "language/statements/class/",
+      "mode": "default"
+    },
+    {
+      "role": "after",
+      "selector": "language/statements/class/",
+      "mode": "vm"
+    }
+  ],
+  "native_control_identities": {
+    "crates/amazing-js/src/module_utf16_tests.rs": [
+      "every_static_request_form_preserves_specifier_code_units",
+      "import_attribute_keys_values_and_sorting_are_exact_utf16",
+      "exact_attribute_duplicate_errors_do_not_reject_distinct_surrogates",
+      "request_dedup_keeps_first_order_and_does_not_merge_lossy_collisions",
+      "typed_request_edges_and_host_selected_canonical_identity_stay_distinct",
+      "legacy_resolver_remains_explicitly_lossy_and_rejects_attributes",
+      "exact_static_requests_preserve_cycles_tla_and_deferred_live_namespace",
+      "static_source_phase_keeps_genuine_synthetic_policy_and_no_eager_expansion",
+      "cached_direct_parser_failures_use_the_requesting_boundary_phase",
+      "canonical_first_source_wins_after_later_host_source_changes"
+    ],
+    "crates/amazing-js/src/module_utf16_source_tests.rs": [
+      "utf16_root_and_dependency_sources_keep_real_literals_and_function_source",
+      "raw_and_escaped_module_values_clone_without_losing_units",
+      "utf16_load_errors_keep_cached_phase_and_repeated_throw_identity",
+      "utf16_source_phase_defers_expansion_then_reuses_the_first_canonical_source",
+      "typed_utf16_graph_retains_host_canonical_id_and_explicit_source_url"
+    ],
+    "crates/amazing-js/src/script_utf16_entry_tests.rs": [
+      "genuine_script_entry_preserves_literal_and_function_source_in_all_modes",
+      "utf16_context_is_retained_by_delayed_closures_and_restored_after_failure",
+      "plain_and_context_utf16_entries_share_the_live_global_environment",
+      "utf16_parse_errors_normalize_to_current_realm_and_restore_context",
+      "typed_phase_loader_preserves_units_and_never_falls_back_to_legacy_hook"
+    ]
+  },
+  "original_groups": {
+    "module_preserved": 14,
+    "candidate_new": 6,
+    "original_frontend_phases": 20,
+    "original_VM_phases": 46,
+    "union_whole_phases": 50
+  },
+  "source_projection": {
+    "crates/amazing-js/src/ast.rs": "a9eb9e5975c2b2c59c0ae628dec9c2afd00ee45d693e02600ae0d16996aa9e6d",
+    "crates/amazing-js/src/interp.rs": "c3eb45f34e972f216a503b9de86cba30704486246b36bbd43c46a68fb046c2c7",
+    "crates/amazing-js/src/interp_module_host.rs": "747bc2cc03c3e04ec070847779203ed6fb8ad6da07397ad2cf3167aa8f1ed0e0",
+    "crates/amazing-js/src/module.rs": "7eae14e20c471f99b053a1baf9ed0c601c9de0c5b56392cf67c609595d2ec1a0",
+    "crates/amazing-js/src/module_requests.rs": "8cabb866c571d5c843d5500eb391e3a11c3f1650df58e741b2d8fe00ec581b36",
+    "crates/amazing-js/src/module_utf16_source_tests.rs": "313dd67050d4192999bc585804c8853982ea201ec96769677b04c905ea7c9d36",
+    "crates/amazing-js/src/module_utf16_tests.rs": "aaea23d3d519b77f66645d0f5a9e7f903fcf940b0a2bcf9bd8a7699137e58c64",
+    "crates/amazing-js/src/parser_module.rs": "d84202de79ceb5ec3f78796702deba764de1f2f91dbb62cca881ad25640727e9",
+    "crates/amazing-js/src/script_utf16_entry_tests.rs": "3a8a474d4943ec4016ec643e660717fce5d7c109b25e63c3b685838ade33a857",
+    "docs/lanes/js-source-entry-utf16/gate-plan.json": "3e182003ed01bc240def7cbbbfdf9a6a117050be034bcf2e813860f08bc307ff",
+    "docs/lanes/js-source-entry-utf16/report.md": "d8926c6d5b4bb2cc717ca1e7a5ec8e20d0db098235f3d95a57e17a471ff071f0"
+  },
+  "helper_overlay": {
+    "source": "7df1309440501fc216c5017018cf4d324ae44ce9",
+    "tested": "75c3d5a21f5fc5d89c370ba51aef351da7c183f5",
+    "path": "scripts/gate-summary.py",
+    "sha256": "0dc65b9e67509bcf681cacb52c5d92d5e1ef2274bdc337f09c5e591578bffe84",
+    "delivery": "exact base64 bytes in each frozen command; hash checked before use; staged under native retained raw owner; no engine source file edits"
+  },
+  "outer_published_helpers": {
+    "scripts/linux-run.sh": "6c960c2a394d659990484388a15bd887f4db4f0793244669d9f88aafe08a1c28",
+    "scripts/boat-lane.py": "adca82065f1cde9631cca5610cc4b3c0e625ca3c90193438a14fd040045f2cba",
+    "scripts/linux-bootstrap.sh": "e6d985ebfe4f6c6771ec554db9329721c0e4e0b09113ec7b5fec244f423f1eb3",
+    "scripts/gate-source.py": "079fdf03824a00f738804c7d9f3b029cf5def6d7985260963f1dcc4ef73e7ca5",
+    "scripts/source-upload.py": "d5b9b8469b7eb160cc2bf923aac48470b6a71b2a040b3a08e19a4c915219e908",
+    "scripts/completed-job.py": "9c2bde2eeaa2507e5a14d2cc17599908d1c2ea9b1418ba76a78d04a1ff3b15b1",
+    "scripts/native-storage-plan.py": "3c4df2f01150f9da8b53695df781d2ee83fd7d79a92a1d9b33449d14bf763dbe",
+    "scripts/native-storage-retention.py": "2628dc352f594177a540961888f8157517ca9603847716731b04146f9033d489"
+  },
+  "native_archived_helpers": {
+    "before": {
+      "scripts/gate-command.py": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b",
+      "scripts/nextest-compact.py": "cddc4e6ec9f9ea5c253e50bb3ac7ff02d64389b9dc696370cb02dc417092cd80",
+      "scripts/test262.py": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83"
+    },
+    "after": {
+      "scripts/gate-command.py": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b",
+      "scripts/nextest-compact.py": "cddc4e6ec9f9ea5c253e50bb3ac7ff02d64389b9dc696370cb02dc417092cd80",
+      "scripts/test262.py": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83"
+    }
+  },
+  "files": {
+    "before.sh": "74aa5697a99c306f209788989259eb657f0438be5791219373bf0e02dd2256fd",
+    "after.sh": "498319e831ab1b0ceb96e9456bf5c8d7709fb0c3ed7c80a7d69d44461c9e80e2",
+    "before.storage.json": "ce78dab8b82676efc8405a9cb496100ccfd5c5f345f4e3f7ee718c73e49a29de",
+    "after.storage.json": "5103386bca5fddd6b021de390d49e09559c975a791203ea1e11055eb99eb6beb",
+    "published-gate-summary.py": "0dc65b9e67509bcf681cacb52c5d92d5e1ef2274bdc337f09c5e591578bffe84"
+  },
+  "capacity": {
+    "provenance": "root supplied prior whole public workspace target7.59GiB with identical line-tables profile;9GiB target budget is explicit allowance, not measured bridge footprint",
+    "before_device_peak_gib": 22.125,
+    "after_additional_device_peak_gib": 20.25,
+    "retention_budget_split_gib": {
+      "all_ELF_generated_sources": 8,
+      "raw_and_compact": 1
+    },
+    "already_retained_before": "counted by actual native statvfs used bytes at AFTER admission; not added twice",
+    "required": "native /tmp scratch and raw/retained device actual statvfs must admit summed budgets before expensive bootstrap/build; compact HOME device separately has bounded receipts; baseline immutable manifest/blobs verified on same native box",
+    "fallback": "actual hardlink-or-copy probe, full explicit copy budget; retirement only after verified retention; no historical target or UNKNOWN artifact deletion"
+  },
+  "native_filesystem_witness": "public capacity guard records actual /tmp device/statvfs before bootstrap; each whole command records findmnt FSTYPE and device before engine work, allowing ext2/ext3/ext4/xfs/btrfs/overlay/tmpfs and rejecting FUSE/MBX/9p/virtiofs; no new box allocated for inspection",
+  "evidence_contract": {
+    "raw": "/tmp/amazing-retained/js-source-entry-utf16-corrected-20261006/<side>/raw",
+    "retained": "/tmp/amazing-retained/js-source-entry-utf16-corrected-20261006/<side>/retained",
+    "intermediate_maps": "native raw/intermediate-compacts; preserve all50/side; never include redundant individual maps in HOME catalog",
+    "native_baseline": "native before/raw summary seal + every map/workspace hash; exact source/pin/input/runner/jobs/timeout/selector identities; public guard verifies all retained baseline ELFs before AFTER",
+    "catalog": "HOME bounded compact only, all *.phase.compact.json transport-safe names",
+    "bundle": "BEFORE50 reports, AFTER100 reports including complete BEFORE maps; qualified public chunk manifest/hash/names; duplicate BEFORE bundle excluded from final committed set only because AFTER bundle retains all originals",
+    "limit_file_bytes": 524288,
+    "limit_ticket_bytes": 2097152,
+    "source_existing_evidence_bytes": 10667,
+    "publication_metadata_reserve_bytes": 65536,
+    "terminal_storage_metadata_reserve_bytes": 16384,
+    "budget_guard": "actual all after compact bytes + all before nonbundle compact bytes + existing evidence + explicit metadata reserve <=2MiB; no classifications dropped to fit"
+  },
+  "corrections": [
+    "native nextest --status-level all preserves PASS/FAIL/SKIP terminal identities",
+    "each phase receipt *.phase.compact.json admitted by completed catalog",
+    "published7df helper empty-shard + complete directory bundling",
+    "native intermediate maps and canonical100-map paired bundle",
+    "genuine manifest counts for workspace/docs",
+    "HOME-relative --compact-root argv"
+  ],
+  "original_failure": {
+    "initial_preallocation_exit": 2,
+    "clean_job": "674a50c5f25b4b089029dc0b3a59b22c",
+    "actual_exit": 1,
+    "runner_exit": 1,
+    "phase_extra_fetch_exit": 3,
+    "phase_extra_fetch": "correct protocol rejection of caller *.phase.json; no manual recovery",
+    "receipt_sha256": "08a38c5ba3792628f1cffa873ec1cb8a727a81b86f624f846896eda9de8e4538",
+    "unchanged_third_run": "forbidden/not performed",
+    "source_still_unqualified": true
+  },
+  "admission": "Root review required before any supported linux-run allocation; BEFORE must terminal workspace/docs0, all50 maps valid and retained baseline verified; then AFTER only",
+  "launcher_argv_template": "/Users/jMac/Projects/OpenSource/amazing/scripts/linux-run.sh js-source-entry-utf16-corrected-20261006 --ref <exact side engine source> --storage-plan <fresh side.storage.json> --endpoint-receipt <fresh side.endpoint.json> --compact-root amazing/out/js-source-entry-utf16-corrected-20261006/<side>/compact --command-file <side.sh>",
+  "updated": "2026-10-05T20:47:51.862059+00:00"
+}

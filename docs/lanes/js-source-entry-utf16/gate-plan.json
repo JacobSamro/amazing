@@ -1,0 +1,52 @@
+{
+  "base": "d265908ea158e34d82084d0c94e8b0f429751cd1",
+  "state": "source-only; no allocation",
+  "native": [
+    "cargo nextest run --workspace --locked --no-fail-fast",
+    "cargo test --workspace --locked --doc",
+    "cargo build --release --locked -p amazing-js --example test262_host"
+  ],
+  "test262": {
+    "pin": "3655e746 (resolve and record full native revision before admission)",
+    "selectors": [
+      "built-ins/AbstractModuleSource/",
+      "built-ins/AsyncFunction/",
+      "built-ins/AsyncGeneratorFunction/",
+      "built-ins/BigInt/",
+      "built-ins/Function/",
+      "built-ins/GeneratorFunction/",
+      "built-ins/Iterator/",
+      "built-ins/Object/",
+      "built-ins/Promise/",
+      "built-ins/Proxy/",
+      "built-ins/Reflect/",
+      "built-ins/RegExp/",
+      "built-ins/String/",
+      "built-ins/eval/",
+      "language/",
+      "language/expressions/assignment/",
+      "language/expressions/class/",
+      "language/expressions/delete/",
+      "language/expressions/optional-chaining/",
+      "language/expressions/postfix-decrement/",
+      "language/expressions/postfix-increment/",
+      "language/expressions/prefix-decrement/",
+      "language/expressions/prefix-increment/",
+      "language/expressions/super/",
+      "language/statements/class/"
+    ],
+    "modes": [
+      "default",
+      "AMAZING_JS_VM=1"
+    ],
+    "jobs": 4,
+    "timeout_seconds": 60,
+    "classification": "all original whole UTF16 frontend20 phases plus original VM46 selector identities retained; shared selection union50 phases; zero lost file and variant PASS identities",
+    "raw": "sandbox OUT only; compact/hash transport only"
+  },
+  "prerequisites": [
+    "Root review before allocation",
+    "Runtime8ec managed capture union separately owned",
+    "Original14 module controls unchanged; new exact-entry and URL controls candidate-only"
+  ]
+}

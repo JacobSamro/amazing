@@ -10,7 +10,7 @@ pub enum ImportPhase {
     Defer,
 }
 
-/// Lossless dynamic import request. Attributes are sorted by their UTF-16 keys.
+/// Lossless static or dynamic import request. Attributes are sorted by their UTF-16 keys.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModuleRequest {
     pub specifier: crate::value::JsString,
@@ -37,7 +37,7 @@ impl ModuleRequest {
             .map(|(_, value)| value)
     }
     fn ast(
-        specifier: &str,
+        specifier: &crate::value::JsString,
         phase: Option<&str>,
         attributes: &[crate::ast::ImportAttribute],
     ) -> Self {
@@ -50,7 +50,7 @@ impl ModuleRequest {
             },
             attributes
                 .iter()
-                .map(|a| (a.key.clone().into(), a.value.clone().into()))
+                .map(|a| (a.key.clone(), a.value.clone()))
                 .collect(),
         )
     }
@@ -85,6 +85,8 @@ pub struct LoadedModule {
 #[derive(Debug, Clone)]
 pub enum ModuleSource {
     JavaScript(String),
+    /// Exact source code units supplied by a typed host, including lone surrogates.
+    JavaScriptUtf16(Vec<u16>),
     /// Hosts parse JSON/text/bytes against their actual MIME/type policy, then
     /// supply the immutable synthetic default binding. No JavaScript parsing of JSON.
     Synthetic {
@@ -95,7 +97,7 @@ pub enum ModuleSource {
 fn import_key(import: &crate::ast::ImportDeclaration) -> String {
     ModuleRequest::ast(&import.from, import.phase.as_deref(), &import.attributes).edge_key()
 }
-fn export_key(from: &str, attrs: &[crate::ast::ImportAttribute]) -> String {
+fn export_key(from: &crate::value::JsString, attrs: &[crate::ast::ImportAttribute]) -> String {
     ModuleRequest::ast(from, None, attrs).edge_key()
 }
 fn item_request(item: &ModuleItem) -> Option<ModuleRequest> {
@@ -124,35 +126,14 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         source_only: bool,
     ) -> Result<(), ModuleFailure> {
         let id = loaded.id;
-        if let Some(cached) = self.load_failures.get(&id) {
-            return Err(cached.failure.clone());
-        }
+        if let Some(failure) = self.cached_load_failure(&id, false) { return Err(failure); }
         if !self.records.contains_key(&id) {
             match loaded.source {
                 ModuleSource::JavaScript(source) => {
-                    let module = match crate::parse_module(&source) {
-                        Ok(module) => module,
-                        Err(error) => {
-                            let failure =
-                                ModuleFailure::syntax(ModulePhase::Resolution, error.to_string());
-                            self.load_failures.insert(
-                                id,
-                                CachedLoadFailure {
-                                    failure: failure.clone(),
-                                    direct_parse: true,
-                                },
-                            );
-                            return Err(failure);
-                        }
-                    };
-                    self.records.insert(
-                        id.clone(),
-                        ModuleRecord {
-                            id: id.clone(),
-                            module,
-                            dependencies: BTreeMap::new(),
-                        },
-                    );
+                    self.load_text_record(&id, &source.encode_utf16().collect::<Vec<_>>(), false)?;
+                }
+                ModuleSource::JavaScriptUtf16(source) => {
+                    self.load_text_record(&id, &source, false)?;
                 }
                 ModuleSource::Synthetic {
                     default_export,

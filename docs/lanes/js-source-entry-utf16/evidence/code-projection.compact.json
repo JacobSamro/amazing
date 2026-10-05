@@ -1,0 +1,27 @@
+{
+  "base": "d265908ea158e34d82084d0c94e8b0f429751cd1",
+  "native_tested_source": "ceb4cbffe0090719f3b947062fe65cb8d7e61add",
+  "source_code_sha256": {
+    "crates/amazing-js/src/ast.rs": "a9eb9e5975c2b2c59c0ae628dec9c2afd00ee45d693e02600ae0d16996aa9e6d",
+    "crates/amazing-js/src/interp.rs": "c3eb45f34e972f216a503b9de86cba30704486246b36bbd43c46a68fb046c2c7",
+    "crates/amazing-js/src/interp_module_host.rs": "747bc2cc03c3e04ec070847779203ed6fb8ad6da07397ad2cf3167aa8f1ed0e0",
+    "crates/amazing-js/src/module.rs": "7eae14e20c471f99b053a1baf9ed0c601c9de0c5b56392cf67c609595d2ec1a0",
+    "crates/amazing-js/src/module_requests.rs": "8cabb866c571d5c843d5500eb391e3a11c3f1650df58e741b2d8fe00ec581b36",
+    "crates/amazing-js/src/module_utf16_source_tests.rs": "313dd67050d4192999bc585804c8853982ea201ec96769677b04c905ea7c9d36",
+    "crates/amazing-js/src/module_utf16_tests.rs": "aaea23d3d519b77f66645d0f5a9e7f903fcf940b0a2bcf9bd8a7699137e58c64",
+    "crates/amazing-js/src/parser_module.rs": "d84202de79ceb5ec3f78796702deba764de1f2f91dbb62cca881ad25640727e9",
+    "crates/amazing-js/src/script_utf16_entry_tests.rs": "3a8a474d4943ec4016ec643e660717fce5d7c109b25e63c3b685838ade33a857"
+  },
+  "profile": {
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_TEST_DEBUG": "line-tables-only",
+    "RUST_MIN_STACK": "8388608",
+    "release": "default"
+  },
+  "engine_code_byteexact": true,
+  "existing_port_headers_preserved": true,
+  "Cargo_changed": false,
+  "raw_and_ELFs": "preserved native /tmp paths named by authenticated receipts; compact HOME only",
+  "root_integration_full16": "separate required integrator gate, not claimed by this original selection"
+}

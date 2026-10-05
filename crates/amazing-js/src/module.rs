@@ -63,6 +63,8 @@ pub trait ModuleResolver {
     /// The default leaves import.meta unchanged for non-browser embeddings.
     fn source_url(&self, _id: &str) -> Option<String> { None }
     /// Typed, phase-aware host loading. Legacy resolvers retain their source API.
+    /// Legacy compatibility uses the scalar callback. Lossless hosts must
+    /// override this method; the default does not supply UTF-16 transport.
     fn resolve_request(&self, request: &ModuleRequest, referrer: &str) -> Result<LoadedModule, String> {
         if !request.attributes.is_empty() { return Err("host does not support import attributes".into()); }
         let (id, source) = self.resolve(&request.specifier.to_utf8_lossy(), referrer)?;
@@ -138,14 +140,21 @@ impl<R: ModuleResolver> ModuleLinker<R> {
 
     /// Parse the root and all transitive dependencies, then validate imports.
     pub fn link(&mut self, id: &str, source: &str) -> Result<(), ModuleFailure> {
+        self.link_utf16(id, &source.encode_utf16().collect::<Vec<_>>())
+    }
+
+    /// Parse and link exact UTF-16 source units. Canonical IDs and legacy
+    /// resolver locator strings remain host policy; request values stay lossless.
+    pub fn link_utf16(&mut self, id: &str, source: &[u16]) -> Result<(), ModuleFailure> {
         if let Some(failure) = self.root_failures.get(id) { return Err(failure.clone()); }
         let result = self.link_inner(id, source);
         if let Err(failure) = &result { self.root_failures.insert(id.into(), failure.clone()); }
         result
     }
 
-    fn link_inner(&mut self, id: &str, source: &str) -> Result<(), ModuleFailure> {
-        self.load(id.to_owned(), source.to_owned(), true)?;
+    fn link_inner(&mut self, id: &str, source: &[u16]) -> Result<(), ModuleFailure> {
+        self.load_text_record(id, source, true)?;
+        self.expand_record(id)?;
         self.first_graph_failure(id, true, &mut HashSet::new())?;
         let mut order = Vec::new();
         self.graph_order(id, &mut HashSet::new(), &mut order);
@@ -191,27 +200,30 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         Ok(())
     }
 
-    fn load(&mut self, id: String, source: String, root: bool) -> Result<(), ModuleFailure> {
-        if let Some(cached) = self.load_failures.get(&id) {
+    fn cached_load_failure(&self, id: &str, root: bool) -> Option<ModuleFailure> {
+        self.load_failures.get(id).map(|cached| {
             let mut failure = cached.failure.clone();
             if cached.direct_parse {
                 failure.phase = if root { ModulePhase::Parse } else { ModulePhase::Resolution };
             }
-            return Err(failure);
-        }
-        self.load_inner(id, source, root)
+            failure
+        })
     }
 
-    fn load_inner(&mut self, id: String, source: String, root: bool) -> Result<(), ModuleFailure> {
-        if self.records.contains_key(&id) { return self.expand_record(&id); }
-        let module = match crate::parse_module(&source) {
+    // Both source transport variants share this parse/cache insertion path.
+    // Expansion is deliberately separate: source-phase imports must not visit
+    // dependencies until an evaluation/defer request actually needs them.
+    fn load_text_record(&mut self, id: &str, source: &[u16], root: bool) -> Result<(), ModuleFailure> {
+        if let Some(failure) = self.cached_load_failure(id, root) { return Err(failure); }
+        if self.records.contains_key(id) { return Ok(()); }
+        let module = match crate::parse_module_utf16(source) {
             Ok(module) => module,
             Err(error) => {
                 let failure = ModuleFailure::syntax(
                     if root { ModulePhase::Parse } else { ModulePhase::Resolution },
                     error.to_string(),
                 );
-                self.load_failures.insert(id.clone(), CachedLoadFailure {
+                self.load_failures.insert(id.to_owned(), CachedLoadFailure {
                     failure: failure.clone(), direct_parse: true,
                 });
                 return Err(failure);
@@ -219,14 +231,13 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         };
         // Insert before recursing, so an import cycle terminates the load walk.
         self.records.insert(
-            id.clone(),
+            id.to_owned(),
             ModuleRecord {
-                id: id.clone(),
+                id: id.to_owned(),
                 module,
                 dependencies: BTreeMap::new(),
             },
         );
-        self.expand_record(&id)?;
         Ok(())
     }
 
@@ -1143,3 +1154,11 @@ mod namespace_operation_tests;
 #[cfg(test)]
 #[path = "module_declarations_tests.rs"]
 mod declaration_instantiation_tests;
+
+#[cfg(test)]
+#[path = "module_utf16_tests.rs"]
+mod utf16_request_tests;
+
+#[cfg(test)]
+#[path = "module_utf16_source_tests.rs"]
+mod utf16_source_tests;

@@ -92,9 +92,8 @@ impl Parser {
             None
         };
         let mut bindings = Vec::new();
-        let from = if let TokenKind::Str(source) = self.cur().kind.clone() {
-            self.bump();
-            source
+        let from = if matches!(self.cur().kind, TokenKind::Str(_)) {
+            self.module_string()?
         } else {
             if !self.at_punct(Punct::Lbrace) && !self.at_punct(Punct::Star) {
                 let local = self.expect_ident()?;
@@ -312,12 +311,26 @@ impl Parser {
         }
     }
 
-    fn module_string(&mut self) -> Result<String, SyntaxError> {
+    fn module_string(&mut self) -> Result<crate::value::JsString, SyntaxError> {
         if let TokenKind::Str(value) = self.cur().kind.clone() {
+            let value = self.cur().cooked_utf16.clone()
+                .map(crate::value::JsString::from_units)
+                .unwrap_or_else(|| value.into());
             self.bump();
             Ok(value)
         } else {
             Err(self.err("expected module specifier string"))
+        }
+    }
+
+    // AttributeKey is PropName, not ModuleExportName: quoted keys keep lone
+    // surrogates, while quoted imported/exported binding names remain validated.
+    fn import_attribute_key(&mut self) -> Result<crate::value::JsString, SyntaxError> {
+        match self.cur().kind.clone() {
+            TokenKind::Str(_) => self.module_string(),
+            TokenKind::Ident(name) => { self.bump(); Ok(name.into()) }
+            TokenKind::Keyword(keyword) => { self.bump(); Ok(keyword.spelling().into()) }
+            _ => Err(self.err("expected import attribute key")),
         }
     }
 
@@ -330,7 +343,7 @@ impl Parser {
         let mut attributes = Vec::new();
         let mut seen = HashSet::new();
         while !self.at_punct(Punct::Rbrace) {
-            let key = self.module_name()?;
+            let key = self.import_attribute_key()?;
             if !seen.insert(key.clone()) {
                 return Err(self.err("duplicate import attribute"));
             }

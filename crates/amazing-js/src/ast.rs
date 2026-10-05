@@ -60,12 +60,12 @@ pub enum ModuleItem {
     ExportNamed {
         declaration: Option<Stmt>,
         names: Vec<ExportName>,
-        from: Option<String>,
+        from: Option<crate::value::JsString>,
         attributes: Vec<ImportAttribute>,
     },
     ExportAll {
         as_name: Option<String>,
-        from: String,
+        from: crate::value::JsString,
         attributes: Vec<ImportAttribute>,
     },
     ExportDefaultExpression(Expr),
@@ -74,7 +74,8 @@ pub enum ModuleItem {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImportDeclaration {
-    pub from: String,
+    /// Exact module StringValue, including lone UTF-16 surrogates.
+    pub from: crate::value::JsString,
     /// Optional source/defer import phase.
     pub phase: Option<String>,
     /// `None` for a side-effect import; `"*"` for a namespace import.
@@ -94,10 +95,11 @@ pub struct ExportName {
     pub exported: String,
 }
 
+/// Import attribute StringValues are semantic UTF-16 data, not export names.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImportAttribute {
-    pub key: String,
-    pub value: String,
+    pub key: crate::value::JsString,
+    pub value: crate::value::JsString,
 }
 
 /// An identifier reference or binding name.

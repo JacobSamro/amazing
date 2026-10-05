@@ -139,9 +139,13 @@ impl Interpreter {
     /// Execute a classic script whose closures retain its originating URL for import().
     /// This changes handle metadata, preserving the realm's live global binding frame.
     pub fn run_script_with_source_context(&mut self, source: &str, referrer: &str) -> Result<JsValue, Throw> {
+        self.run_script_utf16_with_source_context(&source.encode_utf16().collect::<Vec<_>>(), referrer)
+    }
+
+    pub fn run_script_utf16_with_source_context(&mut self, source: &[u16], referrer: &str) -> Result<JsValue, Throw> {
         let previous = self.global_env.clone();
         self.global_env = previous.with_source_context(referrer);
-        let result = self.run_script(source);
+        let result = self.run_script_utf16(source);
         self.global_env = previous;
         result
     }
@@ -149,9 +153,15 @@ impl Interpreter {
     pub fn run_script_with_source_context_and_backend(
         &mut self, source: &str, referrer: &str, backend: ExecutionBackend,
     ) -> Result<JsValue, Throw> {
+        self.run_script_utf16_with_source_context_and_backend(&source.encode_utf16().collect::<Vec<_>>(), referrer, backend)
+    }
+
+    pub fn run_script_utf16_with_source_context_and_backend(
+        &mut self, source: &[u16], referrer: &str, backend: ExecutionBackend,
+    ) -> Result<JsValue, Throw> {
         let previous = self.global_env.clone();
         self.global_env = previous.with_source_context(referrer);
-        let result = self.run_script_with_backend(source, backend);
+        let result = self.run_script_utf16_with_backend(source, backend);
         self.global_env = previous;
         result
     }
@@ -288,3 +298,7 @@ mod phase_import_tests {
         assert_eq!(seen[0].specifier.units(),&[0xd800]);assert_eq!(seen[0].attributes[0].0.to_utf8_lossy(),"a");
     }
 }
+
+#[cfg(test)]
+#[path = "script_utf16_entry_tests.rs"]
+mod script_utf16_entry_tests;

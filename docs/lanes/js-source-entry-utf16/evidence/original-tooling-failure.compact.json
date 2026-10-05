@@ -1,0 +1,143 @@
+{
+  "utc": "2026-10-05T20:31:11.951028+00:00",
+  "source": "d265908ea158e34d82084d0c94e8b0f429751cd1",
+  "engine_candidate": "ceb4cbffe0090719f3b947062fe65cb8d7e61add",
+  "job": {
+    "schema": 2,
+    "lane": "js-source-entry-utf16-20261006",
+    "source_commit": "d265908ea158e34d82084d0c94e8b0f429751cd1",
+    "box_id": "bx_9nw2q7my",
+    "host": "user@46.105.118.117",
+    "port": 19037,
+    "job_id": "674a50c5f25b4b089029dc0b3a59b22c",
+    "output_root": "amazing/out/js-source-entry-utf16-20261006/before/compact",
+    "command_sha256": "ac22a9cf8698bca7edf0c0b27c4b67c0e2881ba5c29639ee3e8e6c6288119940",
+    "execution_sha256": "8d7132668f935b73df4825227f7919c98112a5070d2f6b5ebc292397c2af62f7",
+    "source_archive_sha256": "8d0742e182aa92080ec79f35ba867fbdb2258820c9dcb9468e16fae53c4fab60"
+  },
+  "state": "TERMINAL_UNQUALIFIED",
+  "actual_exit": 1,
+  "runner_exit": 1,
+  "controller_exit": 1,
+  "authenticated_compact_fetch_exit": 0,
+  "phase_extra_fetch_exit": 3,
+  "phase_extra_fetch_reason": "Public transport correctly rejects *.phase.json filenames; caller naming defect, no raw recovery",
+  "whole_corpus_runners": 50,
+  "observed_corpus_runner_exits": {
+    "1": 12,
+    "0": 38
+  },
+  "packaging_failures": 50,
+  "workspace_command_exit": 0,
+  "docs_command_exit": 0,
+  "workspace_collector_exit": 3,
+  "classification_comparison": "UNMEASURED: all50 compact packaging failed; no empty zero-loss claim",
+  "after": "NOT_LAUNCHED",
+  "source_raw_retained": true,
+  "storage": {
+    "actual_storage_exit": 1,
+    "artifact_manifest": {
+      "bytes": 257403,
+      "path": "/tmp/amazing-retained/js-source-entry-utf16-20261006/before/retained/manifests/before-original.json",
+      "sha256": "c11faa0b9293c9a9eaa0a9c4be6fb5bb1e24582784820636248c48eac56e7e9c"
+    },
+    "baseline": null,
+    "capacity": {
+      "admitted": true,
+      "filesystems": [
+        {
+          "available_bytes": 31587905536,
+          "device": 64769,
+          "path": "/tmp/amazing-native-storage",
+          "required_bytes": 9663676416,
+          "total_bytes": 73635184640
+        },
+        {
+          "available_bytes": 31587905536,
+          "device": 64769,
+          "path": "/tmp/amazing-retained/js-source-entry-utf16-20261006/before",
+          "required_bytes": 9663676416,
+          "total_bytes": 73635184640
+        }
+      ],
+      "shared_device_requirements": [
+        {
+          "available_bytes": 31587905536,
+          "required_bytes": 21609054208
+        }
+      ]
+    },
+    "command_exit": 1,
+    "copied_unique_bytes": 0,
+    "free_after": [
+      {
+        "available_bytes": 26029502464,
+        "device": 64769,
+        "path": "/tmp/amazing-native-storage",
+        "total_bytes": 73635184640
+      },
+      {
+        "available_bytes": 26029502464,
+        "device": 64769,
+        "path": "/tmp/amazing-retained/js-source-entry-utf16-20261006/before",
+        "total_bytes": 73635184640
+      }
+    ],
+    "hardlink_capability": {
+      "failed_artifacts": 0,
+      "first_failures": [],
+      "probed_artifacts": 633,
+      "raw": {
+        "bytes": 245808,
+        "path": "/tmp/amazing-native-storage/js-source-entry-utf16-20261006/d265908ea158e34d82084d0c94e8b0f429751cd1/before/before-original/hardlink.probes.json",
+        "sha256": "f0c339fa240ad6552dbce14448db78f040f8ffce05aa0953ae81596f2908a778"
+      },
+      "supported": true
+    },
+    "job": "before-original",
+    "phase": "before",
+    "profile": {
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+    },
+    "recoverable_bytes": 1352415914,
+    "recoverable_files": 3727,
+    "retained_elf_files": 621,
+    "retained_files": 633,
+    "retained_logical_bytes": 6282392425,
+    "retention_capacity_required_bytes": 2962432,
+    "retire_after_retention": true,
+    "schema": 1,
+    "selected_retention_method": "hardlink",
+    "session_raw": {
+      "bytes": 2721,
+      "path": "/tmp/amazing-native-storage/js-source-entry-utf16-20261006/d265908ea158e34d82084d0c94e8b0f429751cd1/before/before-original/session.json",
+      "sha256": "7a512d52d68a5984ba10ccb9eb274a5787c74ef9518961a69b2ca981c3bcf967"
+    },
+    "source": "d265908ea158e34d82084d0c94e8b0f429751cd1",
+    "state": "TERMINAL",
+    "storage_exit": 0,
+    "target_retired": true
+  },
+  "compact_files": {
+    "summary.json": {
+      "bytes": 24134,
+      "sha256": "28a1e093c416a626637830bf1aa04178655293ad1c2449bf9e1a5b54ef164b17"
+    },
+    "workspace.compact.json": {
+      "bytes": 141583,
+      "sha256": "1a79704a35dcd949bd72b7429fb85fd9658b0086fb88a010c80386edbe2ae619"
+    },
+    "storage.summary.json": {
+      "bytes": 2164,
+      "sha256": "753ff78625c8b4ef014887fb4f2a92820a3fb7e3c70ee9566eb044713a532dcc"
+    }
+  },
+  "raw_execution": {
+    "path": "/tmp/amazing-job-674a50c5f25b4b089029dc0b3a59b22c-0r7vfl0_/command.log",
+    "bytes": 186925,
+    "sha256": "699f1e9f30ed8cb943a034f4e55ddefadc44fcd0017ba2d92d3a591fcf5b28c8"
+  },
+  "history": "Initial preallocation2 then ONEclean original674a; no third unchanged run"
+}

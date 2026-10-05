@@ -1298,12 +1298,23 @@ impl Interpreter {
     }
 
     pub fn run_script(&mut self, source: &str) -> Result<JsValue, Throw> {
-        let p = crate::parse_script(source).map_err(|e| self.normalize_throw(Throw::syntax_error(e.to_string())))?;
+        self.run_script_utf16(&source.encode_utf16().collect::<Vec<_>>())
+    }
+
+    /// Execute the host's original ECMAScript source code units.
+    pub fn run_script_utf16(&mut self, source: &[u16]) -> Result<JsValue, Throw> {
+        let p = crate::parse_script_utf16(source)
+            .map_err(|e| self.normalize_throw(Throw::syntax_error(e.to_string())))?;
         self.run_program(&p)
     }
 
     pub fn run_script_with_backend(&mut self, source: &str, backend: ExecutionBackend) -> Result<JsValue, Throw> {
-        let p = crate::parse_script(source).map_err(|e| self.normalize_throw(Throw::syntax_error(e.to_string())))?;
+        self.run_script_utf16_with_backend(&source.encode_utf16().collect::<Vec<_>>(), backend)
+    }
+
+    pub fn run_script_utf16_with_backend(&mut self, source: &[u16], backend: ExecutionBackend) -> Result<JsValue, Throw> {
+        let p = crate::parse_script_utf16(source)
+            .map_err(|e| self.normalize_throw(Throw::syntax_error(e.to_string())))?;
         self.run_program_with_backend(&p, backend)
     }
 
