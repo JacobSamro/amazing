@@ -315,6 +315,7 @@ export CARGO_PROFILE_TEST_DEBUG=\${CARGO_PROFILE_TEST_DEBUG:-line-tables-only} C
   fi
   REMOTE="trap 'timeout --kill-after=5 15 rm -f ~/$LEASE' EXIT
 export LANE='$LANE' COMMIT='${COMMIT:-working-tree}' OUT=\$HOME/amazing/out/$LANE
+export AMAZING_NATIVE_BUSY_LEASE=\$HOME/$LEASE
 bootstrap=\$(mktemp /tmp/amazing-bootstrap-script.XXXXXX) || exit 3
 printf '%s' '$BOOTSTRAP_B64' | base64 -d > \"\$bootstrap\" || exit 3
 . \"\$bootstrap\"
