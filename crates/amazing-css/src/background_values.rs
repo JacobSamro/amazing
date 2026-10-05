@@ -324,7 +324,7 @@ fn logical_edge_of(component: &[Token]) -> Option<&'static str> {
 
 fn is_length_percentage_component(component: &[Token]) -> bool {
     let text = serialize(component);
-    LengthPercentage::parse(&text).is_some() || crate::math::length_percentage(&text, true)
+    LengthPercentage::parse(&text).is_some() || crate::math::contextual_length_percentage(&text, true)
 }
 
 fn lp_text(component: &[Token]) -> String {

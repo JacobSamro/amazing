@@ -1,0 +1,263 @@
+{
+  "state": "done",
+  "source": "731e7aa002adc629ec1c9d398ba1ded6cbd76ae5",
+  "tested_base": "c220413d7778de7a70ed56c8bf5adc81858fa744",
+  "ready_base": "a5a56a90e1fa507fa9babb56e6f64636b496f93f",
+  "baseline": "1c682ab64702a48ebf775b6240004eda74899bdf",
+  "controller": 30673,
+  "initial_compact_fetch": 65776,
+  "all48_compact_fetch": 13746,
+  "actual_exit": 0,
+  "workspace": {
+    "failed": 0,
+    "passed": 4982,
+    "skipped": 17
+  },
+  "doctests": {
+    "failed": 0,
+    "ignored": 0,
+    "passed": 31
+  },
+  "phases": 26,
+  "parsing": {
+    "passed": 4350,
+    "total": 5126,
+    "zero_lost": true
+  },
+  "render": {
+    "passed": 1328,
+    "mismatch": 886,
+    "zero_lost": true
+  },
+  "resources": {
+    "cases": 491,
+    "rc21": 226,
+    "pass": 318,
+    "mismatch": 112,
+    "unsupported": 23,
+    "crash": 38,
+    "lost": []
+  },
+  "original_failures_preserved": [
+    "a1fc9481 native1",
+    "11d4677f native1"
+  ],
+  "files": {
+    "release-build.phase.manifest.json": {
+      "bytes": 393,
+      "sha256": "3f1318c294515664305b2d0e41c79b8d6680822e720170c256fbb33f6a84ae81"
+    },
+    "css-css-display.compact.json": {
+      "bytes": 4827,
+      "sha256": "cbc1e6ce250af28a05a5b8f29182e9a0ae6210bfdf6247db9fd21bba6f9be6db"
+    },
+    "css-css-contain.phase.manifest.json": {
+      "bytes": 1099,
+      "sha256": "6c5912d27f3ac9e273e51d1ae4c9a09e086e9649fe15a136a021f51be7e0bdcf"
+    },
+    "css-CSS2-normal-flow.phase.manifest.json": {
+      "bytes": 1123,
+      "sha256": "628c8ce97cd2b41748f6a40d493e7c6a350c35b31ad34dea0ba2712678b8f143"
+    },
+    "css-css-overflow.phase.manifest.json": {
+      "bytes": 1104,
+      "sha256": "a99fc2036c860c3da2eeccc926effec30fccb94ad3879d86de694f0ba081194a"
+    },
+    "css-css-shadow.compact.json": {
+      "bytes": 4795,
+      "sha256": "7c59d1f2dd48247f0d5eb135c0b22c318ac88832318963c2804617ee1c2ad446"
+    },
+    "css-css-color.compact.json": {
+      "bytes": 20950,
+      "sha256": "8541283900c46030028c757089b0d381397d52e870b2f3d2d00a73fb1ce2c419"
+    },
+    "css-selectors.compact.json": {
+      "bytes": 9943,
+      "sha256": "b34eefafd60059345c3d9f3c053c655b2d92305d7aaf52e76b1d8b307d095952"
+    },
+    "css-CSS2-positioning.phase.manifest.json": {
+      "bytes": 1122,
+      "sha256": "21a017207c0c6a823af2d8bf86f1ef68faacc7f62ac7b2c6cf202c0d86b070fe"
+    },
+    "image-resources.phase.manifest.json": {
+      "bytes": 1317,
+      "sha256": "efd5a88831a03367dbef5f91226ae9f04193fa2d72438897f5d823cb4647baa4"
+    },
+    "css-css-shadow.phase.manifest.json": {
+      "bytes": 1093,
+      "sha256": "5c64e578bfe0216422df646129312849db969f6e2f18cd634636eb1c2a27f0e7"
+    },
+    "css-css-sizing.compact.json": {
+      "bytes": 19373,
+      "sha256": "20b46a9f0f210d3a74e96ac0ab99914ee025a7c08dc051877012e537b1511ef3"
+    },
+    "parsing.summary.json": {
+      "bytes": 140203,
+      "sha256": "10f5921476ad6e11b25a5f16eb7574f129ae8f09fdea051292a82f847d9ae8f8"
+    },
+    "nextest.phase.manifest.json": {
+      "bytes": 394,
+      "sha256": "b7c7c9b7f03df200b79aec6ab951b438da4f591906d626787eb2b74be5bcf6dd"
+    },
+    "css-css-cascade.compact.json": {
+      "bytes": 2905,
+      "sha256": "589feaf22e939d057733dbfb6f3e45430173a0d4dff9f0381e1433765a7237f8"
+    },
+    "css-css-backgrounds.compact.json": {
+      "bytes": 19173,
+      "sha256": "e9b9a3af73a06da42bc103dc77fffa09a91ee6360be8431527c0cf59343a1f06"
+    },
+    "parsing.phase.manifest.json": {
+      "bytes": 640,
+      "sha256": "5572e0c671d0852e084a4e1dc86761916698b632eec14fe3f6595814ef9e0379"
+    },
+    "css-css-viewport.phase.manifest.json": {
+      "bytes": 1103,
+      "sha256": "30e9fce2216ce444eb6fdec8dda2e3534bfd4d5bb0da80b5aa7ecfd71f11719f"
+    },
+    "css-css-overflow.compact.json": {
+      "bytes": 45447,
+      "sha256": "19d84c93d09bfcf6c3d0eeeef40b160a0a961a9ecef00a39b6ce5356c35cab0e"
+    },
+    "css-css-fonts.compact.json": {
+      "bytes": 3888,
+      "sha256": "73c7b29ea3b66fcdcdffe6fa5ebdfd134c21651a11c952a838f7d4e0b171564d"
+    },
+    "css-CSS2-normal-flow.compact.json": {
+      "bytes": 4769,
+      "sha256": "64db0cc30ccbde69760d4ff4be4e7917ae7b435f17eb693695660ef0971b119e"
+    },
+    "endpoint.manifest.json.observation.summary.json": {
+      "bytes": 1378,
+      "sha256": "2e8c2617b870365cdcb0f2acd59c7599bdb793990769d28972c4685f72d37add"
+    },
+    "css-css-tables.phase.manifest.json": {
+      "bytes": 1093,
+      "sha256": "d481b8c09709ee9adec1f523a04848fc1f82354ada902f1b065d0d918033b74a"
+    },
+    "css-css-ruby.compact.json": {
+      "bytes": 7658,
+      "sha256": "047c1498ac609c3a5787fe8edc330e31a19d57c54887cad5046614b47f53300f"
+    },
+    "css-css-color.phase.manifest.json": {
+      "bytes": 1089,
+      "sha256": "a5da453b2aa039b99ef32ff849f3322aaacceb45f79a825aa377b3ce173732c9"
+    },
+    "endpoint.manifest.json": {
+      "bytes": 588,
+      "sha256": "13143c317be03b274976c9847a7f51d4a0c9d68b522f930754920a66a5fb7ccc"
+    },
+    "css-CSS2-positioning.compact.json": {
+      "bytes": 1664,
+      "sha256": "397bf610b476110c6791ce5b26bce9e0673ad3cf9431c1e09936eba2aa946ab4"
+    },
+    "css-css-conditional.compact.json": {
+      "bytes": 9319,
+      "sha256": "e933abff233494d7b6483e41edad7da2f283c68a9ebb93a5e1c97a9b51191676"
+    },
+    "source-command-capacity-freeze.json": {
+      "bytes": 35688,
+      "sha256": "b0f531fc0c85ec70fa3cef7d65faecf7c090776d9a7dc9f3092d744731be7fd6"
+    },
+    "css-CSS2-floats.phase.manifest.json": {
+      "bytes": 1098,
+      "sha256": "8a676d519244bc8609c1a7c959c70b7fb2e11aafaaaa8285bceb0d9c1e15039d"
+    },
+    "compact-publication.manifest.json": {
+      "bytes": 14899,
+      "sha256": "a2ad26b8a66a41d8f7afa1febbd007153ade455c829e01132ae3aff1b19348a8"
+    },
+    "css-css-conditional.phase.manifest.json": {
+      "bytes": 1118,
+      "sha256": "4f19eb6ba6d094885e32164eb00ed78f40465d2735eec3afb2d74a932daf0302"
+    },
+    "gate.summary.json": {
+      "bytes": 41155,
+      "sha256": "65dc893c43ea6e3e287f133c97d673aeb2e4bf794f84d15e7dc2516eaa3916e4"
+    },
+    "css-selectors.phase.manifest.json": {
+      "bytes": 1088,
+      "sha256": "fbd4717f2ffb1dfaea96bc12eeee2cec3dccab5315822ca0943649cfed01e85a"
+    },
+    "doctests.phase.manifest.json": {
+      "bytes": 377,
+      "sha256": "8474fe81c8163308c2e32738423505eba9ea87dd31bba496525dae08f3d67a2e"
+    },
+    "css-css-transforms.compact.json": {
+      "bytes": 43059,
+      "sha256": "ab81e0aa92e71be08f2a8a3edd5f99ecaad6cb96d91c414c2810ea6819dac14c"
+    },
+    "css-css-position.compact.json": {
+      "bytes": 8558,
+      "sha256": "7db67e09a010b14b101c7d5f2755bf22a4f4abcc5e46dcd40f77bd9333e68cdb"
+    },
+    "css-css-viewport.compact.json": {
+      "bytes": 10400,
+      "sha256": "cd57e0fa5622e54c6dfb64a4cb3f07d17e5d4be7058cada969b2e6b4090ac443"
+    },
+    "css-css-images.compact.json": {
+      "bytes": 18510,
+      "sha256": "d4a170b6491dbd29554ce1b43a0c68354fff01f278a89bef18ce33eb73c04c1c"
+    },
+    "css-CSS2-floats.compact.json": {
+      "bytes": 5195,
+      "sha256": "0962f233bba6ae19547323d952b4627764145a44d2a3dfae4128012dd5834386"
+    },
+    "css-css-contain.compact.json": {
+      "bytes": 26553,
+      "sha256": "8f632501b2509ac4247c60e4978b4e7af3e2c92faf8e7e4d0478e581fbeb681a"
+    },
+    "ensure-wpt.phase.manifest.json": {
+      "bytes": 361,
+      "sha256": "33c9a12a0c4b50bd0dd1aacf080d4e3841e7b6189da272c8960de7276038ec83"
+    },
+    "image-resources.compact.json": {
+      "bytes": 56167,
+      "sha256": "69a21ff4a5002ee91d252d5da99f3818c739c696016d6b4ee207b58d929aaf9c"
+    },
+    "css-css-tables.compact.json": {
+      "bytes": 10609,
+      "sha256": "c24ccf4d1bea4f343e4e6140c9cdf5377ae5134f1fb1b7e1ba648dc12ef170a4"
+    },
+    "css-css-cascade.phase.manifest.json": {
+      "bytes": 1098,
+      "sha256": "f5134562eee2766f4817139079ae4e6e36149f6f6cef0ccf5610fcc7466fccf5"
+    },
+    "css-css-images.phase.manifest.json": {
+      "bytes": 1094,
+      "sha256": "679c50c10b38d044d1a87531e57ae92d981956d2ebe728805cf046dc1a8414a0"
+    },
+    "storage.summary.json": {
+      "bytes": 2317,
+      "sha256": "728fec70f8b9db226b99906dce418d0d02a5d2a2c2e47a0220a89bffb2599161"
+    },
+    "css-css-ruby.phase.manifest.json": {
+      "bytes": 1083,
+      "sha256": "00b3d3c4b831f580ef2e5fe55e450032bdfd3fa9bd1c6c773e83a49fe78596e2"
+    },
+    "css-css-position.phase.manifest.json": {
+      "bytes": 1103,
+      "sha256": "52573953adfeb98af3a5dd7219cb537d323cc57a2fc574cfea0d8820651aa81b"
+    },
+    "css-css-fonts.phase.manifest.json": {
+      "bytes": 1088,
+      "sha256": "fd9a89250709c11db9adf910054dc59b288be6e887b9dcd2e89b5ea118b5dc63"
+    },
+    "css-css-display.phase.manifest.json": {
+      "bytes": 1098,
+      "sha256": "03114a1c44b3a04d18b78634901424e0062e5c250371be832e53fbb83d423003"
+    },
+    "css-css-sizing.phase.manifest.json": {
+      "bytes": 1094,
+      "sha256": "b9f337b292bb59a8a8ff3fab1efcd3639add7f03da6e19cc4aaac9f3c17691d4"
+    },
+    "css-css-backgrounds.phase.manifest.json": {
+      "bytes": 1119,
+      "sha256": "4042f90760b5acd220b416f219f9061663b28ce0e92969c989707940e9b13f15"
+    },
+    "css-css-transforms.phase.manifest.json": {
+      "bytes": 1114,
+      "sha256": "f5152123fe154dcdeb40bbcf2b5a9f9ccc94385931f636ae06a65bde03732a7e"
+    }
+  }
+}

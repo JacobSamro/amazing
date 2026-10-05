@@ -94,3 +94,6 @@ pub use imports::{ImportRule, ImportLayer, SupportsCondition, LoadedStylesheet,
 
 mod image_policy;
 pub use image_policy::ObjectFitValue;
+
+mod transform_origins;
+pub use transform_origins::{OriginReferenceBox, used_origin};

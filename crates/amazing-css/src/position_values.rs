@@ -51,7 +51,7 @@ fn length(value: &str, percentage: bool) -> bool {
     };
     values::LengthPercentage::parse(value).is_some_and(|length| {
         percentage || !matches!(length, values::LengthPercentage::Percentage(_))
-    }) || crate::math::length_percentage(&validated, percentage)
+    }) || crate::math::contextual_length_percentage(&validated, percentage)
 }
 fn position(parts: &[String]) -> Option<String> {
     let valid = match parts {
