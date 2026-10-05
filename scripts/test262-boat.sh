@@ -33,6 +33,7 @@ OUTDIR="$MAIN/.agents/test262"; mkdir -p "$OUTDIR"
 OUT="$OUTDIR/t262-$SHA-$TAG.json"
 T0=$(date +%s)
 RUN_ID="$TAG-$(date -u +%Y%m%dT%H%M%S)-$$"
+SHARDROOT="$OUTDIR/runs/$RUN_ID"; mkdir -p "$SHARDROOT"
 
 # Always run the current runner (with --shard), whatever the ref ships.
 if [ -n "$RUNNER_REF" ]; then
@@ -49,7 +50,8 @@ for K in $(seq 0 $((N - 1))); do
   (
     remote_root="amazing/out/$LANE/test262-$RUN_ID/$COMMIT"
     endpoint_receipt="$OUTDIR/endpoints/$RUN_ID/$K/endpoint.manifest.json"
-    setup_receipt="$OUTDIR/.shard-$SHA-$TAG-$K-$$.setup.manifest.json"
+    setup_receipt="$SHARDROOT/shard-$K.setup.manifest.json"
+    observer_rc=0
     if "$REPO/scripts/linux-run.sh" "$LANE" --ref "$COMMIT" --endpoint-receipt "$endpoint_receipt" --compact-root "$remote_root" --setup-summary "$setup_receipt" -- "
       set -euo pipefail
       export OUT=\"\$OUT/test262-$RUN_ID/$COMMIT\"
@@ -59,11 +61,11 @@ for K in $(seq 0 $((N - 1))); do
       phase=setup
       phase_receipt=
       trap 'rc=\$?; trap - EXIT; if [ \$rc -ne 0 ]; then python3 /tmp/t262compact-$K.py failure --source-commit $COMMIT --shard $K/$N --phase-receipt \"\$phase_receipt\" \"\$OUT/shard-$SHA-$TAG.failure.manifest.json\" \"\$phase\" \$rc \"\$OUT/shard-$SHA-$TAG-build.log\" \"\$OUT/shard-$SHA-$TAG-runner.log\" /tmp/shard-$SHA-$RUN_ID-$K.json \"\$OUT/shard-$SHA-$TAG-packaging.log\" || echo compact-failure-manifest-unavailable; fi; exit \$rc' EXIT
-      export CARGO_TARGET_DIR=/tmp/amazing-target-t262-shard-$K CARGO_INCREMENTAL=0
-      mkdir -p /tmp/amazing-src-t262-shard-$K
-      rsync -a --delete --exclude /target --exclude '/target-*' --exclude /corpora --exclude /out ./ /tmp/amazing-src-t262-shard-$K/
-      ln -sfn \"\$NATIVE_CORPORA_ROOT\" /tmp/amazing-src-t262-shard-$K/corpora
-      cd /tmp/amazing-src-t262-shard-$K
+      export CARGO_TARGET_DIR=/tmp/amazing-target-t262-shard-$K-$COMMIT CARGO_INCREMENTAL=0
+      mkdir -p /tmp/amazing-src-t262-shard-$K-$COMMIT
+      rsync -a --delete --exclude /target --exclude '/target-*' --exclude /corpora --exclude /out ./ /tmp/amazing-src-t262-shard-$K-$COMMIT/
+      ln -sfn \"\$NATIVE_CORPORA_ROOT\" /tmp/amazing-src-t262-shard-$K-$COMMIT/corpora
+      cd /tmp/amazing-src-t262-shard-$K-$COMMIT
       phase=build
       phase_receipt=\"\$OUT/shard-$SHA-$TAG-build.phase.manifest.json\"
       set +e
@@ -85,30 +87,41 @@ for K in $(seq 0 $((N - 1))); do
       phase_receipt=\"\$OUT/shard-$SHA-$TAG-packaging.phase.manifest.json\"
       python3 /tmp/t262command-$K.py --phase packaging --source-commit $COMMIT --output \"\$OUT/shard-$SHA-$TAG-packaging.log\" --receipt \"\$phase_receipt\" -- python3 /tmp/t262compact-$K.py test262 --source-commit $COMMIT \"\$OUT/shard-$SHA-$TAG.json\" \"\$OUT/shard-$SHA-$TAG.compact.json\" \$result
       echo shard-$K-exit=\$result
-      :" > "$OUTDIR/.shard-$SHA-$TAG-$K.log" 2>&1; then
-      : # SSH job completed successfully; only now collect the compact receipt.
+      :" > "$SHARDROOT/shard-$K.log" 2>&1; then
+      :
     else
-      job_rc=$?
-      echo "test262-boat: shard $K job exit $job_rc; raw stays on Boat" >&2
-      if [ -f "$setup_receipt" ]; then
-        echo "test262-boat: shard $K failed before job start; compact setup receipt $setup_receipt" >&2
-        exit "$job_rc"
-      fi
+      observer_rc=$?
+    fi
+    native_receipt="$SHARDROOT/shard-$K.native.summary.json"
+    python3 "$REPO/scripts/test262-job-state.py" --receipt "$endpoint_receipt" \
+      --lane "$LANE" --source "$COMMIT" --observer-exit "$observer_rc" \
+      --seconds 3600 --output "$native_receipt" --questions "$SHARDROOT/shard-$K.questions.md"
+    native_rc=$?
+    if ! python3 - "$native_receipt" <<'PYNATIVE'
+import json,sys
+row=json.load(open(sys.argv[1]))
+raise SystemExit(0 if row.get('compact_fetch_allowed') is True and row.get('state')=='TERMINAL' and type(row.get('actual_exit')) is int and type(row.get('runner_exit')) is int else 1)
+PYNATIVE
+    then
+      echo "test262-boat: shard $K native state unresolved; $native_receipt; questions in $SHARDROOT/shard-$K.questions.md" >&2
+      exit 3
+    fi
+    if [ "$native_rc" != 0 ]; then
+      echo "test262-boat: shard $K authenticated native exit $native_rc; observer exit $observer_rc; raw stays on Boat" >&2
       D="$(mktemp -d)"
       if bash "$REPO/scripts/lane-fetch.sh" "$LANE" "$D" --endpoint-receipt "$endpoint_receipt" --source "$COMMIT" "$remote_root/shard-$SHA-$TAG.failure.manifest.json"; then
-        mv "$D/shard-$SHA-$TAG.failure.manifest.json" "$OUTDIR/.shard-$SHA-$TAG-$K.failure.manifest.json"
+        mv "$D/shard-$SHA-$TAG.failure.manifest.json" "$SHARDROOT/shard-$K.failure.manifest.json"
       else
-        echo "test262-boat: shard $K phase receipt unavailable; wrapper exit remains $job_rc" >&2
+        echo "test262-boat: shard $K compact phase receipt unavailable; authenticated native exit remains $native_rc" >&2
       fi
       rmdir "$D" 2>/dev/null || true
-      exit "$job_rc"
+      exit "$native_rc"
     fi
-    rm -f "$OUTDIR/.shard-$SHA-$TAG-$K.json"
     D="$(mktemp -d)"
     bash "$REPO/scripts/lane-fetch.sh" "$LANE" "$D" --endpoint-receipt "$endpoint_receipt" --source "$COMMIT" "$remote_root/shard-$SHA-$TAG.compact.json" &&
       python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["shard"] == sys.argv[2]; assert d["job_exit"] == 0 and d["compact_records"] and d["host_sha256"] and d["input_sha256"]' "$D/shard-$SHA-$TAG.compact.json" "$K/$N" &&
-      mv "$D/shard-$SHA-$TAG.compact.json" "$OUTDIR/.shard-$SHA-$TAG-$K.json"
-    if [ ! -s "$OUTDIR/.shard-$SHA-$TAG-$K.json" ]; then
+      mv "$D/shard-$SHA-$TAG.compact.json" "$SHARDROOT/shard-$K.compact.json"
+    if [ ! -s "$SHARDROOT/shard-$K.compact.json" ]; then
       echo "test262-boat: shard $K compact fetch failed; raw remains on Boat" >&2
       rm -rf "$D"
       exit 1
@@ -119,12 +132,15 @@ for K in $(seq 0 $((N - 1))); do
 done
 failed=0
 for p in "${pids[@]}"; do wait "$p" || failed=1; done
-[ "$failed" = 0 ] || { echo "test262-boat: a shard failed; no stale output qualifies the run" >&2; exit 3; }
+[ "$failed" = 0 ] || {
+  echo "test262-boat: a shard failed; no stale output qualifies the run; fresh receipts/questions $SHARDROOT" >&2
+  exit 3
+}
 
 SHARDS=()
 bytes=0
 for K in $(seq 0 $((N - 1))); do
-  f="$OUTDIR/.shard-$SHA-$TAG-$K.json"
+  f="$SHARDROOT/shard-$K.compact.json"
   [ -s "$f" ] || { echo "test262-boat: shard $K produced no output; see ${f%.json}.log" >&2; tail -5 "${f%.json}.log" >&2; exit 3; }
   bytes=$((bytes + $(wc -c < "$f")))
   [ "$bytes" -le 2000000 ] || { echo "test262-boat: compact shards exceed ticket budget" >&2; exit 3; }

@@ -308,7 +308,8 @@ bootstrap_native_setup
 fi
 bootstrap_native_tools
 bootstrap_native_inputs
-export CARGO_TARGET_DIR=/tmp/amazing-native-target-$LANE CARGO_INCREMENTAL=0
+export CARGO_TARGET_DIR=/tmp/amazing-native-target-$LANE-${COMMIT:-working-tree} CARGO_INCREMENTAL=0
+export AMAZING_SOURCE_COMMIT='${COMMIT:-working-tree}'
 $CMD"
   if [ -n "$ENDPOINT_RECEIPT" ]; then
     # Supervise the entire native bootstrap, not merely the last gate command.

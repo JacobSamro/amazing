@@ -14,6 +14,8 @@ import tarfile
 import tempfile
 import signal
 import sysconfig
+import time
+import uuid
 
 REVISION = '3655e7464de3d52643ecddd4b5f9f4f3e7f62398'
 INPUT_SHA = '91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5'
@@ -27,7 +29,19 @@ def digest(path):
 def receipt(path, facts):
     facts = {'schema': 1, 'source_commit': os.environ.get('COMMIT', 'working-tree'), **facts}
     text = json.dumps(facts, sort_keys=True, separators=(',', ':')) + '\n'
-    Path(path).write_text(text)
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    pending = destination.with_name(destination.name + '.' + uuid.uuid4().hex + '.pending')
+    try:
+        with pending.open('x') as stream:
+            stream.write(text); stream.flush(); os.fsync(stream.fileno())
+        os.replace(pending, destination)
+        if sys.platform.startswith('linux'):
+            fd = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try: os.fsync(fd)
+            finally: os.close(fd)
+    finally:
+        pending.unlink(missing_ok=True)
     print(text, end='', flush=True)
 
 
@@ -46,13 +60,25 @@ def extract(archive, expected, destination):
     for path in sorted(destination.rglob('*')):
         if path.is_file() and not path.is_symlink():
             files.append((path.relative_to(destination).as_posix(), digest(path)))
-            # Commit timestamps must not let Cargo reuse an older artifact.
-            os.utime(path, None)
+
     if not (destination / 'Cargo.toml').is_file():
         raise ValueError('source archive has no workspace Cargo.toml')
+    # Archive/commit dates are data provenance, not Cargo freshness. Give the
+    # authenticated regular source files one genuine native staging generation;
+    # preserve every byte and mode, and never follow a symlink into a corpus.
+    stamp = time.time_ns()
+    refreshed = []
+    for relative, unused_digest in files:
+        path = destination / relative
+        os.utime(path, ns=(stamp, stamp), follow_symlinks=False)
+        refreshed.append(path.stat().st_mtime_ns)
+    if any(value != stamp for value in refreshed):
+        raise ValueError('native source filesystem did not preserve staging timestamp')
     identity = hashlib.sha256(json.dumps(files, separators=(',', ':')).encode()).hexdigest()
     return {'archive_sha256': expected, 'source_tree_sha256': identity,
-            'regular_files': len(files), 'source_path': str(destination)}
+            'regular_files': len(files), 'source_path': str(destination),
+            'source_timestamps': {'mode': 'native-staging-generation', 'stamp_ns': stamp,
+                'regular_files_refreshed': len(refreshed), 'archive_dates_ignored': True}}
 
 
 def inventory(root):
