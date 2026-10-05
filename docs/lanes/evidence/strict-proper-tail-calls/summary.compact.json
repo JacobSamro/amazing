@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "before_source": "16e6183dc6dbea293f96639705fc3cca0fad9426",
+  "after_source": "377d16a098ae56f84835979e27ffef1188a0f682",
+  "native": {
+    "before": {
+      "passed": 4715,
+      "failed": 13,
+      "skipped": 17,
+      "workspace_exit": 100,
+      "doctests_passed": 4
+    },
+    "after": {
+      "passed": 4731,
+      "failed": 0,
+      "skipped": 17,
+      "workspace_exit": 0,
+      "doctests_passed": 4
+    }
+  },
+  "whole_corpus": {
+    "selected_unique_files_per_mode": 29324,
+    "before_pass_files_per_mode": 28933,
+    "after_pass_files_per_mode": 28967,
+    "before_pass_variants_per_mode": 54018,
+    "after_pass_variants_per_mode": 54052,
+    "gained_files_per_mode": 34,
+    "gained_variants_per_mode": 34,
+    "lost_files": [],
+    "lost_variants": [],
+    "mode_reports_per_side": 16
+  },
+  "controls": {
+    "shared_groups": 19,
+    "after_only_private_vm_groups": 3,
+    "ast": "actual forced AST factories",
+    "bytecode": "actual body/opcode controls; ordinary default and VM corpus are not forced-AST corpus"
+  },
+  "compute": {
+    "lane": "js-lang-strict-tail-calls-20261005",
+    "box": "bx_d42gvqzf",
+    "provider": "baremetal",
+    "type": "default",
+    "vcpu": 4,
+    "memoryGB": 8,
+    "before_job": "14206fb6fd8c460d8ccd41da83e87888",
+    "after_job": "54d8e1537c174941a9c7de61c65319f8",
+    "before_owner_exit": 0,
+    "after_owner_exit": 0,
+    "before_compact_fetch_exit": 0,
+    "after_compact_fetch_exit": 0,
+    "fresh_distinct_targets": true
+  },
+  "qualification": "lane Linux whole pair qualified; root16-shard merged gate remains required",
+  "limitations": [
+    "independently owned physical-alias/weak-collector successor not included or qualified",
+    "old unrelated full-corpus default/VM differences are not historical zero-loss evidence"
+  ],
+  "raw_policy": "raw retained HOME on box; committed compact classifications/counts/pass-set differences and SHA/path provenance only"
+}

@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "failed_source": "e807ba5dc27d573a53bd88914ae1dd922ae94170",
+  "corrected_source": "377d16a098ae56f84835979e27ffef1188a0f682",
+  "raw": {
+    "path": "/home/user/amazing/out/js-lang-strict-tail-calls-20261005/strict-tail-calls-after-e807ba5d/workspace.log",
+    "sha256": "0c3c0fad679ff53d587261f4ca774f3ad3ddab4f1bac7d092c0da71a701944ad",
+    "bytes": 672466
+  },
+  "actual_workspace": {
+    "passed": 4727,
+    "failed": 4,
+    "skipped": 17,
+    "exit": 100
+  },
+  "fixes": [
+    {
+      "area": "native forwarding",
+      "actual_failure": "existing HostNative incumbent child became parent",
+      "fix": "record genuine adapter realm integer; next entry scoped into it without retaining execution activation"
+    },
+    {
+      "area": "transparent wrapper admission",
+      "actual_failure": "existing10000-wrapper control invoked target",
+      "fix": "finite MAX_CALL_DEPTH transparent transfer count, reset on genuine body tail transfer; same original control unchanged; new64-wrapper\u00d72500 body-tail control"
+    },
+    {
+      "area": "authored switch controls",
+      "actual_failure": "direct UsingDeclaration CaseClause is SyntaxError, two new groups wrongly expected runtime/opcode",
+      "primary": "https://tc39.es/ecma262/multipage/ecmascript-language-statements-and-declarations.html#sec-switch-statement-static-semantics-early-errors",
+      "fix": "valid nested block resources, correct fallthrough disposal order; explicit CaseClause+DefaultClause forbidden direct using guards",
+      "old_raw_preserved": true
+    }
+  ],
+  "after_ready": false
+}

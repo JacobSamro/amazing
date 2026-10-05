@@ -1,0 +1,20 @@
+{
+  "gated_source": "377d16a098ae56f84835979e27ffef1188a0f682",
+  "base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "files": {
+    "THIRD_PARTY_NOTICES.md": "5154203c3f023dc4eb6f31572f57907d2136b99d7c9978e8f15f96d91e6b1ca7",
+    "crates/amazing-js/src/interp.rs": "273771f99b8c2c924bb6dcff333cf64cb4402e8009924f6f021d3236202be2ec",
+    "crates/amazing-js/src/interp_bound.rs": "f2d86e07aa0c111df724245bfb5f6e3940ffd1486bd3fb9d2797fee3a8b8ebb6",
+    "crates/amazing-js/src/interp_realms.rs": "ba18f8a0b29c8fa9655e073ff92b3d9f6b06dfd35ce0779093b95600303cccf9",
+    "crates/amazing-js/src/interp_stmt.rs": "064874dd0bc0c4af8c8fb461276f7b08d4abe3906d50e82d19a80538e9e6e90e",
+    "crates/amazing-js/src/interp_tail_call_tests.rs": "2440542ae788a21aeba241c8fccae8187a9c394ee98303bb5e7cf58a5dc3e5be",
+    "crates/amazing-js/src/interp_tail_calls.rs": "e036e2f0f1b9378f1493d946ba60ed6246fd3bb5264a337f29dfa30bebac9fa0",
+    "crates/amazing-js/src/vm/compiler.rs": "71a7d6901681b0120b7117f77af11cbdd258de84f5851dcfbc47c559f1694ef1",
+    "crates/amazing-js/src/vm/compiler_chains.rs": "8b25e57c4548830085871644fe492a954b8d285f3d0c05804862861fd0aa2aed",
+    "crates/amazing-js/src/vm/compiler_resources.rs": "beb7ca578cfc41d1b7cba041caef565f57a1e22142ff70f4277f840256bcdce3",
+    "crates/amazing-js/src/vm/compiler_tail_calls.rs": "5925460aae4b1d5b50ab8327126b501f77bb7a51a14cf29e71a0fbbe5d0a7fd3",
+    "crates/amazing-js/src/vm/mod.rs": "f12863b5d31885dfe6c1cb050880524ab59b04904c84e1a8ffe68aef6db38e9d",
+    "crates/amazing-js/src/vm/tests.rs": "0d8dd23c3b2d68868ee3e2ef0381c374211823a2ffb5c19fdeda5f24a50f0ce5",
+    "crates/amazing-js/src/vm/tests_tail_calls.rs": "e81f0d789811d58e3a41a903044dcc36e8c6c9ab06e5d114a385382b8d568b42"
+  }
+}

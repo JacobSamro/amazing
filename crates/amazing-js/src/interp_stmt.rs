@@ -1,3 +1,6 @@
+// Proper-tail outcome/redispatch adaptation from lucid-softworks/lumen
+// (crates/lumen/src/{eval,interpreter}.rs and interpreter/call_entry.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Function body lexical reservation/closure-environment adaptation reuses
 // lucid-softworks/lumen (crates/lumen/src/{eval,interpreter}.rs)
 // @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
@@ -424,6 +427,16 @@ impl Interpreter {
                 }
             },
             StmtKind::Return(e) => {
+                if self.tail_calls_allowed
+                    && !self.using_stack[self.tail_resource_base..].iter().any(|frame| !frame.is_empty())
+                {
+                    if let Some(expression) = e {
+                        return match self.eval_tail_expression(expression, env)? {
+                            CallOutcome::Value(value) => Ok(Flow::Return(value)),
+                            CallOutcome::Tail(record) => Ok(Flow::Tail(record)),
+                        };
+                    }
+                }
                 let value = match e {
                     Some(expression) => {
                         let value = self.eval_expr(expression, env)?;
@@ -531,12 +544,15 @@ impl Interpreter {
     fn exec_stmts(&mut self, body: &[ast::Stmt], env: &EnvHandle) -> Result<Flow, Throw> {
         let mut value = None;
         self.completion = None;
+        let tail_calls_allowed = self.tail_calls_allowed;
+        let result = (|| {
         for statement in body {
             let result = self.exec_stmt(statement, env);
             let result = match result {
                 Err(_) if has_pending_return() => Ok(Flow::Return(take_pending_return().unwrap())),
                 other => other,
             };
+            if stmt_declares_resource(statement) { self.tail_calls_allowed = false; }
             if self.completion.is_none() { self.completion = value.clone(); }
             value = self.completion.clone();
             match result? {
@@ -545,6 +561,9 @@ impl Interpreter {
             }
         }
         Ok(Flow::Normal)
+        })();
+        self.tail_calls_allowed = tail_calls_allowed;
+        result
     }
 
     /// Lexical block evaluation shared by ordinary and try/catch/finally blocks.
@@ -721,6 +740,7 @@ impl Interpreter {
                 Flow::Continue(name) => return Ok(Flow::Continue(name)),
                 Flow::Break(name) => return Ok(Flow::Break(name)),
                 Flow::Return(value) => return Ok(Flow::Return(value)),
+                Flow::Tail(record) => return Ok(Flow::Tail(record)),
             }
             if !self.eval_expr(test, env)?.to_boolean() {
                 break;
@@ -746,7 +766,9 @@ impl Interpreter {
             return self.loop_for_inner(init, test, update, body, env, label);
         }
         self.using_stack.push(Vec::new());
+        let saved = std::mem::replace(&mut self.tail_calls_allowed, false);
         let result = self.loop_for_inner(init, test, update, body, env, label);
+        self.tail_calls_allowed = saved;
         let frame = self.using_stack.pop().unwrap_or_default();
         self.dispose_frame(frame, result)
     }
@@ -835,6 +857,7 @@ impl Interpreter {
                 Flow::Continue(name) => return Ok(Flow::Continue(name)),
                 Flow::Break(name) => return Ok(Flow::Break(name)),
                 Flow::Return(value) => return Ok(Flow::Return(value)),
+                Flow::Tail(record) => return Ok(Flow::Tail(record)),
             }
             if per_iteration_names.is_empty() {
                 if let Some(update) = update {
@@ -998,7 +1021,9 @@ impl Interpreter {
     }
 
     fn exec_try(&mut self, t: &ast::TryStmt, env: &EnvHandle) -> Result<Flow, Throw> {
+        let tail_calls_allowed = std::mem::replace(&mut self.tail_calls_allowed, false);
         let result = self.exec_lexical_block(&t.block, env);
+        self.tail_calls_allowed = tail_calls_allowed;
         let mut out = match result {
             Ok(x) => Ok(x),
             // A coroutine-backed generator's `.return(v)` completion at a suspended `yield`
@@ -1012,12 +1037,16 @@ impl Interpreter {
                 let th = self.normalize_throw(th);
                 if let Some(c) = &t.catch {
                     let ce = EnvHandle::new(if c.binding.is_some() { EnvKind::Catch } else { EnvKind::Block }, Some(env.clone()));
-                    (|| {
+                    let saved = std::mem::replace(&mut self.tail_calls_allowed,
+                        tail_calls_allowed && t.finally.is_none());
+                    let result = (|| {
                         if let Some(binding) = &c.binding {
                             self.bind_pattern(binding, th.0, ast::VarKind::Let, &ce)?;
                         }
                         self.exec_lexical_block(&c.body, &ce)
-                    })()
+                    })();
+                    self.tail_calls_allowed = saved;
+                    result
                 } else {
                     Err(th)
                 }
@@ -2109,15 +2138,15 @@ impl Interpreter {
         args: Vec<JsValue>,
         new_target: Option<JsValue>,
         caller_realm: RealmHandle,
-    ) -> Result<JsValue, Throw> {
+    ) -> Result<CallOutcome, Throw> {
         let o = match f {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("value is not callable")),
         };
         if matches!(o.borrow().exotic, Exotic::Proxy(_)) {
             return match new_target {
-                Some(nt) => self.proxy_construct(&o, args, nt),
-                None => self.proxy_call(&o, this, args),
+                Some(nt) => self.proxy_construct(&o, args, nt).map(CallOutcome::Value),
+                None => self.proxy_call_forward(&o, this, args).map(CallOutcome::Tail),
             };
         }
         let fun = o
@@ -2165,7 +2194,10 @@ impl Interpreter {
         let previous_strict = self.strict_eval_context;
         if interpreted { self.strict_eval_context = strict_function; }
         self.completion = None;
-        let r = (|| -> Result<JsValue, Throw> {
+        let previous_tail_calls = std::mem::replace(&mut self.tail_calls_allowed, false);
+        let previous_tail_resource_base =
+            std::mem::replace(&mut self.tail_resource_base, self.using_stack.len());
+        let r = (|| -> Result<CallOutcome, Throw> {
             match fun.body {
                 FunctionBody::Bytecode(code) => {
                     // The generator's own object, not a pre-read prototype: a
@@ -2175,15 +2207,19 @@ impl Interpreter {
                     // the created generator's `[[Prototype]]` must observe, not
                     // whatever "prototype" held before parameters were bound.
                     // `call` reads it fresh after binding parameters.
-                    code.call(
+                    code.call_outcome(
                         self, fun.env.clone(), fun.is_arrow, this, args,
                         fun.is_generator.then(|| o.clone()),
-                        derived_constructor.clone(), new_target.clone().or(lexical_new_target.clone()),
+                        derived_constructor.clone(), new_target.clone().or(lexical_new_target.clone()), caller_realm,
                     )
                 }
                 FunctionBody::Native(n) => {
                     self.native_stack.push(o.clone());
-                    let result = n(self, this, args);
+                    let result = match self.native_tail_forward(n, &this, &args) {
+                        Some(result) => result.map(|record|
+                            CallOutcome::Tail(record.forwarded(self.binding_current_realm(), false))),
+                        None => n(self, this, args).map(CallOutcome::Value),
+                    };
                     self.native_stack.pop();
                     result
                 }
@@ -2206,7 +2242,7 @@ impl Interpreter {
                     })?;
                     let result = dispatch(self, id, this, args, new_target);
                     self.flush_native_microtasks()?;
-                    result
+                    result.map(CallOutcome::Value)
                 }
                 FunctionBody::Expr(x) => {
                     let e = EnvHandle::new(if fun.is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(fun.env.clone()));
@@ -2214,15 +2250,17 @@ impl Interpreter {
                     let e = self.prepare_function_parameter_environment(&e, &fun.params, strict_function);
                     self.bind_params(&e, &fun.params, args, fun.is_arrow, strict_function)?;
                     let e = self.prepare_function_body_environment(&e, &fun.params, &[], &[])?;
-                    if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
+                    if let Some(code) = &async_body { return code.call_async_with_env(self, e).map(CallOutcome::Value); }
                     let e = self.prepare_function_lexical_environment(&[], &e, strict_function)?;
                     if thread_async {
                         if let Some(promise) = self.start_thread_async_function(FunctionBody::Expr(x.clone()), e.clone(), strict_function) {
                             thread_started.set(true);
-                            return Ok(promise);
+                            return Ok(promise.into());
                         }
                     }
-                    self.eval_expr(&x, &e)
+                    self.tail_calls_allowed = strict_function && !fun.is_async && !fun.is_generator;
+                    if self.tail_calls_allowed { self.eval_tail_expression(&x, &e) }
+                    else { self.eval_expr(&x, &e).map(CallOutcome::Value) }
                 }
                 FunctionBody::Block(b) => {
                     let e = EnvHandle::new(if fun.is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(fun.env.clone()));
@@ -2265,9 +2303,9 @@ impl Interpreter {
                             return Err(Throw::type_error("generator functions are not constructors"));
                         }
                         let e = self.hoist_function_body(&b.body, &e, strict_function)?;
-                        return Ok(self.start_thread_generator(&o, b, e, fun.is_async, strict_function));
+                        return Ok(self.start_thread_generator(&o, b, e, fun.is_async, strict_function).into());
                     }
-                    if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
+                    if let Some(code) = &async_body { return code.call_async_with_env(self, e).map(CallOutcome::Value); }
                     // Hoist, coroutine execution and allocation-failure fallback
                     // must use identical declaration nodes: deep Block clones
                     // invalidate the per-occurrence Annex B eligibility keys.
@@ -2277,12 +2315,13 @@ impl Interpreter {
                     if thread_async {
                         if let Some(promise) = self.start_thread_async_function(body.clone(), e.clone(), strict_function) {
                             thread_started.set(true);
-                            return Ok(promise);
+                            return Ok(promise.into());
                         }
                     }
                     // A function body is a disposal boundary in its own right (spec: ordinary
                     // FunctionDeclarationInstantiation's disposal capability), independent of any
                     // nested block's own boundary.
+                    self.tail_calls_allowed = strict_function && !fun.is_async && !fun.is_generator;
                     let has_using = b.body.iter().any(stmt_declares_resource);
                     let completion = if has_using {
                         self.using_stack.push(Vec::new());
@@ -2292,22 +2331,29 @@ impl Interpreter {
                     } else {
                         self.exec_stmts(&b.body, &e)?
                     };
-                    if derived {
-                        self.complete_derived_constructor(completion, &e, caller_realm)
-                    } else {
-                        match completion {
-                            Flow::Return(value) => Ok(value),
-                            _ => Ok(JsValue::Undefined),
-                        }
+                    match completion {
+                        Flow::Tail(record) => Ok(CallOutcome::Tail(if derived {
+                            record.derived_result(e, caller_realm)
+                        } else { record })),
+                        completion if derived => self.complete_derived_constructor(completion, &e, caller_realm).map(CallOutcome::Value),
+                        Flow::Return(value) => Ok(value.into()),
+                        _ => Ok(JsValue::Undefined.into()),
                     }
                 }
             }
         })();
+        self.tail_calls_allowed = previous_tail_calls;
+        self.tail_resource_base = previous_tail_resource_base;
         self.completion = previous_completion;
         self.strict_eval_context = previous_strict;
         self.frames.pop();
         self.depth -= 1;
-        if async_generator {
+        let r = match r {
+            Ok(CallOutcome::Tail(record)) => return Ok(CallOutcome::Tail(record)),
+            Ok(CallOutcome::Value(value)) => Ok(value),
+            Err(error) => Err(error),
+        };
+        let result = if async_generator {
             // Parameter binding runs when an async generator is called. An
             // abrupt binding completion is synchronous, before any iterator
             // result promise exists.
@@ -2333,8 +2379,10 @@ impl Interpreter {
             }
         } else {
             r
-        }
+        };
+        result.map(CallOutcome::Value)
     }
+
     fn bind_params(
         &mut self,
         e: &EnvHandle,
@@ -3293,6 +3341,8 @@ impl Interpreter {
         body: &ast::Stmt,
         env: &EnvHandle,
     ) -> Result<Flow, Throw> {
+        let saved = std::mem::replace(&mut self.tail_calls_allowed, false);
+        let result = (|| {
         let dispose = for_of_dispose_kind(left);
         // ForIn/OfBodyEvaluation uses GetIterator's actual cached next method.
         // Step abrupts precede binding/body execution and never IteratorClose.
@@ -3321,6 +3371,10 @@ impl Interpreter {
             }
         }
         Ok(Flow::Normal)
+
+        })();
+        self.tail_calls_allowed = saved;
+        result
     }
 
     /// Run one `for-of` iteration: bind the element and execute the body. `dispose` is

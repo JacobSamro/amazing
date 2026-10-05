@@ -1,3 +1,6 @@
+// Proper-tail outcome/redispatch adaptation from lucid-softworks/lumen
+// (crates/lumen/src/{eval,interpreter}.rs and interpreter/call_entry.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Realm state is swapped only on cross-realm entries. Agent queues, tokens,
 // timers and the symbol registry deliberately remain on Interpreter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -319,14 +322,80 @@ impl Interpreter {
     #[inline(never)]
     fn call_value_with_new_target_admitted(&mut self, function: &JsValue, receiver: JsValue,
         args: Vec<JsValue>, new_target: Option<JsValue>) -> Result<JsValue, Throw> {
+        let mut function = function.clone();
+        let mut receiver = receiver;
+        let mut arguments = args;
+        let mut new_target = new_target;
+        let mut constructor = None;
+        let mut forwarding_realm = None;
+        let mut transparent_forwards = 0u32;
+        let direct = self.direct_eval_call;
+        let environment = self.direct_eval_env.clone();
+        let result = (|| loop {
+            // call_outcome_once has restored the caller realm and discarded all
+            // callee locals/frames before this next iteration can begin.
+            let outcome = if let Some(realm) = forwarding_realm {
+                self.binding_with_realm(realm, |i|
+                    i.call_outcome_once(&function, receiver, arguments, new_target))
+            } else {
+                self.call_outcome_once(&function, receiver, arguments, new_target)
+            }?;
+            match outcome {
+                CallOutcome::Value(value) => {
+                    return if let Some(policy) = constructor {
+                        let TailConstructorResult { environment, caller_realm } = policy;
+                        self.complete_derived_constructor(Flow::Return(value), &environment, caller_realm)
+                    } else { Ok(value) };
+                }
+                CallOutcome::Tail(record) => {
+                    let TailCallRecord { callee, receiver: next_receiver, arguments: next_arguments,
+                        constructor: policy, forwarding_realm: next_realm,
+                        transparent_forward } = record;
+                    // Transparent wrappers do not create a language activation,
+                    // but an unbounded wrapper chain must retain the existing
+                    // finite resource admission before ever invoking its target.
+                    transparent_forwards = if transparent_forward {
+                        transparent_forwards + 1
+                    } else { 0 };
+                    if transparent_forwards > MAX_CALL_DEPTH {
+                        return Err(Throw::range_error("call forwarding limit exceeded"));
+                    }
+                    forwarding_realm = next_realm;
+                    if let Some(policy) = policy {
+                        debug_assert!(constructor.is_none());
+                        constructor = Some(policy);
+                    }
+                    function = callee;
+                    receiver = next_receiver;
+                    arguments = next_arguments;
+                    new_target = None;
+                    self.direct_eval_call = false;
+                    self.direct_eval_env = None;
+                    self.admit_synchronous_call()?;
+                }
+            }
+        })();
+        self.direct_eval_call = direct;
+        self.direct_eval_env = environment;
+        result
+    }
+
+    fn call_outcome_once(&mut self, function: &JsValue, receiver: JsValue,
+        args: Vec<JsValue>, new_target: Option<JsValue>) -> Result<CallOutcome, Throw> {
         if Self::is_bound_function(function) {
-            return self.invoke_bound_function(function, args, new_target);
+            return if new_target.is_some() {
+                self.invoke_bound_function(function, args, new_target).map(CallOutcome::Value)
+            } else {
+                self.bound_call_record(function, args)
+                    .map(|record| CallOutcome::Tail(record.forwarded(self.binding_current_realm(), true)))
+            };
         }
         if let JsValue::Object(object) = function {
             if matches!(&object.borrow().exotic, Exotic::Proxy(_)) {
                 return match new_target {
-                    Some(new_target) => self.proxy_construct(object, args, new_target),
-                    None => self.proxy_call(object, receiver, args),
+                    Some(new_target) => self.proxy_construct(object, args, new_target).map(CallOutcome::Value),
+                    None => self.proxy_call_forward(object, receiver, args)
+                        .map(|record| CallOutcome::Tail(record.forwarded(self.binding_current_realm(), true))),
                 };
             }
         }

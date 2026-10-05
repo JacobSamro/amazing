@@ -785,6 +785,7 @@ fn heap_frame_suspends_and_resumes_at_instruction_boundaries() {
             }
             FrameOutcome::Yielded(_) | FrameOutcome::YieldedIteratorResult(_) => panic!("ordinary frame yielded"),
             FrameOutcome::Awaited(_) => panic!("ordinary frame awaited"),
+            FrameOutcome::Tail(_) => panic!("top-level frame tail called"),
         }
     }
     assert!(suspensions > 1);
@@ -849,6 +850,7 @@ fn heap_frame_resumes_through_catch_and_finally() {
             }
             FrameOutcome::Yielded(_) | FrameOutcome::YieldedIteratorResult(_) => panic!("ordinary frame yielded"),
             FrameOutcome::Awaited(_) => panic!("ordinary frame awaited"),
+            FrameOutcome::Tail(_) => panic!("top-level frame tail called"),
         }
     }
     assert!(suspended_in_handler);
