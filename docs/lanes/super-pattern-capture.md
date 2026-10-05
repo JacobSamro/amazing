@@ -1,0 +1,9 @@
+# Native Super destructuring capture correction
+
+Base: cd66e4339c388d1896d3464dcaae82ae175a01ee, root combined candidate. Source-only correction; no qualification yet. The root initial full16 comparison lost staging/sm/destructuring/order-super.js (one file/two variants), while the original constructor24 and BigInt8 remain unchanged. Native constructor eligibility exposed an existing pattern producer that used ordinary Property/RawProperty and lost the instance receiver.
+
+The shared pattern producer now captures GetThisBinding, computed expression raw once, then the live nullable home prototype. Existing SuperProperty/RawSuperProperty are rooted in frame reference slots and consumed by unchanged StorePatternReference/put_reference. All array/object/rest/nested/default consumers use this producer. Three bounded opcodes; no new reference/value/frame fields, no generic Super35 eligibility expansion or author callback on disposal. Eight new groups cover receiver/order/default/rest/nesting/TDZ/null/live-base/abrupt/iterator close and all four callable kinds, with actual AST/Bytecode body assertions. Original Super31 source/control branches remain preserved; this bounded patch does not claim generic Super31/35 qualification.
+
+Adaptation follows the already attributed Lumen eval.rs capture algorithm at f6c9860d44fa52249cfd647122edea184d32c863; MIT LICENSE verified at that exact commit, Copyright (c)2026 Lucid Softworks limited. NOTICE appended. Test262 original fixture is unchanged and not copied into source.
+
+Actual baseline retry b154 release0 and all46corpus phases terminal0; compact fetch authenticated. Candidate cd66 remains HOLD, and its old full16 loss is preserved. AFTER must use the genuine repaired candidate, workspace/docs plus whole46corpora and integrator full16. No local engine build or new allocation performed for repair.

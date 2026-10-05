@@ -1,0 +1,98 @@
+{
+  "recorded_origin_dev": "69f1193e99be9c9a7ab03463bab16760325b4fa5",
+  "original_whole_qualified_ready": "e10727316f9b75fccf27d1b5fc3dd6ada55de495",
+  "current_ptc_producer": "db6aeae945820435f125b9e7a7877ca40c5fc241",
+  "current_backend_tested_in": "445bdccd5f2a943cd84bafaf05a933d97963af85",
+  "whole_scope": "Live GetSuperConstructor before argv; original F/instance fields, genuine builtin defaults/explicit native factories, caller-side derived completion and callee-side class Call errors on current tail-call dispatcher",
+  "no_imported_bigint_optional_super_property_or_gc_algorithm": true,
+  "original_controls": {
+    "constructors": {
+      "counts": {
+        "PASS": 15
+      },
+      "identities": {
+        "amazing-js::interp::vm::tests_constructors::base_fields_precede_parameters_and_object_returns_preserve_completion": "PASS",
+        "amazing-js::interp::vm::tests_constructors::borrowed_foreign_constructors_complete_in_caller_realm_body_errors_stay_callee": "PASS",
+        "amazing-js::interp::vm::tests_constructors::constructor_decorated_elements_keep_extra_initializers_with_lexical_super": "PASS",
+        "amazing-js::interp::vm::tests_constructors::constructors_read_live_parent_for_explicit_implicit_defaults_body_eval_and_arrows": "PASS",
+        "amazing-js::interp::vm::tests_constructors::derived_completion_covers_objects_undefined_primitives_uninitialized_this_and_body_throw": "PASS",
+        "amazing-js::interp::vm::tests_constructors::escaped_lexical_super_retains_original_constructor_and_live_parent_after_abrupt_body": "PASS",
+        "amazing-js::interp::vm::tests_constructors::explicit_constructor_identity_name_length_proto_and_class_call_contract_are_retained": "PASS",
+        "amazing-js::interp::vm::tests_constructors::explicit_constructors_preserve_strict_private_eval_try_finally_and_recursive_calls": "PASS",
+        "amazing-js::interp::vm::tests_constructors::lexical_super_initializes_original_public_private_and_decorated_class_elements": "PASS",
+        "amazing-js::interp::vm::tests_constructors::lexical_super_replacement_object_receives_original_private_brand_and_fields": "PASS",
+        "amazing-js::interp::vm::tests_constructors::null_and_nonconstructible_super_check_follows_all_arguments_and_original_throw": "PASS",
+        "amazing-js::interp::vm::tests_constructors::proxy_super_receives_actual_newtarget_and_implicit_forwarding_skips_iterator": "PASS",
+        "amazing-js::interp::vm::tests_constructors::repeat_and_nested_super_construct_before_binding_error_fields_only_once": "PASS",
+        "amazing-js::interp::vm::tests_constructors::rooted_super_constructor_survives_one_opcode_quantums_and_budget_cleanup": "PASS",
+        "amazing-js::interp::vm::tests_constructors::super_parent_capture_precedes_argument_mutation_and_iterator_expansion": "PASS"
+      }
+    },
+    "default_constructors": {
+      "counts": {
+        "PASS": 9
+      },
+      "identities": {
+        "amazing-js::interp::vm::tests_default_constructors::async_lexical_super_snapshots_parent_before_await_argument_and_preserves_throw": "PASS",
+        "amazing-js::interp::vm::tests_default_constructors::default_builtin_call_errors_and_explicit_class_errors_have_distinct_realms": "PASS",
+        "amazing-js::interp::vm::tests_default_constructors::default_base_newtarget_prototype_read_and_foreign_fallback_are_exact": "PASS",
+        "amazing-js::interp::vm::tests_default_constructors::default_constructor_keeps_class_source_metadata_and_builtin_descriptors": "PASS",
+        "amazing-js::interp::vm::tests_default_constructors::default_derived_preserves_existing_parent_result_and_newtarget_wrappers": "PASS",
+        "amazing-js::interp::vm::tests_default_constructors::default_forwarding_uses_original_arguments_without_array_iterator": "PASS",
+        "amazing-js::interp::vm::tests_default_constructors::default_constructor_whole_base_derived_live_parent_and_null_matrix": "PASS",
+        "amazing-js::interp::vm::tests_default_constructors::default_instance_elements_are_strict_ordered_and_initialized_once": "PASS",
+        "amazing-js::interp::vm::tests_default_constructors::selected_super_parent_survives_argument_await_yield_and_finally": "PASS"
+      }
+    }
+  },
+  "original_files_byte_identical_to_e107": true,
+  "seven_producer_files_byte_identical_to_db6": true,
+  "current_fresh_whole_pair_observation": {
+    "before_source": "445bdccd5f2a943cd84bafaf05a933d97963af85",
+    "after_source": "c52e56b98069d53faf8445bfff1b8ba3a003bfe6",
+    "both_modes": {
+      "default": {
+        "before_files": 30444,
+        "after_files": 30444,
+        "before_variants": 56997,
+        "after_variants": 56997
+      },
+      "vm": {
+        "before_files": 30444,
+        "after_files": 30444,
+        "before_variants": 56997,
+        "after_variants": 56997
+      }
+    },
+    "lost_files_or_variants": [],
+    "lost_native_legacy": [],
+    "native_before_counts": {
+      "PASS": 4782,
+      "SKIP": 17,
+      "FAIL": 41
+    },
+    "native_after_counts": {
+      "PASS": 4820,
+      "SKIP": 17,
+      "FAIL": 3
+    },
+    "combined_after_HOLD": "three separate optional/Super/mirror assertions, not waived",
+    "compact_manifest_sha256": "b6b5dbc5a853631a6e1aa4a3b60f84a22c8a24c6f658ac31fd449cb944c8d8fd"
+  },
+  "current_standalone_workspace_measured": false,
+  "integrator_fresh_native_and_16_shard_gate_required": true,
+  "production_and_original_test_sha256": {
+    "crates/amazing-js/src/interp.rs": "b0922e6839266f185a51500a63a687fd7a5efb50d1c8dcb6dc19c82348fccc1a",
+    "crates/amazing-js/src/interp_bound.rs": "4a06815f7f58f4b810d2debcf42f6ad00ddcd498b5de02f48bc0aa954c7b492f",
+    "crates/amazing-js/src/interp_class_constructors.rs": "fa28c32f49fafd140af3a67708efd9620e4647ccd87fef22abf3c08bb7a0f184",
+    "crates/amazing-js/src/interp_class_evaluation_state.rs": "595d64e88453c4b223c27fcb93b20a9d6671bb636aef3f39bef60e3d28d13641",
+    "crates/amazing-js/src/interp_realm_tests.rs": "56872adeb56eacb66f6c502a6a39c5c6f70d54c0b0eaff76f570e9be0823453c",
+    "crates/amazing-js/src/interp_realms.rs": "78371b1e603100ff6b23600cd97330a25f0d0dd5c96b9d1323587f874b5c22ae",
+    "crates/amazing-js/src/interp_stmt.rs": "1c143c7cfbf582fa132f487c3cbe627d0e8dcddf0f061143ac4870a9fb02e438",
+    "crates/amazing-js/src/vm/compiler.rs": "0d897667c35eed622e4611fbb6b31c8305796a7b67cc702ce73144d36e86dd75",
+    "crates/amazing-js/src/vm/compiler_constructors.rs": "e37fcdded05906d9f7b50be3eb57d2740c6e8246fc5c80fa3f289f94b0ecf1f0",
+    "crates/amazing-js/src/vm/mod.rs": "6a334db5c94b50dec1ea65f7b3c0d6c6525337719ee1e7004ffd41153d078463",
+    "crates/amazing-js/src/vm/tests_constructors.rs": "92ff25cd7eef79f4425245178c2422c271e7572a5f580b0c14efd2b630f896de",
+    "crates/amazing-js/src/vm/tests_default_constructors.rs": "f12279f801a59ad7a4b26225ba01e32b9d3cc8e4e1a685f637b955bf2bf8987b"
+  }
+}

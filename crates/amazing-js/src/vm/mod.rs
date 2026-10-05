@@ -1,3 +1,5 @@
+// Super pattern capture adapted from lucid-softworks/lumen (crates/lumen/src/eval.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Proper-tail outcome/redispatch adaptation from lucid-softworks/lumen
 // (crates/lumen/src/{eval,interpreter}.rs and interpreter/call_entry.rs)
 // @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
@@ -6,6 +8,7 @@
 // @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Portions ported from lucid-softworks/lumen (crates/lumen/src/eval.rs,
 // declare_block_lexicals/annexb_fn_sync_eval) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
+// Live SuperCall/original-constructor fields also adapted from that eval.rs algorithm.
 //! Experimental register VM. Compilation rejects unsupported syntax atomically;
 //! execution never falls back to AST statement/expression evaluation.
 #![forbid(unsafe_code)]
@@ -46,6 +49,12 @@ mod tests_super_reads;
 mod tests_templates;
 #[cfg(test)]
 mod tests_bigint_literals;
+#[cfg(test)]
+mod tests_constructors;
+#[cfg(test)]
+mod tests_default_constructors;
+#[cfg(test)]
+mod tests_super_patterns;
 
 use super::{callable_function, for_iteration_env, new_promise, perform_promise_then, promise_resolving_functions, reference_name, settle_promise, Interpreter, Reference};
 use crate::ast::{BinOp, ForLeft, UnOp, VarKind};
@@ -210,6 +219,10 @@ enum Instruction {
     StoreReference(usize, Register),
     StorePatternReference(usize, Register),
     ResolveMemberWrite(usize, Register, KeyOperand),
+    /// Capture a super write without GetValue or key coercion.
+    LoadSuperBaseNullable(Register),
+    ResolveSuperMemberWrite(usize, Register, KeyOperand, Register),
+    ResolveRawSuperMemberWrite(usize, Register, Register, Register),
     ResolveRawMemberWrite(usize, Register, Register),
     NewObject(Register),
     SetObjectProperty(Register, KeyOperand, Register),
@@ -367,7 +380,8 @@ enum Instruction {
     /// `[[HomeObject]].[[GetPrototypeOf]]()`.
     LoadSuperHome(Register),
     /// `super(...)` in a derived constructor.
-    SuperCall(Register, Vec<CallArgument>),
+    LoadSuperConstructor(Register),
+    SuperCall(Register, Register, Vec<CallArgument>),
 }
 
 #[derive(Debug, Clone)]
@@ -854,22 +868,17 @@ impl Program {
                             .ok_or_else(|| Throw::type_error("super prototype is null"))?;
                         registers[*dst] = JsValue::Object(prototype);
                     }
-                    Instruction::SuperCall(dst, arguments) => {
-                        let super_constructor = i.frames.last().and_then(|frame| frame.super_constructor.clone())
-                            .ok_or_else(|| Throw::syntax_error("super() used outside a derived constructor"))?;
+                    Instruction::LoadSuperConstructor(dst) => {
+                        registers[*dst] = i.live_super_constructor()?;
+                    }
+                    Instruction::SuperCall(dst, constructor, arguments) => {
+                        let function = i.super_call_function()?;
+                        let super_constructor = registers[*constructor].clone();
                         let new_target = i.current_new_target()
                             .ok_or_else(|| Throw::type_error("derived constructor requires new"))?;
                         let args = expand_arguments(&registers, spreads, arguments)?;
                         let result = i.construct_with_new_target(&super_constructor, args, new_target)?;
-                        env.initialize_this(result.clone())?;
-                        if let Some(frame) = i.frames.last_mut() {
-                            frame.this = result.clone();
-                        }
-                        let elements = i.frames.last().and_then(|frame| frame.own_function.clone())
-                            .and_then(|function| function.borrow().class_elements.clone());
-                        if let Some(elements) = elements {
-                            super::initialize_instance_elements(i, &result, &elements)?;
-                        }
+                        i.bind_super_this(&env, &result, &function)?;
                         registers[*dst] = result;
                     }
                     Instruction::ResolveName(slot, dst, name) => {
@@ -995,6 +1004,17 @@ impl Program {
                             }
                             other => i.put_reference(other, value, &env)?,
                         }
+                    }
+                    Instruction::LoadSuperBaseNullable(dst) => {
+                        let home = i.frames.last().and_then(|frame| frame.home.clone())
+                            .ok_or_else(|| Throw::syntax_error("super used outside a method"))?;
+                        registers[*dst] = home.borrow().proto.clone().map(JsValue::Object).unwrap_or(JsValue::Null);
+                    }
+                    Instruction::ResolveSuperMemberWrite(slot, base, key, receiver) => {
+                        references[*slot] = Some(Reference::SuperProperty(registers[*base].clone(), key.resolve(registers)?, registers[*receiver].clone()));
+                    }
+                    Instruction::ResolveRawSuperMemberWrite(slot, base, key, receiver) => {
+                        references[*slot] = Some(Reference::RawSuperProperty(registers[*base].clone(), registers[*key].clone(), registers[*receiver].clone()));
                     }
                     Instruction::ResolveMemberWrite(slot, base, key) => {
                         references[*slot] = Some(Reference::Property(registers[*base].clone(), key.resolve(registers)?));
@@ -2098,19 +2118,13 @@ impl FunctionCode {
                 return Err(Throw::type_error("derived constructor requires new"));
             }
             env.mark_this_uninitialized();
-            if let Some(meta) = derived.as_ref().filter(|meta| meta.implicit) {
+            if derived.as_ref().is_some_and(|meta| meta.implicit) {
+                let function = i.super_call_function()?;
+                let parent = i.live_super_constructor()?;
                 let bound = i.construct_with_new_target(
-                    &meta.parent, args.clone(), new_target.clone().expect("derived constructor new_target"),
+                    &parent, args.clone(), new_target.clone().expect("derived constructor new_target"),
                 )?;
-                env.initialize_this(bound.clone())?;
-                if let Some(frame) = i.frames.last_mut() {
-                    frame.this = bound.clone();
-                }
-                let elements = i.frames.last().and_then(|frame| frame.own_function.clone())
-                    .and_then(|function| function.borrow().class_elements.clone());
-                if let Some(elements) = elements {
-                    super::initialize_instance_elements(i, &bound, &elements)?;
-                }
+                i.bind_super_this(&env, &bound, &function)?;
             }
         } else if !is_arrow {
             env.bind_this(this.clone());

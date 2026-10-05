@@ -76,9 +76,19 @@ mod bound_function_tests {
     fn foreign_bound_class_call_rejects_in_the_caller_realm() {
         let mut i = Interpreter::new();
         let child = i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
-        let bound = i.binding_eval_in_realm(child, "(class {}).bind(null)").unwrap();
-        let error = i.call_value(&bound, JsValue::Undefined, Vec::new()).unwrap_err();
-        let expected = i.run_script("TypeError.prototype").unwrap();
-        assert_eq!(native_object_get_prototype_of(&mut i, JsValue::Undefined, vec![error.0]).unwrap(), expected);
+        let child_prototype = i.binding_eval_in_realm(child, "TypeError.prototype").unwrap();
+        // Keep this historical test identity and all original implicit inputs.
+        // Explicit [[Call]]10.2.1 steps2–4 and implicit builtin15.7.14 step14
+        // both create the rejection in their actual callee realm.
+        for (source, expected) in [
+            ("(class { constructor() {} }).bind(null)", &child_prototype),
+            ("(class extends Object { constructor() { super(); } }).bind(null)", &child_prototype),
+            ("(class {}).bind(null)", &child_prototype),
+            ("(class extends Object {}).bind(null)", &child_prototype),
+        ] {
+            let bound = i.binding_eval_in_realm(child, source).unwrap();
+            let error = i.call_value(&bound, JsValue::Undefined, Vec::new()).unwrap_err();
+            assert_eq!(native_object_get_prototype_of(&mut i, JsValue::Undefined, vec![error.0]).unwrap(), *expected, "{source}");
+        }
     }
 }

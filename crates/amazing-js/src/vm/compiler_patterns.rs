@@ -1,3 +1,5 @@
+// Super pattern capture adapted from lucid-softworks/lumen (crates/lumen/src/eval.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // ForIn head initializer ordering adapted from boa-dev/boa
 // (core/engine/src/bytecompiler/statement/loop.rs::compile_for_in_loop)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
@@ -204,8 +206,26 @@ impl Compiler {
                     self.emit(Instruction::ResolvePrivateWrite(slot, object, name.name.clone()));
                     Ok(Some(slot))
                 } else if let ExprKind::Member { obj, prop, optional: false } = &target.kind {
-                    let object = self.expression(obj)?;
-                    self.write_member_reference(slot, object, prop)?;
+                    if matches!(obj.kind, ExprKind::Super) {
+                        // GetThisBinding precedes the raw key. GetSuperBase is
+                        // live after key evaluation, and PutValue owns coercion.
+                        let receiver = self.register(obj.span)?;
+                        self.emit(Instruction::LoadThis(receiver));
+                        let raw = match prop {
+                            ast::MemberProp::Computed(key) => Some(self.expression(key)?),
+                            _ => None,
+                        };
+                        let base = self.register(obj.span)?;
+                        self.emit(Instruction::LoadSuperBaseNullable(base));
+                        match (prop, raw) {
+                            (ast::MemberProp::Computed(_), Some(key)) => self.emit(Instruction::ResolveRawSuperMemberWrite(slot, base, key, receiver)),
+                            (ast::MemberProp::Ident(name), _) => self.emit(Instruction::ResolveSuperMemberWrite(slot, base, KeyOperand::Static(name.name.as_str().into()), receiver)),
+                            _ => return Err(self.error(target.span, "invalid super property")),
+                        };
+                    } else {
+                        let object = self.expression(obj)?;
+                        self.write_member_reference(slot, object, prop)?;
+                    }
                     Ok(Some(slot))
                 } else if matches!(target.kind, ExprKind::Call { optional: false, .. }) {
                     self.expression(target)?;

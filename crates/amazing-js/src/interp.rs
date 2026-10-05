@@ -193,6 +193,8 @@ struct CallFrame {
     context_id: u64,
     this: JsValue,
     home: Option<Obj>,
+    /// Original derived FunctionEnvironment function; super() reads its live
+    /// prototype. Lexical arrows and suspended contexts retain that same F.
     super_constructor: Option<JsValue>,
     new_target: Option<JsValue>,
     /// The function object actually executing in this frame (`None` for the
@@ -1835,6 +1837,7 @@ include!("interp_array_protocol.rs");
 include!("interp_array_factories.rs");
 include!("interp_class_private.rs");
 include!("interp_decorators.rs");
+include!("interp_class_constructors.rs");
 include!("interp_class_evaluation_state.rs");
 include!("interp_class_eval.rs");
 include!("interp_object_extra.rs");

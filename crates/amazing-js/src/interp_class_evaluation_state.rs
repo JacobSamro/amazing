@@ -35,12 +35,7 @@ impl Interpreter {
             _ => None,
         });
         let original = if let Some(method) = constructor { self.method_value(method, &class_env, true) } else {
-            self.make_function(&ast::FunctionItem {
-                source: class.source.clone(),
-                name: class.name.clone(), params: Vec::new(),
-                body: ast::Block { body: Vec::new(), span: crate::tokens::Span::new(crate::tokens::SourceLocation::new(1, 1), crate::tokens::SourceLocation::new(1, 1)) },
-                is_async: false, is_generator: false,
-            }, &class_env)
+            self.make_default_class_constructor(&class, &class_env)
         };
         let JsValue::Object(object) = &original else { unreachable!("class constructor") };
         let prototype = Obj(Rc::new(RefCell::new(JsObject::ordinary())));

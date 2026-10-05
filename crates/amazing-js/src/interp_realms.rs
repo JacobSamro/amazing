@@ -399,10 +399,10 @@ impl Interpreter {
                 };
             }
         }
-        // [[Call]] rejects class constructors before entering their realm.
-        if new_target.is_none() && matches!(function, JsValue::Object(object) if object.borrow().class_constructor) {
-            return Err(Throw::type_error("class constructor requires new"));
-        }
+        // ECMAScript [[Call]] prepares the real callee context before class
+        // rejection (10.2.1 steps2–4). The inner rejection is normalized inside
+        // binding_with_realm, before caller restoration; constructor completion
+        // errors retain their separate caller-side completion boundary.
         let caller = self.binding_current_realm();
         let id = match function { JsValue::Object(object) => object.borrow().realm, _ => None }
             .unwrap_or(self.host_realm);

@@ -38,6 +38,8 @@ mod with;
 mod completions;
 #[path = "compiler_chains.rs"]
 mod chains;
+#[path = "compiler_constructors.rs"]
+mod constructors;
 #[path = "compiler_classes.rs"]
 mod classes;
 #[path = "compiler_templates.rs"]
@@ -1527,11 +1529,7 @@ impl Compiler {
                 args,
                 optional: false,
             } if matches!(&callee.kind, ExprKind::Super) => {
-                // `super(...)` in a derived constructor: construct the
-                // super-constructor recorded on the active frame and use its
-                // result to initialize `this`.
-                let arguments = self.call_arguments(args)?;
-                self.emit(Instruction::SuperCall(dst, arguments));
+                self.super_constructor_call(dst, args, expression.span)?;
             }
             ExprKind::Call {
                 callee,

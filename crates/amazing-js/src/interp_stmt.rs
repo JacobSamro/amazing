@@ -7,6 +7,9 @@
 // ForIn head initializer ordering adapted from boa-dev/boa
 // (core/engine/src/bytecompiler/statement/loop.rs::compile_for_in_loop)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
+// Live GetSuperConstructor/SuperCall and original-constructor instance elements
+// adapted from lucid-softworks/lumen (crates/lumen/src/eval.rs)
+// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // GetTemplateObject registry/cache algorithm adapted from lucid-softworks/lumen
 // (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Stable parse-site tokens replace upstream pointer identity; UTF-16 values and realms remain Amazing-owned.
@@ -1948,6 +1951,37 @@ impl Interpreter {
             _ => self.assign_target(target, value.clone(), env),
         }
     }
+    /// Original FunctionEnvironment function retained across lexical arrows.
+    fn super_call_function(&self) -> Result<Obj, Throw> {
+        match self.frames.last().and_then(|frame| frame.super_constructor.clone()) {
+            Some(JsValue::Object(function)) => Ok(function),
+            _ => Err(Throw::syntax_error("super() used outside a derived constructor")),
+        }
+    }
+
+    /// GetSuperConstructor snapshots F.[[Prototype]] before argument evaluation.
+    /// F is an ordinary ECMAScript function; its nullable prototype need not
+    /// be a constructor until the subsequent SuperCall has evaluated argv.
+    fn live_super_constructor(&self) -> Result<JsValue, Throw> {
+        let function = self.super_call_function()?;
+        let prototype = function.borrow().proto.clone();
+        Ok(prototype.map_or(JsValue::Null, JsValue::Object))
+    }
+
+    fn bind_super_this(&mut self, environment: &EnvHandle, result: &JsValue, function: &Obj) -> Result<(), Throw> {
+        // Construct ran already: a second super() still runs its constructor
+        // before BindThisValue rejects, and fields run only after successful bind.
+        environment.initialize_this(result.clone())?;
+        if let Some(frame) = self.frames.last_mut() {
+            frame.this = result.clone();
+        }
+        let elements = function.borrow().class_elements.clone();
+        if let Some(elements) = elements {
+            initialize_instance_elements(self, result, &elements)?;
+        }
+        Ok(())
+    }
+
     fn call_expr(
         &mut self,
         c: &ast::Expr,
@@ -1956,21 +1990,12 @@ impl Interpreter {
         e: &EnvHandle,
     ) -> Result<JsValue, Throw> {
         if matches!(&c.kind, ExprKind::Super) {
-            let frame = self.frames.last().ok_or_else(|| Throw::syntax_error("super() used outside a constructor"))?;
-            let constructor = frame.super_constructor.clone().ok_or_else(|| Throw::syntax_error("super() used outside a derived constructor"))?;
-            let new_target = frame.new_target.clone().ok_or_else(|| Throw::type_error("derived constructor requires new"))?;
-            let own_function = frame.own_function.clone();
+            let new_target = self.current_new_target().ok_or_else(|| Throw::type_error("derived constructor requires new"))?;
+            let function = self.super_call_function()?;
+            let constructor = self.live_super_constructor()?;
             let argv = self.eval_args(args, e)?;
             let result = self.construct_with_new_target(&constructor, argv, new_target)?;
-            e.initialize_this(result.clone())?;
-            if let Some(frame) = self.frames.last_mut() {
-                frame.this = result.clone();
-            }
-            if let Some(own_function) = own_function {
-                if let Some(elements) = own_function.borrow().class_elements.clone() {
-                    initialize_instance_elements(self, &result, &elements)?;
-                }
-            }
+            self.bind_super_this(e, &result, &function)?;
             return Ok(result);
         }
         let Some((f, this)) = self.chain_callee(c, e)? else { return Ok(JsValue::Undefined); };
@@ -2164,7 +2189,7 @@ impl Interpreter {
             }
         } else { this };
         let derived_constructor = o.borrow().derived_constructor.clone();
-        if o.borrow().class_constructor && new_target.is_none() {
+        if o.borrow().class_constructor && new_target.is_none() && !is_default_class_constructor(&o) {
             return Err(Throw::type_error("class constructor requires new"));
         }
         let lexical_super_constructor = o.borrow().lexical_super_constructor.clone();
@@ -2186,13 +2211,15 @@ impl Interpreter {
             context_id: CallFrame::next_context_id(),
             this: this.clone(),
             home: fun.home.clone(),
-            super_constructor: derived_constructor.as_ref().map(|meta| meta.parent.clone()).or(lexical_super_constructor),
+            // Retain the original FunctionEnvironment function, not its
+            // definition-time prototype. Lexical arrows keep this same F.
+            super_constructor: derived_constructor.as_ref().map(|_| JsValue::Object(o.clone())).or(lexical_super_constructor),
             new_target: new_target.clone().or(lexical_new_target.clone()),
             own_function: Some(o.clone()),
         });
         let previous_completion = self.completion.clone();
         let previous_strict = self.strict_eval_context;
-        if interpreted { self.strict_eval_context = strict_function; }
+        if interpreted || is_default_class_constructor(&o) { self.strict_eval_context = strict_function; }
         self.completion = None;
         let previous_tail_calls = std::mem::replace(&mut self.tail_calls_allowed, false);
         let previous_tail_resource_base =
@@ -2271,15 +2298,9 @@ impl Interpreter {
                         }
                         e.mark_this_uninitialized();
                         if derived_constructor.as_ref().is_some_and(|meta| meta.implicit) {
-                            let parent = &derived_constructor.as_ref().expect("derived parent").parent;
-                            let bound = self.construct_with_new_target(parent, args.clone(), new_target.clone().expect("newTarget"))?;
-                            e.initialize_this(bound.clone())?;
-                            if let Some(frame) = self.frames.last_mut() {
-                                frame.this = bound.clone();
-                            }
-                            if let Some(elements) = o.borrow().class_elements.clone() {
-                                initialize_instance_elements(self, &bound, &elements)?;
-                            }
+                            let parent = self.live_super_constructor()?;
+                            let bound = self.construct_with_new_target(&parent, args.clone(), new_target.clone().expect("newTarget"))?;
+                            self.bind_super_this(&e, &bound, &o)?;
                         }
                     } else {
                         if !fun.is_arrow { e.bind_this(this.clone()); }
@@ -2481,6 +2502,11 @@ impl Interpreter {
         }
         if Self::is_bound_function(f) {
             return self.invoke_bound_function(f, args, Some(new_target));
+        }
+        // A default class builtin owns allocation and instance initialization.
+        // Do not pre-read NewTarget.prototype or overwrite an existing parent result.
+        if is_default_class_constructor(&o) {
+            return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
         }
         let derived = o.borrow().derived_constructor.is_some();
         if derived {
@@ -2693,7 +2719,7 @@ impl Interpreter {
         JsValue::Object(handle)
     }
     fn method_value(&self, m: &ast::ClassMethod, e: &EnvHandle, class_method: bool) -> JsValue {
-        if self.callable_vm_enabled() && m.kind != ast::MethodKind::Constructor {
+        if self.callable_vm_enabled() {
             if let Ok(code) = vm::compile_class_method(m, class_method || self.strict_eval_context) {
                 let value = code.instantiate(self, e);
                 if let JsValue::Object(function) = &value {

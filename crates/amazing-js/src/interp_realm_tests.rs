@@ -254,15 +254,31 @@ mod realm_tests {
         let mut i = Interpreter::new();
         let child = i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
         for (source, error_name, construct) in [
-            ("(class {})", "TypeError", false),
+            ("(class { constructor() {} })", "TypeError", false),
+            ("(class extends Object { constructor() { super(); } })", "TypeError", false),
             ("(class extends Object { constructor() { return null; } })", "TypeError", true),
             ("(class extends Object { constructor() {} })", "ReferenceError", true),
         ] {
             let class = i.binding_eval_in_realm(child, source).unwrap();
             let error = if construct { i.construct(&class, vec![]) } else { i.call_value(&class, JsValue::Undefined, vec![]) }.unwrap_err();
             let error = i.normalize_throw(error);
-            let prototype = i.run_script(&format!("{error_name}.prototype")).unwrap();
-            assert_eq!(native_object_get_prototype_of(&mut i, JsValue::Undefined, vec![error.0]).unwrap(), prototype);
+            // [[Call]] rejects after callee context installation. Derived
+            // [[Construct]] completion errors occur after caller restoration.
+            let prototype = if construct {
+                i.run_script(&format!("{error_name}.prototype")).unwrap()
+            } else {
+                i.binding_eval_in_realm(child, &format!("{error_name}.prototype")).unwrap()
+            };
+            assert_eq!(native_object_get_prototype_of(&mut i, JsValue::Undefined, vec![error.0]).unwrap(), prototype, "{source}");
+        }
+        // Default constructor creation and [[Call]] use the builtin context;
+        // these observations preserve the former implicit-class inputs with
+        // their genuine callee-realm expectation, separately from explicit F.
+        let prototype = i.binding_eval_in_realm(child, "TypeError.prototype").unwrap();
+        for source in ["(class {})", "(class extends Object {})"] {
+            let class = i.binding_eval_in_realm(child, source).unwrap();
+            let error = i.call_value(&class, JsValue::Undefined, vec![]).unwrap_err();
+            assert_eq!(native_object_get_prototype_of(&mut i, JsValue::Undefined, vec![error.0]).unwrap(), prototype, "{source}");
         }
     }
 
@@ -299,5 +315,52 @@ mod realm_tests {
         i.global_env = global;
     }
 
+
+
+    #[test]
+    fn strict_tail_class_calls_keep_callee_errors_and_derived_completion_keeps_caller() {
+        for ast in [false, true] {
+            let mut i = Interpreter::new();
+            i.force_ast_callables = ast;
+            let child = i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
+            let child_type = i.binding_eval_in_realm(child, "TypeError.prototype").unwrap();
+            let parent_type = i.run_script("TypeError.prototype").unwrap();
+            let parent_reference = i.run_script("ReferenceError.prototype").unwrap();
+            for class_source in [
+                "(class {})", "(class extends Object {})",
+                "(class { constructor() {} })",
+                "(class extends Object { constructor() { super(); } })",
+            ] {
+                let class = i.binding_eval_in_realm(child, class_source).unwrap();
+                i.global_env.declare_var("ForeignClass", class).unwrap();
+                for tail in [
+                    "ForeignClass()", "ForeignClass.call(null)",
+                    "ForeignClass.apply(null, [])", "Reflect.apply(ForeignClass, null, [])",
+                    "ForeignClass.bind(null)()", "new Proxy(ForeignClass, {})()",
+                ] {
+                    // The strict frame exits before the forwarded call. Class
+                    // rejection still belongs to the admitted callee context,
+                    // including native forwarding adapters in the trampoline.
+                    let source = format!("(function(){{'use strict';return {tail};}})()");
+                    let error = i.run_script(&source).unwrap_err();
+                    let error = i.normalize_throw(error);
+                    assert_eq!(native_object_get_prototype_of(&mut i, JsValue::Undefined,
+                        vec![error.0]).unwrap(), child_type, "AST={ast} {class_source} {tail}");
+                }
+            }
+            for (source, prototype) in [
+                ("(class extends Object { constructor() { return null; } })", parent_type),
+                ("(class extends Object { constructor() {} })", parent_reference),
+            ] {
+                let class = i.binding_eval_in_realm(child, source).unwrap();
+                i.global_env.declare_var("ForeignClass", class).unwrap();
+                let error = i.run_script("(function(){'use strict';return new ForeignClass;})()")
+                    .unwrap_err();
+                let error = i.normalize_throw(error);
+                assert_eq!(native_object_get_prototype_of(&mut i, JsValue::Undefined,
+                    vec![error.0]).unwrap(), prototype, "AST={ast} {source}");
+            }
+        }
+    }
 
 }
