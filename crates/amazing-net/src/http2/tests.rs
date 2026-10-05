@@ -694,9 +694,12 @@ fn authenticated_h2_pull_stream_yields_data_before_second_frame() {
         },
     )
     .unwrap();
+    let source = response.source();
+    assert!(!source.is_local_file());
     assert_eq!(response.next_chunk().unwrap(), Some(b"hel".to_vec()));
     assert_eq!(response.next_chunk().unwrap(), Some(b"lo".to_vec()));
     assert_eq!(response.next_chunk().unwrap(), None);
+    assert_eq!(source, response.source());
     thread.join().unwrap().unwrap();
 }
 

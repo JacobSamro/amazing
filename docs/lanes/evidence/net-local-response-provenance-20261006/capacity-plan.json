@@ -1,0 +1,14 @@
+{
+  "source": "71641676bf54edbffb54baccdfd2f9e0f05e0874",
+  "base": "570b0718a22e6b5bc34a05ff0f13a6955e873973",
+  "prebootstrap_public_statvfs_budget_gib": 14.125,
+  "before_workspace_engine_rerun": false,
+  "before_native_engine_rerun": false,
+  "before_csp_driver_measurement": true,
+  "inside_engine_actual_tmp_guard_gib": 12,
+  "raw_source_generated_source_all_elf": "canonical native /tmp, helper terminal manifests and all ELF retained; no live cleanup",
+  "compact_only": "explicit HOME compact paths; relative supported --compact-root",
+  "profile": "line-tables-only DEV/TEST CARGO_INCREMENTAL0 default4/8 finite7200",
+  "prior_native_cold_target_bytes": 8988945869,
+  "retire_after_retention": false
+}

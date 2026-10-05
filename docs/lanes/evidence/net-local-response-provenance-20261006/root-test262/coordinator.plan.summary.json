@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "backend": "pooled",
+  "source_commit": "8e2848bf0134502b88e08c0d6d74ba6bf6434063",
+  "groups": [
+    [
+      0,
+      4,
+      8,
+      12
+    ],
+    [
+      1,
+      5,
+      9,
+      13
+    ],
+    [
+      2,
+      6,
+      10,
+      14
+    ],
+    [
+      3,
+      7,
+      11,
+      15
+    ]
+  ],
+  "shards": 16,
+  "boxes": 4,
+  "jobs_per_shard": 4,
+  "timeout_seconds": 60,
+  "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+  "started_ns": 1791233759909091000
+}

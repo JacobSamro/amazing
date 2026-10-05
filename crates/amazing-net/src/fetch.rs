@@ -68,6 +68,57 @@ impl Default for FetchOptions {
 /// Fetches `input` (an `http`/`https`/`file` URL, or a bare filesystem
 /// path) into a buffered [`Response`].
 pub fn fetch(input: &str, options: &FetchOptions) -> Result<Response, NetError> {
+    fetch_received(input, options).map(ReceivedResponse::into_response)
+}
+
+/// Opaque provenance from the actual successful native loader route. A copied
+/// token retains that fact without copying a response body. It says nothing
+/// about body completion, Document identity or Reporting authority.
+///
+/// ```compile_fail
+/// use amazing_net::ReceivedSource;
+/// let forged = ReceivedSource { local_file: true };
+/// ```
+/// ```compile_fail
+/// use amazing_net::ReceivedSource;
+/// let forged = ReceivedSource::default();
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReceivedSource {
+    local_file: bool,
+}
+impl ReceivedSource {
+    pub(super) const LOCAL_FILE: Self = Self { local_file: true };
+    pub(super) const NETWORK: Self = Self { local_file: false };
+    pub fn is_local_file(self) -> bool { self.local_file }
+}
+
+/// An actual synchronous loader receipt. Its source is minted only in the
+/// concrete filesystem/HTTP router; a bare path is never guessed to be a URL.
+/// The response can be inspected or consumed, but callers cannot replace its
+/// response or fabricate source provenance.
+///
+/// ```compile_fail
+/// use amazing_net::{ReceivedResponse, ReceivedSource, Response};
+/// fn forge(response: Response) -> ReceivedResponse {
+///     ReceivedResponse { response, source: ReceivedSource::LOCAL_FILE }
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct ReceivedResponse {
+    response: Response,
+    source: ReceivedSource,
+}
+impl ReceivedResponse {
+    pub fn response(&self) -> &Response { &self.response }
+    pub fn source(&self) -> ReceivedSource { self.source }
+    pub fn is_local_file(&self) -> bool { self.source.is_local_file() }
+    pub fn into_response(self) -> Response { self.response }
+}
+/// Like [`fetch`], retaining the successful router's actual source provenance.
+/// Errors never produce a receipt; network redirects retain network provenance
+/// and cannot authorize a filesystem read. Response URL text is not authority.
+pub fn fetch_received(input: &str, options: &FetchOptions) -> Result<ReceivedResponse, NetError> {
     let trimmed = input.trim_matches(|c: char| c <= ' ');
     // Match the URL parser's tab/newline removal when identifying a scheme,
     // while preserving interior bytes in bare filesystem paths.
@@ -80,7 +131,7 @@ pub fn fetch(input: &str, options: &FetchOptions) -> Result<Response, NetError> 
             Path::new(trimmed),
             trimmed.to_string(),
             options.max_response_bytes,
-        );
+        ).map(|response| ReceivedResponse { response, source: ReceivedSource::LOCAL_FILE });
     }
 
     let mut current = ParsedUrl::parse(trimmed)?;
@@ -92,13 +143,14 @@ pub fn fetch(input: &str, options: &FetchOptions) -> Result<Response, NetError> 
             "file" => {
                 let fs_path = current.to_file_path()?;
                 let reported = current.to_string();
-                return read_file_response(&fs_path, reported, options.max_response_bytes);
+                return read_file_response(&fs_path, reported, options.max_response_bytes)
+                    .map(|response| ReceivedResponse { response, source: ReceivedSource::LOCAL_FILE });
             }
             other => return Err(NetError::UnsupportedScheme(other.to_string())),
         };
 
         if !is_redirect(response.status) {
-            return Ok(response);
+            return Ok(ReceivedResponse { response, source: ReceivedSource::NETWORK });
         }
         redirects += 1;
         if redirects > MAX_REDIRECTS {
@@ -194,6 +246,10 @@ fn content_type_for(path: &Path) -> &'static str {
 }
 
 #[cfg(test)]
+#[path = "fetch/received_tests.rs"]
+mod received_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::env;
@@ -203,7 +259,7 @@ mod tests {
     use crate::http::tests::serve;
 
     /// Builds a `file:///` URL from a local path on any platform.
-    fn file_url_of(path: &Path) -> String {
+    pub(super) fn file_url_of(path: &Path) -> String {
         let s = path.to_string_lossy().replace('\\', "/");
         if s.starts_with('/') {
             format!("file://{s}")
@@ -212,7 +268,7 @@ mod tests {
         }
     }
 
-    fn temp_file(label: &str, ext: &str, contents: &[u8]) -> std::path::PathBuf {
+    pub(super) fn temp_file(label: &str, ext: &str, contents: &[u8]) -> std::path::PathBuf {
         let mut path = env::temp_dir();
         path.push(format!(
             "ferric-net-{label}-{}-{}.{ext}",
@@ -336,6 +392,10 @@ mod tests {
         assert_eq!(resp.text().as_deref(), Some("plain"));
         assert_eq!(resp.url, reported);
         assert_eq!(resp.content_type(), Some("text/plain"));
+        let actual = fetch_received(&reported, &FetchOptions::default()).unwrap();
+        assert!(actual.is_local_file());
+        assert_eq!(actual.response().url, reported);
+        assert_eq!(actual.into_response().body, resp.body);
         let _ = fs::remove_file(&path);
     }
 

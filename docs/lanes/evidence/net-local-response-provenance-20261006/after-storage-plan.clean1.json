@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "ticket": "net-local-response-provenance-20261006",
+  "source": "71641676bf54edbffb54baccdfd2f9e0f05e0874",
+  "phase": "after",
+  "job": "router-71641676-initial",
+  "scratch_parent": "/tmp/amazing-native-storage",
+  "output_root": "/tmp/amazing-native-retained/net-local-response-provenance-20261006/router-71641676-initial",
+  "retained_root": "/tmp/amazing-native-retained/net-local-response-provenance-20261006/router-71641676-initial/retained",
+  "build_budget_bytes": 10737418240,
+  "retention_budget_bytes": 134217728,
+  "bootstrap_budget_bytes": 2147483648,
+  "reserve_bytes": 2147483648,
+  "retention_method": "hardlink-or-copy",
+  "elf_policy": "all",
+  "retire_after_retention": false,
+  "compact_root": "/home/user/amazing/out/net-local-response-provenance-20261006/router-71641676-initial/compact",
+  "summary_path": "/home/user/amazing/out/net-local-response-provenance-20261006/router-71641676-initial/compact/storage.summary.json",
+  "baseline_source": "570b0718a22e6b5bc34a05ff0f13a6955e873973",
+  "baseline_manifest": "/tmp/amazing-native-retained/net-local-response-provenance-20261006/csp-baseline-570b0718-initial/retained/manifests/csp-baseline-570b0718-initial.json"
+}

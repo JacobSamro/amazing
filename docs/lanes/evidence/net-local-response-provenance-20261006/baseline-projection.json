@@ -1,0 +1,39 @@
+{
+  "base": "570b0718a22e6b5bc34a05ff0f13a6955e873973",
+  "native_source": "f18b8d17ea029f001aabe83fe05f3ae0925652b9",
+  "native_job": "4b811ec123e34278ad50b6941f319acf",
+  "native_actual_exit": 0,
+  "closure": [
+    "crates/amazing-net",
+    "crates/amazing-net-tls",
+    "crates/amazing-fetch",
+    "crates/amazing-net-brotli"
+  ],
+  "closure_diff_paths": [],
+  "native_summary": {
+    "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/navigation-csp-source-loan-sourcefix/after-compact/after.summary.json",
+    "bytes": 373096,
+    "sha256": "86c3b72d4eb3a16be2c767ca7848af5f79c2e4a0c57da503a7442baf996f0457"
+  },
+  "workspace_source": "4be257c938410d303f68c66324af68f1efcaa850",
+  "workspace_job": "workspace-a1e4894f952f4c0e86b54795f8f7b9ea",
+  "workspace_counts": {
+    "doctests": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 31
+    },
+    "nextest": {
+      "failed": 0,
+      "passed": 4956,
+      "skipped": 17
+    }
+  },
+  "workspace_code_cargo_diff_paths": [],
+  "workspace_manifest": {
+    "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/integrator-primary/net-loan-current-workspace/qualified-launcher-c294/compact/workspace.manifest.json",
+    "bytes": 5600,
+    "sha256": "64eaaebe2d6b02173ac3c0b43cc9100ed1f5a2edc21945be1cad7cfa1ffef075"
+  },
+  "installed_csp_baseline": "fresh published570 driver measurement; no identical-driver claim"
+}

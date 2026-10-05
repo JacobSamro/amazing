@@ -64,7 +64,7 @@ pub mod response;
 pub mod stream;
 pub mod url;
 
-pub use fetch::{fetch, FetchOptions};
+pub use fetch::{fetch, fetch_received, FetchOptions, ReceivedResponse, ReceivedSource};
 pub use headers::Headers;
 pub use response::Response;
 pub use stream::{fetch_stream, StreamOptions, StreamingResponse};

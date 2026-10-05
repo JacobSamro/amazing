@@ -2,7 +2,7 @@
 //! Existing `fetch` remains the buffered compatibility entry point.
 use crate::{
     coding::stream::{decode_layer, CapSource, CountSource, IoSource, Source},
-    fetch::{FetchOptions, MAX_REDIRECTS},
+    fetch::{FetchOptions, ReceivedSource, MAX_REDIRECTS},
     headers::Headers,
     http, http2, NetError, ParsedUrl,
 };
@@ -54,10 +54,13 @@ pub struct StreamingResponse {
     pub reason: String,
     pub headers: Headers,
     body: Box<dyn Source>,
+    source: ReceivedSource,
     chunk_bytes: usize,
     done: bool,
 }
 impl StreamingResponse {
+    /// Actual successful loader route, available before body drainage.
+    pub fn source(&self) -> ReceivedSource { self.source }
     pub fn next_chunk(&mut self) -> Result<Option<Vec<u8>>, NetError> {
         if self.done {
             return Ok(None);
@@ -179,6 +182,7 @@ fn file_stream(
         ratio: None,
     });
     Ok(StreamingResponse {
+        source: ReceivedSource::LOCAL_FILE,
         url,
         status: 200,
         reason: "OK".into(),
@@ -306,6 +310,7 @@ pub(crate) fn open_h2<S: Read + Write + 'static>(
         pipeline(raw, &headers, options, config, true)?
     };
     Ok(StreamingResponse {
+        source: ReceivedSource::NETWORK,
         url: url.to_string(),
         status,
         reason: String::new(),
@@ -356,6 +361,7 @@ fn open_http1(
         )?
     };
     Ok(StreamingResponse {
+        source: ReceivedSource::NETWORK,
         url: url.to_string(),
         status,
         reason,

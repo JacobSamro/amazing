@@ -1,0 +1,17 @@
+{
+  "owner": "root",
+  "source": "71641676bf54edbffb54baccdfd2f9e0f05e0874",
+  "original_actual_exit": 3,
+  "original_job": "d1874b9cf5994deb84f432a621c7e410",
+  "original_reason": "Wrong retained manifest path, no engine phases executed",
+  "clean_rerun_allowance_used": 1,
+  "before_actual_exit": 0,
+  "before_fetch_exit": 0,
+  "actual_native_baseline_manifest": {
+    "bytes": 179193,
+    "path": "/tmp/amazing-native-retained/net-local-response-provenance-20261006/csp-baseline-570b0718-initial/retained/manifests/csp-baseline-570b0718-initial.json",
+    "sha256": "9015c063e81e4c2299c462f1d18af5d25210325d93a9c90e766a2711942e2a59"
+  },
+  "source_command_unchanged": true,
+  "storage_sha256": "1623cc7deac5167949f39ae86ebb3f5a09008e6031d62af656377ace9b3acbda"
+}

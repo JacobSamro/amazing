@@ -1,0 +1,67 @@
+{
+  "state": "source716-whole-native-storage-packet-frozen-unqualified-unallocated",
+  "source": "71641676bf54edbffb54baccdfd2f9e0f05e0874",
+  "base": "570b0718a22e6b5bc34a05ff0f13a6955e873973",
+  "source_tree": "/Users/jMac/Projects/OpenSource/amazing-wt/net-local-response-provenance-20261006",
+  "source_paths": {
+    "crates/amazing-net/src/fetch.rs": {
+      "bytes": 17172,
+      "sha256": "3dbf0dad8db2ca5534d12bdc7395739d66b1f052cb12586c0a7b8fa5a2cd18be"
+    },
+    "crates/amazing-net/src/fetch/received_tests.rs": {
+      "bytes": 8926,
+      "sha256": "ca0608145cea6db70735ec468349a6fb28accd86e844e6ea5d83f58e56aaf263"
+    },
+    "crates/amazing-net/src/http2/tests.rs": {
+      "bytes": 29111,
+      "sha256": "1762fae5d43ff20b3ebbc1926988d3701c80e8e8610889ab8d4e7b37c1d5cf74"
+    },
+    "crates/amazing-net/src/lib.rs": {
+      "bytes": 6649,
+      "sha256": "0fdfc517b73e3815b0a98406a38b83f9d555449678a6289427d4cef76bf200eb"
+    },
+    "crates/amazing-net/src/stream.rs": {
+      "bytes": 26134,
+      "sha256": "e56eec28797dfba155948e9b85bdd9eb47e60326bc83a0446af34495b13d85c8"
+    },
+    "docs/lanes/net-local-response-provenance.md": {
+      "bytes": 2915,
+      "sha256": "c3aa94c3aec754ec0499bdead42918d85b63352fce6dddce66d312613c3e9613"
+    }
+  },
+  "existing_source_prerequisite": "895beba19509f419a37fd4c65df8abbcb5b1143a ONLY fetch.rs/lib.rs native delta, adapted on published570",
+  "native_groups_authored": 11,
+  "authenticated_h2_original_assertions_retained": true,
+  "original_assertions_retained": true,
+  "scope": "Fresh published570 CSP/browser baseline only; reuse exact native625 dependency closure and authenticated publishedworkspace4956/docs31. Full candidateworkspace/docs/browser/native625+11/original11CSP/process13 retained.",
+  "gate_claim": false,
+  "installed_claim": false,
+  "commands": {
+    "before-command.txt": "349db1e2fc532500389b69d4b1bf827c1fd78320e9a6d60488a3559448ba9491",
+    "after-command.txt": "c3a9fc9fec194bdbe59d77c066931775ab0cb6914ad2c9b4db381c6685dc45fc"
+  },
+  "launches": {
+    "before-launch.sh": "ec3ec94857e717653d33449eff6669fc09a5db4e5db1410c61b09a8fa45dad45",
+    "after-launch.sh": "633e9bc545e0fb2c196e7fe0a9e40b3cdd022160b21ef35ab738a120555de459"
+  },
+  "gate_body_sha256": "d7150ced082dc5c87036ebb50fddaabc9f25c8230a013d37f517a82d74f4993e",
+  "capacity_sha256": "a45be4196757ed9a5aa1882047e21b3b526d6744eccfdf75ef66ca867c912392",
+  "public_source": "c2942529f9c2df4dfc8f1fa3b4494d4d42878e50",
+  "public_helpers": {
+    "scripts/linux-run.sh": "6c960c2a394d659990484388a15bd887f4db4f0793244669d9f88aafe08a1c28",
+    "scripts/source-upload.py": "d5b9b8469b7eb160cc2bf923aac48470b6a71b2a040b3a08e19a4c915219e908",
+    "scripts/completed-job.py": "9c2bde2eeaa2507e5a14d2cc17599908d1c2ea9b1418ba76a78d04a1ff3b15b1",
+    "scripts/nextest-compact.py": "cddc4e6ec9f9ea5c253e50bb3ac7ff02d64389b9dc696370cb02dc417092cd80",
+    "scripts/native-storage-plan.py": "3c4df2f01150f9da8b53695df781d2ee83fd7d79a92a1d9b33449d14bf763dbe",
+    "scripts/native-storage-retention.py": "2628dc352f594177a540961888f8157517ca9603847716731b04146f9033d489"
+  },
+  "alias_proposed": "net-local-response-provenance-20261006",
+  "tooling_allowance": "initial plus ONE clean tooling rerun; genuine engine failures require whole source correction",
+  "previous_frozen_source": "6dd23463a548696005e3622347fe450b8b550ca4",
+  "source_correction": "external compile-fail control imports ReceivedSource so rejection witnesses private construction, rather than missing name",
+  "storage_plans": {
+    "before-storage-plan.json": "391485ff104400944b07cf558329c8363baaacadd9788f6ec4f36a4a9089a6ca",
+    "after-storage-plan.json": "0553ea379a2f2e38d013621821d7dc1c853c24a0445bf906374da56c62b539d3"
+  },
+  "baseline_projection_sha256": "25ae2cdd86d601d687ef52ea0841b26fca5c66e9f8cff9c6b1976592ed9dee3d"
+}

@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "state": "ALL_REQUIRED_GATES_PASSED",
+  "tested_source": "8e2848bf0134502b88e08c0d6d74ba6bf6434063",
+  "recorded_published_base": "c220413d7778de7a70ed56c8bf5adc81858fa744",
+  "root_workspace_counts": {
+    "doctests": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 34
+    },
+    "nextest": {
+      "failed": 0,
+      "passed": 4980,
+      "skipped": 17
+    }
+  },
+  "root_workspace_actual_exit": 0,
+  "root_workspace_fetch_exit": 0,
+  "root_test262": {
+    "shards": 16,
+    "pools": 4,
+    "counts": {
+      "files": {
+        "fail": 702,
+        "pass": 52705,
+        "skipped": 294,
+        "unsupported": 171
+      },
+      "variants": {
+        "fail": 1355,
+        "pass": 101223,
+        "unsupported": 340
+      }
+    },
+    "lost_files": [],
+    "lost_variants": [],
+    "coordinator_exit": 0,
+    "all_native_and_fetch_exit": 0
+  },
+  "lane_qualified_source": "71641676bf54edbffb54baccdfd2f9e0f05e0874",
+  "own_corpus": "Original625\u2192636 native; CSP32files/81subtests and all13processgroups retained; authentic qualifications committed",
+  "initial_workspace_tool_failure": "source upload255 before engine; ONEclean succeeded",
+  "raw_and_all_elf": "retained on captured native sandbox endpoints"
+}

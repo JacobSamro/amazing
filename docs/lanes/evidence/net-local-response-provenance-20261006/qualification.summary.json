@@ -1,0 +1,162 @@
+{
+  "schema": 1,
+  "recorded_ready_base": "c220413d7778de7a70ed56c8bf5adc81858fa744",
+  "qualified_source": "71641676bf54edbffb54baccdfd2f9e0f05e0874",
+  "qualified_baseline": "570b0718a22e6b5bc34a05ff0f13a6955e873973",
+  "source_projection": [
+    {
+      "path": "crates/amazing-net/src/fetch.rs",
+      "bytes": 17172,
+      "sha256": "3dbf0dad8db2ca5534d12bdc7395739d66b1f052cb12586c0a7b8fa5a2cd18be"
+    },
+    {
+      "path": "crates/amazing-net/src/fetch/received_tests.rs",
+      "bytes": 8926,
+      "sha256": "ca0608145cea6db70735ec468349a6fb28accd86e844e6ea5d83f58e56aaf263"
+    },
+    {
+      "path": "crates/amazing-net/src/http2/tests.rs",
+      "bytes": 29111,
+      "sha256": "1762fae5d43ff20b3ebbc1926988d3701c80e8e8610889ab8d4e7b37c1d5cf74"
+    },
+    {
+      "path": "crates/amazing-net/src/lib.rs",
+      "bytes": 6649,
+      "sha256": "0fdfc517b73e3815b0a98406a38b83f9d555449678a6289427d4cef76bf200eb"
+    },
+    {
+      "path": "crates/amazing-net/src/stream.rs",
+      "bytes": 26134,
+      "sha256": "e56eec28797dfba155948e9b85bdd9eb47e60326bc83a0446af34495b13d85c8"
+    },
+    {
+      "path": "docs/lanes/net-local-response-provenance.md",
+      "bytes": 2915,
+      "sha256": "c3aa94c3aec754ec0499bdead42918d85b63352fce6dddce66d312613c3e9613"
+    }
+  ],
+  "actual_native_exit": 0,
+  "compact_fetch_exit": 0,
+  "native_job": "881bfb54e6ef4c1b83a86b38834e1a1d",
+  "before": {
+    "workspace": 4956,
+    "doctests": 31,
+    "native": 625,
+    "csp_files": 32,
+    "csp_subtests": 81
+  },
+  "after": {
+    "workspace": 4967,
+    "skipped": 17,
+    "doctests": 34,
+    "native": 636,
+    "csp_files": 32,
+    "csp_subtests": 81
+  },
+  "lost": [],
+  "process_original_13": {
+    "amazing-process::receiving_registration accepted_head_is_retained_after_real_completion_and_registration_is_connection_bound": "pass",
+    "amazing-process::receiving_registration captured_owner_ancestry_frame_and_full_policy_are_validated": "pass",
+    "amazing-process::receiving_registration coep_observer_receipts_keep_original_global_and_report_only_disposition": "pass",
+    "amazing-process::receiving_registration csp_admission_failure_has_no_invented_service_id_and_keeps_original_document_snapshot": "pass",
+    "amazing-process::receiving_registration csp_connection_and_framing_failures_preserve_actual_checked_vs_accepted_progress": "pass",
+    "amazing-process::receiving_registration csp_manual_continuation_deduplicates_native_prefix_without_rechecking_redirect_url": "pass",
+    "amazing-process::receiving_registration csp_report_only_response_snapshots_keep_protecting_status_not_target_status": "pass",
+    "amazing-process::receiving_registration csp_source_settings_loan_survives_retirement_before_response_and_manual_continuation": "pass",
+    "amazing-process::receiving_registration fresh_initial_is_explicit_and_never_a_failed_http_response_fallback": "pass",
+    "amazing-process::receiving_registration full_native_context_units_are_carried_without_url_or_scalar_policy_substitution": "pass",
+    "amazing-process::receiving_registration global_identity_cannot_replace_accepted_creation_origin_or_full_coep": "pass",
+    "amazing-process::receiving_registration manual_redirect_uses_retained_private_head_and_admitted_loan_after_retirement": "pass",
+    "amazing-process::receiving_registration source_and_embedding_origin_are_distinct_and_retired_owner_loan_survives": "pass"
+  },
+  "initial_tooling_failure": {
+    "actual_exit": 3,
+    "job": "d1874b9cf5994deb84f432a621c7e410",
+    "reason": "Baseline manifest path omitted retained; no engine phase executed"
+  },
+  "clean_rerun": {
+    "allowance_used": 1,
+    "source_and_command_unchanged": true,
+    "storage_path_only_corrected": true
+  },
+  "metadata_fetch_incident": {
+    "initial_exit": 3,
+    "reason": "Requested nonexistent original-csp.compact; corrected exact catalog fetch actual0; no extra engine rerun"
+  },
+  "native_vs_installed_scope": "Successful router classification only; original installed CSP subset retained. No claim that new HTML/GUI consumers or full browser platform were installed.",
+  "raw_and_elf_retention": "Canonical native /tmp storage; all ELF/source/raw retained, compact HOME only; no raw recovery",
+  "evidence": {
+    "baseline-projection.json": {
+      "bytes": 1393,
+      "sha256": "25ae2cdd86d601d687ef52ea0841b26fca5c66e9f8cff9c6b1976592ed9dee3d"
+    },
+    "packet.json": {
+      "bytes": 3840,
+      "sha256": "ec01f1ef7eea1b94acce3cea79f8fa9baa45ffa6fdd1d474e1cf9c1d148b54dd"
+    },
+    "after-storage-plan.clean1.json": {
+      "bytes": 1211,
+      "sha256": "1623cc7deac5167949f39ae86ebb3f5a09008e6031d62af656377ace9b3acbda"
+    },
+    "before.endpoint.json": {
+      "bytes": 592,
+      "sha256": "b10be8a696c0ce75e666ab5f892521b06800e8cb3d98c7836b42d60323025c78"
+    },
+    "root-after-clean1-owner.json": {
+      "bytes": 766,
+      "sha256": "a76dd7d595946c85bb6c15d13bc0844e7620197c5d7987248cbc9babba67ac66"
+    },
+    "after.clean1.endpoint.json": {
+      "bytes": 586,
+      "sha256": "fd33bd53eab8a93e9aba466cafb25c721d38934c3ee4012015c71bb77e9b820f"
+    },
+    "capacity-plan.json": {
+      "bytes": 712,
+      "sha256": "a45be4196757ed9a5aa1882047e21b3b526d6744eccfdf75ef66ca867c912392"
+    },
+    "after.endpoint.json": {
+      "bytes": 586,
+      "sha256": "b06d8b5c76dab82414cdfee6de3cea4d7540280b580a93d3d0d8782aeb7baa95"
+    },
+    "before.compact/before.summary.json": {
+      "bytes": 85392,
+      "sha256": "f781963f1b41a744859dcc46524d5b1c73c9a60f8f95cc37b71811f94e8f53d7"
+    },
+    "before.compact/network-corpus.compact.json": {
+      "bytes": 20295,
+      "sha256": "43b093dfc41a852a5b3eb1a3c2335d787829853c961d5851e9105389a3d95c3c"
+    },
+    "before.compact/original-csp.compact.json": {
+      "bytes": 35945,
+      "sha256": "1e3432afe09c5786620c40770251ec43675d42cf921f1e4e00217c0933a9314c"
+    },
+    "before.compact/csp-wpt.compact.json": {
+      "bytes": 35906,
+      "sha256": "425d279d32138c2543ba8563569b67eff70317353ee95fbe9526a059502470a5"
+    },
+    "before.compact/storage.summary.json": {
+      "bytes": 2351,
+      "sha256": "253a05e906ce59d82293d55d03719400eb465a2cfb803f1c7dfb7e1830503231"
+    },
+    "after.clean1.compact/after.summary.json": {
+      "bytes": 370566,
+      "sha256": "16c9399f2116eeb50e02a7dfb2af53b2338dd60d8a21b01f1ff163f083c544a1"
+    },
+    "after.clean1.compact/network-corpus.compact.json": {
+      "bytes": 20149,
+      "sha256": "02167c5fcf624f009c24e27a8e790b03853c4f9d5bd421d3a0d4e298418ba78b"
+    },
+    "after.clean1.compact/workspace.compact.json": {
+      "bytes": 141376,
+      "sha256": "2edc1c927cb2269aaa9194f931104b03f4b831fdfe124bde688fe9305c461476"
+    },
+    "after.clean1.compact/csp-wpt.compact.json": {
+      "bytes": 35900,
+      "sha256": "88672cb6c01dea8e7c7f627d958e4252163d756da5388c8e0200c3a03394661f"
+    },
+    "after.clean1.compact/storage.summary.json": {
+      "bytes": 2617,
+      "sha256": "09807e26c2031168b33b17a7dd1f9c8a406893794807299d8b2722ddbda20a04"
+    }
+  }
+}
