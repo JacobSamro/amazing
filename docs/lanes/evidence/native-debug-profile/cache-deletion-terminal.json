@@ -1,0 +1,20 @@
+{
+  "actual_exit": 0,
+  "observed_utc": "2026-10-05T10:16:18.783855+00:00",
+  "stderr": "",
+  "box_id": "bx_fge8dzbh",
+  "live_jobs": [],
+  "target_roots": [
+    "/tmp/amazing-native-target-css-image-paint-ac72a9687c8a",
+    "/tmp/amazing-native-target-css-image-paint-e1773cda7544",
+    "/home/user/amazing/target",
+    "/home/user/amazing/target-shell-shell"
+  ],
+  "classified_allocated_bytes": 8930975744,
+  "before_available_bytes": 0,
+  "after_available_bytes": 8861167616,
+  "released_available_bytes": 8861167616,
+  "protected_elf_paths_verified": 1430,
+  "source_raw_paths_untouched": true,
+  "deleted_file_count": 34063
+}

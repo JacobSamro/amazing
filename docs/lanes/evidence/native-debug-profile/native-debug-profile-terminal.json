@@ -1,0 +1,7 @@
+{
+  "actual_exit": 0,
+  "fetch_exit": 0,
+  "source": "7cefeb9b833b3a84015529e22af7f131148015c4",
+  "command": "python3 scripts/native-debug-profile-check.py",
+  "observed_utc": "2026-10-05T10:25:33.350395+00:00"
+}

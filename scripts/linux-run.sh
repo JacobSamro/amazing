@@ -308,6 +308,9 @@ fi
 bootstrap_native_tools
 bootstrap_native_inputs
 export CARGO_TARGET_DIR=/tmp/amazing-native-target-$LANE CARGO_INCREMENTAL=0
+# Native paired gates keep frame/line diagnostics without full variable DWARF.
+# This changes symbol detail only; test assertions/overflow checks stay configured.
+export CARGO_PROFILE_DEV_DEBUG=line-tables-only CARGO_PROFILE_TEST_DEBUG=line-tables-only
 $JOB_COMMAND"
   ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"
   T0=$(date +%s)

@@ -1,0 +1,16 @@
+{
+  "source": "7cefeb9b833b3a84015529e22af7f131148015c4",
+  "base": "ac72a9687c8a1ff76c3d0eb47db98a321ad263b8",
+  "lane": "css-native-debug-profile-20261005",
+  "command": "python3 scripts/native-debug-profile-check.py",
+  "default_vcpu": 4,
+  "default_ram_gb": 8,
+  "finite_ttl_seconds": 7200,
+  "files": {
+    "/Users/jMac/Projects/OpenSource/amazing-wt/native-debug-profile-source/scripts/linux-run.sh": "3d1cf30093c284348fd6fd96d08b166e31831a3bbe16d751655857e2879eea39",
+    "/Users/jMac/Projects/OpenSource/amazing-wt/native-debug-profile-source/scripts/native-debug-profile-check.py": "a148ef2182a0873c797b96095c583c9e7de317a62d85d3307255adc622585ce5",
+    "/Users/jMac/Projects/OpenSource/amazing-wt/native-debug-profile-source/scripts/boat-lane.py": "adca82065f1cde9631cca5610cc4b3c0e625ca3c90193438a14fd040045f2cba",
+    "/Users/jMac/Projects/OpenSource/amazing-wt/native-debug-profile-source/scripts/completed-job.py": "fffa0b5a6f2904dfc115943db985cd95583d6c4a9a1398f60e965f21fe1f37df",
+    "/Users/jMac/Projects/OpenSource/amazing-wt/native-debug-profile-source/scripts/lane-fetch.sh": "fe4fa79beafef35bbce1ce853f4f3330ae8717b1a6e710675a3bd9892d0d84db"
+  }
+}

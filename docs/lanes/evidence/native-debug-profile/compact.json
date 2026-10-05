@@ -1,0 +1,46 @@
+{
+  "actual_exit": 0,
+  "environment": {
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_TEST_DEBUG": "line-tables-only",
+    "CARGO_INCREMENTAL": "0"
+  },
+  "source_commit": null,
+  "tests_per_profile": 2,
+  "doctests": 1,
+  "commands": [
+    {
+      "name": "line-tests",
+      "exit": 0,
+      "raw_path": "/home/user/amazing/out/css-native-debug-profile-20261005/native-debug-profile/line-tests.log",
+      "raw_sha256": "80c0127e5f1b82babe4c21d214dae94f80ec257855fe1ba8ec73c65eaad29ab0"
+    },
+    {
+      "name": "line-doctests",
+      "exit": 0,
+      "raw_path": "/home/user/amazing/out/css-native-debug-profile-20261005/native-debug-profile/line-doctests.log",
+      "raw_sha256": "cea4064f8968dfe916297d6108354b1eab8516b96e5181caebff0bae81917bfc"
+    },
+    {
+      "name": "full-tests",
+      "exit": 0,
+      "raw_path": "/home/user/amazing/out/css-native-debug-profile-20261005/native-debug-profile/full-tests.log",
+      "raw_sha256": "3d3b61e862bdcf1aa1c98c06e3b89c16fd2f48cef632d9b0bc24f88b8b358a60"
+    }
+  ],
+  "executables": {
+    "line": {
+      "path": "/tmp/amazing-native-target-css-native-debug-profile-20261005/debug/deps/native_profile_contract-68f9453e04cc9ae9",
+      "bytes": 6999464,
+      "sha256": "c5e1b8992a70cf696b7fd5f0c82d258d194fc04347565bc881e3650280fbe63b",
+      "debug_line_present": true
+    },
+    "full": {
+      "path": "/home/user/amazing/out/css-native-debug-profile-20261005/native-debug-profile/full-debug-reference-target/debug/deps/native_profile_contract-3e84345cf6ae4e1d",
+      "bytes": 7035432,
+      "sha256": "de4603fe108160e223d53f9a8acafc50b60d386ef9aaf5f39e41bb98b74b1150",
+      "debug_line_present": true
+    }
+  },
+  "raw_preserved": true
+}
