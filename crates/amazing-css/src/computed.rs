@@ -2169,44 +2169,7 @@ fn valid_overflow(value: &str) -> bool {
     )
 }
 
-fn valid_transform(value: &str) -> bool {
-    if value.trim().eq_ignore_ascii_case("none") {
-        return true;
-    }
-    let tokens = tokenize(value);
-    let Some(components) = top_level_components(&tokens) else {
-        return false;
-    };
-    !components.is_empty() && components.into_iter().all(valid_transform_function)
-}
-
-fn valid_transform_function(tokens: &[Token]) -> bool {
-    let tokens = trim_tokens(tokens);
-    let Some(Token::Function(name)) = tokens.first() else {
-        return false;
-    };
-    let Some(inner) = function_inner(tokens, name) else {
-        return false;
-    };
-    let Some(arguments) = transform_arguments(inner) else {
-        return false;
-    };
-    match name.to_ascii_lowercase().as_str() {
-        "translate" => {
-            (1..=2).contains(&arguments.len())
-                && arguments.iter().all(|arg| valid_transform_length(arg))
-        }
-        "translatex" | "translatey" => arguments.len() == 1 && valid_transform_length(arguments[0]),
-        "scale" => {
-            (1..=2).contains(&arguments.len())
-                && arguments.iter().all(|arg| valid_transform_number(arg))
-        }
-        "scalex" | "scaley" => arguments.len() == 1 && valid_transform_number(arguments[0]),
-        "rotate" | "skewx" | "skewy" => arguments.len() == 1 && valid_transform_angle(arguments[0]),
-        "matrix" => arguments.len() == 6 && arguments.iter().all(|arg| valid_transform_number(arg)),
-        _ => false,
-    }
-}
+fn valid_transform(value: &str) -> bool { crate::transform_values::parse(value).is_some() }
 
 pub(crate) fn transform_arguments(tokens: &[Token]) -> Option<Vec<&[Token]>> {
     let tokens = trim_tokens(tokens);
@@ -2235,25 +2198,6 @@ pub(crate) fn transform_arguments(tokens: &[Token]) -> Option<Vec<&[Token]>> {
     } else {
         top_level_components(tokens)
     }
-}
-
-fn valid_transform_number(tokens: &[Token]) -> bool {
-    matches!(trim_tokens(tokens), [Token::Number(value)] if value.is_finite())
-}
-
-fn valid_transform_length(tokens: &[Token]) -> bool {
-    crate::values::LengthPercentage::parse(&serialize(trim_tokens(tokens))).is_some()
-}
-
-fn valid_transform_angle(tokens: &[Token]) -> bool {
-    matches!(trim_tokens(tokens), [Token::Number(value)] if *value == 0.0)
-        || matches!(
-            trim_tokens(tokens),
-            [Token::Dimension(value, unit)] if value.is_finite() && matches!(
-                unit.to_ascii_lowercase().as_str(),
-                "deg" | "grad" | "rad" | "turn"
-            )
-        )
 }
 
 fn expand_flex_flow(value: &str) -> Option<Vec<(String, String)>> {
@@ -2723,6 +2667,7 @@ pub(crate) fn resolve_with_tree_environment(
     };
     contain_intrinsic::resolve_lengths(&mut style.props, style.root_font_px);
     individual_transforms::resolve(&mut style.props, style.root_font_px);
+    crate::transform_values::resolve(&mut style.props, style.root_font_px);
     font_synthesis::serialize(&mut style.props);
     crate::font_variant::serialize(&mut style.props);
     let border_image_root = if parent.is_none() { style.props.get("font-size").and_then(|css|css.strip_suffix("px")).and_then(|n|n.parse().ok()).unwrap_or(style.root_font_px) } else { style.root_font_px };

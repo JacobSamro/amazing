@@ -197,7 +197,7 @@ impl ResolvedTransform {
                 Transform::Scale(x, y) => ResolvedTransformFunction::Scale(x as f32, y as f32),
                 Transform::SkewX(angle) => ResolvedTransformFunction::SkewX(angle.radians as f32),
                 Transform::SkewY(angle) => ResolvedTransformFunction::SkewY(angle.radians as f32),
-                Transform::Matrix(_) => return None, // matrix decomposition remains on the main thread
+                Transform::Matrix(_) | Transform::Matrix3D(_) | Transform::Translate3D(..) | Transform::TranslateExpression(_) | Transform::Scale3D(_) | Transform::Rotate3D(..) | Transform::Skew(..) | Transform::Perspective(_) => return None, // matrix decomposition remains on the main thread
             });
         }
         let origin = [box_size[0] / 2.0, box_size[1] / 2.0];

@@ -65,6 +65,9 @@ pub mod selectors;
 mod svg_presentation;
 pub mod syntax;
 pub mod values;
+mod transform_values;
+mod transform_matrix;
+pub use transform_matrix::{transform_matrix, TransformMatrix};
 mod viewport_units;
 
 pub use cascade::{

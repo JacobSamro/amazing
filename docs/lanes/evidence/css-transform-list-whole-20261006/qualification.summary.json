@@ -1,0 +1,576 @@
+{
+  "schema": 1,
+  "state": "DONE",
+  "qualified_source": "1c682ab64702a48ebf775b6240004eda74899bdf",
+  "recorded_base": "d265908ea158e34d82084d0c94e8b0f429751cd1",
+  "baseline_source": "1af30cd39b94f4c57d26a8d95ed140da9087f9b7",
+  "baseline_role": "AFTER",
+  "actual_controller_exit": 0,
+  "controller_handle": 20084,
+  "endpoint": {
+    "schema": 2,
+    "lane": "css-transform-angle-successor-20261006",
+    "source_commit": "1c682ab64702a48ebf775b6240004eda74899bdf",
+    "box_id": "bx_ecaj6aj9",
+    "host": "user@178.33.236.118",
+    "port": 19045,
+    "job_id": "f98dd15fd1c844d1bba618fd30b36968",
+    "output_root": "amazing/out/css-transform-angle-successor-20261006/transform-angle-1c682ab6-initial/compact",
+    "command_sha256": "a4b61d0a7354778c950c483b9c8f28da04b459c3613e842564456f64ddf7d30d",
+    "execution_sha256": "4d6a7282a7e76274496025aa4a2659784044ff3e7adba92bc206c6ad72f7610c",
+    "source_archive_sha256": "a1ab4fddf0ed20ad18d144ed5a9de86a9afdbd6bee0bdd4217db2fb6dc93ea56"
+  },
+  "native_exit": 0,
+  "runner_exit": 0,
+  "phase_exits": {
+    "nextest": 0,
+    "doctests": 0,
+    "ensure-wpt": 0,
+    "release-build": 0,
+    "parsing": 0,
+    "css-css-fonts": 0,
+    "css-css-transforms": 0,
+    "css-css-images": 0,
+    "css-CSS2-floats": 0,
+    "css-CSS2-normal-flow": 0,
+    "css-CSS2-positioning": 0,
+    "css-css-backgrounds": 0,
+    "css-css-contain": 0,
+    "css-css-display": 0,
+    "css-css-overflow": 0,
+    "css-css-position": 0,
+    "css-css-ruby": 0,
+    "css-css-sizing": 0,
+    "css-css-tables": 0,
+    "css-css-viewport": 0,
+    "css-css-color": 0,
+    "css-css-cascade": 0,
+    "css-css-conditional": 0,
+    "css-selectors": 0,
+    "css-css-shadow": 0,
+    "image-resources": 0
+  },
+  "counts": {
+    "doctests": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 30
+    },
+    "nextest": {
+      "failed": 0,
+      "passed": 4946,
+      "skipped": 17
+    }
+  },
+  "parsing": {
+    "passed": 4350,
+    "total": 5126,
+    "files": 514,
+    "skipped_non_literal": 169,
+    "gained": 20,
+    "new_failure_count": 0,
+    "same_cohort": true
+  },
+  "render20": {
+    "counts": {
+      "crash": 0,
+      "error": 0,
+      "mismatch": 886,
+      "pass": 1328,
+      "timeout": 0,
+      "unsupported": 0
+    },
+    "gained": [
+      "css__css-transforms__transform-propagate-inherit-boolean-001.html"
+    ],
+    "lost": [],
+    "cohorts": {
+      "css-css-display.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 7,
+          "pass": 28,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-shadow.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 35,
+          "pass": 0,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-color.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 10,
+          "pass": 226,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-selectors.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 9,
+          "pass": 82,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-sizing.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 39,
+          "pass": 99,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-cascade.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 4,
+          "pass": 17,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-backgrounds.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 56,
+          "pass": 78,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-overflow.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 260,
+          "pass": 83,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-fonts.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 8,
+          "pass": 24,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-CSS2-normal-flow.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 5,
+          "pass": 24,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-ruby.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 15,
+          "pass": 52,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-CSS2-positioning.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 2,
+          "pass": 5,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-conditional.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 36,
+          "pass": 30,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-transforms.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 206,
+          "pass": 142,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [
+          "css__css-transforms__transform-propagate-inherit-boolean-001.html"
+        ],
+        "lost": []
+      },
+      "css-css-position.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 9,
+          "pass": 45,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-viewport.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 31,
+          "pass": 56,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-images.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 49,
+          "pass": 92,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-CSS2-floats.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 9,
+          "pass": 30,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-contain.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 74,
+          "pass": 155,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      },
+      "css-css-tables.compact.json": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 22,
+          "pass": 60,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": []
+      }
+    }
+  },
+  "resources": {
+    "cases": 491,
+    "RC21": 226,
+    "counts": {
+      "mismatch": 112,
+      "pass": 318,
+      "unsupported": 23,
+      "crash": 38
+    },
+    "comparison": {
+      "lost": [],
+      "gained": []
+    }
+  },
+  "fetch": {
+    "summary_handle": 8175,
+    "summary_exit": 0,
+    "phases_handle": 13987,
+    "phases_exit": 0,
+    "verified_files": 51,
+    "invalid_path_request": {
+      "handle": 3222,
+      "exit": 3,
+      "reason": "incorrect publication manifest filename; corrected compact-only request, no gate rerun"
+    }
+  },
+  "compact_files": {
+    "release-build.phase.manifest.json": {
+      "bytes": 400,
+      "sha256": "d606e9bea372ec71bc67297b923214619c044ab718755ce64e1f7fd27c4be8f2"
+    },
+    "css-css-display.compact.json": {
+      "bytes": 4834,
+      "sha256": "0ab5b8554171bb85a25d7c6478ad9eb5a0af7e321e7bf7da05bd01bfd033f09d"
+    },
+    "css-css-contain.phase.manifest.json": {
+      "bytes": 1127,
+      "sha256": "d00b932a2a8fb0e4d8cb11dc127c81197f3f37ffc29b243b1e064ee3d0d978b4"
+    },
+    "css-CSS2-normal-flow.phase.manifest.json": {
+      "bytes": 1151,
+      "sha256": "9d07da8eba972762b2e909d86a885c57f154848b91c508f73310518dd7735eb8"
+    },
+    "css-css-overflow.phase.manifest.json": {
+      "bytes": 1132,
+      "sha256": "f039d9e50f069ee3579cd77065e93265a82adb618a81cd525388c69e1734f691"
+    },
+    "css-css-shadow.compact.json": {
+      "bytes": 4802,
+      "sha256": "8545059411bcb63840d452506e9202b4ddc8cf7d3e72a45f896e6ddc3324bec7"
+    },
+    "css-css-color.compact.json": {
+      "bytes": 20957,
+      "sha256": "3955c370e0bfc4a2bef5532ccf0e2ace36e05464ce46d20b00321a8f0a9dc258"
+    },
+    "css-selectors.compact.json": {
+      "bytes": 9950,
+      "sha256": "f75b474e073732662755a74025a3c804f2904353beb7037a159ec97c9c7e096c"
+    },
+    "css-CSS2-positioning.phase.manifest.json": {
+      "bytes": 1151,
+      "sha256": "9c693aaf175ed350f1aebd15a5c85fbd03a92f89518d3a161c234abe3233b26c"
+    },
+    "image-resources.phase.manifest.json": {
+      "bytes": 1352,
+      "sha256": "5da02e1a0cfcbad21e669022fca09e5829a366c6a56b182c69c721c80b22e863"
+    },
+    "css-css-shadow.phase.manifest.json": {
+      "bytes": 1121,
+      "sha256": "fd4d366cd04ca23ec70324eaa3b196fd52cbc40bb997d8da6be41a775c449d0c"
+    },
+    "css-css-sizing.compact.json": {
+      "bytes": 19380,
+      "sha256": "b236a80abcad32de81ff445b950ecfe93ed327ec5c59a68bf9bce8c208090739"
+    },
+    "parsing.summary.json": {
+      "bytes": 142578,
+      "sha256": "96aa8f085c97f3a7df6dc237ab45c5f62875f116727dcd22e5759df17cee35b3"
+    },
+    "nextest.phase.manifest.json": {
+      "bytes": 401,
+      "sha256": "f7983577cc22496edf5d41d164314f1126773c6bea81f09698c3906972fb7e0f"
+    },
+    "css-css-cascade.compact.json": {
+      "bytes": 2912,
+      "sha256": "3b6d23cbd84d70e162dd2c39edb554739563e83a5328b7d51a458844fd8e63b7"
+    },
+    "css-css-backgrounds.compact.json": {
+      "bytes": 19180,
+      "sha256": "ab36f3be8823f7458f1569fc4136d75c8edbcf78987468a8ea1984655c513026"
+    },
+    "parsing.phase.manifest.json": {
+      "bytes": 647,
+      "sha256": "abc90c06c47efd8f29fa3d47ed9cc759156e54e013001fc6d1891204229d6218"
+    },
+    "css-css-viewport.phase.manifest.json": {
+      "bytes": 1131,
+      "sha256": "34190dd4c919c561715cb468d0ee3087b77adc5fad0c7637c20adda8055a68f3"
+    },
+    "css-css-overflow.compact.json": {
+      "bytes": 45454,
+      "sha256": "5b2bdd6af3488ee22231f969a2659b754d48e95e8a8623b129d8babc9f2c6cef"
+    },
+    "css-css-fonts.compact.json": {
+      "bytes": 3895,
+      "sha256": "457c2439fd8c175fb7910b8b7b9ab3a69b74a84c95139da7970f316e22cb7140"
+    },
+    "css-CSS2-normal-flow.compact.json": {
+      "bytes": 4776,
+      "sha256": "d0247149dcf16acaba7050e5bb1ef792112f884c2fa9deef6511658ac76e7bfb"
+    },
+    "css-css-tables.phase.manifest.json": {
+      "bytes": 1121,
+      "sha256": "2dd0adef99843ff8429ae57e8bf6a3f9912bd02c04940e877481c18525db713b"
+    },
+    "css-css-ruby.compact.json": {
+      "bytes": 7665,
+      "sha256": "f87448314f972192f5d0e4088a4937a47ba6b640458f6e4b4595daf74e7957cf"
+    },
+    "css-css-color.phase.manifest.json": {
+      "bytes": 1117,
+      "sha256": "a1ca4db60c9ac20dd3be84feff6bbe2617a35872f8d1dcb8ab391c18d80a0058"
+    },
+    "css-CSS2-positioning.compact.json": {
+      "bytes": 1671,
+      "sha256": "cefcdeae7f0c110b572d65c12356b1c46eeadbf8b7514bda4bcaddcbb3180e11"
+    },
+    "css-css-conditional.compact.json": {
+      "bytes": 9326,
+      "sha256": "0d77044b930b5eeb4e14fd8ff707cdc299ce65de0b3f8cfbff8bdd850e4635e0"
+    },
+    "css-CSS2-floats.phase.manifest.json": {
+      "bytes": 1126,
+      "sha256": "e5074c1fa8cb09e64eede87603dffaa444d98c86083c328d8344f2578f45409d"
+    },
+    "compact-publication.manifest.json": {
+      "bytes": 15242,
+      "sha256": "20636c9cdd37127b1d13e70e4c33e4cad8654f6d0c1d9df5a646157f2beefefe"
+    },
+    "css-css-conditional.phase.manifest.json": {
+      "bytes": 1146,
+      "sha256": "25947252335c88022d882776fd6aeffed5ecbdb59fb603e8a19a27aede26cd2d"
+    },
+    "gate.summary.json": {
+      "bytes": 42129,
+      "sha256": "cfe46287789d14e8bf26eef887989402287428167996fbe9ce56c88054c004ae"
+    },
+    "css-selectors.phase.manifest.json": {
+      "bytes": 1116,
+      "sha256": "81f8d04fcd041b659cf469e39e93a8649691a1f0136329fafab8e4c7b953e004"
+    },
+    "doctests.phase.manifest.json": {
+      "bytes": 384,
+      "sha256": "c234013a00e60af02ca2597bf15d243c6e74aaa8de8788cda1f9c0d2f99fe765"
+    },
+    "css-css-transforms.compact.json": {
+      "bytes": 43065,
+      "sha256": "e5b8cdf6f5448d9ea8aec6254bdd4818b2cb9de8ae0847c67d486c1909cf9d5e"
+    },
+    "css-css-position.compact.json": {
+      "bytes": 8565,
+      "sha256": "0e19b28cada4197b2591cdb55de679c3640d47f05e005b75a71eb21c0a3deab7"
+    },
+    "css-css-viewport.compact.json": {
+      "bytes": 10407,
+      "sha256": "acfc79954543e3fa9d87f19cc9eb20758de422faffd36e467fa585f84646dd94"
+    },
+    "css-css-images.compact.json": {
+      "bytes": 18517,
+      "sha256": "83033c4a319ca6d08aab4cf6e91b726eee6376b7aa4ebbfb7136fe50ec3c4943"
+    },
+    "css-CSS2-floats.compact.json": {
+      "bytes": 5202,
+      "sha256": "9f0791d87c85186907de12903ac975cb356f9c7f83ab9433bc3b56b439d30843"
+    },
+    "css-css-contain.compact.json": {
+      "bytes": 26560,
+      "sha256": "8f40a562117fdab58ffdbe0f7bc6833d953800132c32a95841a551bd551660f5"
+    },
+    "ensure-wpt.phase.manifest.json": {
+      "bytes": 368,
+      "sha256": "1f633da4f82aab879a7cc6a7d9b23c04a5ac995944e73e69a11c0f6e1ed0bd2f"
+    },
+    "image-resources.compact.json": {
+      "bytes": 56174,
+      "sha256": "19c51e10228f818702cd7a4893c4a521aee521c7f564821f7f88bfee77a64343"
+    },
+    "css-css-tables.compact.json": {
+      "bytes": 10616,
+      "sha256": "4b67db8c644fffa8961e616efedc43c6d9e1cf97e5b54569778771cdf331d469"
+    },
+    "css-css-cascade.phase.manifest.json": {
+      "bytes": 1126,
+      "sha256": "b32a35df729900305c12469da66da667eb1eafe22591939511a243e831730658"
+    },
+    "css-css-images.phase.manifest.json": {
+      "bytes": 1122,
+      "sha256": "ea25fea86315736317d09af6c3e04c285bf03c50c4008dc194e19a6e8254afc9"
+    },
+    "storage.summary.json": {
+      "bytes": 2357,
+      "sha256": "d999a3fa63abc9c816ed472d30a20f4c1f0479eba8816e4568ce7b68a492e86f"
+    },
+    "css-css-ruby.phase.manifest.json": {
+      "bytes": 1111,
+      "sha256": "ad2ef7b4931302c383b1f7a5e54f67bf4035ca31dca8b4d382fd7e69ed6500a0"
+    },
+    "css-css-position.phase.manifest.json": {
+      "bytes": 1131,
+      "sha256": "aafc41a19b9f93e0c8dae0b0da5e84b470180b019ae9f27170b37b03881631d5"
+    },
+    "css-css-fonts.phase.manifest.json": {
+      "bytes": 1116,
+      "sha256": "15f0d794bfeb59dc8cc146f913e6e09805c63dd847b1bd823a8c0c69e20f49c3"
+    },
+    "css-css-display.phase.manifest.json": {
+      "bytes": 1126,
+      "sha256": "61028820529992f1fe12a3e80aea06599a79c59b6e36aaa760cd27f73e96c83c"
+    },
+    "css-css-sizing.phase.manifest.json": {
+      "bytes": 1122,
+      "sha256": "e3f9f66b36a89a00226210209720ab385079b45b64fb20f4960e05e5ec0a0690"
+    },
+    "css-css-backgrounds.phase.manifest.json": {
+      "bytes": 1147,
+      "sha256": "96bd6ea3c7f892c8f1967c5a4ff3bbc655c7b4ce28fdf0235f7146f505950aea"
+    },
+    "css-css-transforms.phase.manifest.json": {
+      "bytes": 1142,
+      "sha256": "6cf5bb36c9312c16af6d003014fba9925c019edef38bdf8f304f87ccc16181dd"
+    }
+  },
+  "terminal_sha256": "f7497a0e86895d5dd6757b674e7dee8c5786f288e760889284f39fd55782c8c3",
+  "raw_source_elf_preserved": true,
+  "native_raw_elf_owner": "/tmp/amazing-native-retained/css-transform-angle-successor-20261006/transform-angle-1c682ab6-initial",
+  "previous_genuine_failure": {
+    "source": "4bdce228b6b84b2baa4f6853370e9c00bf52eceb",
+    "outer_exit": 1,
+    "nextest_exit": 100,
+    "diagnostic_source": "36d78dedc602c5b75ab458e586483fc3265aec6e",
+    "diagnostic_sha256": "5bc3536211eb02ed4a1b99fa7dbd3800a2018a15c603b65e97f872731359cffb"
+  },
+  "full_3D_paint_claim": false,
+  "tool_clean_allowance_used": false
+}

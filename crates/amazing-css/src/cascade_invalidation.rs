@@ -1063,6 +1063,23 @@ fn local_transform_matrix(
     operations: &[Transform],
     box_size: Option<CachedBoxSize>,
 ) -> Option<[[f32; 4]; 4]> {
+    // Preserve the established f32 2D shortcut exactly; new families use the typed ABI.
+    if operations.iter().all(|op| matches!(op, Transform::Translate(..) | Transform::Scale(..) | Transform::Rotate(_) | Transform::SkewX(_) | Transform::SkewY(_) | Transform::Matrix(_))) {
+        return legacy_local_transform_matrix(operations, box_size);
+    }
+    let box_size=box_size.filter(|s|s.width.is_finite()&&s.height.is_finite()&&s.width>=0.0&&s.height>=0.0);
+    let needs_origin=operations.iter().any(|op|!matches!(op,Transform::Translate(..)|Transform::Translate3D(..)|Transform::TranslateExpression(_)));
+    if needs_origin&&box_size.is_none(){return None;}
+    let size=box_size.map(|s|[f64::from(s.width),f64::from(s.height)]);
+    let origin=size.map(|s|[s[0]/2.0,s[1]/2.0,0.0]).unwrap_or([0.0;3]);
+    let matrix=crate::transform_matrix(operations,size,origin)?.map(|row|row.map(|n|n as f32));
+    matrix.iter().flatten().all(|n|n.is_finite()).then_some(matrix)
+}
+
+fn legacy_local_transform_matrix(
+    operations: &[Transform],
+    box_size: Option<CachedBoxSize>,
+) -> Option<[[f32; 4]; 4]> {
     type Matrix = [[f32; 4]; 4];
     const IDENTITY: Matrix = [
         [1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0],
@@ -1135,6 +1152,7 @@ fn local_transform_matrix(
                 [0.0, 0.0, 1.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ],
+            _ => return None,
         };
         matrix = mul(matrix, next);
     }

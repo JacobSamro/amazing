@@ -228,6 +228,13 @@ pub enum Transform {
     SkewX(Angle),
     SkewY(Angle),
     Matrix([f64; 6]),
+    Translate3D(LengthPercentage, LengthPercentage, LengthPercentage),
+    TranslateExpression([String; 3]),
+    Scale3D([f64; 3]),
+    Rotate3D([f64; 3], Angle),
+    Skew(Angle, Angle),
+    Matrix3D([f64; 16]),
+    Perspective(Option<String>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1053,57 +1060,7 @@ fn parse_container_shorthand(css: &str) -> Option<()> {
     Some(())
 }
 
-fn transforms(css: &str) -> Option<Vec<Transform>> {
-    if css.trim().eq_ignore_ascii_case("none") {
-        return Some(Vec::new());
-    }
-    let tokens = tokenize(css);
-    let components = crate::computed::top_level_components(&tokens)?;
-    let mut out = Vec::new();
-    for component in components {
-        let Token::Function(name) = component.first()? else {
-            return None;
-        };
-        let inner = crate::computed::function_inner(component, name)?;
-        let args = crate::computed::transform_arguments(inner)?;
-        let args: Vec<String> = args
-            .iter()
-            .map(|arg| crate::syntax::serialize(arg))
-            .collect();
-        let arg = |i: usize| args.get(i).map(String::as_str);
-        let zero = LengthPercentage::Px(0.0);
-        out.push(match name.to_ascii_lowercase().as_str() {
-            "rotate" if args.len() == 1 => Transform::Rotate(Angle::parse(arg(0)?)?),
-            "skewx" if args.len() == 1 => Transform::SkewX(Angle::parse(arg(0)?)?),
-            "skewy" if args.len() == 1 => Transform::SkewY(Angle::parse(arg(0)?)?),
-            "translate" if (1..=2).contains(&args.len()) => Transform::Translate(
-                LengthPercentage::parse(arg(0)?)?,
-                LengthPercentage::parse(arg(1).unwrap_or("0"))?,
-            ),
-            "translatex" if args.len() == 1 => {
-                Transform::Translate(LengthPercentage::parse(arg(0)?)?, zero)
-            }
-            "translatey" if args.len() == 1 => {
-                Transform::Translate(zero, LengthPercentage::parse(arg(0)?)?)
-            }
-            "scale" if (1..=2).contains(&args.len()) => {
-                Transform::Scale(number(arg(0)?)?, number(arg(1).unwrap_or(arg(0)?))?)
-            }
-            "scalex" if args.len() == 1 => Transform::Scale(number(arg(0)?)?, 1.0),
-            "scaley" if args.len() == 1 => Transform::Scale(1.0, number(arg(0)?)?),
-            "matrix" if args.len() == 6 => Transform::Matrix([
-                number(arg(0)?)?,
-                number(arg(1)?)?,
-                number(arg(2)?)?,
-                number(arg(3)?)?,
-                number(arg(4)?)?,
-                number(arg(5)?)?,
-            ]),
-            _ => return None,
-        });
-    }
-    (!out.is_empty()).then_some(out)
-}
+fn transforms(css: &str) -> Option<Vec<Transform>> { crate::transform_values::parse(css) }
 
 #[cfg(test)]
 mod tests {
@@ -1448,9 +1405,12 @@ pub(crate) fn resolve_font_units(
         ComputedValue::LengthPercentage(length) => resolve(length, font, root, line_height),
         ComputedValue::Transform(ops) => {
             for op in ops {
-                if let Transform::Translate(x, y) = op {
-                    resolve(x, font, root, false);
-                    resolve(y, font, root, false);
+                match op {
+                    Transform::Translate(x,y) => {resolve(x,font,root,false);resolve(y,font,root,false);}
+                    Transform::Translate3D(x,y,z) => {resolve(x,font,root,false);resolve(y,font,root,false);resolve(z,font,root,false);}
+                    Transform::TranslateExpression(parts) => {for part in parts {*part=crate::computed::individual_transforms::length(part,font,root);}}
+                    Transform::Perspective(Some(value)) => {*value=crate::computed::individual_transforms::length(value,font,root);}
+                    _=>{}
                 }
             }
         }

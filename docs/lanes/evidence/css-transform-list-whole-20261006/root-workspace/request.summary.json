@@ -1,0 +1,53 @@
+{
+  "admission_bytes": 30198988800.0,
+  "argv": [
+    "bash",
+    "/Users/jMac/Projects/OpenSource/amazing/scripts/linux-run.sh",
+    "integrator-css-transform-workspace-20261006",
+    "--host",
+    "boat",
+    "--ref",
+    "db060233802068ad46faf75adad98fbde6af158a",
+    "--setup-summary",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/integrator-primary/css-transform-current-workspace/setup.manifest.json",
+    "--endpoint-receipt",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/integrator-primary/css-transform-current-workspace/endpoint.manifest.json",
+    "--compact-root",
+    "amazing/out/integrator-css-transform-workspace-20261006/workspace-d97c1032cf054b18af308bfcce68e3a2/compact",
+    "--storage-plan",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/integrator-primary/css-transform-current-workspace/storage-plan.json",
+    "--command-file",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/integrator-primary/css-transform-current-workspace/command.sh"
+  ],
+  "command_sha256": "1e2ded5236baa2cc5232004e1734d787bd4c9c58081873c7b969d60da343f37d",
+  "compact_root": "amazing/out/integrator-css-transform-workspace-20261006/workspace-d97c1032cf054b18af308bfcce68e3a2/compact",
+  "config_sha256": "ba67199d078d0ceb77c463da66a8615823cfe0440f41a8b956591a359be5944f",
+  "corpus_role": "standalone workspace candidate",
+  "endpoint_receipt": "/Users/jMac/Projects/OpenSource/amazing/.agents/integrator-primary/css-transform-current-workspace/endpoint.manifest.json",
+  "ensure_may_renew_finite_ttl": true,
+  "fetch_paths": [
+    "amazing/out/integrator-css-transform-workspace-20261006/workspace-d97c1032cf054b18af308bfcce68e3a2/compact/workspace.manifest.json",
+    "amazing/out/integrator-css-transform-workspace-20261006/workspace-d97c1032cf054b18af308bfcce68e3a2/compact/nextest.phase.manifest.json",
+    "amazing/out/integrator-css-transform-workspace-20261006/workspace-d97c1032cf054b18af308bfcce68e3a2/compact/doctests.phase.manifest.json",
+    "amazing/out/integrator-css-transform-workspace-20261006/workspace-d97c1032cf054b18af308bfcce68e3a2/compact/storage.summary.json"
+  ],
+  "finite_run_ttl_seconds": 7200,
+  "helper_sha256": {
+    "completed-job.py": "9c2bde2eeaa2507e5a14d2cc17599908d1c2ea9b1418ba76a78d04a1ff3b15b1",
+    "gate-command.py": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b",
+    "gate-summary.py": "3e26631cb492c2e77808c7bc9a3354ab248d0e83cf8762b933892647fd7ce0f0",
+    "lane-fetch.sh": "fe4fa79beafef35bbce1ce853f4f3330ae8717b1a6e710675a3bd9892d0d84db",
+    "linux-run.sh": "6c960c2a394d659990484388a15bd887f4db4f0793244669d9f88aafe08a1c28",
+    "linux-workspace-native.py": "497fbb94e7357590846233118e56cc7c405505d6a272b014829f876b71a712b2",
+    "native-storage-plan.py": "3c4df2f01150f9da8b53695df781d2ee83fd7d79a92a1d9b33449d14bf763dbe",
+    "native-storage-retention.py": "2628dc352f594177a540961888f8157517ca9603847716731b04146f9033d489"
+  },
+  "job": "workspace-d97c1032cf054b18af308bfcce68e3a2",
+  "lane": "integrator-css-transform-workspace-20261006",
+  "machine": "default 4 vCPU / 8 GB",
+  "physical_storage_phase": "before",
+  "raw_root": "/tmp/amazing-workspace-raw/integrator-css-transform-workspace-20261006/workspace-d97c1032cf054b18af308bfcce68e3a2",
+  "schema": 1,
+  "source": "db060233802068ad46faf75adad98fbde6af158a",
+  "storage_sha256": "e65c8942b2345da533906958ab86a24e0bbf8b4bde95969db623952081aa9ac6"
+}

@@ -69,12 +69,7 @@ pub(crate) fn signs(value: &str, font: Option<(f64, f64)>) -> Option<String> {
 
 fn angle(value: &str) -> Option<f64> {
     if !crate::math::angle(value) { return None }
-    let tokens = tokenize(value).into_iter().map(|token| match token {
-        Token::Dimension(n, unit) => values::Angle::parse(&format!("{n}{unit}"))
-            .map(|angle| Token::Number(angle.radians.to_degrees())),
-        token => Some(token),
-    }).collect::<Option<Vec<_>>>()?;
-    values::alpha_value(&serialize_computed(&tokens)).filter(|n| n.is_finite())
+    crate::math::computed_angle_degrees(value)
 }
 
 fn rotation(parts: &[String]) -> Option<([f64; 3], f64)> {
@@ -113,7 +108,7 @@ fn number(n: f64) -> String {
     n.to_string()
 }
 
-pub(super) fn length(css: &str, font: f64, root: f64) -> String {
+pub(crate) fn length(css: &str, font: f64, root: f64) -> String {
     let mut tokens = tokenize(css);
     for token in &mut tokens {
         if let Token::Dimension(n, unit) = token {
