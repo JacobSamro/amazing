@@ -13,8 +13,8 @@ retention = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(retention)
 FIELDS = {'schema', 'ticket', 'source', 'phase', 'job', 'scratch_parent', 'output_root',
           'retained_root', 'build_budget_bytes', 'retention_budget_bytes', 'bootstrap_budget_bytes',
-          'reserve_bytes', 'compact_root', 'summary_path', 'baseline_manifest', 'baseline_source', 'retention_method', 'elf_policy'}
-REQUIRED = FIELDS - {'baseline_manifest', 'baseline_source', 'summary_path', 'compact_root'}
+          'reserve_bytes', 'compact_root', 'summary_path', 'baseline_manifest', 'baseline_source', 'retention_method', 'elf_policy', 'retire_after_retention'}
+REQUIRED = FIELDS - {'baseline_manifest', 'baseline_source', 'summary_path', 'compact_root', 'retire_after_retention'}
 
 
 def validate(path, native=True):
@@ -26,11 +26,15 @@ def validate(path, native=True):
     retention.source_id(data['source'])
     if os.environ.get('COMMIT') and os.environ['COMMIT'] != data['source']:
         raise retention.StorageError('storage plan differs from exact native COMMIT')
-    if data['phase'] not in ('before', 'after') or data['retention_method'] not in ('copy', 'hardlink') or data['elf_policy'] not in ('all', 'runnable'):
+    if data['phase'] not in ('before', 'after') or data['retention_method'] not in ('copy', 'hardlink', 'hardlink-or-copy') or data['elf_policy'] not in ('all', 'runnable'):
         raise retention.StorageError('invalid storage plan policy/phase')
     for key in ('build_budget_bytes', 'retention_budget_bytes', 'bootstrap_budget_bytes', 'reserve_bytes'):
         if type(data[key]) is not int or data[key] < (0 if key == 'reserve_bytes' else 1):
             raise retention.StorageError('storage plan requires explicit positive byte budgets')
+    if 'retire_after_retention' in data and type(data['retire_after_retention']) is not bool:
+        raise retention.StorageError('retire_after_retention must be an explicit boolean')
+    if 'retire_after_retention' in data and data['retention_method'] != 'hardlink-or-copy':
+        raise retention.StorageError('retire_after_retention is only valid for the explicit hardlink-or-copy policy')
     def operand(value, scratch=False):
         if native:
             return retention.canonical(value, native=scratch)
@@ -97,6 +101,9 @@ def main():
             raise retention.StorageError('run requires exact command file')
         command = [sys.executable, str(pathlib.Path(__file__).with_name('native-storage-retention.py')), 'run']
         for key, value in data.items():
+            if key == 'retire_after_retention':
+                if value: command += ['--retire-after-retention']
+                continue
             if key not in ('schema', 'bootstrap_budget_bytes', 'summary_path', 'compact_root'):
                 command += ['--' + key.replace('_', '-'), str(value)]
         command += ['--', 'bash', args.command_file]
@@ -106,7 +113,7 @@ def main():
             value = {'schema':1, 'source':data['source'], 'phase':data['phase'], 'job':data['job'], 'actual_storage_exit':code}
             if session.is_file():
                 raw = json.loads(session.read_text())
-                value.update({key:raw[key] for key in ('state','command_exit','profile','capacity','baseline','artifact_manifest','retained_files','retained_elf_files','retained_logical_bytes','copied_unique_bytes','retention_capacity_required_bytes','recoverable_files','recoverable_bytes','target_retired','free_after') if key in raw})
+                value.update({key:raw[key] for key in ('state','command_exit','storage_exit','storage_error','hardlink_capability','selected_retention_method','profile','capacity','baseline','artifact_manifest','retained_files','retained_elf_files','retained_logical_bytes','copied_unique_bytes','retention_capacity_required_bytes','recoverable_files','recoverable_bytes','target_retired','retire_after_retention','free_after') if key in raw})
                 value['session_raw'] = {'path':str(session),'sha256':retention.digest(session),'bytes':session.stat().st_size}
             retention.atomic_json(pathlib.Path(data['summary_path']),value)
         return code

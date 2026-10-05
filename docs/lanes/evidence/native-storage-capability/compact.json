@@ -1,0 +1,136 @@
+{
+  "schema": 1,
+  "ticket": "native-storage-capability",
+  "recorded_origin_dev": "64f5d9b86c1cda019f73aedb2dd4f7137a3b7663",
+  "tested_source": "c9192fa2ab736d303477e61206136b4c5c9c7dbe",
+  "source_files": {
+    "scripts/native-storage-retention.py": "2628dc352f594177a540961888f8157517ca9603847716731b04146f9033d489",
+    "scripts/native-storage-plan.py": "3c4df2f01150f9da8b53695df781d2ee83fd7d79a92a1d9b33449d14bf763dbe",
+    "scripts/native-storage-retention-tests.py": "e792e4cdad3fcc892ca79a34740682b359adb0ad1ff2158ab93466b2fe10b7d6",
+    "docs/lanes/native-storage-capability-copy.md": "1284c4d54c25176f4fa14bcb527b63925f3423864f40d7aa04e2dca6b0656b0e"
+  },
+  "profile": {
+    "box_id": "bx_c7be7646",
+    "vcpu": 4,
+    "memory_gb": 8,
+    "type": "default",
+    "finite_guard_seconds": 7200
+  },
+  "native_job": {
+    "schema": 2,
+    "lane": "native-storage-capability-20261005",
+    "source_commit": "c9192fa2ab736d303477e61206136b4c5c9c7dbe",
+    "box_id": "bx_c7be7646",
+    "host": "user@5.135.136.201",
+    "port": 19033,
+    "job_id": "e7c8be5d6d6e48779f0df0fd5d8b9317",
+    "output_root": "amazing/out/native-storage-capability-20261005/compact",
+    "command_sha256": "28d69d6aa227566910258b4e59dbfa946d0689e7b13041e7999e1dcc3dc07541",
+    "execution_sha256": "8f71f047f7e63942b805cfed2974c8e29d55f99c57cb96fe1cba0054c1d57cb3",
+    "source_archive_sha256": "2106afe3e2ee2e172c00c403d0bceea03b03cc254d74b26bf4cead0b2ab6d318"
+  },
+  "native_actual_exit": 0,
+  "compact_fetch_actual_exit": 0,
+  "controls": {
+    "classifications": {
+      "test_actual_exdev_small_copy_budget_refuses_payload_and_retirement": "pass",
+      "test_actual_raw_exdev_budgeted_copy_verifies_all_files_and_keeps_source": "pass",
+      "test_actual_raw_exdev_zero_copy_budget_preserves_original_and_rejects": "pass",
+      "test_actual_raw_rename_capability_preserves_bytes_without_a_copy": "pass",
+      "test_actual_shared_library_and_exec_survive_runnable_policy": "pass",
+      "test_baseline_commit_identity_is_exact": "pass",
+      "test_before_after_profile_change_rejects_before_execution": "pass",
+      "test_budgeted_actual_exdev_copy_preserves_source_target_by_default": "pass",
+      "test_changed_retained_baseline_bytes_reject_new_after_target": "pass",
+      "test_copy_fallback_explicit_retirement_preserves_verified_original_elf": "pass",
+      "test_failed_native_command_records_actual_exit_and_keeps_measured_elf": "pass",
+      "test_fallback_uses_real_hardlink_when_available_without_implicit_retirement": "pass",
+      "test_fresh_pair_preserves_frozen_executable_and_source_after_terminal_cache_release": "pass",
+      "test_hardlink_pair_reuses_verified_frozen_baseline": "pass",
+      "test_hardlink_policy_refuses_distinct_native_filesystem_before_target": "pass",
+      "test_live_lease_refuses_cache_mutation_then_real_terminal_releases_it": "pass",
+      "test_native_launcher_source_mismatch_refuses_allocation": "pass",
+      "test_native_retention_and_separate_compact_device_preserve_raw_home": "pass",
+      "test_native_signal_exit_is_recorded_without_claiming_success": "pass",
+      "test_no_elf_baseline_cannot_authorize_after_execution": "pass",
+      "test_no_space_budget_refuses_command_and_target_creation": "pass",
+      "test_plan_actual_command_receives_fresh_target_and_profiles": "pass",
+      "test_plan_after_runs_with_exact_baseline_and_separate_phase_target": "pass",
+      "test_plan_capacity_counts_simultaneous_bootstrap_build_and_retention": "pass",
+      "test_plan_explicit_fallback_and_retirement_are_forwarded_without_fake_baseline": "pass",
+      "test_plan_prebootstrap_refusal_prevents_actual_next_shell_stage": "pass",
+      "test_plan_rejects_ambiguous_or_unknown_capacity_inputs": "pass",
+      "test_plan_rejects_missing_after_baseline_before_bootstrap": "pass",
+      "test_prebootstrap_check_allocates_no_target_or_output": "pass",
+      "test_published_wrapper_storage_admission_precedes_cargo_bootstrap": "pass",
+      "test_raw_existing_destination_is_never_overwritten": "pass",
+      "test_raw_home_style_output_is_untouched_by_target_retirement": "pass",
+      "test_raw_output_cannot_be_inside_managed_scratch": "pass",
+      "test_real_exdev_probe_never_changes_original_elf": "pass",
+      "test_real_relocatable_object_is_reconstructible_only_under_explicit_new_policy": "pass",
+      "test_retained_root_cannot_escape_raw_output_owner": "pass",
+      "test_reused_job_is_refused_before_bootstrap": "pass",
+      "test_shared_filesystem_budgets_are_summed_before_admission": "pass",
+      "test_source_phase_job_target_identity_cannot_be_reused": "pass",
+      "test_target_symlink_leaves_terminal_cache_intact": "pass",
+      "test_terminal_hardlink_retains_original_inode_without_duplicate_payload": "pass",
+      "test_unknown_elf_bytes_remain_protected": "pass",
+      "test_unknown_state_refuses_retirement_even_without_a_live_lock": "pass"
+    },
+    "controls_sha256": "e792e4cdad3fcc892ca79a34740682b359adb0ad1ff2158ab93466b2fe10b7d6",
+    "diagnostics": {},
+    "engine_build_or_gate": false,
+    "errors": 0,
+    "failures": 0,
+    "fixture_root": "/tmp/native-retention-controls.89quy4ih",
+    "helper_sha256": "2628dc352f594177a540961888f8157517ca9603847716731b04146f9033d489",
+    "native_elf": {
+      "bytes": 26936,
+      "path": "/usr/bin/true",
+      "sha256": "4b5a5694e3c0e8b1d58fc52ac6ef076e55e72c2f53195243ac86d5ff517cc2f6"
+    },
+    "plan_sha256": "3c4df2f01150f9da8b53695df781d2ee83fd7d79a92a1d9b33449d14bf763dbe",
+    "schema": 1,
+    "source": "c9192fa2ab736d303477e61206136b4c5c9c7dbe",
+    "tests_run": 43,
+    "ticket": "native-storage-retention",
+    "wrapper_sha256": "abae302a231acc870480a7322e1e8778ad1f7eb7ade804c503937ff2d6969438"
+  },
+  "phase_actual_exits": {
+    "command_exit": 0,
+    "engine_exit": 0,
+    "wrapper_exit": 0,
+    "output_copy_exit": 0
+  },
+  "raw": {
+    "path": "/home/user/amazing/out/native-storage-capability-20261005/capability-01/controls.log",
+    "bytes": 10291,
+    "sha256": "7d9ce43db8d1f55adb601385099c7eff9b7cfc8a91123780982f4d726c5908bd"
+  },
+  "compact_receipts": {
+    "controls.phase.manifest.json": {
+      "bytes": 2581,
+      "sha256": "1f57e9bdee3d8286ae9058b7b1327971ed554dfc3555257c127eecd74e01b84e"
+    },
+    "controls.summary.json": {
+      "bytes": 4094,
+      "sha256": "9136470c5fefbf9fa1845734c2c04a58e9ce8f0923e5bc21310202bbe5ea6148"
+    }
+  },
+  "engine_gate_performed": false,
+  "engine_gate_reuse": {
+    "root_authorized": true,
+    "workspace_passed": 4797,
+    "docs_passed": 16,
+    "full16_zero_losses": true,
+    "reason": "pure public tooling; no engine/Cargo delta; published engine gate reuse authorized by root"
+  },
+  "viewport_baseline_incident_retained": {
+    "overall_exit": 101,
+    "gpui_passed": 93,
+    "gpui_nextest_exit": 0,
+    "invalid_bin_only_doc_exit": 101,
+    "retention_errno": "EXDEV18"
+  },
+  "lost_controls": []
+}

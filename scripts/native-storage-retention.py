@@ -8,6 +8,7 @@ only this helper's terminal fresh Cargo target is retired. OUT stays intact.
 """
 import argparse
 import datetime
+import errno
 import fcntl
 import hashlib
 import json
@@ -152,6 +153,33 @@ def artifacts(target, elf_policy='all'):
     return retained, recoverable
 
 
+def probe_hardlink(source, destination):
+    """Exercise the syscall on the actual artifact and destination namespace.
+
+    Device IDs are diagnostic only: overlay/snapshot filesystems may report
+    equal IDs while refusing a link across their backing layers. Only this
+    fresh probe name is removed; the source and previous proofs are untouched.
+    """
+    destination.mkdir(parents=True, exist_ok=True)
+    result = {'source': str(source), 'destination_directory': str(destination),
+              'source_device': source.stat().st_dev,
+              'destination_device': destination.stat().st_dev}
+    with tempfile.TemporaryDirectory(prefix='.hardlink-probe-', dir=destination) as temporary:
+        link = pathlib.Path(temporary) / 'artifact'
+        try:
+            os.link(source, link)
+            one, two = source.stat(), link.stat()
+            if (one.st_dev, one.st_ino, one.st_size) != (two.st_dev, two.st_ino, two.st_size):
+                raise StorageError('hardlink syscall did not preserve artifact identity')
+            result.update(supported=True, errno=None)
+        except OSError as error:
+            if error.errno not in (errno.EXDEV, errno.EOPNOTSUPP, errno.ENOSYS,
+                                  errno.EPERM, errno.EMLINK):
+                raise
+            result.update(supported=False, errno=error.errno, error=str(error))
+    return result
+
+
 def freeze_artifacts(session, data, output, reserve):
     target = session / 'target'
     retained, recoverable = artifacts(target, data.get('elf_policy', 'all'))
@@ -164,9 +192,29 @@ def freeze_artifacts(session, data, output, reserve):
                 raise StorageError('existing retained blob failed integrity verification')
         else:
             missing[artifact['sha256']] = artifact['bytes']
-    hardlink = data.get('retention_method') == 'hardlink'
-    if hardlink and filesystem(target)['device'] != filesystem(output)['device']:
-        raise StorageError('hardlink retention requires the same actual filesystem')
+    requested = data.get('retention_method', 'copy')
+    hardlink = requested in ('hardlink', 'hardlink-or-copy')
+    if hardlink and missing:
+        # Probe every actual artifact before deciding a mode or copying bytes.
+        # A later artifact cannot silently trigger an unbudgeted partial copy.
+        probes = []
+        for artifact in retained:
+            if artifact['sha256'] in missing:
+                probes.append(probe_hardlink(target / artifact['relative_path'], blobs))
+        failures = [row for row in probes if not row['supported']]
+        probe_path = session / 'hardlink.probes.json'
+        atomic_json(probe_path, probes)
+        data['hardlink_capability'] = {'probed_artifacts': len(probes),
+                                      'supported': not failures, 'failed_artifacts': len(failures),
+                                      'first_failures': failures[:8],
+                                      'raw': {'path': str(probe_path), 'bytes': probe_path.stat().st_size,
+                                              'sha256': digest(probe_path)}}
+        atomic_json(session / 'session.json', data)
+        if failures:
+            if requested != 'hardlink-or-copy':
+                raise StorageError('actual hardlink capability unavailable; explicit budgeted copy policy required')
+            hardlink = False
+    data['selected_retention_method'] = 'hardlink' if hardlink else 'copy'
     payload_bytes = 0 if hardlink else sum(missing.values())
     requirement = payload_bytes + (len(missing) * 4096 + len(retained) * 1024 + 8192 if hardlink else 0)
     if requirement > data.get('retention_budget_bytes', requirement):
@@ -282,7 +330,8 @@ def run(args):
         data = dict(receipt, state='RUNNING', owner_pid=os.getpid(), session=str(session),
                     scratch_parent=str(scratch), target=str(target), command=args.command,
                     retention_complete=False, retention_method=args.retention_method,
-                    elf_policy=args.elf_policy, retention_budget_bytes=args.retention_budget_bytes)
+                    elf_policy=args.elf_policy, retention_budget_bytes=args.retention_budget_bytes,
+                    retire_after_retention=(args.retention_method != 'hardlink-or-copy' or args.retire_after_retention))
         atomic_json(session / 'session.json', data)
         environment = dict(os.environ, **profile, CARGO_TARGET_DIR=str(target))
         # The existing native launcher owns timeout/supervision. Keep the lease
@@ -294,7 +343,10 @@ def run(args):
         atomic_json(session / 'session.json', data)
         try:
             freeze_artifacts(session, data, retained, args.reserve_bytes)
-            retire_locked(session, data)
+            if data['retire_after_retention']:
+                retire_locked(session, data)
+            else:
+                data['target_retired'] = False
             data['storage_exit'] = 0
         except (StorageError, OSError) as error:
             data.update(storage_exit=3, storage_error=str(error))
@@ -302,6 +354,82 @@ def run(args):
         atomic_json(session / 'session.json', data)
         print(json.dumps(data, separators=(',', ':')))
         return code if code else data['storage_exit']
+
+
+def publish_raw(args):
+    """Publish one terminal private raw directory; never delete a copy source."""
+    source = canonical(args.directory, native=True)
+    destination = canonical(args.destination)
+    if not source.is_dir() or destination.exists() or destination.is_symlink():
+        raise StorageError('raw publication needs a real source and fresh destination')
+    if source == destination or source in destination.parents or destination in source.parents:
+        raise StorageError('raw source/destination overlap')
+    rows = []
+    directories = []
+    for directory, dirs, files in os.walk(source, followlinks=False):
+        for name in dirs + files:
+            if (pathlib.Path(directory) / name).is_symlink():
+                raise StorageError('raw publication refuses symlink operands')
+        directories += [str((pathlib.Path(directory) / name).relative_to(source)) for name in dirs]
+        for name in files:
+            path = pathlib.Path(directory) / name
+            if not stat.S_ISREG(path.stat().st_mode):
+                raise StorageError('raw publication refuses nonregular files')
+            rows.append({'path': str(path.relative_to(source)), 'bytes': path.stat().st_size,
+                         'sha256': digest(path), 'mode': stat.S_IMODE(path.stat().st_mode)})
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    receipt = {'schema': 1, 'source_directory': str(source), 'destination': str(destination),
+               'raw_files': len(rows), 'raw_bytes': sum(row['bytes'] for row in rows),
+               'inventory_sha256': hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest(),
+               'source_device': source.stat().st_dev,
+               'destination_device': destination.parent.stat().st_dev,
+               'copy_budget_bytes': args.copy_budget_bytes, 'complete': False}
+    try:
+        # The actual rename is the capability check. Equal st_dev is not proof.
+        os.rename(source, destination)
+        receipt.update(method='rename', source_retained=False, rename_errno=None)
+    except OSError as error:
+        if error.errno != errno.EXDEV:
+            raise
+        receipt['rename_errno'] = error.errno
+        required = receipt['raw_bytes'] + 4096 * (len(rows) + len(directories)) + 8192
+        receipt['required_copy_bytes'] = required
+        if required > args.copy_budget_bytes:
+            raise StorageError('raw EXDEV requires an explicit sufficient copy budget; source intact')
+        if filesystem(destination)['available_bytes'] < required + args.reserve_bytes:
+            raise StorageError('raw copy capacity unavailable; source intact')
+        destination.mkdir()  # Exclusive owner; never overwrite a prior raw proof.
+        for directory in directories:
+            (destination / directory).mkdir(parents=True, exist_ok=True)
+        for row in rows:
+            old, new = source / row['path'], destination / row['path']
+            with new.open('xb') as stream, old.open('rb') as original:
+                shutil.copyfileobj(original, stream, 1024 * 1024)
+                stream.flush()
+                os.fsync(stream.fileno())
+            new.chmod(row['mode'])
+        receipt.update(method='copy', source_retained=True)
+    for row in rows:
+        new = destination / row['path']
+        if new.stat().st_size != row['bytes'] or digest(new) != row['sha256']:
+            raise StorageError('raw published bytes changed; retained sources are never removed')
+        if receipt['source_retained'] and (source / row['path']).stat().st_size != row['bytes']:
+            raise StorageError('raw source changed during publication')
+        if receipt['source_retained'] and digest(source / row['path']) != row['sha256']:
+            raise StorageError('raw source changed during publication')
+    expected = {row['path'] for row in rows}
+    for tree in ([source, destination] if receipt['source_retained'] else [destination]):
+        actual = set()
+        for directory, dirs, files in os.walk(tree, followlinks=False):
+            for name in dirs + files:
+                if (pathlib.Path(directory) / name).is_symlink():
+                    raise StorageError('raw tree changed during publication')
+            actual.update(str((pathlib.Path(directory) / name).relative_to(tree)) for name in files)
+        if actual != expected:
+            raise StorageError('raw inventory changed during publication')
+    receipt['complete'] = True
+    print(json.dumps(receipt, separators=(',', ':')))
+    return 0
 
 
 def retire(args):
@@ -330,7 +458,9 @@ def main():
     for name in ('build-budget-bytes', 'retention-budget-bytes'):
         run_parser.add_argument('--' + name, type=int, required=True)
     run_parser.add_argument('--reserve-bytes', type=int, default=64 * 1024 * 1024)
-    run_parser.add_argument('--retention-method', choices=('copy', 'hardlink'), default='copy')
+    run_parser.add_argument('--retention-method', choices=('copy', 'hardlink', 'hardlink-or-copy'), default='copy')
+    run_parser.add_argument('--retire-after-retention', action='store_true',
+                            help='explicitly retire the verified terminal target under hardlink-or-copy')
     run_parser.add_argument('--elf-policy', choices=('all', 'runnable'), default='all')
     run_parser.add_argument('--baseline-manifest')
     run_parser.add_argument('--baseline-source')
@@ -343,7 +473,15 @@ def main():
     for name in ('build-budget-bytes', 'retention-budget-bytes'):
         check_parser.add_argument('--' + name, type=int, required=True)
     check_parser.add_argument('--reserve-bytes', type=int, default=64 * 1024 * 1024)
+    raw_parser = modes.add_parser('publish-raw')
+    raw_parser.add_argument('--directory', required=True)
+    raw_parser.add_argument('--destination', required=True)
+    raw_parser.add_argument('--copy-budget-bytes', type=int, default=0,
+                            help='explicit additional payload capacity; zero rejects EXDEV')
+    raw_parser.add_argument('--reserve-bytes', type=int, default=64 * 1024 * 1024)
     args = parser.parse_args()
+    if args.mode == 'publish-raw' and (args.copy_budget_bytes < 0 or args.reserve_bytes < 0):
+        parser.error('raw copy budgets must be nonnegative')
     if args.mode in ('run', 'check'):
         if min(args.build_budget_bytes, args.retention_budget_bytes) <= 0 or args.reserve_bytes < 0:
             parser.error('positive explicit budgets are required')
@@ -360,6 +498,8 @@ def main():
                               args.build_budget_bytes, args.retention_budget_bytes, args.reserve_bytes)
             print(json.dumps(dict(schema=1, utc=utc(), capacity=result), separators=(',', ':')))
             return 0 if result['admitted'] else 3
+        if args.mode == 'publish-raw':
+            return publish_raw(args)
         return run(args) if args.mode == 'run' else retire(args)
     except (StorageError, OSError, ValueError, KeyError) as error:
         print(json.dumps({'schema': 1, 'utc': utc(), 'storage_exit': 3, 'error': str(error)}))

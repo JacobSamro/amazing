@@ -438,6 +438,164 @@ class Controls(unittest.TestCase):
         subprocess.run(['bash','-n',str(HELPER.with_name('linux-run.sh'))],check=True)
 
 
+    def replay_saved_elf(self, path):
+        # /dev/shm may be noexec. Verify and execute the retained native bytes
+        # from this test's actual executable /tmp filesystem, without claiming
+        # that the storage mount itself permits execution.
+        import shutil
+        replay = self.root / 'replay-retained-elf'
+        shutil.copy2(path, replay)
+        self.assertEqual(sha(replay), sha(path))
+        self.assertEqual(subprocess.run([str(replay)], check=False).returncode, 0)
+
+    def cross_device(self):
+        destination = pathlib.Path(tempfile.mkdtemp(prefix='capability-copy-controls.', dir='/dev/shm'))
+        self.assertNotEqual(destination.stat().st_dev, self.root.stat().st_dev)
+        return destination
+
+    def fallback_invocation(self, destination, budget=1048576, retire=False):
+        args = self.invocation()
+        args[args.index('--output-root') + 1] = str(destination / 'out')
+        args[args.index('--retained-root') + 1] = str(destination / 'out' / 'retained')
+        args[args.index('--retention-budget-bytes') + 1] = str(budget)
+        index = args.index('--')
+        flags = ['--retention-method', 'hardlink-or-copy', '--elf-policy', 'runnable']
+        if retire:
+            flags += ['--retire-after-retention']
+        return args[:index] + flags + args[index:]
+
+    def test_real_exdev_probe_never_changes_original_elf(self):
+        import errno
+        spec = importlib.util.spec_from_file_location('capability_probe', HELPER)
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        source = self.root / 'original-elf'
+        source.write_bytes(ELF.read_bytes())
+        destination = self.cross_device()
+        inode, original = source.stat().st_ino, sha(source)
+        result = module.probe_hardlink(source, destination)
+        self.assertFalse(result['supported'])
+        self.assertEqual(result['errno'], errno.EXDEV)
+        self.assertEqual(source.stat().st_ino, inode)
+        self.assertEqual(sha(source), original)
+        self.assertFalse(list(destination.iterdir()))
+
+    def test_budgeted_actual_exdev_copy_preserves_source_target_by_default(self):
+        receipt = self.invoke(self.fallback_invocation(self.cross_device()))
+        self.assertFalse(receipt['hardlink_capability']['supported'])
+        self.assertEqual(receipt['selected_retention_method'], 'copy')
+        self.assertGreater(receipt['copied_unique_bytes'], 0)
+        self.assertFalse(receipt['target_retired'])
+        original = pathlib.Path(receipt['target']) / 'measured'
+        self.assertEqual(sha(original), sha(ELF))
+        rows = json.loads(pathlib.Path(receipt['artifact_manifest']['path']).read_text())['artifacts']
+        saved = next(row for row in rows if row['kind'] == 'elf')
+        self.assertEqual(saved['retention_method'], 'copy')
+        self.assertEqual(sha(pathlib.Path(saved['blob'])), sha(original))
+        self.replay_saved_elf(pathlib.Path(saved['blob']))
+
+    def test_actual_exdev_small_copy_budget_refuses_payload_and_retirement(self):
+        destination = self.cross_device()
+        receipt = self.invoke(self.fallback_invocation(destination, budget=1), 3)
+        self.assertIn('explicit retention budget', receipt['storage_error'])
+        self.assertFalse(receipt['retention_complete'])
+        self.assertFalse(receipt.get('target_retired', False))
+        self.assertEqual(sha(pathlib.Path(receipt['target']) / 'measured'), sha(ELF))
+        blobs = pathlib.Path(receipt['session']).parent  # Source retained, no published payload.
+        self.assertTrue(blobs.exists())
+        self.assertFalse(list((destination / 'out' / 'retained' / 'blobs').glob('*')))
+
+    def test_copy_fallback_explicit_retirement_preserves_verified_original_elf(self):
+        receipt = self.invoke(self.fallback_invocation(self.cross_device(), retire=True))
+        self.assertTrue(receipt['retire_after_retention'])
+        self.assertTrue(receipt['target_retired'])
+        self.assertFalse(pathlib.Path(receipt['target']).exists())
+        rows = json.loads(pathlib.Path(receipt['artifact_manifest']['path']).read_text())['artifacts']
+        saved = next(row for row in rows if row['kind'] == 'elf')
+        self.assertEqual(sha(pathlib.Path(saved['blob'])), sha(ELF))
+        self.replay_saved_elf(pathlib.Path(saved['blob']))
+
+    def test_fallback_uses_real_hardlink_when_available_without_implicit_retirement(self):
+        args = self.invocation(); index = args.index('--')
+        args = args[:index] + ['--retention-method', 'hardlink-or-copy'] + args[index:]
+        receipt = self.invoke(args)
+        self.assertTrue(receipt['hardlink_capability']['supported'])
+        self.assertEqual(receipt['selected_retention_method'], 'hardlink')
+        self.assertEqual(receipt['copied_unique_bytes'], 0)
+        self.assertFalse(receipt['target_retired'])
+        rows = json.loads(pathlib.Path(receipt['artifact_manifest']['path']).read_text())['artifacts']
+        elf = next(row for row in rows if row['kind'] == 'elf')
+        self.assertEqual(pathlib.Path(elf['blob']).stat().st_ino,
+                         (pathlib.Path(receipt['target']) / 'measured').stat().st_ino)
+
+    def raw_args(self, destination, budget=0):
+        source = self.root / 'raw'
+        source.mkdir(); (source / 'nested').mkdir()
+        (source / 'actual.ppm').write_bytes(b'P6\n1 1\n255\n\x00\xff\x7f')
+        (source / 'nested' / 'stderr.log').write_bytes(b'original error\x00')
+        return [sys.executable, str(HELPER), 'publish-raw', '--directory', str(source),
+                '--destination', str(destination), '--copy-budget-bytes', str(budget),
+                '--reserve-bytes', '4096'], source
+
+    def test_actual_raw_rename_capability_preserves_bytes_without_a_copy(self):
+        destination = self.root / 'published'
+        args, source = self.raw_args(destination)
+        original = sha(source / 'actual.ppm')
+        receipt = self.invoke(args)
+        self.assertEqual(receipt['method'], 'rename')
+        self.assertTrue(receipt['complete'])
+        self.assertFalse(source.exists())
+        self.assertEqual(sha(destination / 'actual.ppm'), original)
+
+    def test_actual_raw_exdev_zero_copy_budget_preserves_original_and_rejects(self):
+        destination = self.cross_device() / 'published'
+        args, source = self.raw_args(destination)
+        original = sha(source / 'actual.ppm')
+        refused = self.invoke(args, 3)
+        self.assertIn('explicit sufficient copy budget', refused['error'])
+        self.assertFalse(destination.exists())
+        self.assertEqual(sha(source / 'actual.ppm'), original)
+
+    def test_actual_raw_exdev_budgeted_copy_verifies_all_files_and_keeps_source(self):
+        destination = self.cross_device() / 'published'
+        args, source = self.raw_args(destination, 1048576)
+        receipt = self.invoke(args)
+        self.assertEqual(receipt['rename_errno'], 18)
+        self.assertEqual(receipt['method'], 'copy')
+        self.assertTrue(receipt['source_retained'])
+        self.assertTrue(receipt['complete'])
+        for relative in ['actual.ppm', 'nested/stderr.log']:
+            self.assertEqual(sha(source / relative), sha(destination / relative))
+        self.assertEqual(receipt['raw_files'], 2)
+
+    def test_raw_existing_destination_is_never_overwritten(self):
+        destination = self.root / 'published'; destination.mkdir()
+        (destination / 'old-proof').write_bytes(b'old intact')
+        args, source = self.raw_args(destination, 1048576)
+        refused = self.invoke(args, 3)
+        self.assertIn('fresh destination', refused['error'])
+        self.assertTrue(source.exists())
+        self.assertEqual((destination / 'old-proof').read_bytes(), b'old intact')
+
+    def test_plan_explicit_fallback_and_retirement_are_forwarded_without_fake_baseline(self):
+        file, plan = self.plan()
+        destination = self.cross_device()
+        plan.update(output_root=str(destination / 'out'),retained_root=str(destination / 'out' / 'retained'),
+                    retention_method='hardlink-or-copy',retire_after_retention=True)
+        file.write_text(json.dumps(plan))
+        self.invoke(self.plan_args('check', file))
+        command = self.root / 'fallback.sh'
+        command.write_text('cp /usr/bin/true "$CARGO_TARGET_DIR/measured"\n')
+        receipt = self.invoke(self.plan_args('run', file) + ['--command-file', str(command)])
+        self.assertEqual(receipt['selected_retention_method'], 'copy')
+        self.assertTrue(receipt['target_retired'])
+        for wrong in [dict(retention_method='copy', retire_after_retention=False),
+                      dict(retention_method='hardlink-or-copy', retire_after_retention='false')]:
+            invalid = dict(plan, **wrong)
+            file.write_text(json.dumps(invalid))
+            refused = self.invoke(self.plan_args('validate', file), 3)
+            self.assertIn('retire_after_retention', refused['error'])
+
+
 class Results(unittest.TextTestResult):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
