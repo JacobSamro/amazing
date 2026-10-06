@@ -1,0 +1,13 @@
+# XML document-entity encoding consistency
+
+Recorded published base: `1bf80148010efcee8ba04b98d56c9a2e53e86b78`. Qualified engine source: `defa54d079bbb52eecde670dbf2b23a58c1b0e54`. The ready commit retains these exact production bytes and adds compact evidence.
+
+The standalone XML conformance host now uses strict document-entity decoding: a genuine UTF-8/UTF-16 byte signature must agree with the actual declaration. Generic UTF-16 accepts the actual BOM endian; unmarked UTF-16 still requires explicit endian authority. Fatal decoding and declaration grammar remain genuine. The existing MIME API retains RFC 7303 BOM/charset priority. Six complete native groups cover signatures, declarations, all 39 supported codecs, malformed bytes and the MIME distinction.
+
+The matched Linux pair completed with actual command/runner/storage exits 0. Workspace **5093 → 5099 PASS**, 0 failures and 17 unchanged skips; doctests **36 → 36**. All original 14 WPT cohorts retain exact passing-name Counters/multiplicities and passing files, including all 194 encoding files. No lost passes or unresolved comparisons. Static trees **1930 → 1930**; executed trees **1936 → 1936**.
+
+XMLTS retains its official archive, every one of 2377 case/fixture identities and the original 1992-eligible profile. Passes **1864 → 1866**, failures **47 → 45**, zero losses; exact gains are `hst-lhs-007` and `hst-lhs-008`. Optional, runtime-unsupported and profile-unsupported observations are unchanged. The remaining 45 external-resource failures remain measured failures with their genuine resolver/processor dependency recorded in questions.md. No fixture handler, expected-output normalization or case exclusion was introduced.
+
+The initial AFTER wrapper failed before engine execution because of the Mac Bash empty-array expansion. Its compact failure is preserved. The single clean run used the independently qualified published caller `2d111857`; source/assertions/deadlines and the 32,346,472,448-byte guard stayed unchanged. Original BEFORE results remain on their original host; the fresh AFTER used authenticated metadata only, with no baseline ELF ferry or fabricated local readback.
+
+Each side retained all 1007 native ELFs through real same-device hardlinks/hash readback. Raw output remains native on the original boxes; compact result/hash/source/endpoint summaries are under `evidence/`. The integrator owns the required combined 16-shard Test262 gate. Primary algorithm references: XML 1.0 §4.3.3/Appendix F and RFC 7303 §3.2. Existing quick-xml detector attribution is unchanged; new strict authority logic is original.

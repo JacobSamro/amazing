@@ -1,0 +1,254 @@
+{
+  "schema": 1,
+  "base": "1bf80148010efcee8ba04b98d56c9a2e53e86b78",
+  "qualified_source": "defa54d079bbb52eecde670dbf2b23a58c1b0e54",
+  "tool_source": "2d111857f77ab9d0946261cd938e1552c9e64f98",
+  "workspace": {
+    "before": {
+      "failed": 0,
+      "passed": 5093,
+      "skipped": 17
+    },
+    "after": {
+      "failed": 0,
+      "passed": 5099,
+      "skipped": 17
+    }
+  },
+  "doctests": {
+    "before": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 36
+    },
+    "after": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 36
+    }
+  },
+  "corpus": {
+    "binary_after": "161991bfda6cb6c7613a605209984770805c82c1dc9e52ece84ba04ddb3a82b2",
+    "binary_before": "e3e5749e142b1259e3ff2db071fdd1ce289ce43c36630d75b29df079743a982e",
+    "comparison_complete": true,
+    "comparison_method": "exact per-file authenticated Counter SHA256 and multiplicity equality; differing counters remain unresolved, never waived",
+    "counts": {
+      "base-url": {
+        "after": 2,
+        "before": 2,
+        "files": 11
+      },
+      "core": {
+        "after": 93221,
+        "before": 93221,
+        "files": 888
+      },
+      "cssom": {
+        "after": 1772,
+        "before": 1772,
+        "files": 192
+      },
+      "encoding": {
+        "after": 12357,
+        "before": 12357,
+        "files": 194
+      },
+      "modules": {
+        "after": 145,
+        "before": 145,
+        "files": 111
+      },
+      "shadow": {
+        "after": 5681,
+        "before": 5681,
+        "files": 277
+      },
+      "syntax": {
+        "after": 3216,
+        "before": 3216,
+        "files": 220
+      },
+      "syntax72": {
+        "after": 2708,
+        "before": 2708,
+        "files": 72
+      },
+      "the-base-element": {
+        "after": 15,
+        "before": 15,
+        "files": 11
+      },
+      "the-history-interface": {
+        "after": 13,
+        "before": 13,
+        "files": 74
+      },
+      "the-iframe-element": {
+        "after": 28,
+        "before": 28,
+        "files": 150
+      },
+      "the-window-object": {
+        "after": 253,
+        "before": 253,
+        "files": 90
+      },
+      "the-windowproxy-exotic-object": {
+        "after": 14,
+        "before": 14,
+        "files": 8
+      },
+      "windows": {
+        "after": 4,
+        "before": 4,
+        "files": 53
+      }
+    },
+    "executed-trees.compact.json": {
+      "after": 1936,
+      "before": 1936,
+      "gained": [],
+      "lost": []
+    },
+    "passing_counter_gains": [],
+    "passing_counter_losses": [],
+    "passing_files_lost": [],
+    "raw_after": {
+      "bytes": 4534910,
+      "path": "/tmp/amazing-xml-entity-output/html-xml-entity-after-clean-20261006/xml-entity-after-clean-defa54d0/raw/wpt-counter-records.raw.json.gz",
+      "sha256": "58fdd756feac661836bdeb9931a7ce3e20a869a028adff12d4961e3ae9c18889"
+    },
+    "raw_before": {
+      "bytes": 4534910,
+      "path": "/tmp/amazing-xml-entity-output/html-xml-entity-before-20261006/xml-entity-before-1bf80148/raw/wpt-counter-records.raw.json.gz",
+      "sha256": "58fdd756feac661836bdeb9931a7ce3e20a869a028adff12d4961e3ae9c18889"
+    },
+    "source_after": "defa54d079bbb52eecde670dbf2b23a58c1b0e54",
+    "source_before": "1bf80148010efcee8ba04b98d56c9a2e53e86b78",
+    "trees": {
+      "after_passed": 1930,
+      "before_passed": 1930,
+      "lost": [],
+      "raw_after": {
+        "bytes": 183082,
+        "path": "/tmp/amazing-xml-entity-output/html-xml-entity-after-clean-20261006/xml-entity-after-clean-defa54d0/raw/trees.json",
+        "sha256": "fd1ab07a655bb7814b181a310cf2a9d6d3cd9f12de3b6862b82257cd677cc888"
+      },
+      "raw_before": {
+        "bytes": 183082,
+        "path": "/tmp/amazing-xml-entity-output/html-xml-entity-before-20261006/xml-entity-before-1bf80148/raw/trees.json",
+        "sha256": "fd1ab07a655bb7814b181a310cf2a9d6d3cd9f12de3b6862b82257cd677cc888"
+      },
+      "unsupported": 6
+    },
+    "unresolved_counter_changes": [],
+    "xmlts.compact.json": {
+      "after": 1866,
+      "before": 1864,
+      "gained": [
+        [
+          "eduni/misc/007.xml",
+          "hst-lhs-007",
+          "ef18c32b7867c63ab08caf6e8fd6ce7cad08939378b3fc161443b6e34ae986c3",
+          "0fcc1fc486096eda1651958a907dfaa8c10c9602ba2c0e506dd4db19853d68ce"
+        ],
+        [
+          "eduni/misc/008.xml",
+          "hst-lhs-008",
+          "ef18c32b7867c63ab08caf6e8fd6ce7cad08939378b3fc161443b6e34ae986c3",
+          "b79f9e33fed1756114406089b89d7dd77edd7d5e10512703c6d35cd1281f8783"
+        ]
+      ],
+      "lost": []
+    },
+    "zero_loss": true
+  },
+  "files": {
+    "before/executed-trees.compact.json": {
+      "bytes": 89361,
+      "sha256": "c0cedfc5bad102593cd2d16b256021f094391d203080d915faaf9a9501d5bef7"
+    },
+    "before/gate.manifest.json": {
+      "bytes": 3792,
+      "sha256": "e7cf74442f5346f1b9cc0caefecc8df5b19f89434494dace6a4a58a392132dae"
+    },
+    "before/storage.summary.json": {
+      "bytes": 2307,
+      "sha256": "2a2eac054edf95bf4b87f25b10e3a7ca5e03f95b88820a3bc5660483995de8cd"
+    },
+    "before/trees.summary.json": {
+      "bytes": 45070,
+      "sha256": "5ee5f978f3dc6e92df00e55d7c68714f99dd12a92eea2a920bdcd406b87809d9"
+    },
+    "before/wpt.compact.json": {
+      "bytes": 97007,
+      "sha256": "c1711ec247df58fbacf64f7e2ca74aced4b416f3829f052fdef90cce8b82dd4b"
+    },
+    "before/xmlts.compact.json": {
+      "bytes": 193637,
+      "sha256": "557d8596d0e3f1935519e601d03e35d25447a2d957aedc366fadad3987923961"
+    },
+    "after/comparison.summary.json": {
+      "bytes": 2847,
+      "sha256": "d7691b153cd3366e3208f1c62cb58aaeabf022a5e6dd0ad201d508839b3ec727"
+    },
+    "after/executed-trees.compact.json": {
+      "bytes": 89361,
+      "sha256": "c0cedfc5bad102593cd2d16b256021f094391d203080d915faaf9a9501d5bef7"
+    },
+    "after/gate.manifest.json": {
+      "bytes": 3812,
+      "sha256": "013c60a1e2f40f6dba3d03e83b11d447ba1656fe9bbc0f2112057b5f015804b9"
+    },
+    "after/storage.summary.json": {
+      "bytes": 4050,
+      "sha256": "73ee89917a1c74ff1e12224552b3abafee95ac3afddd43a84616a006063a7b03"
+    },
+    "after/trees.summary.json": {
+      "bytes": 45080,
+      "sha256": "94c9593b298455debc8e03ca72e06deed029c28e48eb8a229be604bd9c191085"
+    },
+    "after/wpt.compact.json": {
+      "bytes": 97156,
+      "sha256": "e0654b21a61952dd351e81005b500e88fb2940e1ef92bdb5de90d7b9a489ce70"
+    },
+    "after/xmlts.compact.json": {
+      "bytes": 193687,
+      "sha256": "f8814c11792943c0a2117a12ac6f171ef6d311689ebe4cb03df7225f3c9e0013"
+    }
+  },
+  "actual_endpoint_before": {
+    "schema": 2,
+    "lane": "html-xml-entity-before-20261006",
+    "source_commit": "1bf80148010efcee8ba04b98d56c9a2e53e86b78",
+    "box_id": "bx_ynhc29q5",
+    "host": "user@213.32.27.79",
+    "port": 19049,
+    "job_id": "c8933266c2604ce484ca7bc96ef43e9c",
+    "output_root": "amazing/out/html-xml-entity-before-20261006/html-xml-entity-before-20261006/before",
+    "command_sha256": "dd3277b771b954e58868a6cbb0db3fcaf434cf990ad425524305ec652f213c54",
+    "execution_sha256": "b23ec770029696bedd5e18a51fe13206d7f073e8aa88c0c5c8faae84170d653a",
+    "source_archive_sha256": "c9a4a794882cf61ed69632fa9ef78f2601cfd82116748289ebfc6e7463fba24f"
+  },
+  "actual_endpoint_after": {
+    "schema": 2,
+    "lane": "html-xml-entity-after-clean-20261006",
+    "source_commit": "defa54d079bbb52eecde670dbf2b23a58c1b0e54",
+    "box_id": "bx_5eb64yg4",
+    "host": "user@46.105.118.142",
+    "port": 19044,
+    "job_id": "3d9bbf000e05432a9568fd7a81b04584",
+    "output_root": "amazing/out/html-xml-entity-after-clean-20261006/html-xml-entity-after-clean-20261006/after",
+    "command_sha256": "67a3051946c3c74f3bd290d61fcea36eaed7321a22207611430670fb0b830a10",
+    "execution_sha256": "c821533430103716a2b66ef8738d630346fdc00ee9a4a8c8fa4ff6b1a2a8e504",
+    "source_archive_sha256": "34d2dc1935ce0e7dc49e81fd1ac650d2adf338bbe85d09cb71c6c046fc25a15d"
+  },
+  "command_sha256": "67a3051946c3c74f3bd290d61fcea36eaed7321a22207611430670fb0b830a10",
+  "storage_plan_sha256": "5b6ee203906620787833e74d3d2414ced00ceebd8285c6fd185ce6c6c2bde91a",
+  "baseline_reference_sha256": "6f17ddfa636493f11ea42d6c688e38a8b97f3f989392df8dc19ef527d995ed1e",
+  "scope": "original14/fullencoding194/XML2377/1992/static1930/scripted1936",
+  "source_area": "document-entity encoding consistency; original MIME authority unchanged",
+  "external_resources": "Remaining external-resource failures preserved; resolver/validating processors remain explicit separate areas",
+  "raw_policy": "Native raw/allELFs remain on their original boxes; only compact evidence fetched",
+  "integrator_test262": "Required16shard combined gate remains integrator-owned"
+}

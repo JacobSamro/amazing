@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "source": "defa54d079bbb52eecde670dbf2b23a58c1b0e54",
+  "actual_owner": 3274,
+  "actual_exit": 3,
+  "box": "bx_mbj3jnd7",
+  "phase": "endpoint capture before native bootstrap",
+  "error": "scripts/linux-run.sh line 364: PROOF_CAPTURE_ARGS[@]: unbound variable",
+  "command_sha256": "704a430ae8f82b050442839c01c5db6499c1b78c0c04794445c280854277d01e",
+  "storage_plan_sha256": "2e81578c20e20ba50be58a3c4c85676135e5f743f347b1a8bbe9c6153da9b7df",
+  "baseline_reference_sha256": "6f17ddfa636493f11ea42d6c688e38a8b97f3f989392df8dc19ef527d995ed1e",
+  "native_archive": "/tmp/amazing-source-transport-html-xml-entity-after-20261006.9881/source.tar.gz",
+  "native_archive_sha256": "542a8c1abc47a9fe38bfab2c452d87767bb689d9a2344d84a93265f228d256d9",
+  "engine_started": false,
+  "endpoint_receipt_minted": false,
+  "clean_allowance_remaining": 1
+}

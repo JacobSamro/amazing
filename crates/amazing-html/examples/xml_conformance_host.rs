@@ -11,7 +11,9 @@ fn observe(path: &str) -> (String, String) {
         Ok(bytes) => bytes,
         Err(error) => return ("io-error".into(), error.to_string()),
     };
-    let decoded = match xml_encoding::decode(&bytes, None) {
+    // Files are document entities, not MIME responses carrying an authoritative
+    // HTTP charset/BOM recovery contract. No fixture expectation participates.
+    let decoded = match xml_encoding::decode_entity(&bytes) {
         Ok(decoded) => decoded,
         Err(error) => return ("decode-error".into(), error.to_string()),
     };

@@ -15,18 +15,45 @@ impl fmt::Display for XmlDecodeError {
 impl std::error::Error for XmlDecodeError {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodedXml { pub text: String, pub encoding: Encoding }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ByteAuthority { Mime, DocumentEntity }
 
 /// Decodes a complete XML entity. BOM is authoritative, then HTTP charset,
 /// then the entity's declaration/autodetection; otherwise UTF-8 is required.
 /// Unsupported codecs and malformed sequences fail without a partial string.
 pub fn decode(bytes: &[u8], transport_label: Option<&str>) -> Result<DecodedXml, XmlDecodeError> {
+    decode_with_authority(bytes, transport_label, ByteAuthority::Mime)
+}
+
+/// Decodes a document entity without a MIME/transport authority. XML 1.0
+/// §4.3.3 requires its declaration to agree with the detected byte signature.
+/// This is distinct from RFC 7303's MIME recovery rules used by `decode`.
+pub fn decode_entity(bytes: &[u8]) -> Result<DecodedXml, XmlDecodeError> {
+    decode_with_authority(bytes, None, ByteAuthority::DocumentEntity)
+}
+
+fn decode_with_authority(bytes: &[u8], transport_label: Option<&str>, authority: ByteAuthority)
+    -> Result<DecodedXml, XmlDecodeError> {
     if [[0, 0, 0xfe, 0xff], [0xff, 0xfe, 0, 0], [0, 0, 0xff, 0xfe], [0xfe, 0xff, 0, 0]]
         .iter().any(|marker| bytes.starts_with(marker)) {
         return Err(XmlDecodeError("unsupported UCS-4 XML encoding".into()));
     }
     let detected = detect_encoding(bytes);
     if let Some(found) = detected.filter(|found| found.bom_len() != 0) {
-        return decode_as(&bytes[found.bom_len()..], found.encoding());
+        let decoded = decode_as(&bytes[found.bom_len()..], found.encoding())?;
+        if authority == ByteAuthority::DocumentEntity {
+            let declaration = crate::xml::encoding_declaration(&decoded.text)
+                .map_err(|error| XmlDecodeError(error.to_string()))?;
+            if let Some(label) = declaration {
+                let matches = if label.eq_ignore_ascii_case("utf-16") {
+                    matches!(decoded.encoding, Encoding::Utf16Le | Encoding::Utf16Be)
+                } else { codec(&label)? == decoded.encoding };
+                if !matches {
+                    return Err(XmlDecodeError("XML declaration conflicts with byte order mark".into()));
+                }
+            }
+        }
+        return Ok(decoded);
     }
     if let Some(label) = transport_label {
         if label.trim().eq_ignore_ascii_case("utf-16") {
@@ -69,8 +96,16 @@ pub fn decode(bytes: &[u8], transport_label: Option<&str>) -> Result<DecodedXml,
     if matches!(initial, Encoding::Utf16Le | Encoding::Utf16Be) && selected != initial {
         return Err(XmlDecodeError("XML declaration conflicts with detected byte order".into()));
     }
+    if authority == ByteAuthority::DocumentEntity && initial == Encoding::Utf8
+        && matches!(selected, Encoding::Utf16Le | Encoding::Utf16Be) {
+        return Err(XmlDecodeError("XML declaration conflicts with byte signature".into()));
+    }
     decode_as(bytes, selected)
 }
+
+#[cfg(test)]
+#[path = "xml_encoding_entity_tests.rs"]
+mod entity_tests;
 fn codec(label: &str) -> Result<Encoding, XmlDecodeError> {
     amazing_encoding::encoding_for_label(label)
         .filter(|encoding| *encoding != Encoding::Replacement)
