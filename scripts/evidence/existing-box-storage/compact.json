@@ -1,0 +1,13 @@
+{
+  "scope": "Public wrapper ordinary exact-ref --existing-box storage and completed endpoint capture; not approval of generic-font engine source",
+  "helper_commit_at_measurement": "7b2e0b9b1",
+  "helper_sha256": "5466781d152de096be01857fd4729b9b70c5405c5054ce5ff2a57c3358e16631",
+  "existing_box_id": "bx_a59cv9tg",
+  "measured_engine_source": "10776ee633e01c069718ed78b6e0fed521c8781b",
+  "native_storage_exit": 0,
+  "native_job_terminal_exit": 1,
+  "workspace_passed": 5497,
+  "doctests_passed": 39,
+  "engine_loss_preserved": "Generic font PUA regression, blocked engine ticket; no waiver or success claim",
+  "lifecycle": "existing endpoint mode, no create/resume/resize; guard unmodified"
+}

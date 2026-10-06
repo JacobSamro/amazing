@@ -156,7 +156,10 @@ if [ -n "$MISSION_PACKAGE$MISSION_SHA256" ]; then
   }
 fi
 if [ "$EXISTING_BOX" = 1 ] && [ -z "$MISSION_PACKAGE" ]; then
-  echo "linux-run: --existing-box requires guarded mission transport" >&2; exit 2
+  [ "$HOST" = boat ] && [ -n "$REF" ] && [ -n "$STORAGE_PLAN" ] &&
+    [ -n "$ENDPOINT_RECEIPT" ] && [ -n "$COMPACT_ROOT" ] || {
+      echo 'linux-run: ordinary --existing-box requires exact-ref Boat storage and endpoint capture' >&2; exit 2;
+    }
 fi
 
 # One run per lane tree at a time. Two runs of the same lane share the remote
