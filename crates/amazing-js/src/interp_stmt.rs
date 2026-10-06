@@ -2022,6 +2022,8 @@ impl Interpreter {
         result
     }
     fn delete_member_value(&mut self, o: JsValue, k: PropertyKey) -> Result<JsValue, Throw> {
+        // Delete boxes primitive references without an observable constructor.
+        let o = object_to_object(self, o)?;
         if let JsValue::Object(o) = o {
             if let Some(result) = self.window_proxy_delete(&o, &k) {
                 let deleted = result?;

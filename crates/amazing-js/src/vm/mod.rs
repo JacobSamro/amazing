@@ -48,6 +48,8 @@ mod tests_super_reads;
 #[cfg(test)]
 mod tests_templates;
 #[cfg(test)]
+mod tests_delete;
+#[cfg(test)]
 mod tests_bigint_literals;
 #[cfg(test)]
 mod tests_constructors;
@@ -215,6 +217,8 @@ enum Instruction {
     GetMember(Register, Register, KeyOperand),
     GetMemberReceiver(Register, Register, KeyOperand, Register),
     DeleteMember(Register, Register, KeyOperand),
+    DeleteName(Register, String),
+    RejectSuperDelete,
     ResolveMember(usize, Register, Register, KeyOperand),
     StoreReference(usize, Register),
     StorePatternReference(usize, Register),
@@ -906,6 +910,10 @@ impl Program {
                         let key = key.resolve(&registers)?;
                         registers[*dst] = i.get_prop_receiver(&registers[*object], &key, registers[*receiver].clone())?;
                     }
+                    Instruction::DeleteName(dst, name) => {
+                        registers[*dst] = i.delete_scoped_name(&env, name)?;
+                    }
+                    Instruction::RejectSuperDelete => return Err(Throw::reference_error("cannot delete super property")),
                     Instruction::DeleteMember(dst, object, key) => {
                         let key = key.resolve(&registers)?;
                         registers[*dst] = i.delete_member_value(registers[*object].clone(), key)?;

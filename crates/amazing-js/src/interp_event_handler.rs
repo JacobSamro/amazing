@@ -110,7 +110,10 @@ impl Interpreter {
             Some(Reference::ObjectBinding(object, key, with)) => {
                 if with {
                     if let Some(result) = self.legacy_delete(&object, name)? { result }
-                    else { object.borrow_mut().delete_own(&key) }
+                    // ObjectEnvironmentRecord.DeleteBinding uses the captured
+                    // binding object's semantic [[Delete]], including Proxy
+                    // traps/invariants; it never obtains the binding value.
+                    else { self.default_delete_property(&object, &PropertyKey::from(key.as_str()))? }
                 } else {
                     let deleted = self.default_delete_property(&object, &PropertyKey::from(key.as_str()))?;
                     if deleted { env.global_scope().remove_object_binding(name); }

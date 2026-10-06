@@ -25,6 +25,9 @@ use std::rc::Rc;
 #[path = "tests_source.rs"]
 mod tests_source;
 
+#[path = "compiler_delete.rs"]
+mod delete;
+
 #[path = "compiler_patterns.rs"]
 mod patterns;
 use patterns::pattern_target;
@@ -1219,6 +1222,11 @@ impl Compiler {
 
     fn expression(&mut self, expression: &Expr) -> Result<Register, CompileError> {
         self.enter(expression.span)?;
+        if let ExprKind::Unary { op: UnOp::Delete, operand } = &expression.kind {
+            let result = self.delete_expression(operand);
+            self.depth -= 1;
+            return result;
+        }
         if may_suspend(expression)
             && (chains::is_chain_expression(expression) || chains::is_super_read(expression)) {
             let result = self.suspended_chain(expression);

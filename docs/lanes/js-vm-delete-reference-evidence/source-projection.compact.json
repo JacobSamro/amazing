@@ -1,0 +1,52 @@
+{
+  "recorded_base": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+  "tested_source": "4d6e8f01fab404aa88489e74e8999ea1806e463f",
+  "byteexact_code_and_tests": [
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "sha256": "6fde5628b675bd15de534e7e1e55913648f6d00ddd3fef160f5fe073ad70188b",
+      "bytes": 38767
+    },
+    {
+      "path": "crates/amazing-js/src/interp_event_handler.rs",
+      "sha256": "06f782897d1330d860981517c89855110d4d1f4ca97fda9f2bc1d85ff30bbcb4",
+      "bytes": 14098
+    },
+    {
+      "path": "crates/amazing-js/src/interp_optional_chain.rs",
+      "sha256": "9c1fff1fb2e7e88ab5a3d0d00ff8b4c625bcc49bb86cbb63e51ee102065f8726",
+      "bytes": 9475
+    },
+    {
+      "path": "crates/amazing-js/src/interp_stmt.rs",
+      "sha256": "fd0863f5c2e7b2ecfae1a69bd3177981797a1bdcd7723a9f660cbc9530deccb7",
+      "bytes": 173069
+    },
+    {
+      "path": "crates/amazing-js/src/vm/compiler.rs",
+      "sha256": "eabf3d8f7b3a38be2b4fa06bf5e57d3e2160c1b8a560f7f4ef94b36b2b300acb",
+      "bytes": 96699
+    },
+    {
+      "path": "crates/amazing-js/src/vm/compiler_delete.rs",
+      "sha256": "9f67e8f772374106e5a54315d5cb7ab738acff30c590d48f53df1e168e3a37d0",
+      "bytes": 2393
+    },
+    {
+      "path": "crates/amazing-js/src/vm/mod.rs",
+      "sha256": "835aef082e82f1829e7a353574c2b97c2f951cbe10693113ae37f23377a29827",
+      "bytes": 150871
+    },
+    {
+      "path": "crates/amazing-js/src/vm/tests_delete.rs",
+      "sha256": "4d43fba117c78d89fe2ee01e835cbea9e84393fdca90d652f01d74585eae7844",
+      "bytes": 30570
+    },
+    {
+      "path": "crates/amazing-js/tests/delete_super_reference.rs",
+      "sha256": "69a4122cad43cd88323c8569536e1ccf905a6d2249094ed15f56482319276016",
+      "bytes": 11823
+    }
+  ],
+  "integration_full16_pending": true
+}

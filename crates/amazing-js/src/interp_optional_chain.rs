@@ -1,3 +1,5 @@
+// Super-reference Delete portions adapted from lucid-softworks/lumen
+// (crates/lumen/src/eval.rs, eval_delete) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Super Reference/GetValue portions adapted from lucid-softworks/lumen
 // (crates/lumen/src/eval.rs) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
 // Portions ported from boa-dev/boa (core/engine/src/bytecompiler/mod.rs)
@@ -116,6 +118,16 @@ impl Interpreter {
     }
 
     fn delete_chain(&mut self, expression: &ast::Expr, env: &EnvHandle) -> Result<JsValue, Throw> {
+        let mut target = expression;
+        while let ExprKind::Paren(inner) = &target.kind { target = inner; }
+        if matches!(&target.kind, ExprKind::Member { obj, optional: false, .. }
+            if matches!(obj.kind, ExprKind::Super)) {
+            // Capture actual this and the raw expression, then reject without
+            // GetValue, ToPropertyKey, ToObject or property callbacks.
+            let reference = self.capture_reference(target, env)?;
+            debug_assert!(matches!(reference, Reference::SuperProperty(..) | Reference::RawSuperProperty(..)));
+            return Err(Throw::reference_error("cannot delete super property"));
+        }
         match self.eval_chain_reference(expression, env)? {
             ChainEvaluation::Property { super_reference: true, .. } => Err(Throw::reference_error("cannot delete super property")),
             ChainEvaluation::Property { base, key, .. } => self.delete_member_value(base, key),
