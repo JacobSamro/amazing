@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "ticket": "grid-line-name-collector-current",
+  "base": "2d111857f77ab9d0946261cd938e1552c9e64f98",
+  "state": "ready-fixed-base-own-gates-passed",
+  "scope": [
+    "decode explicit bracket identifiers using the existing public CSS tokenizer",
+    "union and deduplicate actual line positions across duplicate words, adjacent groups and repeated fragment boundaries",
+    "preserve independent names, case/nonascii/escaped codepoints and original line limits",
+    "retain original repeat count, track sizing, auto-fit mask and inherited subgrid algorithms"
+  ],
+  "controls": {
+    "groups": 14,
+    "file": "crates/amazing-layout/src/grid_line_names_tests.rs",
+    "actual_document_groups": 12,
+    "metadata_contract_groups": 2,
+    "native_run": true,
+    "original_assertions_unchanged": true
+  },
+  "authorship": "Amazing-authored composition of existing CSS tokenizer and std occurrence vectors; no new upstream code port",
+  "independent_of_pending_named_area": "No f0/3180 code or history imported; positive/negative existing named occurrences consume the normalized producer on this recorded dev base",
+  "old_source_preserved": {
+    "named_ready": "3180d569523355dcee9faad3fc91308c0c8b5843",
+    "named_failed": "5a307b2b1ae869052b52f47062b28f420d3faaf7",
+    "dense96": "held CSS prerequisite",
+    "intrinsic07": "held exhausted tooling"
+  },
+  "gate_plan": {
+    "whole8": [
+      "css/css-grid",
+      "css/css-flexbox",
+      "css/css-contain",
+      "css/css-display",
+      "css/css-overflow",
+      "css/css-position",
+      "css/css-sizing",
+      "css/css-writing-modes"
+    ],
+    "original_selected": 2421,
+    "pin": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "viewport": [
+      800,
+      600,
+      1
+    ],
+    "jobs": 4,
+    "timeout_seconds": 20,
+    "limit": 0,
+    "before_source": "2d111857f77ab9d0946261cd938e1552c9e64f98",
+    "before_workspace_redundant": false,
+    "after_workspace_docs": true,
+    "profiles_identical": true,
+    "default_vcpu": 4,
+    "default_ram_gb": 8,
+    "finite_ttl_seconds": 7200,
+    "physical_storage_lifecycle": "before on each fresh box; actual roles separately before/after",
+    "native_budget_bytes": 30198988800,
+    "prebootstrap_budget_bytes": 32346472448,
+    "raw_budget_bytes": 12884901888,
+    "native_raw_and_all_elfs_retained": true,
+    "compact_home_only": true,
+    "after_only_authenticated_before_0": true,
+    "one_clean_tooling_retry": true,
+    "no_local_build_test_or_direct_boat": true
+  },
+  "initial_qualification": {
+    "source": "20627b3c103be150846c03b561d4176969a464cd",
+    "after_native_exit": 1,
+    "after_fetch_exit": 0,
+    "workspace_passed": 5176,
+    "workspace_failed": 1,
+    "doctests_passed": 36,
+    "corpus_before_passed": 1217,
+    "corpus_after_passed": 1217,
+    "gained": 0,
+    "lost": [],
+    "sole_failure": "new empty_groups_do_not_add_tracks_or_names positive fixture used two separate name blocks per boundary",
+    "production_code_unchanged": true,
+    "fix": "Legal empty-group track list positive plus exact original invalid value as negative cascade/geometry control",
+    "original_repo_and_other12_controls_preserved": true,
+    "prior_guard_tooling3_preserved": true,
+    "tooling_retry_used": 1
+  },
+  "qualified_sources": {
+    "production_and_full8": "20627b3c103be150846c03b561d4176969a464cd",
+    "corrected_workspace": "65ec7f1d721c118c023f20bff87aca9cc70abbb6",
+    "fixture_only_correction": true,
+    "all14_controls_actual_workspace_pass": true
+  },
+  "actual_gate": {
+    "workspace": {
+      "failed": 0,
+      "passed": 5178,
+      "skipped": 17
+    },
+    "doctests": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 36
+    },
+    "render_original_cases": 2421,
+    "render_before_pass": 1217,
+    "render_after_pass": 1217,
+    "gained": [],
+    "lost": [],
+    "workspace_native_exit": 0,
+    "workspace_fetch_exit": 0,
+    "prior_render_run_overall_exit": 1,
+    "prior_per_render_phases_exit": 0,
+    "corpus_reuse": "Explicit root decision: unchanged production/helper/input/profile; prior workspace failure retained"
+  }
+}

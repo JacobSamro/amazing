@@ -465,11 +465,12 @@ fn collect_line_names(
         if token.starts_with('[') && token.ends_with(']') {
             // Adjacent blocks (`[a][b]`) arrive as one token; `][` separates
             // their name lists just like whitespace.
-            for name in token[1..token.len() - 1]
-                .split("][")
-                .flat_map(|part| part.split_ascii_whitespace())
-            {
-                names.entry(name.to_owned()).or_default().push(line);
+            for part in token[1..token.len() - 1].split("][") {
+                for token in amazing_css::syntax::tokenize(part) {
+                    if let amazing_css::syntax::Token::Ident(name) = token {
+                        names.entry(name).or_default().push(line);
+                    }
+                }
             }
             continue;
         }
@@ -499,6 +500,9 @@ fn collect_line_names(
         }
         line = (line + 1).min(MAX_GRID_TRACKS as i32 + 1);
     }
+    // A line can receive the same name through adjacent groups and both
+    // sides of a repeated fragment, but contributes one occurrence per name.
+    for lines in names.values_mut() { lines.sort_unstable(); lines.dedup(); }
     names
 }
 
@@ -3062,3 +3066,7 @@ mod tests {
 #[cfg(test)]
 #[path = "grid_named_tests.rs"]
 mod named_tests;
+
+#[cfg(test)]
+#[path = "grid_line_names_tests.rs"]
+mod line_names_tests;

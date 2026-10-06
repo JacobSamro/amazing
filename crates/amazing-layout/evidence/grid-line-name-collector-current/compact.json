@@ -1,0 +1,265 @@
+{
+  "base": "2d111857f77ab9d0946261cd938e1552c9e64f98",
+  "controls": {
+    "groups": 14,
+    "new_legal_positive": true,
+    "original_invalid_negative_retained": true,
+    "original_repo_assertions_unchanged": true
+  },
+  "corrected_workspace": {
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 36
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 5178,
+        "skipped": 17
+      }
+    },
+    "endpoint": {
+      "box_id": "bx_4r65mjb6",
+      "command_sha256": "19b849b4efdc4305f7734b27d4253161693ef728a70599a0065790e4075cb6b7",
+      "execution_sha256": "6fcc0c473e93751daf3b441ee54ad6859fb7e8f0e834b3acdd1420732f6f57fe",
+      "host": "user@5.39.75.76",
+      "job_id": "30d8b6e46d6340f4b506646ca3a31ca5",
+      "lane": "layout-grid-line-collector-workspace-20261006",
+      "output_root": "amazing/out/layout-grid-line-collector-workspace-20261006/workspace-51fc20b460574252b1f314947a843a08/compact",
+      "port": 19032,
+      "schema": 2,
+      "source_archive_sha256": "98e40665dad774fcb8c41d5172f0868d61728bf15e022ce21ede08b984953926",
+      "source_commit": "65ec7f1d721c118c023f20bff87aca9cc70abbb6"
+    },
+    "fetch_exit": 0,
+    "manifest": "workspace-corrected/workspace.manifest.json",
+    "native_actual_exit": 0,
+    "phase_exits": {
+      "doctests": 0,
+      "nextest": 0
+    },
+    "profile": {
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+    },
+    "runner_exit": 0
+  },
+  "corrected_workspace_source": "65ec7f1d721c118c023f20bff87aca9cc70abbb6",
+  "evidence_hashes": {
+    "before/corpus.manifest.json": "ec2b30f228278c134d0e0f45bc7e2903954063d43d546ab4f71af1ee94d1fb27",
+    "before/css-css-contain.compact.json": "697d98f6c5a7a54fa93ee89b44b6eea52bd9272f1e44a41c969ae7fd589f907c",
+    "before/css-css-display.compact.json": "25d6b08f1f6fb6d280086363b691e1bf60386ee3df87e54b88a242130e736263",
+    "before/css-css-flexbox.compact.json": "59ed7a774e23d3e717b09889a1d1691d3ca609e6407ee9afdc745f6e28a14794",
+    "before/css-css-grid.compact.json": "bac2d4ace4e0a3b8ad4e8fb24bb661d980131d79432dcd83a31df737d50ff1b2",
+    "before/css-css-overflow.compact.json": "7b7068ad58a71c6d4707d997465581deb9df55b73849aeaf94ce5f0711149377",
+    "before/css-css-position.compact.json": "1547f0beb519262a957d7d2ea99ebe7ca7e946a507469faeb7526b2c9d548693",
+    "before/css-css-sizing.compact.json": "ba26d9c8edb44d35b3541b597b72b002c4ad027ab0a82fe28d24e3620c2c97e8",
+    "before/css-css-writing-modes.compact.json": "27ccf75456b822eaaca5ff73ecf37071770a24166ca7e4db18b4a925e0c10336",
+    "before/endpoint.manifest.json": "8a28020635d28c55a24026460d245026d93d10a6f607e784ac6205bfd0d3f0a6",
+    "before/endpoint.manifest.json.observation.summary.json": "b2fdbd5c96fd8e9c6954b21ac0885e83da40126d2a660f8a8ca83e06f82582bf",
+    "before/gate.summary.json": "0691ccf345d18865540100a000545024c4bf667a42cdcca0426ff6b793885cb1",
+    "before/storage.summary.json": "b19a6f813096f6c932884e3e19c8ceb69c29ade0d02f844cd2ba010a615bcb74",
+    "corpus-after/corpus.manifest.json": "62e21f94792a1479b7294c935a3e62f2507e71aabde5aae31216aa23b8d3dd8a",
+    "corpus-after/css-css-contain.compact.json": "ce1268520796d7dc9b1ead3e4ad5013c4a3e9e98b5773bc484b4cf9bb89d8395",
+    "corpus-after/css-css-display.compact.json": "b6616fd7cd190947747cb5f34e238929830f5d1f21e4d9a1cb4f7d27fde513a1",
+    "corpus-after/css-css-flexbox.compact.json": "a770cc44813fc962e12205d67dfea4325a011bbd8c0a999b12cd3fe0873a2152",
+    "corpus-after/css-css-grid.compact.json": "a4d13758d8066871610312ef250267fa8f2dea92d2cfc69ffb66714c82751bae",
+    "corpus-after/css-css-overflow.compact.json": "905eef4b1500070e81b1e2071875f5de1791ff60bee47a1ca085a7276e1768dc",
+    "corpus-after/css-css-position.compact.json": "aa718480801c4e8a4148eeac273ca404cf6cfdaeb7b919cd9fcbf000bb851973",
+    "corpus-after/css-css-sizing.compact.json": "fc7dcdf707a20a7699f537552aa6a27f54778c38f3ab271edc0bd1813354141e",
+    "corpus-after/css-css-writing-modes.compact.json": "4a7eb98ae0ca23c9e8db5581be3bc9b901bc5d12723aefba053c86063a48d49a",
+    "corpus-after/endpoint.manifest.json": "36bf3c4fc0d7dead39959ab76ee8b1fb7518ba42dd4664b26c3a3b253670a2bc",
+    "corpus-after/endpoint.manifest.json.observation.summary.json": "0d2d6cf52dee044d2c5a8cd4d6c6e3d192ac07edd1534e32963c7e395b8db822",
+    "corpus-after/gate.summary.json": "21c3e13f1d9eedf2f8a2e21ce238e4300b1ec09de22e2855e3b8ce78489711a2",
+    "corpus-after/storage.summary.json": "3de506004496f514f649be2c1b69c47f8f65e72548b51b1d7e617f47d0ecfba2",
+    "workspace-corrected/doctests.phase.manifest.json": "b96acab1e8235256f196e2ed351e64dcadcca4d21b7c60a49e86050013a899ee",
+    "workspace-corrected/endpoint.manifest.json": "c9d838b663de1fa6ea4b048b5cf96479efe618987b4fba86623e546f082fcbf8",
+    "workspace-corrected/endpoint.manifest.json.observation.summary.json": "b1ad0ed767a1ee9fcdaf468db85cf9a5ae7aa8a2fd0a2392f69c5735350380ed",
+    "workspace-corrected/nextest.phase.manifest.json": "a0cc5296f083f88f8a4b2f2b5e38c5b48e29fd3fd0a831f5909eb74a200f955a",
+    "workspace-corrected/request.summary.json": "4ac5a1e1ceaeca07c9857e888057da53463f6362f2fb7386743f466f44ffca4c",
+    "workspace-corrected/result.summary.json": "1e018bb8f4e7831532e4c3329239c4e81bebcb6d3cce15fa2a5baf1bda906000",
+    "workspace-corrected/storage.summary.json": "c3d294a9b3fbdfb74074ca9fa294f9da5d90385de7d95b620c5dd99304c51cb4",
+    "workspace-corrected/workspace.manifest.json": "e45e2fa71c0412ffa48ca8cefab800bf68578fd06e563282a43c5b7ceaf35093"
+  },
+  "full16": "Integrator merged-head gate required, lane does not claim completion",
+  "own_corpus": {
+    "after_passing": 1217,
+    "after_source": "20627b3c103be150846c03b561d4176969a464cd",
+    "before_passing": 1217,
+    "before_source": "2d111857f77ab9d0946261cd938e1552c9e64f98",
+    "gained": [],
+    "lost": [],
+    "original_directories": 8,
+    "original_files": 2421,
+    "renders": {
+      "css-css-contain": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 74,
+          "pass": 155,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "raw_compact": {
+          "bytes": 29739,
+          "path": "/tmp/amazing-grid-line-collector/layout-grid-line-collector-after-clean1-20261006/line-collector-after-20627b3c-clean1/raw/render-gate/line-collector-after-20627b3c-clean1/20627b3c103be150846c03b561d4176969a464cd/css-css-contain.compact.json",
+          "sha256": "78818fe443f9fd42bc4f3e0caa4e75833181dcbdb933f461962831e06f4ba6e3"
+        }
+      },
+      "css-css-display": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 7,
+          "pass": 28,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "raw_compact": {
+          "bytes": 5491,
+          "path": "/tmp/amazing-grid-line-collector/layout-grid-line-collector-after-clean1-20261006/line-collector-after-20627b3c-clean1/raw/render-gate/line-collector-after-20627b3c-clean1/20627b3c103be150846c03b561d4176969a464cd/css-css-display.compact.json",
+          "sha256": "bc85fd0096c678232165a40f2149c7b654b584349447f796b5bdf8c14d8d218a"
+        }
+      },
+      "css-css-flexbox": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 174,
+          "pass": 349,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "raw_compact": {
+          "bytes": 66532,
+          "path": "/tmp/amazing-grid-line-collector/layout-grid-line-collector-after-clean1-20261006/line-collector-after-20627b3c-clean1/raw/render-gate/line-collector-after-20627b3c-clean1/20627b3c103be150846c03b561d4176969a464cd/css-css-flexbox.compact.json",
+          "sha256": "74278f03520373276f036644689a9c1b640599822c10ff0963b80f604059506e"
+        }
+      },
+      "css-css-grid": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 531,
+          "pass": 414,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "raw_compact": {
+          "bytes": 180152,
+          "path": "/tmp/amazing-grid-line-collector/layout-grid-line-collector-after-clean1-20261006/line-collector-after-20627b3c-clean1/raw/render-gate/line-collector-after-20627b3c-clean1/20627b3c103be150846c03b561d4176969a464cd/css-css-grid.compact.json",
+          "sha256": "48a90003b075f0aca2c8d11b18991262eb7fb5313253204f1a4bfa1fa7186cc4"
+        }
+      },
+      "css-css-overflow": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 260,
+          "pass": 83,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "raw_compact": {
+          "bytes": 50115,
+          "path": "/tmp/amazing-grid-line-collector/layout-grid-line-collector-after-clean1-20261006/line-collector-after-20627b3c-clean1/raw/render-gate/line-collector-after-20627b3c-clean1/20627b3c103be150846c03b561d4176969a464cd/css-css-overflow.compact.json",
+          "sha256": "7ec747acf29dde802437260fcf6ae30d8d37c41689df75f6212ffc652fda9471"
+        }
+      },
+      "css-css-position": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 9,
+          "pass": 45,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "raw_compact": {
+          "bytes": 9469,
+          "path": "/tmp/amazing-grid-line-collector/layout-grid-line-collector-after-clean1-20261006/line-collector-after-20627b3c-clean1/raw/render-gate/line-collector-after-20627b3c-clean1/20627b3c103be150846c03b561d4176969a464cd/css-css-position.compact.json",
+          "sha256": "5200763b922cfd2f78fac72b1565fb8a6d083f45574b63b6e6cd9cc8db009373"
+        }
+      },
+      "css-css-sizing": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 39,
+          "pass": 99,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "raw_compact": {
+          "bytes": 21376,
+          "path": "/tmp/amazing-grid-line-collector/layout-grid-line-collector-after-clean1-20261006/line-collector-after-20627b3c-clean1/raw/render-gate/line-collector-after-20627b3c-clean1/20627b3c103be150846c03b561d4176969a464cd/css-css-sizing.compact.json",
+          "sha256": "12ed8a854b9d47ad3a4f4f8e2358704dfda07efede7879202fdaed1941560d6f"
+        }
+      },
+      "css-css-writing-modes": {
+        "counts": {
+          "crash": 0,
+          "error": 0,
+          "mismatch": 109,
+          "pass": 44,
+          "timeout": 1,
+          "unsupported": 0
+        },
+        "gained": [],
+        "lost": [],
+        "raw_compact": {
+          "bytes": 25030,
+          "path": "/tmp/amazing-grid-line-collector/layout-grid-line-collector-after-clean1-20261006/line-collector-after-20627b3c-clean1/raw/render-gate/line-collector-after-20627b3c-clean1/20627b3c103be150846c03b561d4176969a464cd/css-css-writing-modes.compact.json",
+          "sha256": "074e92d1f2d5045f93ea3de35cd3fc48193832efcc1b575db1b756a6495de82c"
+        }
+      }
+    },
+    "rerendered_for_corrected_source": false,
+    "reuse_decision": "Root approved exact production/helper/input/profile reuse after fixture-only correction; prior overall1 remains failed"
+  },
+  "previous_failures": {
+    "clean1_after_native_exit": 1,
+    "clean1_counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 36
+      },
+      "nextest": {
+        "failed": 1,
+        "passed": 5176,
+        "skipped": 17
+      }
+    },
+    "clean1_fetch_exit": 0,
+    "failed_source_branch": "lane/grid-line-collector-20627b3c-failed",
+    "initial_after_native_exit": 3,
+    "initial_capacity_shortfall_bytes": 146206720,
+    "initial_engine_started": false,
+    "sole_failed_authored_fixture": "empty_groups_do_not_add_tracks_or_names used invalid successive line-name blocks",
+    "tooling_clean_retry_used": 1
+  },
+  "production_identity": "grid.rs byte-identical corrected65ec; only new fixture and decision metadata corrected",
+  "production_source": "20627b3c103be150846c03b561d4176969a464cd",
+  "raw_and_elf_custody": "Original native raw/ELF sources remain on actual boxes; compact receipts only copied locally",
+  "schema": 1,
+  "state": "own corpus and corrected workspace qualified; integrator merged-head gate required",
+  "ticket": "grid-line-name-collector-current"
+}

@@ -1,0 +1,53 @@
+{
+  "admission_bytes": 30198988800.0,
+  "argv": [
+    "bash",
+    "/Users/jMac/Projects/OpenSource/amazing-wt/grid-line-collector-current-20261006/scripts/linux-run.sh",
+    "layout-grid-line-collector-workspace-20261006",
+    "--host",
+    "boat",
+    "--ref",
+    "65ec7f1d721c118c023f20bff87aca9cc70abbb6",
+    "--setup-summary",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/line-name-collector-current/workspace-corrected/setup.manifest.json",
+    "--endpoint-receipt",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/line-name-collector-current/workspace-corrected/endpoint.manifest.json",
+    "--compact-root",
+    "amazing/out/layout-grid-line-collector-workspace-20261006/workspace-51fc20b460574252b1f314947a843a08/compact",
+    "--storage-plan",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/line-name-collector-current/workspace-corrected/storage-plan.json",
+    "--command-file",
+    "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/line-name-collector-current/workspace-corrected/command.sh"
+  ],
+  "command_sha256": "19b849b4efdc4305f7734b27d4253161693ef728a70599a0065790e4075cb6b7",
+  "compact_root": "amazing/out/layout-grid-line-collector-workspace-20261006/workspace-51fc20b460574252b1f314947a843a08/compact",
+  "config_sha256": "c615c8ce9124e5b0478e1d8a8b49c7d8d32cee5f293561b7b8802b64f6fbdb4d",
+  "corpus_role": "standalone workspace candidate",
+  "endpoint_receipt": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/line-name-collector-current/workspace-corrected/endpoint.manifest.json",
+  "ensure_may_renew_finite_ttl": true,
+  "fetch_paths": [
+    "amazing/out/layout-grid-line-collector-workspace-20261006/workspace-51fc20b460574252b1f314947a843a08/compact/workspace.manifest.json",
+    "amazing/out/layout-grid-line-collector-workspace-20261006/workspace-51fc20b460574252b1f314947a843a08/compact/nextest.phase.manifest.json",
+    "amazing/out/layout-grid-line-collector-workspace-20261006/workspace-51fc20b460574252b1f314947a843a08/compact/doctests.phase.manifest.json",
+    "amazing/out/layout-grid-line-collector-workspace-20261006/workspace-51fc20b460574252b1f314947a843a08/compact/storage.summary.json"
+  ],
+  "finite_run_ttl_seconds": 7200,
+  "helper_sha256": {
+    "completed-job.py": "5db1ec0ed6e28656752b6d7abd7395daf978ccbb76f8293287427d184b1c8a2c",
+    "gate-command.py": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b",
+    "gate-summary.py": "0dc65b9e67509bcf681cacb52c5d92d5e1ef2274bdc337f09c5e591578bffe84",
+    "lane-fetch.sh": "fe4fa79beafef35bbce1ce853f4f3330ae8717b1a6e710675a3bd9892d0d84db",
+    "linux-run.sh": "c36713bbb3bc8bca825e82488ef933eeda2453f6492e9c39dd03d48c7180980c",
+    "linux-workspace-native.py": "497fbb94e7357590846233118e56cc7c405505d6a272b014829f876b71a712b2",
+    "native-storage-plan.py": "8c09537bc331f619a61f6a683160188b6ff56abf9bc0941e395a0f42b51fea4a",
+    "native-storage-retention.py": "fbae10191922024fa68ac0b0823ead407fc9730d6273c92aa5cf673f1b709413"
+  },
+  "job": "workspace-51fc20b460574252b1f314947a843a08",
+  "lane": "layout-grid-line-collector-workspace-20261006",
+  "machine": "default 4 vCPU / 8 GB",
+  "physical_storage_phase": "before",
+  "raw_root": "/tmp/amazing-workspace-raw/layout-grid-line-collector-workspace-20261006/workspace-51fc20b460574252b1f314947a843a08",
+  "schema": 1,
+  "source": "65ec7f1d721c118c023f20bff87aca9cc70abbb6",
+  "storage_sha256": "e5c92712b6f606dfd401a4347e4e7773676aacb5336914d2827b84abc8b1c9a0"
+}
