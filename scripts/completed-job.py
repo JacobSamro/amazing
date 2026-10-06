@@ -14,7 +14,7 @@ COMPACT=re.compile(r'(?:[A-Za-z0-9_.-]+\.)?(?:compact|summary|manifest)\.json')
 def digest(data):return hashlib.sha256(data).hexdigest()
 def encoded(row):return base64.b64encode(json.dumps(row,separators=(',',':')).encode()).decode()
 def decode(text):return json.loads(base64.b64decode(text))
-def identity(row):return {k:row[k] for k in FIELDS+(('execution_sha256','source_archive_sha256') if row['schema']==2 else ())}
+def identity(row):return {k:row[k] for k in FIELDS+(('execution_sha256','source_archive_sha256') if row['schema']==2 else ())+(('captured_proof_root',) if row.get('captured_proof_root') else ())}
 def marker(row):return pathlib.Path.home()/('amazing-completed-'+row['job_id']+'.json')
 def ledger(row):return pathlib.Path.home()/'.amazing-jobs'/row['job_id']
 def boot_id():return pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()
@@ -56,6 +56,7 @@ def valid(row):
     for key,pattern in [('lane',r'[A-Za-z0-9_-]+'),('source_commit',r'[0-9a-f]{40}'),('box_id',r'bx_[A-Za-z0-9]+'),('host',r'[A-Za-z0-9_.-]+@[A-Za-z0-9:.]+'),('job_id',r'[0-9a-f]{32}'),('command_sha256',r'[0-9a-f]{64}')]+([('execution_sha256',r'[0-9a-f]{64}'),('source_archive_sha256',r'[0-9a-f]{64}')] if row['schema']==2 else []):
         if not re.fullmatch(pattern,str(row.get(key,''))):raise ValueError('invalid '+key)
     if type(row['port']) is not int or not 1<=row['port']<=65535:raise ValueError('invalid port')
+    if row.get('captured_proof_root') not in (None,'/srv/amazing-proof'):raise ValueError('unsupported captured native proof root')
     valid_output_root(row['lane'],row['output_root'])
     return row
 
@@ -65,6 +66,7 @@ def capture(args):
     row=dict(schema=1,lane=args.lane,source_commit=args.source,box_id=args.box,host=args.host,port=args.port,job_id=uuid.uuid4().hex,output_root=args.root,command_sha256=digest(args.command.encode()))
     if args.execution is not None:
         row.update(schema=2,execution_sha256=digest(args.execution.encode()),source_archive_sha256=args.source_archive_sha256)
+    if getattr(args,'captured_proof_root',None):row['captured_proof_root']=args.captured_proof_root
     valid(row);save(pathlib.Path(args.receipt),row);print(encoded(row))
 
 def catalog(row):
@@ -83,7 +85,19 @@ def catalog(row):
     return files
 
 def diagnostic_file(row):
-    directory=pathlib.Path(tempfile.mkdtemp(prefix='amazing-job-'+row['job_id']+'-',dir='/tmp'))
+    parent=pathlib.Path('/tmp')
+    if row.get('captured_proof_root'):
+        parent=pathlib.Path(row['captured_proof_root'])
+        info=parent.stat()
+        if parent.resolve(strict=True)!=parent or not parent.is_dir() or info.st_uid!=os.getuid() or info.st_mode&0o077:raise ValueError('captured raw root must be canonical owner-private')
+        mounts=[]
+        for line in pathlib.Path('/proc/self/mountinfo').read_text().splitlines():
+            left,right=line.split(' - ',1);mount=pathlib.Path(left.split()[4])
+            if parent==mount or mount in parent.parents:mounts.append((len(mount.parts),right.split()[0]))
+        if not mounts or max(mounts)[1] not in ('ext2','ext3','ext4','xfs','btrfs','overlay'):raise ValueError('captured raw requires native disk, never FUSE/tmpfs')
+        for ancestor in [parent,*parent.parents]:
+            if any((ancestor/name).exists() or (ancestor/name).is_symlink() for name in ('.boxignore','.oneignore')):raise ValueError('captured raw root has unresolved snapshot exclusions')
+    directory=pathlib.Path(tempfile.mkdtemp(prefix='amazing-job-'+row['job_id']+'-',dir=parent))
     return directory/'command.log'
 
 def failure_detail(error,phase,path):
@@ -408,7 +422,7 @@ def main():
     a=subs.add_parser('capture')
     for name in ('receipt','lane','source','box','host','root'):a.add_argument('--'+name,required=True)
     g=a.add_mutually_exclusive_group(required=True);g.add_argument('--command');g.add_argument('--command-file')
-    a.add_argument('--port',type=int,required=True);g=a.add_mutually_exclusive_group();g.add_argument('--execution');g.add_argument('--execution-file');a.add_argument('--source-archive-sha256')
+    a.add_argument('--captured-proof-root',choices=('/srv/amazing-proof',));a.add_argument('--port',type=int,required=True);g=a.add_mutually_exclusive_group();g.add_argument('--execution');g.add_argument('--execution-file');a.add_argument('--source-archive-sha256')
     a=subs.add_parser('run');a.add_argument('receipt');a.add_argument('command')
     a=subs.add_parser('run-base64stdin');a.add_argument('receipt')
     a=subs.add_parser('launch');a.add_argument('receipt');a.add_argument('--execution-file',required=True)

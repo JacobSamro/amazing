@@ -42,7 +42,8 @@ MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-
 
 LANE="${1:?usage: linux-run.sh <lane> [--host H] [--ref REF] [--no-slot] -- <command>}"
 shift
-HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0 SETUP_SUMMARY="" ENDPOINT_RECEIPT="" COMPACT_ROOT="" COMMAND_FILE="" STORAGE_PLAN=""
+HOST="" REF="" SLOT=1 MISSION_PACKAGE="" MISSION_SHA256="" EXISTING_BOX=0 SETUP_SUMMARY="" ENDPOINT_RECEIPT="" COMPACT_ROOT="" COMMAND_FILE="" CAPTURED_PROOF_ROOT=""
+STORAGE_PLAN=""
 if [ -e "$MAIN/.agents/.boat-only" ]; then HOST=boat; fi
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -54,6 +55,7 @@ while [ $# -gt 0 ]; do
     --setup-summary) SETUP_SUMMARY="$2"; shift 2 ;;
     --endpoint-receipt) ENDPOINT_RECEIPT="$2"; shift 2 ;;
     --compact-root) COMPACT_ROOT="$2"; shift 2 ;;
+    --captured-proof-root) CAPTURED_PROOF_ROOT="$2"; shift 2 ;;
     --storage-plan) STORAGE_PLAN="$2"; shift 2 ;;
     --command-file) COMMAND_FILE="$2"; shift 2 ;;
     --no-slot) SLOT=0; shift ;;
@@ -357,7 +359,9 @@ $STORAGE_COMMAND"
     execution_file=$(mktemp) || { rm -f "$command_file"; exit 3; }
     printf '%s' "$CMD" > "$command_file"
     printf '%s' "$REMOTE" > "$execution_file"
-    JOB_ROW=$(python3 "$REPO/scripts/completed-job.py" capture --receipt "$ENDPOINT_RECEIPT" --lane "$LANE" --source "$COMMIT" --box "$BOAT_ID" --host "$BOAT_HOST" --port "$BOAT_PORT" --root "$COMPACT_ROOT" --command-file "$command_file" --execution-file "$execution_file" --source-archive-sha256 "${SOURCE_ARCHIVE_SHA:-$MISSION_SHA256}")
+    PROOF_CAPTURE_ARGS=()
+    if [ -n "$CAPTURED_PROOF_ROOT" ]; then PROOF_CAPTURE_ARGS=(--captured-proof-root "$CAPTURED_PROOF_ROOT"); fi
+    JOB_ROW=$(python3 "$REPO/scripts/completed-job.py" capture "${PROOF_CAPTURE_ARGS[@]}" --receipt "$ENDPOINT_RECEIPT" --lane "$LANE" --source "$COMMIT" --box "$BOAT_ID" --host "$BOAT_HOST" --port "$BOAT_PORT" --root "$COMPACT_ROOT" --command-file "$command_file" --execution-file "$execution_file" --source-archive-sha256 "${SOURCE_ARCHIVE_SHA:-$MISSION_SHA256}")
     capture_rc=$?
     if [ "$capture_rc" = 0 ]; then
       REMOTE=$(python3 "$REPO/scripts/completed-job.py" launch "$JOB_ROW" --execution-file "$execution_file")

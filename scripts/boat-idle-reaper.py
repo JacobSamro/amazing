@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import shlex
 from pathlib import Path
 import os
 import subprocess
@@ -71,6 +72,30 @@ _custody_spec.loader.exec_module(custody)
 
 def custody_status(sandbox_id: str, now: float) -> dict:
     return custody.decision(custody.DEFAULT_DIRECTORY, sandbox_id, now)
+
+
+def archive_admission(sandbox_id: str) -> dict:
+    # Ships read-only production checks; no observer output or generated helper
+    # is mistaken for retained producer proof. Failure never authorizes stop.
+    try:
+        directory=Path(__file__).resolve().parent
+        archive_code=(directory/'native-proof-archive.py').read_text()
+        guard_code=(directory/'native-stop-admission.py').read_text()
+        loader="spec=importlib.util.spec_from_file_location('archive',Path(__file__).with_name('native-proof-archive.py'))\na=importlib.util.module_from_spec(spec);spec.loader.exec_module(a)"
+        if guard_code.count(loader)!=1:raise ValueError('stop helper import boundary changed')
+        guard_code=guard_code.replace(loader,'a=archive',1)
+        code="import types,sys,json\narchive=types.ModuleType('archive')\nexec("+repr(archive_code)+",archive.__dict__)\nguard=types.ModuleType('guard');guard.__dict__['archive']=archive\nexec("+repr(guard_code)+",guard.__dict__)\nwith archive.deadline(600):\n row=guard.admission(sys.argv[1])\nprint(json.dumps(row,separators=(',',':')))\nraise SystemExit(0 if row['admitted'] else 3)\n"
+        command='timeout --kill-after=5 605 /usr/bin/python3 -I -c '+shlex.quote(code)+' '+shlex.quote(sandbox_id)
+        result=boat('exec',sandbox_id,command,timeout=620)
+        if not result:raise ValueError('native stop admission unavailable')
+        lines=[line for line in result.get('stdout','').splitlines() if line.startswith('{')]
+        row=json.loads(lines[-1]) if lines else None
+        if not isinstance(row,dict) or row.get('schema')!=1 or row.get('box_id')!=sandbox_id or row.get('admitted') is not True or row.get('errors'):
+            return {'admitted':False,'reason':result.get('stderr','')[-1000:],'native':row}
+        if result.get('success') is not True:return {'admitted':False,'reason':'native verifier did not exit successfully','native':row}
+        return row
+    except (OSError,ValueError,TypeError,KeyError) as error:
+        return {'admitted':False,'reason':str(error)}
 
 
 def custody_extension(sandbox: dict, hold: dict, now: float) -> int:
@@ -209,6 +234,11 @@ def main() -> int:
             # and boat-lane.py resumes it at the wanted size.
             want = wanted.get(sid)
             if want and sb.get("type") and sb.get("type") != want and is_busy(sid) is False and not custody_status(sid, time.time())["held"]:
+                archive=archive_admission(sid)
+                if not archive.get('admitted'):
+                    log(f"ARCHIVE-HOLD {sid}: {archive}");continue
+                if is_busy(sid) is not False or custody_status(sid,time.time())['held']:
+                    idle_since.pop(sid,None);continue
                 log(f"RESIZE-STOP {sid} ({sb.get('type')} -> {want} on next resume)")
                 if not args.dry_run:
                     boat("stop", sid, timeout=120)
@@ -221,6 +251,11 @@ def main() -> int:
                 if is_busy(sid) is not False or custody_status(sid, time.time())["held"]:
                     idle_since.pop(sid, None)
                     continue
+                archive=archive_admission(sid)
+                if not archive.get('admitted'):
+                    log(f"ARCHIVE-HOLD {sid}: {archive}");continue
+                if is_busy(sid) is not False or custody_status(sid,time.time())['held']:
+                    idle_since.pop(sid,None);continue
                 log(f"STOP {sid} ({name}, {sb.get('type')}) idle {idle_min:.0f} min")
                 if not args.dry_run:
                     boat("stop", sid, timeout=120)

@@ -32,7 +32,7 @@ def identifier(value):
 def canonical(path):
     path = Path(path)
     if not path.is_absolute() or path.resolve(strict=True) != path:
-        raise ValueError('proof operand must exist with no symlink components')
+        raise ValueError('proof operand must exist with no symlink components: '+str(path))
     return path
 
 
@@ -55,7 +55,7 @@ def native_mount(path):
         raise ValueError('no actual mount provenance')
     result = max(matches, key=lambda row: row[0])[1]
     if result['filesystem'] not in NATIVE_TYPES:
-        raise ValueError('proof requires native disk, not FUSE/ramfs/tmpfs: ' + result['filesystem'])
+        raise ValueError(json.dumps({'path':str(path),'type':'filesystem','error':'proof requires native disk, not FUSE/ramfs/tmpfs: '+result['filesystem']},separators=(',',':')))
     result['stat_device'] = path.stat().st_dev
     return result
 
@@ -86,32 +86,62 @@ def fingerprint(info):
             info.st_ctime_ns, stat.S_IMODE(info.st_mode))
 
 
-def inventory(roots):
-    rows, directories = [], []
-    for label, source in sorted(roots.items()):
-        source = canonical(source)
-        if not source.is_dir(): raise ValueError('input must be a terminal directory')
+def inventory_details(roots, capture_links=False, file_inputs=()):
+    rows, directories, links = [], [], []
+    admitted = {label:canonical(path) for label,path in roots.items()}
+    def failure(path, kind, message):
+        raise ValueError(json.dumps({'path':str(path),'type':kind,'error':message},separators=(',',':')))
+    def record(label, source, file, relative):
+        before=file.stat()
+        if not stat.S_ISREG(before.st_mode):failure(file,'nonregular','only regular native targets can be copied')
+        sha=digest(file)
+        if fingerprint(file.stat())!=fingerprint(before):failure(file,'regular','input changed while hashing')
+        with file.open('rb') as stream:elf=stream.read(4)==b'\x7fELF'
+        rows.append({'label':label,'path':relative,'bytes':before.st_size,'sha256':sha,
+                     'mode':stat.S_IMODE(before.st_mode),'elf':elf,'source_identity':list(fingerprint(before))})
+    for label,source in sorted(admitted.items()):
         native_mount(source)
-        for directory, dirs, files in os.walk(source, followlinks=False):
-            parent = Path(directory)
-            native_mount(parent)
+        if source.is_file() and label in file_inputs:
+            directories.append({'label':label,'path':'.'});record(label,source,source,source.name);continue
+        if not source.is_dir():failure(source,'operand','directory input or explicit regular target required')
+        for directory, dirs, files in os.walk(source,followlinks=False):
+            parent=Path(directory);native_mount(parent)
             if any((parent/name).exists() or (parent/name).is_symlink() for name in ('.boxignore','.oneignore')):
-                raise ValueError('input policy could exclude copied proof; explicit resolution required')
-            directories.append({'label': label, 'path': str(parent.relative_to(source))})
-            for name in dirs + files:
-                if (parent / name).is_symlink(): raise ValueError('symlink proof is never followed or omitted')
+                failure(parent,'snapshot-policy','copied exclusion policy requires explicit resolution')
+            directories.append({'label':label,'path':str(parent.relative_to(source))})
+            for name in dirs+files:
+                link=parent/name
+                if not link.is_symlink():continue
+                raw=os.readlink(link);info=link.lstat()
+                if not capture_links:failure(link,'symlink','explicit native-target capture required; target='+raw)
+                try:resolved=link.resolve(strict=True)
+                except (OSError,RuntimeError) as error:failure(link,'symlink','unresolved target='+raw+'; '+str(error))
+                owners=[(key,root) for key,root in admitted.items() if resolved==root or (root.is_dir() and root in resolved.parents)]
+                if not owners:failure(link,'symlink','undeclared/escaping target='+raw+'; resolved='+str(resolved))
+                native_mount(resolved)
+                kind='directory' if resolved.is_dir() else 'regular' if resolved.is_file() else 'nonregular'
+                if kind=='nonregular':failure(link,'symlink','unsupported native target='+str(resolved))
+                key,root=max(owners,key=lambda item:len(item[1].parts))
+                links.append({'label':label,'path':str(link.relative_to(source)),'target':raw,
+                              'resolved_target':str(resolved),'target_label':key,
+                              'target_path':str(resolved.relative_to(root)) if root.is_dir() else root.name,
+                              'target_kind':kind,'mode':stat.S_IMODE(info.st_mode),'uid':info.st_uid,'gid':info.st_gid,'mtime_ns':info.st_mtime_ns,'source_identity':list(fingerprint(info))})
+                if os.readlink(link)!=raw or fingerprint(link.lstat())!=fingerprint(info):failure(link,'symlink','link changed during capture')
             for name in sorted(files):
-                file = parent / name
-                before = file.stat()
-                if not stat.S_ISREG(before.st_mode): raise ValueError('proof contains nonregular input')
-                sha = digest(file)
-                if fingerprint(file.stat()) != fingerprint(before): raise ValueError('input changed while hashing')
-                with file.open('rb') as stream: elf = stream.read(4) == b'\x7fELF'
-                rows.append({'label': label, 'path': str(file.relative_to(source)),
-                             'bytes': before.st_size, 'sha256': sha,
-                             'mode': stat.S_IMODE(before.st_mode), 'elf': elf,
-                             'source_identity': list(fingerprint(before))})
-    return sorted(rows, key=lambda row: (row['label'], row['path'])), sorted(directories, key=lambda row: (row['label'], row['path']))
+                file=parent/name
+                if not file.is_symlink():record(label,source,file,str(file.relative_to(source)))
+    return (sorted(rows,key=lambda row:(row['label'],row['path'])),
+            sorted(directories,key=lambda row:(row['label'],row['path'])),
+            sorted(links,key=lambda row:(row['label'],row['path'])))
+
+
+def inventory(roots):
+    return inventory_details(roots)[:2]
+
+
+def original_path(manifest,row):
+    root=Path(manifest['inputs'][row['label']])
+    return root if row['label'] in manifest.get('file_inputs',[]) else root/row['path']
 
 
 def fsync_directory(path):
@@ -142,20 +172,23 @@ def terminal(path, source, job):
     return {'path': str(path), 'bytes': path.stat().st_size, 'sha256': digest(path), 'actual_exit': code}
 
 
-def archive(lane, source, job, roots, terminal_path, copy_budget, reserve):
+def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, capture_links=False, targets=None):
     identifier(lane); identifier(job)
     if not re.fullmatch(r'[0-9a-f]{40}', source): raise ValueError('exact source commit required')
     if copy_budget < 0 or reserve < 0: raise ValueError('negative capacity budget')
     mount = root_admission()
     producer = terminal(terminal_path, source, job)
-    roots = {identifier(label): canonical(path) for label, path in roots.items()}
+    targets=targets or {}
+    if set(roots)&set(targets):raise ValueError('duplicate input/target labels')
+    file_inputs=[label for label,path in targets.items() if canonical(path).is_file()]
+    roots = {identifier(label): canonical(path) for label, path in {**roots,**targets}.items()}
     if not roots: raise ValueError('no declared raw/ELF inputs')
     for path in roots.values():
         if ROOT == path or ROOT in path.parents or path in ROOT.parents:
             raise ValueError('archive/input root overlap')
     destination = ROOT / lane / source / job
     if destination.exists() or destination.is_symlink(): raise ValueError('prior archive/partial preserved')
-    rows, directories = inventory(roots)
+    rows, directories, links = inventory_details(roots,capture_links,file_inputs)
     required = sum(row['bytes'] for row in rows) + 4096 * (len(rows) + len(directories)) + 65536
     available = shutil.disk_usage(ROOT).free
     if required > copy_budget or available < required + reserve:
@@ -165,7 +198,7 @@ def archive(lane, source, job, roots, terminal_path, copy_budget, reserve):
     destination.mkdir(mode=0o700)
     header = {'schema': 1, 'lane': lane, 'source': source, 'job': job,
               'destination': str(destination), 'inputs': {k: str(v) for k,v in roots.items()},
-              'terminal_producer': producer, 'mount': mount, 'required_bytes': required,
+              'terminal_producer': producer, 'capture_links':capture_links,'file_inputs':file_inputs,'links':links,'mount': mount, 'required_bytes': required,
               'available_bytes': available, 'copy_budget_bytes': copy_budget,
               'reserve_bytes': reserve, 'complete': False, 'source_retained': True}
     save(destination / 'start.manifest.json', header)
@@ -173,7 +206,7 @@ def archive(lane, source, job, roots, terminal_path, copy_budget, reserve):
         for directory in directories:
             (destination / 'payload' / directory['label'] / directory['path']).mkdir(parents=True, exist_ok=True, mode=0o700)
         for row in rows:
-            original = roots[row['label']] / row['path']
+            original = original_path(header,row)
             final = destination / 'payload' / row['label'] / row['path']
             if list(fingerprint(original.stat())) != row['source_identity']: raise ValueError('input changed before copy')
             with original.open('rb') as source_stream, final.open('xb') as output:
@@ -183,8 +216,8 @@ def archive(lane, source, job, roots, terminal_path, copy_budget, reserve):
             with final.open('rb') as stream: os.fsync(stream.fileno())
             if final.stat().st_size != row['bytes'] or digest(final) != row['sha256']:
                 raise ValueError('destination byte/hash readback failed')
-        after, after_directories = inventory(roots)
-        if rows != after or directories != after_directories: raise ValueError('input tree changed during archive; no completed publication')
+        after, after_directories, after_links = inventory_details(roots,capture_links,file_inputs)
+        if rows != after or directories != after_directories or links != after_links: raise ValueError('input tree changed during archive; no completed publication')
         if terminal(terminal_path, source, job) != producer: raise ValueError('terminal producer receipt changed')
         copied, copied_directories = inventory({label:destination/'payload'/label for label in roots})
         fields=('label','path','bytes','sha256','mode','elf')
@@ -196,12 +229,12 @@ def archive(lane, source, job, roots, terminal_path, copy_budget, reserve):
         for parent in [destination, destination.parent, destination.parent.parent, ROOT]: fsync_directory(parent)
         manifest = dict(header, complete=True, files=rows, directories=directories,
                         file_count=len(rows), elf_count=sum(row['elf'] for row in rows),
-                        logical_bytes=sum(row['bytes'] for row in rows), completed_ns=time.time_ns())
+                        logical_bytes=sum(row['bytes'] for row in rows), link_count=len(links),completed_ns=time.time_ns())
         save(destination / 'archive.manifest.json', manifest)
         for parent in [destination, destination.parent, destination.parent.parent, ROOT]: fsync_directory(parent)
         return {'schema': 1, 'complete': True, 'source': source, 'lane': lane, 'job': job,
                 'destination': str(destination), 'files': len(rows), 'elf_files': manifest['elf_count'],
-                'logical_bytes': manifest['logical_bytes'], 'mount': mount, 'source_retained': True,
+                'logical_bytes': manifest['logical_bytes'],'links':len(links),'link_storage':'exact metadata; admitted target payloads copied independently, no escaping archive symlinks','mount': mount, 'source_retained': True,
                 'archive_manifest': {'path': str(destination/'archive.manifest.json'),
                     'bytes': (destination/'archive.manifest.json').stat().st_size,
                     'sha256': digest(destination/'archive.manifest.json')},
@@ -227,9 +260,19 @@ def verify(manifest_path, expected_sha, archive_exit):
     rows,directories=inventory(roots);fields=('label','path','bytes','sha256','mode','elf')
     if [{k:r[k] for k in fields} for r in rows] != [{k:r[k] for k in fields} for r in manifest['files']] or directories!=manifest['directories']:
         raise ValueError('archived raw/ELF bytes or paths changed')
+    for link in manifest.get('links',[]):
+        label=identifier(link['target_label']);relative=Path(link['target_path'])
+        if label not in roots or relative.is_absolute() or '..' in relative.parts:raise ValueError('link metadata escapes captured target')
+        target=roots[label]/relative
+        if link['target_kind']=='directory':
+            if not target.is_dir():raise ValueError('captured directory link target missing')
+        elif link['target_kind']=='regular':
+            if not target.is_file():raise ValueError('captured regular link target missing')
+        else:raise ValueError('unsupported captured link target type')
+        canonical(target);native_mount(target)
     return {'schema':1,'complete':True,'actual_archive_exit':archive_exit,'destination':str(destination),
             'source':manifest['source'],'lane':manifest['lane'],'job':manifest['job'],
-            'files':len(rows),'elf_files':sum(r['elf'] for r in rows),'archive_manifest_sha256':expected_sha}
+            'files':len(rows),'elf_files':sum(r['elf'] for r in rows),'links':len(manifest.get('links',[])),'archive_manifest_sha256':expected_sha}
 
 
 @contextlib.contextmanager
@@ -257,11 +300,15 @@ def main():
     p.add_argument('--input',action='append',required=True,help='label=absolute native terminal directory')
     p.add_argument('--copy-budget-bytes',type=int,required=True);p.add_argument('--reserve-bytes',type=int,required=True)
     p.add_argument('--seconds',type=int,default=600)
+    p.add_argument('--capture-links',action='store_true')
+    p.add_argument('--target',action='append',default=[],help='label=explicit admitted native directory or regular file')
     args=p.parse_args()
     try:
         pairs=[value.split('=',1) for value in args.input]
         if any(len(pair)!=2 for pair in pairs) or len({pair[0] for pair in pairs})!=len(pairs):raise ValueError('invalid or duplicate input labels')
-        with deadline(args.seconds):result=archive(args.lane,args.source,args.job,dict(pairs),args.terminal_receipt,args.copy_budget_bytes,args.reserve_bytes)
+        target_pairs=[value.split('=',1) for value in args.target]
+        if any(len(pair)!=2 for pair in target_pairs) or len({pair[0] for pair in target_pairs})!=len(target_pairs):raise ValueError('invalid or duplicate target labels')
+        with deadline(args.seconds):result=archive(args.lane,args.source,args.job,dict(pairs),args.terminal_receipt,args.copy_budget_bytes,args.reserve_bytes,args.capture_links,dict(target_pairs))
         code=0
     except Exception as error:
         code=124 if isinstance(error,TimeoutError) else 3
