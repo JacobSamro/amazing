@@ -37,7 +37,7 @@ impl Interpreter {
         };
         let mut fields = StdDescriptorFields::default();
         for name in ["enumerable", "configurable", "value", "writable", "get", "set"] {
-            if !object.borrow().has_property(name) { continue; }
+            if !self.default_has_property(object, &PropertyKey::from(name))? { continue; }
             let value = self.get_prop(descriptor, name)?;
             match name {
                 "enumerable" => fields.enumerable = Some(value.to_boolean()),
@@ -196,31 +196,22 @@ impl Interpreter {
                 return Ok(true);
             }
         }
-        if let JsValue::Object(object) = &receiver {
-            if Rc::ptr_eq(&object.0, &target.0) {
-                if let Some(result) = binary_set_index(self, target, key, value.clone()) {
-                    result?;
-                    return Ok(true);
-                }
-            }
-        }
-        // [[Set]] with a distinct Receiver on a canonical numeric index of an
-        // integer-indexed exotic `target`: IsValidIntegerIndex decides the
-        // outcome directly (10.4.5.5). The generic prototype walk below reads
-        // `own_prop`, which can't see virtual typed-array indices, and would
-        // otherwise walk straight past `target` to a shadowing prototype
-        // accessor that the spec says is unreachable here.
-        let target_index_view = binary_index_view(target, key);
-        if let Some((view, _kind, index)) = &target_index_view {
-            if index.filter(|idx| *idx < binary_length(view)).is_none() {
-                return Ok(true);
-            }
-        }
-        let mut cursor = if target_index_view.is_some() { None } else { Some(target.clone()) };
+        let mut cursor = Some(target.clone());
         while let Some(object) = cursor {
             if let Some(result) = self.window_proxy_set(&object, key, value.clone(), receiver.clone()) { return result; }
             if let Some(result) = self.proxy_set(&object, key, value.clone(), receiver.clone()) { return result; }
             if is_module_namespace(&object) { return Ok(false); }
+            if let Some((view, _kind, index)) = binary_index_view(&object, key) {
+                if view.buffer.borrow().immutable { return Ok(false); }
+                if matches!(&receiver, JsValue::Object(receiver_object)
+                    if Rc::ptr_eq(&receiver_object.0, &object.0)) {
+                    return binary_set_index(self, &object, key, value).unwrap();
+                }
+                if index.filter(|index| *index < binary_length(&view)).is_none() { return Ok(true); }
+                // A valid virtual writable element enters OrdinarySetWithOwnDescriptor;
+                // never walk through to a numeric accessor above the TypedArray.
+                break;
+            }
             let property = if let Some(name) = key.as_string() {
                 // Legacy named properties belong to the collection itself.
                 // They do not prevent an ordinary receiver from shadowing one.
@@ -249,17 +240,14 @@ impl Interpreter {
                 Some(result) => result?,
                 None => match self.namespace_own_property(&receiver_object, key) {
                     Some(result) => result?,
-                    None => receiver_object.borrow().own_prop(key).cloned(),
+                    None => binary_index_descriptor(&receiver_object, key)
+                        .unwrap_or_else(|| receiver_object.borrow().own_prop(key).cloned()),
                 },
             },
         };
         if let Some(property) = &existing {
             if property.is_accessor() || !property.writable { return Ok(false); }
         } else if !receiver_object.borrow().extensible { return Ok(false); }
-        if let Some(result) = binary_set_index(self, &receiver_object, key, value.clone()) {
-            result?;
-            return Ok(true);
-        }
         if self.legacy_for(&receiver_object).is_some()
             || Self::dom_style_id(&receiver_object).is_some()
             || Self::dom_dataset_id(&receiver_object).is_some()
@@ -296,6 +284,14 @@ impl Interpreter {
         // real descriptor object handed to arbitrary trap code, so build one
         // and fall back for this (rare -- ordinary objects are the common
         // case) branch only.
+        let fields = StdDescriptorFields {
+            value: Some(value.clone()),
+            writable: existing.is_none().then_some(true),
+            enumerable: existing.is_none().then_some(true),
+            configurable: existing.is_none().then_some(true),
+            ..Default::default()
+        };
+        if let Some(result) = binary_define_index_fields(self, target, key, &fields) { return result; }
         if self.is_window_proxy(target) || self.proxy_parts(target).is_some()
             || matches!(&target.borrow().exotic, Exotic::Arguments(_)) {
             let mut descriptor = JsObject::ordinary();

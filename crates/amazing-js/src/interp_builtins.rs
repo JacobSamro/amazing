@@ -1754,14 +1754,7 @@ fn native_object_get_own_property_descriptor(
             .map(|property| object_descriptor_value(i, property)).unwrap_or(JsValue::Undefined));
     }
     if let Some(property) = binary_index_descriptor(object, &key) {
-        let Some(property) = property else { return Ok(JsValue::Undefined); };
-        let mut descriptor = JsObject::ordinary();
-        descriptor.proto = Some(i.object_proto.clone());
-        descriptor.set_own("value", property.value);
-        descriptor.set_own("writable", JsValue::Bool(true));
-        descriptor.set_own("enumerable", JsValue::Bool(true));
-        descriptor.set_own("configurable", JsValue::Bool(true));
-        return Ok(JsValue::object(descriptor));
+        return Ok(property.map(|property| object_descriptor_value(i, property)).unwrap_or(JsValue::Undefined));
     }
     if let Some(result)=i.namespace_own_property(object,&key) {
         return Ok(result?.map(|property|object_descriptor_value(i,property)).unwrap_or(JsValue::Undefined));

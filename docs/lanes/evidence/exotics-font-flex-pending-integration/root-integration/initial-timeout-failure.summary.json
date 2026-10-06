@@ -1,0 +1,239 @@
+{
+  "schema": 1,
+  "utc": "2026-10-06T09:09:31.018774+00:00",
+  "source": "3ea924d88d2df9b28fcbd1e3cad81e949dbb5b61",
+  "original_controller_exit": 1,
+  "all_native_and_fetch_exits": 0,
+  "summary": {
+    "files": {
+      "fail": 502,
+      "pass": 52895,
+      "skipped": 294,
+      "timeout": 11,
+      "unsupported": 170
+    },
+    "variants": {
+      "fail": 988,
+      "pass": 101570,
+      "timeout": 22,
+      "unsupported": 338
+    }
+  },
+  "gained_files": 11,
+  "lost_files": [
+    "built-ins/decodeURI/S15.1.3.1_A2.5_T1.js",
+    "built-ins/decodeURIComponent/S15.1.3.2_A2.5_T1.js",
+    "staging/sm/Date/dst-offset-caching-1-of-8.js",
+    "staging/sm/Date/dst-offset-caching-2-of-8.js",
+    "staging/sm/Date/dst-offset-caching-3-of-8.js",
+    "staging/sm/Date/dst-offset-caching-4-of-8.js",
+    "staging/sm/Date/dst-offset-caching-5-of-8.js",
+    "staging/sm/Date/dst-offset-caching-6-of-8.js",
+    "staging/sm/Date/dst-offset-caching-7-of-8.js",
+    "staging/sm/Date/dst-offset-caching-8-of-8.js"
+  ],
+  "lost_variants": [
+    [
+      "built-ins/decodeURI/S15.1.3.1_A2.5_T1.js",
+      "non-strict"
+    ],
+    [
+      "built-ins/decodeURI/S15.1.3.1_A2.5_T1.js",
+      "strict"
+    ],
+    [
+      "built-ins/decodeURIComponent/S15.1.3.2_A2.5_T1.js",
+      "non-strict"
+    ],
+    [
+      "built-ins/decodeURIComponent/S15.1.3.2_A2.5_T1.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-1-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-1-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-2-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-2-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-3-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-3-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-4-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-4-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-5-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-5-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-6-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-6-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-7-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-7-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-8-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-8-of-8.js",
+      "strict"
+    ]
+  ],
+  "original_merged_sha256": "3b093fd1f8cbd7bf320787b808efa7485caa4a150a6e87fc4457fe60f1561abc",
+  "classification_files": {
+    "pool-0/shard-8.compact.json": {
+      "bytes": 50674,
+      "sha256": "f3b1a1d360d67fff9ef720ce7b42c2637b74d44e5151d0e236958ac9e0f0768e"
+    },
+    "pool-0/shard-4.compact.json": {
+      "bytes": 50650,
+      "sha256": "847d0f644007cb9dfc0bc0a8cc97569c8f9c11b0ca878db86becf759080b2ea6"
+    },
+    "pool-0/shard-12.compact.json": {
+      "bytes": 50509,
+      "sha256": "bd73340a839df403d7d41f6e420fb6dfb95673f3d7f3f727919f7a4c9adf10c7"
+    },
+    "pool-0/shard-0.compact.json": {
+      "bytes": 50575,
+      "sha256": "6a7a40e611e643e16e4111b5e4ce74a83df43777d17a6006877ea0f99941c2d0"
+    },
+    "pool-1/shard-9.compact.json": {
+      "bytes": 50667,
+      "sha256": "2a63854e0a19ff8eff011503cbe6210985995feb3ef35c7f0be18467fc4ce0f0"
+    },
+    "pool-1/shard-5.compact.json": {
+      "bytes": 50823,
+      "sha256": "751a272205550a43e226853b55881f63563126f8cf3051f6e311ee8715e154de"
+    },
+    "pool-1/shard-1.compact.json": {
+      "bytes": 50351,
+      "sha256": "74060b8bca391a9f093456c7ff0174010868f5bc52d8f87420cbe55c66e1a87a"
+    },
+    "pool-1/shard-13.compact.json": {
+      "bytes": 50677,
+      "sha256": "a3060a25372ae9a8128a893a65aa9cd575cb357062ae248b7c1f53494c44af5c"
+    },
+    "pool-3/shard-11.compact.json": {
+      "bytes": 50493,
+      "sha256": "abe2219e82572b70913526f3ad8fdfe542199660d4da38473f6bb487d0983124"
+    },
+    "pool-3/shard-3.compact.json": {
+      "bytes": 50843,
+      "sha256": "2ccea5e6cb56ae9c27d09e04cb9bec0bb6d2b1d1c5c77d74269fef8d3cf3ef18"
+    },
+    "pool-3/shard-15.compact.json": {
+      "bytes": 50745,
+      "sha256": "ccd297efbb152cc13e2d1d094e66d05dc2c683245a0019c347ea6f69d7962000"
+    },
+    "pool-3/shard-7.compact.json": {
+      "bytes": 50990,
+      "sha256": "f2aaeccdd0f962a3176f1cc58407e068e717f7e468bd9160b2f874bd3aee886f"
+    },
+    "pool-2/shard-2.compact.json": {
+      "bytes": 50538,
+      "sha256": "323dd0b708c167f6855e11c5b86213c630523ec969b301db5c82170f5053efd5"
+    },
+    "pool-2/shard-10.compact.json": {
+      "bytes": 50860,
+      "sha256": "12dffef277e20865d75306f03c249efb991efe5b66dac870f8a2869ea4d54621"
+    },
+    "pool-2/shard-6.compact.json": {
+      "bytes": 50926,
+      "sha256": "14821f936267e1b8f75e970ebf597b097c462528ae2bfc4a059e0a0a6b5a775b"
+    },
+    "pool-2/shard-14.compact.json": {
+      "bytes": 50905,
+      "sha256": "7185e0cdf1f9c9241c9ed97ae847f2a4919704719465f46b5fe043e62a9199bc"
+    }
+  },
+  "pool_endpoints": [
+    {
+      "schema": 2,
+      "lane": "t262-exotics-font-flex-pending-pool-0",
+      "source_commit": "3ea924d88d2df9b28fcbd1e3cad81e949dbb5b61",
+      "box_id": "bx_yvt84fe8",
+      "host": "user@78.46.162.232",
+      "port": 22,
+      "job_id": "b55e914537294bd081ceca805d798467",
+      "output_root": "amazing/out/t262-exotics-font-flex-pending-pool-0/test262-exotics-font-flex-pending-current-initial-20261006T083214-1791275534833077000/3ea924d88d2df9b28fcbd1e3cad81e949dbb5b61",
+      "command_sha256": "a80aaa3909763445de3ba27062ce390b2602f8591c263837511469187d075880",
+      "execution_sha256": "dfd05b1f957054e8fe2aa5313a355ff8efeeee2cddb37158bfa654056155c8fb",
+      "source_archive_sha256": "ecb5d1092ba91627562a371c4beafe1e14232976d4721c31c5d8a5b75578a0ed"
+    },
+    {
+      "schema": 2,
+      "lane": "t262-exotics-font-flex-pending-pool-1",
+      "source_commit": "3ea924d88d2df9b28fcbd1e3cad81e949dbb5b61",
+      "box_id": "bx_2dx84je2",
+      "host": "user@2.29.61.104",
+      "port": 22,
+      "job_id": "583fed6472fd46fdb0574a5ce3462eaf",
+      "output_root": "amazing/out/t262-exotics-font-flex-pending-pool-1/test262-exotics-font-flex-pending-current-initial-20261006T083214-1791275534833077000/3ea924d88d2df9b28fcbd1e3cad81e949dbb5b61",
+      "command_sha256": "991ba7cd3ffedb58e2297798660db696accc972fbcc9600b6c61bc9508603efc",
+      "execution_sha256": "4e8731bfac4eb17fa37bb563dd08e9502f0e52572d9b057b9b02ff67d1adc173",
+      "source_archive_sha256": "ecb5d1092ba91627562a371c4beafe1e14232976d4721c31c5d8a5b75578a0ed"
+    },
+    {
+      "schema": 2,
+      "lane": "t262-exotics-font-flex-pending-pool-2",
+      "source_commit": "3ea924d88d2df9b28fcbd1e3cad81e949dbb5b61",
+      "box_id": "bx_8zsg45na",
+      "host": "user@195.201.142.163",
+      "port": 22,
+      "job_id": "ef51a110047746adbf622a86ef4dddaa",
+      "output_root": "amazing/out/t262-exotics-font-flex-pending-pool-2/test262-exotics-font-flex-pending-current-initial-20261006T083214-1791275534833077000/3ea924d88d2df9b28fcbd1e3cad81e949dbb5b61",
+      "command_sha256": "94b88c4bd63e23eae6dd183b3a79cf3844c16d0a8565fdd3f473b9080e98d750",
+      "execution_sha256": "f4edd22485667ae1f4e3a945778265ca9dea48ba0274596fa1c28dbecf021cda",
+      "source_archive_sha256": "0ee8dc64f8ddcb2ec767af223ae8a48f12ee58abb71ad6b806c441a494dff80d"
+    },
+    {
+      "schema": 2,
+      "lane": "t262-exotics-font-flex-pending-pool-3",
+      "source_commit": "3ea924d88d2df9b28fcbd1e3cad81e949dbb5b61",
+      "box_id": "bx_6sxu9sss",
+      "host": "user@116.203.115.113",
+      "port": 22,
+      "job_id": "df42e8cddc064f72b336ec6848db2cdf",
+      "output_root": "amazing/out/t262-exotics-font-flex-pending-pool-3/test262-exotics-font-flex-pending-current-initial-20261006T083214-1791275534833077000/3ea924d88d2df9b28fcbd1e3cad81e949dbb5b61",
+      "command_sha256": "2998a530dd484046cee2c185fb0f96236c309212d9ac693f5cfa3d2a1912763d",
+      "execution_sha256": "b1b1986f092e30a1d913b94d7b8e9d317d1c0aef7bb94d77cebc8501f2ecf33c",
+      "source_archive_sha256": "6a7279e21f16fecf0ae35f5e469c123830caa421e0dc540cf239c61284eb4ce4"
+    }
+  ],
+  "disposition": "Blocked publication; unchanged60-second genuine timeout classifications preserved. Published-source same EPYC hosts control11144, candidate same prior Ryzen baseline hosts qualification77794 running. No attribution or waiver yet."
+}

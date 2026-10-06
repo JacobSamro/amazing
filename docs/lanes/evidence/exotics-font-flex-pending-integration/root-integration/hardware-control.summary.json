@@ -1,0 +1,69 @@
+{
+  "utc": "2026-10-06T09:06:16.780998+00:00",
+  "observations": [
+    {
+      "tag": "context-stack-async-dispose-current-initial",
+      "box_id": "bx_b9h6dcbk",
+      "endpoint": ".agents/test262/runs/context-stack-async-dispose-current-initial-20261006T075559-1791273359547140000/pool-0.endpoint.manifest.json",
+      "observed_exit": 0,
+      "hardware_snapshot": "x86_64\n4\nModel name:                              AMD Ryzen 9 9950X 16-Core Processor\nusage_usec 1677276748\nuser_usec 1368546294\nsystem_usec 308730454\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0\n0.00 0.03 0.06 1/494 86695\n 09:06:15 up  1:17,  2 users,  load average: 0.00, 0.03, 0.06\n",
+      "observer_error": "cat: /sys/fs/cgroup/cpu.max: No such file or directory\n"
+    },
+    {
+      "tag": "context-stack-async-dispose-current-initial",
+      "box_id": "bx_234xvsz3",
+      "endpoint": ".agents/test262/runs/context-stack-async-dispose-current-initial-20261006T075559-1791273359547140000/pool-1.endpoint.manifest.json",
+      "observed_exit": 0,
+      "hardware_snapshot": "x86_64\n4\nModel name:                              AMD Ryzen 9 9950X 16-Core Processor\nusage_usec 1552957601\nuser_usec 1292574837\nsystem_usec 260382763\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0\n0.00 0.00 0.00 1/521 85539\n 09:06:15 up  1:13,  2 users,  load average: 0.00, 0.00, 0.00\n",
+      "observer_error": "cat: /sys/fs/cgroup/cpu.max: No such file or directory\n"
+    },
+    {
+      "tag": "context-stack-async-dispose-current-initial",
+      "box_id": "bx_k3ew38a7",
+      "endpoint": ".agents/test262/runs/context-stack-async-dispose-current-initial-20261006T075559-1791273359547140000/pool-2.endpoint.manifest.json",
+      "observed_exit": 0,
+      "hardware_snapshot": "x86_64\n4\nModel name:                              AMD Ryzen 9 9950X 16-Core Processor\nusage_usec 1603200828\nuser_usec 1324405866\nsystem_usec 278794962\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0\n0.00 0.00 0.00 1/494 86283\n 09:06:16 up  1:14,  2 users,  load average: 0.00, 0.00, 0.00\n",
+      "observer_error": "cat: /sys/fs/cgroup/cpu.max: No such file or directory\n"
+    },
+    {
+      "tag": "context-stack-async-dispose-current-initial",
+      "box_id": "bx_ctqhfy37",
+      "endpoint": ".agents/test262/runs/context-stack-async-dispose-current-initial-20261006T075559-1791273359547140000/pool-3.endpoint.manifest.json",
+      "observed_exit": 0,
+      "hardware_snapshot": "x86_64\n4\nModel name:                              AMD Ryzen 9 9950X 16-Core Processor\nusage_usec 1475269814\nuser_usec 1230541828\nsystem_usec 244727986\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0\n0.00 0.00 0.00 1/521 85566\n 09:06:14 up  1:15,  2 users,  load average: 0.00, 0.00, 0.00\n",
+      "observer_error": "cat: /sys/fs/cgroup/cpu.max: No such file or directory\n"
+    },
+    {
+      "tag": "exotics-font-flex-pending-current-initial",
+      "box_id": "bx_yvt84fe8",
+      "endpoint": ".agents/test262/runs/exotics-font-flex-pending-current-initial-20261006T083214-1791275534833077000/pool-0.endpoint.manifest.json",
+      "observed_exit": 0,
+      "hardware_snapshot": "x86_64\n4\nModel name:                              AMD EPYC-Rome Processor\nusage_usec 5091220000\nuser_usec 4160868000\nsystem_usec 930352000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0\n2.36 1.35 2.33 5/544 90051\n 09:06:15 up  1:45,  3 users,  load average: 2.36, 1.35, 2.33\n",
+      "observer_error": "cat: /sys/fs/cgroup/cpu.max: No such file or directory\n"
+    },
+    {
+      "tag": "exotics-font-flex-pending-current-initial",
+      "box_id": "bx_2dx84je2",
+      "endpoint": ".agents/test262/runs/exotics-font-flex-pending-current-initial-20261006T083214-1791275534833077000/pool-1.endpoint.manifest.json",
+      "observed_exit": 0,
+      "hardware_snapshot": "x86_64\n4\nModel name:                              AMD EPYC-Rome Processor\nusage_usec 4480377000\nuser_usec 3755597000\nsystem_usec 724780000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0\n3.27 1.62 2.15 5/486 71955\n 09:06:16 up 37 min,  3 users,  load average: 3.27, 1.62, 2.15\n",
+      "observer_error": "cat: /sys/fs/cgroup/cpu.max: No such file or directory\n"
+    },
+    {
+      "tag": "exotics-font-flex-pending-current-initial",
+      "box_id": "bx_8zsg45na",
+      "endpoint": ".agents/test262/runs/exotics-font-flex-pending-current-initial-20261006T083214-1791275534833077000/pool-2.endpoint.manifest.json",
+      "observed_exit": 0,
+      "hardware_snapshot": "x86_64\n4\nModel name:                              AMD EPYC-Rome Processor\nusage_usec 4935798000\nuser_usec 3987761000\nsystem_usec 948037000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0\n2.37 1.35 2.30 6/538 90148\n 09:06:15 up  1:45,  3 users,  load average: 2.37, 1.35, 2.30\n",
+      "observer_error": "cat: /sys/fs/cgroup/cpu.max: No such file or directory\n"
+    },
+    {
+      "tag": "exotics-font-flex-pending-current-initial",
+      "box_id": "bx_6sxu9sss",
+      "endpoint": ".agents/test262/runs/exotics-font-flex-pending-current-initial-20261006T083214-1791275534833077000/pool-3.endpoint.manifest.json",
+      "observed_exit": 0,
+      "hardware_snapshot": "x86_64\n4\nModel name:                              AMD EPYC-Rome Processor\nusage_usec 4475071000\nuser_usec 3690881000\nsystem_usec 784190000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0\n2.77 1.37 2.19 5/542 72450\n 09:06:16 up 38 min,  3 users,  load average: 2.77, 1.37, 2.19\n",
+      "observer_error": "cat: /sys/fs/cgroup/cpu.max: No such file or directory\n"
+    }
+  ]
+}

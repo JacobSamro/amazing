@@ -147,7 +147,10 @@ impl Interpreter {
         if is_module_namespace(&o) {
             return Err(Throw::type_error("module namespace properties cannot be assigned"));
         }
-        if let Some(result) = binary_set_index(self, &o, &key, x.clone()) { return result; }
+        if let Some(result) = binary_set_index(self, &o, &key, x.clone()) {
+            return if result? || !self.strict_eval_context { Ok(()) }
+                else { Err(Throw::type_error("cannot assign TypedArray element")) };
+        }
         arguments_write_mapping(&o, &key, x.clone())?;
         if let Some(forward_to) = self.binding_put_forwards_target(&o, k) {
             let target = self.get_prop(v, k)?;

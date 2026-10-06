@@ -418,7 +418,13 @@ impl Interpreter {
         if let Some(descriptor) = binary_index_descriptor(target, key) { return Ok(descriptor.is_some()); }
         match key.as_string() {
             Some(name) => self.legacy_has_property(target, name.clone()),
-            None => Ok(target.borrow().has_property(key)),
+            None => {
+                if target.borrow().own_prop(key).is_some() { return Ok(true); }
+                match self.default_get_prototype(target)? {
+                    JsValue::Object(prototype) => self.default_has_property(&prototype, key),
+                    _ => Ok(false),
+                }
+            },
         }
     }
 

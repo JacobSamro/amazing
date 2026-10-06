@@ -1599,7 +1599,7 @@ impl Interpreter {
                         Ok(JsValue::Bool(match k.as_string() {
                         _ if binary_index_descriptor(&o, &k).is_some() => binary_index_descriptor(&o, &k).flatten().is_some(),
                         Some(name) => self.legacy_has_property(&o, name)?,
-                        None => o.borrow().has_property(&k),
+                        None => self.default_has_property(&o, &k)?,
                     })) },
                     _ => Err(Throw::type_error("right operand of in is not an object")),
                 }
