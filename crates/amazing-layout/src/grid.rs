@@ -1,3 +1,7 @@
+// Portions ported from DioxusLabs/taffy (src/compute/grid/track_sizing.rs,
+// resolve_item_baselines; src/compute/grid/types/grid_item.rs, baseline participation)
+// @ 04965fc5ac0c0e9423f5aab8ca29b48231738c7a, MIT.
+// Copyright (c) 2018 Visly Inc.; Copyright (c) 2026 Taffy Authors.
 //! CSS Grid layout (css-grid-1 subset): track sizing, item placement and
 //! alignment for `display: grid` containers.
 //!
@@ -54,6 +58,8 @@ use crate::values::{self, MaybeLen};
 #[path = "grid_repeat.rs"]
 mod repeat;
 use repeat::{auto_fit_tracks, repeat_counts, ActiveAxis};
+#[path = "grid_baseline.rs"]
+mod row_baseline;
 
 const MAX_GRID_TRACKS: usize = 1000;
 const MAX_OCCUPIED_CELLS: usize = MAX_GRID_TRACKS * MAX_GRID_TRACKS;
@@ -1398,6 +1404,47 @@ fn height_is_auto(it: &LayoutBox) -> bool {
     }
 }
 
+
+/// Gather baseline metrics from genuine used item boxes and their resolved
+/// area widths. Percentage heights crossing intrinsic rows are cyclic; flex
+/// maxima count as intrinsic only with an indefinite container block size.
+/// Standalone fr retains its implicit auto minimum (minmax(auto, fr)).
+/// These use fallback, as do orthogonal text baselines not exported by this
+/// horizontal track producer. Auto block margins exclude participation.
+fn grid_row_baseline_metric(
+    item: &LayoutBox, placement: &Placement, row_kinds: &[TrackSize],
+    container: &ComputedStyle, area_width: f32, indefinite_block_size: bool,
+) -> row_baseline::Metric {
+        let requested=row_baseline::preference(item,container);
+        let preference=requested.unwrap_or(row_baseline::Preference::First);
+        let row_start=(placement.row.unwrap_or(1)-1) as usize;
+        let row_end=(row_start+placement.row_span.max(1) as usize).min(row_kinds.len());
+        let auto_block_margin=margin_is_auto(&item.style,"top") || margin_is_auto(&item.style,"bottom");
+        let cyclic=crate::used_size::style(item).get("height").is_some_and(|height|height.contains('%'))
+            && row_kinds[row_start..row_end].iter().any(|kind| {
+                kind.is_intrinsic() || matches!(kind,TrackSize::Fr(_))
+                    || (indefinite_block_size && matches!(kind,TrackSize::MinMax {max:TrackBreadth::Fr(_),..}))
+            });
+        let horizontal=item.style.get("writing-mode").is_none_or(|mode|mode.eq_ignore_ascii_case("horizontal-tb"));
+        let margins=values::resolve_margins(&item.style,item.font_size,area_width);
+        let participates=requested.is_some() && !auto_block_margin && !cyclic && horizontal;
+        let baseline=if participates {
+            let absolute=match preference {row_baseline::Preference::First=>row_baseline::first_baseline(item),row_baseline::Preference::Last=>row_baseline::last_baseline(item)};
+            absolute-item.border_box.y
+        } else {0.0};
+        row_baseline::Metric {row_start,row_end,preference,requested:requested.is_some(),participates,
+            auto_block_margin,height:item.border_box.h,baseline,
+            margin_top:margins.top.unwrap_or(0.0),margin_bottom:margins.bottom.unwrap_or(0.0)}
+}
+fn grid_row_baseline_metrics(
+    items: &[LayoutBox], placed: &[Placement], row_kinds: &[TrackSize],
+    container: &ComputedStyle, area_widths: &[f32], indefinite_block_size: bool,
+) -> Vec<row_baseline::Metric> {
+    items.iter().zip(placed).enumerate().map(|(index,(item,placement))|
+        grid_row_baseline_metric(item,placement,row_kinds,container,
+            area_widths[index],indefinite_block_size)).collect()
+}
+
 /// Outer (margin-box) height of a LAID OUT item.
 fn outer_h(it: &LayoutBox) -> f32 {
     // border_box.h already includes padding/border — only margins add on.
@@ -1792,15 +1839,20 @@ pub(crate) fn layout_grid_with_context(
     }
 
     // --- 5. row sizing ----------------------------------------------------
+    let area_widths=placed.iter().map(|placement|area_w_of(placement).max(0.0)).collect::<Vec<_>>();
+    let measured=grid_row_baseline_metrics(items,&placed,&row_kinds,container,&area_widths,definite_height.is_none());
+    let baseline_shims=row_baseline::intrinsic_shims(&measured);
     let row_contribs: Vec<Contrib> = items
         .iter()
         .zip(&placed)
-        .flat_map(|(it, p)| {
-            subgrid_row_contribs(it, p, &spec, content_w).unwrap_or_else(|| vec![Contrib {
-                start: (p.row.unwrap_or(1) - 1) as usize,
-                span: p.row_span.max(1) as usize,
-                outer: outer_h(it),
-            }])
+        .enumerate()
+        .flat_map(|(index,(it,p))| {
+            let own=Contrib {start:(p.row.unwrap_or(1)-1) as usize,
+                span:p.row_span.max(1) as usize,outer:outer_h(it)+baseline_shims[index]};
+            if let Some(mut children)=subgrid_row_contribs(it,p,&spec,content_w) {
+                if baseline_shims[index]>0.0 {children.push(own);}
+                children
+            } else {vec![own]}
         })
         .collect();
     let mut row_sizes = context.and_then(|context| context.rows.as_ref()).map_or_else(
@@ -1862,6 +1914,7 @@ pub(crate) fn layout_grid_with_context(
             .get("height")
             .is_some_and(|v| v.trim().ends_with('%'));
         if align == ItemAlign::Stretch
+            && row_baseline::preference(it,container).is_none()
             && height_is_auto(it)
             && !own_height_is_percentage
             && !margin_is_auto(&it.style, "top")
@@ -1953,6 +2006,14 @@ pub(crate) fn layout_grid_with_context(
         };
         crate::flex::translate(it, bx - it.border_box.x, by - it.border_box.y);
     }
+    let final_baselines=grid_row_baseline_metrics(items,&placed,&row_kinds,container,&area_widths,definite_height.is_none());
+    let area_tops=placed.iter().map(|p|row_pos[(p.row.unwrap_or(1)-1) as usize]).collect::<Vec<_>>();
+    let area_heights=placed.iter().map(|p| {
+        let start=(p.row.unwrap_or(1)-1) as usize;
+        let end=(start+p.row_span.max(1) as usize).min(n_rows);
+        row_pos[end-1]+row_sizes[end-1]-row_pos[start]
+    }).collect::<Vec<_>>();
+    row_baseline::position_rows(items,&final_baselines,&area_tops,&area_heights);
 
     let tracks = GridTracks {
         col_positions: col_pos,
@@ -2192,15 +2253,34 @@ fn layout_row_lanes(
         .fold(spec.rows.len().max(1), usize::max);
     if tracks > MAX_GRID_TRACKS { return (0.0, GridTracks::default()); }
     let kinds = track_vector(&spec.rows, &spec.auto_rows, tracks);
-    let mut contributions = Vec::new();
-    for (it, p) in items.iter_mut().zip(&raw) {
+    for it in items.iter_mut() {
         crate::block::layout_block(it, 0.0, 0.0, content_w, fonts);
-        contributions.push(Contrib {
-            start: p.row.unwrap_or(1).saturating_sub(1) as usize,
-            span: p.row_span as usize,
-            outer: outer_h(it),
-        });
     }
+    // Grid Lanes §6.5 uses the same row sharing groups as Grid. Automatic
+    // baseline participants can occupy every eligible start (§3.4); size
+    // those hypothetical groups before waterfall placement chooses a row.
+    let mut projected = Vec::new();
+    let mut metrics = Vec::new();
+    for (index, (it, p)) in items.iter().zip(&raw).enumerate() {
+        let span = (p.row_span as usize).clamp(1, tracks);
+        let starts = if p.row.is_none() && row_baseline::preference(it, container).is_some() {
+            (0..=tracks-span).collect::<Vec<_>>()
+        } else { vec![(p.row.unwrap_or(1).saturating_sub(1) as usize).min(tracks-span)] };
+        for start in starts {
+            let mut placement = *p;
+            placement.row = Some(start as u32 + 1);
+            placement.row_span = span as u32;
+            metrics.push(grid_row_baseline_metric(it, &placement, &kinds,
+                container, content_w, definite_height.is_none()));
+            projected.push((index, placement));
+        }
+    }
+    let shims = row_baseline::intrinsic_shims(&metrics);
+    let contributions = projected.iter().zip(&shims).map(|((index,p),shim)| Contrib {
+        start: p.row.unwrap_or(1).saturating_sub(1) as usize,
+        span: p.row_span as usize,
+        outer: outer_h(&items[*index]) + shim,
+    }).collect::<Vec<_>>();
     let axis = ActiveAxis::for_lanes(tracks, &spec.row_auto_fit, raw.iter().map(|p| (p.row, p.row_span)));
     let mut sizes = axis.size(&kinds, spec.row_gap, definite_height, &contributions);
     if spec.align_content == Pack::Stretch {
@@ -2209,6 +2289,9 @@ fn layout_row_lanes(
     let natural_height = sizes.iter().sum::<f32>() + axis.gaps(spec.row_gap);
     let positions = axis.positions(&sizes, spec.row_gap, spec.align_content,
         definite_height.unwrap_or(natural_height), content_y, false);
+    let mut resolved = raw.clone();
+    let mut area_tops = vec![0.0; items.len()];
+    let mut area_heights = vec![0.0; items.len()];
     let mut running = axis.lane_positions();
     let tolerance = flow_tolerance(container, font_px, definite_height.unwrap_or(content_w));
     let mut cursor = 0usize;
@@ -2228,6 +2311,11 @@ fn layout_row_lanes(
         let area_y = positions[start];
         let end = start + span - 1;
         let area_h = positions[end] + sizes[end] - area_y;
+        resolved[index].row = Some(start as u32 + 1);
+        resolved[index].row_span = span as u32;
+        area_tops[index] = area_y;
+        area_heights[index] = area_h;
+
         let it = &mut items[index];
         it.containing_block_height = Some(area_h);
         let rows = subgrid_axis_for_item(it, "grid-template-rows", &sizes,
@@ -2239,7 +2327,8 @@ fn layout_row_lanes(
                 .min((content_w - h_chrome(it)).max(0.0)),
         };
         let mut used=crate::UsedContentSize{width:Some(width),height:None};
-        if height_is_auto(it) {
+        if height_is_auto(it) && row_baseline::preference(it, container).is_none()
+            && !margin_is_auto(&it.style, "top") && !margin_is_auto(&it.style, "bottom") {
             let margin = values::resolve_margins(&it.style, it.font_size, content_w);
             let padding = values::resolve_padding(&it.style, it.font_size, content_w);
             let border = values::resolve_borders(&it.style, it.font_size);
@@ -2250,7 +2339,13 @@ fn layout_row_lanes(
         crate::block::layout_block_with_used_content_size(it,0.0,0.0,content_w,fonts,None,used);
         let margin = values::resolve_margins(&it.style, it.font_size, content_w);
         let x = content_x + stack + margin.left.unwrap_or(0.0);
-        let y = area_y + it.margin.top.unwrap_or(0.0);
+        let auto_top = margin_is_auto(&it.style, "top");
+        let auto_bottom = margin_is_auto(&it.style, "bottom");
+        let free = (area_h - it.border_box.h - margin.top.unwrap_or(0.0)
+            - margin.bottom.unwrap_or(0.0)).max(0.0);
+        let auto_lead = if auto_top && auto_bottom { free * 0.5 }
+            else if auto_top { free } else { 0.0 };
+        let y = area_y + margin.top.unwrap_or(0.0) + auto_lead;
         crate::flex::translate(it, x - it.border_box.x, y - it.border_box.y);
         let outer_width = (it.border_box.w + margin.left.unwrap_or(0.0)
             + margin.right.unwrap_or(0.0)).max(0.0);
@@ -2258,6 +2353,10 @@ fn layout_row_lanes(
             *position = stack + outer_width + spec.col_gap;
         }
     }
+    let widths = vec![content_w; items.len()];
+    let final_metrics = grid_row_baseline_metrics(items, &resolved, &kinds,
+        container, &widths, definite_height.is_none());
+    row_baseline::position_rows(items, &final_metrics, &area_tops, &area_heights);
     if !spec.rtl {
         let natural_width = (running.into_iter().filter(|value| value.is_finite()).fold(0.0, f32::max) - spec.col_gap).max(0.0);
         let (lead, _) = pack_pair(spec.justify_content, content_w - natural_width, 1);
