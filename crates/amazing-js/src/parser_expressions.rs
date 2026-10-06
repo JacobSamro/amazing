@@ -1,3 +1,6 @@
+// Private-brand dispatch and async-method commitment adapted from boa-dev/boa
+// (core/parser/src/parser/expression/{mod.rs,primary/object_initializer/mod.rs})
+// @39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 //! Expression grammar and literals.
 use super::*;
 
@@ -122,7 +125,9 @@ impl Parser {
     /// starts fresh.
     pub(super) fn parse_binary(&mut self, min_prec: u8) -> Result<Expr, SyntaxError> {
         let start = self.cur_loc();
-        let mut left = self.parse_unary()?;
+        let mut left = if matches!(self.cur().kind, TokenKind::PrivateIdent(_)) {
+            self.parse_private_brand_expression(min_prec)?
+        } else { self.parse_unary()? };
         let mut saw_coalesce = false;
         let mut saw_logical = false;
         loop {
@@ -135,6 +140,9 @@ impl Parser {
             }
             if kind == BinKind::Arithmetic(BinOp::In) && self.no_in {
                 break;
+            }
+            if self.cur().escaped_identifier && matches!(self.cur().kind, TokenKind::Keyword(_)) {
+                return Err(self.err("escaped reserved word is not a binary operator"));
             }
             if matches!(left.kind, ExprKind::PrivateName(_))
                 && kind != BinKind::Arithmetic(BinOp::In)
@@ -615,12 +623,7 @@ impl Parser {
                 expr.string_has_escape = token.string_has_escape;
                 Ok(expr)
             }
-            TokenKind::PrivateIdent(name) => {
-                let t = self.bump();
-                let id = Ident::new(name, t.span);
-                self.use_private(id.clone())?;
-                Ok(Expr::new(ExprKind::PrivateName(id), self.span_from(start)))
-            }
+            TokenKind::PrivateIdent(_) => Err(self.err("private identifier is not a primary expression")),
             TokenKind::TemplatePart { .. } => {
                 let lit = self.parse_template_lit()?;
                 if lit.cooked_valid.iter().any(|valid| !valid) {
@@ -841,7 +844,7 @@ impl Parser {
                     return Err(self.err_at(name.span.start, "duplicate arrow parameter"));
                 }
                 if (self.strict_script || own_strict)
-                    && matches!(name.name.as_str(), "eval" | "arguments") {
+                    && super::statements::strict_binding_name(&name.name) {
                     return Err(self.err_at(name.span.start, "invalid strict arrow parameter"));
                 }
             }
@@ -1041,16 +1044,22 @@ impl Parser {
         let is_generator = self.eat_punct(Punct::Star);
         let mut kind = MethodKind::Method;
         if !is_generator && !is_async {
-            if self.word("get") && self.nth_starts_member_key(1) {
+            if self.word("get") && self.nth_starts_accessor_name(1) {
                 self.bump();
                 kind = MethodKind::Get;
-            } else if self.word("set") && self.nth_starts_member_key(1) {
+            } else if self.word("set") && self.nth_starts_accessor_name(1) {
                 self.bump();
                 kind = MethodKind::Set;
             }
         }
         let key_start = self.cur_loc();
         let (key, key_utf16) = self.parse_prop_key()?;
+        // Once a method prefix is consumed, it cannot become a data property,
+        // cover-initialized name or shorthand after parsing the property key.
+        if (is_async || is_generator || kind != MethodKind::Method)
+            && !self.at_punct(Punct::LParen) {
+            return Err(self.err("method modifiers require a parameter list"));
+        }
         if self.at_punct(Punct::Colon) {
             self.bump();
             let value = self.parse_assignment_with_in()?;

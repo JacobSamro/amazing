@@ -2349,3 +2349,13 @@ mod construct_tests {
 #[cfg(test)]
 #[path = "parser_source_tests.rs"]
 mod source_tests;
+
+#[path = "parser_contextual_grammar.rs"]
+mod contextual_grammar;
+#[cfg(test)]
+#[path = "parser_contextual_grammar_tests.rs"]
+mod contextual_grammar_tests;
+
+#[cfg(test)]
+#[path = "parser_callable_binding_closure_tests.rs"]
+mod callable_binding_closure_tests;

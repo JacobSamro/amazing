@@ -1174,7 +1174,7 @@ fn is_resource_statement(statement: &Stmt) -> bool {
     matches!(&statement.kind, StmtKind::Var(decl) if decl.resource_kind.is_some())
 }
 
-fn strict_binding_name(name: &str) -> bool {
+pub(super) fn strict_binding_name(name: &str) -> bool {
     matches!(name, "eval" | "arguments" | "implements" | "interface" | "let" | "package"
         | "private" | "protected" | "public" | "static" | "yield")
 }

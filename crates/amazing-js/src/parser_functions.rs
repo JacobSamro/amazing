@@ -66,7 +66,7 @@ impl Parser {
         self.in_static_block = saved_static_block;
         let body = body?;
         if let Some(name) = &name {
-            if (self.strict_script || has_use_strict(&body)) && matches!(name.name.as_str(), "eval" | "arguments" | "yield") {
+            if (self.strict_script || has_use_strict(&body)) && super::statements::strict_binding_name(&name.name) {
                 return Err(self.err_at(name.span.start, "invalid strict function name"));
             }
         }
@@ -139,7 +139,7 @@ impl Parser {
                 if (strict || force_unique || !simple) && !seen.insert(name.name.clone()) {
                     return Err(self.err_at(name.span.start, "duplicate parameter"));
                 }
-                if strict && matches!(name.name.as_str(), "eval" | "arguments" | "implements" | "interface" | "package" | "private" | "protected" | "public" | "static" | "yield" | "let") {
+                if strict && super::statements::strict_binding_name(&name.name) {
                     return Err(self.err_at(name.span.start, "invalid strict parameter name"));
                 }
             }
@@ -224,10 +224,12 @@ impl Parser {
                 if !names.insert(&ident.name) {
                     return Err(self.err_at(ident.span.start, "duplicate method parameter"));
                 }
-                if strict && (ident.name == "eval" || ident.name == "arguments") {
+                if strict && super::statements::strict_binding_name(&ident.name) {
                     return Err(self.err_at(
                         ident.span.start,
-                        "eval and arguments cannot be strict parameters",
+                        if matches!(ident.name.as_str(), "eval" | "arguments") {
+                            "eval and arguments cannot be strict parameters"
+                        } else { "invalid strict method parameter" },
                     ));
                 }
             }
@@ -297,7 +299,7 @@ impl Parser {
         if !self.eat_kw(crate::tokens::Keyword::Class) { return Err(self.err("decorators must precede a class")); }
         let name = if matches!(self.cur().kind, TokenKind::Ident(_)) {
             let id = self.expect_ident()?;
-            if matches!(id.name.as_str(), "eval" | "arguments" | "implements" | "interface" | "let" | "package" | "private" | "protected" | "public" | "static" | "yield") {
+            if super::statements::strict_binding_name(&id.name) {
                 return Err(self.err_at(id.span.start, "invalid class name in strict mode"));
             }
             Some(id)
@@ -422,10 +424,10 @@ impl Parser {
         let is_generator = self.eat_punct(Punct::Star);
         let mut kind = MethodKind::Method;
         if !is_generator && !is_async {
-            if self.word("get") && !self.nth(1).newline_before && self.nth_starts_member_key(1) {
+            if self.word("get") && self.nth_starts_accessor_name(1) {
                 self.bump();
                 kind = MethodKind::Get;
-            } else if self.word("set") && !self.nth(1).newline_before && self.nth_starts_member_key(1) {
+            } else if self.word("set") && self.nth_starts_accessor_name(1) {
                 self.bump();
                 kind = MethodKind::Set;
             }
@@ -522,13 +524,7 @@ impl Parser {
         }
         self.declare_private(&key, MethodKind::Method, is_static)?;
         let init = if self.eat_punct(Punct::Eq) {
-            self.in_class_field_initializer += 1;
-            let saved_super_property = self.super_property_allowed;
-            self.super_property_allowed = true;
-            let init = self.parse_assignment_expr();
-            self.super_property_allowed = saved_super_property;
-            self.in_class_field_initializer -= 1;
-            Some(init?)
+            Some(self.parse_class_field_initializer()?)
         } else {
             None
         };

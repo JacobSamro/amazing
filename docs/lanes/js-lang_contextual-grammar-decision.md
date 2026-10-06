@@ -1,0 +1,15 @@
+# Contextual grammar closure
+
+Recorded base: `95a143c6d442a6eab360b95fddcb61ecd739dcf8`.
+
+The current pinned full16 map has three coherent parser defects: consumed method modifiers can become data properties, function names with their own strict directive validate only three restricted names, and private identifiers incorrectly enter unary/primary expressions. The dedicated private-brand relational production and async-method commitment are adapted from boa-dev/boa `39cd11214ecb366200157dab96b3919e61e9a391`, MIT, with source headers and an appended notice. All dependencies remain std-only.
+
+Field initialization retains the normative Yield/Await parameters. ECMA-2622025 15.7 FieldDefinition passes both parameters to Initializer; current primary commit `6db9135b3d77fd38a81a5a1f1bb6ed77fcca9066` agrees. The initializer gets its genuine function-code new.target/super/formal-parameter boundary without becoming module top-level await. Computed names stay in the enclosing context. Getter/setter names permit line terminators as the MethodDefinition grammar specifies.
+
+The earlier reset proposal and contradictory authored controls are preserved at WIP `457871db76d2a62fb2d4ec63616ebe68a0de1a2e`. Pinned Mozilla staging field cases expect a different await interpretation; that discrepancy remains unresolved and visible. Official input, classifications and losses are never rewritten to reconcile it. The shipping successor uses current-primary controls. The whole original staging selectors remain in the before/after gate.
+
+Eleven shared groups cover four callable kinds, all field/method forms, Script/Module and exact UTF16 goals, escaped names, private-brand precedence, restoration and actual AST/bytecode consumers. Qualified Linux source74efd881: workspace5364 PASS/0FAIL/17SKIP, docs39 PASS, host18 PASS. Whole seven selectors/default+VM preserve28519 passing files and53140 variants and gain3 files/5 variants eachmode; no losses. All official inputs remain unchanged. See compact gate receipt.
+
+Native725 passed5362 workspace controls, but its whole language directory exposed two genuine ASI losses: fields named get/set followed by generator methods after a newline. Accessor lookahead now uses ClassElementName/PropertyName starts, excluding the star accepted by async-generator lookahead. Both accessor paths are fixed; the original official fixtures and shared native controls remain unchanged. Failed725 observations are preserved; no losses are relabeled.
+
+Whole725 staging misc identified the remaining strict-binding consumer: setter parameters with their own strict directive checked only eval/arguments. Methods and arrows now share the complete BindingIdentifier strict restriction already used by functions/classes. Original eleven shared groups remain byte-identical; two additive after-only closure groups cover actual ASI field/generator semantics and complete callable parameter/directive boundaries. The unchanged official future-reserved-words fixture remains in the full selector.
