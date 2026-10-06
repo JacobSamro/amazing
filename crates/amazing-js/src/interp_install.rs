@@ -546,6 +546,7 @@ impl Interpreter {
             self.array_proto.borrow_mut().define(n, symbol_data(method, true, true)).unwrap();
         }
         self.install_array_extra();
+        self.install_binary_array_to_string_alias();
         for (n, f) in [
             ("then", native_promise_then as crate::value::NativeFn),
             ("catch", native_promise_catch as crate::value::NativeFn),

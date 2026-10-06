@@ -1,0 +1,5 @@
+TypedArray copy/species methods now preserve original-length and fresh coercion checkpoints, reject immutable/mismatched species destinations before callbacks, stream overlapping slice bytes, handle clipped zero-byte copies safely, and use canonical Array.toString and actual realm intrinsics. Whole13 new native groups cover all12 element kinds in TreeWalk and Bytecode; original23 RAB and13 exotic groups remain unchanged.
+
+Linux source070→953: workspace5412→5425/17skipped,doctests39→39; all60 selectors/modes per side at pinned3655/J4/60s with zero lost files/variants. Five original TypedArray files gained in each mode (+10file/+20variant cohort identities). Initial fixture failure and real slice lost6/panic are preserved under failed-history. Raw/source/generated/allELFs remain native on original boxes; current target was retired only after verified retention.
+
+This one commit on publisheda6 contains the method delta only; allfour engine/test files are byteexact native-tested953. Exotics is already published52e. Root owns merged workspace/full16 and publication; this ticket makes no browser/GC/Atomics completeness or cross-box performance claim.

@@ -1,0 +1,128 @@
+{
+  "utc": "2026-10-06T09:31:01.855668+00:00",
+  "published_source": "eb564ea50952c11242969a4ae4ec8665ce1b675f",
+  "candidate": "3ea924d88d2df9b28fcbd1e3cad81e949dbb5b61",
+  "same_captured_epyc_box_ids": [
+    "bx_yvt84fe8",
+    "bx_2dx84je2",
+    "bx_8zsg45na",
+    "bx_6sxu9sss"
+  ],
+  "all_native_and_fetch_exits": 0,
+  "published_control_summary": {
+    "files": {
+      "fail": 513,
+      "pass": 52885,
+      "skipped": 294,
+      "timeout": 10,
+      "unsupported": 170
+    },
+    "variants": {
+      "fail": 1010,
+      "pass": 101550,
+      "timeout": 20,
+      "unsupported": 338
+    }
+  },
+  "published_control_lost_files": [
+    "built-ins/decodeURI/S15.1.3.1_A2.5_T1.js",
+    "staging/sm/Date/dst-offset-caching-1-of-8.js",
+    "staging/sm/Date/dst-offset-caching-2-of-8.js",
+    "staging/sm/Date/dst-offset-caching-3-of-8.js",
+    "staging/sm/Date/dst-offset-caching-4-of-8.js",
+    "staging/sm/Date/dst-offset-caching-5-of-8.js",
+    "staging/sm/Date/dst-offset-caching-6-of-8.js",
+    "staging/sm/Date/dst-offset-caching-7-of-8.js",
+    "staging/sm/Date/dst-offset-caching-8-of-8.js"
+  ],
+  "published_control_lost_variants": [
+    [
+      "built-ins/decodeURI/S15.1.3.1_A2.5_T1.js",
+      "non-strict"
+    ],
+    [
+      "built-ins/decodeURI/S15.1.3.1_A2.5_T1.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-1-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-1-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-2-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-2-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-3-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-3-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-4-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-4-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-5-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-5-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-6-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-6-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-7-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-7-of-8.js",
+      "strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-8-of-8.js",
+      "non-strict"
+    ],
+    [
+      "staging/sm/Date/dst-offset-caching-8-of-8.js",
+      "strict"
+    ]
+  ],
+  "candidate_shared_timeouts": [
+    "built-ins/decodeURI/S15.1.3.1_A2.5_T1.js",
+    "staging/sm/Date/dst-offset-caching-1-of-8.js",
+    "staging/sm/Date/dst-offset-caching-2-of-8.js",
+    "staging/sm/Date/dst-offset-caching-3-of-8.js",
+    "staging/sm/Date/dst-offset-caching-4-of-8.js",
+    "staging/sm/Date/dst-offset-caching-5-of-8.js",
+    "staging/sm/Date/dst-offset-caching-6-of-8.js",
+    "staging/sm/Date/dst-offset-caching-7-of-8.js",
+    "staging/sm/Date/dst-offset-caching-8-of-8.js"
+  ],
+  "candidate_only_timeout_files": [
+    "built-ins/decodeURIComponent/S15.1.3.2_A2.5_T1.js"
+  ],
+  "conclusion": "Nine timeout losses reproduce on published code on same EPYC hosts. Additional candidate-only decodeURIComponent timeout is not attributed. Candidate independently qualified all16 on exact prior Ryzen baseline hardware with zero losses and unchanged60s; no deadline waiver.",
+  "control_merged_sha256": "78c2b9f2965015d0aa498af69b7220401dfd8d787e2bc6bd5b7ef0f2aaf89ff2"
+}
