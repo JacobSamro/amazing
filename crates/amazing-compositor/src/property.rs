@@ -778,3 +778,7 @@ mod scrolling_tests {
         );
     }
 }
+
+#[path = "prepared_sampling.rs"]
+mod prepared_sampling;
+pub(crate) use prepared_sampling::PreparedUnmap;

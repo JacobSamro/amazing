@@ -1,0 +1,16 @@
+{
+  "before": "d6a99d011ed67de7f417a84c2c213d8215567d04",
+  "after": "d812fc12843f330684e5c9aff07cd56867cac8fd",
+  "box_id": "bx_a59cv9tg",
+  "alias": "compositor-quad-sampler-reuse-20261006",
+  "actual_profile": "existing xlarge16vCPU/32GiB; measured native profile required",
+  "Cargo_jobs_both": 4,
+  "existing_box_only": true,
+  "allocation_lifecycle_forbidden": true,
+  "packet_bytes": 141304679,
+  "packet_sha256": "fc1170508a9d3a81de4f2309c2c05061c0856468324faa0bf03cbb745f7d543e",
+  "command_sha256": "6438566fdd0085a30f3a48412be75aaa4f791f5d7aa280446a3a509b2e0ae776",
+  "public_linux_run_sha256": "301443415f353426f954c88b2532593b25fb7e8d4c311ed66fc969186f6a9054",
+  "unchanged_same_device_budget_bytes": 26306674688,
+  "original_control_bodies_unchanged": true
+}

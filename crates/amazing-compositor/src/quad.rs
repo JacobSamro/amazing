@@ -635,22 +635,40 @@ fn resource_pixel(
         )
         .unwrap_or([0; 4])
 }
-fn sample(
-    resources: &ResourceTable,
-    frame: &CompositorFrame,
+/// Cache only the quad's authenticated source tile; interpolation across a
+/// tile edge still resolves the real neighboring resource through tile_lookup.
+struct TileSampler<'a> {
+    resources: &'a ResourceTable,
+    frame: &'a CompositorFrame,
     layer: usize,
+    cached: Option<((i32, i32), &'a Surface)>,
+}
+impl<'a> TileSampler<'a> {
+    fn new(resources: &'a ResourceTable, frame: &'a CompositorFrame, quad: &TileQuad) -> Self {
+        let tile = ((quad.rect.x.floor() as i32).div_euclid(TILE_SIZE),
+            (quad.rect.y.floor() as i32).div_euclid(TILE_SIZE));
+        let cached = (frame.resource_id_at(quad.layer, tile.0, tile.1) == Some(quad.resource_id))
+            .then(|| resources.get(quad.resource_id).map(|surface| (tile, surface))).flatten();
+        Self { resources, frame, layer: quad.layer, cached }
+    }
+    fn pixel(&self, x: i32, y: i32) -> [u8; 4] {
+        if let Some((tile, surface)) = self.cached {
+            if (x.div_euclid(TILE_SIZE), y.div_euclid(TILE_SIZE)) == tile {
+                return surface.get_pixel(x.rem_euclid(TILE_SIZE) as u32,
+                    y.rem_euclid(TILE_SIZE) as u32).unwrap_or([0; 4]);
+            }
+        }
+        resource_pixel(self.resources, self.frame, self.layer, x, y)
+    }
+}
+fn sample(
+    sampler: &TileSampler<'_>,
     sx: f32,
     sy: f32,
     integer: bool,
 ) -> [u8; 4] {
     if integer {
-        return resource_pixel(
-            resources,
-            frame,
-            layer,
-            sx.floor() as i32,
-            sy.floor() as i32,
-        );
+        return sampler.pixel(sx.floor() as i32, sy.floor() as i32);
     }
     let fx = sx - 0.5;
     let fy = sy - 0.5;
@@ -665,10 +683,10 @@ fn sample(
         tx * ty,
     ];
     let samples = [
-        resource_pixel(resources, frame, layer, x, y),
-        resource_pixel(resources, frame, layer, x + 1, y),
-        resource_pixel(resources, frame, layer, x, y + 1),
-        resource_pixel(resources, frame, layer, x + 1, y + 1),
+        sampler.pixel(x, y),
+        sampler.pixel(x + 1, y),
+        sampler.pixel(x, y + 1),
+        sampler.pixel(x + 1, y + 1),
     ];
     let mut a = 0.;
     let mut p = [0.; 3];
@@ -754,6 +772,12 @@ impl ReferenceCpuPresenter {
                     } else {
                         Some(Matrix4::IDENTITY)
                     };
+                    let visibility = frame.trees.prepare_visibility(q.state);
+                    let source_mapper = super::property::PreparedUnmap::new(q.transform);
+                    let texture = TileSampler::new(&self.resources, frame, q);
+                    let nearest = frame.raster_sampling == RasterSampling::Nearest
+                        || integer_translation(q.transform);
+                    let opacity = amazing_paint::quantize_opacity(q.opacity) as u32;
                     let local = intersect(q.rect, q.content_rect);
                     let Some(world) = q.transform.map_bounds(local) else {
                         continue;
@@ -772,13 +796,15 @@ impl ReferenceCpuPresenter {
                             let dy = y as f32 + 0.5;
                             // Local effect surfaces sample in source space,
                             // but property-tree visibility remains world-space.
-                            let visible_point = visibility_matrix.and_then(|m| m.map(dx, dy));
+                            let visible_point = if local_effect {
+                                visibility_matrix.and_then(|m| m.map(dx, dy))
+                            } else { Some((dx, dy)) };
                             if !visible_point
-                                .is_some_and(|(x, y)| frame.trees.visible(q.state, x, y))
+                                .is_some_and(|(x, y)| visibility.contains(x, y))
                             {
                                 continue;
                             }
-                            let Some((sx, sy)) = q.transform.unmap(dx, dy) else {
+                            let Some((sx, sy)) = source_mapper.unmap(dx, dy) else {
                                 continue;
                             };
                             if !q.content_rect.contains(sx, sy)
@@ -787,13 +813,10 @@ impl ReferenceCpuPresenter {
                                 continue;
                             }
                             let src = sample(
-                                &self.resources,
-                                frame,
-                                q.layer,
+                                &texture,
                                 sx,
                                 sy,
-                                frame.raster_sampling == RasterSampling::Nearest
-                                    || integer_translation(q.transform),
+                                nearest,
                             );
                             if src[3] == 0 {
                                 continue;
@@ -801,7 +824,7 @@ impl ReferenceCpuPresenter {
                             let dst = out.get_pixel(x, y).unwrap_or([0; 4]);
                             let index = y as usize * frame.width as usize + x as usize;
                             let alpha = (src[3] as u32
-                                * amazing_paint::quantize_opacity(q.opacity) as u32
+                                * opacity
                                 + 127)
                                 / 255;
                             if alpha > 0 && alpha < 255 && dst[3] > 0 && owner[index] != Some(layer)
@@ -819,6 +842,7 @@ impl ReferenceCpuPresenter {
                     }
                 }
                 DrawQuad::SolidColor(q) => {
+                    let opacity = amazing_paint::quantize_opacity(q.opacity) as u32;
                     let draw = intersect(
                         intersect(q.rect, q.clip_rect),
                         Rect::new(0., 0., frame.width as f32, frame.height as f32),
@@ -835,7 +859,7 @@ impl ReferenceCpuPresenter {
                             let dst = out.get_pixel(x, y).unwrap_or([0; 4]);
                             let index = y as usize * frame.width as usize + x as usize;
                             let alpha = (q.color[3] as u32
-                                * amazing_paint::quantize_opacity(q.opacity) as u32
+                                * opacity
                                 + 127)
                                 / 255;
                             if alpha > 0 && alpha < 255 && dst[3] > 0 && owner[index] != Some(layer)
@@ -866,6 +890,9 @@ impl ReferenceCpuPresenter {
                     // read per destination pixel, exactly like `DrawQuad::
                     // Tile`'s own transform sampling.
                     let local_transform = operations.and_then(|op| op.local_transform);
+                    let source_mapper = local_transform.map(super::property::PreparedUnmap::new);
+                    let visibility = frame.trees.prepare_visibility(q.state);
+                    let opacity = amazing_paint::quantize_opacity(q.opacity) as u32;
                     // Seed the group's backdrop before its children draw. A
                     // nested backdrop filter then sees the already-filtered
                     // parent background, without escaping its backdrop root.
@@ -951,11 +978,11 @@ impl ReferenceCpuPresenter {
                         {
                             let dx = x as f32 + 0.5;
                             let dy = y as f32 + 0.5;
-                            if !frame.trees.visible(q.state, dx, dy) {
+                            if !visibility.contains(dx, dy) {
                                 continue;
                             }
-                            let src = if let Some(m) = local_transform {
-                                let Some((sx, sy)) = m.unmap(dx, dy) else {
+                            let src = if let Some(mapper) = source_mapper {
+                                let Some((sx, sy)) = mapper.unmap(dx, dy) else {
                                     continue;
                                 };
                                 if operations.is_some_and(|op| {
@@ -973,7 +1000,7 @@ impl ReferenceCpuPresenter {
                             let dst = out.get_pixel(x, y).unwrap_or([0; 4]);
                             let index = y as usize * frame.width as usize + x as usize;
                             let alpha = (src[3] as u32
-                                * amazing_paint::quantize_opacity(q.opacity) as u32
+                                * opacity
                                 + 127)
                                 / 255;
                             if alpha > 0 {
@@ -1118,6 +1145,49 @@ mod tests {
             classify_pixel_parity(&presenter, &candidate, &full).losses,
             1
         );
+    }
+
+    #[test]
+    fn tile_sampler_preserves_neighbor_seams_negative_tiles_and_mismatched_quad_ids() {
+        let mut resources = ResourceTable::default();
+        let mut lookup = HashMap::new();
+        let mut uploads = Vec::new();
+        for ty in -1..=1 {
+            for tx in -1..=1 {
+                let id = ResourceId(((ty + 1) * 3 + tx + 2) as u64);
+                lookup.insert((7, tx, ty), id);
+                let mut surface = Surface::new(TILE_SIZE as u32, TILE_SIZE as u32);
+                for y in 0..surface.height {
+                    for x in 0..surface.width {
+                        surface.set_pixel(x, y, [x as u8, y as u8, id.0 as u8 * 19, ((x + y) % 256) as u8]);
+                    }
+                }
+                uploads.push(ResourceUpload { id, width: surface.width, height: surface.height, pixels: surface.pixels });
+            }
+        }
+        resources.apply(&ResourceDelta { uploads, evictions: Vec::new() }).unwrap();
+        let frame = CompositorFrame { raster_sampling: RasterSampling::Bilinear,
+            width: 32, height: 32, passes: Vec::new(), resources: ResourceDelta::default(),
+            damage: Vec::new(), trees: PropertyTrees::new(), tile_lookup: lookup };
+        for ty in -1..=1 {
+            for tx in -1..=1 {
+                let mut quad = TileQuad { resource_id: frame.resource_id_at(7, tx, ty).unwrap(),
+                    rect: Rect::new((tx * TILE_SIZE) as f32, (ty * TILE_SIZE) as f32, TILE_SIZE as f32, TILE_SIZE as f32),
+                    content_rect: Rect::new(0., 0., 1000., 1000.), transform: Matrix4::IDENTITY,
+                    clip_rect: Rect::new(0., 0., 1000., 1000.), opacity: 1., blend: BlendMode::Normal,
+                    state: PropertyTreeState::default(), layer: 7 };
+                for mismatched in [false, true] {
+                    if mismatched { quad.resource_id = ResourceId(999); }
+                    let sampler = TileSampler::new(&resources, &frame, &quad);
+                    for dy in [-2, -1, 0, 1, 128, 254, 255, 256, 257] {
+                        for dx in [-2, -1, 0, 1, 128, 254, 255, 256, 257] {
+                            let (x, y) = (tx * TILE_SIZE + dx, ty * TILE_SIZE + dy);
+                            assert_eq!(sampler.pixel(x, y), resource_pixel(&resources, &frame, 7, x, y));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     struct Colors(Cell<u8>);

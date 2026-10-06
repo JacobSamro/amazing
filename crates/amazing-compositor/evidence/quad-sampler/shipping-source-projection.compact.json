@@ -1,0 +1,90 @@
+{
+  "tested_source": "d812fc12843f330684e5c9aff07cd56867cac8fd",
+  "ready_base": "09e3a5eb1c8628cfce9c669a864d22a05ea5c857",
+  "shipping_engine_and_original_controls_byteexact": true,
+  "paths": [
+    {
+      "path": "crates/amazing-compositor/examples/cached_quad_trace.rs",
+      "bytes": 2561,
+      "sha256": "77cf18236372fe828280ba6eda4489eb6a95a93d2dcb0d11f3e9a273073ea9e4"
+    },
+    {
+      "path": "crates/amazing-compositor/src/prepared_sampling.rs",
+      "bytes": 6510,
+      "sha256": "954ccbcaa006fb3d67cc8577446121918b6a17e4e7ae1026430df0a345d661d1"
+    },
+    {
+      "path": "crates/amazing-compositor/src/property.rs",
+      "bytes": 26003,
+      "sha256": "86ca5fd4eb64b4b5b1bc428b63da6b4e88b853ef043805be53332fea61031873"
+    },
+    {
+      "path": "crates/amazing-compositor/src/quad.rs",
+      "bytes": 51899,
+      "sha256": "a9b570271a1f042bf2a66cd87779f06a895123ae0f896180d2533c3716a6d8b9"
+    }
+  ],
+  "original_integration_tests_unchanged": [
+    {
+      "path": "crates/amazing-compositor/tests/baked_frame.rs",
+      "bytes": 10907,
+      "sha256": "b47dfd0dde38733b29deabd45231895d1ad6dc439cb5e40b3ac7d822c1023f43"
+    },
+    {
+      "path": "crates/amazing-compositor/tests/css14_adapter.rs",
+      "bytes": 2139,
+      "sha256": "400926e88dbb68b66da5bd88ebcc180625c65fc89c9e72fa59bb4e9138b04fa7"
+    },
+    {
+      "path": "crates/amazing-compositor/tests/device_raster.rs",
+      "bytes": 3913,
+      "sha256": "e96de746e1e544a86de142b2c74cdd4a89a46b05388ef1e6291670cfa717bb25"
+    },
+    {
+      "path": "crates/amazing-compositor/tests/paint_blends.rs",
+      "bytes": 244,
+      "sha256": "28d02d32c29ab246cee6622ad00a978ac24486c462cd410415a0df38c1bb82ef"
+    },
+    {
+      "path": "crates/amazing-compositor/tests/paint_filter_parity.rs",
+      "bytes": 4067,
+      "sha256": "34c29259e5e11c3ada384e6a6c057051e6a837a7cf25af104ae39e920c8d7f0b"
+    },
+    {
+      "path": "crates/amazing-compositor/tests/paint_filters.rs",
+      "bytes": 6452,
+      "sha256": "dfabad191ccdc8566915439eee34cfb0c97b21104439205eb1a95dc1c0d9188b"
+    },
+    {
+      "path": "crates/amazing-compositor/tests/paint_sampling.rs",
+      "bytes": 7517,
+      "sha256": "e7781fdfd4b8b1dadbb869216d3f6b2b6ab2f118dfa0a1b95735a5b93c880d7b"
+    },
+    {
+      "path": "crates/amazing-compositor/tests/paint_view_pages.rs",
+      "bytes": 29567,
+      "sha256": "888c1c803e14ca597ce63d76d4d5bfef8ec11ccbb76af41963951bee6de5efce"
+    },
+    {
+      "path": "crates/amazing-compositor/tests/paint_visibility.rs",
+      "bytes": 8786,
+      "sha256": "c172eef14ceb48c7855694e10cdeff78b719796bd53e5bc9029f642ac99f8ce9"
+    },
+    {
+      "path": "crates/amazing-compositor/tests/parallel_tile_pages.rs",
+      "bytes": 4305,
+      "sha256": "1e874cf8c91fd14c105413dd7adbc639b20e75f9c6d8c421112e0254945643c5"
+    },
+    {
+      "path": "crates/amazing-compositor/tests/support/paint_blends.rs",
+      "bytes": 4263,
+      "sha256": "4699d2e021a7825895fedc786f1eead65ac0d182b96bf56fc7e7503a266b75cb"
+    },
+    {
+      "path": "crates/amazing-compositor/tests/support/paint_filter_parity.rs",
+      "bytes": 8124,
+      "sha256": "49053258ab7819e0a890275a4c53eda2019851ae55404636321bbfcf6662fc06"
+    }
+  ],
+  "original_quad_tests_sha256": "1a7e9082cdcba352a864956d0cada0ae535243ef51c52ac287cd8c428b530781"
+}

@@ -1,0 +1,1283 @@
+{
+  "schema": 1,
+  "recorded_base": "09e3a5eb1c8628cfce9c669a864d22a05ea5c857",
+  "tested_before": "d6a99d011ed67de7f417a84c2c213d8215567d04",
+  "tested_after": "d812fc12843f330684e5c9aff07cd56867cac8fd",
+  "actual_profile": {
+    "actual_os_cpus": 16,
+    "actual_memtotal_bytes": 33652166656,
+    "allocated_shape": "xlarge16vCPU/32GiB",
+    "cargo_build_jobs": 4,
+    "JOBS": "4",
+    "CARGO_BUILD_JOBS": "4",
+    "boot_id": "444c300f-220f-4e56-9e68-73a9433f7b2b",
+    "assigned_box_id": "bx_a59cv9tg",
+    "profile": {
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+    }
+  },
+  "terminal": {
+    "job": {
+      "schema": 2,
+      "lane": "compositor-quad-sampler-reuse-20261006",
+      "source_commit": "d812fc12843f330684e5c9aff07cd56867cac8fd",
+      "box_id": "bx_a59cv9tg",
+      "host": "user@51.255.76.140",
+      "port": 19034,
+      "job_id": "e2b301def1684049a4531ef86e70f570",
+      "output_root": "amazing/out/compositor-quad-sampler-reuse-20261006/quad-sampler-pair/compact",
+      "command_sha256": "6438566fdd0085a30f3a48412be75aaa4f791f5d7aa280446a3a509b2e0ae776",
+      "execution_sha256": "8996f04b38c0b580db29cf2aeb3d01767869c10b5416229d908ca2b076e18909",
+      "source_archive_sha256": "fc1170508a9d3a81de4f2309c2c05061c0856468324faa0bf03cbb745f7d543e",
+      "captured_proof_root": "/srv/amazing-proof"
+    },
+    "state": "TERMINAL",
+    "actual_exit": 0,
+    "runner_exit": 0,
+    "boot_id": "444c300f-220f-4e56-9e68-73a9433f7b2b",
+    "reason": "authenticated actual command exit",
+    "owner": {
+      "pid": 277085,
+      "start_ticks": 975618,
+      "state": "R",
+      "parent_pid": 277082,
+      "cmdline_sha256": "414c33ae278d957f7c0293ece9dd8679b3a59f295ca73893a5fc3a34a1bd37bf"
+    },
+    "started_ns": 1791288472356243523,
+    "catalog_error": null,
+    "execution_raw": {
+      "path": "/srv/amazing-proof/amazing-job-e2b301def1684049a4531ef86e70f570-e6zt9gda/command.log",
+      "bytes": 47604,
+      "sha256": "672d41519b697c0f1adb1de1253236b5a91bec66ab3026a12e9afe593309e4cc"
+    },
+    "observer_pipe_closed": false,
+    "signals": [],
+    "command_returncode": 0,
+    "exited_ns": 1791289113959919154,
+    "diagnostic_error": null,
+    "native_diagnostics": {
+      "path": "/srv/amazing-proof/amazing-job-e2b301def1684049a4531ef86e70f570-e6zt9gda/command.log",
+      "device": 64769
+    }
+  },
+  "workspace": {
+    "before_pass": 5482,
+    "after_pass": 5485,
+    "failed": 0,
+    "skipped_both": 17,
+    "doctests_both": 39,
+    "lost": [],
+    "gained": [
+      "amazing-compositor property::prepared_sampling::tests::prepared_unmap_preserves_affine_projective_and_singular_point_solves",
+      "amazing-compositor property::prepared_sampling::tests::prepared_visibility_matches_nested_clips_scroll_fixed_sticky_and_updates",
+      "amazing-compositor quad::tests::tile_sampler_preserves_neighbor_seams_negative_tiles_and_mismatched_quad_ids"
+    ]
+  },
+  "corpora": [
+    {
+      "phase": "paint-blends",
+      "cases": 85,
+      "before_pass": 83,
+      "after_pass": 83,
+      "unchanged_known_failures": 2,
+      "unchanged_diagnostic_notes": [
+        "color-burn/opaque: Some(PixelParityLoss { x: 0, y: 0, candidate: [21, 0, 167, 255], full: [22, 0, 167, 255] })",
+        "plus-lighter/alpha: Some(PixelParityLoss { x: 0, y: 0, candidate: [180, 205, 255, 255], full: [173, 205, 233, 255] })",
+        "TOTAL: 2/85 cases with losses, 1152 pixels, 0 unexpected cases"
+      ],
+      "lost": [],
+      "before_raw": {
+        "path": "/srv/amazing-proof/compositor-quad-sampler-reuse-20261006/before/raw/paint-blends.log",
+        "bytes": 6200,
+        "sha256": "f952e561492172ab9f5d552e36a644f5a8995ba8255db85e60a5f0701f079064"
+      },
+      "after_raw": {
+        "path": "/srv/amazing-proof/compositor-quad-sampler-reuse-20261006/after/raw/paint-blends.log",
+        "bytes": 6188,
+        "sha256": "60cc45c6233af2777fa34925e05568cb5ceaef1809df4475d57c54fa76bd60b6"
+      },
+      "rows": [
+        [
+          "normal,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "normal,alpha",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "normal,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "normal,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "normal,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "multiply,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "multiply,alpha",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "multiply,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "multiply,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "multiply,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "screen,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "screen,alpha",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "screen,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "screen,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "screen,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "overlay,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "overlay,alpha",
+          "3",
+          "3520",
+          "576",
+          "0"
+        ],
+        [
+          "overlay,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "overlay,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "overlay,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "darken,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "darken,alpha",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "darken,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "darken,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "darken,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "lighten,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "lighten,alpha",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "lighten,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "lighten,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "lighten,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "color-dodge,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "color-dodge,alpha",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "color-dodge,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "color-dodge,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "color-dodge,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "color-burn,opaque",
+          "3",
+          "3520",
+          "0",
+          "576"
+        ],
+        [
+          "color-burn,alpha",
+          "3",
+          "3520",
+          "576",
+          "0"
+        ],
+        [
+          "color-burn,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "color-burn,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "color-burn,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "hard-light,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "hard-light,alpha",
+          "3",
+          "3520",
+          "576",
+          "0"
+        ],
+        [
+          "hard-light,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "hard-light,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "hard-light,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "soft-light,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "soft-light,alpha",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "soft-light,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "soft-light,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "soft-light,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "difference,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "difference,alpha",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "difference,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "difference,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "difference,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "exclusion,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "exclusion,alpha",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "exclusion,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "exclusion,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "exclusion,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "hue,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "hue,alpha",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "hue,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "hue,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "hue,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "saturation,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "saturation,alpha",
+          "3",
+          "3520",
+          "576",
+          "0"
+        ],
+        [
+          "saturation,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "saturation,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "saturation,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "color,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "color,alpha",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "color,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "color,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "color,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "luminosity,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "luminosity,alpha",
+          "3",
+          "3520",
+          "576",
+          "0"
+        ],
+        [
+          "luminosity,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "luminosity,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "luminosity,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "plus-lighter,opaque",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "plus-lighter,alpha",
+          "3",
+          "3520",
+          "0",
+          "576"
+        ],
+        [
+          "plus-lighter,opacity",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "plus-lighter,isolate",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "plus-lighter,transform",
+          "3",
+          "4096",
+          "0",
+          "0"
+        ]
+      ]
+    },
+    {
+      "phase": "paint-filter-parity",
+      "cases": 32,
+      "before_pass": 32,
+      "after_pass": 32,
+      "unchanged_known_failures": 0,
+      "unchanged_diagnostic_notes": [],
+      "lost": [],
+      "before_raw": {
+        "path": "/srv/amazing-proof/compositor-quad-sampler-reuse-20261006/before/raw/paint-filter-parity.log",
+        "bytes": 4130,
+        "sha256": "97ab3359fd90bd7a8819c8f04899dbb276950553307dcb3257903f4f108bb15f"
+      },
+      "after_raw": {
+        "path": "/srv/amazing-proof/compositor-quad-sampler-reuse-20261006/after/raw/paint-filter-parity.log",
+        "bytes": 4127,
+        "sha256": "5149ca17a60cdef81282de5d0c5321b20093903001d9f653f30bf4c39c951028"
+      },
+      "rows": [
+        [
+          "filter,brightness(.4)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "filter,contrast(.5)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "filter,grayscale(.7)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "filter,hue-rotate(90deg)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "filter,invert(.8)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "filter,opacity(.5)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "filter,saturate(.2)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "filter,sepia(.6)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "filter,blur(2px)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "filter,drop-shadow(3px 2px 1px red)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "filter,invert(1) blur(1px)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "filter,blur(1px) opacity(.5)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "backdrop-filter,brightness(.4)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "backdrop-filter,contrast(.5)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "backdrop-filter,grayscale(.7)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "backdrop-filter,hue-rotate(90deg)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "backdrop-filter,invert(.8)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "backdrop-filter,opacity(.5)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "backdrop-filter,saturate(.2)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "backdrop-filter,sepia(.6)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "backdrop-filter,blur(2px)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "backdrop-filter,drop-shadow(3px 2px 1px red)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "backdrop-filter,invert(1) blur(1px)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "backdrop-filter,blur(1px) opacity(.5)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "clip-path,inset(4px)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "clip-path,inset(4px round 6px)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "clip-path,circle(40%)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "clip-path,circle(10px at 20px 12px)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "clip-path,ellipse(30% 20%)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "clip-path,ellipse(12px 8px at 18px 10px)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "clip-path,inset(4px round 6px);filter:blur(1px)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ],
+        [
+          "clip-path,circle(10px at 20px 12px);backdrop-filter:invert(1)",
+          "RawLocal",
+          "4096",
+          "0",
+          "0"
+        ]
+      ]
+    },
+    {
+      "phase": "css-effects-corpus",
+      "cases": 4,
+      "before_pass": 4,
+      "after_pass": 4,
+      "unchanged_known_failures": 0,
+      "unchanged_diagnostic_notes": [],
+      "lost": [],
+      "before_raw": {
+        "path": "/srv/amazing-proof/compositor-quad-sampler-reuse-20261006/before/raw/css-effects-corpus.log",
+        "bytes": 2301,
+        "sha256": "cff45d56f0c5af3e0a47173bfbba8036a4370e8f02f224f4798d3449df0477e6"
+      },
+      "after_raw": {
+        "path": "/srv/amazing-proof/compositor-quad-sampler-reuse-20261006/after/raw/css-effects-corpus.log",
+        "bytes": 2298,
+        "sha256": "24bd699c24fe196d5f54dfed87e7e849d2022d324f10867e301bf756a899dde9"
+      },
+      "rows": [
+        [
+          "backdrop.html",
+          "4",
+          "1",
+          "0"
+        ],
+        [
+          "blends.html",
+          "20",
+          "0",
+          "0"
+        ],
+        [
+          "clips-masks.html",
+          "0",
+          "12",
+          "0"
+        ],
+        [
+          "filters.html",
+          "13",
+          "1",
+          "0"
+        ]
+      ]
+    },
+    {
+      "phase": "mutation-trace",
+      "cases": 40,
+      "before_pass": 40,
+      "after_pass": 40,
+      "unchanged_known_failures": 0,
+      "unchanged_diagnostic_notes": [
+        "fixture,frame,mutation_to_frame_us,style_layout_us,view_us,frame_us,items,uploads"
+      ],
+      "lost": [],
+      "before_raw": {
+        "path": "/srv/amazing-proof/compositor-quad-sampler-reuse-20261006/before/raw/mutation-trace.log",
+        "bytes": 4395,
+        "sha256": "f3cb1df085de1871f109d0ac4b870baa6efb9c5383efda12df9dc7589970badb"
+      },
+      "after_raw": {
+        "path": "/srv/amazing-proof/compositor-quad-sampler-reuse-20261006/after/raw/mutation-trace.log",
+        "bytes": 4391,
+        "sha256": "baa72147e15f29f82aa292bb22b8e23bd60133471161b87d4d64aeaf09ee52bc"
+      },
+      "rows": null
+    },
+    {
+      "phase": "cached-quad-trace",
+      "cases": 4,
+      "before_pass": 4,
+      "after_pass": 4,
+      "unchanged_known_failures": 0,
+      "unchanged_diagnostic_notes": [],
+      "lost": [],
+      "before_raw": {
+        "path": "/srv/amazing-proof/compositor-quad-sampler-reuse-20261006/before/raw/cached-quad-trace.log",
+        "bytes": 2392,
+        "sha256": "b03b5ecc52f3b12a7d0d0b2baa42dd443d4fa137d2d54ff410cae2f0954954ba"
+      },
+      "after_raw": {
+        "path": "/srv/amazing-proof/compositor-quad-sampler-reuse-20261006/after/raw/cached-quad-trace.log",
+        "bytes": 2387,
+        "sha256": "6c0060ed0a454f979198a14cd34a1dc32c1177d6c970a9ac157e7b8f656a0673"
+      },
+      "rows": null
+    }
+  ],
+  "cached_quad_timings": [
+    {
+      "dpr": 1.0,
+      "sampling": "Bilinear",
+      "physical_size": [
+        614,
+        256
+      ],
+      "before_p50_us": 38808,
+      "after_p50_us": 11132,
+      "speedup": 3.486,
+      "before_max_us": 39186,
+      "after_max_us": 11438,
+      "pixel_losses": 0
+    },
+    {
+      "dpr": 1.25,
+      "sampling": "Bilinear",
+      "physical_size": [
+        767,
+        320
+      ],
+      "before_p50_us": 60754,
+      "after_p50_us": 18381,
+      "speedup": 3.305,
+      "before_max_us": 61210,
+      "after_max_us": 19141,
+      "pixel_losses": 0
+    },
+    {
+      "dpr": 2.0,
+      "sampling": "Bilinear",
+      "physical_size": [
+        1228,
+        512
+      ],
+      "before_p50_us": 155722,
+      "after_p50_us": 45879,
+      "speedup": 3.394,
+      "before_max_us": 156039,
+      "after_max_us": 54075,
+      "pixel_losses": 0
+    },
+    {
+      "dpr": 3.0,
+      "sampling": "Bilinear",
+      "physical_size": [
+        1842,
+        768
+      ],
+      "before_p50_us": 353791,
+      "after_p50_us": 107137,
+      "speedup": 3.302,
+      "before_max_us": 373915,
+      "after_max_us": 112742,
+      "pixel_losses": 0
+    }
+  ],
+  "native_receipts": [
+    {
+      "role": "before",
+      "source": "d6a99d011ed67de7f417a84c2c213d8215567d04",
+      "counts": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 39
+        },
+        "nextest": {
+          "failed": 0,
+          "passed": 5482,
+          "skipped": 17
+        }
+      },
+      "phase_raw": [
+        {
+          "phase": "workspace",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 795875,
+            "path": "/tmp/amazing-gate-command-qvuq3nbn/output.log",
+            "sha256": "51a37ba0f972986ac664acc0e3a6375b938e9dd084317100b88d6d544145750f"
+          }
+        },
+        {
+          "phase": "docs",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 30799,
+            "path": "/tmp/amazing-gate-command-awse9z8s/output.log",
+            "sha256": "a754b180f6934b3ffe01829e8bb72a924d4bcddc83bc3991081be035742af8ca"
+          }
+        },
+        {
+          "phase": "paint-blends",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 6200,
+            "path": "/tmp/amazing-gate-command-tnzxsjrx/output.log",
+            "sha256": "f952e561492172ab9f5d552e36a644f5a8995ba8255db85e60a5f0701f079064"
+          }
+        },
+        {
+          "phase": "paint-filter-parity",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 4130,
+            "path": "/tmp/amazing-gate-command-rbpfef8b/output.log",
+            "sha256": "97ab3359fd90bd7a8819c8f04899dbb276950553307dcb3257903f4f108bb15f"
+          }
+        },
+        {
+          "phase": "css-effects-corpus",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 2301,
+            "path": "/tmp/amazing-gate-command-bpk8_8o2/output.log",
+            "sha256": "cff45d56f0c5af3e0a47173bfbba8036a4370e8f02f224f4798d3449df0477e6"
+          }
+        },
+        {
+          "phase": "mutation-trace",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 4395,
+            "path": "/tmp/amazing-gate-command-u139i619/output.log",
+            "sha256": "f3cb1df085de1871f109d0ac4b870baa6efb9c5383efda12df9dc7589970badb"
+          }
+        },
+        {
+          "phase": "cached-quad-trace",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 2392,
+            "path": "/tmp/amazing-gate-command-bl6a3r82/output.log",
+            "sha256": "b03b5ecc52f3b12a7d0d0b2baa42dd443d4fa137d2d54ff410cae2f0954954ba"
+          }
+        }
+      ],
+      "retained_elf_files": 643,
+      "retained_files": 655,
+      "artifact_manifest": {
+        "bytes": 266940,
+        "path": "/srv/amazing-proof/compositor-quad-sampler-reuse-20261006/before/retained/manifests/before-d6a99d01-xlarge-j4.json",
+        "sha256": "71f6b67cfbede21ce8dac5b0d3b2f477aa1cf6b43159a53357c1b25243332753"
+      },
+      "selected_retention_method": "copy",
+      "storage_exit": 0,
+      "target_retired": true
+    },
+    {
+      "role": "after",
+      "source": "d812fc12843f330684e5c9aff07cd56867cac8fd",
+      "counts": {
+        "doctests": {
+          "failed": 0,
+          "ignored": 0,
+          "passed": 39
+        },
+        "nextest": {
+          "failed": 0,
+          "passed": 5485,
+          "skipped": 17
+        }
+      },
+      "phase_raw": [
+        {
+          "phase": "workspace",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 787018,
+            "path": "/tmp/amazing-gate-command-7nuryrm4/output.log",
+            "sha256": "fca74def0426880bed10d4591555895a75198b2d730cba47440c7a5528032ecf"
+          }
+        },
+        {
+          "phase": "docs",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 30799,
+            "path": "/tmp/amazing-gate-command-uho0x2es/output.log",
+            "sha256": "113deae3d56ea56e8b99ce54566f76469766f008072e5164c38f8204170a3aa3"
+          }
+        },
+        {
+          "phase": "paint-blends",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 6188,
+            "path": "/tmp/amazing-gate-command-g8i15frn/output.log",
+            "sha256": "60cc45c6233af2777fa34925e05568cb5ceaef1809df4475d57c54fa76bd60b6"
+          }
+        },
+        {
+          "phase": "paint-filter-parity",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 4127,
+            "path": "/tmp/amazing-gate-command-2rpzfzyq/output.log",
+            "sha256": "5149ca17a60cdef81282de5d0c5321b20093903001d9f653f30bf4c39c951028"
+          }
+        },
+        {
+          "phase": "css-effects-corpus",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 2298,
+            "path": "/tmp/amazing-gate-command-npqs4ra_/output.log",
+            "sha256": "24bd699c24fe196d5f54dfed87e7e849d2022d324f10867e301bf756a899dde9"
+          }
+        },
+        {
+          "phase": "mutation-trace",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 4391,
+            "path": "/tmp/amazing-gate-command-h7akky72/output.log",
+            "sha256": "baa72147e15f29f82aa292bb22b8e23bd60133471161b87d4d64aeaf09ee52bc"
+          }
+        },
+        {
+          "phase": "cached-quad-trace",
+          "actual_exit": 0,
+          "raw": {
+            "bytes": 2387,
+            "path": "/tmp/amazing-gate-command-j_sed03f/output.log",
+            "sha256": "6c0060ed0a454f979198a14cd34a1dc32c1177d6c970a9ac157e7b8f656a0673"
+          }
+        }
+      ],
+      "retained_elf_files": 643,
+      "retained_files": 655,
+      "artifact_manifest": {
+        "bytes": 266281,
+        "path": "/srv/amazing-proof/compositor-quad-sampler-reuse-20261006/after/retained/manifests/after-d812fc12-xlarge-j4.json",
+        "sha256": "722159daf8518c7f2a2b774f137070babb6b925775433031f44e7b1337e1f505"
+      },
+      "selected_retention_method": "copy",
+      "storage_exit": 0,
+      "target_retired": true
+    }
+  ],
+  "compact_ferry_exits": {
+    "initial_combined_request": 3,
+    "corrected_before": 0,
+    "corrected_after": 0,
+    "profile": 0,
+    "status": 0
+  },
+  "integration_status": "lane-qualified; root combined product Q17 and merge gate pending",
+  "scope_limit": "Lower native CPU sampler; does not prove original installed Q17 eight-second window control by itself"
+}
