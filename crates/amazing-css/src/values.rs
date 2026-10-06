@@ -555,6 +555,7 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
     if property == "contain" {
         return crate::contain_value::specified(css).map(|_| V::Unparsed);
     }
+    if property == "aspect-ratio" { return crate::aspect_ratio::specified(css).map(|_| V::Unparsed); }
     if property == "clip-path" {
         return crate::effects::parse_clip_path(css).map(V::ClipPath);
     }

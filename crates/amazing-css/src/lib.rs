@@ -53,6 +53,7 @@ mod font_properties;
 mod font_shorthand;
 mod font_selection;
 mod contain_value;
+mod aspect_ratio;
 mod font_variant;
 mod border_image;
 mod text_properties;

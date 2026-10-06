@@ -1,0 +1,117 @@
+{
+  "state": "QUALIFIED_NATIVE0_COMPACT_FETCH0_READY",
+  "recorded_origin_dev_base": "bbd2e5a558bee9b3923819663d90158cf25bf888",
+  "qualified_source": "a461ea7ec779c2cce38f9d0748c4d74bce366a12",
+  "original_algorithm_source": "7ab1c8a65a282d19f2a1c281b7233e1fe3fc57c5",
+  "original_module_all_controls_byteexact": true,
+  "source_identity": {
+    "crates/amazing-css/src/aspect_ratio.rs": {
+      "bytes": 7483,
+      "sha256": "b3ef54a276d5034672dfb3b6acb0fc8e9c7c042dcbd9b5c58eb675badc7f00ad",
+      "byteexact_qualified_source": true
+    },
+    "crates/amazing-css/src/computed.rs": {
+      "bytes": 144312,
+      "sha256": "7a745e3a1abd0198c48e11d4c684d2ba84afa14f4ba3f04894d9311c0ea57bbf",
+      "byteexact_qualified_source": true
+    },
+    "crates/amazing-css/src/lib.rs": {
+      "bytes": 4805,
+      "sha256": "b1f20833395b307dde57b1b4f95389b161cedf705cbdc9e8aef2a47bd977017b",
+      "byteexact_qualified_source": true
+    },
+    "crates/amazing-css/src/values.rs": {
+      "bytes": 70106,
+      "sha256": "4b136ea76dd1249b69b23ea8f975cf78331146405d2c0186cf5f853b0a5fcf84",
+      "byteexact_qualified_source": true
+    }
+  },
+  "original_engine_controller": 75943,
+  "actual_engine_exit": 0,
+  "actual_all25_phase_exits": 0,
+  "counts": {
+    "doctests": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 36
+    },
+    "nextest": {
+      "failed": 0,
+      "passed": 5199,
+      "skipped": 17
+    }
+  },
+  "whole_original_scope": {
+    "css17_selectors": 17,
+    "css17_passed": 4366,
+    "css17_total": 5126,
+    "original20_render_cases": 2214,
+    "render20_dirs": [
+      "css/css-fonts",
+      "css/css-transforms",
+      "css/css-images",
+      "css/CSS2/floats",
+      "css/CSS2/normal-flow",
+      "css/CSS2/positioning",
+      "css/css-backgrounds",
+      "css/css-contain",
+      "css/css-display",
+      "css/css-overflow",
+      "css/css-position",
+      "css/css-ruby",
+      "css/css-sizing",
+      "css/css-tables",
+      "css/css-viewport",
+      "css/css-color",
+      "css/css-cascade",
+      "css/css-conditional",
+      "css/selectors",
+      "css/css-shadow"
+    ],
+    "viewport": {
+      "device_scale": 1,
+      "height": 600,
+      "width": 800
+    },
+    "pin": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "profile": {
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+    }
+  },
+  "current1c_comparison": {
+    "parsing_gained": 16,
+    "parsing_lost": 0,
+    "render_gained": 0,
+    "render_lost": 0,
+    "baseline_source": "1c682ab64702a48ebf775b6240004eda74899bdf",
+    "original_role": "after"
+  },
+  "original_own_comparison": {
+    "parsing_gained": 27,
+    "parsing_lost": 0,
+    "render_gained": 1,
+    "render_lost": 0,
+    "baseline_source": "7ab1c8a65a282d19f2a1c281b7233e1fe3fc57c5",
+    "original_role": "after"
+  },
+  "publication_path_history": {
+    "original": "/srv diagnostics enabled; compacts initially placed /srv although supported catalog is HOME-relative",
+    "initial_containment_fetch35228_exit": null,
+    "correction": "ONE bounded supported existing-box mission, original terminal/source/job/boot verified via public completed-job.observe, already-produced compact hashes matched original public publisher manifest, exact byte-copy to fresh HOME capturedOUT",
+    "mission_controller": 20154,
+    "actual_mission_exit": 0,
+    "fetch_controller": 27895,
+    "actual_fetch_exit": 0,
+    "engine_build_reruns": 0,
+    "no_original_exit_or_receipt_relabel": true,
+    "no_raw_transfer_or_reconstruction": true
+  },
+  "retained_native_elf_files": 1005,
+  "native_source_raw_elf_untouched": true,
+  "dependencies": [],
+  "Code_Cargo_changes": false,
+  "local_build_test": false,
+  "shipping_gate": "root authoritative merged workspace/docs/full16 and own corpus zero-loss"
+}
