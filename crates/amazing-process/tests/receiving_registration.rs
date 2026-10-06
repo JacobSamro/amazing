@@ -992,3 +992,131 @@ fn csp_source_settings_loan_survives_retirement_before_response_and_manual_conti
         assert_eq!(http.join().unwrap().len(), if redirect { 3 } else { 2 });
     }
 }
+
+
+/// Real original-global admission, retired capability, POST bytes and terminal
+/// IPC completion. No synthetic ReportFinished or URL-derived global identity.
+#[test]
+fn report_completion_preserves_native_wire_observations_after_original_retirement() {
+    use amazing_ipc::codec::{decode, encode};
+    for modern in [false, true] {
+        for (terminal, redirect) in [(200u16,None), (410,None), (599,None),
+            (200,Some(301u16)),(200,Some(302)),(200,Some(303)),(200,Some(307)),(200,Some(308))] {
+            if !modern && redirect.is_some() { continue; }
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let base = format!("http://{}", listener.local_addr().unwrap());
+            let policy = if modern { "frame-src 'none'; report-to reports" }
+                else { "frame-src 'none'; report-uri /collector" };
+            let fields = format!("Cross-Origin-Embedder-Policy: require-corp\r\nContent-Security-Policy: {policy}\r\nReporting-Endpoints: reports=\"/collector\"\r\n");
+            let head = response(&fields);
+            let peer = std::thread::spawn(move || {
+                let mut requests = Vec::new();
+                for index in 0..(3 + usize::from(redirect.is_some())) {
+                    let (mut stream, _) = listener.accept().unwrap();
+                    stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+                    let mut headers = Vec::new();
+                    while !headers.ends_with(b"\r\n\r\n") {
+                        assert!(headers.len() < 64*1024);
+                        let mut byte = [0]; stream.read_exact(&mut byte).unwrap(); headers.push(byte[0]);
+                    }
+                    let headers = String::from_utf8(headers).unwrap();
+                    let size = headers.lines().find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        name.eq_ignore_ascii_case("content-length").then(|| value.trim().parse::<usize>().unwrap())
+                    }).unwrap_or(0);
+                    let mut body = vec![0; size]; stream.read_exact(&mut body).unwrap();
+                    requests.push((headers, body));
+                    if index == 0 { stream.write_all(&head).unwrap(); }
+                    else if index == 1 && redirect.is_some() {
+                        stream.write_all(format!("HTTP/1.1 {} Redirect\r\nLocation: /terminal\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", redirect.unwrap()).as_bytes()).unwrap();
+                    }
+                    else if index == 1 + usize::from(redirect.is_some()) {
+                        if terminal == 599 {
+                            // Genuine incomplete framing, rather than a fabricated error event.
+                            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\nx").unwrap();
+                        } else {
+                            stream.write_all(format!("HTTP/1.1 {terminal} Outcome\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).unwrap();
+                        }
+                    } else { stream.write_all(&response("")).unwrap(); }
+                }
+                requests
+            });
+            let session = session(1800 + u64::from(modern)*1000 + u64::from(terminal));
+            let source_url = format!("{base}/original");
+            let origin = HttpUrl::parse(&base).unwrap().origin().clone();
+            let accepted = session.capture_receiving_navigation(navigation(&source_url, &origin)).unwrap();
+            assert!(complete(&session, &accepted).1.is_none());
+            let mut receiver = client(2800 + u64::from(modern)*1000 + u64::from(terminal), &source_url,
+                origin.clone(), Vec::new(), EmbedderPolicy::RequireCorp);
+            let mut policy_headers = amazing_fetch::HeaderList::default();
+            policy_headers.append("content-security-policy", policy).unwrap();
+            receiver.context.csp = CspPolicyList::from_headers(&policy_headers).unwrap();
+            let container = EmbedderPolicyContainer { value: EmbedderPolicy::RequireCorp,
+                reporting_endpoint: None, report_only_value: EmbedderPolicy::UnsafeNone,
+                report_only_reporting_endpoint: None };
+            let source = session.register_receiving_global(&receiver, &container, true, Some(&accepted)).unwrap();
+            let target = HttpUrl::parse(&format!("{base}/blocked")).unwrap();
+            let result = session.start_receiving_navigation_outcome(&source,
+                csp_owner(&session, &source, &origin, 1800), &target, 1024).unwrap();
+            assert!(matches!(result, ReceivingNavigationOutcome::Failed(_)));
+            let events = session.poll_receiving_reports(&source).unwrap();
+            let snapshots = csp_snapshots(&events); assert_eq!(snapshots.len(), 1);
+            let plan = snapshots[0].prepared_report.unwrap();
+            assert!(session.retire_receiving_global(&source).unwrap());
+            let admitted = session.finish_receiving_csp_report(&source, plan).unwrap();
+            assert!(admitted.error.is_none());
+            assert!(session.finish_receiving_csp_report(&source, plan).is_err());
+            let deadline = Instant::now() + Duration::from_secs(10);
+            let completion = loop {
+                assert!(Instant::now() < deadline);
+                let events = session.poll_receiving_reports(&source).unwrap();
+                if let Some(value) = events.into_iter().find_map(|event| match event {
+                    ReceivingReportEvent::Completion(value) => Some(value), _ => None,
+                }) { break value; }
+                std::thread::yield_now();
+            };
+            assert_eq!(completion.wire.version, 1);
+            assert_eq!(completion.wire.report_url, source_url);
+            assert_eq!(completion.wire.owner_origin, origin.serialize());
+            assert_eq!(completion.wire.request_origin, origin.serialize());
+            assert_eq!(completion.wire.registered_endpoint, format!("{base}/collector"));
+            let expected_lineage = if redirect.is_some() { vec![format!("{base}/collector"),format!("{base}/terminal")] }
+                else { vec![format!("{base}/collector")] };
+            assert_eq!(completion.wire.url_list, expected_lineage);
+            assert_eq!(completion.wire.terminal_url, format!("{base}/{}",if redirect.is_some() {"terminal"} else {"collector"}));
+            assert!(!completion.wire.terminal_is_preflight);
+            assert!(completion.wire.terminal_includes_credentials);
+            assert_eq!(completion.route, if modern { "reporting-api" } else { "legacy-csp" });
+            if terminal == 599 { assert!(completion.error.is_some()); assert!(!completion.accepted); }
+            else {
+                assert_eq!(completion.status, Some(terminal));
+                assert_eq!(completion.accepted, !modern || terminal == 200);
+                assert!(completion.error.is_none());
+            }
+            let bytes = encode(&completion).unwrap();
+            assert_eq!(decode::<ReceivingReportCompletion>(&bytes).unwrap(), completion);
+            assert!(decode::<ReceivingReportCompletion>(&bytes[..bytes.len()-1]).is_err());
+            assert!(session.poll_receiving_reports(&source).unwrap().is_empty());
+            // An unrelated genuine sibling request proves the old completion
+            // did not poison the process session or transfer endpoint authority.
+            let sibling = session.capture_receiving_navigation(navigation(&format!("{base}/sibling"), &origin)).unwrap();
+            assert!(complete(&session, &sibling).1.is_none());
+            let requests = peer.join().unwrap(); assert_eq!(requests.len(), 3 + usize::from(redirect.is_some()));
+            assert!(requests[1].0.starts_with("POST /collector "));
+            assert!(requests[1].0.to_ascii_lowercase().contains(if modern {
+                "content-type: application/reports+json" } else { "content-type: application/csp-report" }));
+            assert!(!requests[1].1.is_empty());
+            if let Some(status) = redirect {
+                if matches!(status,301|302|303) {
+                    assert!(requests[2].0.starts_with("GET /terminal "));
+                    assert!(requests[2].1.is_empty());
+                } else {
+                    assert!(requests[2].0.starts_with("POST /terminal "));
+                    assert_eq!(requests[2].1,requests[1].1);
+                }
+            }
+            assert!(requests[2 + usize::from(redirect.is_some())].0.starts_with("GET /sibling "));
+            assert!(session.poll_receiving_reports(&source).unwrap().is_empty());
+        }
+    }
+}

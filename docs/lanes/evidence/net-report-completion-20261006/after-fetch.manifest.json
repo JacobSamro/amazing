@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "fetch_actual_exit": 0,
+  "native_actual_exit": 0,
+  "source": "92f3ca7e0ebd8a5e03e99c7e4a51f1fcdfeebaca",
+  "files": {
+    "after.summary.json": {
+      "bytes": 391218,
+      "sha256": "13eb1da66c5f156f52d4486e11b085e97d044ff5d5720ef412d7c0725f36a1cb"
+    },
+    "network-corpus.compact.json": {
+      "bytes": 25814,
+      "sha256": "a431d9507f9c7582fe8eb26850c4d87db01b330b0c1f2cf613294d282feec04f"
+    },
+    "workspace.compact.json": {
+      "bytes": 146103,
+      "sha256": "c4fe96b34e3a495550db7b3b0349b6379081f3537d7bb6e85dfd9a635abadbbc"
+    },
+    "csp-wpt.compact.json": {
+      "bytes": 35909,
+      "sha256": "06079d55cc1c41970ec9d8da28ca3220d5c6d1b5922683bc5693da5c2a5b2b4a"
+    },
+    "storage.summary.json": {
+      "bytes": 2713,
+      "sha256": "061977cd652475ed6b41173faf136ef1f46c7582c8a79940192d9302c8e42f67"
+    }
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "base": "3d49ae6d6f42a293c28720337c8be2ef09ba7f6c",
+  "qualification_before": "6d9514d8bb25a035e5f3bdb8020e352b1aa854d0",
+  "qualification_after": "92f3ca7e0ebd8a5e03e99c7e4a51f1fcdfeebaca",
+  "wire_prerequisite": "3c2ffe739609b83915640156cbfa997d944b9d0f",
+  "wire_published": "9160781e7",
+  "counts": {
+    "before": {
+      "workspace": 5108,
+      "docs": 36,
+      "native": 822,
+      "CSPfiles": 32,
+      "CSPsubtests": 81
+    },
+    "after": {
+      "workspace": 5111,
+      "docs": 36,
+      "native": 825,
+      "CSPfiles": 32,
+      "CSPsubtests": 81
+    }
+  },
+  "gained": {
+    "workspace": 3,
+    "native": 3
+  },
+  "lost": [],
+  "custody": {
+    "before": {
+      "endpoint": {
+        "schema": 2,
+        "lane": "net-report-completion-20261006",
+        "source_commit": "6d9514d8bb25a035e5f3bdb8020e352b1aa854d0",
+        "box_id": "bx_543sgjzq",
+        "host": "user@5.135.137.33",
+        "port": 19050,
+        "job_id": "679d8cdeb4e24270a8f8f31eda52465c",
+        "output_root": "amazing/out/net-report-completion-20261006/report-completion-before-6d9514d8-initial/compact",
+        "command_sha256": "52aabba6d2990e4f864dd02aa69592306d520231a3adc3b4e06abf84749250ca",
+        "execution_sha256": "1b6dacc456e9c97603db4df6dfac5f05532acf6c9cbd1eb137260ebe42795f2a",
+        "source_archive_sha256": "bcef2da94cc0ab082d29e653c025b5e33fc84e9ad6d45537cc583690a5b04ab4"
+      },
+      "native_actual_exit": 0,
+      "runner_exit": 0,
+      "controller_exit": 0,
+      "fetch_exit": 0,
+      "raw": {
+        "path": "/tmp/amazing-job-679d8cdeb4e24270a8f8f31eda52465c-95mb40u4/command.log",
+        "bytes": 12166,
+        "sha256": "01e684fdd68f5950f01d62bd331310ba0485ac8f8c5a7d00729b31b8e5b8b7d3"
+      },
+      "retention": {
+        "files": 1132,
+        "all_elf_files": 1108,
+        "manifest": {
+          "bytes": 512541,
+          "path": "/tmp/amazing-native-retained/net-report-completion-20261006/report-completion-before-6d9514d8-initial/retained/manifests/report-completion-before-6d9514d8-initial.json",
+          "sha256": "9b860d756d37608f7b246bd2da486e3bc8d9d80fd7b9b653e8f4792a9c7e3d85"
+        },
+        "source_raw_generated_allELF_retained": true,
+        "cache_retired": false
+      }
+    },
+    "after": {
+      "endpoint": {
+        "schema": 2,
+        "lane": "net-report-completion-20261006",
+        "source_commit": "92f3ca7e0ebd8a5e03e99c7e4a51f1fcdfeebaca",
+        "box_id": "bx_543sgjzq",
+        "host": "user@5.135.137.33",
+        "port": 19050,
+        "job_id": "53d3fe443c864c9aaa02fbd2d6907422",
+        "output_root": "amazing/out/net-report-completion-20261006/report-completion-after-92f3ca7e-initial/compact",
+        "command_sha256": "400f52c4aa7ce8614948c423f73e29e9747a34f2c1cdc9f6746f908cb9a4d482",
+        "execution_sha256": "245cd0b6b46b9c7e21286a88b2897c4170aaf3702984ab540c7c8fabfc840928",
+        "source_archive_sha256": "ef0c94158f30acec0824518d451ce62a5a935e9b38cb4a2e7d9d925a546c8556"
+      },
+      "native_actual_exit": 0,
+      "runner_exit": 0,
+      "controller_exit": 0,
+      "fetch_exit": 0,
+      "raw": {
+        "path": "/tmp/amazing-job-53d3fe443c864c9aaa02fbd2d6907422-87_bn5ik/command.log",
+        "bytes": 12081,
+        "sha256": "a86aa71bc4260a80298338034949b70825cf8c6339f36b5ea6035e487191c690"
+      },
+      "retention": {
+        "files": 1132,
+        "all_elf_files": 1108,
+        "manifest": {
+          "bytes": 511405,
+          "path": "/tmp/amazing-native-retained/net-report-completion-20261006/report-completion-after-92f3ca7e-initial/retained/manifests/report-completion-after-92f3ca7e-initial.json",
+          "sha256": "03978f5abfe65dc967579071e89eba82c79dd839e8718409a46a6092938ccbf9"
+        },
+        "source_raw_generated_allELF_retained": true,
+        "cache_retired": false
+      }
+    }
+  },
+  "freeze": {
+    "schema": 1,
+    "base": "8ec929c6b58e8a4d092d0a0c42ac0e3c49e96fbd",
+    "before": "6d9514d8bb25a035e5f3bdb8020e352b1aa854d0",
+    "after": "92f3ca7e0ebd8a5e03e99c7e4a51f1fcdfeebaca",
+    "wire_prerequisite": "3c2ffe739609b83915640156cbfa997d944b9d0f",
+    "alias": "net-report-completion-20261006",
+    "public_source": "c2942529f9c2df4dfc8f1fa3b4494d4d42878e50",
+    "state": "all6engine phases/nativecontroller/fetch/storage actual0 BOTH; zeroLoss original maps",
+    "profile": "default4/8 finite7200 DEV/TEST line-tables-only incremental0",
+    "scope": "wholeworkspace/docs/browser/fullTLS-net-fetch-process/test-support +original11CSP32files81subtests +original13process groups/protocol/all12wire controls",
+    "installed_claim": false,
+    "capacity": "public actual same-filesystem14.125GiB first cold bootstrap,12GiB AFTER bootstrap +12GiB each engine; allsource/raw/generated/allELF native/tmp, compactHOME only; no cache retirement",
+    "commands": {
+      "after-launch.sh": "38f439f5a4f1a11d85f2c7546d1f3f6f1319d8ff1a27f3586f5fac01ff180d68",
+      "after-command.txt": "400f52c4aa7ce8614948c423f73e29e9747a34f2c1cdc9f6746f908cb9a4d482",
+      "after-storage-plan.json": "167ce2a4641b96b56c238f4bdacf7aaccccb02a75fec88902829483e28f55cfe",
+      "before-command.txt": "52aabba6d2990e4f864dd02aa69592306d520231a3adc3b4e06abf84749250ca",
+      "before-launch.sh": "59c90d8bba15128ecc08c390321e62802e8f9caa352689f017c662d309d4f9f4",
+      "before-storage-plan.json": "234aa1928268f68256dc04fc99c4bcef3a7d51d6bb66ab6a3558ec66bf492bea"
+    },
+    "shipping": [
+      {
+        "path": "crates/amazing-fetch/src/reporting/wire_context_tests.rs",
+        "bytes": 32789,
+        "sha256": "d000ec7309e328a9994f9e6526835eb0f3453804e30a096c2b1f61c1208e8d90"
+      },
+      {
+        "path": "crates/amazing-process/src/network_v2/receiving_registry.rs",
+        "bytes": 19624,
+        "sha256": "106aafa0390aef0071f0b4702286ea3e2ad27acc37091aafe6d913ff689c81c6"
+      },
+      {
+        "path": "crates/amazing-process/src/protocol_receiving.rs",
+        "bytes": 8565,
+        "sha256": "e5e4d3c3cf6c8f34772be8b4eb9ef0caea78f32164b8c5ff074dea014130ffbe"
+      },
+      {
+        "path": "crates/amazing-process/tests/receiving_registration.rs",
+        "bytes": 45561,
+        "sha256": "a83d7341769db8f979a8cfd5a2d04d620123b8e073d372f1ea48025c122cba00"
+      }
+    ],
+    "packaging_base": "3d49ae6d6f42a293c28720337c8be2ef09ba7f6c",
+    "qualified_source": "92f3ca7e0ebd8a5e03e99c7e4a51f1fcdfeebaca"
+  },
+  "metadata_note": "Original CSP compact base display retains donor68 label. Actual sources6d9514d8/92f3, measured binaries/raw hashes/passsets and explicit before\u2192after comparison are authenticated. Preserve original bytes; no baseline relabel/fake authority.",
+  "installed_claim": false,
+  "native_control_groups": "original13process+protocol+wire12 preserved; new accounting/mixed-content/process-retirement-terminal-redirect groups",
+  "envelope_sha256": "42566d6817b76e90499cc36016445a6d0c86226db545ce8f597b284b4a641395"
+}

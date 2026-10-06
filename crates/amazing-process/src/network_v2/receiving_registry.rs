@@ -331,6 +331,19 @@ impl ReceivingRegistry {
     }
     pub fn report_finished(&mut self, report: amazing_fetch::reporting::ReportFinished) {
         use amazing_fetch::reporting::{ReportOutcome, ReportRoute};
+        // Read the genuine receipt before moving its independent outcome.
+        let native = report.wire();
+        let wire = ReceivingReportWire {
+            version: 1,
+            report_url: native.report_url().to_owned(),
+            owner_origin: native.owner_origin().serialize(),
+            request_origin: native.request_origin().serialize(),
+            registered_endpoint: native.registered_endpoint().serialize(),
+            url_list: native.url_list().iter().map(HttpUrl::serialize).collect(),
+            terminal_url: native.terminal_url().serialize(),
+            terminal_is_preflight: native.terminal_is_preflight(),
+            terminal_includes_credentials: native.terminal_includes_credentials(),
+        };
         let (status, accepted, error) = match report.outcome {
             ReportOutcome::Response { status, accepted } => (Some(status), accepted, None),
             ReportOutcome::Failed(error) => (None, false, Some(format!("{error:?}"))),
@@ -347,6 +360,7 @@ impl ReceivingRegistry {
                 status,
                 accepted,
                 error,
+                wire,
             }),
         );
     }
@@ -373,7 +387,7 @@ impl ReceivingRegistry {
                         + 128
                 }
                 ReceivingReportEvent::Completion(report) => {
-                    report.error.as_ref().map_or(0, String::len) + 128
+                    completion_bytes(report)
                 }
                 ReceivingReportEvent::CreationError(error) => error.len() + 32,
                 ReceivingReportEvent::Csp(report) => super::receiving_csp::snapshot_bytes(report),
@@ -424,5 +438,47 @@ impl ReceivingRegistry {
         }
         self.plans.remove(&receipt.id);
         Ok(true)
+    }
+}
+
+// Charge retained observation strings, not provider allocation totals. The
+// queue enforces this estimate alongside its original 256-event bound.
+fn completion_bytes(report: &ReceivingReportCompletion) -> usize {
+    report.error.as_ref().map_or(0, String::len)
+        + report.route.len()
+        + report.wire.report_url.len()
+        + report.wire.owner_origin.len()
+        + report.wire.request_origin.len()
+        + report.wire.registered_endpoint.len()
+        + report.wire.terminal_url.len()
+        + report.wire.url_list.iter().map(String::len).sum::<usize>()
+        + 256
+}
+#[cfg(test)]
+mod completion_accounting_tests {
+    use super::*;
+    #[test]
+    fn every_wire_observation_is_charged_including_rejected_hop_lineage() {
+        // A codec observation fixture cannot mint a native ReportingDocument,
+        // receiving client, or ReportFinished. This tests queue accounting.
+        let mut report = ReceivingReportCompletion {
+            delivery_id: 1, route: "reporting-api".into(), status: None,
+            accepted: false, error: Some("Transport".into()),
+            wire: ReceivingReportWire {
+                version: 1, report_url: "original".into(), owner_origin: "null".into(),
+                request_origin: "origin".into(), registered_endpoint: "endpoint".into(),
+                url_list: vec!["admitted".into(), "rejected".into()], terminal_url: "admitted".into(),
+                terminal_is_preflight: false, terminal_includes_credentials: false,
+            },
+        };
+        let original = completion_bytes(&report);
+        let expected = 256 + 13 + 9 + 8 + 4 + 6 + 8 + 8 + 8 + 8;
+        assert_eq!(original, expected);
+        // Added actual URL observations must consume queue credit; the old
+        // error-only accounting would accept this single oversized event.
+        report.wire.url_list.push("x".repeat(512*1024));
+        assert!(completion_bytes(&report) > 512*1024);
+        report.wire.url_list.pop();
+        assert_eq!(completion_bytes(&report), original);
     }
 }

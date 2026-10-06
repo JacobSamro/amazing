@@ -92,8 +92,17 @@ wire_struct! {#[derive(Debug,Clone,PartialEq,Eq)] pub struct ReceivingObserverRe
     request_id:u64, report_type:Vec<u16>, report_url:Vec<u16>, body:Vec<ReceivingReportField>,
     delivery_id:Option<u64>, delivery_error:Option<String>
 }}
+/// Immutable observations of native Reporting request admission, not receiving
+/// authority or proof that bytes were emitted. Outcome remains independent.
+/// Version 1 requires every fact; old truncated payloads fail decoding.
+wire_struct! {#[derive(Debug,Clone,PartialEq,Eq)] pub struct ReceivingReportWire {
+    version:u16, report_url:String, owner_origin:String, request_origin:String,
+    registered_endpoint:String, url_list:Vec<String>, terminal_url:String,
+    terminal_is_preflight:bool, terminal_includes_credentials:bool
+}}
 wire_struct! {#[derive(Debug,Clone,PartialEq,Eq)] pub struct ReceivingReportCompletion {
-    delivery_id:u64, route:String, status:Option<u16>, accepted:bool, error:Option<String>
+    delivery_id:u64, route:String, status:Option<u16>, accepted:bool, error:Option<String>,
+    wire:ReceivingReportWire
 }}
 wire_enum! {#[derive(Debug,Clone,PartialEq,Eq)] pub enum ReceivingReportEvent {
     Observer(ReceivingObserverReport)=1, Completion(ReceivingReportCompletion)=2,

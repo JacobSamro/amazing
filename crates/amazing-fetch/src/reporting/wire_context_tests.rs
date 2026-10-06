@@ -140,6 +140,10 @@ fn actual_legacy_report_uri_preserves_original_opaque_origin_and_client_cookie_r
     let now=Instant::now();service.queue_csp_report(handle,&v,now,now).unwrap();
     let delivery=service.reporting.deliveries.values().next().unwrap();
     assert_eq!(delivery.request.origin,client.origin);assert!(matches!(&delivery.context,DeliveryContext::Legacy(_)));
+    let mut expected_security=client.context.security;
+    expected_security.destination=crate::Destination::Other;
+    expected_security.top_level_navigation=false;
+    assert_eq!(delivery.request.security,expected_security);
     assert_eq!(run(&mut service,1)[0].route,ReportRoute::LegacyCsp);
     let wire=rx.recv().unwrap().to_ascii_lowercase();peer.join().unwrap();
     assert!(wire.contains("\r\norigin: null"));assert!(!wire.contains("\r\ncookie:"));
@@ -464,4 +468,24 @@ fn actual_redirect_status_family_keeps_report_provenance_through_method_rewrite(
         assert!(!final_wire.to_ascii_lowercase().contains("\r\nreferer:"));
         assert_eq!(service.reporting.retained_bytes, 0);
     }
+}
+
+
+#[test]
+fn legacy_security_context_is_retained_and_mixed_content_denial_admits_no_socket() {
+    let endpoint = HttpUrl::parse("http://198.51.100.1/collector").unwrap();
+    let protected = HttpUrl::parse("https://protected.test/document").unwrap();
+    let mut client = receiving_client(&protected, &protected.serialize());
+    client.context.security.client_restricts_mixed_content = true;
+    client.context.security.embedder_policy = crate::EmbedderPolicy::RequireCorp;
+    client.context.security.image_set_initiator = true;
+    let mut service = NetworkService::new(DispatchLimits::default());
+    let handle = service.register_reporting_client_response(&client, &protected, &headers("")).unwrap();
+    let mut v = violation(&protected.serialize()); v.report_to = None;
+    v.report_uris = vec![endpoint.serialize()];
+    let now = Instant::now();
+    assert_eq!(service.queue_csp_report(handle, &v, now, now),
+        Err(ReportError::Policy(FetchError::MixedContent)));
+    assert!(service.reporting.deliveries.is_empty());
+    assert_eq!(service.dispatcher.in_flight(), 0);
 }

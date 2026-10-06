@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "status": "required installed controls; NOT measured or implemented by native relay ticket",
+  "owner": "Runtime actual driver consumer; HTML original SPVE producer; no existing WorkerGlobal",
+  "native_contract": {
+    "admission": "actual same-service ReportId and original ReportingDocument with saved ReceivingDocumentIdentity and original Window/realm/scope before callbacks",
+    "completion": "lookup exact admitted tuple; consume native wire before moving independent outcome; no current active-global lookup",
+    "observations": "wire strings never mint native settings, origin or global authority",
+    "pump": "actual has_pending_reporting_io and retained output/drain drive after ordinary fetch empty; terminal records have bounded retention/consumption",
+    "observer": "notify immutable report at creation independently of NoEndpoint/admission/transport/outcome; completion never adds duplicate observer report"
+  },
+  "required_groups": [
+    "real accepted header original Window modern CSP/test/COEP POST, original wire and terminal outcome",
+    "actual trusted SPVE dispatch before report enqueue with original target/root check",
+    "SPVE listener retires original Window: prepared plan/report mapping captured before callback, POST/terminal retains original settings without roots revival",
+    "SPVE listener error: same ordering and transport completion despite exception",
+    "modern no endpoint: actual observer report independent of NoEndpoint; zero admitted completion marker",
+    "post-navigation replacement Window same URL: completion stays old owner, never fresh global",
+    "actual 2xx versus 410 shared-original-endpoint revocation and transport/framing/deadline failure with distinct terminal facts",
+    "all five real redirects, actual method/body transition and native lineage/last admitted URL",
+    "cross-origin preflight and sticky redirect credentials with native null client rather than enum/default context",
+    "ordinary fetch/HTTP-control pending queues empty while report transport pending, pump still drains real output",
+    "same/foreign service and duplicate completion rejection under actual admitted tuple",
+    "bounded terminal records cleanup, source/settings loan release after real final completion",
+    "worker missing: require authentic WorkerGlobal initialization settings/accepted response and observer/task/lifetime/pump before claiming any dedicated/shared/service worker installed coverage"
+  ],
+  "existing_process_gap": "MAX_GLOBALS64 retains retired records until service teardown; no explicit global release API. Existing owner/navigation release is not global release."
+}
