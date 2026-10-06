@@ -84,11 +84,15 @@ def archive_admission(sandbox_id: str) -> dict:
         pack_loader="spec = importlib.util.spec_from_file_location('native_pack', Path(__file__).with_name('native-proof-pack.py'))\npack = importlib.util.module_from_spec(spec); spec.loader.exec_module(pack)"
         if archive_code.count(pack_loader)!=1:raise ValueError('pack helper import boundary changed')
         archive_code=archive_code.replace(pack_loader,'pack=native_pack',1)
+        content_code=(directory/'native-proof-content.py').read_text()
+        content_loader="spec_content = importlib.util.spec_from_file_location('native_content', Path(__file__).with_name('native-proof-content.py'))\ncontent = importlib.util.module_from_spec(spec_content); spec_content.loader.exec_module(content)"
+        if archive_code.count(content_loader)!=1:raise ValueError('content helper import boundary changed')
+        archive_code=archive_code.replace(content_loader,'content=native_content',1)
         guard_code=(directory/'native-stop-admission.py').read_text()
         loader="spec=importlib.util.spec_from_file_location('archive',Path(__file__).with_name('native-proof-archive.py'))\na=importlib.util.module_from_spec(spec);spec.loader.exec_module(a)"
         if guard_code.count(loader)!=1:raise ValueError('stop helper import boundary changed')
         guard_code=guard_code.replace(loader,'a=archive',1)
-        code="import types,sys,json\nnative_pack=types.ModuleType('native_pack')\nexec("+repr(pack_code)+",native_pack.__dict__)\narchive=types.ModuleType('archive');archive.__dict__['native_pack']=native_pack\nexec("+repr(archive_code)+",archive.__dict__)\nguard=types.ModuleType('guard');guard.__dict__['archive']=archive\nexec("+repr(guard_code)+",guard.__dict__)\nwith archive.deadline(600):\n row=guard.admission(sys.argv[1])\nprint(json.dumps(row,separators=(',',':')))\nraise SystemExit(0 if row['admitted'] else 3)\n"
+        code="import types,sys,json\nnative_content=types.ModuleType('native_content')\nexec("+repr(content_code)+",native_content.__dict__)\nnative_pack=types.ModuleType('native_pack')\nexec("+repr(pack_code)+",native_pack.__dict__)\narchive=types.ModuleType('archive');archive.__dict__['native_pack']=native_pack;archive.__dict__['native_content']=native_content\nexec("+repr(archive_code)+",archive.__dict__)\nguard=types.ModuleType('guard');guard.__dict__['archive']=archive\nexec("+repr(guard_code)+",guard.__dict__)\nwith archive.deadline(600):\n row=guard.admission(sys.argv[1])\nprint(json.dumps(row,separators=(',',':')))\nraise SystemExit(0 if row['admitted'] else 3)\n"
         command='timeout --kill-after=5 605 /usr/bin/python3 -I -c '+shlex.quote(code)+' '+shlex.quote(sandbox_id)
         result=boat('exec',sandbox_id,command,timeout=620)
         if not result:raise ValueError('native stop admission unavailable')

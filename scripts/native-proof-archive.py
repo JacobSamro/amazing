@@ -18,6 +18,9 @@ import uuid
 spec = importlib.util.spec_from_file_location('native_pack', Path(__file__).with_name('native-proof-pack.py'))
 pack = importlib.util.module_from_spec(spec); spec.loader.exec_module(pack)
 
+spec_content = importlib.util.spec_from_file_location('native_content', Path(__file__).with_name('native-proof-content.py'))
+content = importlib.util.module_from_spec(spec_content); spec_content.loader.exec_module(content)
+
 ROOT = Path('/srv/amazing-proof')
 NATIVE_TYPES = {'ext2', 'ext3', 'ext4', 'xfs', 'btrfs', 'overlay'}
 
@@ -176,7 +179,7 @@ def terminal(path, source, job):
     return {'path': str(path), 'bytes': path.stat().st_size, 'sha256': digest(path), 'actual_exit': code}
 
 
-def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, capture_links=False, targets=None, pack_targets=(), pack_data_targets=()):
+def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, capture_links=False, targets=None, pack_targets=(), pack_data_targets=(), deduplicate_content=False):
     identifier(lane); identifier(job)
     if not re.fullmatch(r'[0-9a-f]{40}', source): raise ValueError('exact source commit required')
     if copy_budget < 0 or reserve < 0: raise ValueError('negative capacity budget')
@@ -197,11 +200,12 @@ def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, captu
     destination = ROOT / lane / source / job
     if destination.exists() or destination.is_symlink(): raise ValueError('prior archive/partial preserved')
     rows, directories, links = inventory_details(roots,capture_links,file_inputs)
-    required = sum(row['bytes'] for row in rows if row['label'] not in packed or (row['label'] in data and row['elf'])) + 4096 * (len(rows) + len(directories)) + 65536
+    diagnostics=content.capacity(rows,directories,packed,data,deduplicate_content,copy_budget,reserve,shutil.disk_usage(ROOT).free)
+    required=diagnostics['required_plain_and_metadata_bytes']
     if any(row['elf'] and row['label'] in strict for row in rows):raise ValueError('native ELF target packing is not admitted')
     available = shutil.disk_usage(ROOT).free
     if required > copy_budget or available < required + reserve:
-        raise OSError(28, 'explicit archive capacity unavailable; inputs untouched')
+        raise OSError(28, 'explicit archive capacity unavailable; inputs untouched; '+json.dumps(diagnostics,separators=(',',':')))
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     canonical(destination.parent); exclusions(destination.parent); native_mount(destination.parent)
     destination.mkdir(mode=0o700)
@@ -209,10 +213,10 @@ def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, captu
               'destination': str(destination), 'inputs': {k: str(v) for k,v in roots.items()},
               'terminal_producer': producer, 'capture_links':capture_links,'file_inputs':file_inputs,'links':links,'mount': mount, 'required_bytes': required,
               'available_bytes': available, 'copy_budget_bytes': copy_budget,
-              'reserve_bytes': reserve, 'packed_targets':sorted(packed), 'data_packed_targets':sorted(data), 'packs':{}, 'complete': False, 'source_retained': True}
+              'reserve_bytes': reserve, 'capacity':diagnostics,'deduplicate_content':bool(deduplicate_content),'content_aliases':[],'packed_targets':sorted(packed), 'data_packed_targets':sorted(data), 'packs':{}, 'complete': False, 'source_retained': True}
     save(destination / 'start.manifest.json', header)
     try:
-        packs={}
+        packs={};content_owners={};content_aliases=[]
         if packed:(destination/'packs').mkdir(mode=0o700)
         for label in sorted(packed):
             selected=[row for row in rows if row['label']==label and not (label in data and row['elf'])]
@@ -231,10 +235,19 @@ def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, captu
             original = original_path(header,row)
             final = destination / 'payload' / row['label'] / row['path']
             if list(fingerprint(original.stat())) != row['source_identity']: raise ValueError('input changed before copy')
-            with original.open('rb') as source_stream, final.open('xb') as output:
-                shutil.copyfileobj(source_stream, output, 1024 * 1024)
-                output.flush(); os.fsync(output.fileno())
-            final.chmod(row['mode'])
+            owner=content_owners.get(content.key(row)) if deduplicate_content else None
+            if owner is None:
+                with original.open('rb') as source_stream, final.open('xb') as output:
+                    shutil.copyfileobj(source_stream, output, 1024 * 1024)
+                    output.flush(); os.fsync(output.fileno())
+                final.chmod(row['mode'])
+                content_owners[content.key(row)]=(row,final)
+            else:
+                owner_row,owner_path=owner
+                if not content.equal_bytes(original,owner_path):raise ValueError('content hash collision or input mutation; no lossless alias publication')
+                if list(fingerprint(original.stat()))!=row['source_identity']:raise ValueError('input changed during content comparison')
+                os.link(owner_path,final,follow_symlinks=False)
+                content_aliases.append({'label':row['label'],'path':row['path'],'owner_label':owner_row['label'],'owner_path':owner_row['path']})
             with final.open('rb') as stream: os.fsync(stream.fileno())
             if final.stat().st_size != row['bytes'] or digest(final) != row['sha256']:
                 raise ValueError('destination byte/hash readback failed')
@@ -248,6 +261,8 @@ def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, captu
         for label,record in packs.items():
             if digest(Path(record['path']))!=record['sha256']:raise ValueError('packed capture changed before sealing')
             pack.readback(Path(record['path']),[r for r in rows if r['label']==label and not (label in data and r['elf'])],[r for r in directories if r['label']==label])
+        content.verify_aliases(destination,rows,content_aliases)
+        header['content_aliases']=content_aliases
         if packs:fsync_directory(destination/'packs')
         if root_admission() != mount:raise ValueError('captured native root mount changed')
         # Seal every payload directory before the complete receipt.
@@ -260,7 +275,7 @@ def archive(lane, source, job, roots, terminal_path, copy_budget, reserve, captu
         for parent in [destination, destination.parent, destination.parent.parent, ROOT]: fsync_directory(parent)
         return {'schema': 1, 'complete': True, 'source': source, 'lane': lane, 'job': job,
                 'destination': str(destination), 'files': len(rows), 'elf_files': manifest['elf_count'],
-                'packed_targets':sorted(packed),'data_packed_targets':sorted(data),'plain_elf_files':manifest['elf_count'],'physical_required_bytes':required,'logical_bytes': manifest['logical_bytes'],'links':len(links),'link_storage':'exact metadata; admitted target payloads copied independently, no escaping archive symlinks','mount': mount, 'source_retained': True,
+                'content_aliases':len(content_aliases),'capacity':diagnostics,'packed_targets':sorted(packed),'data_packed_targets':sorted(data),'plain_elf_files':manifest['elf_count'],'physical_required_bytes':required,'logical_bytes': manifest['logical_bytes'],'links':len(links),'link_storage':'exact metadata; admitted target payloads copied independently, no escaping archive symlinks','mount': mount, 'source_retained': True,
                 'archive_manifest': {'path': str(destination/'archive.manifest.json'),
                     'bytes': (destination/'archive.manifest.json').stat().st_size,
                     'sha256': digest(destination/'archive.manifest.json')},
@@ -290,6 +305,7 @@ def verify(manifest_path, expected_sha, archive_exit):
     rows,directories=inventory(roots);fields=('label','path','bytes','sha256','mode','elf')
     if [{k:r[k] for k in fields} for r in rows] != [{k:r[k] for k in fields} for r in manifest['files'] if r['label'] not in packed or (r['label'] in data and r['elf'])] or directories!=[r for r in manifest['directories'] if r['label'] not in strict]:
         raise ValueError('archived raw/ELF bytes or paths changed')
+    content.verify_aliases(destination,manifest['files'],manifest.get('content_aliases',[]))
     for label in sorted(packed):
         identifier(label);record=manifest['packs'][label];path=destination/'packs'/(label+'.tar.gz')
         canonical(path);native_mount(path)
@@ -313,6 +329,20 @@ def verify(manifest_path, expected_sha, archive_exit):
     return {'schema':1,'complete':True,'actual_archive_exit':archive_exit,'destination':str(destination),
             'source':manifest['source'],'lane':manifest['lane'],'job':manifest['job'],
             'files':len(manifest['files']),'elf_files':sum(r['elf'] for r in manifest['files']),'links':len(manifest.get('links',[])),'archive_manifest_sha256':expected_sha}
+
+
+def capacity_plan(lane,source,job,roots,terminal_path,budget,reserve,targets=None,pack_targets=(),pack_data_targets=(),deduplicate=False):
+    identifier(lane);identifier(job)
+    if not re.fullmatch(r'[0-9a-f]{40}',source) or budget<0 or reserve<0:raise ValueError('invalid exact capacity plan')
+    native=root_admission();producer=terminal(terminal_path,source,job);targets=targets or {}
+    strict=set(pack_targets);data=set(pack_data_targets);packed=strict|data
+    if strict&data or not packed.issubset(targets) or set(roots)&set(targets):raise ValueError('invalid declared capacity labels')
+    combined={identifier(label):canonical(path) for label,path in {**roots,**targets}.items()}
+    if not combined:raise ValueError('capacity plan requires declared proof roots')
+    rows,dirs,links=inventory_details(combined,True,[label for label,path in targets.items() if canonical(path).is_file()])
+    if any(r['elf'] and r['label'] in strict for r in rows):raise ValueError('strict native ELF packing remains rejected')
+    facts=content.capacity(rows,dirs,packed,data,deduplicate,budget,reserve,shutil.disk_usage(ROOT).free)
+    return {'schema':1,'mode':'read-only-capacity-plan','source':source,'job':job,'lane':lane,'terminal_producer':producer,'mount':native,'capacity':facts,'links':len(links),'copied_files':0,'archive_complete':False,'stop_admission':False,'source_retained':True}
 
 
 def restore_target(manifest_path, expected_sha, archive_exit, label, destination, budget, reserve):
@@ -356,6 +386,19 @@ def deadline(seconds):
 
 
 def main():
+    if len(sys.argv)>1 and sys.argv[1]=='capacity-plan':
+        p=argparse.ArgumentParser(description='Exact native logical/plain/unique capacity; no copy, stop or qualification')
+        p.add_argument('mode')
+        for name in ('lane','source','job','terminal-receipt'):p.add_argument('--'+name,required=True)
+        p.add_argument('--input',action='append',required=True);p.add_argument('--target',action='append',default=[]);p.add_argument('--pack-target',action='append',default=[]);p.add_argument('--pack-data-target',action='append',default=[]);p.add_argument('--deduplicate-content',action='store_true')
+        p.add_argument('--copy-budget-bytes',type=int,required=True);p.add_argument('--reserve-bytes',type=int,required=True);p.add_argument('--seconds',type=int,default=600);args=p.parse_args()
+        try:
+            inputs=[v.split('=',1) for v in args.input];targets=[v.split('=',1) for v in args.target]
+            if any(len(v)!=2 for v in inputs+targets) or len(dict(inputs))!=len(inputs) or len(dict(targets))!=len(targets):raise ValueError('invalid capacity operand labels')
+            with deadline(args.seconds):result=capacity_plan(args.lane,args.source,args.job,dict(inputs),args.terminal_receipt,args.copy_budget_bytes,args.reserve_bytes,dict(targets),args.pack_target,args.pack_data_target,args.deduplicate_content)
+            code=0
+        except Exception as error:result={'complete':False,'error':str(error)};code=124 if isinstance(error,TimeoutError) else 3
+        result['actual_exit']=code;print(json.dumps(result,separators=(',',':')));return code
     if len(sys.argv)>1 and sys.argv[1]=='restore-target':
         p=argparse.ArgumentParser(description='Restore every losslessly captured target byte into fresh native storage')
         p.add_argument('mode');p.add_argument('manifest');p.add_argument('--sha256',required=True);p.add_argument('--actual-archive-exit',required=True,type=int)
@@ -382,6 +425,7 @@ def main():
     p.add_argument('--seconds',type=int,default=600)
     p.add_argument('--capture-links',action='store_true')
     p.add_argument('--target',action='append',default=[],help='label=explicit admitted native directory or regular file')
+    p.add_argument('--deduplicate-content',action='store_true',help='byte-compare and share ONLY identical new captured plain content, preserving every readable path and metadata record')
     p.add_argument('--pack-data-target',action='append',default=[],help='losslessly pack target DATA, keeping every encountered native ELF PLAIN and independently readable')
     p.add_argument('--pack-target',action='append',default=[],help='losslessly capture every byte of this explicitly declared target label as native gzip tar')
     args=p.parse_args()
@@ -390,7 +434,7 @@ def main():
         if any(len(pair)!=2 for pair in pairs) or len({pair[0] for pair in pairs})!=len(pairs):raise ValueError('invalid or duplicate input labels')
         target_pairs=[value.split('=',1) for value in args.target]
         if any(len(pair)!=2 for pair in target_pairs) or len({pair[0] for pair in target_pairs})!=len(target_pairs):raise ValueError('invalid or duplicate target labels')
-        with deadline(args.seconds):result=archive(args.lane,args.source,args.job,dict(pairs),args.terminal_receipt,args.copy_budget_bytes,args.reserve_bytes,args.capture_links,dict(target_pairs),args.pack_target,args.pack_data_target)
+        with deadline(args.seconds):result=archive(args.lane,args.source,args.job,dict(pairs),args.terminal_receipt,args.copy_budget_bytes,args.reserve_bytes,args.capture_links,dict(target_pairs),args.pack_target,args.pack_data_target,args.deduplicate_content)
         code=0
     except Exception as error:
         code=124 if isinstance(error,TimeoutError) else 3
