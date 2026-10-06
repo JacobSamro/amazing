@@ -1,0 +1,82 @@
+{
+  "kind": "TOOL_READY_NOT_ENGINE_QUALIFICATION",
+  "base": "a6bdb2f64735be47470716935aaa86d60a8231c1",
+  "tested_source": "a437c8fa83f6c5b7138ef82be93e7e7b295ef68e",
+  "actual_exit": 0,
+  "fetch_actual_exit": 0,
+  "native_controls": {
+    "original": 24,
+    "wrapped": 17,
+    "original_phase_exits": 29,
+    "total": 70,
+    "failed": 0
+  },
+  "endpoint": {
+    "schema": 2,
+    "lane": "integrator-html-capacity-large-20261006",
+    "source_commit": "a437c8fa83f6c5b7138ef82be93e7e7b295ef68e",
+    "box_id": "bx_dy9pxzhv",
+    "host": "user@94.130.72.202",
+    "port": 22,
+    "job_id": "63b8eed156164be98a41da8537c107ee",
+    "output_root": "amazing/out/integrator-html-capacity-large-20261006/html-failed-phase-diagnostic-20261006/python-terminal-context",
+    "command_sha256": "554b0a61d0aa50664f5ac8f1375aba8a9d75b00080d324188f7ef13fdae3a87c",
+    "execution_sha256": "9f28abd6b60505809a02369c3988e0dafb30e75f91f0dd19bbe345c6d42522e7",
+    "source_archive_sha256": "20966115ba3de712cca1b53b4abb7bff8cb7f1ab9c1f510ee7505fcdf8f903f9"
+  },
+  "command_sha256": "554b0a61d0aa50664f5ac8f1375aba8a9d75b00080d324188f7ef13fdae3a87c",
+  "files": {
+    "initial-failure.summary.json": {
+      "bytes": 1036,
+      "sha256": "d78d77b1a301be97208a05ed95797aebdacad13f824d22c28ef90b6a1e015e0b"
+    },
+    "original-controls.compact.json": {
+      "bytes": 1275,
+      "sha256": "362ff4a09b3dbcd0bd46421a1d26208b60b994e3c822ce72f9fed6ac7a5b5c7d"
+    },
+    "original-own-wpt-diagnostic.compact.json": {
+      "bytes": 4012,
+      "sha256": "a4870effe17a6476ed4e0c4c597fbf5e8705fd8d105c72922e2c2a5c223d5049"
+    },
+    "phase-exits-controls.compact.json": {
+      "bytes": 69,
+      "sha256": "cd1dbaa4e38555c5be577d4026dac6bbf17561cbbbca32980e40de3d411ce7f9"
+    },
+    "qualification.summary.json": {
+      "bytes": 1036,
+      "sha256": "83aa9f51630c7cfa73342c954ecd0b4bab4d7b48a0cf3c11bf817c54b7459860"
+    },
+    "wrapped-controls.compact.json": {
+      "bytes": 176,
+      "sha256": "ffe80d4b68dd2ec7105f3425031d6cc52c94d4d990336ce9f8b437b8e63255ca"
+    }
+  },
+  "production_files": {
+    "scripts/gate-failure-diagnostic.py": "c0009b5918b1b009a879bcffa0a9c369e31b74c5fc286c54dcfa0c760ddb89bd",
+    "scripts/gate-phase-exits-diagnostic-tests.py": "ce947f1c4b3de1204e82af7dbfab623dda59c7c223e13a5c64dded4c4c52da92"
+  },
+  "raw": {
+    "original-controls.log": {
+      "bytes": 0,
+      "path": "/tmp/amazing-original-phase-diagnostic.IO5wNc/original-controls.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "original-terminal.summary.json": {
+      "bytes": 1462,
+      "path": "/tmp/amazing-original-phase-diagnostic.IO5wNc/original-terminal.summary.json",
+      "sha256": "32e75164bc29c7b5550e2aa322bea860b5bc23c405435c1e613887c7c22d1fd9"
+    },
+    "phase-exits-controls.log": {
+      "bytes": 2736,
+      "path": "/tmp/amazing-original-phase-diagnostic.IO5wNc/phase-exits-controls.log",
+      "sha256": "b931608f3df12daffdc2c0c4fba1a4515d20b162479bccca3d532f49da21e6c4"
+    },
+    "wrapped-controls.log": {
+      "bytes": 1752,
+      "path": "/tmp/amazing-original-phase-diagnostic.IO5wNc/wrapped-controls.log",
+      "sha256": "d638389fbb1b7ccd0a068e19c510739e27d043e3a8d4613871346bcfc7177d4e"
+    }
+  },
+  "original_engine_source_unchanged": true,
+  "engine_rerun": false
+}

@@ -11,11 +11,13 @@ import os
 from pathlib import Path
 import re
 import stat
+import shlex
+import base64
 
 MAX_RAW = 16 * 1024 * 1024
 MAX_OUTPUT = 64 * 1024
 ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
-FAIL = re.compile(r'(?:\bFAIL\b|\bFAILED\b|panicked at|assertion .*failed|assertion failed|^\s*(?:left|right):)')
+FAIL = re.compile(r'(?:\bFAIL\b|\bFAILED\b|panicked at|assertion .*failed|assertion failed|^\s*(?:left|right):|^Traceback \(|\b(?:AssertionError|TimeoutExpired|[A-Za-z]+Error)(?::|$))')
 
 
 def digest(data):
@@ -88,6 +90,12 @@ def extract(summary_path, summary_sha, terminal_path, terminal_sha, source, job,
     raw = phase_raw(row)
     if not Path(raw['path']).is_relative_to('/tmp') or type(raw['bytes']) is not int:
         raise ValueError('retained native /tmp raw binding required')
+    return extract_bound(summary_path, summary_sha, terminal_path, terminal_sha,
+                         source, endpoint, actual, phase, row, raw)
+
+
+def extract_bound(summary_path, summary_sha, terminal_path, terminal_sha,
+                  source, endpoint, actual, phase, row, raw):
     data = checked_file(raw['path'], raw['sha256'], MAX_RAW, raw['bytes'])
     lines = ANSI.sub('', data.decode('utf-8', errors='replace')).splitlines()
     hits = [i for i, line in enumerate(lines) if FAIL.search(line)]
@@ -112,8 +120,8 @@ def extract(summary_path, summary_sha, terminal_path, terminal_sha, source, job,
         snippets.append(entry)
         used += cost
     result = {'schema': 1, 'kind': 'failed-phase-diagnostic', 'source_commit': source,
-              'original_job': endpoint, 'original_state': terminal['state'],
-              'original_actual_exit': actual, 'original_runner_exit': terminal['runner_exit'],
+              'original_job': endpoint, 'original_state': 'TERMINAL',
+              'original_actual_exit': actual, 'original_runner_exit': actual,
               'summary': {'path': str(summary_path), 'sha256': summary_sha},
               'terminal': {'path': str(terminal_path), 'sha256': terminal_sha},
               'phase': phase, 'phase_actual_exit': row['actual_returncode'],
@@ -123,6 +131,77 @@ def extract(summary_path, summary_sha, terminal_path, terminal_sha, source, job,
     output = (json.dumps(result, sort_keys=True, ensure_ascii=True) + '\n').encode()
     if len(output) > MAX_OUTPUT:
         raise ValueError('diagnostic exceeds 64 KiB')
+    return output
+
+
+def extract_phase_exits(summary_path, summary_sha, terminal_path, terminal_sha,
+                        source, job, phase, hashes_path, hashes_sha):
+    """Read original legacy phase-exits metadata without synthesizing receipts."""
+    if not re.fullmatch(r'[a-f0-9]{40}', source) or not re.fullmatch(r'[a-f0-9]{32}', job):
+        raise ValueError('full original source/job required')
+    if not re.fullmatch(r'[A-Za-z0-9_-]+', phase):
+        raise ValueError('one original phase required')
+    summary_data = checked_file(summary_path, summary_sha, 512 * 1024)
+    summary = json.loads(summary_data)
+    terminal = json.loads(checked_file(terminal_path, terminal_sha, 64 * 1024))
+    endpoint, actual = terminal.get('job', {}), terminal.get('actual_exit')
+    if (terminal.get('state') != 'TERMINAL' or type(actual) is not int or actual == 0
+            or type(terminal.get('runner_exit')) is not int or terminal['runner_exit'] != actual
+            or type(terminal.get('command_returncode')) is not int or terminal['command_returncode'] != actual
+            or endpoint.get('source_commit') != source or endpoint.get('job_id') != job
+            or summary.get('source_commit') != source or summary.get('job_exit') != actual):
+        raise ValueError('original terminal/source/job/summary mismatch')
+    code = summary.get('phase_exits', {}).get(phase)
+    if type(code) is not int or code == 0 or summary.get('phases'):
+        raise ValueError('actual legacy failed phase required; no conflicting phase receipts')
+    hashes = json.loads(checked_file(hashes_path, hashes_sha, 512 * 1024))
+    raw = hashes.get(phase + '.log', {})
+    root = Path(raw.get('path', '')).parent
+    if (not root.is_absolute() or not root.is_relative_to('/tmp')
+            or root.resolve() != root or Path(raw.get('path', '')).name != phase + '.log'):
+        raise ValueError('original canonical native phase path required')
+    bound_summary = hashes.get('gate.manifest.json', {})
+    original_summary = root / 'gate.manifest.json'
+    summary_binding = {'bytes': len(summary_data), 'sha256': summary_sha}
+    if (bound_summary not in (summary_binding, dict(summary_binding, path=str(original_summary)))
+            or checked_file(original_summary, summary_sha, 512 * 1024, len(summary_data)) != summary_data):
+        raise ValueError('original raw metadata does not bind this gate summary')
+    # Both the native raw root and failed phase must belong to the hash-bound
+    # ORIGINAL execution, not to a new diagnostic job or another same-source run.
+    execution = terminal.get('execution_raw', {})
+    execution_data = checked_file(execution['path'], execution['sha256'], MAX_RAW, execution['bytes'])
+    script_path = Path(execution['path']).parent / 'command.sh'
+    script = checked_file(script_path, endpoint.get('execution_sha256', endpoint.get('command_sha256')), MAX_RAW)
+    command_sha = endpoint.get('command_sha256', endpoint.get('execution_sha256'))
+    candidates = [script] if digest(script) == command_sha else []
+    # linux-run's storage wrapper embeds the original command as a literal
+    # base64 payload in the authenticated executed script. Decode data only;
+    # never execute shell text or accept a new diagnostic command as custody.
+    for encoded in re.findall(rb"'([A-Za-z0-9+/=]{16,})'", script):
+        try: decoded = base64.b64decode(encoded, validate=True)
+        except ValueError: continue
+        if digest(decoded) == command_sha: candidates.append(decoded)
+    if len(candidates) != 1:
+        raise ValueError('original command missing/ambiguous in executed script')
+    roots = []
+    for line in candidates[0].decode('utf-8').splitlines():
+        if line.startswith(('OUT=', 'export OUT=')):
+            tokens = shlex.split(line)
+            if len(tokens) == 2 and tokens[0] == 'export': tokens = tokens[1:]
+            if len(tokens) == 1 and tokens[0].startswith('OUT='): roots.append(tokens[0][4:])
+    if roots != [str(root)]:
+        raise ValueError('native phase root differs from original execution')
+    marker = re.compile(r'^HTML_PHASE [A-Za-z0-9_-]+ ' + re.escape(phase) + r' exit=' + str(code) + r'$', re.M)
+    if len(marker.findall(execution_data.decode('utf-8', errors='replace'))) != 1:
+        raise ValueError('original actual phase marker missing/ambiguous')
+    row = {'actual_returncode': code, 'argv': None}
+    payload = json.loads(extract_bound(summary_path, summary_sha, terminal_path, terminal_sha,
+                        source, endpoint, actual, phase, row, raw))
+    payload.update(kind='original-phase-exits-diagnostic', phase_receipt_synthesized=False,
+        original_raw_hashes={'path': str(hashes_path), 'sha256': hashes_sha},
+        original_execution=execution)
+    output = (json.dumps(payload, sort_keys=True, ensure_ascii=True) + '\n').encode()
+    if len(output) > MAX_OUTPUT: raise ValueError('diagnostic exceeds 64 KiB')
     return output
 
 
@@ -186,9 +265,13 @@ def main():
                 'source', 'job', 'phase', 'output'):
         parser.add_argument('--' + key, required=True)
     parser.add_argument('--case-id')
+    parser.add_argument('--raw-hashes')
+    parser.add_argument('--raw-hashes-sha256')
     args = parser.parse_args()
-    extractor = extract_case if args.case_id else extract
-    extra = [args.case_id] if args.case_id else []
+    if bool(args.raw_hashes) != bool(args.raw_hashes_sha256) or (args.raw_hashes and args.case_id):
+        raise ValueError('one complete diagnostic input mode required')
+    extractor = extract_phase_exits if args.raw_hashes else (extract_case if args.case_id else extract)
+    extra = [args.raw_hashes, args.raw_hashes_sha256] if args.raw_hashes else ([args.case_id] if args.case_id else [])
     output = extractor(args.summary, args.summary_sha256, args.terminal,
                      args.terminal_sha256, args.source, args.job, args.phase, *extra)
     destination = Path(args.output)
