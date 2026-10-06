@@ -1,0 +1,456 @@
+{
+  "schema": 1,
+  "ticket": "grid-named-areas-current",
+  "recorded_ready_base": "973bdec5345bbbf768acd1fa3ef8220d0274b153",
+  "qualified_engine_source": "f0caf87d0a8166f9776182648fc43e8404918d85",
+  "code_sha256": {
+    "crates/amazing-layout/src/grid.rs": "420b5b580851f3a1873972944af616fb419c5c7ab13d65a36c192ce205b07672",
+    "crates/amazing-layout/src/grid_named.rs": "5af2e7e60c5b27ca70d8ae9cbd04c7614514179ac54148b784150532d9b4116b",
+    "crates/amazing-layout/src/grid_named_tests.rs": "6d99e3261798257171c996b4d5db89606467c5e5e16ef8fb2a5f9234bd939ee9"
+  },
+  "scope": "Canonical named template areas and edge names, signed named occurrences/spans, leading implicit tracks, automatic placement, inherited/intrinsic consumers, and named existing out-of-flow geometry.",
+  "controls": {
+    "new_groups": 20,
+    "original_assertions_preserved": true,
+    "original_driver_unbounded_guard_restored": true
+  },
+  "native": {
+    "controller": 65512,
+    "fetch_controller": 46765,
+    "actual_exit": 0,
+    "runner_exit": 0,
+    "fetch_exit": 0,
+    "endpoint": {
+      "schema": 2,
+      "lane": "layout-grid-named-areas-fixed-20261006",
+      "source_commit": "f0caf87d0a8166f9776182648fc43e8404918d85",
+      "box_id": "bx_cds9zp7d",
+      "host": "user@213.32.26.26",
+      "port": 19048,
+      "job_id": "0d45b2f79b6e4aa7a9a197314eb99d36",
+      "output_root": "amazing/out/layout-grid-named-areas-fixed-20261006/named-areas-fixed-f0caf87d/compact",
+      "command_sha256": "71664714bf543e2c43f8bdcd999ba79b7f7616697d0dbc40998a5e9a3f1d4ba7",
+      "execution_sha256": "7ec70722ba2b2fa75b98a7916ff6b774b09ae62baba8ffa7f2d9e323c90eff38",
+      "source_archive_sha256": "0249adf1897fa64c30f17b2cc669765c40b72f02d7828b83c338aa7835c4ea0f"
+    },
+    "command_sha256": "71664714bf543e2c43f8bdcd999ba79b7f7616697d0dbc40998a5e9a3f1d4ba7",
+    "config_sha256": "941459140fc185608fc26c0f9cf9e5623bac56223f45384bb2746af9694c585d",
+    "storage_plan_sha256": "e222e2346dac9014921587a3c51611b63beb3656d02fad092fb970716081a2ac",
+    "source_profile_helper_sha256": {
+      "linux-run.sh": "6c960c2a394d659990484388a15bd887f4db4f0793244669d9f88aafe08a1c28",
+      "boat-lane.py": "adca82065f1cde9631cca5610cc4b3c0e625ca3c90193438a14fd040045f2cba",
+      "native-storage-plan.py": "3c4df2f01150f9da8b53695df781d2ee83fd7d79a92a1d9b33449d14bf763dbe",
+      "native-storage-retention.py": "2628dc352f594177a540961888f8157517ca9603847716731b04146f9033d489",
+      "render-corpus-collector.py": "4308df951b05dcb050e8b8b5834f84a62400364cdaf1e8a0d25dbbe2c4309570",
+      "render-gate.py": "c4cb1eecc149ffbab383624b3feb13969597beb9d3af662dbdaffad71aa4bcf7",
+      "wpt_render_compare.py": "219764b940f2b41da580f1eb73634088b96203b954f19fd72bf29dfba4f14b23",
+      "gate-command.py": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b",
+      "gate-summary.py": "0dc65b9e67509bcf681cacb52c5d92d5e1ef2274bdc337f09c5e591578bffe84",
+      "completed-job.py": "9c2bde2eeaa2507e5a14d2cc17599908d1c2ea9b1418ba76a78d04a1ff3b15b1",
+      "lane-fetch.sh": "fe4fa79beafef35bbce1ce853f4f3330ae8717b1a6e710675a3bd9892d0d84db",
+      "ensure-wpt.sh": "d189c8cc9c90f43b204d499503694b5033b88b7a6dce11a30ba01af80b17c53e"
+    },
+    "finite_ttl_seconds": 7200,
+    "size": "default4vCPU8GB",
+    "storage_lifecycle_phase": "before",
+    "corpus_role": "after",
+    "profile": {
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+    },
+    "native_executable": {
+      "bytes": 190340632,
+      "path": "/tmp/amazing-native-storage/layout-grid-named-areas-fixed-20261006/f0caf87d0a8166f9776182648fc43e8404918d85/before/named-areas-fixed-f0caf87d/target/debug/amazing",
+      "sha256": "84ee7e8ce7e1bc07bc46c53a987cadaaf1478bdc50a792abc2a1d26766be645d"
+    },
+    "outer_raw": {
+      "path": "/tmp/amazing-job-0d45b2f79b6e4aa7a9a197314eb99d36-ohqm_i0w/command.log",
+      "bytes": 9900,
+      "sha256": "99019d2e20c40ee0c37a23690d6aa844f0bf2b2701370905bd7f461cfebe63ec"
+    },
+    "render_raw_directory": "/tmp/amazing-render-gate-xefkg3q5",
+    "storage": {
+      "actual_storage_exit": 0,
+      "artifact_manifest": {
+        "bytes": 454032,
+        "path": "/tmp/amazing-grid-named/layout-grid-named-areas-fixed-20261006/named-areas-fixed-f0caf87d/retained/manifests/named-areas-fixed-f0caf87d.json",
+        "sha256": "67a806e3160cd626e3377d4c5cbe41bc427db63fdb07428c5be6b4245be87fb3"
+      },
+      "baseline": null,
+      "capacity": {
+        "admitted": true,
+        "filesystems": [
+          {
+            "available_bytes": 32389595136,
+            "device": 64769,
+            "path": "/tmp/amazing-native-storage",
+            "required_bytes": 27917287424,
+            "total_bytes": 73635184640
+          },
+          {
+            "available_bytes": 32389595136,
+            "device": 64769,
+            "path": "/tmp/amazing-grid-named/layout-grid-named-areas-fixed-20261006/named-areas-fixed-f0caf87d",
+            "required_bytes": 134217728,
+            "total_bytes": 73635184640
+          }
+        ],
+        "shared_device_requirements": [
+          {
+            "available_bytes": 32389595136,
+            "required_bytes": 30198988800
+          }
+        ]
+      },
+      "command_exit": 0,
+      "copied_unique_bytes": 0,
+      "free_after": [
+        {
+          "available_bytes": 12805435392,
+          "device": 64769,
+          "path": "/tmp/amazing-native-storage",
+          "total_bytes": 73635184640
+        },
+        {
+          "available_bytes": 12805435392,
+          "device": 64769,
+          "path": "/tmp/amazing-grid-named/layout-grid-named-areas-fixed-20261006/named-areas-fixed-f0caf87d",
+          "total_bytes": 73635184640
+        }
+      ],
+      "hardlink_capability": {
+        "failed_artifacts": 0,
+        "first_failures": [],
+        "probed_artifacts": 1026,
+        "raw": {
+          "bytes": 454477,
+          "path": "/tmp/amazing-native-storage/layout-grid-named-areas-fixed-20261006/f0caf87d0a8166f9776182648fc43e8404918d85/before/named-areas-fixed-f0caf87d/hardlink.probes.json",
+          "sha256": "ff52edd657592bdb1eb1c742a31365f149352ed29011d1d6d49c384ef805b0a2"
+        },
+        "supported": true
+      },
+      "job": "named-areas-fixed-f0caf87d",
+      "phase": "before",
+      "profile": {
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+        "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+      },
+      "recoverable_bytes": 2619557107,
+      "recoverable_files": 6356,
+      "retained_elf_files": 1002,
+      "retained_files": 1026,
+      "retained_logical_bytes": 6904513698,
+      "retention_capacity_required_bytes": 3606528,
+      "retire_after_retention": false,
+      "schema": 1,
+      "selected_retention_method": "hardlink",
+      "session_raw": {
+        "bytes": 2854,
+        "path": "/tmp/amazing-native-storage/layout-grid-named-areas-fixed-20261006/f0caf87d0a8166f9776182648fc43e8404918d85/before/named-areas-fixed-f0caf87d/session.json",
+        "sha256": "0b790ef2693856bf9f642e4d25946f0f16daf32cc21823881d280d7d665662c5"
+      },
+      "source": "f0caf87d0a8166f9776182648fc43e8404918d85",
+      "state": "TERMINAL",
+      "storage_exit": 0,
+      "target_retired": false
+    }
+  },
+  "workspace_docs": {
+    "doctests": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 36
+    },
+    "nextest": {
+      "failed": 0,
+      "passed": 5113,
+      "skipped": 17
+    }
+  },
+  "whole_corpus": {
+    "pin": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "viewport": [
+      800,
+      600,
+      1
+    ],
+    "jobs": 4,
+    "timeout_seconds": 20,
+    "selected": 2421,
+    "before_passed": 1216,
+    "after_passed": 1228,
+    "gained": [
+      "css__css-grid__grid-definition__grid-support-named-grid-lines-002.html",
+      "css__css-grid__grid-definition__grid-support-named-grid-lines-003.html",
+      "css__css-grid__grid-lanes__grid-placement__grid-lanes-grid-placement-named-lines-001.html",
+      "css__css-grid__grid-lanes__grid-placement__grid-lanes-grid-placement-named-lines-002.html",
+      "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__column-line-names-003.html",
+      "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__column-line-names-010.html",
+      "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-003.html",
+      "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-006.html",
+      "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-010.html",
+      "css__css-grid__subgrid__line-names-003.html",
+      "css__css-grid__subgrid__line-names-006.html",
+      "css__css-grid__subgrid__line-names-010.html"
+    ],
+    "lost": [],
+    "cohorts": {
+      "css-css-contain.compact.json": {
+        "selected": 229,
+        "before_passed": 155,
+        "after_passed": 155,
+        "gained": [],
+        "lost": [],
+        "new_ids": [],
+        "removed_ids": []
+      },
+      "css-css-display.compact.json": {
+        "selected": 35,
+        "before_passed": 28,
+        "after_passed": 28,
+        "gained": [],
+        "lost": [],
+        "new_ids": [],
+        "removed_ids": []
+      },
+      "css-css-flexbox.compact.json": {
+        "selected": 523,
+        "before_passed": 349,
+        "after_passed": 349,
+        "gained": [],
+        "lost": [],
+        "new_ids": [],
+        "removed_ids": []
+      },
+      "css-css-grid.compact.json": {
+        "selected": 945,
+        "before_passed": 413,
+        "after_passed": 425,
+        "gained": [
+          "css__css-grid__grid-definition__grid-support-named-grid-lines-002.html",
+          "css__css-grid__grid-definition__grid-support-named-grid-lines-003.html",
+          "css__css-grid__grid-lanes__grid-placement__grid-lanes-grid-placement-named-lines-001.html",
+          "css__css-grid__grid-lanes__grid-placement__grid-lanes-grid-placement-named-lines-002.html",
+          "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__column-line-names-003.html",
+          "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__column-line-names-010.html",
+          "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-003.html",
+          "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-006.html",
+          "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-010.html",
+          "css__css-grid__subgrid__line-names-003.html",
+          "css__css-grid__subgrid__line-names-006.html",
+          "css__css-grid__subgrid__line-names-010.html"
+        ],
+        "lost": [],
+        "new_ids": [],
+        "removed_ids": []
+      },
+      "css-css-overflow.compact.json": {
+        "selected": 343,
+        "before_passed": 83,
+        "after_passed": 83,
+        "gained": [],
+        "lost": [],
+        "new_ids": [],
+        "removed_ids": []
+      },
+      "css-css-position.compact.json": {
+        "selected": 54,
+        "before_passed": 45,
+        "after_passed": 45,
+        "gained": [],
+        "lost": [],
+        "new_ids": [],
+        "removed_ids": []
+      },
+      "css-css-sizing.compact.json": {
+        "selected": 138,
+        "before_passed": 99,
+        "after_passed": 99,
+        "gained": [],
+        "lost": [],
+        "new_ids": [],
+        "removed_ids": []
+      },
+      "css-css-writing-modes.compact.json": {
+        "selected": 154,
+        "before_passed": 44,
+        "after_passed": 44,
+        "gained": [],
+        "lost": [],
+        "new_ids": [],
+        "removed_ids": []
+      }
+    },
+    "phase_exits": {
+      "build": 0,
+      "css-css-contain": 0,
+      "css-css-display": 0,
+      "css-css-flexbox": 0,
+      "css-css-grid": 0,
+      "css-css-overflow": 0,
+      "css-css-position": 0,
+      "css-css-sizing": 0,
+      "css-css-writing-modes": 0,
+      "doctests": 0,
+      "ensure-wpt": 0,
+      "nextest": 0
+    }
+  },
+  "baseline": {
+    "actual_source": "570b0718a22e6b5bc34a05ff0f13a6955e873973",
+    "actual_job": "auto-repeat-current-before-570b0718",
+    "actual_exit": 0,
+    "fetch_exit": 0,
+    "manifest_sha256": "305a7d63413b6a08257ce053a93de44ee7d3b9142c171228470152095572c54b",
+    "reuse": "Authentic570 BEFORE classifications equal published e8 AFTER carried6bf/dbce; roles/source remain unchanged, no new973 BEFORE or cross-box ELF claim",
+    "recorded_role": "before",
+    "no_cross_box_elf_claim": true
+  },
+  "initial_failure": {
+    "source": "5a307b2b1ae869052b52f47062b28f420d3faaf7",
+    "state": "held-genuine-workspace-regression",
+    "controller": 17693,
+    "native_exit": 1,
+    "runner_exit": 1,
+    "fetch_controller": 59256,
+    "fetch_exit": 0,
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 36
+      },
+      "nextest": {
+        "failed": 1,
+        "passed": 5111,
+        "skipped": 17
+      }
+    },
+    "phase_exits": {
+      "build": 0,
+      "css-css-contain": 0,
+      "css-css-display": 0,
+      "css-css-flexbox": 0,
+      "css-css-grid": 0,
+      "css-css-overflow": 0,
+      "css-css-position": 0,
+      "css-css-sizing": 0,
+      "css-css-writing-modes": 0,
+      "doctests": 0,
+      "ensure-wpt": 0,
+      "nextest": 100
+    },
+    "whole8": {
+      "selected": 2421,
+      "before_passed": 1216,
+      "after_passed": 1228,
+      "gained": 12,
+      "lost": []
+    },
+    "failed_original_control": "amazing::phase5_flex_grid::grid_rejects_unbounded_line_occurrences_before_track_allocation",
+    "raw_native_directory": "/tmp/amazing-render-gate-47n6p8rq",
+    "native_executable": {
+      "bytes": 190330408,
+      "path": "/tmp/amazing-native-storage/layout-grid-named-areas-20261006/5a307b2b1ae869052b52f47062b28f420d3faaf7/before/named-areas-5a307b2b/target/debug/amazing",
+      "sha256": "f6f3b155f98fb649b9e73e901628a7612bb0bc760eaead86775ad3d06bfeb866"
+    },
+    "endpoint_receipt": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/named-areas-current/qualification-5a307b2b/endpoint.manifest.json",
+    "gate_summary_sha256": "4f9e88a3f83b3149ed55a4299e269770d0d79f2c3cbb96f63701256b2df86858",
+    "storage_summary_sha256": "f6d86e0d44bf30818e015b14d568474e0b2708e796dee89ea7d9357e2f2d5493",
+    "raw_and_all_1002_elfs_preserved": true,
+    "tooling_retry_used": 0,
+    "preserved_failed_branch": "lane/grid-named-areas-5a307b2b-failed"
+  },
+  "producer_contract": {
+    "css4df_pending_at_source_freeze": true,
+    "css_history_imported": false,
+    "canonical_ascii_row_separators_only": true,
+    "names_case_sensitive_including_nonascii_whitespace": true,
+    "computed_longhands_authoritative": true
+  },
+  "pending_integration": "Root current merged workspace/docs and full16 Test262 still required; this is authentic own lane qualification.",
+  "evidence_files": {
+    "after/corpus.manifest.json": {
+      "bytes": 6968,
+      "sha256": "8099325271f1cbf67e5d8a9637764a9a2592d0dbad3bc2230e3bfe1197909e02"
+    },
+    "after/css-css-contain.compact.json": {
+      "bytes": 26585,
+      "sha256": "e09db8f22e4a91caab7f0503699ea9c6c1a1b826468af90f7856446365ce7b06"
+    },
+    "after/css-css-display.compact.json": {
+      "bytes": 4859,
+      "sha256": "476a813d5d83264c73fbb0289381f58b999adbc457a951bda88dfc096e6ee9d3"
+    },
+    "after/css-css-flexbox.compact.json": {
+      "bytes": 59556,
+      "sha256": "a0b598c3b2e4bf41dee896795edbf521fcebc80c9b1f42266cfcb912f645e0b0"
+    },
+    "after/css-css-grid.compact.json": {
+      "bytes": 167645,
+      "sha256": "832e6fbf47ab12d41817d49a8c433b3a42703c193ae0f918450cb3c7cf8d6400"
+    },
+    "after/css-css-overflow.compact.json": {
+      "bytes": 45479,
+      "sha256": "4d1f2306d0d93f15c2a946f745bda99943dea52d9d1e4273530a91af24dd4885"
+    },
+    "after/css-css-position.compact.json": {
+      "bytes": 8590,
+      "sha256": "e235f980de524835674e12512c2625f475219cb7ef06bdd85f343a2d7ee5ddaf"
+    },
+    "after/css-css-sizing.compact.json": {
+      "bytes": 19405,
+      "sha256": "1c184a18526a6b40dbde9b4ee5bead0fc401722aec1c52af6fae5f7953d0ad18"
+    },
+    "after/css-css-writing-modes.compact.json": {
+      "bytes": 22851,
+      "sha256": "b5a721ae624d560762724e388ad2a1c797a03c97d1d19cf13a889a4ab3f4632f"
+    },
+    "after/gate.summary.json": {
+      "bytes": 208085,
+      "sha256": "2aeda275a5ef78f466c9baae456a7fc5c4c823149022166ddd795bde5ee8e7e1"
+    },
+    "after/storage.summary.json": {
+      "bytes": 2319,
+      "sha256": "fb5b8549b4d0d9fac45591f179c86cc778fb9d8d3a68bbeb49a93231d05c581b"
+    },
+    "before/corpus.manifest.json": {
+      "bytes": 6989,
+      "sha256": "305a7d63413b6a08257ce053a93de44ee7d3b9142c171228470152095572c54b"
+    },
+    "before/css-css-contain.compact.json": {
+      "bytes": 14302,
+      "sha256": "5ca4172b051ecc7e334c92236828e3ce972ef5e5bf9f86d025e83ed523cf13c1"
+    },
+    "before/css-css-display.compact.json": {
+      "bytes": 2625,
+      "sha256": "23d26743ab6c255ba08976840a97b527bb28aa1cecf284635d3cecebe9349458"
+    },
+    "before/css-css-flexbox.compact.json": {
+      "bytes": 32017,
+      "sha256": "6fc4ae100f6861498cea66855b618afc93eb6d133b11650ce2178e816b7d11b4"
+    },
+    "before/css-css-grid.compact.json": {
+      "bytes": 88279,
+      "sha256": "2d1d02baba6671e929eab42441e0c2878f5277b5b95171a73224bac3f82ebaca"
+    },
+    "before/css-css-overflow.compact.json": {
+      "bytes": 24520,
+      "sha256": "928c4536c9bf928e256c35d0745a7d1898f234a08dca9e924d5ccf936ffa14ef"
+    },
+    "before/css-css-position.compact.json": {
+      "bytes": 4561,
+      "sha256": "aa70e65834efc943001dd2cea3709e40bd9f25ea7d52a28849bbb1cd038e0b7a"
+    },
+    "before/css-css-sizing.compact.json": {
+      "bytes": 10323,
+      "sha256": "bd578174097e42d0782924cd5cb45ea8b40d57b6b1963d7cc2d8a596b956ad0b"
+    },
+    "before/css-css-writing-modes.compact.json": {
+      "bytes": 12244,
+      "sha256": "bdc292d419b6597a99d94f5a2bfc1263dff9ca239eb8a393114116ec3a7fba4c"
+    }
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "ticket": "grid-named-areas-current",
+  "base": "973bdec5345bbbf768acd1fa3ef8220d0274b153",
+  "state": "qualified-own-linux-ready-for-integration",
+  "scope": [
+    "canonical named template rectangles extend explicit axes and generate edge names",
+    "authoritative computed item longhands including explicit auto overrides",
+    "side-sensitive area edge lookup; named occurrence and anchored span searches",
+    "signed leading implicit extent and cycled auto-track pattern",
+    "shared placement consumers: ordinary Grid, Grid Lanes, intrinsic lanes and subgrid contributions",
+    "named out-of-flow geometry without creating tracks"
+  ],
+  "producer_dependency": {
+    "source": "4df3515bdca675dd3382eefdd19fb283fa71139e",
+    "published": false,
+    "imported": false,
+    "contract": "get(grid-template-areas) is none or quoted decoded rectangular rows separated by ASCII spaces; non-ASCII whitespace is retained inside case-sensitive names; shorthand longhands authoritative",
+    "limitation": "adjacent name/dot raw lexical normalization is producer work; no CSS edits/history imported"
+  },
+  "upstream": {
+    "repo": "DioxusLabs/taffy",
+    "commit": "2c81b8e09d172c2e4d7747be2b1e5a03e0f30bf0",
+    "path": "src/compute/grid/explicit_grid.rs",
+    "license": "MIT",
+    "license_sha256": "f97daf1a0124413dccf399a4e6626b4b74acd05282f80b6d64ac82225650b77a",
+    "port_scope": "leading implicit auto-track sequence/origin; upstream does not implement named-line placement, which is Amazing-authored"
+  },
+  "controls": {
+    "groups": 20,
+    "file": "crates/amazing-layout/src/grid_named_tests.rs",
+    "original_assertions_preserved": true,
+    "native_run": true
+  },
+  "own_corpus": {
+    "cohorts": [
+      "css/css-grid",
+      "css/css-flexbox",
+      "css/css-contain",
+      "css/css-display",
+      "css/css-overflow",
+      "css/css-position",
+      "css/css-sizing",
+      "css/css-writing-modes"
+    ],
+    "historical_selected": 2421,
+    "pin": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "viewport": [
+      800,
+      600,
+      1
+    ],
+    "timeout_seconds": 20,
+    "jobs": 4,
+    "limit": 0
+  },
+  "profile": {
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+  },
+  "qualification": "workspace nextest and doctests plus original full8; actual native result remains required; no local build/test",
+  "held_sources_not_imported": [
+    "dense96",
+    "intrinsic07",
+    "506",
+    "95",
+    "31"
+  ],
+  "initial_qualification": {
+    "source": "5a307b2b1ae869052b52f47062b28f420d3faaf7",
+    "native_exit": 1,
+    "fetch_exit": 0,
+    "workspace_passed": 5111,
+    "workspace_failed": 1,
+    "doctests_passed": 36,
+    "original8_gained": 12,
+    "original8_lost": 0,
+    "failed_original_control": "amazing::phase5_flex_grid::grid_rejects_unbounded_line_occurrences_before_track_allocation",
+    "source_correction": "checked signed occurrence resolution; reject oversized lines as auto rather than clamping raw occurrences"
+  },
+  "qualified_source": "f0caf87d0a8166f9776182648fc43e8404918d85",
+  "qualification_result": {
+    "actual_exit": 0,
+    "runner_exit": 0,
+    "fetch_exit": 0,
+    "nextest_passed": 5113,
+    "nextest_failed": 0,
+    "nextest_skipped": 17,
+    "docs_passed": 36,
+    "docs_failed": 0,
+    "original8_selected": 2421,
+    "before_passed": 1216,
+    "after_passed": 1228,
+    "gained": 12,
+    "lost": []
+  }
+}

@@ -16,8 +16,8 @@
 //!   backflow implemented via occupancy rescans)
 //! - item placement: `grid-row` / `grid-column` (+ the four longhands)
 //!   with line numbers incl. negatives-from-the-explicit-grid-end,
-//!   `span N`; `span <line-name>` degrades to `span 1` (named lines are
-//!   dropped by the parser); sparse auto-placement cursor honoring dense
+//!   named areas, named occurrences and named spans in both directions;
+//!   sparse auto-placement cursor honoring dense
 //!   mode; implicit tracks created wherever items land outside the
 //!   explicit grid
 //! - track sizing: definite px/% bases; intrinsic (`auto`/`min/max-content`)
@@ -31,9 +31,7 @@
 //!   at their final width, stretched heights materialized and re-flowed)
 //!
 //! Deviations / deferrals (documented):
-//! - named areas / `grid-area` / `grid-template-areas` are not implemented
-//! - `span <line-name>` → `span 1`; implicit tracks before the explicit grid
-//!   do not yet participate in out-of-range negative named occurrences
+//! - canonical template-area lexical normalization is supplied by CSS
 //! - percentages in `grid-template-rows` resolve against the content WIDTH
 //!   (the height is indefinite at parse time in this engine)
 //! - automatic repetition requires a definite axis size and repeat contribution;
@@ -57,6 +55,8 @@ use crate::values::{self, MaybeLen};
 
 #[path = "grid_repeat.rs"]
 mod repeat;
+#[path = "grid_named.rs"]
+mod named;
 use repeat::{auto_fit_tracks, repeat_counts, ActiveAxis};
 #[path = "grid_baseline.rs"]
 mod row_baseline;
@@ -605,7 +605,12 @@ fn parse_gaps(style: &ComputedStyle, font_px: f32, content_w: f32) -> (f32, f32)
 }
 
 /// Everything layout_grid needs from the CONTAINER's computed style.
+#[derive(Clone)]
 struct GridSpec {
+    explicit_cols: usize,
+    explicit_rows: usize,
+    col_origin: usize,
+    row_origin: usize,
     cols: Vec<TrackSize>,
     rows: Vec<TrackSize>,
     col_auto_fit: Vec<bool>,
@@ -668,7 +673,8 @@ impl GridSpec {
         let words: Vec<&str> = flow.split_ascii_whitespace().collect();
         let col_value = style.get("grid-template-columns").unwrap_or("none");
         let row_value = style.get("grid-template-rows").unwrap_or("none");
-        GridSpec {
+        let mut spec = GridSpec {
+            explicit_cols: 0, explicit_rows: 0, col_origin: 0, row_origin: 0,
             col_auto_fit: if context.and_then(|c| c.cols.as_ref()).is_none() {
                 auto_fit_tracks(col_value, &ctx_cols)
             } else { Vec::new() },
@@ -712,7 +718,11 @@ impl GridSpec {
             align_content: parse_pack(style.get("align-content")),
             justify_items: parse_item_align(style.get("justify-items")),
             align_items: parse_item_align(style.get("align-items")),
-        }
+        };
+        named::add_template(&mut spec, style.get("grid-template-areas").unwrap_or("none"),
+            context.is_some_and(|c| c.cols.is_some()), context.is_some_and(|c| c.rows.is_some()));
+        spec.explicit_cols = spec.cols.len(); spec.explicit_rows = spec.rows.len();
+        spec
     }
 }
 
@@ -722,99 +732,19 @@ impl GridSpec {
 
 /// One side of a placement (`grid-row-start` etc.) after parsing:
 /// an optional line number plus a span (≥ 1).
+#[cfg(test)]
 #[derive(Debug, Clone, Copy)]
 struct LineSpec {
     line: Option<i32>,
     span: u32,
 }
 
+#[cfg(test)]
 impl LineSpec {
     const AUTO: LineSpec = LineSpec {
         line: None,
         span: 1,
     };
-}
-
-/// Parses one slot value: `auto`, `<integer>`, `span N`, or a named-line
-/// occurrence such as `middle`, `middle 2`, or `-1 middle`.
-fn parse_line_slot(
-    s: &str,
-    names: &HashMap<String, Vec<i32>>,
-    explicit_count: usize,
-) -> LineSpec {
-    let s = s.trim();
-    if s.is_empty() || s.eq_ignore_ascii_case("auto") {
-        return LineSpec::AUTO;
-    }
-    let lower = s.to_ascii_lowercase();
-    if let Some(rest) = lower.strip_prefix("span") {
-        let rest = rest.trim();
-        return match rest.parse::<u32>() {
-            Ok(n) if n >= 1 => LineSpec {
-                line: None,
-                span: n.min(1000),
-            },
-            _ => LineSpec {
-                line: None,
-                span: 1,
-            }, // `span <name>` → span 1
-        };
-    }
-    match s.parse::<i32>() {
-        Ok(0) => LineSpec::AUTO,
-        Ok(n) => LineSpec {
-            line: Some(n),
-            span: 1,
-        },
-        Err(_) => resolve_named_line(s, names, explicit_count).map_or(LineSpec::AUTO, |line| {
-            LineSpec {
-                line: Some(line),
-                span: 1,
-            }
-        }),
-    }
-}
-
-fn resolve_named_line(
-    value: &str,
-    names: &HashMap<String, Vec<i32>>,
-    explicit_count: usize,
-) -> Option<i32> {
-    let parts = value.split_ascii_whitespace().collect::<Vec<_>>();
-    let (name, occurrence) = match parts.as_slice() {
-        [name] => (*name, 1),
-        [first, second] => {
-            if let Ok(occurrence) = first.parse::<i32>() {
-                (*second, occurrence)
-            } else if let Ok(occurrence) = second.parse::<i32>() {
-                (*first, occurrence)
-            } else {
-                return None;
-            }
-        },
-        _ => return None,
-    };
-    if occurrence == 0 {
-        return None;
-    }
-    let occurrences = names.get(name).map(Vec::as_slice).unwrap_or(&[]);
-    if occurrence > 0 {
-        let index = usize::try_from(occurrence).ok()?.checked_sub(1)?;
-        occurrences.get(index).copied().or_else(|| {
-            i32::try_from(explicit_count)
-                .ok()?
-                .checked_add(1)?
-                .checked_add(occurrence)?
-                .checked_sub(i32::try_from(occurrences.len()).ok()?)
-                .filter(|line| *line <= MAX_GRID_TRACKS as i32 + 1)
-        })
-    } else {
-        let from_end = occurrence.unsigned_abs() as usize;
-        occurrences
-            .len()
-            .checked_sub(from_end)
-            .and_then(|index| occurrences.get(index).copied())
-    }
 }
 
 /// Resolved placement of one item: 1-based start lines (None = needs auto
@@ -834,6 +764,10 @@ pub(crate) struct Placement {
 /// collapsed `auto-fit` tracks (stored as `0.0`).
 #[derive(Debug, Clone, Default)]
 pub(crate) struct GridTracks {
+    pub(crate) explicit_cols: usize,
+    pub(crate) explicit_rows: usize,
+    pub(crate) col_origin: usize,
+    pub(crate) row_origin: usize,
     pub(crate) col_positions: Vec<f32>,
     pub(crate) col_sizes: Vec<f32>,
     pub(crate) row_positions: Vec<f32>,
@@ -855,13 +789,19 @@ impl GridTracks {
     /// axis has a definite placement and resolved tracks. `None` per axis
     /// means the caller falls back to the container's content edges.
     pub(crate) fn area(&self, style: &ComputedStyle) -> (Option<(f32, f32)>, Option<(f32, f32)>) {
-        let p = parse_placement(style, self.col_sizes.len(), self.row_sizes.len(),
-            &self.col_line_names, &self.row_line_names);
+        let axis = |property, explicit, origin: usize, names: &HashMap<String, Vec<i32>>| {
+            let names = names.iter().map(|(name, lines)| (name.clone(), lines.iter().map(|n| *n-origin as i32).collect())).collect();
+            let (start, span) = named::axis(style, property, explicit, &names);
+            (start.map(|n| n+origin as i32).filter(|n| *n >= 1).map(|n| n as u32), span)
+        };
+        let (col,col_span) = axis("column",self.explicit_cols,self.col_origin,&self.col_line_names);
+        let (row,row_span) = axis("row",self.explicit_rows,self.row_origin,&self.row_line_names);
+        let p = Placement { col,col_span,row,row_span };
         let span = |start: Option<u32>, span: u32, positions: &[f32], sizes: &[f32]| {
             let start = start?;
             let index = start.saturating_sub(1) as usize;
-            let end = (index + (span.max(1) as usize)).min(positions.len());
-            if index >= positions.len() || end <= index {
+            let end = index + (span.max(1) as usize);
+            if index >= positions.len() || end > positions.len() || end <= index {
                 return None;
             }
             let left = positions[index];
@@ -880,6 +820,7 @@ impl GridTracks {
 /// line numbers resolve FIRST (`-k` counts back from the END of the
 /// explicit grid: line `tracks + 2 - k`, so `-1` is the last line), then
 /// out-of-order ends swap per §8.3.2.1.
+#[cfg(test)]
 fn combine_slots(start: LineSpec, end: LineSpec, explicit_count: usize) -> (Option<u32>, u32) {
     let resolve = |l: i32| -> Option<u32> {
         if l < 0 {
@@ -920,76 +861,11 @@ fn parse_placement(
     col_names: &HashMap<String, Vec<i32>>,
     row_names: &HashMap<String, Vec<i32>>,
 ) -> Placement {
-    // `grid-area` is not registered in CSS yet (the cascade never expands it
-    // into the four longhands the way it does `grid-column`/`grid-row`), but
-    // an unrecognized declared value still survives verbatim in the computed
-    // style. Expand its `row / column / row / column` shorthand here. Once
-    // present, it must be authoritative: `grid-column-start` etc. are real
-    // registered properties whose *initial* value is also the string "auto",
-    // so `style.get(s_prop)` is `Some("auto")` even when the author only ever
-    // wrote `grid-area` — there is no way from here to tell that apart from
-    // an explicit `grid-column-start: auto` override. Skipping the longhand
-    // checks whenever `grid-area` is present avoids that false override.
-    let grid_area = style.get("grid-area").filter(|value| !value.trim().is_empty());
-    let (row_base, col_base) = match grid_area {
-        Some(value) => {
-            let parts: Vec<&str> = value.split('/').map(str::trim).collect();
-            let row_start = parts[0];
-            let col_start = parts.get(1).copied().unwrap_or(parts[0]);
-            let row_end = parts.get(2).copied().unwrap_or(row_start);
-            let col_end = parts.get(3).copied().unwrap_or(col_start);
-            ((row_start, row_end), (col_start, col_end))
-        }
-        None => (("auto", "auto"), ("auto", "auto")),
-    };
-    let side = |shorthand: &str,
-                s_prop: &str,
-                e_prop: &str,
-                base: (&str, &str),
-                expl: usize,
-                names: &HashMap<String, Vec<i32>>| {
-        let mut start = parse_line_slot(base.0, names, expl);
-        let mut end = parse_line_slot(base.1, names, expl);
-        if grid_area.is_none() {
-            if let Some(v) = style.get(shorthand) {
-                let parts: Vec<&str> = v.split('/').collect();
-                start = parse_line_slot(parts.first().copied().unwrap_or("auto"), names, expl);
-                end = match parts.get(1) {
-                    Some(e) => parse_line_slot(e, names, expl),
-                    None => LineSpec::AUTO,
-                };
-            }
-            if let Some(v) = style.get(s_prop) {
-                start = parse_line_slot(v, names, expl);
-            }
-            if let Some(v) = style.get(e_prop) {
-                end = parse_line_slot(v, names, expl);
-            }
-        }
-        combine_slots(start, end, expl)
-    };
-    let (col, col_span) = side(
-        "grid-column",
-        "grid-column-start",
-        "grid-column-end",
-        col_base,
-        explicit_cols,
-        col_names,
-    );
-    let (row, row_span) = side(
-        "grid-row",
-        "grid-row-start",
-        "grid-row-end",
-        row_base,
-        explicit_rows,
-        row_names,
-    );
-    Placement {
-        row,
-        row_span,
-        col,
-        col_span,
-    }
+    let (col, col_span) = named::axis(style, "column", explicit_cols, col_names);
+    let (row, row_span) = named::axis(style, "row", explicit_rows, row_names);
+    Placement { col: col.filter(|n| *n >= 1).map(|n| n as u32), col_span,
+        row: row.filter(|n| *n >= 1).map(|n| n as u32), row_span }
+
 }
 
 // ---------------------------------------------------------------------------
@@ -1656,21 +1532,10 @@ pub(crate) fn layout_grid_with_context(
     definite_height: Option<f32>,
     fonts: &FontSource,
 ) -> (f32, GridTracks) {
-    let spec = GridSpec::of(container, context, font_px, content_w, definite_height);
+    let mut spec = GridSpec::of(container, context, font_px, content_w, definite_height);
 
     // --- 1. placement ---------------------------------------------------
-    let raw: Vec<Placement> = items
-        .iter()
-        .map(|it| {
-            parse_placement(
-                &it.style,
-                spec.cols.len(),
-                spec.rows.len(),
-                &spec.col_line_names,
-                &spec.row_line_names,
-            )
-        })
-        .collect();
+    let raw = named::prepare(&mut spec, items, context);
     let mut order = (0..items.len()).collect::<Vec<_>>();
     order.sort_by_key(|&index| items[index].style.get("order")
         .and_then(|value| value.parse::<i32>().ok()).unwrap_or(0));
@@ -2016,6 +1881,8 @@ pub(crate) fn layout_grid_with_context(
     row_baseline::position_rows(items,&final_baselines,&area_tops,&area_heights);
 
     let tracks = GridTracks {
+        explicit_cols: spec.explicit_cols, explicit_rows: spec.explicit_rows,
+        col_origin: spec.col_origin, row_origin: spec.row_origin,
         col_positions: col_pos,
         col_sizes,
         row_positions: row_pos,
@@ -2050,7 +1917,7 @@ pub(crate) fn intrinsic_lanes_width(box_: &LayoutBox, fonts: &FontSource, minimu
     let chrome = padding.left + padding.right + border.left + border.right;
     if let Some(width) = crate::containment::intrinsic_width(box_) { return chrome + width; }
     let crate::Flow::Grid(items) = &box_.flow else { return chrome; };
-    let spec = GridSpec::of(&box_.style, None, box_.font_size, 0.0, None);
+    let mut spec = GridSpec::of(&box_.style, None, box_.font_size, 0.0, None);
     let measure = |item: &LayoutBox| {
         let width = if minimum {
             crate::flex::min_content_width(item, fonts)
@@ -2064,8 +1931,7 @@ pub(crate) fn intrinsic_lanes_width(box_: &LayoutBox, fonts: &FontSource, minimu
         return chrome + items.iter().map(measure).sum::<f32>()
             + spec.col_gap * items.len().saturating_sub(1) as f32;
     }
-    let raw = items.iter().map(|item| parse_placement(&item.style, spec.cols.len(),
-        spec.rows.len(), &spec.col_line_names, &spec.row_line_names)).collect::<Vec<_>>();
+    let raw = named::prepare(&mut spec, items, None);
     let tracks = raw.iter().map(|p| p.col.map_or(p.col_span as usize,
         |start| (start + p.col_span - 1) as usize))
         .fold(spec.cols.len().max(1), usize::max);
@@ -2119,7 +1985,7 @@ pub(crate) fn layout_grid_lanes(
     definite_height: Option<f32>,
     fonts: &FontSource,
 ) -> (f32, GridTracks) {
-    let spec = GridSpec::of(container, None, font_px, content_w, definite_height);
+    let mut spec = GridSpec::of(container, None, font_px, content_w, definite_height);
     let fill_reverse = container.get("grid-lanes-direction")
         .is_some_and(|value| value.split_whitespace().any(|token| token.eq_ignore_ascii_case("fill-reverse")));
     let row_lanes = spec.cols.is_empty() && !spec.rows.is_empty();
@@ -2132,13 +1998,11 @@ pub(crate) fn layout_grid_lanes(
                 crate::flex::translate(item, mirrored - item.border_box.x, 0.0);
             }
         }
-        tracks.col_line_names = spec.col_line_names;
-        tracks.row_line_names = spec.row_line_names;
+
         tracks.reverse_x = fill_reverse;
         return (height, tracks);
     }
-    let raw = items.iter().map(|it| parse_placement(&it.style, spec.cols.len(),
-        spec.rows.len(), &spec.col_line_names, &spec.row_line_names)).collect::<Vec<_>>();
+    let raw = named::prepare(&mut spec, items, None);
     let tracks = raw.iter().map(|p| p.col.map_or(p.col_span as usize,
         |start| (start + p.col_span - 1) as usize))
         .fold(spec.cols.len().max(1), usize::max);
@@ -2224,6 +2088,8 @@ pub(crate) fn layout_grid_lanes(
         }
     }
     (natural_height, GridTracks {
+        explicit_cols: spec.explicit_cols, explicit_rows: spec.explicit_rows,
+        col_origin: spec.col_origin, row_origin: spec.row_origin,
         col_positions: positions,
         col_sizes: sizes,
         row_positions: Vec::new(),
@@ -2246,8 +2112,8 @@ fn layout_row_lanes(
     container: &ComputedStyle,
     fonts: &FontSource,
 ) -> (f32, GridTracks) {
-    let raw = items.iter().map(|it| parse_placement(&it.style, spec.cols.len(),
-        spec.rows.len(), &spec.col_line_names, &spec.row_line_names)).collect::<Vec<_>>();
+    let mut spec = spec.clone();
+    let raw = named::prepare(&mut spec, items, None);
     let tracks = raw.iter().map(|p| p.row.map_or(p.row_span as usize,
         |start| (start + p.row_span - 1) as usize))
         .fold(spec.rows.len().max(1), usize::max);
@@ -2367,12 +2233,14 @@ fn layout_row_lanes(
         }
     }
     (natural_height, GridTracks {
+        explicit_cols: spec.explicit_cols, explicit_rows: spec.explicit_rows,
+        col_origin: spec.col_origin, row_origin: spec.row_origin,
         col_positions: Vec::new(),
         col_sizes: Vec::new(),
         row_positions: positions,
         row_sizes: sizes,
-        col_line_names: HashMap::new(),
-        row_line_names: HashMap::new(),
+        col_line_names: spec.col_line_names,
+        row_line_names: spec.row_line_names,
         ..GridTracks::default()
     })
 }
@@ -3190,3 +3058,7 @@ mod tests {
         assert!(rect_eq(items[2].border_box, 0.0, 70.0, 100.0, 30.0));
     }
 }
+
+#[cfg(test)]
+#[path = "grid_named_tests.rs"]
+mod named_tests;
