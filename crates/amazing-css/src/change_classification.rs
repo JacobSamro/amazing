@@ -233,6 +233,8 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         // Not evaluated (no size-container-query matching yet), but a real
         // change establishes/removes a query container and containment, so
         // it is conservatively a full rebuild rather than a narrower kind.
+        // Containment changes scopes, containing blocks and stacking.
+        "contain" |
         "container-name" |
         "container-type" |
         "content" |
@@ -283,9 +285,9 @@ mod tests {
         // `background-position-x`/`-y`, all PaintOnly. CSS39 adds thirteen
         // registered text policy axes, all Layout. CSS42 adds six image-border
         // properties, all PaintOnly.
-        // The complete grid-template producer registers areas as one more Layout longhand.
-        // Flow tolerance adds one more Layout longhand to the ready grid producer.
-        assert_eq!(counts, [19, 53, 144, 34]);
+        // Grid areas and flow tolerance contribute two Layout longhands.
+        // Complete containment invalidation adds one Rebuild registration.
+        assert_eq!(counts, [19, 53, 144, 35]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }

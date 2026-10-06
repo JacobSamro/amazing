@@ -1216,6 +1216,7 @@ const PROPERTIES: &[PropertyMetadata] = &[
     // CSS Contain 3: not evaluated (no size-container-query matching), but
     // registered so `initial`/`inherit`/`unset` resolve instead of dropping
     // the declaration entirely.
+    PropertyMetadata { name: "contain", initial: "none", inherited: false },
     PropertyMetadata { name: "container-name", initial: "none", inherited: false },
     PropertyMetadata { name: "container-type", initial: "normal", inherited: false },
 ];
@@ -1268,6 +1269,10 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     if crate::image_policy::supported(&property) {
         return if needs_deferred_expansion(value) || contains_attr_function(value) { vec![(property, value.into())] }
         else { crate::image_policy::canonical(&property,value).map(|value| vec![(property,value)]).unwrap_or_default() };
+    }
+    if property == "contain" {
+        return if needs_deferred_expansion(value) || contains_attr_function(value) { vec![(property, value.into())] }
+        else { crate::contain_value::specified(value).map(|value| vec![(property, value)]).unwrap_or_default() };
     }
     if property == "font-width" { return expand_declaration("font-stretch", value); }
     if property == "word-wrap" { return expand_declaration("overflow-wrap", value); }
@@ -2885,6 +2890,8 @@ fn compute_normal_value(
         crate::image_policy::canonical(property.name,&computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "grid-template-areas" {
         canonical_areas(&computed).unwrap_or_else(|| property.initial.to_owned())
+    } else if property.name == "contain" {
+        crate::contain_value::computed(&computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "display" {
         values::display_canonical(&computed).unwrap_or(&computed).to_owned()
     } else if matches!(property.name, "ruby-align" | "ruby-position" | "ruby-overhang" | "ruby-merge") {
