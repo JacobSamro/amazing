@@ -1,0 +1,69 @@
+{
+  "state": "QUALIFIED_ENGINE_COMPONENTS_WITH_PRESERVED_OUTER1",
+  "recorded_origin_dev_base": "7d6a4c9009be3e936ffc89bd868ad5b533846084",
+  "qualified_source": "e66d8b335d1a965351d1b9964fcb9f8b10a2c94e",
+  "source_prerequisite": {
+    "ready_commit": "71d3c0d0feb27e8f384178175af85b58fe9a9c28",
+    "code_only_qualified_stage": "ad649cb9",
+    "publication": "pending root; required before/with Flow, no prerequisite source/history/evidence in residual ready"
+  },
+  "controller": 42535,
+  "original_actual_exit": 1,
+  "original_all13_phase_exits": 0,
+  "workspace": {
+    "passed": 5188,
+    "failed": 0,
+    "skipped": 17
+  },
+  "doctests": {
+    "passed": 36,
+    "failed": 0
+  },
+  "css17": {
+    "passed": 4365,
+    "total": 5126,
+    "files": 514,
+    "skipped_non_literal": 169,
+    "gained_passing_cases": 15,
+    "lost_passing_cases": 0,
+    "two_changed_failed_cases_remain_failed": true
+  },
+  "full8": {
+    "cases": 2421,
+    "grid_cases": 945,
+    "gained": 1,
+    "lost_against_c220_before": 0,
+    "lost_against_e8_after": 0,
+    "authentic_roles_unchanged": true
+  },
+  "actual_fetches": {
+    "35403": 0,
+    "82384": 0,
+    "identity57547": 0
+  },
+  "identity_tool": {
+    "ready_commit": "207268150f7bb9c84fd6c793b14be80f541434ca",
+    "qualified_source": "9c975dbf9d1ceb0307cf2f828b4361d109808fe3",
+    "controller": 88804,
+    "actual_exit": 0,
+    "controls_passed": 27,
+    "controls_failed": 0
+  },
+  "source_identity": {
+    "crates/amazing-css/src/flow_tolerance.rs": {
+      "sha256": "72480c1c37902729926e4203254a092bc5e2391e2fe0a1b9986b0cf81e702c1b",
+      "bytes": 2795,
+      "exact_qualified_source": true
+    },
+    "crates/amazing-css/tests/css_flow_tolerance.rs": {
+      "sha256": "80e4934035844412e40097343ae3fe82752f2b4e4a756318c8e1cebf78a5f4a7",
+      "bytes": 5440,
+      "exact_qualified_source": true
+    }
+  },
+  "scope": "Original CSS17/full8 and all8 Flow controls retained; literal renderer font limitation remains honest",
+  "no_new_engine_rerun": true,
+  "no_outer_exit_relabel": true,
+  "native_raw_source_1007_elf_retained": true,
+  "engine_shipping": "root authoritative merged workspace/docs/full16 and own corpus zero loss required"
+}

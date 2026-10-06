@@ -771,6 +771,7 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
                 integer(css).map(V::Integer)
             };
         }
+        "flow-tolerance" => return crate::computed::flow_tolerance::parse(css),
         "transform" => return transforms(css).map(V::Transform),
         // CSS-29: box-shadow keeps its cascade-side literal representation
         // (`Unparsed`, same as before), but now actually goes through the

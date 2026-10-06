@@ -1,0 +1,365 @@
+{
+  "actual_summary": {
+    "bytes": 47005,
+    "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/gate.summary.json",
+    "sha256": "03cdb1b65baa6373814ec4b71d6b982f88659bcf752363e322086afc29d1fcd9"
+  },
+  "actual_terminal_exit": 1,
+  "baselines": [
+    {
+      "baseline_source": "c220413d7778de7a70ed56c8bf5adc81858fa744",
+      "comparisons": [
+        {
+          "after": {
+            "bytes": 26574,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-contain.compact.json",
+            "sha256": "c196647019c4d3fcb5827bf5938bc9bc68d5a2eef7fd8f045d5b02732e0597cd"
+          },
+          "after_cases": 229,
+          "before": {
+            "bytes": 14302,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-contain.compact.json",
+            "sha256": "d081504652fb106d54c06e97a96214a8cde97b421efc13bce6efb0bc8c56ecb9"
+          },
+          "before_cases": 229,
+          "cohort": "css/css-contain",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 4848,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-display.compact.json",
+            "sha256": "db48b61d626e326a74ac3bcb1eca213852c80ac4aaa04555dcbbc492b8ba4d16"
+          },
+          "after_cases": 35,
+          "before": {
+            "bytes": 2625,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-display.compact.json",
+            "sha256": "1a4d1c044f9a954154063020006d4157abf78f58ce94d1b3070511cf9ffa1b31"
+          },
+          "before_cases": 35,
+          "cohort": "css/css-display",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 59545,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-flexbox.compact.json",
+            "sha256": "8ae5d59d46ca4a5815702674c04742713bd7d4ea335196a9561ae942a33226ef"
+          },
+          "after_cases": 523,
+          "before": {
+            "bytes": 32017,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-flexbox.compact.json",
+            "sha256": "c1a723159d8c57f80ea55c2494a7962b7e1a6f23198097a66a4c912cac7258ef"
+          },
+          "before_cases": 523,
+          "cohort": "css/css-flexbox",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 167678,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-grid.compact.json",
+            "sha256": "d9f3a434d80d455088fa5e12f311ad543d8f4e836340c71c7a526dd3bbee9266"
+          },
+          "after_cases": 945,
+          "before": {
+            "bytes": 88279,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-grid.compact.json",
+            "sha256": "701fc2d94520cbe29f1029cc6cdca3d8628e79996c90ae81db5103648a630cbd"
+          },
+          "before_cases": 945,
+          "cohort": "css/css-grid",
+          "gained": [
+            "css__css-grid__alignment__grid-align-baseline-explicit-placement.html"
+          ],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 45468,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-overflow.compact.json",
+            "sha256": "fdff48c2af9f9f500960f09e6acb28e3e719a6f04130bf7f7f62f5d9db201924"
+          },
+          "after_cases": 343,
+          "before": {
+            "bytes": 24520,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-overflow.compact.json",
+            "sha256": "9bc665ac4cd9a44fc9b815bc652fc6d02c880a6834567a1dbac194e657152723"
+          },
+          "before_cases": 343,
+          "cohort": "css/css-overflow",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 8579,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-position.compact.json",
+            "sha256": "77a18fd929b84b28589b450b684d4e1409f44cfdb34a533e5716d616bbdb4916"
+          },
+          "after_cases": 54,
+          "before": {
+            "bytes": 4561,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-position.compact.json",
+            "sha256": "3b57ce0acb71daf0a1e2219c32c93f7b887bb6c121e23f65ab5d71190fdc9bf5"
+          },
+          "before_cases": 54,
+          "cohort": "css/css-position",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 19394,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-sizing.compact.json",
+            "sha256": "f7aebef20a2a121d921ba893094bc44bfc1346d193e0f8d5ce31689850016bb4"
+          },
+          "after_cases": 138,
+          "before": {
+            "bytes": 10323,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-sizing.compact.json",
+            "sha256": "eb050450ba26aa1f5cadcfd117c021d0d4f2d8c1659c9044ba0bbcffe5330a43"
+          },
+          "before_cases": 138,
+          "cohort": "css/css-sizing",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 22840,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-writing-modes.compact.json",
+            "sha256": "2fe8d689085c3ced45c3f3b0b964a4f0f2b329ae4df722df4be7816cbb015296"
+          },
+          "after_cases": 154,
+          "before": {
+            "bytes": 12244,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-writing-modes.compact.json",
+            "sha256": "a61790d26e083c932e52f063d5dbcc4d6c4c78240734d6d0062215158d081485"
+          },
+          "before_cases": 154,
+          "cohort": "css/css-writing-modes",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        }
+      ],
+      "counts_after": {
+        "mismatch": 1203,
+        "pass": 1217,
+        "timeout": 1
+      },
+      "counts_before": {
+        "mismatch": 1204,
+        "pass": 1216,
+        "timeout": 1
+      },
+      "gained": [
+        "css__css-grid__alignment__grid-align-baseline-explicit-placement.html"
+      ],
+      "lost": [],
+      "name": "c220-before",
+      "original_baseline_role": "before"
+    },
+    {
+      "baseline_source": "e8a2a7cf5c16e02d56ce260d4884e177cd4f92f0",
+      "comparisons": [
+        {
+          "after": {
+            "bytes": 26574,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-contain.compact.json",
+            "sha256": "c196647019c4d3fcb5827bf5938bc9bc68d5a2eef7fd8f045d5b02732e0597cd"
+          },
+          "after_cases": 229,
+          "before": {
+            "bytes": 26589,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-contain.compact.json",
+            "sha256": "400e5694f923262685ea94eec2c59ddbf963fc84313e5f0997fe1e7f1ec9dabb"
+          },
+          "before_cases": 229,
+          "cohort": "css/css-contain",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 4848,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-display.compact.json",
+            "sha256": "db48b61d626e326a74ac3bcb1eca213852c80ac4aaa04555dcbbc492b8ba4d16"
+          },
+          "after_cases": 35,
+          "before": {
+            "bytes": 4863,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-display.compact.json",
+            "sha256": "9ea88cc2726be5ccb736d8874da1a1bb69a04b03474cb6c09c531eaafd41f8f1"
+          },
+          "before_cases": 35,
+          "cohort": "css/css-display",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 59545,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-flexbox.compact.json",
+            "sha256": "8ae5d59d46ca4a5815702674c04742713bd7d4ea335196a9561ae942a33226ef"
+          },
+          "after_cases": 523,
+          "before": {
+            "bytes": 59560,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-flexbox.compact.json",
+            "sha256": "76fa05dc7a678f59067dd2e458d14602ca1c8e3cfcacd97772f7672a6213dc50"
+          },
+          "before_cases": 523,
+          "cohort": "css/css-flexbox",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 167678,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-grid.compact.json",
+            "sha256": "d9f3a434d80d455088fa5e12f311ad543d8f4e836340c71c7a526dd3bbee9266"
+          },
+          "after_cases": 945,
+          "before": {
+            "bytes": 167698,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-grid.compact.json",
+            "sha256": "5ff57a958ed54c4d9c2f4ed07399a8b8161d985d4ee11e2af28ddaa0c5cec8f6"
+          },
+          "before_cases": 945,
+          "cohort": "css/css-grid",
+          "gained": [
+            "css__css-grid__alignment__grid-align-baseline-explicit-placement.html"
+          ],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 45468,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-overflow.compact.json",
+            "sha256": "fdff48c2af9f9f500960f09e6acb28e3e719a6f04130bf7f7f62f5d9db201924"
+          },
+          "after_cases": 343,
+          "before": {
+            "bytes": 45483,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-overflow.compact.json",
+            "sha256": "438fd4e966b389348c032ecae3202ccd07c021c899bcbe875e5e34d1f8e63f7f"
+          },
+          "before_cases": 343,
+          "cohort": "css/css-overflow",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 8579,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-position.compact.json",
+            "sha256": "77a18fd929b84b28589b450b684d4e1409f44cfdb34a533e5716d616bbdb4916"
+          },
+          "after_cases": 54,
+          "before": {
+            "bytes": 8594,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-position.compact.json",
+            "sha256": "8f3dacc7559f670b8ff0ddfdc4950581f827027e23c90adf5782209405143e88"
+          },
+          "before_cases": 54,
+          "cohort": "css/css-position",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 19394,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-sizing.compact.json",
+            "sha256": "f7aebef20a2a121d921ba893094bc44bfc1346d193e0f8d5ce31689850016bb4"
+          },
+          "after_cases": 138,
+          "before": {
+            "bytes": 19409,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-sizing.compact.json",
+            "sha256": "c76f9012ad6eecfa7264494ee09257e0148c5212b4514baac472d3cac543d2ad"
+          },
+          "before_cases": 138,
+          "cohort": "css/css-sizing",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 22840,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/flow-tolerance/composed-gate/compact/css-css-writing-modes.compact.json",
+            "sha256": "2fe8d689085c3ced45c3f3b0b964a4f0f2b329ae4df722df4be7816cbb015296"
+          },
+          "after_cases": 154,
+          "before": {
+            "bytes": 22855,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-writing-modes.compact.json",
+            "sha256": "f028fa3cd7396bc115829fc28ca1baac7973937758e4f85b498aa6bf7519b3ec"
+          },
+          "before_cases": 154,
+          "cohort": "css/css-writing-modes",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        }
+      ],
+      "counts_after": {
+        "mismatch": 1203,
+        "pass": 1217,
+        "timeout": 1
+      },
+      "counts_before": {
+        "mismatch": 1204,
+        "pass": 1216,
+        "timeout": 1
+      },
+      "gained": [
+        "css__css-grid__alignment__grid-align-baseline-explicit-placement.html"
+      ],
+      "lost": [],
+      "name": "e8-authentic-after",
+      "original_baseline_role": "after"
+    }
+  ],
+  "classifications_changed": false,
+  "counts_from_authentic_maps_only": true,
+  "native_receipts_reconstructed": false,
+  "source_commit": "e66d8b335d1a965351d1b9964fcb9f8b10a2c94e",
+  "zero_lost": true
+}
