@@ -1405,3 +1405,21 @@ fn page_endpoint_pushes_accessibility_node_updates() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn script_source_exact_units_survive_actual_websocket_json_transport() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+    for payload in [vec![0xd800], vec![0xdc00], vec![0xd800, 0xdc00], vec![0xfffd], vec![0xe000]] {
+        let units: Vec<u16> = "var exact='".encode_utf16().chain(payload).chain("';\n".encode_utf16()).collect();
+        host.script().lock().unwrap().script_source_utf16 = Some(units.clone());
+        let source = client.result("Debugger.getScriptSource", obj! { "scriptId" => s("script-1") });
+        assert_eq!(source.get("scriptSource").unwrap().as_utf16().unwrap().as_ref(), units);
+    }
+    // Original scalar host path remains exact when no native override exists.
+    host.script().lock().unwrap().script_source_utf16 = None;
+    let source = client.result("Debugger.getScriptSource", obj! { "scriptId" => s("script-1") });
+    assert_eq!(source.get("scriptSource").unwrap().as_str(), Some("function f() { return 42; }"));
+    shutdown.store(true, Ordering::Relaxed);
+}

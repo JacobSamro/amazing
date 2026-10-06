@@ -1319,7 +1319,7 @@ impl RuntimeBindings {
             let script = { let host = host.borrow(); crate::cmd::js::script_source_from_node(&host.dom, dest_node) };
             let Some(script) = script else { return Ok(()) };
             let script_url = js.binding_with_realm(realm, |i| Ok(self.page_script_url(i, &script, child_url)))?;
-            let execute = |js: &mut Interpreter, source: &str, url: &str| {
+            let execute = |js: &mut Interpreter, source: &amazing_js::value::JsString, url: &str| {
                 if !self.parser_session_current(lifecycle) { return Ok(()); }
                 if mode == amazing_html::ScriptMode::Async {
                     self.queue_ready_parser_script(crate::cmd::js::HtmlParserScript {
@@ -1611,7 +1611,7 @@ impl RuntimeBindings {
                 Some(realm) => js.binding_with_realm(realm, |i| Ok(self.page_script_url(i, &script, &base))).unwrap_or_else(|_| base.clone()),
                 None => self.page_script_url(js, &script, &base),
             };
-            let run_body = |js: &mut Interpreter, body: &str, url: &str| {
+            let run_body = |js: &mut Interpreter, body: &amazing_js::value::JsString, url: &str| {
                 // A script's own uncaught exception does not stop the page
                 // or suppress its `load` event (that pair reflects fetch
                 // success/failure, not execution success) -- matches
@@ -2347,7 +2347,7 @@ impl RuntimeBindingHost<'_> {
         match operation {
             Operation::Append | Operation::Prepend | Operation::ReplaceChildren
             | Operation::AppendChild | Operation::InsertBefore | Operation::ReplaceChild
-            | Operation::RemoveChild | Operation::SetTextContent => self.node_from_value(receiver),
+            | Operation::RemoveChild | Operation::SetTextContent | Operation::ScriptSetText => self.node_from_value(receiver),
             Operation::Before | Operation::After => self.node_from_value(receiver).and_then(parent_of),
             Operation::ReplaceWith => pre_inserted.first().copied().and_then(parent_of)
                 .or_else(|| self.node_from_value(receiver).and_then(parent_of)),
@@ -2471,7 +2471,7 @@ impl RuntimeBindingHost<'_> {
             | Operation::ElementSetAttributeNS | Operation::ElementRemoveAttribute
             | Operation::ElementRemoveAttributeNS | Operation::ElementSetAttributeNode
             | Operation::ElementSetAttributeNodeNS | Operation::ElementRemoveAttributeNode
-            | Operation::SetTextContent) {
+            | Operation::SetTextContent | Operation::ScriptSetText) {
             bindings.navigate_iframes(self.js);
             if let Some(before) = before_scripts {
                 let after: Vec<NodeIdx> = bindings.connected_script_nodes()

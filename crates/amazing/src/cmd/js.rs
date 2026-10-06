@@ -15,7 +15,7 @@ pub(crate) struct PageScript {
     /// Captured when this script record is created; a recycled slot is a different node.
     pub(crate) node_generation: Option<u64>,
     pub(crate) src: Option<String>,
-    pub(crate) body: String,
+    pub(crate) body: amazing_js::value::JsString,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ScriptKind { Classic, Module }
@@ -63,12 +63,7 @@ pub(crate) fn script_source_from_node(
         if attrs.iter().any(|(name, _)| name.eq_ignore_ascii_case("nomodule")) { return None; }
         ScriptKind::Classic
     } else { return None; };
-    let mut source = String::new();
-    for child in dom.children(node) {
-        if let amazing_dom::NodeKind::Text { data } | amazing_dom::NodeKind::CDATASection { data } = &dom.get(child).kind {
-            source.push_str(data);
-        }
-    }
+    let source = crate::runtime_binding_host::script_utf16::script_child_text(dom, node)?;
     // HTML-32: an SVG `<script>` (unlike its HTML sibling) names its
     // external resource with `href`/`xlink:href`, not `src` -- SVG has no
     // `src` attribute at all. WPT's `unclosed-svg-script.html` ("SVG
@@ -92,7 +87,7 @@ pub(crate) fn script_source_from_node(
                 .find(|(name, _)| name == "href" || name.eq_ignore_ascii_case("xlink:href"))
                 .map(|(_, value)| value.clone())
         });
-    if src.is_some() || !source.trim().is_empty() {
+    if src.is_some() || crate::runtime_binding_host::script_utf16::has_script_source(&source) {
         Some(PageScript { node, node_generation, src, body: source, kind })
     } else {
         None
@@ -321,7 +316,7 @@ pub(crate) fn execute_page_scripts_lenient(
         }
         let source = match &script.src {
             Some(src) if script.kind == ScriptKind::Module => match scheduler.load_module_source(&scheduler.page_script_url(page, script)) {
-                Ok(source) => source,
+                Ok(source) => source.into(),
                 Err(error) => { errors.push(format!("external module {src}: {error}")); return Ok(()); }
             },
             Some(src) => {
@@ -331,7 +326,7 @@ pub(crate) fn execute_page_scripts_lenient(
                     .and_then(|response| response.text()
                         .ok_or_else(|| format!("external script {src} was not text")));
                 match fetched {
-                    Ok(source) => source,
+                    Ok(source) => source.into(),
                     Err(error) => { errors.push(format!("external script {src}: {error}")); return Ok(()); }
                 }
             }
@@ -369,7 +364,7 @@ pub(crate) fn execute_page_scripts_lenient(
         if !scheduler.parser_session_current(script.session) { continue; }
             let source = match &script.src {
                 Some(src) if script.kind == ScriptKind::Module => match scheduler.load_module_source(&scheduler.page_script_url(page, script)) {
-                    Ok(source) => source,
+                    Ok(source) => source.into(),
                     Err(error) => {
                         errors.push(format!("external module {src}: {error}"));
                         let script_url = scheduler.page_script_url(page, script);
@@ -384,7 +379,7 @@ pub(crate) fn execute_page_scripts_lenient(
                         .and_then(|response| response.text()
                             .ok_or_else(|| format!("external script {src} was not text")));
                     match fetched {
-                        Ok(source) => source,
+                        Ok(source) => source.into(),
                         Err(error) => { errors.push(format!("external script {src}: {error}")); continue; }
                     }
                 }
@@ -458,7 +453,7 @@ pub(crate) fn prepare_page_scripts(
                         .map_err(|error| format!("external script {src}: {error}"))?;
                 response
                     .text()
-                    .ok_or_else(|| format!("external script {src} was not text"))?
+                    .ok_or_else(|| format!("external script {src} was not text"))?.into()
             }
             None => script.body.clone(),
         };
@@ -488,7 +483,7 @@ pub(crate) fn prepare_page_scripts(
                         .map_err(|error| format!("external script {src}: {error}"))?;
                 response
                     .text()
-                    .ok_or_else(|| format!("external script {src} was not text"))?
+                    .ok_or_else(|| format!("external script {src} was not text"))?.into()
             }
             None => script.body.clone(),
         };
@@ -547,7 +542,7 @@ pub(crate) fn cmd_run(path: Option<&str>) -> ExitCode {
     let entry = if let Some(path) = path {
         let url = crate::runtime_binding_host::modules::source_url(path);
         scheduler.set_location_url(&url);
-        let script = PageScript { kind: ScriptKind::Classic, node: amazing_dom::NodeIdx(0), node_generation: host.borrow().dom.node_generation(amazing_dom::NodeIdx(0)), src: Some(url.clone()), body: String::new() };
+        let script = PageScript { kind: ScriptKind::Classic, node: amazing_dom::NodeIdx(0), node_generation: host.borrow().dom.node_generation(amazing_dom::NodeIdx(0)), src: Some(url.clone()), body: "".into() };
         scheduler.run_page_script(&script, &source, &url)
     } else { scheduler.run_script(&source) };
     let checkpoint = scheduler.pump_at(std::time::Duration::from_millis(16), true);

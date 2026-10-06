@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "source": "6e4ce98c5c6a94ecc6ecfdb89b60009887a1936f",
+  "controller_session": 24714,
+  "controller_actual_exit": 3,
+  "native_job_exists": false,
+  "box": "bx_zvamj3ms",
+  "upload_endpoint": {
+    "host": "user@37.59.33.142",
+    "port": 19045
+  },
+  "source_upload_actual_exit": 0,
+  "source_upload_ready": true,
+  "source_archive": {
+    "bytes": 51357063,
+    "sha256": "368541b52a264b597f65baa11fc7180042cc6d1adf4c9963c064bd436b604c5d"
+  },
+  "cause": "public linux-run.sh line364 expands an empty PROOF_CAPTURE_ARGS under Bash set-u; actual unbound variable before completed-job capture",
+  "command_sha256": "87a0f736198c90f5336a151c23cce61903931ef0b5f5827422f63cd95531242d",
+  "storage_sha256": "0b8692a22a03c329f3fb90d8bb1bece64a027d7f1b68b7ce00597210b8311aa6",
+  "caller_linux_run_sha256": "c80d1beb9ae383a73c889e9f7b11c34823881d200c6c305f3a89743d0b8dab35",
+  "clean_tooling_rerun_used": false,
+  "candidate_qualification": "not started; no native workspace/corpus counts",
+  "no_manual_recovery": true
+}

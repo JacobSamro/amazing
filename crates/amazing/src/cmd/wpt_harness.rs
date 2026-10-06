@@ -1244,7 +1244,7 @@ fn execute_page(
                 {
                     // IA-TESTDRIVER: not in the pinned upstream checkout; see
                     // `TESTDRIVER_VENDOR_JS`.
-                    (testdriver_vendor_source(), src.clone(), false)
+                    (amazing_js::value::JsString::from(testdriver_vendor_source()), src.clone(), false)
                 }
                 Some(src) => {
                     // HTML-31: a parser-inserted script (typically from
@@ -1276,7 +1276,7 @@ fn execute_page(
                     let text = if script.kind == crate::cmd::js::ScriptKind::Module {
                         module_source(&root, &path, options.scaffold)?
                     } else { source(&root, &path, options.scaffold)? };
-                    (text, src.clone(), harness)
+                    (amazing_js::value::JsString::from(text), src.clone(), harness)
                 }
                 None => (script.body.clone(), "inline script".into(), false),
             };
@@ -1308,7 +1308,7 @@ fn execute_page(
         let (text, label) = match &script.src {
             Some(src) if script.kind == crate::cmd::js::ScriptKind::Module => {
                 match scheduler.load_module_source(&script_url) {
-                    Ok(text) => (text, src.clone()),
+                    Ok(text) => (amazing_js::value::JsString::from(text), src.clone()),
                     Err(_) => {
                         scheduler.finish_module_script(script, None, &script_url, false).map_err(|e| e.describe())?;
                         continue;
@@ -1319,7 +1319,7 @@ fn execute_page(
                 if !options.scaffold && is_testdriver_vendor_url(&script_url) {
                     // IA-TESTDRIVER: not in the pinned upstream checkout; see
                     // `TESTDRIVER_VENDOR_JS`.
-                    (testdriver_vendor_source(), src.clone())
+                    (amazing_js::value::JsString::from(testdriver_vendor_source()), src.clone())
                 } else {
                     // Same "unsupported resource URL" skip as the blocking-script
                     // closure above, for a deferred/async script's own `src`.
@@ -1334,7 +1334,7 @@ fn execute_page(
                     let text = if script.kind == crate::cmd::js::ScriptKind::Module {
                         module_source(&root, &path, options.scaffold)?
                     } else { source(&root, &path, options.scaffold)? };
-                    (text, src.clone())
+                    (amazing_js::value::JsString::from(text), src.clone())
                 }
             }
             None => (script.body.clone(), "inline deferred/async script".into()),
@@ -1746,7 +1746,7 @@ mod any_window_tests {
             Ok("export const value=7".into())
         }));
         let script = crate::cmd::js::PageScript { node: amazing_dom::NodeIdx(node), node_generation,
-            src: Some("main.js".into()), body: String::new(), kind: crate::cmd::js::ScriptKind::Classic };
+            src: Some("main.js".into()), body: "".into(), kind: crate::cmd::js::ScriptKind::Classic };
         let url = scheduler.page_script_url(page, &script);
         let text = super::source(&root, &super::script_file(&root, &url).unwrap(), true).unwrap();
         scheduler.run_page_script(&script, &text, &url).unwrap();

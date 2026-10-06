@@ -32,7 +32,7 @@ fn module_referrer_policy(value: &str) -> String {
 }
 type ContextProvider = dyn Fn(RealmHandle) -> Option<html::HtmlDocumentContext>;
 type Registry = Rc<RefCell<ModuleLinker<BrowserModuleResolver>>>;
-type SourceCache = Rc<RefCell<HashMap<String, Result<String, String>>>>;
+type SourceCache = Rc<RefCell<HashMap<String, Result<amazing_js::value::JsString, String>>>>;
 
 #[derive(Clone)]
 pub(super) struct ModuleRuntime {
@@ -60,7 +60,7 @@ struct BrowserModuleResolver {
     realm: RealmHandle,
     inline_urls: Rc<RefCell<HashMap<String, String>>>,
     fallback: String,
-    cache: Rc<RefCell<HashMap<String, Result<String, String>>>>,
+    cache: SourceCache,
 }
 
 impl BrowserModuleResolver {
@@ -84,8 +84,8 @@ impl BrowserModuleResolver {
     }
 }
 
-impl ModuleResolver for BrowserModuleResolver {
-    fn resolve(&self, specifier: &str, referrer: &str) -> Result<(String, String), String> {
+impl BrowserModuleResolver {
+    fn resolve_units(&self, specifier: &str, referrer: &str) -> Result<(String, amazing_js::value::JsString), String> {
         let id = self.locate(specifier, referrer)?;
         let cached = self.cache.borrow().get(&id).cloned();
         let source = if let Some(source) = cached { source } else {
@@ -114,16 +114,28 @@ impl ModuleResolver for BrowserModuleResolver {
                     if !policy.is_empty() {
                         self.options.borrow_mut().entry((self.realm, id.clone())).or_default().referrer_policy = policy;
                     }
-                    Ok(decode_module(&response.body))
+                    Ok(decode_module(&response.body).into())
                 })
             } else {
                 let loader = self.sources.borrow().clone();
-                loader(&id)
+                loader(&id).map(Into::into)
             };
             self.cache.borrow_mut().insert(id.clone(), source.clone());
             source
         }?;
         Ok((id, source))
+    }
+}
+impl ModuleResolver for BrowserModuleResolver {
+    fn resolve(&self, specifier: &str, referrer: &str) -> Result<(String, String), String> {
+        self.resolve_units(specifier, referrer).map(|(id, source)| (id, source.to_utf8_lossy()))
+    }
+    fn resolve_request(&self, request: &amazing_js::module::ModuleRequest, referrer: &str)
+        -> Result<amazing_js::module::LoadedModule, String> {
+        if !request.attributes.is_empty() { return Err("host does not support import attributes".into()); }
+        let (id, source) = self.resolve_units(&request.specifier.to_utf8_lossy(), referrer)?;
+        Ok(amazing_js::module::LoadedModule { id,
+            source: amazing_js::module::ModuleSource::JavaScriptUtf16(source.units().to_vec()) })
     }
     fn source_url(&self, id: &str) -> Option<String> { Some(self.url(id)) }
     fn resolve_request_error(&self, request: &amazing_js::module::ModuleRequest, referrer: &str, message: &str) -> Option<Throw> {
@@ -207,13 +219,14 @@ impl ModuleRuntime {
             Rc::new(RefCell::new(ModuleLinker::new(self.resolver(js))))
         }).clone()
     }
-    fn evaluate(&self, js: &mut Interpreter, id: &str, source: &str) -> Result<(JsValue, Option<JsValue>), Throw> {
+    fn evaluate(&self, js: &mut Interpreter, id: &str, source: impl Into<amazing_js::value::JsString>) -> Result<(JsValue, Option<JsValue>), Throw> {
+        let source = source.into();
         let key = (js.binding_current_realm(), id.to_owned());
         if let Some(error) = self.failures.borrow().get(&key).cloned() { return Err(error); }
         let registry = self.registry(js);
         self.resolver(js).cache.borrow_mut().entry(id.to_owned()).or_insert_with(|| Ok(source.to_owned()));
         let result = (|| {
-            let linked = registry.borrow_mut().link(id, source);
+            let linked = registry.borrow_mut().link_utf16(id, source.units());
             if linked.as_ref().is_err_and(|error| error.phase == ModulePhase::Resolution && error.thrown.is_none()) {
                 self.fetch_failures.borrow_mut().insert(key.clone());
             }
@@ -316,7 +329,7 @@ impl RuntimeBindings {
         self.dispatch_module_script_event(js, script.node, if fetched { "load" } else { "error" })
     }
     pub(crate) fn execute_document_script(&self, js: &mut Interpreter, script: &crate::cmd::js::PageScript,
-        source: &str, url: &str) -> Result<(), Throw> {
+        source: impl Into<amazing_js::value::JsString>, url: &str) -> Result<(), Throw> {
         let result = self.execute_page_script(js, script, source, url);
         if script.kind == crate::cmd::js::ScriptKind::Module {
             self.finish_module_script(js, script, result.as_ref().err(), url, true)
@@ -363,10 +376,10 @@ impl RuntimeBindings {
             amazing_dom::events::EventTarget::Node(node), name,
             amazing_dom::events::EventInit { bubbles: false, cancelable: false, composed: false })
     }
-    pub(crate) fn load_module_source(&self, js: &Interpreter, url: &str) -> Result<String, String> {
+    pub(crate) fn load_module_source(&self, js: &Interpreter, url: &str) -> Result<amazing_js::value::JsString, String> {
         let runtime = self.state.borrow().modules.clone();
         let url = source_url(url);
-        runtime.resolver(js).resolve(&url, "").map(|(_, source)| source)
+        runtime.resolver(js).resolve_units(&url, "").map(|(_, source)| source)
     }
     pub(crate) fn set_module_source_loader(&self, loader: Rc<ModuleSourceLoader>) {
         let runtime = self.state.borrow().modules.clone();
@@ -376,7 +389,8 @@ impl RuntimeBindings {
         *self.state.borrow().modules.resources.borrow_mut() = Some(loader);
     }
     pub(crate) fn execute_page_script(&self, js: &mut Interpreter,
-        script: &crate::cmd::js::PageScript, source: &str, url: &str) -> Result<JsValue, Throw> {
+        script: &crate::cmd::js::PageScript, source: impl Into<amazing_js::value::JsString>, url: &str) -> Result<JsValue, Throw> {
+        let source = source.into();
         let runtime = self.state.borrow().modules.clone();
         let url = if matches!(url, "about:blank" | "about:srcdoc") {
             runtime.resolver(js).fallback
@@ -396,7 +410,7 @@ impl RuntimeBindings {
         });
         if script.kind == crate::cmd::js::ScriptKind::Classic {
             runtime.options.borrow_mut().insert((js.binding_current_realm(), url.clone()), self.module_script_options(script));
-            let result = js.run_script_with_source_context(source, &url);
+            let result = js.run_script_utf16_with_source_context(source.units(), &url);
             if let Some(document) = document { runtime.current_scripts.borrow_mut().insert(document, previous.flatten()); }
             return result;
         }
@@ -407,7 +421,7 @@ impl RuntimeBindings {
         };
         runtime.options.borrow_mut().entry((js.binding_current_realm(), id.clone()))
             .or_insert_with(|| self.module_script_options(script));
-        let result = runtime.evaluate(js, &id, source).and_then(|(namespace, pending)| {
+        let result = runtime.evaluate(js, &id, &source).and_then(|(namespace, pending)| {
             if let Some(promise) = pending {
                 let bindings = self.clone();
                 let url = runtime.inline_urls.borrow().get(&id).cloned().unwrap_or_else(|| id.clone());
@@ -471,7 +485,7 @@ mod tests {
     }
     fn script(bindings: &RuntimeBindings, kind: ScriptKind, node: u32, external: bool) -> PageScript {
         let node_generation = bindings.state.borrow().host.borrow().dom.node_generation(NodeIdx(node));
-        PageScript { kind, node: NodeIdx(node), node_generation, src: external.then(|| "root.js".into()), body: String::new() }
+        PageScript { kind, node: NodeIdx(node), node_generation, src: external.then(|| "root.js".into()), body: "".into() }
     }
     #[test]
     fn first_external_and_inline_module_graphs_capture_actual_document_response_policy() {

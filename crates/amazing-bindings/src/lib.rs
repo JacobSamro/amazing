@@ -45,6 +45,7 @@ mod legacy_document_bindings;
 mod parser_bindings;
 mod xml_serializer_bindings;
 mod element_reflection;
+mod script_text_bindings;
 mod hyperlink_bindings;
 mod table_bindings;
 mod processing_instruction_bindings;

@@ -452,7 +452,7 @@ enum PageCommand {
     DebuggerStepInto(Reply<()>),
     DebuggerStepOut(Reply<()>),
     EvaluateOnCallFrame(String, String, Reply<EvaluateResult>),
-    GetScriptSource(String, Reply<String>),
+    GetScriptSource(String, Reply<Vec<u16>>),
     DrainScriptsParsed(Reply<Vec<ScriptInfo>>),
     DrainDebuggerPaused(Reply<Vec<PausedEvent>>),
     SetCacheDisabled(bool, Reply<()>),
@@ -543,6 +543,7 @@ fn json_to_js_value(value: &amazing_devtools::json::Json) -> amazing_js::value::
         Json::Bool(b) => JsValue::Bool(*b),
         Json::Number(n) => JsValue::Num(*n),
         Json::String(s) => JsValue::str(s.clone()),
+        Json::StringUtf16(s) => JsValue::Str(amazing_js::value::JsString::from_units(s.clone())),
         Json::Array(_) | Json::Object(_) => JsValue::Undefined,
     }
 }
@@ -965,7 +966,7 @@ struct PageOwner {
 struct ScriptRecord {
     script_id: String,
     url: String,
-    source: String,
+    source: amazing_js::value::JsString,
     start_line: u32,
     start_column: u32,
     end_line: u32,
@@ -1146,6 +1147,25 @@ fn script_extent(source: &str) -> (u32, u32) {
     let end_line = lines.len().saturating_sub(1) as u32;
     let end_column = lines.last().map(|line| line.chars().count()).unwrap_or(0) as u32;
     (end_line, end_column)
+}
+
+// Native source custody and execution use code units. The legacy CDP String
+// transport sends these exact units through JSON Unicode escapes.
+fn script_units_hash(source: &[u16]) -> String {
+    if let Ok(text) = String::from_utf16(source) { return script_hash(&text); }
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    source.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+fn script_units_extent(source: &[u16]) -> (u32, u32) {
+    if let Ok(text) = String::from_utf16(source) { return script_extent(&text); }
+    let mut line = 0u32;
+    let mut column = 0u32;
+    for &unit in source {
+        if unit == 10 { line += 1; column = 0; } else { column += 1; }
+    }
+    (line, column)
 }
 
 impl PageOwner {
@@ -1363,7 +1383,7 @@ impl PageOwner {
                 Some(src) => {
                     let script_url = crate::cmd::js::resolve_script_url(&self.url, &src);
                     match self.fetch_and_record(&script_url, "Script") {
-                        Ok(text) => (text, script_url),
+                        Ok(text) => (amazing_js::value::JsString::from(text), script_url),
                         Err(()) => continue, // already recorded as a network failure
                     }
                 }
@@ -2355,15 +2375,15 @@ impl PageOwner {
     /// ever calls `Debugger.enable` (i.e. every script on this driver's
     /// synchronous initial page load) is reported once, by that enable
     /// call's own backfill, not twice.
-    fn register_script(&mut self, url: &str, source: &str) -> String {
+    fn register_script(&mut self, url: &str, source: &amazing_js::value::JsString) -> String {
         self.next_script_id += 1;
         let script_id = format!("script-{}", self.next_script_id);
-        let (end_line, end_column) = script_extent(source);
-        let hash = script_hash(source);
+        let (end_line, end_column) = script_units_extent(source.units());
+        let hash = script_units_hash(source.units());
         self.scripts.push(ScriptRecord {
             script_id: script_id.clone(),
             url: url.to_owned(),
-            source: source.to_owned(),
+            source: source.clone(),
             start_line: 0,
             start_column: 0,
             end_line,
@@ -2509,12 +2529,9 @@ impl PageOwner {
         Ok(self.evaluate(&EvaluateParams { expression: expression.to_owned(), ..EvaluateParams::default() }))
     }
 
-    fn get_script_source(&self, script_id: &str) -> Result<String, HostError> {
-        self.scripts
-            .iter()
-            .find(|script| script.script_id == script_id)
-            .map(|script| script.source.clone())
-            .ok_or(HostError::NotFound)
+    fn get_script_source(&self, script_id: &str) -> Result<Vec<u16>, HostError> {
+        self.scripts.iter().find(|script| script.script_id == script_id)
+            .map(|script| script.source.units().to_vec()).ok_or(HostError::NotFound)
     }
 
     fn drain_scripts_parsed(&mut self) -> Vec<ScriptInfo> {
@@ -3341,6 +3358,10 @@ impl DevToolsSession for DriverPageSession {
     }
 
     fn get_script_source(&mut self, script_id: &str) -> Result<String, HostError> {
+        String::from_utf16(&self.get_script_source_utf16(script_id)?)
+            .map_err(|_| HostError::Internal("Use the exact UTF-16 source interface for unpaired surrogate units".into()))
+    }
+    fn get_script_source_utf16(&mut self, script_id: &str) -> Result<Vec<u16>, HostError> {
         let script_id = script_id.to_owned();
         request(&self.sender, |reply| PageCommand::GetScriptSource(script_id, reply))
     }

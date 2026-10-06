@@ -1603,6 +1603,12 @@ pub trait DevToolsSession: Send {
         Err(HostError::Unsupported)
     }
 
+    /// Exact native source units for Debugger.getScriptSource. Existing scalar
+    /// hosts preserve their text; browser hosts override with native custody.
+    fn get_script_source_utf16(&mut self, script_id: &str) -> Result<Vec<u16>, HostError> {
+        self.get_script_source(script_id).map(|source| source.encode_utf16().collect())
+    }
+
     // --- Profiler -----------------------------------------------------------
     /// Enables/disables the CPU profiler (`Profiler.enable`/`disable`).
     /// Advisory.

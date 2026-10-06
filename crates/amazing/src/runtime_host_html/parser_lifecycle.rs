@@ -202,12 +202,12 @@ impl RuntimeBindings {
 #[derive(Clone)]
 pub(crate) struct HtmlReadyParserScript {
     pub(crate) record: crate::cmd::js::HtmlParserScript,
-    pub(crate) source: String,
+    pub(crate) source: amazing_js::value::JsString,
     pub(crate) url: String,
 }
 impl RuntimeBindings {
     pub(crate) fn queue_ready_parser_script(&self, record: crate::cmd::js::HtmlParserScript,
-        source: &str, url: &str) -> Result<(), Throw> {
+        source: impl Into<amazing_js::value::JsString>, url: &str) -> Result<(), Throw> {
         if !self.parser_session_current(record.session) { return Ok(()); }
         let mut state = self.state.borrow_mut();
         let lifecycle = &mut state.frames.parser_lifecycle;
@@ -215,7 +215,7 @@ impl RuntimeBindings {
         entry.asynchronous = entry.asynchronous.checked_add(1)
             .ok_or_else(|| Throw::range_error("Async parser script count exhausted"))?;
         lifecycle.scripts.push_back(HtmlReadyParserScript { record,
-            source: source.to_owned(), url: url.to_owned() });
+            source: source.into(), url: url.to_owned() });
         Ok(())
     }
     pub(crate) fn take_ready_parser_scripts(&self) -> Vec<HtmlReadyParserScript> {

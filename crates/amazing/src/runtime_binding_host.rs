@@ -43,6 +43,7 @@ use runtime_host_net::{NetNativeEntry, NetRuntime};
 #[path = "runtime_host_integrator_assist.rs"]
 mod runtime_host_integrator_assist;
 use runtime_host_integrator_assist::{IaNativeEntry, IaRuntime};
+#[path = "runtime_host_script_utf16.rs"] pub(crate) mod script_utf16;
 #[path = "runtime_host_modules.rs"] pub(crate) mod modules;
 
 #[path = "runtime_host_messaging.rs"]
@@ -1486,9 +1487,11 @@ impl BindingHost for RuntimeBindingHost<'_> {
                     )?;
                 }
                 MemberKind::Getter => {
+                    let (name, length) = script_utf16::script_text_accessor(member.operation)
+                        .unwrap_or((member.name, 0));
                     let function = self.native(
-                        member.name,
-                        0,
+                        name,
+                        length,
                         NativeEntry::Operation(member.operation),
                         HostCallPolicy::CallOnly,
                     );
@@ -1503,9 +1506,11 @@ impl BindingHost for RuntimeBindingHost<'_> {
                     )?;
                 }
                 MemberKind::Setter => {
+                    let (name, length) = script_utf16::script_text_accessor(member.operation)
+                        .unwrap_or((member.name, 0));
                     let function = self.native(
-                        member.name,
-                        0,
+                        name,
+                        length,
                         NativeEntry::Operation(member.operation),
                         HostCallPolicy::CallOnly,
                     );

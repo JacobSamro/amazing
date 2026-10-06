@@ -367,7 +367,7 @@ pub enum Operation {
     SourceSizes, SourceSetSizes,
     InputType, InputSetType, ElementName, ElementSetName, ElementDisabled, ElementSetDisabled,
     InputPlaceholder, InputSetPlaceholder, ResourceType, ResourceSetType,
-    ScriptAsync, ScriptSetAsync, ScriptDefer, ScriptSetDefer,
+    ScriptAsync, ScriptSetAsync, ScriptDefer, ScriptSetDefer, ScriptText, ScriptSetText,
     LinkMedia, LinkSetMedia, MetaContent, MetaSetContent,
     MetaHttpEquiv, MetaSetHttpEquiv, MetaCharset, MetaSetCharset,
     TableCaption, TableSetCaption, TableCreateCaption, TableDeleteCaption,

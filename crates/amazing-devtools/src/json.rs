@@ -26,6 +26,9 @@ pub enum Json {
     Bool(bool),
     Number(f64),
     String(String),
+    /// Exact UTF-16 string value, including unpaired surrogate units.
+    /// Construct through string_utf16 to retain the legacy scalar variant when possible.
+    StringUtf16(Vec<u16>),
     Array(Vec<Json>),
     Object(Vec<(String, Json)>),
 }
@@ -74,6 +77,24 @@ impl Json {
     /// Convenience constructor for a JSON string.
     pub fn string(value: impl Into<String>) -> Json {
         Json::String(value.into())
+    }
+
+    /// Construct a protocol string without losing native UTF-16 source units.
+    pub fn string_utf16(value: impl Into<Vec<u16>>) -> Json {
+        let units = value.into();
+        match String::from_utf16(&units) {
+            Ok(value) => Json::String(value),
+            Err(_) => Json::StringUtf16(units),
+        }
+    }
+
+    /// Exact code units of a string value. Scalar strings encode without loss.
+    pub fn as_utf16(&self) -> Option<std::borrow::Cow<'_, [u16]>> {
+        match self {
+            Json::String(value) => Some(std::borrow::Cow::Owned(value.encode_utf16().collect())),
+            Json::StringUtf16(value) => Some(std::borrow::Cow::Borrowed(value)),
+            _ => None,
+        }
     }
 
     /// Convenience constructor for a JSON number.
@@ -194,6 +215,7 @@ impl Json {
             Json::Bool(false) => out.push_str("false"),
             Json::Number(n) => write_number(*n, out),
             Json::String(s) => write_string(s, out),
+            Json::StringUtf16(s) => write_string_utf16(s, out),
             Json::Array(items) => {
                 out.push('[');
                 for (i, item) in items.iter().enumerate() {
@@ -263,6 +285,15 @@ fn write_string(s: &str, out: &mut String) {
     out.push('"');
 }
 
+/// Escape code units directly: JSON's \u grammar admits lone surrogates
+/// (RFC 8259 §8.2). No Rust scalar-string conversion is involved.
+fn write_string_utf16(units: &[u16], out: &mut String) {
+    use std::fmt::Write;
+    out.push('"');
+    for unit in units { let _ = write!(out, "\\u{unit:04x}"); }
+    out.push('"');
+}
+
 struct Parser<'a> {
     bytes: &'a [u8],
     pos: usize,
@@ -306,7 +337,7 @@ impl<'a> Parser<'a> {
         match self.peek() {
             Some(b'{') => self.parse_object(depth),
             Some(b'[') => self.parse_array(depth),
-            Some(b'"') => self.parse_string().map(Json::String),
+            Some(b'"') => self.parse_string_units().map(Json::string_utf16),
             Some(b't') => self.parse_literal(b"true", Json::Bool(true)),
             Some(b'f') => self.parse_literal(b"false", Json::Bool(false)),
             Some(b'n') => self.parse_literal(b"null", Json::Null),
@@ -388,27 +419,25 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_string(&mut self) -> Result<String, JsonError> {
-        self.pos += 1; // opening quote
-        let mut out = String::new();
+        let units = self.parse_string_units()?;
+        // Protocol member names remain the existing scalar identifier interface.
+        String::from_utf16(&units).map_err(|_| self.syntax("unpaired UTF-16 surrogate in object key"))
+    }
+
+    fn parse_string_units(&mut self) -> Result<Vec<u16>, JsonError> {
+        self.pos += 1;
+        let mut out = Vec::new();
         loop {
             let b = self.peek().ok_or_else(|| self.syntax("unterminated string"))?;
             match b {
-                b'"' => {
-                    self.pos += 1;
-                    return Ok(out);
-                }
-                b'\\' => {
-                    self.pos += 1;
-                    self.parse_escape(&mut out)?;
-                }
+                b'"' => { self.pos += 1; return Ok(out); }
+                b'\\' => { self.pos += 1; self.parse_escape(&mut out)?; }
                 0x00..=0x1f => return Err(self.syntax("raw control character in string")),
-                0x20..=0x7f => {
-                    out.push(b as char);
-                    self.pos += 1;
-                }
+                0x20..=0x7f => { out.push(u16::from(b)); self.pos += 1; }
                 _ => {
                     let (c, len) = self.next_char()?;
-                    out.push(c);
+                    let mut units = [0; 2];
+                    out.extend_from_slice(c.encode_utf16(&mut units));
                     self.pos += len;
                 }
             }
@@ -422,40 +451,15 @@ impl<'a> Parser<'a> {
         Ok((c, c.len_utf8()))
     }
 
-    fn parse_escape(&mut self, out: &mut String) -> Result<(), JsonError> {
+    fn parse_escape(&mut self, out: &mut Vec<u16>) -> Result<(), JsonError> {
         let b = self.peek().ok_or_else(|| self.syntax("unterminated escape"))?;
         self.pos += 1;
-        match b {
-            b'"' => out.push('"'),
-            b'\\' => out.push('\\'),
-            b'/' => out.push('/'),
-            b'b' => out.push('\u{08}'),
-            b'f' => out.push('\u{0c}'),
-            b'n' => out.push('\n'),
-            b'r' => out.push('\r'),
-            b't' => out.push('\t'),
-            b'u' => {
-                let first = self.parse_hex4()?;
-                let scalar = if (0xd800..=0xdbff).contains(&first) {
-                    if self.peek() != Some(b'\\') || self.bytes.get(self.pos + 1) != Some(&b'u') {
-                        return Err(self.syntax("unpaired UTF-16 surrogate"));
-                    }
-                    self.pos += 2;
-                    let second = self.parse_hex4()?;
-                    if !(0xdc00..=0xdfff).contains(&second) {
-                        return Err(self.syntax("invalid UTF-16 surrogate pair"));
-                    }
-                    0x10000 + ((first - 0xd800) << 10) + (second - 0xdc00)
-                } else if (0xdc00..=0xdfff).contains(&first) {
-                    return Err(self.syntax("unpaired UTF-16 surrogate"));
-                } else {
-                    first
-                };
-                let c = char::from_u32(scalar).ok_or_else(|| self.syntax("invalid scalar"))?;
-                out.push(c);
-            }
+        out.push(match b {
+            b'"' => 0x22, b'\\' => 0x5c, b'/' => 0x2f,
+            b'b' => 8, b'f' => 12, b'n' => 10, b'r' => 13, b't' => 9,
+            b'u' => self.parse_hex4()? as u16,
             _ => return Err(self.syntax("invalid escape")),
-        }
+        });
         Ok(())
     }
 
@@ -570,8 +574,6 @@ mod tests {
             "1.",
             "1e",
             "\"\\x\"",
-            "\"\\ud800\"",
-            "\"\\ud800\\u0041\"",
         ] {
             assert!(Json::parse(bad).is_err(), "expected rejection: {bad:?}");
         }
@@ -591,4 +593,26 @@ mod tests {
         value.insert("b", Json::Bool(true));
         assert_eq!(value.to_string(), r#"{"a":2,"b":true}"#);
     }
+    #[test]
+    fn exact_utf16_string_values_round_trip_json_escapes() {
+        for units in [vec![0xd800], vec![0xdc00], vec![0xd800, 0xdc00],
+            vec![0xd800, 65], vec![0xdc00, 0xd800], vec![0xfffd],
+            vec![0, 8, 9, 10, 13, 34, 92, 0xd800, 0xd83d, 0xde00]] {
+            let value = Json::string_utf16(units.clone());
+            let wire = value.to_string();
+            let parsed = Json::parse(&wire).unwrap();
+            assert_eq!(parsed.as_utf16().unwrap().as_ref(), units);
+            assert_eq!(parsed, value);
+            assert!(!wire.contains('\u{fffd}') || units.contains(&0xfffd));
+        }
+        // These original rejection fixtures are legal JSON string values.
+        assert_eq!(Json::parse(r#""\ud800""#).unwrap().as_utf16().unwrap().as_ref(), &[0xd800]);
+        assert_eq!(Json::parse(r#""\ud800\u0041""#).unwrap().as_utf16().unwrap().as_ref(), &[0xd800, 65]);
+        for text in ["plain", "é", "😀", "\n\t\"\\"] {
+            let value = Json::string_utf16(text.encode_utf16().collect::<Vec<_>>());
+            assert_eq!(value, Json::String(text.into()));
+            assert_eq!(value.as_str(), Some(text));
+        }
+    }
+
 }

@@ -35,7 +35,7 @@ impl RuntimeBindings {
     /// Root facade parser entry shares the same actual-document fetch gateway
     /// as child and reopened-document scripts.
     pub(crate) fn load_classic_page_script(&self, js: &mut Interpreter,
-        script: &crate::cmd::js::PageScript, base: &str) -> Result<(String, String), Throw> {
+        script: &crate::cmd::js::PageScript, base: &str) -> Result<(amazing_js::value::JsString, String), Throw> {
         if script.kind != crate::cmd::js::ScriptKind::Classic {
             return Err(Throw::type_error("Expected a classic page script"));
         }
@@ -59,7 +59,7 @@ impl RuntimeBindings {
 
     pub(super) fn fetch_document_classic_script(&self, js: &mut Interpreter,
         document: NodeIdx, script: NodeIdx, src: &str,
-        base: &str, resolver: Option<&FrameResourceResolver>) -> Option<(String, String)> {
+        base: &str, resolver: Option<&FrameResourceResolver>) -> Option<(amazing_js::value::JsString, String)> {
         let snapshot = {
             let state = self.state.borrow();
             let loader = state.frames.resource_loader.clone();
@@ -82,7 +82,7 @@ impl RuntimeBindings {
         };
         let Some(loader) = snapshot.0 else {
             let url = ParsedUrl::parse(base).ok()?.resolve(src).ok()?.serialize();
-            return fetch_child_script(src, base, resolver).map(|text| (text, url));
+            return fetch_child_script(src, base, resolver).map(|text| (text.into(), url));
         };
         let url = {
             let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
@@ -98,7 +98,7 @@ impl RuntimeBindings {
             nonce: snapshot.6, integrity: snapshot.7,
             request_mode: snapshot.3, credentials: snapshot.4, referrer_policy: snapshot.5 };
         let response = loader(&request).ok()?;
-        decode_classic_response(response, snapshot.2).ok()
+        decode_classic_response(response, snapshot.2).ok().map(|(text, url)| (text.into(), url))
     }
 }
 

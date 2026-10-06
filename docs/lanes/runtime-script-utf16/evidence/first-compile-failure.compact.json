@@ -1,0 +1,24 @@
+{
+  "source": "01696917f6a80adbef6aa6859c744a321a1bcb54",
+  "job": "ed5a07f7bcb146eaa02cd55156a933b4",
+  "actual_exit": 1,
+  "nextest_exit": 101,
+  "doctests_exit": 0,
+  "counts": {
+    "doctests": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 36
+    },
+    "nextest": null
+  },
+  "corpora": "unstarted after compile failure",
+  "compiler_error_cluster": "34 incorrect root-level type references; remaining str inference diagnostics dependent on those unresolved types",
+  "compiler_raw": {
+    "path": "/tmp/amazing-gate-command-cd2smwbv/output.log",
+    "bytes": 63357,
+    "sha256": "586ae0a4ace05557e6c1fcc0e4d39dd8168590f8f0969fb41d610a922b5f962e"
+  },
+  "successor": "6e4ce98c5c6a94ecc6ecfdb89b60009887a1936f",
+  "original_assertions": "unchanged"
+}

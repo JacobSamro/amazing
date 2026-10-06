@@ -168,6 +168,8 @@ pub struct MockScript {
     pub call_frame_eval_value: EvaluateResult,
     /// Source text returned by `Debugger.getScriptSource`.
     pub script_source: String,
+    /// Exact source override for native UTF-16 transport controls.
+    pub script_source_utf16: Option<Vec<u16>>,
     /// Queued `Debugger.scriptParsed` events.
     pub scripts_parsed: VecDeque<ScriptInfo>,
     /// Queued `Debugger.paused` events.
@@ -387,6 +389,7 @@ impl Default for MockScript {
             step_out_calls: 0,
             call_frame_eval_value: EvaluateResult::value(RemoteObject::number(42.0)),
             script_source: "function f() { return 42; }".into(),
+            script_source_utf16: None,
             scripts_parsed: VecDeque::new(),
             debugger_paused_events: VecDeque::new(),
             profiler_enabled: None,
@@ -1401,6 +1404,11 @@ impl DevToolsSession for MockSession {
 
     fn get_script_source(&mut self, _script_id: &str) -> Result<String, HostError> {
         Ok(self.script.lock().unwrap().script_source.clone())
+    }
+
+    fn get_script_source_utf16(&mut self, _script_id: &str) -> Result<Vec<u16>, HostError> {
+        let script = self.script.lock().unwrap();
+        Ok(script.script_source_utf16.clone().unwrap_or_else(|| script.script_source.encode_utf16().collect()))
     }
 
     fn drain_scripts_parsed(&mut self) -> Vec<ScriptInfo> {

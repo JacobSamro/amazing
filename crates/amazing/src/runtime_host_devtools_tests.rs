@@ -2348,3 +2348,29 @@ fn real_cdp_empty_accessors_project_undefined_without_losing_data_or_getters() {
     shutdown.store(true, Ordering::Relaxed);
     let _ = join.join();
 }
+
+#[test]
+fn native_script_record_execution_and_source_wire_keep_exact_units() {
+    for payload in [vec![0xd800], vec![0xdc00], vec![0xd800, 0xdc00], vec![0xfffd], vec![0xe000]] {
+        let units: Vec<u16> = "var retainedSource='".encode_utf16().chain(payload.iter().copied()).chain("';".encode_utf16()).collect();
+        let mut dom = amazing_dom::Dom::new();
+        let script = dom.create_element_expanded_in(amazing_dom::NodeIdx(0), Some(amazing_html::xml::HTML_NAMESPACE), None, "script").unwrap();
+        let text = dom.create_text(script, "");
+        dom.replace_character_data(text, 0, 0, &units).unwrap();
+        dom.pre_insert(script, amazing_dom::NodeIdx(0), None).unwrap();
+        dom.set_document_scripting_enabled(amazing_dom::NodeIdx(0), true).unwrap();
+        let mut page = PageOwner::from_parsed("exact-source", "https://example.test/source", dom, 800.0).unwrap();
+        assert_eq!(page.scheduler.run_script("retainedSource").unwrap(), amazing_js::value::JsValue::Str(amazing_js::value::JsString::from_units(payload)));
+        assert_eq!(page.scripts.len(), 1);
+        let source = page.get_script_source(&page.scripts[0].script_id).unwrap();
+        assert_eq!(source, units);
+        let wire = Json::Object(vec![("scriptSource".into(), Json::string_utf16(source))]).to_string();
+        let decoded = Json::parse(&wire).unwrap();
+        assert_eq!(decoded.get("scriptSource").unwrap().as_utf16().unwrap().as_ref(), units);
+    }
+    for text in ["plain", "é", "😀", "function scalar() {}"] {
+        let units: Vec<u16> = text.encode_utf16().collect();
+        assert_eq!(script_units_hash(&units), script_hash(text));
+        assert_eq!(script_units_extent(&units), script_extent(text));
+    }
+}

@@ -939,6 +939,7 @@ const RADIO_LIST: &[Member] = &[
     getter("value", O::RadioNodeListValue), setter("value", O::RadioNodeListSetValue),
 ];
 const SCRIPT: &[Member] = &[
+    getter("text", O::ScriptText), setter("text", O::ScriptSetText),
     getter("src", O::ElementSrc), setter("src", O::ElementSetSrc),
     getter("type", O::ResourceType), setter("type", O::ResourceSetType),
     getter("async", O::ScriptAsync), setter("async", O::ScriptSetAsync),

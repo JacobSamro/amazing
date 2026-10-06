@@ -90,11 +90,11 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
             let script_id = request.string_param("scriptId")?;
             let source = session
                 .dev
-                .get_script_source(script_id)
+                .get_script_source_utf16(script_id)
                 .map_err(CdpError::from)?;
             Ok(DispatchOutcome::result(object(vec![(
                 "scriptSource",
-                Json::String(source),
+                Json::string_utf16(source),
             )])))
         }
         other => Err(CdpError::method_not_found(other)),

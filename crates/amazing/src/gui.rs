@@ -269,7 +269,7 @@ mod windows {
 
     struct PageScript {
         src: Option<String>,
-        body: String,
+        body: amazing_js::value::JsString,
     }
 
     struct GuiState {
@@ -980,17 +980,12 @@ mod windows {
 
     fn collect_scripts(dom: &Dom, node: NodeIdx, scripts: &mut Vec<PageScript>) {
         if dom.name(node) == Some("script") {
-            let mut source = String::new();
-            for child in dom.children(node) {
-                if let NodeKind::Text { data } = &dom.get(child).kind {
-                    source.push_str(data);
-                }
-            }
+            let source = crate::runtime_binding_host::script_utf16::script_child_text(dom, node).unwrap_or_else(|| "".into());
             let src = dom
                 .attrs_of(node)
                 .and_then(|attrs| attrs.iter().find(|(name, _)| name == "src"))
                 .map(|(_, value)| value.clone());
-            if src.is_some() || !source.trim().is_empty() {
+            if src.is_some() || crate::runtime_binding_host::script_utf16::has_script_source(&source) {
                 scripts.push(PageScript { src, body: source });
             }
             return;
@@ -1084,7 +1079,7 @@ mod windows {
                             .map_err(|error| format!("external script {src}: {error}"))?;
                     response
                         .text()
-                        .ok_or_else(|| format!("external script {src} was not text"))?
+                        .ok_or_else(|| format!("external script {src} was not text"))?.into()
                 }
                 None => script.body,
             };
