@@ -1,0 +1,42 @@
+{
+  "published_base": "68bc5a1c304c68b6fa59c5fcb671c027707b9079",
+  "combined_source": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+  "qualified_sampler": "9d373827ec50e2c5ea0b5304ab6dcc86e1a7a8e1",
+  "own_source": "397d17859b5912d0630b21a9c739eb8be63a88e7",
+  "own_projection_exact": true,
+  "sampler_projection_exact": true,
+  "no_other_changes": true,
+  "owned_paths": [
+    "crates/amazing-paint/src/paint.rs",
+    "crates/amazing-shell-gpui/smoke/continuation.actions",
+    "crates/amazing-shell-gpui/smoke/font-display.actions",
+    "crates/amazing-shell-gpui/smoke/navigation.actions",
+    "crates/amazing-shell-gpui/smoke/navigation_actions.py",
+    "crates/amazing-shell-gpui/smoke/navigation_atspi.py",
+    "crates/amazing-shell-gpui/smoke/navigation_fixture.py",
+    "crates/amazing-shell-gpui/smoke/navigation_gate.sh",
+    "crates/amazing-shell-gpui/smoke/navigation_windows.sh",
+    "crates/amazing-shell-gpui/src/compositor_presenter.rs",
+    "crates/amazing-shell-gpui/src/engine_compositor.rs",
+    "crates/amazing-shell-gpui/src/engine_viewport.rs",
+    "crates/amazing-shell-gpui/src/engine_viewport/page_font_loader.rs",
+    "crates/amazing-shell-gpui/src/main.rs",
+    "crates/amazing-shell-gpui/src/navigation_acquisition.rs",
+    "crates/amazing-shell-gpui/src/navigation_tests.rs",
+    "crates/amazing-shell-gpui/src/product_navigation.rs",
+    "crates/amazing-shell-gpui/src/product_navigation/workers.rs",
+    "crates/amazing-shell-gpui/src/session_state.rs"
+  ],
+  "sampler_paths": [
+    "crates/amazing-compositor/evidence/quad-sampler/after-workspace.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/before-workspace.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/comparison.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/shipping-source-projection.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/source-command.compact.json",
+    "crates/amazing-compositor/examples/cached_quad_trace.rs",
+    "crates/amazing-compositor/src/prepared_sampling.rs",
+    "crates/amazing-compositor/src/property.rs",
+    "crates/amazing-compositor/src/quad.rs",
+    "docs/lanes/compositor-quad-sampler-source.md"
+  ]
+}

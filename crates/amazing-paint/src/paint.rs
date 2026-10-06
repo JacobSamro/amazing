@@ -1728,6 +1728,11 @@ fn paint_line_glyphs(
             continue;
         }
         if let Some(mark) = images.text_emphasis(glyph.node) {
+            let visibility = text.glyph_visibility(glyph.font).map_err(|error| {
+                if error == amazing_text::TextError::ResourceLimit { crate::RasterError::ResourceLimit }
+                else { crate::RasterError::UnsupportedText }
+            })?;
+            if visibility == amazing_text::GlyphVisibility::InvisibleFallback { continue; }
             paint_emphasis_mark(surface, line, glyph, mark, clip);
         }
     }

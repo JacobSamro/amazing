@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "backend": "pooled",
+  "source_commit": "5480caecaf2ddd50c299352685fad5636f2a1095",
+  "groups": [
+    [
+      0,
+      4,
+      8,
+      12
+    ],
+    [
+      1,
+      5,
+      9,
+      13
+    ],
+    [
+      2,
+      6,
+      10,
+      14
+    ],
+    [
+      3,
+      7,
+      11,
+      15
+    ]
+  ],
+  "shards": 16,
+  "boxes": 4,
+  "jobs_per_shard": 4,
+  "timeout_seconds": 60,
+  "runner_sha256": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83",
+  "started_ns": 1791295495614410000,
+  "pools": [
+    {
+      "pool": 0,
+      "shards": [
+        0,
+        4,
+        8,
+        12
+      ],
+      "observer_exit": 0,
+      "state": "TERMINAL",
+      "native_receipt": "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/product-independent-current-initial-20261006T140455-1791295495613681000/pool-0.native.summary.json",
+      "actual_exit": 0,
+      "runner_exit": 0,
+      "endpoint": "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/product-independent-current-initial-20261006T140455-1791295495613681000/pool-0.endpoint.manifest.json",
+      "ready": true,
+      "compact_fetch_exit": 0
+    },
+    {
+      "pool": 1,
+      "shards": [
+        1,
+        5,
+        9,
+        13
+      ],
+      "observer_exit": 0,
+      "state": "TERMINAL",
+      "native_receipt": "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/product-independent-current-initial-20261006T140455-1791295495613681000/pool-1.native.summary.json",
+      "actual_exit": 0,
+      "runner_exit": 0,
+      "endpoint": "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/product-independent-current-initial-20261006T140455-1791295495613681000/pool-1.endpoint.manifest.json",
+      "ready": true,
+      "compact_fetch_exit": 0
+    },
+    {
+      "pool": 2,
+      "shards": [
+        2,
+        6,
+        10,
+        14
+      ],
+      "observer_exit": 0,
+      "state": "TERMINAL",
+      "native_receipt": "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/product-independent-current-initial-20261006T140455-1791295495613681000/pool-2.native.summary.json",
+      "actual_exit": 0,
+      "runner_exit": 0,
+      "endpoint": "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/product-independent-current-initial-20261006T140455-1791295495613681000/pool-2.endpoint.manifest.json",
+      "ready": true,
+      "compact_fetch_exit": 0
+    },
+    {
+      "pool": 3,
+      "shards": [
+        3,
+        7,
+        11,
+        15
+      ],
+      "observer_exit": 0,
+      "state": "TERMINAL",
+      "native_receipt": "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/product-independent-current-initial-20261006T140455-1791295495613681000/pool-3.native.summary.json",
+      "actual_exit": 0,
+      "runner_exit": 0,
+      "endpoint": "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/product-independent-current-initial-20261006T140455-1791295495613681000/pool-3.endpoint.manifest.json",
+      "ready": true,
+      "compact_fetch_exit": 0
+    }
+  ],
+  "finished_ns": 1791296461560545000
+}

@@ -1,0 +1,322 @@
+{
+  "schema": 1,
+  "qualification_source": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+  "recorded_published_base": "68bc5a1c304c68b6fa59c5fcb671c027707b9079",
+  "qualified_sampler_prerequisite": "9d373827ec50e2c5ea0b5304ab6dcc86e1a7a8e1",
+  "owned_shipping_projection": "397d17859b5912d0630b21a9c739eb8be63a88e7",
+  "original_before_source": "3d49ae6d6f42a293c28720337c8be2ef09ba7f6c",
+  "actual_exit": 0,
+  "authenticated_compact_fetch_exit": 0,
+  "window_proof_fetch_exits": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "workspace": {
+    "passed": 5507,
+    "skipped": 17,
+    "failed": 0
+  },
+  "workspace_doctests": {
+    "passed": 39,
+    "failed": 0,
+    "ignored": 0
+  },
+  "gpui": {
+    "before": 109,
+    "after": 123,
+    "gained": 14,
+    "lost": []
+  },
+  "actual_window_groups": {
+    "groups": 10,
+    "device_scales": [
+      1,
+      2
+    ],
+    "failures": 0,
+    "assertions": 602,
+    "original_find_deadline_seconds": 8
+  },
+  "pinned_render": {
+    "directories": 20,
+    "selected": 2214,
+    "before_pass": 1328,
+    "after_pass": 1328,
+    "mismatch": 886,
+    "lost": [],
+    "gained": [],
+    "changed": []
+  },
+  "retention": {
+    "method": "strict-hardlink",
+    "elf": 1431,
+    "artifacts": 1472,
+    "logical_bytes": 8629788640,
+    "source_and_generated_retained": true,
+    "storage_exit": 0
+  },
+  "diagnostic_fetch_note": "Post-terminal nextest diagnostic is not in immutable completed-job catalog: captured fetch rejected exit3; supported ordinary public compact-only fetch succeeded0 on same existing endpoint, collector authenticates original phase raw hash/source/exits. No gate/test rerun.",
+  "files": {
+    "actual-windows.phase.manifest.json": {
+      "bytes": 4089,
+      "sha256": "fa31a3655591726a144af593a12227e7dc5791c65824b1203d8ed463f7c8f74d"
+    },
+    "composition-source-projection.summary.json": {
+      "bytes": 2208,
+      "sha256": "2f718ff9595b79178f0552e754bbfe6ed311db7484c69ac4adc410af7302de64"
+    },
+    "continuation-scale1.compact.json": {
+      "bytes": 3695,
+      "sha256": "868a6eaaf13bbc9e12e1f245844bc028af3af715e1801cbfd354c540521333bf"
+    },
+    "continuation-scale1.window.manifest.json": {
+      "bytes": 5801,
+      "sha256": "24752a89d1e63823bfe7292cbf4378a122151df218e8c21597a018029e192a89"
+    },
+    "continuation-scale2.compact.json": {
+      "bytes": 3695,
+      "sha256": "51b1a50c8b89c33aa6be3f631d63583af6fe1697690136b05fe084d3ec5bd8f6"
+    },
+    "continuation-scale2.window.manifest.json": {
+      "bytes": 5795,
+      "sha256": "3c160a4330e23d0e82fe2ab9b4739b3b74581c03f63c7dfdb3c8c9e38cade34d"
+    },
+    "css-CSS2-floats.compact.json": {
+      "bytes": 5783,
+      "sha256": "15c501fef7ef51eab533a79469bdca78c89ab19863ed207cf2b5765de2470cf0"
+    },
+    "css-CSS2-normal-flow.compact.json": {
+      "bytes": 5227,
+      "sha256": "7adfab3d01dbde6c5ac280fa34e92a975cf02d95c1c2b09f5b1277f206ea1748"
+    },
+    "css-CSS2-positioning.compact.json": {
+      "bytes": 1836,
+      "sha256": "33a6d83920920940d76b21c87aecc6550e40bef80251761f1b05c101d0248340"
+    },
+    "css-css-backgrounds.compact.json": {
+      "bytes": 20996,
+      "sha256": "a4b1ee57ef6d50fef4e1ba14ba7a5597ddd31f2db15c808df6389ceafb8152b6"
+    },
+    "css-css-cascade.compact.json": {
+      "bytes": 3259,
+      "sha256": "43bda7f8798c78e4e88e3292fc23cdbb95e46bce2301d2b52f0a854b17c55577"
+    },
+    "css-css-color.compact.json": {
+      "bytes": 24099,
+      "sha256": "dc165a2ae64eaa90211b9875f09a85add9c32fd0de4c3b8c36c1e358d55c4863"
+    },
+    "css-css-conditional.compact.json": {
+      "bytes": 10258,
+      "sha256": "cf62a3d69785301e3a32c4ad8f1cf35de3020477cb64d95fc802ee6918efb1ea"
+    },
+    "css-css-contain.compact.json": {
+      "bytes": 29611,
+      "sha256": "6a0e51efffa999e1d4c3e85a576d515d05db38c62dc8f14f169542d8d80ee796"
+    },
+    "css-css-display.compact.json": {
+      "bytes": 5363,
+      "sha256": "54c886b01a917aabb5cecf21a2785f2e3df8696cefe445a33b5e1190ff36f704"
+    },
+    "css-css-fonts.compact.json": {
+      "bytes": 4385,
+      "sha256": "aca6c4e0eb1ba28b2b29130b3229df023cd0dc4015d4a291619a1f93bea58533"
+    },
+    "css-css-images.compact.json": {
+      "bytes": 20424,
+      "sha256": "8cd900e52088179803087131c25015d1de43f743953cf6d8d7d91cefa7e2bb80"
+    },
+    "css-css-overflow.compact.json": {
+      "bytes": 49987,
+      "sha256": "990e3354542b398a40c7dc5ecccc41ef02fbe136c945657a586e4d1abb2089dd"
+    },
+    "css-css-position.compact.json": {
+      "bytes": 9341,
+      "sha256": "49fec57deb33c46953d49301b4c53a169db82a0a185d40821aaa50ff024e82d8"
+    },
+    "css-css-ruby.compact.json": {
+      "bytes": 8610,
+      "sha256": "c5a0da2369d7ce570142fab2e24c9e9a1abb5a15e8b90c688465e8a04e2bff6c"
+    },
+    "css-css-shadow.compact.json": {
+      "bytes": 5331,
+      "sha256": "34581ac6738294a218b50d32333466e8caa3cd9518ce1ebfe3c7018a4b2bc320"
+    },
+    "css-css-sizing.compact.json": {
+      "bytes": 21248,
+      "sha256": "bf592178c12337b67a7cfbd64e631eaa3f2d8f01725e73d2a1faa10ddbd2dd3f"
+    },
+    "css-css-tables.compact.json": {
+      "bytes": 11756,
+      "sha256": "fbb9aa874a367b8267dbf1d46d1ef4ad6af65e37c282b699c72a855b576aadd9"
+    },
+    "css-css-transforms.compact.json": {
+      "bytes": 47664,
+      "sha256": "2efef3bfc295c289c380b17c556c911d7e8ba97ed39fb40febc8c59ff8fb2aef"
+    },
+    "css-css-viewport.compact.json": {
+      "bytes": 11612,
+      "sha256": "7a408106041e21d520defc847bcfbec9ca3637a1e3655e06d4bff513b8c2d74a"
+    },
+    "css-selectors.compact.json": {
+      "bytes": 11207,
+      "sha256": "fea5d7fbd904c12f4f2656aacb8a770ef0d004773537f902f2f7002c869d9305"
+    },
+    "doctest-counts.summary.json": {
+      "bytes": 4956,
+      "sha256": "9a1e4164cff10f8569654220b04a8e0ceee30b07c117badb8d6d3dfbcce86ed3"
+    },
+    "doctests.phase.manifest.json": {
+      "bytes": 1570,
+      "sha256": "c2f7cea1f4556b6f7a922cee42b82b22f73fd93c7130de64402f580ccd46ddfa"
+    },
+    "endpoint.manifest.json": {
+      "bytes": 621,
+      "sha256": "14af392a7a0b45cccc224ec1055c25eb5f3fa1fa2fa59dc926306e8db7cd0b07"
+    },
+    "font-display-scale1.compact.json": {
+      "bytes": 5748,
+      "sha256": "6ddac7a44193a7de6c3d49aa445d49253e261262c38477fe9d910ed6efbcddf0"
+    },
+    "font-display-scale1.window.manifest.json": {
+      "bytes": 15090,
+      "sha256": "79a4bdec9dde5d053124d3322ae439712f4e5d9bd91bd2841c8fddcd1bc2419b"
+    },
+    "font-display-scale2.compact.json": {
+      "bytes": 5748,
+      "sha256": "601dd68b2dc74766adbcbfa4650e100fb9cf054cc327ddc1239d9740a79ea217"
+    },
+    "font-display-scale2.window.manifest.json": {
+      "bytes": 15074,
+      "sha256": "9425565aa83fb41262775bba998caa0fad56eb49cddb1277746062fa7d6d1786"
+    },
+    "freeze.manifest.json": {
+      "bytes": 1452,
+      "sha256": "e30aa439d6e4fd6448293b42dfa1c957fdb99c9b21e504a475c43d6f171c60c2"
+    },
+    "gpui-build.phase.manifest.json": {
+      "bytes": 1790,
+      "sha256": "64a4f1bdf0d65b266650b9bb872863aadd4f7e2e24da08654c500913830a1810"
+    },
+    "gpui-nextest.phase.manifest.json": {
+      "bytes": 2941,
+      "sha256": "0305d9336ee7c89bde77de3ae4455f71196e7130cdb541b0f7744528e845120d"
+    },
+    "gpui-pass-set.compact.json": {
+      "bytes": 10320,
+      "sha256": "b741adc12bd10c7d10dfc9cf04f99184165907a43f088b5ad01f2225390f343c"
+    },
+    "hardlink-preflight.manifest.json": {
+      "bytes": 240,
+      "sha256": "169fbecfc8e4f2a95e8a20b64da601550cd8abb047b1ec5c0c9be1ca22c01b2c"
+    },
+    "inspection.summary.json": {
+      "bytes": 20809,
+      "sha256": "09df17bb79c7c81e665486330cfac0212a21f52d085f46b3979bd834b9a1733d"
+    },
+    "navigation-scale1.compact.json": {
+      "bytes": 6881,
+      "sha256": "7e17cd3a9cf72d01cb053b8088abd6b257aa31674df52f465039f77722eb190b"
+    },
+    "navigation-scale1.window.manifest.json": {
+      "bytes": 16862,
+      "sha256": "49e96a8105e339c2b94fdf0dfcdeb8ed7bd04134011c486c5325933cdb04c0e3"
+    },
+    "navigation-scale2.compact.json": {
+      "bytes": 6881,
+      "sha256": "b79c1674fa736cd2c69b4cee10dab6e2e5e50d232d8fd029d20b5e5d3c14d1eb"
+    },
+    "navigation-scale2.window.manifest.json": {
+      "bytes": 16844,
+      "sha256": "7a251b99670ba2c02ede04c4e64eb4c42cbb4cf32c8664989f3ffd4c03d520fa"
+    },
+    "original-gpui-pass-set.compact.json": {
+      "bytes": 13628,
+      "sha256": "544bb415e381529cfbb5027f09487a37429728f908b5e66666cbf992fafe50b7"
+    },
+    "pinned-render20.phase.manifest.json": {
+      "bytes": 2157,
+      "sha256": "4532c50c1e8fe6d570b3402d3a198b630de9400407b336ec9379e502b57e20cf"
+    },
+    "pre-engine-capacity.summary.json": {
+      "bytes": 681,
+      "sha256": "ae0ecff1815c0dd08f28dafda64a1276ca60cac939b4451054e0b134ac86068c"
+    },
+    "product-smoke-scale1.compact.json": {
+      "bytes": 4366,
+      "sha256": "47ed0810ff23d13cf9450c5be18a502d0ed60fc50a51a36b85a9eee0aebfcb35"
+    },
+    "product-smoke-scale1.window.manifest.json": {
+      "bytes": 18819,
+      "sha256": "32f37b3dc0143ab32295f5cb009ea2c0118f333016d9bed4cabd3330afa7194c"
+    },
+    "product-smoke-scale2.compact.json": {
+      "bytes": 4366,
+      "sha256": "b10621e0b65d2cbaa9da848d4be8cc62acc967ec1e26cbe3167d21db114a5410"
+    },
+    "product-smoke-scale2.window.manifest.json": {
+      "bytes": 18801,
+      "sha256": "de9cf0035d274b8b36663cdc5567ec503d064edf0e793e0bcbfbaa182817b67c"
+    },
+    "raw-admission.manifest.json": {
+      "bytes": 170,
+      "sha256": "82c85f43ff75b5ebfdd12d0029271c25251c2644fc8a14e82adb3197b527452a"
+    },
+    "render.summary.json": {
+      "bytes": 216904,
+      "sha256": "b40ceff72f5d9c6143b7d066188a0b65e4423abc61ff5d3f45a7ea347c944823"
+    },
+    "session-custody-controls.phase.manifest.json": {
+      "bytes": 2016,
+      "sha256": "34fe3d64ba151bab952f42d39ac3147dfae6596d23c68baffe11c1bd992d6587"
+    },
+    "session.manifest.json": {
+      "bytes": 2812,
+      "sha256": "a9073d40d787c7ab9c53cc2970542d5b6615c49e0760242bc531ba914c4fd5ee"
+    },
+    "source-input.manifest.json": {
+      "bytes": 547,
+      "sha256": "e47208abe5f1d7baa6a0f22b9e40d9bc9986ee199d5ce6f81e080e42c733ab2b"
+    },
+    "status.summary.json": {
+      "bytes": 1441,
+      "sha256": "5c5bb0939b64fe3ee331b2854fdcdb8db9e472680c4ea57817e0d292f102b5a6"
+    },
+    "storage.summary.json": {
+      "bytes": 3900,
+      "sha256": "13a84ef272a8b05fd7fc0a827c13975d5ab175f025b552b243ce187483f9cafb"
+    },
+    "viewport-resize-scale1.compact.json": {
+      "bytes": 2052,
+      "sha256": "dd91a71ff35aba27fc457eb572ffbc1ebc4dcef7d1646d181bca265360132df7"
+    },
+    "viewport-resize-scale1.window.manifest.json": {
+      "bytes": 7592,
+      "sha256": "d85e32d9dc06e3bccc442213e129ee1be39788a128b73cc90870fd22c52443b9"
+    },
+    "viewport-resize-scale2.compact.json": {
+      "bytes": 2052,
+      "sha256": "556b9d49ecc16d36e25fa30742363b8cc9aeb167f04b7845ec33a73cd1409a4f"
+    },
+    "viewport-resize-scale2.window.manifest.json": {
+      "bytes": 7588,
+      "sha256": "609f1517764d7f6cc1a19db2f2807390837b04f9d27394521fcd2b49b8e5d01f"
+    },
+    "window-proof-controls.phase.manifest.json": {
+      "bytes": 1748,
+      "sha256": "dd9c778d52e6ecbe6dfd318ff887caab942d0dd881638ed226ca35f2c105b0ed"
+    },
+    "workspace.phase.manifest.json": {
+      "bytes": 2620,
+      "sha256": "82c4bf356fee3406165bb69afa17a4ffa480541a3026e9b639b60290271f65ba"
+    }
+  },
+  "limits": {
+    "max_file": 216904,
+    "total_before_this_summary": 781367
+  },
+  "scope": "Responsive cancellable navigation, same-runtime resource/font continuation, typed visibility/emphasis, Find ownership/single presentation. Authored synchronous JS network and physical OS cancellation bounds unchanged; complete browser goal remains unfinished."
+}

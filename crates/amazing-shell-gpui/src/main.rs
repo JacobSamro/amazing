@@ -10,6 +10,8 @@ mod compositor_presenter;
 mod playback_clock;
 mod session_state;
 mod secure_video;
+mod navigation_acquisition;
+mod product_navigation;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -29,6 +31,7 @@ use engine_viewport::{EngineViewport, FormRequest, PageRuntime, RuntimeUpdate, V
 use viewport_metrics::ViewportMetrics;
 use playback_clock::{PlaybackUpdate, VideoPlaybackClock};
 use session_state::BrowserSession;
+use product_navigation::{PendingNavigation, HistoryCommit};
 use secure_video::{FRAME_EVENT_CAPACITY, SecureVideoEvent, spawn_secure_video_source};
 use amazing_compositor::{ScrollAxis, ScrollBehavior, ScrollInput, ScrollKey};
 
@@ -57,7 +60,9 @@ actions!(
         ToggleBookmark,
         ShowDownloads,
         DismissChrome,
-        FindInPage
+        FindInPage,
+        NextBrowserTab,
+        PreviousBrowserTab
     ]
 );
 
@@ -146,11 +151,21 @@ impl Tab {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChromeInputOwner {
+    Document,
+    Address,
+    Find,
+}
+
 struct BrowserShell {
     last_viewport_receipt: Option<(ViewportMetrics, (f32, f32))>,
     viewport_metrics: ViewportMetrics,
     tabs: Vec<Tab>,
     page_runtimes: Vec<Option<PageRuntime>>,
+    pending_navigation: Vec<Option<PendingNavigation>>,
+    next_navigation_id: u64,
+    last_navigation_trace: String,
     video_frames: Vec<EngineViewport>,
     video_clock: VideoPlaybackClock,
     video_frame_index: usize,
@@ -179,6 +194,7 @@ struct BrowserShell {
     page_input: Option<PageInputState>,
     find_focus: Option<FocusHandle>,
     find_open: bool,
+    chrome_input_owner: ChromeInputOwner,
     find_query: String,
     find_matches: Vec<amazing_a11y::AxRect>,
     find_active: usize,
@@ -277,6 +293,9 @@ impl BrowserShell {
                 ),
             ],
             page_runtimes: Vec::from([None, None, None, None, None, None]),
+            pending_navigation: (0..6).map(|_| None).collect(),
+            next_navigation_id: 1,
+            last_navigation_trace: String::new(),
             video_frames: EngineViewport::video_demo_frames().expect("decode GPUI video demo"),
             video_clock: VideoPlaybackClock::new((0..6).map(|index| index * 500).collect(), 0)
                 .expect("valid demo video timeline"),
@@ -306,6 +325,7 @@ impl BrowserShell {
             page_input: None,
             find_focus,
             find_open: false,
+            chrome_input_owner: ChromeInputOwner::Document,
             find_query: String::new(),
             find_matches: Vec::new(),
             find_active: 0,
@@ -320,8 +340,9 @@ impl BrowserShell {
     fn select_tab(&mut self, index: usize) {
         if self.tabs.get(index).is_some_and(|tab| tab.open) {
             self.active = index;
-            self.address = self.tabs[index].url.clone();
-            self.committed_address = self.address.clone();
+            self.committed_address = self.tabs[index].url.clone();
+            self.address = self.pending_navigation[index].as_ref()
+                .map_or_else(|| self.committed_address.clone(), |pending| pending.address.clone());
             self.address_selected = false;
             self.downloads_open = false;
             self.menu_open = false;
@@ -337,6 +358,7 @@ impl BrowserShell {
             // `find_is_available`), which is what SHELL-L9's product smoke
             // first surfaced as an apparent input freeze.
             self.find_open = false;
+            self.chrome_input_owner = ChromeInputOwner::Document;
             self.find_query.clear();
             self.find_matches.clear();
             self.find_active = 0;
@@ -360,6 +382,7 @@ impl BrowserShell {
             Some(EngineViewport::new_tab()),
         ));
         self.page_runtimes.push(None);
+        self.pending_navigation.push(None);
         self.select_tab(self.tabs.len() - 1);
         self.address.clear();
         self.address_selected = true;
@@ -369,6 +392,8 @@ impl BrowserShell {
         if !self.tabs.get(index).is_some_and(|tab| tab.open) {
             return;
         }
+        self.pending_navigation[index] = None;
+        self.page_runtimes[index] = None;
         self.tabs[index].open = false;
         if index != self.active {
             return;
@@ -403,7 +428,19 @@ impl BrowserShell {
             .set_bookmarked(&tab.url, tab.bookmarked);
     }
 
+    // Native keyboard focus stays on the surviving shell element. The logical
+    // chrome owner routes genuine text/key events once, even when an absolute
+    // find bar or address child is rebuilt during reflow at another density.
+    fn activate_chrome_input(&mut self, owner: ChromeInputOwner, window: &mut Window, cx: &mut Context<Self>) {
+        self.chrome_input_owner = owner;
+        if let Some(focus) = self.shell_focus.as_ref() { focus.focus(window, cx); }
+        if std::env::var_os("AMAZING_NAVIGATION_TRACE").is_some() {
+            eprintln!("AMAZING_CHROME_OWNER owner={owner:?}");
+        }
+    }
+
     fn focus_shell(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.chrome_input_owner = ChromeInputOwner::Document;
         if let Some(focus) = self.shell_focus.as_ref() {
             focus.focus(window, cx);
         }
@@ -411,9 +448,7 @@ impl BrowserShell {
     }
 
     fn focus_address(&mut self, _: &FocusAddress, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(focus) = self.address_focus.as_ref() {
-            focus.focus(window, cx);
-        }
+        self.activate_chrome_input(ChromeInputOwner::Address, window, cx);
         self.address_selected = true;
         self.downloads_open = false;
         self.menu_open = false;
@@ -424,10 +459,21 @@ impl BrowserShell {
 
     fn new_browser_tab(&mut self, _: &NewBrowserTab, window: &mut Window, cx: &mut Context<Self>) {
         self.add_tab();
-        if let Some(focus) = self.address_focus.as_ref() {
-            focus.focus(window, cx);
-        }
+        self.activate_chrome_input(ChromeInputOwner::Address, window, cx);
         cx.notify();
+    }
+
+    fn step_tab(&mut self, delta: isize) {
+        let open: Vec<usize> = self.tabs.iter().enumerate().filter_map(|(index, tab)| tab.open.then_some(index)).collect();
+        let Some(position) = open.iter().position(|index| *index == self.active) else { return; };
+        let next = (position as isize + delta).rem_euclid(open.len() as isize) as usize;
+        self.select_tab(open[next]);
+    }
+    fn next_browser_tab(&mut self, _: &NextBrowserTab, window: &mut Window, cx: &mut Context<Self>) {
+        self.step_tab(1); self.focus_shell(window, cx); cx.notify();
+    }
+    fn previous_browser_tab(&mut self, _: &PreviousBrowserTab, window: &mut Window, cx: &mut Context<Self>) {
+        self.step_tab(-1); self.focus_shell(window, cx); cx.notify();
     }
 
     fn close_browser_tab(
@@ -483,6 +529,7 @@ impl BrowserShell {
             return;
         }
         self.find_open = true;
+        self.chrome_input_owner = ChromeInputOwner::Find;
         self.find_query.clear();
         self.find_matches.clear();
         self.find_active = 0;
@@ -490,13 +537,12 @@ impl BrowserShell {
         self.menu_open = false;
         self.site_info_open = false;
         self.profile_open = false;
-        if let Some(focus) = self.find_focus.as_ref() {
-            focus.focus(window, cx);
-        }
+        self.activate_chrome_input(ChromeInputOwner::Find, window, cx);
         cx.notify();
     }
 
     fn close_find(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.chrome_input_owner = ChromeInputOwner::Document;
         self.find_open = false;
         self.find_query.clear();
         self.find_matches.clear();
@@ -597,6 +643,9 @@ impl BrowserShell {
     }
 
     fn on_find_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if std::env::var_os("AMAZING_NAVIGATION_TRACE").is_some() {
+            eprintln!("AMAZING_CHROME_KEY target=find key={:?} char={:?} control={} platform={}", event.keystroke.key, event.keystroke.key_char, event.keystroke.modifiers.control, event.keystroke.modifiers.platform);
+        }
         cx.stop_propagation();
         match event.keystroke.key.as_str() {
             "enter" => {
@@ -641,6 +690,7 @@ impl BrowserShell {
             self.close_find(window, cx);
             return;
         }
+        self.stop_navigation();
         self.focus_shell(window, cx);
         cx.notify();
     }
@@ -651,6 +701,9 @@ impl BrowserShell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.find_open && self.chrome_input_owner == ChromeInputOwner::Find {
+            self.on_find_key_down(event, window, cx); return;
+        }
         cx.stop_propagation();
         match event.keystroke.key.as_str() {
             "a" if event.keystroke.modifiers.control => {
@@ -846,9 +899,18 @@ impl BrowserShell {
     fn on_shell_key_down(
         &mut self,
         event: &KeyDownEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // A dynamic chrome element can be rebuilt while its request/page is
+        // reflowing. Preserve the explicit input owner, rather than dropping
+        // typed text when GPUI routes that event through the surviving root.
+        if self.find_open && self.chrome_input_owner == ChromeInputOwner::Find {
+            self.on_find_key_down(event, window, cx); return;
+        }
+        if self.chrome_input_owner == ChromeInputOwner::Address {
+            self.on_address_key_down(event, window, cx); return;
+        }
         self.reconcile_page_input(self.active);
         if self.page_input.is_none() {
             let key = match event.keystroke.key.as_str() {
@@ -932,20 +994,156 @@ impl BrowserShell {
     }
 
     fn commit_request(&mut self, address: String, method: &str, body: Vec<u8>) {
-        self.load_request(&address, method, body);
-        let tab = &mut self.tabs[self.active];
-        if tab.history[tab.history_index] != self.committed_address {
-            tab.history.truncate(tab.history_index + 1);
-            tab.history.push(self.committed_address.clone());
-            tab.history_index = tab.history.len() - 1;
+        self.start_navigation(address, method, body, HistoryCommit::Push);
+    }
+
+    fn start_navigation(&mut self, address: String, method: &str, body: Vec<u8>, history: HistoryCommit) {
+        let index = self.active;
+        self.pending_navigation[index] = None; // Drop cancels every actual outstanding transport.
+        self.page_input = None;
+        self.address = address.clone();
+        self.address_selected = false;
+        let id = self.next_navigation_id;
+        self.next_navigation_id = self.next_navigation_id.checked_add(1).expect("navigation identity exhausted");
+        if address == "amazing://status" || address == "amazing://newtab" {
+            let page = EngineViewport::load_request_with_metrics(&address, method, body,
+                self.session.clone(), self.viewport_metrics);
+            self.finish_navigation(index, id, &address, history, page);
+        } else {
+            self.pending_navigation[index] = Some(PendingNavigation::new(id, address, method, body, history, &self.session));
         }
-        let history_len = tab.history.len();
-        if let Some(runtime) = self.page_runtimes[self.active].as_mut() {
-            runtime.set_history_length(history_len);
+    }
+
+    fn stop_navigation(&mut self) {
+        if let Some(pending) = self.pending_navigation[self.active].take() {
+            let committed = pending.committed;
+            drop(pending); // Freeze cancellation before asking the same page to expose failed-font fallback.
+            if committed { self.refresh_stopped_font_display(self.active); }
+            self.address = self.tabs[self.active].url.clone();
+            self.address_selected = false;
         }
-        self.session
-            .borrow_mut()
-            .record_history(&self.committed_address);
+    }
+
+    fn refresh_stopped_font_display(&mut self, index: usize) {
+        let tab = &mut self.tabs[index];
+        let Some(viewport) = tab.viewport.take() else { return };
+        let mut page = engine_viewport::LoadedPage { viewport, final_address: tab.url.clone(),
+            title: Some(tab.title.clone()), favicon: tab.favicon.take(), runtime: self.page_runtimes[index].take() };
+        let result = if let Some(replay) = page.acquisition_replay() {
+            navigation_acquisition::with_replay(replay, || EngineViewport::refresh_initial_page(&mut page, self.viewport_metrics))
+        } else { EngineViewport::refresh_initial_page(&mut page, self.viewport_metrics) };
+        let tab = &mut self.tabs[index]; tab.viewport = Some(page.viewport); tab.favicon = page.favicon;
+        if let Some(title) = page.title { tab.title = title; } self.page_runtimes[index] = page.runtime;
+        if let Err(error) = result { self.record_render_failure(index, error, self.viewport_metrics); }
+    }
+
+    fn poll_navigation(&mut self) {
+        for index in 0..self.tabs.len() {
+            if !self.tabs[index].open { continue; }
+            let Some(mut pending) = self.pending_navigation[index].take() else { continue };
+            let already_committed = pending.committed;
+            if already_committed {
+                let tab = &mut self.tabs[index];
+                pending.lend_visible_page(engine_viewport::LoadedPage {
+                    viewport: tab.viewport.take().expect("published loading page"),
+                    final_address: tab.url.clone(), title: Some(tab.title.clone()),
+                    favicon: tab.favicon.take(), runtime: self.page_runtimes[index].take(),
+                });
+            }
+            let result = pending.poll(&self.session, self.viewport_metrics);
+            let terminal = result.is_some() && (!pending.committed || already_committed);
+            if already_committed {
+                let page = match result {
+                    Some(Ok(page)) => Some(page),
+                    Some(Err(error)) => {
+                        self.record_render_failure(index, error, self.viewport_metrics);
+                        pending.take_visible_page()
+                    },
+                    None => pending.take_visible_page(),
+                };
+                if let Some(page) = page {
+                    let tab = &mut self.tabs[index];
+                    tab.viewport = Some(page.viewport); tab.favicon = page.favicon;
+                    if let Some(title) = page.title { tab.title = title; }
+                    self.page_runtimes[index] = page.runtime;
+                }
+            } else if let Some(result) = result {
+                self.finish_navigation(index, pending.id, &pending.address, pending.history, result);
+            }
+            if !terminal { self.pending_navigation[index] = Some(pending); }
+        }
+    }
+
+    fn trace_navigation_state(&mut self) {
+        if std::env::var_os("AMAZING_NAVIGATION_TRACE").is_none() { return; }
+        let tabs = self.tabs.iter().enumerate().map(|(index, tab)| {
+            let pending = self.pending_navigation[index].as_ref();
+            format!("{{\"index\":{index},\"open\":{},\"url\":{:?},\"title\":{:?},\"pending\":{},\"request\":{},\"history_index\":{},\"history_len\":{}}}",
+                tab.open, tab.url, tab.title, pending.is_some(), pending.map_or(0, |pending| pending.id), tab.history_index, tab.history.len())
+        }).collect::<Vec<_>>().join(",");
+        let fonts = self.page_runtimes[self.active].as_ref().map(PageRuntime::font_display_trace)
+            .or_else(|| self.tabs[self.active].viewport.as_ref().map(EngineViewport::font_display_trace)).unwrap_or_else(|| "[]".into());
+        let decoded_images = self.tabs[self.active].viewport.as_ref().map_or(0, EngineViewport::decoded_image_count);
+        let state = format!("{{\"images\":{decoded_images},\"active\":{},\"address\":{:?},\"committed\":{:?},\"find_open\":{},\"find_query\":{:?},\"fonts\":{fonts},\"tabs\":[{tabs}]}}", self.active, self.address, self.committed_address, self.find_open, self.find_query);
+        if self.last_navigation_trace != state {
+            eprintln!("AMAZING_NAVIGATION_STATE {state}"); self.last_navigation_trace = state;
+        }
+    }
+
+    fn finish_navigation(&mut self, index: usize, id: u64, requested: &str, history: HistoryCommit,
+        result: Result<engine_viewport::LoadedPage, String>) {
+        if !self.tabs[index].open { return; }
+        let page = match result {
+            Ok(page) => page,
+            Err(error) => {
+                match EngineViewport::error(requested, &error).try_reflow_static(self.viewport_metrics) {
+                    Ok(Some(viewport)) => engine_viewport::LoadedPage { viewport,
+                        final_address: requested.into(), title: None, favicon: None, runtime: None },
+                    result => {
+                        let reason = result.err().unwrap_or_else(|| "missing error document".into());
+                        self.record_render_failure(index, format!("{error}; error page: {reason}"), self.viewport_metrics);
+                        return;
+                    },
+                }
+            },
+        };
+        let final_address = page.final_address;
+        let tab = &mut self.tabs[index];
+        match history {
+            HistoryCommit::Push => {
+                if tab.history[tab.history_index] != final_address {
+                    tab.history.truncate(tab.history_index + 1);
+                    tab.history.push(final_address.clone());
+                    tab.history_index = tab.history.len() - 1;
+                }
+            },
+            HistoryCommit::Traverse(target) => {
+                if target >= tab.history.len() { return; }
+                tab.history_index = target;
+                tab.history[target] = final_address.clone();
+            },
+            HistoryCommit::Reload => tab.history[tab.history_index] = final_address.clone(),
+        }
+        tab.url = final_address.clone();
+        tab.kind = TabKind::Engine;
+        tab.viewport = Some(page.viewport);
+        tab.render_failure = None;
+        tab.failed_metrics = None;
+        tab.title = page.title.unwrap_or_else(|| navigation_title(&final_address));
+        tab.mono = site_initial(&final_address).to_string();
+        tab.favicon = page.favicon;
+        tab.bookmarked = self.session.borrow().is_bookmarked(&final_address);
+        self.page_runtimes[index] = page.runtime;
+        if let Some(runtime) = self.page_runtimes[index].as_mut() { runtime.set_history_length(tab.history.len()); }
+        self.session.borrow_mut().record_history(&final_address);
+        if self.active == index {
+            self.committed_address = final_address.clone();
+            if self.address == requested { self.address = final_address.clone(); }
+            self.find_matches.clear(); self.find_active = 0;
+        }
+        if std::env::var_os("AMAZING_NAVIGATION_TRACE").is_some() {
+            eprintln!("AMAZING_NAVIGATION_COMMIT tab={index} request={id} url={final_address}");
+        }
     }
 
     fn submit_form(&mut self, request: FormRequest) {
@@ -954,87 +1152,48 @@ impl BrowserShell {
     }
 
     fn load_navigation(&mut self, address: &str) {
-        self.load_request(address, "GET", Vec::new());
+        self.start_navigation(address.into(), "GET", Vec::new(), HistoryCommit::Reload);
     }
 
-    fn load_request(&mut self, address: &str, method: &str, body: Vec<u8>) {
-        self.page_input = None;
-        let (viewport, final_address, title, favicon, runtime) =
-            match EngineViewport::load_request_with_metrics(
-                address,
-                method,
-                body,
-                self.session.clone(),
-                self.viewport_metrics,
-            ) {
-            Ok(page) => (
-                page.viewport,
-                page.final_address,
-                page.title,
-                page.favicon,
-                page.runtime,
-            ),
-            Err(error) => {
-                let viewport = match EngineViewport::error(address, &error)
-                    .try_reflow_static(self.viewport_metrics) {
-                    Ok(Some(viewport)) => viewport,
-                    result => {
-                        let reason = result.err().unwrap_or_else(|| "missing error document".into());
-                        self.tabs[self.active].render_failure = Some(format!("{error}; error page: {reason}"));
-                        self.tabs[self.active].failed_metrics = Some(self.viewport_metrics);
-                        return;
-                    }
-                };
-                (viewport, address.to_string(), None, None, None)
-            },
-            };
-        self.address = final_address.clone();
-        self.committed_address = final_address.clone();
-        let tab = &mut self.tabs[self.active];
-        tab.url = final_address.clone();
-        tab.kind = TabKind::Engine;
-        tab.viewport = Some(viewport);
-        tab.render_failure = None;
-        tab.failed_metrics = None;
-        tab.title = title.unwrap_or_else(|| navigation_title(&final_address));
-        tab.mono = site_initial(&final_address).to_string();
-        tab.favicon = favicon;
-        self.page_runtimes[self.active] = runtime;
-        self.address_selected = false;
+    fn traversal_index(&self) -> usize {
+        match self.pending_navigation[self.active].as_ref().map(|pending| pending.history) {
+            Some(HistoryCommit::Traverse(target)) => target,
+            _ => self.tabs[self.active].history_index,
+        }
     }
 
     fn go_back(&mut self) {
-        let tab = &mut self.tabs[self.active];
-        if tab.history_index == 0 {
-            return;
-        }
-        tab.history_index -= 1;
-        let address = tab.history[tab.history_index].clone();
-        self.load_navigation(&address);
+        let target = self.traversal_index();
+        if target == 0 { return; }
+        let target = target - 1;
+        let address = self.tabs[self.active].history[target].clone();
+        self.start_navigation(address, "GET", Vec::new(), HistoryCommit::Traverse(target));
     }
 
     fn go_forward(&mut self) {
-        let tab = &mut self.tabs[self.active];
-        if tab.history_index + 1 >= tab.history.len() {
-            return;
-        }
-        tab.history_index += 1;
-        let address = tab.history[tab.history_index].clone();
-        self.load_navigation(&address);
+        let target = self.traversal_index() + 1;
+        if target >= self.tabs[self.active].history.len() { return; }
+        let address = self.tabs[self.active].history[target].clone();
+        self.start_navigation(address, "GET", Vec::new(), HistoryCommit::Traverse(target));
     }
 
     fn can_go_back(&self) -> bool {
-        self.tabs[self.active].history_index > 0
+        self.traversal_index() > 0
     }
 
     fn can_go_forward(&self) -> bool {
         let tab = &self.tabs[self.active];
-        tab.history_index + 1 < tab.history.len()
+        self.traversal_index() + 1 < tab.history.len()
     }
 
     fn reload(&mut self) {
-        let address = self.committed_address.clone();
-        self.load_navigation(&address);
+        let (address, method, body, history) = self.pending_navigation[self.active].as_ref()
+            .map_or_else(|| (self.committed_address.clone(), "GET".to_owned(), Vec::new(), HistoryCommit::Reload),
+                |pending| {
+                    let (method, body) = pending.request_data();
+                    (pending.address.clone(), method, body, pending.history)
+                });
+        self.start_navigation(address, &method, body, history);
     }
 
     fn apply_runtime_update(&mut self, index: usize, update: RuntimeUpdate) -> RuntimeDirective {
@@ -1324,6 +1483,7 @@ impl BrowserShell {
     fn tab(&self, index: usize, cx: &mut Context<Self>) -> gpui::AnyElement {
         let tab = self.tabs[index].clone();
         let active = self.active == index;
+        let loading = self.pending_navigation[index].is_some();
         let favicon = if let Some(image) = tab.favicon.clone() {
             div()
                 .size(px(16.0))
@@ -1377,7 +1537,7 @@ impl BrowserShell {
                     } else {
                         gpui::FontWeight::NORMAL
                     })
-                    .child(tab.title),
+                    .child(if loading { format!("Loading · {}", tab.title) } else { tab.title }),
             )
             .child(
                 div()
@@ -1441,6 +1601,7 @@ impl BrowserShell {
     }
 
     fn navigation_toolbar(&self, cx: &mut Context<Self>, visible: bool) -> gpui::AnyElement {
+        let loading = self.pending_navigation[self.active].is_some();
         let bookmarked = self.tabs[self.active].bookmarked;
         let back_enabled = self.can_go_back();
         let forward_enabled = self.can_go_forward();
@@ -1478,10 +1639,11 @@ impl BrowserShell {
                 div()
                     .id("history-reload")
                     .on_click(cx.listener(|this, _, _, cx| {
-                        this.reload();
+                        if this.pending_navigation[this.active].is_some() { this.stop_navigation(); }
+                        else { this.reload(); }
                         cx.notify();
                     }))
-                    .child(Self::icon_button("↻", true))
+                    .child(Self::icon_button(if loading { "×" } else { "↻" }, true))
                     .into_any_element(),
             ])
             .child(
@@ -1504,9 +1666,7 @@ impl BrowserShell {
                         address.track_focus(focus)
                     })
                     .on_click(cx.listener(|this, _, window, cx| {
-                        if let Some(focus) = this.address_focus.as_ref() {
-                            focus.focus(window, cx);
-                        }
+                        this.activate_chrome_input(ChromeInputOwner::Address, window, cx);
                         this.address_selected = true;
                         cx.notify();
                     }))
@@ -1686,9 +1846,7 @@ impl BrowserShell {
                     .text_color(rgb(DIM))
                     .cursor_pointer()
                     .on_click(cx.listener(|this, _, window, cx| {
-                        if let Some(focus) = this.address_focus.as_ref() {
-                            focus.focus(window, cx);
-                        }
+                        this.activate_chrome_input(ChromeInputOwner::Address, window, cx);
                         this.address_selected = true;
                         cx.notify();
                     }))
@@ -1708,9 +1866,7 @@ impl BrowserShell {
                     .hover(|style| style.bg(rgb(STRIP_HOVER)))
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.add_tab();
-                        if let Some(focus) = this.address_focus.as_ref() {
-                            focus.focus(window, cx);
-                        }
+                        this.activate_chrome_input(ChromeInputOwner::Address, window, cx);
                         cx.notify();
                     }))
                     .child("＋  New tab"),
@@ -2131,9 +2287,7 @@ impl BrowserShell {
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.add_tab();
                         this.menu_open = false;
-                        if let Some(focus) = this.address_focus.as_ref() {
-                            focus.focus(window, cx);
-                        }
+                        this.activate_chrome_input(ChromeInputOwner::Address, window, cx);
                         cx.notify();
                     }))
                     .child(item("New tab", "Ctrl+T")),
@@ -2529,12 +2683,16 @@ impl BrowserShell {
                                     .shadow_md()
                                     .text_size(px(12.0))
                                     .text_color(rgb(TEXT))
-                                    .when_some(self.find_focus.as_ref(), |bar, focus| bar.track_focus(focus))
                                     .on_key_down(cx.listener(Self::on_find_key_down))
                                     .child(
                                         div()
                                             .id("find-in-page-input")
                                             .min_w(px(90.0))
+                                            .cursor(CursorStyle::IBeam)
+                                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
+                                                this.activate_chrome_input(ChromeInputOwner::Find, window, cx);
+                                                cx.stop_propagation(); cx.notify();
+                                            }))
                                             .child(format!("{}│", self.find_query)),
                                     )
                                     .child(
@@ -2715,6 +2873,8 @@ impl Render for BrowserShell {
             .on_action(cx.listener(Self::focus_address))
             .on_action(cx.listener(Self::new_browser_tab))
             .on_action(cx.listener(Self::close_browser_tab))
+            .on_action(cx.listener(Self::next_browser_tab))
+            .on_action(cx.listener(Self::previous_browser_tab))
             .on_action(cx.listener(Self::reload_page))
             .on_action(cx.listener(Self::navigate_back))
             .on_action(cx.listener(Self::navigate_forward))
@@ -2863,9 +3023,7 @@ impl Render for BrowserShell {
                                     .id("new-tab")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.add_tab();
-                                        if let Some(focus) = this.address_focus.as_ref() {
-                                            focus.focus(window, cx);
-                                        }
+                                        this.activate_chrome_input(ChromeInputOwner::Address, window, cx);
                                         cx.notify();
                                     }))
                                     .child(Self::icon_button("+", true)),
@@ -3041,6 +3199,8 @@ fn main() {
             KeyBinding::new("f6", FocusAddress, None),
             KeyBinding::new("ctrl-t", NewBrowserTab, None),
             KeyBinding::new("ctrl-w", CloseBrowserTab, None),
+            KeyBinding::new("ctrl-tab", NextBrowserTab, None),
+            KeyBinding::new("ctrl-shift-tab", PreviousBrowserTab, None),
             KeyBinding::new("ctrl-r", ReloadPage, None),
             KeyBinding::new("f5", ReloadPage, None),
             KeyBinding::new("alt-left", NavigateBack, None),
@@ -3072,7 +3232,7 @@ fn main() {
                         let mut delay_ms = if start_with_secure_video {
                             SECURE_VIDEO_POLL_MS
                         } else {
-                            500
+                            25
                         };
                         loop {
                             cx.background_executor()
@@ -3081,6 +3241,8 @@ fn main() {
                             match this.update(cx, |shell: &mut BrowserShell, cx| {
                                 let fallback_now_ms =
                                     started.elapsed().as_millis().min(u64::MAX as u128) as u64;
+                                shell.poll_navigation();
+                                shell.trace_navigation_state();
                                 shell.pump_active_runtime();
                                 shell.poll_secure_video(fallback_now_ms);
                                 let clock_now_ms = shell
@@ -3097,7 +3259,7 @@ fn main() {
                                 cx.notify();
                                 next_delay_ms
                             }) {
-                                Ok(next_delay) => delay_ms = next_delay,
+                                Ok(next_delay) => delay_ms = next_delay.min(25),
                                 Err(_) => break,
                             }
                         }
@@ -3285,7 +3447,20 @@ fn presentation_gap_exceeds_cadence(presentation_ms: &[u64], next_ms: u64) -> bo
 }
 
 #[cfg(test)]
+#[path = "navigation_tests.rs"]
+mod navigation_tests;
+
+#[cfg(test)]
 mod tests {
+    fn settle_navigation(shell: &mut super::BrowserShell) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(8);
+        while shell.pending_navigation.iter().any(Option::is_some) {
+            shell.poll_navigation();
+            assert!(std::time::Instant::now() < deadline, "navigation did not settle");
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+
     use super::*;
 
     #[test]
@@ -3397,6 +3572,7 @@ mod tests {
         let mut shell = BrowserShell::new(None, None);
         shell.address = "example.test/docs".to_string();
         shell.commit_navigation();
+        settle_navigation(&mut shell);
         assert_eq!(shell.active, 0);
         assert_eq!(shell.address, "https://example.test/docs");
         assert_eq!(shell.committed_address, shell.address);
@@ -3423,33 +3599,47 @@ mod tests {
 
     #[test]
     fn history_back_forward_and_branching_follow_browser_rules() {
+        // Preserve the original normalization and history assertions, while the
+        // asynchronous lifecycle uses real deterministic HTTP rather than public DNS.
+        assert_eq!(normalize_address("first.test").as_deref(), Some("https://first.test"));
+        assert_eq!(normalize_address("second.test").as_deref(), Some("https://second.test"));
+        assert_eq!(normalize_address("branch.test").as_deref(), Some("https://branch.test"));
+        let fixture = navigation_tests::Fixture::new();
+        let (first, second, branch) = (fixture.url("/first"), fixture.url("/second"), fixture.url("/branch"));
         let mut shell = BrowserShell::new(None, None);
-        shell.address = "first.test".to_string();
+        shell.address = first.clone();
         shell.commit_navigation();
-        shell.address = "second.test".to_string();
+        settle_navigation(&mut shell);
+        shell.address = second.clone();
         shell.commit_navigation();
+        settle_navigation(&mut shell);
         assert_eq!(shell.tabs[0].history.len(), 3);
         assert_eq!(shell.tabs[0].history_index, 2);
 
         shell.go_back();
-        assert_eq!(shell.committed_address, "https://first.test");
+        settle_navigation(&mut shell);
+        assert_eq!(shell.committed_address, first);
         shell.go_forward();
-        assert_eq!(shell.committed_address, "https://second.test");
+        settle_navigation(&mut shell);
+        assert_eq!(shell.committed_address, second);
 
         shell.go_back();
-        shell.address = "branch.test".to_string();
+        settle_navigation(&mut shell);
+        shell.address = branch.clone();
         shell.commit_navigation();
+        settle_navigation(&mut shell);
         assert_eq!(
             shell.tabs[0].history,
             [
-                "amazing://status",
-                "https://first.test",
-                "https://branch.test"
+                "amazing://status".to_owned(),
+                first.clone(),
+                branch.clone()
             ]
         );
         assert_eq!(shell.tabs[0].history_index, 2);
         shell.go_forward();
-        assert_eq!(shell.committed_address, "https://branch.test");
+        settle_navigation(&mut shell);
+        assert_eq!(shell.committed_address, branch);
     }
 
     #[test]
@@ -3486,6 +3676,7 @@ mod tests {
         assert_eq!(shell.tabs[new_tab].history, ["amazing://newtab"]);
         shell.address = "localhost:8080/example".into();
         shell.commit_navigation();
+        settle_navigation(&mut shell);
         assert_eq!(shell.tabs[new_tab].history.len(), 2);
         assert_eq!(shell.tabs[0].history, ["amazing://status"]);
 
@@ -3658,6 +3849,26 @@ mod tests {
         assert!(shell.tabs[0].render_failure.is_none());
         assert_eq!(shell.tabs[0].title, "Recovered by timer");
         assert!(shell.document_interaction_available(0));
+    }
+
+    #[test]
+    fn real_newtab_find_scroll_finishes_at_both_window_densities() {
+        for (scale, width, height) in [(1.0, 1254.0, 656.0), (2.0, 614.0, 256.0)] {
+            let metrics = ViewportMetrics::new(width, height, scale).unwrap();
+            let view = EngineViewport::new_tab().try_reflow_static(metrics).unwrap().unwrap();
+            for query in ["A", "Amazing", "engine", "not-present-proof"] {
+                let matches = BrowserShell::find_matches_in_tree(view.accessibility_tree().unwrap(), query);
+                assert_eq!(matches.is_empty(), query == "not-present-proof");
+                if let Some(rect) = matches.first() {
+                    let node = view.root_scroll_id().unwrap();
+                    let target_y = (rect.y - ((metrics.css_height - rect.height) / 2.0).max(0.0)).max(0.0);
+                    let before = view.completed_presentations_for_fixture();
+                    let moved = view.scroll_input(ScrollInput::ScrollTo { node, target:(0.0,target_y), behavior:ScrollBehavior::Instant }, false).unwrap();
+                    assert_eq!(view.completed_presentations_for_fixture() - before, u64::from(moved), "one real scroll must produce one finished frame through one resource owner");
+                    if moved { assert!(view.scroll_element().is_some()); }
+                }
+            }
+        }
     }
 
 }

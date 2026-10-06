@@ -1,0 +1,39 @@
+{
+  "published_base": "68bc5a1c304c68b6fa59c5fcb671c027707b9079",
+  "qualified_sampler": "9d373827ec50e2c5ea0b5304ab6dcc86e1a7a8e1",
+  "owned_source": "397d17859b5912d0630b21a9c739eb8be63a88e7",
+  "combined_source": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+  "existing_only": true,
+  "new_or_resume_forbidden": true,
+  "box": "bx_43uffekx",
+  "profile": "default4vCPU8GB finite7200 existing live endpoint",
+  "original_deadline_seconds": 8,
+  "guard": 31138512896,
+  "full_scope": "workspace+docs+GPUI123+proof17/session12+all10windowgroups/AT/DPR1and2/original20render1328of2214",
+  "files": {
+    "mission.tar.gz": {
+      "bytes": 72043513,
+      "sha256": "74b4d4f835df03ab3e7da881790e4fa29c27649a0f5cd017228079657891cf02"
+    },
+    "mission.command.sh": {
+      "bytes": 488,
+      "sha256": "5bb2d4682726f7006eba7794571d8c4143f6800968305116bc6663ce92f2e99b"
+    },
+    "plan.json": {
+      "bytes": 1259,
+      "sha256": "6a424ad0a20e6f2c36b1648708a4c01b520cc7c2fc0ca4548e0eceba9319a5c2"
+    },
+    "after.command.sh": {
+      "bytes": 230351,
+      "sha256": "e119bb5e5d5561764f1825d9c32a9d6ffbbf118e1fcd881963c3140cc30f95f0"
+    },
+    "after.storage.json": {
+      "bytes": 18410,
+      "sha256": "3039f94dd9717f1ccd7f86f59f1d5ef3874bb4f6c2fd94c051ea1f51fef72490"
+    },
+    "composition-source-projection.summary.json": {
+      "bytes": 2208,
+      "sha256": "2f718ff9595b79178f0552e754bbfe6ed311db7484c69ac4adc410af7302de64"
+    }
+  }
+}

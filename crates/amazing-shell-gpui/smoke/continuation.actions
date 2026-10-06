@@ -1,0 +1,46 @@
+# Real authored timers discover resources while a swap font has no deadline.
+nav /font-continuation/complete
+requested /slow-cont-font-complete/font.ttf
+requested /slow-cont-image-complete/pixel.ppm
+expect timer-once t['pending'] and t['title']=='Continuation 1 callback 1' and s['images']==0
+release slow-cont-image-complete
+expect image-before-font t['pending'] and t['title']=='Continuation 1 callback 1' and s['images']==1 and s['fonts'][0]['phase']=='Swap'
+shot 01-image-before-font
+release slow-cont-font-complete
+expect font-after-image not t['pending'] and t['title']=='Continuation 1 callback 1' and s['images']==1
+nav /font-continuation/stop
+requested /slow-cont-font-stop/font.ttf
+requested /slow-cont-image-stop/pixel.ppm
+expect stop-timer-once t['pending'] and t['title']=='Continuation 2 callback 2'
+key Escape
+expect stop-preserves-document not t['pending'] and t['title']=='Continuation 2 callback 2' and s['images']==0
+cancelled /slow-cont-font-stop/font.ttf
+cancelled /slow-cont-image-stop/pixel.ppm
+shot 02-stopped-continuation
+release slow-cont-font-stop
+release slow-cont-image-stop
+expect stop-no-late-publication not t['pending'] and t['title']=='Continuation 2 callback 2' and s['images']==0
+nav /font-continuation/supersede
+requested /slow-cont-font-supersede/font.ttf
+requested /slow-cont-image-supersede/pixel.ppm
+expect supersede-timer-once t['pending'] and t['title']=='Continuation 3 callback 3'
+nav /normal
+expect superseded-continuation not t['pending'] and t['title']=='Normal' and s['images']==0
+cancelled /slow-cont-font-supersede/font.ttf
+cancelled /slow-cont-image-supersede/pixel.ppm
+release slow-cont-font-supersede
+release slow-cont-image-supersede
+key ctrl+t
+nav /font-continuation/close
+requested /slow-cont-font-close/font.ttf
+requested /slow-cont-image-close/pixel.ppm
+expect close-timer-once t['pending'] and t['title']=='Continuation 4 callback 4'
+key ctrl+w
+expect closed-continuation not s['tabs'][6]['open'] and not s['tabs'][6]['pending']
+cancelled /slow-cont-font-close/font.ttf
+cancelled /slow-cont-image-close/pixel.ppm
+release slow-cont-font-close
+release slow-cont-image-close
+key ctrl+Tab
+expect original-normal-after-close s['active']==0 and t['title']=='Normal' and not t['pending'] and s['images']==0
+shot 04-after-closed-normal

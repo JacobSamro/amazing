@@ -1,0 +1,1 @@
+{"supported": true, "source_device": 64769, "retained_device": 64769, "probe_sha256": "4f16ee9de252be76b2c2a3158992aa143306348ccaa968ea171857c79ce7ef5a", "policy": "strict hardlink; all actual artifacts probed again at terminal retention"}
