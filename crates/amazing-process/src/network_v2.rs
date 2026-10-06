@@ -97,6 +97,7 @@ fn destination(value: &str) -> Result<(Destination, CspDestination), Error> {
         "child" => (Destination::Other, CspDestination::Child),
         "object" => (Destination::Other, CspDestination::Object),
         "manifest" => (Destination::Other, CspDestination::Manifest),
+        "report" => (Destination::Report, CspDestination::None),
         "other" => (Destination::Other, CspDestination::None),
         _ => return Err(invalid("invalid destination")),
     })
@@ -137,6 +138,12 @@ fn build_request(wire: NetworkStart) -> Result<(ApiRequest, ClientContext), Erro
         WireCookieSite::CrossSite(()) => CookieSite::CrossSite,
     };
     let (destination, csp_destination) = destination(&wire.destination)?;
+    // A wire destination does not mint the original-global settings or the
+    // null-client Reporting request. Only registered native report admission
+    // owns those facts; ordinary Fetch/navigation starts cannot adopt them.
+    if destination == Destination::Report {
+        return Err(invalid("report requires native registered Reporting admission"));
+    }
     let embedder_policy = match wire.context.embedder_policy.as_str() {
         "unsafe-none" => EmbedderPolicy::UnsafeNone,
         "require-corp" => EmbedderPolicy::RequireCorp,
@@ -1194,3 +1201,37 @@ impl Drop for NetworkSession {
 
 mod receiving_coep;
 pub use receiving_coep::apply_receiving_coep;
+
+
+#[cfg(test)]
+mod destination_protocol_tests {
+    use super::*;
+    #[test]
+    fn complete_destination_policy_mapping_preserves_existing_aliases_and_report_identity() {
+        for (spelling, native, csp) in [
+            ("empty",Destination::Empty,CspDestination::None),
+            ("document",Destination::Document,CspDestination::None),
+            ("image",Destination::Image,CspDestination::Image),
+            ("font",Destination::Font,CspDestination::Font),
+            ("audio",Destination::Audio,CspDestination::Media),
+            ("video",Destination::Video,CspDestination::Media),
+            ("script",Destination::Script,CspDestination::Script),
+            ("style",Destination::Style,CspDestination::Style),
+            ("connect",Destination::Empty,CspDestination::Connect),
+            ("worker",Destination::Worker,CspDestination::Worker),
+            ("shared-worker",Destination::SharedWorker,CspDestination::Worker),
+            ("service-worker",Destination::ServiceWorker,CspDestination::Worker),
+            ("frame",Destination::Other,CspDestination::Frame),
+            ("child",Destination::Other,CspDestination::Child),
+            ("object",Destination::Other,CspDestination::Object),
+            ("manifest",Destination::Other,CspDestination::Manifest),
+            ("report",Destination::Report,CspDestination::None),
+            ("other",Destination::Other,CspDestination::None),
+        ] {
+            assert_eq!(destination(spelling).unwrap(), (native,csp));
+        }
+        for spelling in ["", "Report", "REPORT", " report", "report ", "reports", "report\0", "unknown", "sharedworker", "serviceworker"] {
+            assert!(destination(spelling).is_err());
+        }
+    }
+}

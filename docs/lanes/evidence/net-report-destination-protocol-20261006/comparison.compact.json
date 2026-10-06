@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "base": "ab19e359edbab188e1881addb0001f8febdc1d15",
+  "source": "98fa6bf7e13d55add6b314cb3a8ae23b76843d2e",
+  "actual_native_exits": {
+    "before": 0,
+    "after": 0
+  },
+  "actual_compact_fetch_exits": {
+    "before": 0,
+    "after": 0
+  },
+  "workspace": {
+    "before": 5055,
+    "after": 5058,
+    "skipped": 17,
+    "lost": [],
+    "gained": [
+      "amazing-process network_v2::destination_protocol_tests::complete_destination_policy_mapping_preserves_existing_aliases_and_report_identity",
+      "amazing-process network_v2::receiving_capture::destination_wire_tests::every_native_destination_roundtrips_with_exact_wire_spelling",
+      "amazing-process::report_destination report_destination_cannot_adopt_null_client_authority_through_ordinary_ipc_start"
+    ]
+  },
+  "doctests": {
+    "before": 36,
+    "after": 36,
+    "failures": 0
+  },
+  "native_tls_net_fetch_process": {
+    "before": 803,
+    "after": 806,
+    "skipped": 3,
+    "lost": [],
+    "gained": [
+      "amazing-process network_v2::destination_protocol_tests::complete_destination_policy_mapping_preserves_existing_aliases_and_report_identity",
+      "amazing-process network_v2::receiving_capture::destination_wire_tests::every_native_destination_roundtrips_with_exact_wire_spelling",
+      "amazing-process::report_destination report_destination_cannot_adopt_null_client_authority_through_ordinary_ipc_start"
+    ]
+  },
+  "csp": {
+    "before_files": 32,
+    "after_files": 32,
+    "before_subtests": 81,
+    "after_subtests": 81,
+    "lost_files": [],
+    "lost_subtests": [],
+    "selection_sha256": "827083295c0011e2fd1bfb1760fbf28b036cd6412e077d4ae2f016234e5ff0a0"
+  },
+  "all_phases": {
+    "before": {
+      "browser-build": 0,
+      "csp-wpt": 0,
+      "doctests": 0,
+      "network-corpus": 0,
+      "workspace": 0,
+      "wpt-setup": 0
+    },
+    "after": {
+      "browser-build": 0,
+      "csp-wpt": 0,
+      "doctests": 0,
+      "network-corpus": 0,
+      "workspace": 0,
+      "wpt-setup": 0
+    }
+  },
+  "scope": "native whole protocol + original installed CSP subset only; no installed Reporting Window/SPVE/worker/null-client delivery completion claim",
+  "original_child_metadata_note": {
+    "schema": 1,
+    "original_child_collector_base_label": "68b1e6363be41f3867c684040326d54bf07af3af",
+    "meaning": "inherited legacy display label, not actual compared baseline; original compact bytes retained",
+    "actual_source": "ab19e359edbab188e1881addb0001f8febdc1d15",
+    "actual_paired_base": "ab19e359edbab188e1881addb0001f8febdc1d15",
+    "actual_baseline_job": "00f578e5beed449f8f39236c31260d6f",
+    "before_input_for_after": "GATE_BEFORE_COMPACT actual sourceab19 BEFORE csp-wpt.compact.json; source/binary/raw hashes authenticated",
+    "commands_unchanged": true
+  },
+  "packing_decode": "base64.b85decode(payload_xz_base85), then lzma.decompress(memlimit=16777216); validate payload SHA and each part offset/bytes/SHA"
+}

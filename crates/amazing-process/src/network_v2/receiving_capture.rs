@@ -26,6 +26,7 @@ fn fetch_destination(value: &str) -> Result<Destination, Error> {
         "sharedworker" => Destination::SharedWorker,
         "serviceworker" => Destination::ServiceWorker,
         "style" => Destination::Style,
+        "report" => Destination::Report,
         "other" => Destination::Other,
         _ => return Err(invalid("receiving destination")),
     })
@@ -323,6 +324,7 @@ impl From<&ClientContext> for ReceivingClientContext {
                 Destination::SharedWorker => "sharedworker",
                 Destination::ServiceWorker => "serviceworker",
                 Destination::Style => "style",
+                Destination::Report => "report",
                 Destination::Other => "other",
             }
             .into(),
@@ -392,6 +394,36 @@ impl From<&NavigableContext> for ReceivingNavigable {
             referrer: value.referrer.clone(),
             referrer_policy: value.referrer_policy.clone(),
             now_unix: value.now_unix,
+        }
+    }
+}
+
+#[cfg(test)]
+mod destination_wire_tests {
+    use super::*;
+
+    #[test]
+    fn every_native_destination_roundtrips_with_exact_wire_spelling() {
+        for (native, spelling) in [
+            (Destination::Empty, ""), (Destination::Document, "document"),
+            (Destination::Image, "image"), (Destination::Font, "font"),
+            (Destination::Audio, "audio"), (Destination::Video, "video"),
+            (Destination::Script, "script"), (Destination::Worker, "worker"),
+            (Destination::SharedWorker, "sharedworker"), (Destination::ServiceWorker, "serviceworker"),
+            (Destination::Style, "style"), (Destination::Report, "report"),
+            (Destination::Other, "other"),
+        ] {
+            let mut context = ClientContext::default();
+            context.security.destination = native;
+            let wire = ReceivingClientContext::from(&context);
+            assert_eq!(wire.destination, spelling);
+            let encoded = amazing_ipc::codec::encode(&wire).unwrap();
+            let decoded: ReceivingClientContext = amazing_ipc::codec::decode(&encoded).unwrap();
+            assert_eq!(decoded, wire);
+            assert_eq!(decode_context(decoded).unwrap().security.destination, native);
+        }
+        for spelling in ["Report", "REPORT", " report", "report ", "reports", "report\0"] {
+            assert!(fetch_destination(spelling).is_err());
         }
     }
 }

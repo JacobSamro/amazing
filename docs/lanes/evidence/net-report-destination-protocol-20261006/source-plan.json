@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "state": "whole source/paired command/storage/public hashes frozen before allocation",
+  "source": "98fa6bf7e13d55add6b314cb3a8ae23b76843d2e",
+  "base": "ab19e359edbab188e1881addb0001f8febdc1d15",
+  "worktree": "/Users/jMac/Projects/OpenSource/amazing-wt/net-report-destination-protocol-current-20261006",
+  "alias": "net-report-destination-protocol-20261006",
+  "public_source": "c2942529f9c2df4dfc8f1fa3b4494d4d42878e50",
+  "profile": "DEV/TEST line-tables-only incremental0 default4/8 finite7200",
+  "capacity": "actual public same-device14.125GiB before bootstrap, actual/tmp12GiB before each engine side; native/tmp raw/source/allELF retention, HOME bounded compact",
+  "scope": "whole workspace nextest/docs/browser/full TLS-net-fetch-process test-support corpus + original11CSP32files81subtests; original13 receiving groups and complete existing destinations untouched,3new grouped protocol controls",
+  "shipping": [
+    {
+      "path": "crates/amazing-fetch/src/reporting/coep_request.rs",
+      "bytes": 16730,
+      "sha256": "5cdf46e6166c83cb50f8a53b8fa968c14aba85aa9c059bb1f56011dfb4bc4566",
+      "lines": 258
+    },
+    {
+      "path": "crates/amazing-fetch/src/security.rs",
+      "bytes": 22022,
+      "sha256": "ef6512b94c7d9a271a5a1adc54b517324b29b1af09db4425a0871ddcc3ffe2f5",
+      "lines": 575
+    },
+    {
+      "path": "crates/amazing-fetch/src/service.rs",
+      "bytes": 92177,
+      "sha256": "63b1fdfd06456b18fbb4839a46693b90440dd85d2be82fde2c0bfc550076fa1b",
+      "lines": 1910
+    },
+    {
+      "path": "crates/amazing-process/src/network_v2.rs",
+      "bytes": 52539,
+      "sha256": "bd8ea8db930b7f98ad362ab7ef13cfe599b275ce60be85a249c2070663438c1e",
+      "lines": 1237
+    },
+    {
+      "path": "crates/amazing-process/src/network_v2/receiving_capture.rs",
+      "bytes": 17844,
+      "sha256": "fb990d7207a0cc80f22f9448d1fa4bb58d080da0175dbcf0070059f2ebfced84",
+      "lines": 429
+    },
+    {
+      "path": "crates/amazing-process/tests/report_destination.rs",
+      "bytes": 3368,
+      "sha256": "e470efbc89110dabcd979bc623001257dd5284f4eebbb52e0ca3ce1b9e9f7506",
+      "lines": 59
+    },
+    {
+      "path": "docs/lanes/net-tls-report-destination-protocol.md",
+      "bytes": 2590,
+      "sha256": "761d9188d7f420ff9543c3ec8afebac46929d651adc826c59d83b728527a0fb3",
+      "lines": 40
+    }
+  ],
+  "native_enum": "4c6508ca393e595f416253f600ead4645698a51b",
+  "owned_codec_peer": "9e7d3a4f448f83642842483a185c5d7ac6d14114",
+  "excluded": "wire027 transport/provenance residual; no hidden410 delta (published baseline already has410); no installed Window/SPVE/worker/null-client upload claim",
+  "commands": {
+    "after-command.txt": "c9b2e43101c35d675d51d370c337edc6d12a8852c2a3a59155c924d18ca41b22",
+    "before-command.txt": "8e9762d213cdb2009f906d04079d42259581620e3d942d9603cc22dd253d4238"
+  },
+  "storage_plans": {
+    "after-storage-plan.json": "9ac5ae33945c06fa577f1e81f56445cbd9c9447d1ecc549bacb194b04b55323e",
+    "before-storage-plan.json": "5983363140b19e2d8a1613eb2e715d1606f2c50c2d519e4b257af4f3b45f0fd3"
+  },
+  "launches": {
+    "after-launch.sh": "4afa36b1d7376abd3a4dc0fcd8724bf438961b94c06e1ed484571dd880b7be58",
+    "before-launch.sh": "3b1c48a2ba8faeef4ed20ee920508549e7e3f2d2d1089101217a42d4429c438f"
+  },
+  "body_sha256": "7f54229d19a98f1d11b3e7a2086b6129f702408b43e8cfe3d2a8a20e198e085f",
+  "public_helpers": {
+    "linux-run.sh": "6c960c2a394d659990484388a15bd887f4db4f0793244669d9f88aafe08a1c28",
+    "source-upload.py": "d5b9b8469b7eb160cc2bf923aac48470b6a71b2a040b3a08e19a4c915219e908",
+    "completed-job.py": "9c2bde2eeaa2507e5a14d2cc17599908d1c2ea9b1418ba76a78d04a1ff3b15b1",
+    "nextest-compact.py": "cddc4e6ec9f9ea5c253e50bb3ac7ff02d64389b9dc696370cb02dc417092cd80",
+    "native-storage-plan.py": "3c4df2f01150f9da8b53695df781d2ee83fd7d79a92a1d9b33449d14bf763dbe",
+    "native-storage-retention.py": "2628dc352f594177a540961888f8157517ca9603847716731b04146f9033d489"
+  },
+  "tooling_policy": "initial + ONE clean tooling failure rerun only; real compiler/test regressions require whole source correction; all raw/ELF/failures preserved, no hand recovery",
+  "native_claim": false,
+  "installed_claim": false,
+  "finite_lifetime": "qualified public boat-lane.py RUN_TTL_SECONDS=7200 normal ensure; no custom lifecycle env"
+}

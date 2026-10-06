@@ -22,6 +22,8 @@ pub enum Destination {
     SharedWorker,
     ServiceWorker,
     Style,
+    /// Browser-internal Reporting API upload, with a genuine null client.
+    Report,
     Other,
 }
 impl Destination {

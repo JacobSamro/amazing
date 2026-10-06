@@ -117,7 +117,7 @@ impl CoepRequestReportSettings {
 fn destination(value:Destination)->Result<&'static str,ReportError> {
     Ok(match value {Destination::Empty=>"",Destination::Document=>"document",Destination::Image=>"image",Destination::Font=>"font",
         Destination::Audio=>"audio",Destination::Video=>"video",Destination::Script=>"script",Destination::Worker=>"worker",
-        Destination::SharedWorker=>"sharedworker",Destination::ServiceWorker=>"serviceworker",Destination::Style=>"style",
+        Destination::SharedWorker=>"sharedworker",Destination::ServiceWorker=>"serviceworker",Destination::Style=>"style",Destination::Report=>"report",
         // Other is not an authentic standard destination name.
         Destination::Other=>return Err(ReportError::InvalidReport)})
 }

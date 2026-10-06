@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "files": {
+    "before-network-corpus.compact.json": {
+      "bytes": 24387,
+      "sha256": "82ba9f5da3d6dec083b585aca1044bd6ace9154157dd525cac253cc35bad6eb9"
+    },
+    "after-workspace.compact.json": {
+      "bytes": 144219,
+      "sha256": "082d5563d93d11e660f9dfa801af6003594124d1420b875579c507203d485ab7"
+    },
+    "after-storage.summary.json": {
+      "bytes": 2755,
+      "sha256": "461b870c0ed327abe4e6f07b1eac09be6ee9770b46891863a673fa4274e9ceab"
+    },
+    "comparison.compact.json": {
+      "bytes": 2944,
+      "sha256": "b8672c374bb941b76400e50223c7bb3beeec848b850a0dd969e0a3008ed0b22c"
+    },
+    "after-fetch.manifest.json": {
+      "bytes": 1338,
+      "sha256": "e4bf97a70b5a26846961b09b99aa38468efb00a0dbd4268933f45ac8149bf910"
+    },
+    "after-csp-wpt.compact.json": {
+      "bytes": 35917,
+      "sha256": "acb95d0a14aa54236a8fd75df56665735a5eed2ae9e4cf4e0241b30c6a375305"
+    },
+    "before-workspace.compact.json": {
+      "bytes": 144090,
+      "sha256": "7b8cb0f3ce4cf046c91b41084d0f80749708171a326638ce20fd258f04d05913"
+    },
+    "after.owner.json": {
+      "bytes": 974,
+      "sha256": "da4406d76469b5c8d7ec18525bf9d937e5a457f4b9c8a39acb438a42cf0ba321"
+    },
+    "before.owner.json": {
+      "bytes": 934,
+      "sha256": "c874da821c1583714cde71f65c6408093b512ee9405bdca2fa683dd9efd3240b"
+    },
+    "before-csp-wpt.compact.json": {
+      "bytes": 35918,
+      "sha256": "bc625c0dfc605a3e56ce4d92e200fd138a0ee2e0ef9839600406b60cd3498d3d"
+    },
+    "paired-summary.envelope.json": {
+      "bytes": 247400,
+      "sha256": "6314481a5aed0c1f5f687a7b0840814096f95da3ed728de72a986bc237fcfb4f"
+    },
+    "before-storage.summary.json": {
+      "bytes": 2435,
+      "sha256": "ffa7970ec6c26fb79a339c4ff0cb006e318fd0fb59fc6fdbfd9784b145de375f"
+    },
+    "before-fetch.manifest.json": {
+      "bytes": 1345,
+      "sha256": "4038a20e9e3962aee316cbf1170233c75d8d705201c82950a49105a1b25f1642"
+    },
+    "after-network-corpus.compact.json": {
+      "bytes": 25215,
+      "sha256": "479026eb1a7c8ca724b5dd7a9ec0dc6eddc901b134db5770de1d5fc2b7a4ae01"
+    },
+    "source-plan.json": {
+      "bytes": 4316,
+      "sha256": "0a1c243f29a89adf5f43fbbff18247912e234fc53ed4e24b35e62b5a7107d4d8"
+    }
+  }
+}

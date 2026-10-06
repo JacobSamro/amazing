@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "controller": 67101,
+  "source": "ab19e359edbab188e1881addb0001f8febdc1d15",
+  "endpoint": {
+    "schema": 2,
+    "lane": "net-report-destination-protocol-20261006",
+    "source_commit": "ab19e359edbab188e1881addb0001f8febdc1d15",
+    "box_id": "bx_4tzr3dan",
+    "host": "user@5.135.136.30",
+    "port": 19050,
+    "job_id": "00f578e5beed449f8f39236c31260d6f",
+    "output_root": "amazing/out/net-report-destination-protocol-20261006/report-protocol-before-ab19e359-initial/compact",
+    "command_sha256": "8e9762d213cdb2009f906d04079d42259581620e3d942d9603cc22dd253d4238",
+    "execution_sha256": "e1be0ac9a666a342bf0bdb03b76246c6851a071b5035ea95caeb6d2ed389c235",
+    "source_archive_sha256": "1a757e0b0be31e8da1d50ad0dbe2520556d454c95b20b385e1884ef3502c0757"
+  },
+  "state": "TERMINAL",
+  "actual_exit": 0,
+  "controller_exit": 0,
+  "compact_fetch_exit": 0,
+  "workspace": 5055,
+  "docs": 36,
+  "native": 803
+}

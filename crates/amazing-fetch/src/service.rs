@@ -380,6 +380,7 @@ impl NetworkService {
         context.csp_destination = match destination {
             Destination::Script => CspDestination::Script,
             Destination::Style => CspDestination::Style,
+            Destination::Report => CspDestination::None,
             Destination::Image => CspDestination::Image,
             Destination::Font => CspDestination::Font,
             Destination::Audio | Destination::Video => CspDestination::Media,

@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "actual_fetch_exit": 0,
+  "native_actual_exit": 0,
+  "job": "00f578e5beed449f8f39236c31260d6f",
+  "files": {
+    "before.summary.json": {
+      "path": ".agents/net-tls/report-destination-protocol/before.compact/before.summary.json",
+      "bytes": 384027,
+      "sha256": "794d8069f560ed33e3cb5520682f3eff89ea21ca589277da34ab955ee473e801"
+    },
+    "network-corpus.compact.json": {
+      "path": ".agents/net-tls/report-destination-protocol/before.compact/network-corpus.compact.json",
+      "bytes": 24387,
+      "sha256": "82ba9f5da3d6dec083b585aca1044bd6ace9154157dd525cac253cc35bad6eb9"
+    },
+    "workspace.compact.json": {
+      "path": ".agents/net-tls/report-destination-protocol/before.compact/workspace.compact.json",
+      "bytes": 144090,
+      "sha256": "7b8cb0f3ce4cf046c91b41084d0f80749708171a326638ce20fd258f04d05913"
+    },
+    "csp-wpt.compact.json": {
+      "path": ".agents/net-tls/report-destination-protocol/before.compact/csp-wpt.compact.json",
+      "bytes": 35918,
+      "sha256": "bc625c0dfc605a3e56ce4d92e200fd138a0ee2e0ef9839600406b60cd3498d3d"
+    },
+    "storage.summary.json": {
+      "path": ".agents/net-tls/report-destination-protocol/before.compact/storage.summary.json",
+      "bytes": 2435,
+      "sha256": "ffa7970ec6c26fb79a339c4ff0cb006e318fd0fb59fc6fdbfd9784b145de375f"
+    }
+  }
+}
