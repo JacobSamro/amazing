@@ -230,6 +230,7 @@ fn grid_template_only_splits_on_a_top_level_solidus() {
         vec![
             ("grid-template-rows".to_owned(), "minmax(10px, calc(20px / 2))".to_owned()),
             ("grid-template-columns".to_owned(), "repeat(2, 1fr)".to_owned()),
+            ("grid-template-areas".to_owned(), "none".to_owned()),
         ]
     );
     assert_eq!(

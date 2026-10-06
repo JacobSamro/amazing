@@ -145,3 +145,76 @@ fn place_shorthands_reach_computed_style_through_the_full_cascade() {
     assert_eq!(result.get("align-items"), Some("center"));
     assert_eq!(result.get("justify-items"), Some("end"));
 }
+
+#[test]
+fn adjacent_grid_tracks_and_line_names_survive_full_cascade() {
+    for property in ["grid-template-columns", "grid-template-rows"] {
+        for value in [
+            "[one]50px[two]50px[three]50px",
+            "[a][b]10px[c][d]",
+            "[one][alias]50px[two]minmax(10px,1fr)[end]",
+            "[one]repeat(2,[a]50px[b]minmax(10px,1fr))[end]",
+            "fit-content(40px)minmax(10px,1fr)",
+            "repeat(auto-fill,[a]minmax(10px,50px)[b])20px[end]",
+            "[one]50px/**/[two]50px/**/[three]50px",
+        ] {
+            let result = style(property, value);
+            assert_ne!(result.get(property), Some("none"), "{property}: {value}");
+            assert!(result.get(property).unwrap().contains(if value.contains('[') { "[" } else { "(" }));
+        }
+    }
+}
+
+#[test]
+fn implicit_tracks_and_template_strings_consume_complete_components() {
+    for property in ["grid-auto-columns", "grid-auto-rows"] {
+        for value in ["minmax(10px,1fr)fit-content(50px)", "50px/**/20px", "auto minmax(0,1fr)"] {
+            assert_ne!(style(property, value).get(property), Some("auto"), "{property}: {value}");
+        }
+    }
+    for value in [
+        "[a]\"one one\"50px[b]\"two two\"minmax(10px,1fr)[c]/50px 50px",
+    ] {
+        let result = style("grid-template", value);
+        assert_ne!(result.get("grid-template-rows"), Some("none"), "{value}");
+        assert!(result.get("grid-template-areas").unwrap().contains("one"));
+    }
+    let result = style("grid", "[one]50px[two]50px/auto-flow minmax(10px,1fr)fit-content(50px)");
+    assert_ne!(result.get("grid-template-rows"), Some("none"));
+    assert_ne!(result.get("grid-auto-columns"), Some("auto"));
+}
+
+#[test]
+fn component_boundaries_do_not_relax_track_grammar() {
+    for value in [
+        "[span]50px", "[one]50px50px", "[one]-50px", "minmax(1fr,10px)fit-content(50px)",
+        "repeat(0,[one]50px)", "repeat(auto-fill,1fr)", "fit-content(1fr)20px",
+        "[one](50px)", "[one]{50px}", "[one]50px,20px", "minmax(10px)20px",
+    ] {
+        assert_eq!(style("grid-template-columns", value).get("grid-template-columns"), Some("none"), "{value}");
+    }
+    for value in ["[one]50px", "repeat(2,50px)", "50px[one]", "minmax(1fr,10px)"] {
+        assert_eq!(style("grid-auto-columns", value).get("grid-auto-columns"), Some("auto"), "{value}");
+    }
+    // The grid-specific component scanner does not change non-grid arity.
+    assert_eq!(style("width", "10px20px").get("width"), Some("auto"));
+}
+
+#[test]
+fn adjacent_components_preserve_variable_resolution_and_cascade_order() {
+    let mut dom = Dom::new();
+    let html = dom.create_element(NodeIdx(0), "html");
+    let element = dom.create_element(html, "div");
+    for css in [
+        "div { --tracks:[one]50px[two]50px[three]50px; grid-template-columns:var(--tracks); }",
+        "div { grid-template-columns:1fr; grid-template-columns:[one]50px[two]50px[three]50px; }",
+        "div { grid-template-columns:[one]50px[two]50px[three]50px; grid-template-columns:[span]50px; }",
+    ] {
+        let computed = compute(&dom, &[parse_stylesheet(css)]);
+        let value = computed.get(element).unwrap().get("grid-template-columns").unwrap();
+        assert!(value.contains("one") && value.contains("two") && value.contains("three"), "{css}: {value}");
+        // Serialization is fed back through the real parser, rather than
+        // interpreting a guessed spacing form as the producer contract.
+        assert_eq!(style("grid-template-columns", value).get("grid-template-columns"), Some(value));
+    }
+}

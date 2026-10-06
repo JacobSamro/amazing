@@ -19,62 +19,17 @@
 use crate::syntax::{Token, serialize, tokenize};
 use crate::values;
 use super::{
-    DEFERRED_GRID_COLUMNS, DEFERRED_GRID_ROWS, contains_var_function, css_wide_keyword, deferred,
-    function_inner, skip_css_whitespace, top_level_components, trim_tokens,
+    contains_var_function, css_wide_keyword,
+    function_inner, skip_css_whitespace, trim_tokens,
 };
 
-pub(crate) fn deferred_grid_template(value: &str) -> Vec<(String, String)> {
-    vec![
-        (
-            "grid-template-rows".to_owned(),
-            deferred(DEFERRED_GRID_ROWS, value),
-        ),
-        (
-            "grid-template-columns".to_owned(),
-            deferred(DEFERRED_GRID_COLUMNS, value),
-        ),
-    ]
-}
+#[path = "grid_components.rs"]
+mod components;
+use components::grid_components;
 
-pub(crate) fn expand_grid_template(value: &str) -> Option<Vec<(String, String)>> {
-    if css_wide_keyword(value).is_some() || value.trim().eq_ignore_ascii_case("none") {
-        return Some(vec![
-            ("grid-template-rows".to_owned(), value.trim().to_owned()),
-            ("grid-template-columns".to_owned(), value.trim().to_owned()),
-        ]);
-    }
-
-    let tokens = tokenize(value);
-    let mut stack = Vec::new();
-    let mut slash = None;
-    for (index, token) in tokens.iter().enumerate() {
-        match token {
-            Token::OpenParen => stack.push(')'),
-            Token::OpenSquare => stack.push(']'),
-            Token::OpenCurly => stack.push('}'),
-            Token::CloseParen if stack.pop() != Some(')') => return None,
-            Token::CloseSquare if stack.pop() != Some(']') => return None,
-            Token::CloseCurly if stack.pop() != Some('}') => return None,
-            Token::Delim('/') if stack.is_empty() && slash.replace(index).is_some() => {
-                return None;
-            }
-            _ => {}
-        }
-    }
-    if !stack.is_empty() {
-        return None;
-    }
-    let slash = slash?;
-    let rows = serialize(&tokens[..slash]).trim().to_owned();
-    let columns = serialize(&tokens[slash + 1..]).trim().to_owned();
-    if !valid_grid_track_list(&rows) || !valid_grid_track_list(&columns) {
-        return None;
-    }
-    Some(vec![
-        ("grid-template-rows".to_owned(), rows),
-        ("grid-template-columns".to_owned(), columns),
-    ])
-}
+#[path = "grid_shorthand.rs"]
+mod shorthands;
+pub(crate) use shorthands::{canonical_areas, deferred_grid, deferred_grid_template, expand_grid, expand_grid_template};
 
 pub(crate) fn split_top_level_comma(tokens: &[Token]) -> Option<(&[Token], &[Token])> {
     let mut stack = Vec::new();
@@ -204,7 +159,7 @@ pub(crate) fn parse_subgrid_names(tokens: &[Token], start: usize) -> Option<(Vec
 /// `<line-names>` block per slot) and, when an auto-repeat is present
 /// anywhere in the list, requires every other component to be fixed-size too.
 pub(crate) fn valid_grid_track_tokens(tokens: &[Token], allow_repeat: bool) -> bool {
-    let Some(components) = top_level_components(tokens) else {
+    let Some(components) = grid_components(tokens) else {
         return false;
     };
     if components.is_empty() {
@@ -540,7 +495,7 @@ pub(crate) fn valid_grid_auto_track_list(value: &str) -> bool {
         return true;
     }
     let tokens = tokenize(value);
-    let Some(components) = top_level_components(&tokens) else {
+    let Some(components) = grid_components(&tokens) else {
         return false;
     };
     !components.is_empty() && components.iter().all(|component| valid_track_size(component))
@@ -574,35 +529,7 @@ pub(crate) fn valid_grid_auto_flow(value: &str) -> bool {
 /// whitespace-separated row of cell tokens and every row has the same
 /// column count (an empty or all-whitespace row is never valid).
 pub(crate) fn valid_grid_template_areas(value: &str) -> bool {
-    if css_wide_keyword(value).is_some() || contains_var_function(value) {
-        return true;
-    }
-    if value.trim().eq_ignore_ascii_case("none") {
-        return true;
-    }
-    let tokens = tokenize(value);
-    let tokens = trim_tokens(&tokens);
-    if tokens.is_empty() {
-        return false;
-    }
-    let mut columns = None;
-    for token in tokens {
-        match token {
-            Token::Whitespace => {}
-            Token::Str(row) => {
-                let cells = row.split_whitespace().count();
-                if cells == 0 {
-                    return false;
-                }
-                match columns {
-                    Some(expected) if expected != cells => return false,
-                    _ => columns = Some(cells),
-                }
-            }
-            _ => return false,
-        }
-    }
-    columns.is_some()
+    css_wide_keyword(value).is_some() || contains_var_function(value) || canonical_areas(value).is_some()
 }
 
 /// `[ auto-flow && dense? ] <track-size>*` -- one axis of the `grid`
@@ -640,8 +567,8 @@ pub(crate) fn valid_grid_auto_flow_form(value: &str) -> bool {
     };
     let rows = trim_tokens(&tokens[..slash]);
     let columns = trim_tokens(&tokens[slash + 1..]);
-    let Some(row_components) = top_level_components(rows) else { return false };
-    let Some(column_components) = top_level_components(columns) else { return false };
+    let Some(row_components) = grid_components(rows) else { return false };
+    let Some(column_components) = grid_components(columns) else { return false };
     (valid_grid_track_list(&serialize(rows)) && valid_grid_auto_flow_axis(&column_components))
         || (valid_grid_auto_flow_axis(&row_components) && valid_grid_track_list(&serialize(columns)))
 }
@@ -719,14 +646,14 @@ pub(crate) fn valid_grid_template(value: &str) -> bool {
         }
     }
 
-    let Some(components) = top_level_components(main) else {
+    let Some(components) = grid_components(main) else {
         return false;
     };
     if components.is_empty() {
         return false;
     }
 
-    let mut columns_count: Option<usize> = None;
+    let mut area_strings = Vec::new();
     let mut index = 0;
     while index < components.len() {
         if is_line_names_component(components[index]) {
@@ -742,14 +669,7 @@ pub(crate) fn valid_grid_template(value: &str) -> bool {
             return false;
         };
         index += 1;
-        let cells = row.split_whitespace().count();
-        if cells == 0 {
-            return false;
-        }
-        match columns_count {
-            Some(expected) if expected != cells => return false,
-            _ => columns_count = Some(cells),
-        }
+        area_strings.push(Token::Str(row.clone()));
         if let Some(component) = components.get(index) {
             if !is_line_names_component(component) && valid_track_size(component) {
                 index += 1;
@@ -764,7 +684,7 @@ pub(crate) fn valid_grid_template(value: &str) -> bool {
             }
         }
     }
-    columns_count.is_some()
+    canonical_areas(&serialize(&area_strings)).is_some()
 }
 
 /// `grid`: `<'grid-template'> | <'grid-template-rows'> / [ auto-flow &&
@@ -794,7 +714,7 @@ pub(crate) fn valid_repeat(tokens: &[Token]) -> Option<(bool, &[Token])> {
 }
 
 pub(crate) fn valid_fixed_track_tokens(tokens: &[Token]) -> bool {
-    let Some(components) = top_level_components(tokens) else {
+    let Some(components) = grid_components(tokens) else {
         return false;
     };
     let mut saw_track = false;

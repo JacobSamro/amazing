@@ -22,7 +22,8 @@ mod grid_values;
 // covered by `values.rs`'s own tests/WPT gate), not dead code.
 #[allow(unused_imports)]
 pub(crate) use grid_values::{
-    deferred_grid_template, expand_grid_template, grid_line_custom_ident, is_line_names_component,
+    canonical_areas, deferred_grid, deferred_grid_template, expand_grid, expand_grid_template,
+    grid_line_custom_ident, is_line_names_component,
     parse_subgrid, parse_subgrid_names, split_grid_line_words, split_top_level_comma,
     top_level_solidus, valid_calc_length_percentage, valid_fixed_breadth, valid_fixed_size,
     valid_fixed_track_tokens, valid_grid_area, valid_grid_auto_flow, valid_grid_auto_flow_axis,
@@ -783,6 +784,11 @@ const PROPERTIES: &[PropertyMetadata] = &[
         name: "fill-opacity",
         initial: "1",
         inherited: true,
+    },
+    PropertyMetadata {
+        name: "grid-template-areas",
+        initial: "none",
+        inherited: false,
     },
     PropertyMetadata {
         name: "grid-auto-columns",
@@ -1717,27 +1723,8 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         }
         "grid-template" if needs_deferred_expansion(value) => deferred_grid_template(value),
         "grid-template" => expand_grid_template(value).unwrap_or_default(),
-        "grid" if css_wide_keyword(value).is_some() => [
-            "grid-template-rows", "grid-template-columns", "grid-auto-rows",
-            "grid-auto-columns", "grid-auto-flow",
-        ].into_iter().map(|name| (name.to_owned(), value.to_owned())).collect(),
-        "grid" if needs_deferred_expansion(value) => {
-            let mut template = deferred_grid_template(value);
-            template.extend([
-                ("grid-auto-rows".to_owned(), "auto".to_owned()),
-                ("grid-auto-columns".to_owned(), "auto".to_owned()),
-                ("grid-auto-flow".to_owned(), "row".to_owned()),
-            ]);
-            template
-        },
-        "grid" => expand_grid_template(value).map(|mut template| {
-            template.extend([
-                ("grid-auto-rows".to_owned(), "auto".to_owned()),
-                ("grid-auto-columns".to_owned(), "auto".to_owned()),
-                ("grid-auto-flow".to_owned(), "row".to_owned()),
-            ]);
-            template
-        }).unwrap_or_default(),
+        "grid" if needs_deferred_expansion(value) => deferred_grid(value),
+        "grid" => expand_grid(value).unwrap_or_default(),
         "flex-flow" if !parts.is_empty() => {
             if css_wide_keyword(value).is_some() {
                 vec![
@@ -1852,6 +1839,8 @@ const DEFERRED_FLEX_DIRECTION: &str = "amazing-internal-flex-flow-direction";
 const DEFERRED_FLEX_WRAP: &str = "amazing-internal-flex-flow-wrap";
 const DEFERRED_GRID_ROWS: &str = "amazing-internal-grid-template-rows";
 const DEFERRED_GRID_COLUMNS: &str = "amazing-internal-grid-template-columns";
+const DEFERRED_GRID_AREAS: &str = "amazing-internal-grid-template-areas";
+const DEFERRED_GRID: &str = "amazing-internal-grid";
 const DEFERRED_RADIUS_TOP_LEFT: &str = "amazing-internal-border-radius-top-left";
 const DEFERRED_RADIUS_TOP_RIGHT: &str = "amazing-internal-border-radius-top-right";
 const DEFERRED_RADIUS_BOTTOM_RIGHT: &str = "amazing-internal-border-radius-bottom-right";
@@ -2874,6 +2863,8 @@ fn compute_normal_value(
         crate::text_properties::canonical(property.name, &computed).unwrap_or(computed)
     } else if crate::image_policy::supported(property.name) {
         crate::image_policy::canonical(property.name,&computed).unwrap_or_else(|| property.initial.to_owned())
+    } else if property.name == "grid-template-areas" {
+        canonical_areas(&computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "display" {
         values::display_canonical(&computed).unwrap_or(&computed).to_owned()
     } else if matches!(property.name, "ruby-align" | "ruby-position" | "ruby-overhang" | "ruby-merge") {
@@ -3108,6 +3099,8 @@ fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()>
         DEFERRED_FLEX_WRAP,
         DEFERRED_GRID_ROWS,
         DEFERRED_GRID_COLUMNS,
+        DEFERRED_GRID_AREAS,
+        DEFERRED_GRID,
         DEFERRED_RADIUS_TOP_LEFT,
         DEFERRED_RADIUS_TOP_RIGHT,
         DEFERRED_RADIUS_BOTTOM_RIGHT,
@@ -3184,6 +3177,10 @@ fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()>
             .find_map(|(name, value)| (name == property).then_some(value))
             .ok_or(());
     }
+    if let Some(inner) = deferred_inner(value, DEFERRED_GRID) {
+        return expand_grid(inner).ok_or(())?.into_iter()
+            .find_map(|(name, value)| (name == property).then_some(value)).ok_or(());
+    }
     let deferred = match property {
         "flex-direction" => deferred_inner(value, DEFERRED_FLEX_DIRECTION)
             .map(|inner| (inner, "flex-direction", true)),
@@ -3194,6 +3191,8 @@ fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()>
             .map(|inner| (inner, "grid-template-rows", false)),
         "grid-template-columns" => deferred_inner(value, DEFERRED_GRID_COLUMNS)
             .map(|inner| (inner, "grid-template-columns", false)),
+        "grid-template-areas" => deferred_inner(value, DEFERRED_GRID_AREAS)
+            .map(|inner| (inner, "grid-template-areas", false)),
         _ => None,
     };
     let Some((inner, wanted, flex)) = deferred else {
