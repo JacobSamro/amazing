@@ -136,6 +136,7 @@ mod tests {
             slant: FontSlant::Normal,
             sfnt: Vec::new(),
             author_face: Some(FontFaceMetadata {
+                declaration_order:0,
                 weight: FontDescriptorRange {
                     min: 100.0,
                     max: 900.0,

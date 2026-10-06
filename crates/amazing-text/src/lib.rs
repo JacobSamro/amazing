@@ -684,7 +684,13 @@ pub enum TextError {
     ResourceLimit,
 }
 
+/// Whether a native shaped rendering font contributes glyph coverage.
+/// Invisible fallback still supplies normal advances, metrics and hit geometry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GlyphVisibility { #[default] Visible, InvisibleFallback }
+
 pub trait TextSystem {
+    fn glyph_visibility(&self, _font: FontKey) -> Result<GlyphVisibility, TextError> { Ok(GlyphVisibility::Visible) }
     fn generation(&self) -> u64;
     fn metrics(&self, style: &TextStyle) -> Result<FontMetrics, TextError>;
     fn font_relative_metrics(&self, style: &TextStyle) -> FontRelativeMetrics {

@@ -62,7 +62,8 @@ impl TextProvider {
             let mut best_rank = None;
             let mut candidates = Vec::new();
             for (index, font) in self.fonts.iter().enumerate() {
-                if !font.family.eq_ignore_ascii_case(family)
+                if !self.font_display_available(font.key)
+                    || !font.family.eq_ignore_ascii_case(family)
                     || (author_only && font.author_face.is_none())
                 {
                     continue;
@@ -79,6 +80,7 @@ impl TextProvider {
             if author_only {
                 // Equal-descriptor faces form a composite face. Later rules
                 // win for overlapping unicode ranges.
+                candidates.sort_by_key(|index|self.fonts[*index].author_face.as_ref().map_or(0,|face|face.declaration_order));
                 candidates.reverse();
             }
             for index in candidates {
@@ -129,8 +131,10 @@ impl TextProvider {
         let segmenter = GraphemeClusterSegmenter::new();
         let mut itemized = Vec::new();
         let mut selected = Vec::new();
+        let mut visibility=Vec::new();
         let mut clusters = Vec::new();
         let mut previous_font = None;
+        let mut previous_visibility=amazing_text::GlyphVisibility::Visible;
         let boundaries = segmenter
             .segment_str(text)
             .take(MAX_TEXT_CLUSTERS + 2)
@@ -160,6 +164,7 @@ impl TextProvider {
             }
             let owner = spans.get(span_index).ok_or(TextError::InvalidParagraph)?;
             let font = self.matching_font(&owner.style, Some(&text[cluster.clone()]));
+            let visible=self.font_display_visibility(&owner.style,&text[cluster.clone()],font)?;
             let mut overlap_index = span_index;
             while let Some(span) = spans.get(overlap_index)
                 && span.range.start < cluster.end
@@ -175,7 +180,7 @@ impl TextProvider {
                 };
                 if !itemized.is_empty()
                     && boundary != ShapingBoundary::Hard
-                    && previous_font != font
+                    && (previous_font != font || previous_visibility!=visible)
                 {
                     boundary = ShapingBoundary::StyleChange;
                 }
@@ -186,8 +191,10 @@ impl TextProvider {
                     boundary_before: boundary,
                 });
                 selected.push(font);
+                visibility.push(visible);
                 clusters.push(cluster.clone());
                 previous_font = font;
+                previous_visibility=visible;
                 overlap_index += 1;
             }
         }
@@ -195,6 +202,7 @@ impl TextProvider {
             spans: itemized,
             fonts: selected,
             clusters,
+            visibility,
         })
     }
 }

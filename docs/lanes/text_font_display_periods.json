@@ -1,0 +1,994 @@
+{
+  "schema": 1,
+  "ticket": "text-font-display-periods",
+  "base": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+  "qualified_source": "24657055311f6de4ec67cdf4aa6ec735f42bf571",
+  "scope": [
+    "amazing-text",
+    "amazing-text-provider"
+  ],
+  "native_groups": 10,
+  "before": {
+    "endpoint": {
+      "schema": 2,
+      "lane": "text-font-display-before-20261006",
+      "source_commit": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+      "box_id": "bx_zct8ejan",
+      "host": "user@5.39.75.58",
+      "port": 19037,
+      "job_id": "7a58a6f7081240828a7868ca9e6f8a0a",
+      "output_root": "amazing/out/text-font-display-before-20261006/font-display/before-6b31767e335b",
+      "command_sha256": "7f9c7ac1b1f6aab7de66f9592234023bf19535bcffd7e936f0b266fb414c6bb0",
+      "execution_sha256": "529e525beaef5bcf354a1e5370e1c4c6c7d50caf73a8e6b3c4e5572c7838ea21",
+      "source_archive_sha256": "55136a7edd12b404fd9d9bd9c3a603a60aad62238583aef6e1554b8f39aafa98"
+    },
+    "actual_exit": 0,
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 38
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 5263,
+        "skipped": 17
+      }
+    },
+    "phase_exits": {
+      "build": 0,
+      "css-css-fonts": 0,
+      "doctests": 0,
+      "ensure-wpt": 0,
+      "nextest": 0
+    },
+    "phase_details": [
+      {
+        "command": [
+          "cargo",
+          "nextest",
+          "run",
+          "--workspace",
+          "--locked",
+          "--no-fail-fast",
+          "--status-level",
+          "skip"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "        PASS [   0.002s] (5255/5263) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+          "        PASS [   0.012s] (5256/5263) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+          "        PASS [   0.013s] (5257/5263) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+          "        PASS [   0.006s] (5258/5263) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+          "        PASS [   0.004s] (5259/5263) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+          "        PASS [   0.013s] (5260/5263) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+          "        PASS [   0.026s] (5261/5263) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+          "        PASS [  24.540s] (5262/5263) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+          "        SLOW [>180.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500) amazing-compositor::paint_visibility local_effect_visibility_uses_world_centers_for_positive_negative_and_fractional_transforms",
+          "        PASS [ 198.352s] (5263/5263) amazing-compositor::paint_visibility local_effect_visibility_uses_world_centers_for_positive_negative_and_fractional_transforms",
+          "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+          "     Summary [ 256.702s] 5263 tests run: 5263 passed (2 slow), 17 skipped"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-7ujbg6y_/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/tmp/amazing-font-display-proof-before-6b31767e335b/raw/render-gate/font-display-before-6b31767e335b/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/nextest.log",
+            "durable": {
+              "bytes": 760745,
+              "path": "/tmp/amazing-font-display-proof-before-6b31767e335b/raw/render-gate/font-display-before-6b31767e335b/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/nextest.log",
+              "sha256": "141c7e7c642628a83468f5ed1f44242e2cd26c88fb46484ae9caff0ded8418dc"
+            },
+            "native": {
+              "bytes": 760745,
+              "path": "/tmp/amazing-gate-command-7ujbg6y_/output.log",
+              "sha256": "141c7e7c642628a83468f5ed1f44242e2cd26c88fb46484ae9caff0ded8418dc"
+            },
+            "source": "/tmp/amazing-gate-command-7ujbg6y_/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "nextest",
+        "raw_native": {
+          "bytes": 760745,
+          "path": "/tmp/amazing-gate-command-7ujbg6y_/output.log",
+          "sha256": "141c7e7c642628a83468f5ed1f44242e2cd26c88fb46484ae9caff0ded8418dc"
+        },
+        "schema": 1,
+        "source_commit": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--workspace",
+          "--locked",
+          "--doc"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "   Doc-tests amazing_webrtc_codecs",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "",
+          "   Doc-tests amazing_webrtc_crypto",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          ""
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-9lvvfont/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/tmp/amazing-font-display-proof-before-6b31767e335b/raw/render-gate/font-display-before-6b31767e335b/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/doctests.log",
+            "durable": {
+              "bytes": 30773,
+              "path": "/tmp/amazing-font-display-proof-before-6b31767e335b/raw/render-gate/font-display-before-6b31767e335b/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/doctests.log",
+              "sha256": "01cfcc28df4dc31cebba57915cd5656a06c10a498fb930f44d407859158cbda1"
+            },
+            "native": {
+              "bytes": 30773,
+              "path": "/tmp/amazing-gate-command-9lvvfont/output.log",
+              "sha256": "01cfcc28df4dc31cebba57915cd5656a06c10a498fb930f44d407859158cbda1"
+            },
+            "source": "/tmp/amazing-gate-command-9lvvfont/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "doctests",
+        "raw_native": {
+          "bytes": 30773,
+          "path": "/tmp/amazing-gate-command-9lvvfont/output.log",
+          "sha256": "01cfcc28df4dc31cebba57915cd5656a06c10a498fb930f44d407859158cbda1"
+        },
+        "schema": 1,
+        "source_commit": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "bash",
+          "scripts/ensure-wpt.sh"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "/home/user/corpora/wpt"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-p2l1bim6/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/tmp/amazing-font-display-proof-before-6b31767e335b/raw/render-gate/font-display-before-6b31767e335b/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/ensure-wpt.log",
+            "durable": {
+              "bytes": 23,
+              "path": "/tmp/amazing-font-display-proof-before-6b31767e335b/raw/render-gate/font-display-before-6b31767e335b/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/ensure-wpt.log",
+              "sha256": "bbad706af3e2ae6446dc23042db1738f1e3b142cc60a5b3cb50235f655d9f5de"
+            },
+            "native": {
+              "bytes": 23,
+              "path": "/tmp/amazing-gate-command-p2l1bim6/output.log",
+              "sha256": "bbad706af3e2ae6446dc23042db1738f1e3b142cc60a5b3cb50235f655d9f5de"
+            },
+            "source": "/tmp/amazing-gate-command-p2l1bim6/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "ensure-wpt",
+        "raw_native": {
+          "bytes": 23,
+          "path": "/tmp/amazing-gate-command-p2l1bim6/output.log",
+          "sha256": "bbad706af3e2ae6446dc23042db1738f1e3b142cc60a5b3cb50235f655d9f5de"
+        },
+        "schema": 1,
+        "source_commit": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "build",
+          "-p",
+          "amazing",
+          "--locked"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "469 |                     object.borrow_mut().define(name.clone(), property.clone());",
+          "    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+          "    |",
+          "    = note: this `Result` may be an `Err` variant, which should be handled",
+          "    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default",
+          "help: use `let _ = ...` to ignore the resulting value",
+          "    |",
+          "469 |                     let _ = object.borrow_mut().define(name.clone(), property.clone());",
+          "    |                     +++++++",
+          "",
+          "warning: `amazing` (bin \"amazing\") generated 63 warnings (run `cargo fix --bin \"amazing\" -p amazing` to apply 11 suggestions)",
+          "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 48.69s"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-6evt_3uu/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/tmp/amazing-font-display-proof-before-6b31767e335b/raw/render-gate/font-display-before-6b31767e335b/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/build.log",
+            "durable": {
+              "bytes": 59010,
+              "path": "/tmp/amazing-font-display-proof-before-6b31767e335b/raw/render-gate/font-display-before-6b31767e335b/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/build.log",
+              "sha256": "5f1adae9b57d2b2d95e206a00d918a66ee1764d5befa60ad6a719af205fb30c6"
+            },
+            "native": {
+              "bytes": 59010,
+              "path": "/tmp/amazing-gate-command-6evt_3uu/output.log",
+              "sha256": "5f1adae9b57d2b2d95e206a00d918a66ee1764d5befa60ad6a719af205fb30c6"
+            },
+            "source": "/tmp/amazing-gate-command-6evt_3uu/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "build",
+        "raw_native": {
+          "bytes": 59010,
+          "path": "/tmp/amazing-gate-command-6evt_3uu/output.log",
+          "sha256": "5f1adae9b57d2b2d95e206a00d918a66ee1764d5befa60ad6a719af205fb30c6"
+        },
+        "schema": 1,
+        "source_commit": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "/usr/bin/python3",
+          "scripts/wpt_render_compare.py",
+          "--wpt-root",
+          "/home/user/corpora/wpt",
+          "--subdir",
+          "css/css-fonts",
+          "--exe",
+          "/tmp/amazing-font-display-storage/font-display-periods/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/before-6b31767e335b/target/debug/amazing",
+          "--out",
+          "/tmp/amazing-render-gate-y2mp91ar/css-css-fonts",
+          "--width",
+          "800",
+          "--height",
+          "600",
+          "--timeout",
+          "20",
+          "--jobs",
+          "4",
+          "--limit",
+          "0",
+          "--compact"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "PASS       css__css-fonts__font-size-zero-3.html",
+          "PASS       css__css-fonts__synthetic-bold-space-width.html",
+          "MISMATCH   css__css-fonts__standard-font-family-3.html",
+          "MISMATCH   css__css-fonts__standard-font-family-2.html",
+          "PASS       css__css-fonts__rem-in-monospace.html",
+          "PASS       css__css-fonts__test-synthetic-bold.html",
+          "PASS       css__css-fonts__rlh-in-monospace.html",
+          "PASS       css__css-fonts__font-size-adjust-zero-1.html",
+          "MISMATCH   css__css-fonts__standard-font-family-11.html",
+          "Report: /tmp/amazing-render-gate-y2mp91ar/css-css-fonts/run-20261006T074105Z-80395/report.json",
+          "Counts: pass=24 mismatch=8 error=0 timeout=0 unsupported=0 crash=0",
+          "Compact: /tmp/amazing-render-gate-y2mp91ar/css-css-fonts/run-20261006T074105Z-80395/compact.json"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-3gk1zq4v/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/tmp/amazing-font-display-proof-before-6b31767e335b/raw/render-gate/font-display-before-6b31767e335b/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/css-css-fonts.log",
+            "durable": {
+              "bytes": 2005,
+              "path": "/tmp/amazing-font-display-proof-before-6b31767e335b/raw/render-gate/font-display-before-6b31767e335b/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/css-css-fonts.log",
+              "sha256": "1d9e37f5ab37d0b074a290f1d6476982b8db3fa48660f860362ae57431740f0c"
+            },
+            "native": {
+              "bytes": 2005,
+              "path": "/tmp/amazing-gate-command-3gk1zq4v/output.log",
+              "sha256": "1d9e37f5ab37d0b074a290f1d6476982b8db3fa48660f860362ae57431740f0c"
+            },
+            "source": "/tmp/amazing-gate-command-3gk1zq4v/output.log"
+          },
+          {
+            "copy_exit": 0,
+            "destination": "/tmp/amazing-font-display-proof-before-6b31767e335b/raw/render-gate/font-display-before-6b31767e335b/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/css-css-fonts.compact.json",
+            "durable": {
+              "bytes": 2438,
+              "path": "/tmp/amazing-font-display-proof-before-6b31767e335b/raw/render-gate/font-display-before-6b31767e335b/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/css-css-fonts.compact.json",
+              "sha256": "81515f482255bff166a628d8968e76f0eba9c72134709d7db87f55ffa0b1f31b"
+            },
+            "native": {
+              "bytes": 2438,
+              "path": "/tmp/amazing-render-gate-y2mp91ar/css-css-fonts/compact.json",
+              "sha256": "81515f482255bff166a628d8968e76f0eba9c72134709d7db87f55ffa0b1f31b"
+            },
+            "source": "/tmp/amazing-render-gate-y2mp91ar/css-css-fonts/compact.json"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "css-css-fonts",
+        "raw_native": {
+          "bytes": 2005,
+          "path": "/tmp/amazing-gate-command-3gk1zq4v/output.log",
+          "sha256": "1d9e37f5ab37d0b074a290f1d6476982b8db3fa48660f860362ae57431740f0c"
+        },
+        "schema": 1,
+        "source_commit": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+        "wrapper_exit": 0
+      }
+    ],
+    "storage": {
+      "actual_storage_exit": 0,
+      "artifact_manifest": {
+        "bytes": 416539,
+        "path": "/tmp/amazing-font-display-proof-before-6b31767e335b/retained/manifests/before-6b31767e335b.json",
+        "sha256": "2f180a7c5e7bddfeac504f448dcefc28903ebc7d9cd78bf22cad656ceddbd074"
+      },
+      "baseline": null,
+      "capacity": {
+        "admitted": true,
+        "filesystems": [
+          {
+            "available_bytes": 31669706752,
+            "device": 64769,
+            "path": "/tmp/amazing-font-display-storage",
+            "required_bytes": 25769803776,
+            "total_bytes": 73635184640
+          },
+          {
+            "available_bytes": 31669706752,
+            "device": 64769,
+            "path": "/tmp/amazing-font-display-proof-before-6b31767e335b",
+            "required_bytes": 134217728,
+            "total_bytes": 73635184640
+          }
+        ],
+        "shared_device_requirements": [
+          {
+            "available_bytes": 31669706752,
+            "required_bytes": 28051505152
+          }
+        ]
+      },
+      "command_exit": 0,
+      "copied_unique_bytes": 0,
+      "free_after": [
+        {
+          "available_bytes": 25237614592,
+          "device": 64769,
+          "path": "/tmp/amazing-font-display-storage",
+          "total_bytes": 73635184640
+        },
+        {
+          "available_bytes": 25237614592,
+          "device": 64769,
+          "path": "/tmp/amazing-font-display-proof-before-6b31767e335b",
+          "total_bytes": 73635184640
+        }
+      ],
+      "hardlink_capability": {
+        "failed_artifacts": 0,
+        "first_failures": [],
+        "probed_artifacts": 1030,
+        "raw": {
+          "bytes": 397454,
+          "path": "/tmp/amazing-font-display-storage/font-display-periods/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/before-6b31767e335b/hardlink.probes.json",
+          "sha256": "87f7d60c39507543e752300900b1a8c383bc8d9fb1dae2a978949a68a660e965"
+        },
+        "supported": true
+      },
+      "job": "before-6b31767e335b",
+      "phase": "before",
+      "profile": {
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+        "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+      },
+      "recoverable_bytes": 2627825324,
+      "recoverable_files": 6376,
+      "retained_elf_files": 1006,
+      "retained_files": 1030,
+      "retained_logical_bytes": 7090464322,
+      "retention_capacity_required_bytes": 3627008,
+      "retire_after_retention": true,
+      "schema": 1,
+      "selected_retention_method": "hardlink",
+      "session_raw": {
+        "bytes": 2715,
+        "path": "/tmp/amazing-font-display-storage/font-display-periods/5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58/before/before-6b31767e335b/session.json",
+        "sha256": "6528f028d872716bde912d14ee0bc7cdb66644d7a23a9d474ddcfd559f09dbe3"
+      },
+      "source": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+      "state": "TERMINAL",
+      "storage_exit": 0,
+      "target_retired": true
+    },
+    "compact_hashes": {
+      "compact-export.manifest.json": "a4b9c5500d63b9aaa2b4f4858feb365874a84d6ebd65537b6da5c3ef596e5dbe",
+      "css-css-fonts.compact.json": "81515f482255bff166a628d8968e76f0eba9c72134709d7db87f55ffa0b1f31b",
+      "gate.summary.json": "4ab56f98c6684c2bf2e809a3f35adfdb21f42c422d18948eed135ee96587f2fa",
+      "storage.summary.json": "94d0620f8de2af37ef74f724445f8786dd404ffa99632bd20caa8bcac21c6601"
+    }
+  },
+  "after": {
+    "endpoint": {
+      "schema": 2,
+      "lane": "text-font-display-after-corrected-20261006",
+      "source_commit": "24657055311f6de4ec67cdf4aa6ec735f42bf571",
+      "box_id": "bx_2ttze9up",
+      "host": "user@46.105.118.126",
+      "port": 19043,
+      "job_id": "d86d8664f6364deca22e4b141018aeda",
+      "output_root": "amazing/out/text-font-display-after-corrected-20261006/font-display/after-corrected-9f1c5fadcc",
+      "command_sha256": "fcbe5af9afab6216c59109f0d4c80a60a704417af0c510a96498833ac0a9483b",
+      "execution_sha256": "4dd346e5d5a688844abc256e30d75742b7494cd1b69383b2a7886f8b0bce8a40",
+      "source_archive_sha256": "9a8429f3d200dacbde0326659615ce59f6ff19ef38cf02adefb45d38f2c82aac"
+    },
+    "actual_exit": 0,
+    "counts": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 38
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 5273,
+        "skipped": 17
+      }
+    },
+    "phase_exits": {
+      "build": 0,
+      "css-css-fonts": 0,
+      "doctests": 0,
+      "ensure-wpt": 0,
+      "nextest": 0
+    },
+    "phase_details": [
+      {
+        "command": [
+          "cargo",
+          "nextest",
+          "run",
+          "--workspace",
+          "--locked",
+          "--no-fail-fast",
+          "--status-level",
+          "skip"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "        PASS [   0.002s] (5265/5273) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage",
+          "        PASS [   0.010s] (5266/5273) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback",
+          "        PASS [   0.012s] (5267/5273) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba",
+          "        PASS [   0.005s] (5268/5273) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels",
+          "        PASS [   0.003s] (5269/5273) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam",
+          "        PASS [   0.014s] (5270/5273) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit",
+          "        PASS [   0.014s] (5271/5273) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels",
+          "        PASS [  23.542s] (5272/5273) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles",
+          "        SLOW [>180.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500) amazing-compositor::paint_visibility local_effect_visibility_uses_world_centers_for_positive_negative_and_fractional_transforms",
+          "        PASS [ 199.714s] (5273/5273) amazing-compositor::paint_visibility local_effect_visibility_uses_world_centers_for_positive_negative_and_fractional_transforms",
+          "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+          "     Summary [ 260.932s] 5273 tests run: 5273 passed (3 slow), 17 skipped"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-12i_3_k1/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc/raw/render-gate/font-display-after-corrected-9f1c5fadcc/24657055311f6de4ec67cdf4aa6ec735f42bf571/nextest.log",
+            "durable": {
+              "bytes": 762337,
+              "path": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc/raw/render-gate/font-display-after-corrected-9f1c5fadcc/24657055311f6de4ec67cdf4aa6ec735f42bf571/nextest.log",
+              "sha256": "658e1c51aa78487692bf23677669abf2b95e32de6ce7f91854cff82b2e41108d"
+            },
+            "native": {
+              "bytes": 762337,
+              "path": "/tmp/amazing-gate-command-12i_3_k1/output.log",
+              "sha256": "658e1c51aa78487692bf23677669abf2b95e32de6ce7f91854cff82b2e41108d"
+            },
+            "source": "/tmp/amazing-gate-command-12i_3_k1/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "nextest",
+        "raw_native": {
+          "bytes": 762337,
+          "path": "/tmp/amazing-gate-command-12i_3_k1/output.log",
+          "sha256": "658e1c51aa78487692bf23677669abf2b95e32de6ce7f91854cff82b2e41108d"
+        },
+        "schema": 1,
+        "source_commit": "24657055311f6de4ec67cdf4aa6ec735f42bf571",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--workspace",
+          "--locked",
+          "--doc"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "   Doc-tests amazing_webrtc_codecs",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "",
+          "   Doc-tests amazing_webrtc_crypto",
+          "",
+          "running 0 tests",
+          "",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          ""
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-y9s9n4pc/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc/raw/render-gate/font-display-after-corrected-9f1c5fadcc/24657055311f6de4ec67cdf4aa6ec735f42bf571/doctests.log",
+            "durable": {
+              "bytes": 30773,
+              "path": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc/raw/render-gate/font-display-after-corrected-9f1c5fadcc/24657055311f6de4ec67cdf4aa6ec735f42bf571/doctests.log",
+              "sha256": "80f36bea5103ab4127d60937bc116dba0c43eabcd05e0f8663cb294e2cbdb7de"
+            },
+            "native": {
+              "bytes": 30773,
+              "path": "/tmp/amazing-gate-command-y9s9n4pc/output.log",
+              "sha256": "80f36bea5103ab4127d60937bc116dba0c43eabcd05e0f8663cb294e2cbdb7de"
+            },
+            "source": "/tmp/amazing-gate-command-y9s9n4pc/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "doctests",
+        "raw_native": {
+          "bytes": 30773,
+          "path": "/tmp/amazing-gate-command-y9s9n4pc/output.log",
+          "sha256": "80f36bea5103ab4127d60937bc116dba0c43eabcd05e0f8663cb294e2cbdb7de"
+        },
+        "schema": 1,
+        "source_commit": "24657055311f6de4ec67cdf4aa6ec735f42bf571",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "bash",
+          "scripts/ensure-wpt.sh"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "/home/user/corpora/wpt"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-jxd4945m/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc/raw/render-gate/font-display-after-corrected-9f1c5fadcc/24657055311f6de4ec67cdf4aa6ec735f42bf571/ensure-wpt.log",
+            "durable": {
+              "bytes": 23,
+              "path": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc/raw/render-gate/font-display-after-corrected-9f1c5fadcc/24657055311f6de4ec67cdf4aa6ec735f42bf571/ensure-wpt.log",
+              "sha256": "bbad706af3e2ae6446dc23042db1738f1e3b142cc60a5b3cb50235f655d9f5de"
+            },
+            "native": {
+              "bytes": 23,
+              "path": "/tmp/amazing-gate-command-jxd4945m/output.log",
+              "sha256": "bbad706af3e2ae6446dc23042db1738f1e3b142cc60a5b3cb50235f655d9f5de"
+            },
+            "source": "/tmp/amazing-gate-command-jxd4945m/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "ensure-wpt",
+        "raw_native": {
+          "bytes": 23,
+          "path": "/tmp/amazing-gate-command-jxd4945m/output.log",
+          "sha256": "bbad706af3e2ae6446dc23042db1738f1e3b142cc60a5b3cb50235f655d9f5de"
+        },
+        "schema": 1,
+        "source_commit": "24657055311f6de4ec67cdf4aa6ec735f42bf571",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "build",
+          "-p",
+          "amazing",
+          "--locked"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "469 |                     object.borrow_mut().define(name.clone(), property.clone());",
+          "    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+          "    |",
+          "    = note: this `Result` may be an `Err` variant, which should be handled",
+          "    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default",
+          "help: use `let _ = ...` to ignore the resulting value",
+          "    |",
+          "469 |                     let _ = object.borrow_mut().define(name.clone(), property.clone());",
+          "    |                     +++++++",
+          "",
+          "warning: `amazing` (bin \"amazing\") generated 63 warnings (run `cargo fix --bin \"amazing\" -p amazing` to apply 11 suggestions)",
+          "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 48.20s"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-loobzme_/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc/raw/render-gate/font-display-after-corrected-9f1c5fadcc/24657055311f6de4ec67cdf4aa6ec735f42bf571/build.log",
+            "durable": {
+              "bytes": 59010,
+              "path": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc/raw/render-gate/font-display-after-corrected-9f1c5fadcc/24657055311f6de4ec67cdf4aa6ec735f42bf571/build.log",
+              "sha256": "3eb7c30bd8e237ecd01aac87efc44c03c2fbd4cc7ab89428a1f5c40722e58873"
+            },
+            "native": {
+              "bytes": 59010,
+              "path": "/tmp/amazing-gate-command-loobzme_/output.log",
+              "sha256": "3eb7c30bd8e237ecd01aac87efc44c03c2fbd4cc7ab89428a1f5c40722e58873"
+            },
+            "source": "/tmp/amazing-gate-command-loobzme_/output.log"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "build",
+        "raw_native": {
+          "bytes": 59010,
+          "path": "/tmp/amazing-gate-command-loobzme_/output.log",
+          "sha256": "3eb7c30bd8e237ecd01aac87efc44c03c2fbd4cc7ab89428a1f5c40722e58873"
+        },
+        "schema": 1,
+        "source_commit": "24657055311f6de4ec67cdf4aa6ec735f42bf571",
+        "wrapper_exit": 0
+      },
+      {
+        "command": [
+          "/usr/bin/python3",
+          "scripts/wpt_render_compare.py",
+          "--wpt-root",
+          "/home/user/corpora/wpt",
+          "--subdir",
+          "css/css-fonts",
+          "--exe",
+          "/tmp/amazing-font-display-storage/font-display-periods/24657055311f6de4ec67cdf4aa6ec735f42bf571/after/after-corrected-9f1c5fadcc/target/debug/amazing",
+          "--out",
+          "/tmp/amazing-render-gate-qrm6l62t/css-css-fonts",
+          "--width",
+          "800",
+          "--height",
+          "600",
+          "--timeout",
+          "20",
+          "--jobs",
+          "4",
+          "--limit",
+          "0",
+          "--compact",
+          "--baseline",
+          "/tmp/amazing-font-display-tools.dhrBll/baseline.compact.json"
+        ],
+        "command_exit": 0,
+        "diagnostic_tail": [
+          "PASS       css__css-fonts__synthetic-bold-space-width.html",
+          "MISMATCH   css__css-fonts__standard-font-family-3.html",
+          "PASS       css__css-fonts__rem-in-monospace.html",
+          "MISMATCH   css__css-fonts__standard-font-family-2.html",
+          "PASS       css__css-fonts__test-synthetic-bold.html",
+          "MISMATCH   css__css-fonts__standard-font-family-11.html",
+          "PASS       css__css-fonts__rlh-in-monospace.html",
+          "PASS       css__css-fonts__font-size-adjust-zero-1.html",
+          "Baseline compare (css/css-fonts): gained=0 lost=0 changed=0 unchanged=32 new=0 removed=0",
+          "Report: /tmp/amazing-render-gate-qrm6l62t/css-css-fonts/run-20261006T081247Z-78633/report.json",
+          "Counts: pass=24 mismatch=8 error=0 timeout=0 unsupported=0 crash=0",
+          "Compact: /tmp/amazing-render-gate-qrm6l62t/css-css-fonts/run-20261006T081247Z-78633/compact.json"
+        ],
+        "engine_exit": 0,
+        "native_receipt": "/tmp/amazing-gate-command-0f91yy95/phase.manifest.json",
+        "output_copies": [
+          {
+            "copy_exit": 0,
+            "destination": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc/raw/render-gate/font-display-after-corrected-9f1c5fadcc/24657055311f6de4ec67cdf4aa6ec735f42bf571/css-css-fonts.log",
+            "durable": {
+              "bytes": 2094,
+              "path": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc/raw/render-gate/font-display-after-corrected-9f1c5fadcc/24657055311f6de4ec67cdf4aa6ec735f42bf571/css-css-fonts.log",
+              "sha256": "c428470755537ce71396d1d3280a19caa6cc89c477dcf1070847c62e188e5497"
+            },
+            "native": {
+              "bytes": 2094,
+              "path": "/tmp/amazing-gate-command-0f91yy95/output.log",
+              "sha256": "c428470755537ce71396d1d3280a19caa6cc89c477dcf1070847c62e188e5497"
+            },
+            "source": "/tmp/amazing-gate-command-0f91yy95/output.log"
+          },
+          {
+            "copy_exit": 0,
+            "destination": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc/raw/render-gate/font-display-after-corrected-9f1c5fadcc/24657055311f6de4ec67cdf4aa6ec735f42bf571/css-css-fonts.compact.json",
+            "durable": {
+              "bytes": 4340,
+              "path": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc/raw/render-gate/font-display-after-corrected-9f1c5fadcc/24657055311f6de4ec67cdf4aa6ec735f42bf571/css-css-fonts.compact.json",
+              "sha256": "e69e6aed1beab7f59d39c5d8abc23bdd37ec4d9d58ec21ead597b060c7530631"
+            },
+            "native": {
+              "bytes": 4340,
+              "path": "/tmp/amazing-render-gate-qrm6l62t/css-css-fonts/compact.json",
+              "sha256": "e69e6aed1beab7f59d39c5d8abc23bdd37ec4d9d58ec21ead597b060c7530631"
+            },
+            "source": "/tmp/amazing-render-gate-qrm6l62t/css-css-fonts/compact.json"
+          }
+        ],
+        "output_copy_exit": 0,
+        "phase": "css-css-fonts",
+        "raw_native": {
+          "bytes": 2094,
+          "path": "/tmp/amazing-gate-command-0f91yy95/output.log",
+          "sha256": "c428470755537ce71396d1d3280a19caa6cc89c477dcf1070847c62e188e5497"
+        },
+        "schema": 1,
+        "source_commit": "24657055311f6de4ec67cdf4aa6ec735f42bf571",
+        "wrapper_exit": 0
+      }
+    ],
+    "storage": {
+      "actual_storage_exit": 0,
+      "artifact_manifest": {
+        "bytes": 423761,
+        "path": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc/retained/manifests/after-corrected-9f1c5fadcc.json",
+        "sha256": "c2a45e7f004bcacc603918f27799ccb06d76510f44ccbbfcfad9ac3e61fdb5a7"
+      },
+      "baseline": {
+        "artifact_count": 1030,
+        "catalog_sha256": "17b51ccf96d49c2f1327016e110199cf8836c443c57879b47032b5cfb06c608f",
+        "elf_count": 1006,
+        "local_elf_readback": false,
+        "mode": "remote-reference",
+        "original_device": 64769,
+        "original_filesystems": [
+          {
+            "available_bytes": 31669706752,
+            "device": 64769,
+            "path": "/tmp/amazing-font-display-storage",
+            "required_bytes": 25769803776,
+            "total_bytes": 73635184640
+          },
+          {
+            "available_bytes": 31669706752,
+            "device": 64769,
+            "path": "/tmp/amazing-font-display-proof-before-6b31767e335b",
+            "required_bytes": 134217728,
+            "total_bytes": 73635184640
+          }
+        ],
+        "original_job": {
+          "box_id": "bx_zct8ejan",
+          "command_sha256": "7f9c7ac1b1f6aab7de66f9592234023bf19535bcffd7e936f0b266fb414c6bb0",
+          "execution_sha256": "529e525beaef5bcf354a1e5370e1c4c6c7d50caf73a8e6b3c4e5572c7838ea21",
+          "host": "user@5.39.75.58",
+          "job_id": "7a58a6f7081240828a7868ca9e6f8a0a",
+          "lane": "text-font-display-before-20261006",
+          "output_root": "amazing/out/text-font-display-before-20261006/font-display/before-6b31767e335b",
+          "port": 19037,
+          "schema": 2,
+          "source_archive_sha256": "55136a7edd12b404fd9d9bd9c3a603a60aad62238583aef6e1554b8f39aafa98",
+          "source_commit": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58"
+        },
+        "original_payload_retained_on_original_host": true,
+        "path": "/tmp/amazing-font-display-proof-before-6b31767e335b/retained/manifests/before-6b31767e335b.json",
+        "profile": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+          "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+        },
+        "reference_sha256": "3ae2961c865dafc1fb5b2710d9686a2a40975942ca56465852c9215b96af3c0f",
+        "sha256": "2f180a7c5e7bddfeac504f448dcefc28903ebc7d9cd78bf22cad656ceddbd074",
+        "source": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58"
+      },
+      "capacity": {
+        "admitted": true,
+        "filesystems": [
+          {
+            "available_bytes": 32384987136,
+            "device": 64769,
+            "path": "/tmp/amazing-font-display-storage",
+            "required_bytes": 25769803776,
+            "total_bytes": 73635184640
+          },
+          {
+            "available_bytes": 32384987136,
+            "device": 64769,
+            "path": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc",
+            "required_bytes": 134217728,
+            "total_bytes": 73635184640
+          }
+        ],
+        "shared_device_requirements": [
+          {
+            "available_bytes": 32384987136,
+            "required_bytes": 28051505152
+          }
+        ]
+      },
+      "command_exit": 0,
+      "copied_unique_bytes": 0,
+      "free_after": [
+        {
+          "available_bytes": 25938046976,
+          "device": 64769,
+          "path": "/tmp/amazing-font-display-storage",
+          "total_bytes": 73635184640
+        },
+        {
+          "available_bytes": 25938046976,
+          "device": 64769,
+          "path": "/tmp/amazing-font-display-proof-after-corrected-9f1c5fadcc",
+          "total_bytes": 73635184640
+        }
+      ],
+      "hardlink_capability": {
+        "failed_artifacts": 0,
+        "first_failures": [],
+        "probed_artifacts": 1030,
+        "raw": {
+          "bytes": 410844,
+          "path": "/tmp/amazing-font-display-storage/font-display-periods/24657055311f6de4ec67cdf4aa6ec735f42bf571/after/after-corrected-9f1c5fadcc/hardlink.probes.json",
+          "sha256": "c2f1d2673f48ea9c693bdf42e5c4d91d976d91172fa74d9cd6972a4703a08c37"
+        },
+        "supported": true
+      },
+      "job": "after-corrected-9f1c5fadcc",
+      "phase": "after",
+      "profile": {
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+        "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+      },
+      "recoverable_bytes": 2630252245,
+      "recoverable_files": 6376,
+      "retained_elf_files": 1006,
+      "retained_files": 1030,
+      "retained_logical_bytes": 7093803234,
+      "retention_capacity_required_bytes": 3627008,
+      "retire_after_retention": true,
+      "schema": 1,
+      "selected_retention_method": "hardlink",
+      "session_raw": {
+        "bytes": 4382,
+        "path": "/tmp/amazing-font-display-storage/font-display-periods/24657055311f6de4ec67cdf4aa6ec735f42bf571/after/after-corrected-9f1c5fadcc/session.json",
+        "sha256": "8de07456a449c6cf67f4cf5eb957d5ed67e06cc539f0264f8b4f1e6bc05258a4"
+      },
+      "source": "24657055311f6de4ec67cdf4aa6ec735f42bf571",
+      "state": "TERMINAL",
+      "storage_exit": 0,
+      "target_retired": true
+    },
+    "compact_hashes": {
+      "nextest.phase.manifest.json": "d97f8f697d54dd22666b12e74d2438abe2d61780b2847e5732d85c78b901e3ed",
+      "css-css-fonts.compact.json": "e69e6aed1beab7f59d39c5d8abc23bdd37ec4d9d58ec21ead597b060c7530631",
+      "gate.summary.json": "fac3d679e8552c6bc9b96a60e9a46224ae30f5d6390f11639482bced2fe755f9",
+      "storage.summary.json": "7b4d5e6e10108cc7fe8809d523361b331a28516f1820f994a14abbf79570025a"
+    }
+  },
+  "corpus": {
+    "selection": "whole eligible css/css-fonts static reftests",
+    "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "profile": {
+      "width": 800,
+      "height": 600,
+      "device_scale": 1
+    },
+    "before_counts": {
+      "pass": 24,
+      "mismatch": 8,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 24,
+      "mismatch": 8,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "before": {
+      "css__css-fonts__system-ui-mixed.html": "pass",
+      "css__css-fonts__font-size-zero-1-ref.html": "pass",
+      "css__css-fonts__test-synthetic-italic.html": "pass",
+      "css__css-fonts__font-variant-ligatures-11.optional.html": "pass",
+      "css__css-fonts__matching__font-unicode-PUA-primary-font.html": "mismatch",
+      "css__css-fonts__standard-font-family-19.html": "pass",
+      "css__css-fonts__font-size-zero-1.html": "pass",
+      "css__css-fonts__standard-font-family-5.html": "mismatch",
+      "css__css-fonts__font-kerning-01.html": "pass",
+      "css__css-fonts__font-size-adjust-zero-2.html": "pass",
+      "css__css-fonts__font-variant-emoji-1.html": "mismatch",
+      "css__css-fonts__font-size-xxx-large.html": "pass",
+      "css__css-fonts__standard-font-family-13.html": "pass",
+      "css__css-fonts__font-variant-emoji-2.html": "pass",
+      "css__css-fonts__standard-font-family-17.html": "mismatch",
+      "css__css-fonts__font-feature-settings-tibetan.html": "pass",
+      "css__css-fonts__quoted-generic-ignored.html": "pass",
+      "css__css-fonts__standard-font-family.html": "pass",
+      "css__css-fonts__rch-in-monospace.html": "pass",
+      "css__css-fonts__font-size-adjust-order-001.html": "mismatch",
+      "css__css-fonts__font-size-zero-2.html": "pass",
+      "css__css-fonts__standard-font-family-12.html": "pass",
+      "css__css-fonts__font-size-zero-3.html": "pass",
+      "css__css-fonts__standard-font-family-4.html": "pass",
+      "css__css-fonts__synthetic-bold-space-width.html": "pass",
+      "css__css-fonts__standard-font-family-2.html": "mismatch",
+      "css__css-fonts__standard-font-family-3.html": "mismatch",
+      "css__css-fonts__rem-in-monospace.html": "pass",
+      "css__css-fonts__test-synthetic-bold.html": "pass",
+      "css__css-fonts__rlh-in-monospace.html": "pass",
+      "css__css-fonts__font-size-adjust-zero-1.html": "pass",
+      "css__css-fonts__standard-font-family-11.html": "mismatch"
+    },
+    "after": {
+      "css__css-fonts__system-ui-mixed.html": "pass",
+      "css__css-fonts__font-size-zero-1-ref.html": "pass",
+      "css__css-fonts__test-synthetic-italic.html": "pass",
+      "css__css-fonts__font-variant-ligatures-11.optional.html": "pass",
+      "css__css-fonts__matching__font-unicode-PUA-primary-font.html": "mismatch",
+      "css__css-fonts__standard-font-family-19.html": "pass",
+      "css__css-fonts__font-size-zero-1.html": "pass",
+      "css__css-fonts__standard-font-family-5.html": "mismatch",
+      "css__css-fonts__font-kerning-01.html": "pass",
+      "css__css-fonts__font-size-adjust-zero-2.html": "pass",
+      "css__css-fonts__font-variant-emoji-1.html": "mismatch",
+      "css__css-fonts__font-size-xxx-large.html": "pass",
+      "css__css-fonts__standard-font-family-13.html": "pass",
+      "css__css-fonts__font-variant-emoji-2.html": "pass",
+      "css__css-fonts__standard-font-family-17.html": "mismatch",
+      "css__css-fonts__font-feature-settings-tibetan.html": "pass",
+      "css__css-fonts__quoted-generic-ignored.html": "pass",
+      "css__css-fonts__standard-font-family.html": "pass",
+      "css__css-fonts__rch-in-monospace.html": "pass",
+      "css__css-fonts__font-size-adjust-order-001.html": "mismatch",
+      "css__css-fonts__font-size-zero-2.html": "pass",
+      "css__css-fonts__standard-font-family-12.html": "pass",
+      "css__css-fonts__font-size-zero-3.html": "pass",
+      "css__css-fonts__standard-font-family-4.html": "pass",
+      "css__css-fonts__synthetic-bold-space-width.html": "pass",
+      "css__css-fonts__standard-font-family-2.html": "mismatch",
+      "css__css-fonts__standard-font-family-3.html": "mismatch",
+      "css__css-fonts__rem-in-monospace.html": "pass",
+      "css__css-fonts__test-synthetic-bold.html": "pass",
+      "css__css-fonts__rlh-in-monospace.html": "pass",
+      "css__css-fonts__font-size-adjust-zero-1.html": "pass",
+      "css__css-fonts__standard-font-family-11.html": "mismatch"
+    },
+    "lost": [],
+    "gained": [],
+    "changed": []
+  },
+  "boundary": "Provider timing/glyph contracts qualified; Product owns shell timeline installation and real-window visual qualification. Full16 Test262 belongs to integrator merge gate.",
+  "failures_preserved": {
+    "source": "5e190ea2bbcd73efdfdb62edc25ed5ec16912067",
+    "workspace_compile_exit": 101,
+    "compiler_raw": {
+      "host": "bx_5wrt3t48",
+      "path": "/tmp/amazing-gate-command-ts42t97y/output.log",
+      "sha256": "7d6bf0d03b52686a6f2035242dba11afa985976c6829e69547e5a8efa67a733e"
+    },
+    "correction": "Two new native fixture Direction::Ltr enum references corrected to existing LeftToRight; production unchanged."
+  }
+}

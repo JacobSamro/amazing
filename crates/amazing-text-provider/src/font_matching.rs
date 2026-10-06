@@ -137,6 +137,10 @@ pub(super) fn rank(style: &TextStyle, font: &FontRecord) -> (u8, u32, u8, u32, u
             FontDescriptorRange::single(font.weight as f32),
         )
     };
+    rank_descriptors(style,width,slant,weight)
+}
+pub(super) fn rank_descriptors(style:&TextStyle,width:FontDescriptorRange,slant:FontStyleDescriptor,weight:FontDescriptorRange)
+    ->(u8,u32,u8,u32,u8,u32){
     let (width_side, width_distance) = width_rank(requested_width(style), width);
     let (style_stage, style_distance) = style_rank(style, slant);
     let (weight_stage, weight_distance) = weight_rank(style.weight as f32, weight);

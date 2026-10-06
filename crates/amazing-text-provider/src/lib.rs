@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod font_display;
+mod font_display_provider;
 mod font_matching;
 mod font_relative_metrics;
 mod font_variant_synthesis;
@@ -10,7 +11,7 @@ mod font_variations;
 mod line_break_objects;
 mod text_emphasis;
 mod text_transform;
-pub use font_display::FontDisplayPeriods;
+pub use font_display::{FontDisplayPeriods,FontDisplayTimeline,FontDisplaySnapshot,FontDisplayPhase,FontDisplayMetrics,FontDisplayFaceState};
 pub use text_emphasis::text_emphasis_mark;
 pub use text_transform::apply_text_transform;
 mod emoji_presentation;
@@ -259,13 +260,24 @@ pub struct FontFetchRequest<'a> {
     pub max_bytes: usize,
 }
 
+/// An asynchronous source cannot be treated as a failed source: later `src`
+/// entries are not attempted while an earlier valid source is still pending.
+#[derive(Debug)]
+pub enum FontSourceLoad { Pending, Failed, Ready(Vec<u8>) }
 pub trait FontFaceLoader {
     fn load_local(&mut self, name: &str, max_bytes: usize) -> Result<Option<Vec<u8>>, TextError>;
     fn load_url(&mut self, request: FontFetchRequest<'_>) -> Result<Option<Vec<u8>>, TextError>;
+    fn load_local_state(&mut self,name:&str,max_bytes:usize)->Result<FontSourceLoad,TextError>{
+        self.load_local(name,max_bytes).map(|v|v.map_or(FontSourceLoad::Failed,FontSourceLoad::Ready))
+    }
+    fn load_url_state(&mut self,request:FontFetchRequest<'_>)->Result<FontSourceLoad,TextError>{
+        self.load_url(request).map(|v|v.map_or(FontSourceLoad::Failed,FontSourceLoad::Ready))
+    }
 }
 
 #[derive(Debug, Clone)]
 struct FontFaceMetadata {
+    declaration_order:usize,
     weight: FontDescriptorRange,
     stretch: FontDescriptorRange,
     style: FontStyleDescriptor,
@@ -314,12 +326,17 @@ struct FontItemization {
     spans: Vec<amazing_text::TextSpan>,
     fonts: Vec<Option<usize>>,
     clusters: Vec<std::ops::Range<usize>>,
+    visibility:Vec<amazing_text::GlyphVisibility>,
 }
 
 #[derive(Debug)]
 pub struct TextProvider {
     generation: u64,
-    next_font_key: u64,
+    display_generation:Option<u64>,
+    next_font_key: Cell<u64>,
+    display_time:std::time::Duration,
+    display_faces:Vec<font_display::DisplayFace>,
+    hidden_fonts:RefCell<HashMap<FontKey,FontKey>>,
     fonts: Vec<FontRecord>,
     author_families: BTreeSet<String>,
     face_rules: Vec<FontFaceRegistration>,
@@ -334,7 +351,11 @@ impl Default for TextProvider {
     fn default() -> Self {
         Self {
             generation: 0,
-            next_font_key: 1,
+            display_generation:None,
+            next_font_key: Cell::new(1),
+            display_time:std::time::Duration::ZERO,
+            display_faces:Vec::new(),
+            hidden_fonts:RefCell::new(HashMap::new()),
             fonts: Vec::new(),
             author_families: BTreeSet::new(),
             face_rules: Vec::new(),
@@ -355,14 +376,12 @@ impl TextProvider {
     /// Number of asynchronous font loads still in progress. Font registration
     /// currently completes synchronously through a caller-owned loader.
     pub fn pending_font_loads(&self) -> usize {
-        self.pending_font_loads.len()
+        self.pending_font_loads.len()+self.display_faces.iter().filter(|face|face.pending).count()
     }
 
     pub fn pending_font_display_periods(&self) -> Vec<FontDisplayPeriods> {
-        self.pending_font_loads
-            .iter()
-            .map(|display| display.periods())
-            .collect()
+        self.pending_font_loads.iter().map(|display|display.periods())
+            .chain(self.display_faces.iter().filter(|face|face.pending).map(|face|face.descriptor.display.periods())).collect()
     }
 
     pub fn begin_font_load(&mut self, display: FontDisplay) -> Result<(), TextError> {
@@ -390,6 +409,10 @@ impl TextProvider {
         descriptor: FontFaceDescriptor,
         loader: &mut L,
     ) -> Result<Option<FontKey>, TextError> {
+        self.register_font_face_impl(descriptor,loader,false,&mut false)
+    }
+    fn register_font_face_impl<L:FontFaceLoader>(&mut self,descriptor:FontFaceDescriptor,loader:&mut L,
+        timed:bool,pending:&mut bool)->Result<Option<FontKey>,TextError>{
         let family = descriptor.family.trim().to_ascii_lowercase();
         if family.is_empty()
             || family.len() > 256
@@ -418,6 +441,7 @@ impl TextProvider {
             return Err(TextError::ResourceLimit);
         }
         let metadata = FontFaceMetadata {
+            declaration_order:self.face_rules.len(),
             weight: descriptor.weight,
             stretch: descriptor.stretch,
             style: descriptor.style,
@@ -443,7 +467,8 @@ impl TextProvider {
                     if name.trim().is_empty() {
                         continue;
                     }
-                    (loader.load_local(&name, MAX_COMPRESSED_FONT_BYTES), None)
+                    (if timed {loader.load_local_state(&name,MAX_COMPRESSED_FONT_BYTES)}else{
+                        loader.load_local(&name,MAX_COMPRESSED_FONT_BYTES).map(|v|v.map_or(FontSourceLoad::Failed,FontSourceLoad::Ready))}, None)
                 }
                 FontFaceSource::Url {
                     url,
@@ -465,18 +490,15 @@ impl TextProvider {
                         continue;
                     }
                     (
-                        loader.load_url(FontFetchRequest {
-                            url: &url,
-                            cors_mode: true,
-                            max_bytes: MAX_COMPRESSED_FONT_BYTES,
-                        }),
+                        if timed {loader.load_url_state(FontFetchRequest{url:&url,cors_mode:true,max_bytes:MAX_COMPRESSED_FONT_BYTES})}
+                        else {loader.load_url(FontFetchRequest{url:&url,cors_mode:true,max_bytes:MAX_COMPRESSED_FONT_BYTES})
+                            .map(|v|v.map_or(FontSourceLoad::Failed,FontSourceLoad::Ready))},
                         Some(accepted),
                     )
                 }
             };
-            let Ok(Some(bytes)) = bytes else {
-                continue;
-            };
+            let bytes=match bytes {Ok(FontSourceLoad::Ready(bytes))=>bytes,
+                Ok(FontSourceLoad::Pending)=>{*pending=true;break},_=>continue};
             if bytes.is_empty() || bytes.len() > MAX_COMPRESSED_FONT_BYTES {
                 continue;
             }
@@ -525,7 +547,9 @@ impl TextProvider {
         style: &TextStyle,
         metric: FontSizeAdjustMetric,
     ) -> Option<f32> {
-        let index = self.matching_font_with_space_policy(style, Some(" "), true)?;
+        let index = self.matching_font_with_space_policy(style, Some(" "), true);
+        self.font_display_visibility(style," ",index).ok()?;
+        let index=index?;
         font_relative_metrics::aspect_ratio(&self.fonts[index], style, metric)
     }
 
@@ -560,11 +584,8 @@ impl TextProvider {
             return Err(TextError::ResourceLimit);
         }
 
-        let key = FontKey(self.next_font_key);
-        self.next_font_key = self
-            .next_font_key
-            .checked_add(1)
-            .ok_or(TextError::ResourceLimit)?;
+        let key=FontKey(self.next_font_key.get());
+        self.next_font_key.set(key.0.checked_add(1).ok_or(TextError::ResourceLimit)?);
         self.font_set_bytes += decoded.len();
         self.fonts.push(FontRecord {
             key,
@@ -579,6 +600,7 @@ impl TextProvider {
             .generation
             .checked_add(1)
             .ok_or(TextError::ResourceLimit)?;
+        if self.display_generation.is_some(){self.refresh_display_generation()?;}
         self.raster_cache.get_mut().clear();
         self.raster_cache_bytes.set(0);
         Ok(key)
@@ -587,21 +609,25 @@ impl TextProvider {
 
 
 impl TextSystem for TextProvider {
+    fn glyph_visibility(&self,font:FontKey)->Result<amazing_text::GlyphVisibility,TextError>{
+        if self.hidden_fonts.borrow().values().any(|key|*key==font){return Ok(amazing_text::GlyphVisibility::InvisibleFallback)}
+        if font==FontKey(0)||self.fonts.iter().any(|f|f.key==font){Ok(amazing_text::GlyphVisibility::Visible)}else{Err(TextError::MissingFont)}
+    }
     fn generation(&self) -> u64 {
-        self.generation
+        self.display_generation.unwrap_or(self.generation)
     }
 
     fn metrics(&self, style: &TextStyle) -> Result<amazing_text::FontMetrics, TextError> {
-        let Some(index) = self.matching_font_with_space_policy(style, Some(" "), true) else {
-            return self.fallback.metrics(style);
-        };
+        let selected=self.matching_font_with_space_policy(style,Some(" "),true);
+        self.font_display_visibility(style," ",selected)?;
+        let Some(index)=selected else{return self.fallback.metrics(style)};
         font_metrics(&self.fonts[index], style.size)
     }
 
     fn font_relative_metrics(&self, style: &TextStyle) -> amazing_text::FontRelativeMetrics {
-        let Some(index) = self.matching_font_with_space_policy(style, Some(" "), true) else {
-            return self.fallback.font_relative_metrics(style);
-        };
+        let selected=self.matching_font_with_space_policy(style,Some(" "),true);
+        if self.font_display_visibility(style," ",selected).is_err(){return self.fallback.font_relative_metrics(style)}
+        let Some(index)=selected else{return self.fallback.font_relative_metrics(style)};
         font_relative_metrics::for_font(&self.fonts[index], style)
     }
 
@@ -706,9 +732,10 @@ impl TextSystem for TextProvider {
     ) -> Result<Option<GlyphImage>, TextError> {
         let key = request.key;
         scale.device_size(key)?;
-        if key.generation != self.generation {
+        if key.generation != self.generation() {
             return Err(TextError::MissingFont);
         }
+        if self.glyph_visibility(key.font)?==amazing_text::GlyphVisibility::InvisibleFallback{return Ok(None)}
         let cache_key = (key, scale);
         if let Some(cached) = self.raster_cache.borrow().get(&cache_key) {
             return Ok(cached.clone());
@@ -758,6 +785,7 @@ impl TextProvider {
         })?;
         let selected = itemization.fonts;
         let clusters = itemization.clusters;
+        let visibility=itemization.visibility;
         let directions = bidi_directions(text, spans, &itemized, base_direction, bidi_scopes)?;
         let mut runs = Vec::new();
         let mut index = 0usize;
@@ -765,13 +793,14 @@ impl TextProvider {
             let Some(font_index) = selected[index] else {
                 let cluster = clusters[index].clone();
                 let mut end = index + 1;
-                while end < itemized.len() && selected[end].is_none() && clusters[end] == cluster {
+                while end < itemized.len() && selected[end].is_none() && clusters[end] == cluster && visibility[end]==visibility[index] {
                     end += 1;
                 }
                 if cluster.start < selected_range.end && selected_range.start < cluster.end {
                     let mut run =
                         fallback_grapheme_run(&self.fallback, text, cluster, &itemized[index])?;
                     run.direction = directions[index];
+                    if visibility[index]==amazing_text::GlyphVisibility::InvisibleFallback {run.font=self.invisible_font(run.font)?;}
                     runs.push(run);
                 }
                 index = end;
@@ -782,6 +811,7 @@ impl TextProvider {
                 cluster_orientation(&itemized[index].style, text, itemized[index].range.clone());
             while end < itemized.len()
                 && selected[end] == Some(font_index)
+                && visibility[end]==visibility[index]
                 && itemized[end].boundary_before == ShapingBoundary::Continue
                 && itemized[end].style == itemized[index].style
                 && directions[end] == directions[index]
@@ -795,7 +825,7 @@ impl TextProvider {
                 ..group_range.end.min(selected_range.end);
             if target.start < target.end {
                 let hard_context = hard_context_range(&itemized, index, end, text.len());
-                runs.extend(shape_range(
+                let mut shaped=shape_range(
                     &self.fonts[font_index],
                     text,
                     &itemized[index..end],
@@ -803,7 +833,9 @@ impl TextProvider {
                     hard_context,
                     directions[index],
                     orientation,
-                )?);
+                )?;
+                if visibility[index]==amazing_text::GlyphVisibility::InvisibleFallback {for run in &mut shaped {run.font=self.invisible_font(run.font)?;}}
+                runs.extend(shaped);
             }
             index = end;
         }
@@ -1291,3 +1323,6 @@ fn paragraph_break_ranges(text: &str) -> Vec<std::ops::Range<usize>> {
 
 #[cfg(test)]
 mod device_raster_tests;
+
+#[cfg(test)]
+mod font_display_tests;
