@@ -492,7 +492,7 @@ impl NetworkService {
         };
         let preflight = if delivery.route == ReportRoute::ReportingApi {
             delivery.request.prepare().map_err(ReportError::Policy)?;
-            if delivery.main_ready || self.preflight_cache.contains(&delivery.request, now) {
+            if delivery.main_ready || self.preflight_cache.contains_partitioned(&delivery.request, delivery.context.partition_key().as_ref(), now) {
                 None
             } else {
                 crate::preflight(&delivery.request).map_err(ReportError::Policy)?
@@ -658,6 +658,9 @@ impl NetworkService {
             return true;
         }
         if let Some(outcome) = result {
+            if delivery.route == ReportRoute::ReportingApi && matches!(&outcome, ReportOutcome::Failed(_)) {
+                self.preflight_cache.clear_partitioned(&delivery.request, delivery.context.partition_key().as_ref());
+            }
             self.dispatcher.cancel(wire);
             self.reporting.retained_bytes -= delivery.bytes;
             if delivery.route == ReportRoute::ReportingApi
@@ -713,7 +716,7 @@ impl NetworkService {
             }
             // The checked grant is reused only for this exact request/hop.
             self.preflight_cache
-                .insert(&delivery.request, &response, now);
+                .insert_partitioned(&delivery.request, &response, delivery.context.partition_key().as_ref(), now);
             delivery.preflight = false;
             delivery.main_ready = true;
             // submit_reporting consults this exact cache grant before OPTIONS.

@@ -952,13 +952,7 @@ pub fn fetch_api(
         }
         if plan.preflight {
             if let Some(preflight) = preflight(&policy).map_err(ApiError::Network)? {
-                let mut probe = Request::new(policy.url().clone(), policy.origin.clone());
-                probe.mode = RequestMode::Cors;
-                probe.credentials = CredentialsMode::Omit;
-                probe.headers = preflight.headers;
-                probe
-                    .set_method_body("OPTIONS", None)
-                    .map_err(ApiError::Network)?;
+                let mut probe = preflight_policy(&policy, preflight.headers)?;
                 let probe_plan = probe.prepare().map_err(ApiError::Network)?;
                 let answer = network
                     .exchange(&probe, &probe_plan, site)
@@ -1002,6 +996,8 @@ pub fn fetch_api(
 /// calls `Dispatcher::step` and routes matching events here; each hop remains
 /// asynchronous. The existing `fetch_api` entry point is unchanged.
 pub struct PendingFetchApi {
+    preflight_partition: Option<crate::Site>,
+    cors_preflight_path: bool,
     sent_referrer: Option<String>,
     policy: Request,
     wire_id: amazing_net::dispatch::RequestId,
@@ -1092,7 +1088,7 @@ impl PendingFetchApi {
         conditional_headers: Option<crate::HeaderList>,
         cache: Option<&mut crate::PreflightCache>,
     ) -> Result<Self, ApiError> {
-        Self::start_with_cache_progress(request,dispatcher,now,security,csp,csp_destination,cookie_header,conditional_headers,cache,&mut None,None)
+        Self::start_with_cache_progress(request,dispatcher,now,security,csp,csp_destination,cookie_header,conditional_headers,cache,&mut None,None,None)
     }
     pub(crate) fn start_with_cache_progress<
         R: amazing_net::dispatch::Resolver,
@@ -1106,9 +1102,10 @@ impl PendingFetchApi {
         csp_destination: crate::CspDestination,
         cookie_header: Option<String>,
         conditional_headers: Option<crate::HeaderList>,
-        cache: Option<&mut crate::PreflightCache>,
+        mut cache: Option<&mut crate::PreflightCache>,
         progress:&mut Option<crate::CspResponseProvenance>,
         owner_service:Option<u64>,
+        preflight_partition: Option<crate::Site>,
     ) -> Result<Self, ApiError> {
         if let Some(owner)=&request.embedding_owner {
             owner.validate_service(owner_service.ok_or(ApiError::Network(FetchError::FrameEmbedding))?)
@@ -1136,11 +1133,19 @@ impl PendingFetchApi {
             now,
             cookie_header.as_deref(),
             conditional_headers.as_ref(),
-            cache,
+            cache.as_deref_mut(),
+            preflight_partition.as_ref(),
         );
         *progress=policy.csp_pre_request_checked.then(||crate::CspResponseProvenance::checked(&policy,Vec::new()));
+        if started.is_err() && policy.taint == ResponseType::Cors
+            && (policy.use_cors_preflight || !crate::safelisted_method(policy.method())
+                || !crate::unsafe_request_header_names(&policy.headers).is_empty()) {
+            if let Some(cache) = cache {cache.clear_partitioned(&policy, preflight_partition.as_ref());}
+        }
         let (wire_id,stage,sent_referrer,request_includes_credentials)=started?;
         Ok(Self {
+            preflight_partition,
+            cors_preflight_path: policy.taint == ResponseType::Cors && (policy.use_cors_preflight || !crate::safelisted_method(policy.method()) || !crate::unsafe_request_header_names(&policy.headers).is_empty()),
             failure_provenance:progress.clone(),
             sent_referrer,
             policy,
@@ -1161,21 +1166,16 @@ impl PendingFetchApi {
         cookie_header: Option<&str>,
         conditional_headers: Option<&crate::HeaderList>,
         mut cache: Option<&mut crate::PreflightCache>,
+        partition: Option<&crate::Site>,
     ) -> Result<(amazing_net::dispatch::RequestId, DispatchStage, Option<String>, bool), ApiError> {
         let plan = policy.prepare().map_err(ApiError::Network)?;
         if plan.preflight
             && !cache
                 .as_mut()
-                .is_some_and(|cache| cache.contains(policy, now))
+                .is_some_and(|cache| cache.contains_partitioned(policy, partition, now))
         {
             if let Some(preflight) = preflight(policy).map_err(ApiError::Network)? {
-                let mut probe = Request::new(policy.url().clone(), policy.origin.clone());
-                probe.mode = RequestMode::Cors;
-                probe.credentials = CredentialsMode::Omit;
-                probe.headers = preflight.headers;
-                probe
-                    .set_method_body("OPTIONS", None)
-                    .map_err(ApiError::Network)?;
+                let mut probe = preflight_policy(policy, preflight.headers)?;
                 let probe_plan = probe.prepare().map_err(ApiError::Network)?;
                 let id = submit_policy(&probe, &probe_plan, dispatcher, now, None, None)?;
                 return Ok((id, DispatchStage::Preflight, None, false));
@@ -1206,6 +1206,31 @@ impl PendingFetchApi {
         self.on_event_with_cache(event, dispatcher, now, |_| None, |_| None, None)
     }
     pub(crate) fn on_event_with_cache<
+        R: amazing_net::dispatch::Resolver,
+        C: amazing_net::dispatch::Connector,
+        F: FnMut(&Request) -> Option<String>,
+        U: FnMut(&HttpUrl) -> Option<HttpUrl>,
+    >(
+        &mut self,
+        event: &amazing_net::dispatch::NetEvent,
+        dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
+        now: std::time::Instant,
+        cookie_for: F,
+        hsts_upgrade: U,
+        mut cache: Option<&mut crate::PreflightCache>,
+    ) -> Option<Result<ApiResponse, ApiError>> {
+        let result = self.on_event_with_cache_inner(event, dispatcher, now, cookie_for, hsts_upgrade, cache.as_deref_mut());
+        if result.as_ref().is_some_and(Result::is_err) {
+            if let Some(cache) = cache { self.clear_preflight_cache(cache); }
+        }
+        result
+    }
+    pub(crate) fn clear_preflight_cache(&self, cache: &mut crate::PreflightCache) {
+        if self.cors_preflight_path {
+            cache.clear_partitioned(&self.policy, self.preflight_partition.as_ref());
+        }
+    }
+    fn on_event_with_cache_inner<
         R: amazing_net::dispatch::Resolver,
         C: amazing_net::dispatch::Connector,
         F: FnMut(&Request) -> Option<String>,
@@ -1279,7 +1304,7 @@ impl PendingFetchApi {
                             return Some(Err(ApiError::Network(e)));
                         }
                         if let Some(cache) = cache.as_mut() {
-                            cache.insert(&self.policy, &response, now);
+                            cache.insert_partitioned(&self.policy, &response, self.preflight_partition.as_ref(), now);
                         }
                         let plan = match self.policy.prepare() {
                             Ok(p) => p,
@@ -1330,6 +1355,9 @@ impl PendingFetchApi {
                                 if self.redirects > 20 {
                                     return Some(Err(ApiError::Network(FetchError::RedirectLimit)));
                                 }
+                                self.cors_preflight_path |= self.policy.taint == ResponseType::Cors
+                                    && (self.policy.use_cors_preflight || !crate::safelisted_method(self.policy.method())
+                                        || !crate::unsafe_request_header_names(&self.policy.headers).is_empty());
                                 match Self::start_hop(
                                     &mut self.policy,
                                     dispatcher,
@@ -1337,6 +1365,7 @@ impl PendingFetchApi {
                                     self.cookie_header.as_deref(),
                                     None,
                                     cache,
+                                    self.preflight_partition.as_ref(),
                                 ) {
                                     Ok((id, stage, referrer, request_includes_credentials)) => {
                                         self.wire_id = id;
@@ -1381,6 +1410,19 @@ impl PendingFetchApi {
         dispatcher.cancel(self.wire_id);
     }
 }
+/// Fetch §4.8 copies source/lineage and excludes credentials/body. Preflight
+/// goes directly to HTTP-network fetch: main CSP already checked the original
+/// request. Preserve that fact instead of rechecking an OPTIONS-shaped request.
+fn preflight_policy(policy:&Request,headers:crate::HeaderList)->Result<Request,ApiError> {
+    let mut probe=Request::new(policy.url().clone(),policy.origin.clone());
+    probe.url_list=policy.url_list.clone();probe.mode=RequestMode::Cors;
+    probe.credentials=CredentialsMode::Omit;probe.taint=ResponseType::Cors;
+    probe.headers=headers;probe.referrer=policy.referrer.clone();probe.referrer_policy=policy.referrer_policy;
+    probe.security=policy.security;probe.csp_destination=policy.csp_destination;
+    probe.csp_pre_request_checked=policy.csp_pre_request_checked;
+    probe.response_body_limit=policy.response_body_limit;
+    probe.set_method_body("OPTIONS",None).map_err(ApiError::Network)?;Ok(probe)
+}
 fn submit_policy<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::Connector>(
     request: &Request,
     plan: &crate::FetchPlan,
@@ -1400,9 +1442,10 @@ fn submit_policy<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::C
         .map(|(n, v)| (n.to_owned(), v.to_owned()))
         .collect();
     if plan.taint == ResponseType::Cors || !matches!(request.method(), "GET" | "HEAD") {
-        options
-            .request_headers
-            .push(("origin".into(), request.origin.serialize()));
+        // Origin is a singleton UA field. Preflight already contains its
+        // generated value; replace it once, using the actual redirect lineage.
+        options.request_headers.retain(|(name,_)|!name.eq_ignore_ascii_case("origin"));
+        options.request_headers.push(("origin".into(),crate::cors_origin(request)));
     }
     if let Some(referrer) = &plan.referrer {
         options

@@ -2,75 +2,102 @@ use crate::*;
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
 
-/// Bounded Fetch §4.8 preflight grants. A grant covers exactly the method and
-/// unsafe header-name set that was checked against the preflight response.
+/// Bounded Fetch §4.8–4.9 cache of independently granted methods/header names.
+/// The service supplies its actual client partition; the legacy pure-policy API
+/// remains in its own unpartitioned namespace. No URL-derived partition is minted.
+#[derive(Default)]
 pub struct PreflightCache {
     entries: Vec<PreflightGrant>,
 }
 struct PreflightGrant {
-    origin: Origin,
+    partition: Option<Site>,
+    origin: String,
     url: String,
     credentials: bool,
-    method: String,
-    names: Vec<String>,
+    permission: Permission,
     expires: Instant,
 }
-impl Default for PreflightCache {
-    fn default() -> Self {
-        Self {
-            entries: Vec::new(),
+#[derive(Clone, PartialEq, Eq)]
+enum Permission { Method(String), Header(String) }
+impl PreflightGrant {
+    fn key_matches(&self, request: &Request, partition: Option<&Site>) -> bool {
+        self.partition.as_ref() == partition
+            && self.origin == cors_origin(request)
+            && self.url == request.url().without_fragment()
+    }
+    fn matches(&self, request: &Request, partition: Option<&Site>) -> bool {
+        self.key_matches(request, partition)
+            && (self.credentials || request.credentials != CredentialsMode::Include)
+    }
+    fn permits(&self, permission: &Permission) -> bool {
+        match (&self.permission, permission) {
+            (Permission::Method(grant), Permission::Method(method)) => grant == method || (grant == "*" && !self.credentials),
+            (Permission::Header(grant), Permission::Header(name)) =>
+                grant.eq_ignore_ascii_case(name) || (grant == "*" && !self.credentials && name != "authorization"),
+            _ => false,
         }
     }
 }
 impl PreflightCache {
     pub fn contains(&mut self, request: &Request, now: Instant) -> bool {
-        self.entries.retain(|entry| entry.expires > now);
-        let names = unsafe_request_header_names(&request.headers);
-        self.entries.iter().any(|entry| {
-            entry.origin == request.origin
-                && entry.url == request.url().without_fragment()
-                && (entry.credentials || request.credentials != CredentialsMode::Include)
-                && entry.method == request.method()
-                && entry.names == names
-        })
+        self.contains_partitioned(request, None, now)
     }
-    /// Call only after `check_preflight` succeeds. Invalid max-age falls back
-    /// to Fetch's five-second default; a server cannot retain a grant forever.
-    pub fn insert(&mut self, request: &Request, response: &InternalResponse, now: Instant) {
-        let seconds = response
-            .headers
-            .get("access-control-max-age")
-            .and_then(|s| {
-                (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
-                    .then(|| s.parse::<u64>().ok())
-                    .flatten()
-            })
-            .unwrap_or(5)
-            .min(7200);
-        if seconds == 0 {
-            return;
-        }
+    pub fn contains_partitioned(&mut self, request: &Request, partition: Option<&Site>, now: Instant) -> bool {
         self.entries.retain(|entry| entry.expires > now);
-        let names = unsafe_request_header_names(&request.headers);
-        let url = request.url().without_fragment();
-        self.entries.retain(|entry| {
-            !(entry.origin == request.origin
-                && entry.url == url
-                && entry.credentials == (request.credentials == CredentialsMode::Include)
-                && entry.method == request.method()
-                && entry.names == names)
-        });
-        if self.entries.len() == 256 {
-            self.entries.remove(0);
+        let matches = |permission: Permission| self.entries.iter()
+            .any(|entry| entry.matches(request, partition) && entry.permits(&permission));
+        // A safelisted method does not need a method grant, unless the caller's
+        // genuine use-CORS-preflight flag required the preflight itself.
+        (!request.use_cors_preflight && safelisted_method(request.method())
+            || matches(Permission::Method(request.method().to_owned())))
+            && unsafe_request_header_names(&request.headers).into_iter()
+                .all(|name| matches(Permission::Header(name)))
+    }
+    /// Invalid responses never create authority, even for direct policy callers.
+    pub fn insert(&mut self, request: &Request, response: &InternalResponse, now: Instant) {
+        self.insert_partitioned(request, response, None, now);
+    }
+    pub fn insert_partitioned(&mut self, request: &Request, response: &InternalResponse,
+        partition: Option<&Site>, now: Instant) {
+        if check_preflight(request, response).is_err() { return; }
+        let seconds = response.headers.get("access-control-max-age")
+            .and_then(|s| (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
+                .then(|| s.parse::<u64>().ok()).flatten())
+            .unwrap_or(5).min(7200);
+        self.entries.retain(|entry| entry.expires > now);
+        let mut methods = tokens(&response.headers, "access-control-allow-methods").unwrap();
+        if response.headers.get("access-control-allow-methods").is_none() && request.use_cors_preflight {
+            methods.push(request.method().to_owned());
         }
-        self.entries.push(PreflightGrant {
-            origin: request.origin.clone(),
-            url,
-            credentials: request.credentials == CredentialsMode::Include,
-            method: request.method().to_owned(),
-            names,
-            expires: now + Duration::from_secs(seconds),
-        });
+        let names = tokens(&response.headers, "access-control-allow-headers").unwrap();
+        for permission in methods.into_iter().map(Permission::Method)
+            .chain(names.into_iter().map(|name| Permission::Header(name.to_ascii_lowercase()))) {
+            let mut updated = false;
+            for entry in &mut self.entries {
+                // A credentialed literal-star grant cannot be refreshed into
+                // an uncredentialed wildcard grant; store the distinct grant.
+                let literal_star = entry.credentials && request.credentials != CredentialsMode::Include
+                    && matches!(&permission, Permission::Method(s) | Permission::Header(s) if s == "*");
+                if !literal_star && entry.matches(request, partition) && entry.permits(&permission) {
+                    entry.expires = now + Duration::from_secs(seconds);
+                    updated = true;
+                }
+            }
+            if updated || seconds == 0 { continue; }
+            // Early eviction is permitted by Fetch; the existing bounded limit
+            // remains 256 entries, now counting actual scalar permissions.
+            if self.entries.len() == 256 { self.entries.remove(0); }
+            self.entries.push(PreflightGrant {
+                partition: partition.cloned(), origin: cors_origin(request),
+                url: request.url().without_fragment(),
+                credentials: request.credentials == CredentialsMode::Include,
+                permission, expires: now + Duration::from_secs(seconds),
+            });
+        }
+    }
+    pub fn clear(&mut self, request: &Request) { self.clear_partitioned(request, None); }
+    pub fn clear_partitioned(&mut self, request: &Request, partition: Option<&Site>) {
+        self.entries.retain(|entry| !entry.key_matches(request, partition));
     }
 }
 pub fn safelisted_method(method: &str) -> bool {

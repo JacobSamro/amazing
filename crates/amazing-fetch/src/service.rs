@@ -908,6 +908,7 @@ impl NetworkService {
             Some(&mut self.preflight_cache),
             progress,
             Some(self.reporting.service_id()),
+            context.partition_key.clone(),
         )?;
         self.active.insert(
             id,
@@ -1235,6 +1236,7 @@ impl NetworkService {
                                 });
                         }
                     }
+                    if outcome.is_err() {task.pending.clear_preflight_cache(&mut self.preflight_cache);}
                     if task.trusted_subresource {
                         subresource = Some(outcome.as_ref().map(|response| {
                             let mut head = ApiResponseHead::from_response(response);
@@ -1331,6 +1333,7 @@ impl NetworkService {
     pub fn abort(&mut self, id: ServiceId) -> bool {
         if let Some(task) = self.active.remove(&id) {
             task.pending.cancel(&mut self.dispatcher);
+            task.pending.clear_preflight_cache(&mut self.preflight_cache);
             if task.trusted_subresource {
                 self.ready.push(ServiceEvent::SubresourceFailed{id,failure:SubresourceFailure{error:ApiError::Aborted,csp_provenance:task.pending.failure_csp_provenance()}});
             } else if task.received_navigation {
