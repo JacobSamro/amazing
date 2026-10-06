@@ -203,3 +203,5 @@ reproduced in the table row for that upstream.
 | boa-dev/boa @ ef40c63283e1bb73f371d93372e9e95217a36945, core/engine/src/builtins/typed_array/object.rs | MIT | Copyright (c) 2019 Jason Williams | crates/amazing-js/src/builtins_binary_exotic.rs: whole TypedArray exotic protocol adapted to native side tables |
 
 | boa-dev/boa @ ef40c63283e1bb73f371d93372e9e95217a36945, core/engine/src/builtins/typed_array/builtin.rs | MIT | Copyright (c) 2019 Jason Williams | crates/amazing-js/src/builtins_binary_prototype.rs: complete species/create, map, slice and change-by-copy adaptation |
+
+| boa-dev/boa core/engine/src/builtins/atomics/mod.rs @ ef40c63283e1bb73f371d93372e9e95217a36945 | MIT | Copyright (c) 2019 Jason Williams | Whole integer Atomics validation/conversion/read-modify-write family adapted in amazing-js/src/builtins_binary_atomics.rs; std-only native byte store, no unsafe/GC dependencies. License retained at amazing-js/src/binary_exotic.LICENSE-MIT. |

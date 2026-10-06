@@ -1,0 +1,5 @@
+Whole nine-method Atomics integer transactions qualified on Linux. All operand conversions precede native read/write, with original-length admission, fresh bounds, fixed-width comparisons and store return values. Genuine offset shared aliases and Number/BigInt widths are retained.
+
+Workspace 5,482 → 5,491 passed (17 skipped); doctests 39 → 39. Original 30 directories, default and VM, pin `3655e746`, jobs 4, 60 seconds: 120 paired reports, zero lost passing files/variants; three unique original Atomics files gained in each mode (+6 cohort files/+12 variants). Original RAB 23/exotic 13/prototype 13 groups unchanged; nine new groups exercise both backends.
+
+Tested BEFORE `7c01700b`, AFTER `47276f38`; ready base `09e3a5eb` publishes the method prerequisite and has no engine/Cargo difference from BEFORE. Ready engine files are byteexact AFTER. Native raw, generated files and all 633 ELFs per side remain on captured host; verified artifact readback precedes terminal target retirement. No local build, deadline waiver or third-party dependencies. Cross-agent backing and wait/notify scheduling remain separate.

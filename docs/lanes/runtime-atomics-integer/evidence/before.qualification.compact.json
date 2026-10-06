@@ -1,0 +1,53 @@
+{
+  "state": "AUTHENTIC_BEFORE_ZERO_COMPLETE_MAPS_AFTER_ADMISSIBLE",
+  "utc": "2026-10-06T10:54:44.342293+00:00",
+  "source": "7c01700b99364248f15d2d3051e637f5ef50f305",
+  "workspace": {
+    "doctests": {
+      "failed": 0,
+      "ignored": 0,
+      "passed": 39
+    },
+    "nextest": {
+      "failed": 0,
+      "passed": 5482,
+      "skipped": 17
+    }
+  },
+  "reports": 60,
+  "cohort_files": {
+    "pass": 26576,
+    "fail": 8,
+    "skipped": 17640,
+    "unsupported": 250
+  },
+  "bundle_sha256": "7fbe518b16933341b8fa48d5cbc01197a8e4b64ab0f68c2c9c8db83647387553",
+  "decoded_sha256": "db78e6dde167af8ef85e03c1450db9ba0b8b09ccd963e46ae7d4425a6660e594",
+  "artifact_manifest": {
+    "bytes": 253721,
+    "path": "/tmp/amazing-atomics-integer/atomics-before-01/retained/manifests/atomics-before-01.json",
+    "sha256": "74090ff0ee8f7719ed3372f400f0992aeda2d87c4ba16e5a863e8b9e0000d015"
+  },
+  "profile": {
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+  },
+  "free_after": [
+    {
+      "available_bytes": 25692459008,
+      "device": 64769,
+      "path": "/tmp/amazing-native-storage",
+      "total_bytes": 73635184640
+    },
+    {
+      "available_bytes": 25692459008,
+      "device": 64769,
+      "path": "/tmp/amazing-atomics-integer/atomics-before-01",
+      "total_bytes": 73635184640
+    }
+  ],
+  "guard_bytes": 24830279680,
+  "actual_exit": 0,
+  "fetch_exit": 0
+}

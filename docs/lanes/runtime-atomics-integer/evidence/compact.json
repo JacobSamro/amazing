@@ -1,0 +1,76 @@
+{
+  "state": "QUALIFIED_PAIRED_WHOLE_AREA_READY",
+  "utc": "2026-10-06T11:15:35.550756+00:00",
+  "ready_base": "09e3a5eb1c8628cfce9c669a864d22a05ea5c857",
+  "tested_before": "7c01700b99364248f15d2d3051e637f5ef50f305",
+  "tested_after": "47276f38d2f4c30de980046c4808569aaa75629b",
+  "base_projection": "No crates/Cargo differences between tested BEFORE and ready base; ready base publishes genuine method prerequisite plus two public diagnostic helpers. Three engine/test files byteexact tested AFTER. One new notice row/source-plan included. No dependency ancestry imported.",
+  "projection": [
+    {
+      "path": "crates/amazing-js/src/builtins_binary.rs",
+      "bytes": 87475,
+      "sha256": "5c9296e65507033ebac20d5057a2605d7b6fa13944ff84aef5729680e2355738"
+    },
+    {
+      "path": "crates/amazing-js/src/builtins_binary_atomics.rs",
+      "bytes": 6021,
+      "sha256": "5ad2ef1ebcf79f574e8d35767eebb996db369825a8fc6bf5f01a2d4d2d16fb6c"
+    },
+    {
+      "path": "crates/amazing-js/src/runtime_atomics_integer_tests.rs",
+      "bytes": 13209,
+      "sha256": "0c9bc76cb5535ce8818286badfad0e92112687f13e4ff4ac3e443d5627282f63"
+    }
+  ],
+  "workspace": {
+    "before": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 39
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 5482,
+        "skipped": 17
+      }
+    },
+    "after": {
+      "doctests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 39
+      },
+      "nextest": {
+        "failed": 0,
+        "passed": 5491,
+        "skipped": 17
+      }
+    }
+  },
+  "selector_modes_per_side": 60,
+  "paired_reports": 120,
+  "lost_files": 0,
+  "lost_variants": 0,
+  "gained_cohort_files": 6,
+  "gained_cohort_variants": 12,
+  "original_native_groups": {
+    "RAB": 23,
+    "exotics": 13,
+    "prototype": 13
+  },
+  "new_native_groups": 9,
+  "native_pair_exit": {
+    "before": 0,
+    "after": 0
+  },
+  "fetch_pair_exit": {
+    "before": 0,
+    "after": 0
+  },
+  "comparison": {
+    "bytes": 51367,
+    "sha256": "43ecc99c253764726d6b4275e3881db8fb0baadf673693cfa00cdc83eb7eae60"
+  },
+  "boundary": "Genuine single-agent native integer memory transactions/shared aliases; no installed cross-agent backing, wait/notify/scheduler or GC completion claim."
+}

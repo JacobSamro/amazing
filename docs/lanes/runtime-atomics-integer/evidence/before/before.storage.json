@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "ticket": "runtime-atomics-integer-20261006",
+  "source": "7c01700b99364248f15d2d3051e637f5ef50f305",
+  "phase": "before",
+  "job": "atomics-before-01",
+  "scratch_parent": "/tmp/amazing-native-storage",
+  "output_root": "/tmp/amazing-atomics-integer/atomics-before-01",
+  "retained_root": "/tmp/amazing-atomics-integer/atomics-before-01/retained",
+  "build_budget_bytes": 13019119616,
+  "retention_budget_bytes": 7516192768,
+  "bootstrap_budget_bytes": 2147483648,
+  "reserve_bytes": 2147483648,
+  "retention_method": "hardlink-or-copy",
+  "elf_policy": "all",
+  "retire_after_retention": true,
+  "compact_root": "/home/user/amazing/out/runtime-atomics-integer-20261006/atomics-before-01/compact",
+  "summary_path": "/home/user/amazing/out/runtime-atomics-integer-20261006/atomics-before-01/compact/storage.summary.compact.json"
+}

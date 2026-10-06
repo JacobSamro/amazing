@@ -1283,8 +1283,13 @@ fn binary_atomics_notify(i: &mut Interpreter, view: &BinaryView, kind: BinaryKin
     Ok(JsValue::num(binary_atomics_wake(i, &view.buffer, byte_offset, count)))
 }
 
+include!("builtins_binary_atomics.rs");
+
 fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let name = binary_current_name(i);
+    if let Some(operation) = BinaryAtomicOperation::named(&name) {
+        return binary_atomic_integer(i, operation, &args);
+    }
     if name == "isLockFree" {
         let size = i.to_number(args.first().unwrap_or(&JsValue::Undefined))?;
         return Ok(JsValue::Bool(matches!(size.trunc() as i64, 1 | 2 | 4 | 8)));
@@ -1334,50 +1339,7 @@ fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
     if name == "wait" { return binary_atomics_wait(i, &view, kind, index, args.get(2), args.get(3)); }
     if name == "waitAsync" { return binary_wait_async(i, &view, kind, index, args.get(2), args.get(3)); }
     if name == "notify" { return binary_atomics_notify(i, &view, kind, index, args.get(2)); }
-    let offset = index * kind.size();
-    let old = binary_read(&view, kind, offset, true)?;
-    if name == "load" { return Ok(old); }
-    if kind.big() {
-        let input = i.to_bigint(args.get(2).unwrap_or(&JsValue::Undefined))?;
-        let JsValue::BigInt(old_big) = &old else { unreachable!() };
-        let next = match name.as_str() {
-            "store" | "exchange" => input.clone(),
-            "add" => old_big.add(&input), "sub" => old_big.sub(&input),
-            "and" => old_big.bitwise(&input, ast::BinOp::BitAnd),
-            "or" => old_big.bitwise(&input, ast::BinOp::BitOr),
-            "xor" => old_big.bitwise(&input, ast::BinOp::BitXor),
-            "compareExchange" => {
-                let replacement = i.to_bigint(args.get(3).unwrap_or(&JsValue::Undefined))?;
-                if old_big.as_ref() != &input { return Ok(old); }
-                replacement
-            }
-            "waitAsync" => return Err(Throw::type_error("Atomics.waitAsync is unavailable")),
-            _ => return Err(Throw::type_error("unknown Atomics operation")),
-        };
-        binary_write_value(i, &view, kind, offset, true, &Interpreter::bigint_value(next))?;
-        return Ok(if name == "store" { Interpreter::bigint_value(input) } else { old });
-    }
-    let input = i.to_number(args.get(2).unwrap_or(&JsValue::Undefined))?;
-    let old_number = old.to_number()?;
-    let next = match name.as_str() {
-        "store" | "exchange" => input,
-        "add" => old_number + input,
-        "sub" => old_number - input,
-        "and" => ((old_number as i64) & (input as i64)) as f64,
-        "or" => ((old_number as i64) | (input as i64)) as f64,
-        "xor" => ((old_number as i64) ^ (input as i64)) as f64,
-        "compareExchange" => {
-            if old_number != input { return Ok(old); }
-            i.to_number(args.get(3).unwrap_or(&JsValue::Undefined))?
-        }
-        "waitAsync" => return Err(Throw::type_error("Atomics.waitAsync is unavailable")),
-        _ => return Err(Throw::type_error("unknown Atomics operation")),
-    };
-    binary_write(&view, kind, offset, true, next)?;
-    Ok(if name == "store" {
-        // Atomics.store returns ToIntegerOrInfinity(value); -0 normalises to +0.
-        JsValue::num(if input == 0.0 { 0.0 } else { input.trunc() })
-    } else { old })
+    Err(Throw::type_error("unknown Atomics operation"))
 }
 
 #[cfg(test)]

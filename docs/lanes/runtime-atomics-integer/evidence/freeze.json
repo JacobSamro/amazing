@@ -1,0 +1,116 @@
+{
+  "state": "WHOLE_SOURCE_COMMAND_CAPACITY_FROZEN",
+  "source": "47276f38d2f4c30de980046c4808569aaa75629b",
+  "before_source": "7c01700b99364248f15d2d3051e637f5ef50f305",
+  "recorded_origin_dev": "a6bdb2f64735be47470716935aaa86d60a8231c1",
+  "prerequisite_ready": "1e88d2e2ffe2084db3b301b80c591dd799fcff5e",
+  "prerequisite_adoption": "Exact engine hunks only, not lane ancestry or evidence",
+  "projection": [
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "bytes": 40435,
+      "sha256": "dee0e1bd9667dad57a7be5d1d048e96a8ab5a319c4bb09741868262005126ad4"
+    },
+    {
+      "path": "crates/amazing-js/src/builtins_binary.rs",
+      "bytes": 87475,
+      "sha256": "5c9296e65507033ebac20d5057a2605d7b6fa13944ff84aef5729680e2355738"
+    },
+    {
+      "path": "crates/amazing-js/src/builtins_binary_atomics.rs",
+      "bytes": 6021,
+      "sha256": "5ad2ef1ebcf79f574e8d35767eebb996db369825a8fc6bf5f01a2d4d2d16fb6c"
+    },
+    {
+      "path": "crates/amazing-js/src/runtime_atomics_integer_tests.rs",
+      "bytes": 13209,
+      "sha256": "0c9bc76cb5535ce8818286badfad0e92112687f13e4ff4ac3e443d5627282f63"
+    },
+    {
+      "path": "docs/lanes/runtime-atomics-integer/source-plan.md",
+      "bytes": 2604,
+      "sha256": "d4e31f3bc311213f8a7e0221018a59e34d040bfca97347c4a318d482778a8572"
+    }
+  ],
+  "selectors": [
+    "built-ins/ArrayBuffer",
+    "built-ins/SharedArrayBuffer",
+    "built-ins/DataView",
+    "built-ins/TypedArray",
+    "built-ins/Atomics",
+    "built-ins/Int8Array",
+    "built-ins/Uint8Array",
+    "built-ins/Uint8ClampedArray",
+    "built-ins/Int16Array",
+    "built-ins/Uint16Array",
+    "built-ins/Int32Array",
+    "built-ins/Uint32Array",
+    "built-ins/Float16Array",
+    "built-ins/Float32Array",
+    "built-ins/Float64Array",
+    "built-ins/BigInt64Array",
+    "built-ins/BigUint64Array",
+    "built-ins/Array",
+    "built-ins/Object",
+    "built-ins/Reflect",
+    "built-ins/Proxy",
+    "built-ins/Symbol",
+    "built-ins/String",
+    "built-ins/Iterator",
+    "language/statements/for-of",
+    "language/expressions/array",
+    "language/statements/with",
+    "language/expressions/in",
+    "language/expressions/assignment",
+    "language/expressions/delete"
+  ],
+  "modes": [
+    "default",
+    "vm"
+  ],
+  "selector_modes": 60,
+  "pin": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "jobs": 4,
+  "timeout": 60,
+  "original_native_groups": {
+    "RAB": 23,
+    "exotics": 13,
+    "prototype": 13
+  },
+  "new_native_groups": 9,
+  "local_checks": "rustfmt parse/format and git diff check only; no local compilation/tests",
+  "native_allocated": false,
+  "utc": "2026-10-06T10:32:47.266315+00:00",
+  "base": "7c01700b99364248f15d2d3051e637f5ef50f305",
+  "alias": "runtime-atomics-integer-20261006",
+  "machine": "default4vCPU/8GiB",
+  "finite_ttl_seconds": 7200,
+  "commands": {
+    "before": "48f9a37fd149565c081c7b6b7a7dff5479a1eb5ba47caefe8c7bc4c1b4d46293",
+    "after": "fbdc78d14ead4cab5bc207e506694f6644284950c1875af79229debf99756446"
+  },
+  "storage": {
+    "before": "eb210dffa222fe409563e44bd097b47d6e66f69fb051ebc2da00a3510d62d538",
+    "after": "365a7e494a6fe853342e18361f61eec7c5f6d59d0053461f5ed7209bb0c4b13a"
+  },
+  "helper_sha256": {
+    "scripts/linux-run.sh": "301443415f353426f954c88b2532593b25fb7e8d4c311ed66fc969186f6a9054",
+    "scripts/boat-lane.py": "adca82065f1cde9631cca5610cc4b3c0e625ca3c90193438a14fd040045f2cba",
+    "scripts/gate-command.py": "f62e231f16e2e6b62d0ad8623067ec632c8c6a48b19cca2a002e4474e473c98b",
+    "scripts/gate-summary.py": "0dc65b9e67509bcf681cacb52c5d92d5e1ef2274bdc337f09c5e591578bffe84",
+    "scripts/native-storage-plan.py": "8c09537bc331f619a61f6a683160188b6ff56abf9bc0941e395a0f42b51fea4a",
+    "scripts/native-storage-retention.py": "fbae10191922024fa68ac0b0823ead407fc9730d6273c92aa5cf673f1b709413",
+    "scripts/source-upload.py": "f71d53c90623d8a58ce7c243cef7fbcd045c1d277efe24e3b7d842303fac1191",
+    "scripts/completed-job.py": "5db1ec0ed6e28656752b6d7abd7395daf978ccbb76f8293287427d184b1c8a2c",
+    "scripts/test262.py": "0f65931448fd619f80b64102c39476f4dd5db4f42134791e0e0f0d5a03559e83"
+  },
+  "guard_bytes": 24830279680,
+  "profile": {
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+  },
+  "phase_count_per_side": 63,
+  "evidence_contract": "Actual BEFORE60 and AFTER120 lossless public maps, complete oldRAB23/exotic13/prototype13+new9 controls, workspace/docs, original pin/J4/60s, zeroLostfiles/variants. Native/tmp raw/generated/source/allELFs retained with actual guard/readback before terminaltarget retirement. No whole agent/wait/GC/cross-box performance claim.",
+  "before_gate_condition": "AFTERonlyafter genuine beforeworkspace/docs0,validfull60maps and actualretainedbaseline; no fake empty baseline/no rerun on observedexpiry."
+}
