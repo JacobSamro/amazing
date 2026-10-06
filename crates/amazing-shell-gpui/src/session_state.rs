@@ -38,6 +38,23 @@ struct CachedResponseMeta {
     reason: String,
 }
 
+/// Cache/cookie preparation stays on the session owner; only transport crosses threads.
+pub struct PreparedFetch {
+    pub input: String,
+    pub options: FetchOptions,
+    original: FetchOptions,
+    cookie: String,
+    request_headers: HeaderList,
+    prior_meta: Option<CachedResponseMeta>,
+    conditional: bool,
+    request_time: i64,
+}
+
+pub enum FetchPreparation {
+    Ready(Response),
+    Transport(PreparedFetch),
+}
+
 pub struct BrowserSession {
     state_path: Option<PathBuf>,
     cookies: Vec<Cookie>,
@@ -148,6 +165,18 @@ impl BrowserSession {
         input: &str,
         options: &FetchOptions,
     ) -> Result<Response, amazing_net::NetError> {
+        match self.prepare_fetch(input, options)? {
+            FetchPreparation::Ready(response) => Ok(response),
+            FetchPreparation::Transport(prepared) => {
+                let response = amazing_net::fetch(&prepared.input, &prepared.options)?;
+                self.finish_fetch(prepared, response)
+            }
+        }
+    }
+
+    pub fn prepare_fetch(&mut self, input: &str, options: &FetchOptions)
+        -> Result<FetchPreparation, NetError>
+    {
         let parsed = Url::parse(input).ok();
         let cookie = parsed
             .as_ref()
@@ -180,7 +209,7 @@ impl BrowserSession {
                 let vary = entry.vary.clone();
                 let response = cached_net_response(&meta, entry.response_at(unix_seconds()))?;
                 self.promote_cache_entry(&legacy_key, &vary);
-                return Ok(response);
+                return Ok(FetchPreparation::Ready(response));
             }
             Ok(CacheLookup::Validate { entry, headers }) => {
                 prior_meta = Some(
@@ -201,15 +230,28 @@ impl BrowserSession {
                     .push((name.to_owned(), value.to_owned()));
             }
         }
-        let request_time = unix_seconds();
-        let response = amazing_net::fetch(input, &request_options)?;
+        Ok(FetchPreparation::Transport(PreparedFetch {
+            input: input.to_owned(), options: request_options, original: options.clone(),
+            cookie, request_headers, prior_meta, conditional: conditional.is_some(), request_time: unix_seconds(),
+        }))
+    }
+
+    pub fn finish_fetch(&mut self, prepared: PreparedFetch, response: Response)
+        -> Result<Response, NetError>
+    {
+        let PreparedFetch { input, original: options, cookie, request_headers, prior_meta,
+            conditional, request_time, .. } = prepared;
+        let input = input.as_str();
+        let cache_request = CacheRequest {
+            uri: input, method: &options.method, headers: &request_headers, cookie: &cookie,
+        };
         let response_time = unix_seconds().max(request_time);
         if let Ok(final_url) = Url::parse(&response.url) {
             for header in response.headers.get_all("set-cookie") {
                 self.store_cookie(&final_url, header);
             }
         }
-        if response.status == 304 && conditional.is_some() {
+        if response.status == 304 && conditional {
             if let (Some(meta), Some(headers)) = (prior_meta, cache_response_headers(&response)) {
                 let updated = self
                     .cache

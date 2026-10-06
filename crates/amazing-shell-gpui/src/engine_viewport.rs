@@ -9,9 +9,8 @@ use image::{Frame, RgbaImage};
 
 use crate::dom_runtime::ShellDomHost;
 use crate::engine_compositor::EngineCompositor;
-use crate::compositor_presenter::{GpuiFrame, GpuiPresenter};
+use crate::compositor_presenter::GpuiFrame;
 use crate::session_state::BrowserSession;
-use amazing_compositor::Presenter;
 use crate::viewport_metrics::ViewportMetrics;
 
 const VIEWPORT_WIDTH: u32 = 960;
@@ -155,7 +154,6 @@ pub struct EngineViewport {
     static_document: Option<Rc<StaticDocument>>,
     pub compositor: Option<Rc<RefCell<EngineCompositor>>>,
     scroll_controller: Rc<RefCell<amazing_compositor::ScrollController>>,
-    scroll_presenter: Rc<RefCell<GpuiPresenter>>,
     scroll_frame: Rc<RefCell<Option<GpuiFrame>>>,
     page: Option<Rc<RetainedPage>>,
     pub width: u32,
@@ -176,6 +174,7 @@ impl ViewportIdentity {
 }
 
 struct StaticDocument {
+    acquisition: Option<Rc<RefCell<crate::navigation_acquisition::Replay>>>,
     dom: amazing_dom::Dom,
     css: String,
     font_sheets: Vec<(String, String)>,
@@ -252,6 +251,71 @@ pub struct LoadedPage {
     pub runtime: Option<PageRuntime>,
 }
 
+impl LoadedPage {
+    pub fn acquisition_replay(&self) -> Option<Rc<RefCell<crate::navigation_acquisition::Replay>>> {
+        self.runtime.as_ref().and_then(|runtime| runtime.acquisition.clone())
+            .or_else(|| self.viewport.static_document.as_ref().and_then(|document| document.acquisition.clone()))
+    }
+}
+
+/// One original UI-owned DOM survives all initial acquisition passes.
+pub struct PreparedDocument {
+    dom: amazing_dom::Dom,
+    final_address: String,
+    options: FetchOptions,
+}
+pub struct PreparedPage {
+    scripts: Vec<String>,
+    viewport: Option<EngineViewport>,
+    title: Option<String>,
+    favicon: Option<Arc<RenderImage>>,
+    css: String,
+    font_sheets: Vec<(String, String)>,
+}
+impl PreparedDocument {
+    pub fn new(response: &amazing_net::Response, options: FetchOptions) -> Result<Self, String> {
+        let html = response.text().ok_or("response body was not decodable text")?;
+        Ok(Self { dom: amazing_html::parse(&html), final_address: response.url.clone(), options })
+    }
+    pub fn discover(&self, session: Rc<RefCell<BrowserSession>>, metrics: ViewportMetrics) -> Result<PreparedPage, String> {
+        let dom = &self.dom;
+        let address = &self.final_address;
+        let scripts = collect_document_scripts(dom, address, &self.options, Some(&session));
+        if !scripts.is_empty() {
+            // Preserve existing author ordering: resources are selected from the post-script DOM.
+            // The retained runtime's first snapshot discovers them without re-evaluating script.
+            return Ok(PreparedPage { scripts, viewport: None, title: None, favicon: None,
+                css: String::new(), font_sheets: Vec::new() });
+        }
+        // Do not select pre-script CSS/images while an external classic script is still pending.
+        if crate::navigation_acquisition::has_missing() { return Err("script acquisition pending".into()); }
+        let (css, font_sheets) = load_document_styles(dom, address, &self.options, Some(&session));
+        let resources = load_page_resources_with_metrics(dom, &css, address, &self.options, Some(&session), metrics);
+        let title = document_title(dom);
+        let favicon = load_favicon(dom, address, &self.options, Some(&session));
+        let viewport = EngineViewport::from_dom_with_style_sources_and_metrics(
+            dom, &css, resources, Some(address), &font_sheets, metrics)?;
+        Ok(PreparedPage { scripts, viewport: Some(viewport), title, favicon, css, font_sheets })
+    }
+    pub fn finish(self, prepared: PreparedPage, session: Rc<RefCell<BrowserSession>>, metrics: ViewportMetrics) -> Result<LoadedPage, String> {
+        if prepared.scripts.is_empty() {
+            let mut viewport = prepared.viewport.ok_or("missing prepared static viewport")?;
+            viewport.static_document = Some(Rc::new(StaticDocument {
+                acquisition: crate::navigation_acquisition::current_replay(),
+                dom: self.dom, css: prepared.css, font_sheets: prepared.font_sheets,
+                document_url: Some(self.final_address.clone()), options: self.options, session: Some(session),
+            }));
+            return Ok(LoadedPage { viewport, final_address: self.final_address,
+                title: prepared.title, favicon: prepared.favicon, runtime: None });
+        }
+        let mut runtime = PageRuntime::new_with_metrics(self.dom, self.final_address.clone(),
+            self.options, prepared.scripts, session, metrics);
+        let update = runtime.snapshot(false);
+        Ok(LoadedPage { viewport: update.viewport.ok_or_else(|| update.render_failure.unwrap_or_else(|| "initial runtime render unavailable".into()))?,
+            final_address: self.final_address, title: update.title, favicon: update.favicon, runtime: Some(runtime) })
+    }
+}
+
 pub struct RuntimeUpdate {
     pub viewport: Option<EngineViewport>,
     pub render_failure: Option<String>,
@@ -265,6 +329,7 @@ pub struct RuntimeUpdate {
 }
 
 pub struct PageRuntime {
+    acquisition: Option<Rc<RefCell<crate::navigation_acquisition::Replay>>>,
     metrics: ViewportMetrics,
     host: Rc<RefCell<ShellDomHost>>,
     interpreter: amazing_js::Interpreter,
@@ -274,6 +339,11 @@ pub struct PageRuntime {
 }
 
 impl PageRuntime {
+    pub fn font_display_trace(&self) -> String { crate::navigation_acquisition::font_trace(self.acquisition.as_ref()) }
+
+    #[cfg(test)]
+    pub(crate) fn navigation_runtime_identity(&self) -> usize { Rc::as_ptr(&self.host) as usize }
+
     #[cfg(test)]
     pub(super) fn failure_fixture() -> Self {
         Self::new_with_metrics(amazing_html::parse(
@@ -343,6 +413,7 @@ impl PageRuntime {
             }
         }
         Self {
+            acquisition: crate::navigation_acquisition::current_replay(),
             metrics,
             host,
             interpreter,
@@ -353,6 +424,12 @@ impl PageRuntime {
     }
 
     fn snapshot(&mut self, default_prevented: bool) -> RuntimeUpdate {
+        if let Some(replay) = self.acquisition.clone() {
+            return crate::navigation_acquisition::with_replay(replay, || self.snapshot_inner(default_prevented));
+        }
+        self.snapshot_inner(default_prevented)
+    }
+    fn snapshot_inner(&mut self, default_prevented: bool) -> RuntimeUpdate {
         let navigation = self.interpreter.take_navigation();
         let history_delta = self.interpreter.take_history_delta();
         let history_update = self
@@ -382,6 +459,12 @@ impl PageRuntime {
     }
 
     fn render_viewport(&self) -> Result<EngineViewport, String> {
+        if let Some(replay) = &self.acquisition {
+            return crate::navigation_acquisition::with_replay(replay.clone(), || self.render_viewport_inner());
+        }
+        self.render_viewport_inner()
+    }
+    fn render_viewport_inner(&self) -> Result<EngineViewport, String> {
         let host = self.host.borrow();
         let (css, font_sheets) = load_document_styles(&host.dom, &self.document_url,
             &self.options, Some(&self.session));
@@ -530,6 +613,7 @@ impl EngineViewport {
         let mut viewport = Self::from_dom_with_style_sources_and_metrics(
             &dom, &css, resources, Some(&final_address), &font_sheets, metrics)?;
         viewport.static_document = Some(Rc::new(StaticDocument {
+            acquisition: crate::navigation_acquisition::current_replay(),
             dom, css, font_sheets, document_url: Some(final_address.clone()),
             options, session: Some(session),
         }));
@@ -540,6 +624,19 @@ impl EngineViewport {
             favicon,
             runtime: None,
         })
+    }
+
+    pub fn refresh_initial_page(page: &mut LoadedPage, metrics: ViewportMetrics) -> Result<(), String> {
+        if let Some(runtime) = page.runtime.as_mut() {
+            // Never rerun author script while awaiting newly selected resources.
+            page.viewport = runtime.reflow(metrics)?;
+            let host = runtime.host.borrow();
+            page.title = document_title(&host.dom);
+            page.favicon = load_favicon(&host.dom, &runtime.document_url, &runtime.options, Some(&runtime.session));
+        } else if let Some(viewport) = page.viewport.try_reflow_static(metrics)? {
+            page.viewport = viewport;
+        }
+        Ok(())
     }
 
     pub fn error(address: &str, error: &str) -> Self {
@@ -611,7 +708,6 @@ impl EngineViewport {
                 static_document: None,
                 compositor: None,
                 scroll_controller: Rc::new(RefCell::new(amazing_compositor::ScrollController::default())),
-                scroll_presenter: Rc::new(RefCell::new(GpuiPresenter::default())),
                 scroll_frame: Rc::new(RefCell::new(None)),
                 page: None,
                 width: decoded.width,
@@ -637,7 +733,6 @@ impl EngineViewport {
             static_document: None,
             compositor: None,
             scroll_controller: Rc::new(RefCell::new(amazing_compositor::ScrollController::default())),
-            scroll_presenter: Rc::new(RefCell::new(GpuiPresenter::default())),
             scroll_frame: Rc::new(RefCell::new(None)),
             page: None,
             width,
@@ -651,6 +746,7 @@ impl EngineViewport {
         let dom = amazing_html::parse(html);
         let mut viewport = Self::from_dom(&dom, css);
         viewport.static_document = Some(Rc::new(StaticDocument {
+            acquisition: crate::navigation_acquisition::current_replay(),
             dom, css: css.into(), font_sheets: Vec::new(), document_url: None,
             options: FetchOptions::default(), session: None,
         }));
@@ -703,7 +799,6 @@ impl EngineViewport {
             static_document: None,
             compositor,
             scroll_controller: Rc::new(RefCell::new(amazing_compositor::ScrollController::default())),
-            scroll_presenter: Rc::new(RefCell::new(GpuiPresenter::default())),
             scroll_frame: Rc::new(RefCell::new(None)),
             page,
             width,
@@ -719,8 +814,20 @@ impl EngineViewport {
         self.try_reflow_static(metrics).expect("static shell render")
     }
 
+    /// Actual successfully decoded images retained in the painted page snapshot.
+    pub fn decoded_image_count(&self) -> usize { self.page.as_ref().map_or(0, |page| page.resources.images.len()) }
+
+    pub fn font_display_trace(&self) -> String {
+        crate::navigation_acquisition::font_trace(self.static_document.as_ref().and_then(|document| document.acquisition.as_ref()))
+    }
     pub fn try_reflow_static(&self, metrics: ViewportMetrics) -> Result<Option<Self>, String> {
         let Some(input) = self.static_document.as_ref() else { return Ok(None) };
+        if let Some(replay) = &input.acquisition {
+            return crate::navigation_acquisition::with_replay(replay.clone(), || self.reflow_static_input(input, metrics));
+        }
+        self.reflow_static_input(input, metrics)
+    }
+    fn reflow_static_input(&self, input: &Rc<StaticDocument>, metrics: ViewportMetrics) -> Result<Option<Self>, String> {
         let resources = if let Some(url) = &input.document_url {
             load_page_resources_with_metrics(&input.dom, &input.css, url, &input.options,
                 input.session.as_ref(), metrics)
@@ -895,44 +1002,29 @@ impl EngineViewport {
     /// scroll, transform and opacity property updates all reuse tiles
     /// instead of repainting (COMP-18).
     fn rebuild_retained_frame(&self) -> Result<(), String> {
-        let (Some(page), Some(scene)) = (&self.page, &self.compositor) else {
-            return Ok(());
-        };
-        let mut fallback = false;
-        let mut frame = {
-            let mut scene = scene.borrow_mut();
-            match scene.compositor_mut().build_cached_frame(self.width, self.height) {
-                Ok(frame) => frame,
-                Err(amazing_compositor::SceneError::MissingCachedTile) => {
-                    fallback = true;
-                    let images = amazing_paint::image::StyledImages {
-                        images: &page.resources, styles: &page.styles,
-                    };
-                    let view = amazing_paint::display_list_view::DisplayListView::new(
-                        &page.root, self.width, self.height, &page.text, &images,
-                        &amazing_paint::controls::NoControls,
-                    ).with_raster_viewport(self.metrics.raster_viewport()?)
-                        .map_err(|error| format!("retained raster viewport: {error:?}"))?;
-                    scene.update(&view)?;
-                    scene.compositor_mut().build_cached_frame(self.width, self.height)
-                        .map_err(|error| error.to_string())?
-                }
-                Err(error) => return Err(error.to_string()),
-            }
-        };
+        let (Some(page), Some(scene)) = (&self.page, &self.compositor) else { return Ok(()) };
         let first = self.scroll_frame.borrow().is_none();
         let mut scene = scene.borrow_mut();
-        amazing_compositor::add_paint_view_canvas_background(scene.mode(), &mut frame);
-        if first || fallback {
-            frame.resources.uploads = scene.compositor_mut().resource_snapshot().uploads;
-            frame.damage.push(amazing_compositor::Rect::new(
-                0., 0., self.width as f32, self.height as f32));
+        match scene.compositor_mut().build_cached_frame(self.width, self.height) {
+            Ok(frame) => scene.present_cached_viewport_frame(frame, first)?,
+            Err(amazing_compositor::SceneError::MissingCachedTile) => {
+                let images = amazing_paint::image::StyledImages { images: &page.resources, styles: &page.styles };
+                let view = amazing_paint::display_list_view::DisplayListView::new(
+                    &page.root, self.width, self.height, &page.text, &images,
+                    &amazing_paint::controls::NoControls,
+                ).with_raster_viewport(self.metrics.raster_viewport()?)
+                    .map_err(|error| format!("retained raster viewport: {error:?}"))?;
+                scene.update_viewport_frame(&view)?;
+            }
+            Err(error) => return Err(error.to_string()),
         }
-        drop(scene);
-        let presented = self.scroll_presenter.borrow_mut().present(&frame)
-            .map_err(|error| error.to_string())?;
-        *self.scroll_frame.borrow_mut() = Some(presented);
+        *self.scroll_frame.borrow_mut() = Some(scene.frame().clone());
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn completed_presentations_for_fixture(&self) -> u64 {
+        self.compositor.as_ref().unwrap().borrow().completed_presentations()
     }
 
     pub fn load_static_deferred_images(&mut self) -> Result<bool, String> {
@@ -1030,47 +1122,16 @@ impl EngineViewport {
 
     /// Repaint the retained scroll frame from the current page resources.
     fn repaint_scroll_frame(&self) -> Result<(), String> {
-        let (Some(page), Some(scene)) = (&self.page, &self.compositor) else {
-            return Ok(());
-        };
-        let mut frame = {
-            let mut scene = scene.borrow_mut();
-            let images = amazing_paint::image::StyledImages {
-                images: &page.resources,
-                styles: &page.styles,
-            };
-            let view = amazing_paint::display_list_view::DisplayListView::new(
-                &page.root,
-                self.width,
-                self.height,
-                &page.text,
-                &images,
-                &amazing_paint::controls::NoControls,
-            ).with_raster_viewport(self.metrics.raster_viewport()?)
-                .map_err(|error| format!("retained paint view: {error:?}"))?;
-            scene.update(&view)?;
-            scene
-                .compositor_mut()
-                .build_cached_frame(self.width, self.height)
-                .map_err(|error| error.to_string())?
-        };
-        {
-            let mut scene = scene.borrow_mut();
-            amazing_compositor::add_paint_view_canvas_background(scene.mode(), &mut frame);
-            frame.resources.uploads = scene.compositor_mut().resource_snapshot().uploads;
-            frame.damage.push(amazing_compositor::Rect::new(
-                0.,
-                0.,
-                self.width as f32,
-                self.height as f32,
-            ));
-        }
-        let presented = self
-            .scroll_presenter
-            .borrow_mut()
-            .present(&frame)
-            .map_err(|error| error.to_string())?;
-        *self.scroll_frame.borrow_mut() = Some(presented);
+        let (Some(page), Some(scene)) = (&self.page, &self.compositor) else { return Ok(()) };
+        let images = amazing_paint::image::StyledImages { images: &page.resources, styles: &page.styles };
+        let view = amazing_paint::display_list_view::DisplayListView::new(
+            &page.root, self.width, self.height, &page.text, &images,
+            &amazing_paint::controls::NoControls,
+        ).with_raster_viewport(self.metrics.raster_viewport()?)
+            .map_err(|error| format!("retained paint view: {error:?}"))?;
+        let mut scene = scene.borrow_mut();
+        scene.update_viewport_frame(&view)?;
+        *self.scroll_frame.borrow_mut() = Some(scene.frame().clone());
         Ok(())
     }
 
@@ -1249,6 +1310,7 @@ fn render_dom_with_resources(
     let root = amazing_layout::layout_styled_document_from_root(dom, amazing_dom::NodeIdx(0),
         &styles, &text, &resources, metrics.css_width, Some(metrics.css_height))
         .expect("shell renders its actual Document root");
+    record_font_display_state(&text)?;
     let links = document_url
         .map(|url| collect_link_regions(dom, &root, url))
         .unwrap_or_default();
@@ -1531,6 +1593,12 @@ fn fetch_resource(
     address: &str,
     options: &FetchOptions,
 ) -> Result<amazing_net::Response, amazing_net::NetError> {
+    let request = if session.is_some() {
+        crate::navigation_acquisition::ResourceRequest::Session(address.into(), options.clone())
+    } else {
+        crate::navigation_acquisition::ResourceRequest::Raw(address.into(), options.clone())
+    };
+    if let Some(result) = crate::navigation_acquisition::response(request) { return result; }
     match session {
         Some(session) => session.borrow_mut().fetch(address, options),
         None => fetch(address, options),
@@ -2051,8 +2119,7 @@ fn escape_html(value: &str) -> String {
 }
 
 // Keep font discovery identical to the engine driver on every platform.
-#[path = "../../amazing/src/font_loader.rs"]
-mod page_font_loader;
+pub(crate) mod page_font_loader;
 
 const MAX_PAGE_FONT_BYTES: usize = 8 * 1024 * 1024;
 
@@ -2069,12 +2136,14 @@ fn load_resource(url: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
         max_response_bytes: max_bytes,
         ..amazing_net::FetchOptions::default()
     };
-    amazing_net::fetch(url, &options)
-        .map(|response| response.body)
+    let result = crate::navigation_acquisition::response(
+        crate::navigation_acquisition::ResourceRequest::Raw(url.into(), options.clone()))
+        .unwrap_or_else(|| amazing_net::fetch(url, &options));
+    result.map(|response| response.body)
         .map_err(|error| error.to_string())
 }
 
-fn resolve_font_url(page: &str, source: &str) -> String {
+pub(crate) fn resolve_font_url(page: &str, source: &str) -> String {
     resolve_resource_address(page, source).unwrap_or_else(|| source.to_owned())
 }
 
@@ -2148,6 +2217,21 @@ fn register_system_text_faces(provider: &mut amazing_text_provider::TextProvider
     }
 }
 
+fn record_font_display_state(text: &TextProvider) -> Result<(), String> {
+    let Some(replay) = crate::navigation_acquisition::current_replay() else { return Ok(()) };
+    let faces = {
+        let state = replay.borrow(); state.current_font_faces.iter().filter_map(|key|
+            state.font_timelines.get(key).map(|timeline| (key.clone(), timeline.clone()))).collect::<Vec<_>>()
+    };
+    let mut states = std::collections::BTreeMap::new();
+    for (key, timeline) in faces {
+        states.insert(key, text.font_display_face_state(&timeline).map_err(|error| format!("font display state: {error:?}"))?);
+    }
+    let deadline = text.next_font_display_deadline().map_err(|error| format!("font display deadline: {error:?}"))?;
+    let mut state = replay.borrow_mut(); state.font_states = states; state.next_font_deadline = deadline;
+    Ok(())
+}
+
 fn load_page_text(css: &str, page: &str, sheets: &[(String, String)]) -> TextProvider {
     let mut provider = TextProvider::new();
     register_system_text_faces(&mut provider);
@@ -2161,9 +2245,11 @@ fn load_page_text(css: &str, page: &str, sheets: &[(String, String)]) -> TextPro
     for warning in warnings {
         eprintln!("amazing shell: {warning}");
     }
+    let replay = crate::navigation_acquisition::current_replay();
+    if let Some(replay) = &replay { replay.borrow_mut().current_font_faces.clear(); }
     let mut font_fetch_cache = std::collections::HashMap::new();
-    for (source, stylesheet_url) in &expanded {
-      for face in amazing_css::parse_font_faces(source) {
+    for (sheet_index, (source, stylesheet_url)) in expanded.iter().enumerate() {
+      for (rule_index, face) in amazing_css::parse_font_faces(source).into_iter().enumerate() {
         let family = face.family.clone();
         let descriptor = match page_font_loader::descriptor_from_css(face) {
             Ok(value) => value,
@@ -2178,14 +2264,33 @@ fn load_page_text(css: &str, page: &str, sheets: &[(String, String)]) -> TextPro
             warnings: Vec::new(),
             cache: &mut font_fetch_cache,
         };
-        if let Err(error) = provider.begin_font_load(descriptor.display) {
-            eprintln!("amazing shell: font-face {family:?}: {error:?}");
-            continue;
-        }
-        let result = provider.register_font_face(descriptor, &mut loader);
-        provider.end_font_load();
+        let result = if let Some(replay) = &replay {
+            let key = format!("{page:?}|{stylesheet_url:?}|{sheet_index}|{rule_index}|{descriptor:?}");
+            let (timeline, epoch) = {
+                let mut state = replay.borrow_mut();
+                if state.font_timelines.len() >= 512 && !state.font_timelines.contains_key(&key) {
+                    eprintln!("amazing shell: font display declaration limit"); continue;
+                }
+                let timeline = state.font_timelines.entry(key.clone())
+                    .or_insert_with(|| amazing_text_provider::FontDisplayTimeline::new(descriptor.clone())).clone();
+                (timeline, state.page_epoch)
+            };
+            let result = provider.register_font_face_with_clock(descriptor, &mut loader, &timeline, || epoch.elapsed());
+            if result.is_ok() { replay.borrow_mut().current_font_faces.push(key); }
+            result
+        } else {
+            if let Err(error) = provider.begin_font_load(descriptor.display) {
+                eprintln!("amazing shell: font-face {family:?}: {error:?}"); continue;
+            }
+            let result = provider.register_font_face(descriptor, &mut loader);
+            provider.end_font_load(); result
+        };
         match result {
-            Ok(Some(_)) => {},
+            Ok(Some(key)) => {
+                if std::env::var_os("AMAZING_NAVIGATION_TRACE").is_some() {
+                    eprintln!("AMAZING_FONT_REGISTERED family={family:?} key={key:?}");
+                }
+            },
             Ok(None) => eprintln!("amazing shell: font-face {family:?}: no usable source"),
             Err(error) => eprintln!("amazing shell: font-face {family:?}: {error:?}"),
         }
@@ -2277,6 +2382,7 @@ mod tests {
             &PageResources::default(), Some("https://example.test/form"));
         let identity = original.control_identity(1).unwrap();
         original.static_document = Some(Rc::new(StaticDocument {
+            acquisition: crate::navigation_acquisition::current_replay(),
             dom, css: css.into(), font_sheets: Vec::new(),
             document_url: Some("https://example.test/form".into()), options: FetchOptions::default(), session: None,
         }));
@@ -3042,6 +3148,76 @@ mod tests {
                      {build_cache_hits},direct_tiles={direct_tiles:?}"
                 );
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod font_display_emphasis_controls {
+    use super::*;
+    use std::time::Duration;
+    use amazing_paint::paint::{TextEmphasis, EmphasisShape};
+    use amazing_text::{GlyphVisibility, TextSystem, TextError};
+    use amazing_text_provider::{FontFaceLoader, FontFetchRequest, FontSourceLoad, FontDisplayTimeline};
+    struct PendingSource;
+    impl FontFaceLoader for PendingSource {
+        fn load_local(&mut self, _: &str, _: usize) -> Result<Option<Vec<u8>>, TextError> { Ok(None) }
+        fn load_url(&mut self, _: FontFetchRequest<'_>) -> Result<Option<Vec<u8>>, TextError> { Ok(None) }
+        fn load_url_state(&mut self, _: FontFetchRequest<'_>) -> Result<FontSourceLoad, TextError> { Ok(FontSourceLoad::Pending) }
+    }
+    struct Marks;
+    impl amazing_paint::ImageProvider for Marks {
+        fn image(&self, _: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> { None }
+        fn text_emphasis(&self, _: amazing_dom::NodeIdx) -> Option<TextEmphasis> {
+            Some(TextEmphasis { shape: EmphasisShape::Circle,
+                filled: true, color: [255, 0, 0, 255], over: true })
+        }
+    }
+    fn glyphs(root: &amazing_layout::LayoutBox, out: &mut Vec<amazing_layout::GlyphFrag>) {
+        for line in &root.lines { out.extend(line.glyphs.iter().cloned()); }
+        match &root.flow {
+            amazing_layout::Flow::Blocks(children) | amazing_layout::Flow::Flex(children) | amazing_layout::Flow::Grid(children) =>
+                for child in children { glyphs(child, out); },
+            _ => {},
+        }
+        for child in &root.positioned { glyphs(child, out); }
+    }
+    #[test]
+    fn native_timed_mixed_range_hides_only_invisible_emphasis_and_keeps_metrics_and_non_text_ink() {
+        let dom = amazing_html::parse("<!doctype html><body><div>AB</div></body>");
+        let css = "body{margin:0;padding-top:20px;border:2px solid blue;background:white}div{font-family:NavProof;font-size:20px;color:black}";
+        let styles = amazing_css::compute(&dom, &[amazing_css::parse_stylesheet(css)]);
+        let face = amazing_css::parse_font_faces("@font-face{font-family:NavProof;src:url(font.ttf);font-display:block;unicode-range:U+41}").pop().unwrap();
+        let descriptor = page_font_loader::descriptor_from_css(face).unwrap();
+        let timeline = FontDisplayTimeline::new(descriptor.clone());
+        let mut text = TextProvider::new();
+        text.register_font_face_with_timeline(descriptor, &mut PendingSource, &timeline, Duration::ZERO).unwrap();
+        let resources = PageResources::default();
+        let build = |text: &TextProvider| amazing_layout::layout_styled_document_from_root(
+            &dom, amazing_dom::NodeIdx(0), &styles, text, &resources, 100., Some(80.)).unwrap();
+        let hidden_root = build(&text); let mut hidden_glyphs = Vec::new(); glyphs(&hidden_root, &mut hidden_glyphs);
+        assert_eq!(hidden_glyphs.len(), 2);
+        assert_eq!(text.glyph_visibility(hidden_glyphs[0].font).unwrap(), GlyphVisibility::InvisibleFallback);
+        assert_eq!(text.glyph_visibility(hidden_glyphs[1].font).unwrap(), GlyphVisibility::Visible);
+        let mut hidden_counts = Vec::new();
+        for density in [1.0, 2.0] {
+            let raster = ViewportMetrics::new(100., 80., density).unwrap().raster_viewport().unwrap();
+            let hidden = amazing_paint::paint_document_at_viewport(&hidden_root, raster, &text, &Marks, &amazing_paint::controls::NoControls).unwrap();
+            let red = |surface: &Surface| surface.pixels.chunks_exact(4).filter(|pixel| *pixel == [255, 0, 0, 255]).count();
+            let hidden_red = red(&hidden); assert!(hidden_red > 0, "visible-range emphasis must still paint");
+            assert_eq!(hidden.get_pixel(0, 0), Some([0, 0, 255, 255]), "non-text border ink must remain");
+            hidden_counts.push(hidden_red);
+        }
+        assert!(text.set_font_display_time(Duration::from_millis(3000)).unwrap());
+        let visible_root = build(&text); let mut visible_glyphs = Vec::new(); glyphs(&visible_root, &mut visible_glyphs);
+        assert_eq!(hidden_glyphs.iter().map(|g| (g.x,g.y,g.advance_x,g.advance_y)).collect::<Vec<_>>(),
+            visible_glyphs.iter().map(|g| (g.x,g.y,g.advance_x,g.advance_y)).collect::<Vec<_>>());
+        for (index, density) in [1.0, 2.0].into_iter().enumerate() {
+            let raster = ViewportMetrics::new(100., 80., density).unwrap().raster_viewport().unwrap();
+            let visible = amazing_paint::paint_document_at_viewport(&visible_root, raster, &text, &Marks, &amazing_paint::controls::NoControls).unwrap();
+            let red = visible.pixels.chunks_exact(4).filter(|pixel| *pixel == [255, 0, 0, 255]).count();
+            assert!(red > hidden_counts[index], "only the formerly invisible range adds emphasis ink after block ends"); assert_eq!(visible.get_pixel(0, 0), Some([0, 0, 255, 255]));
+            assert!(visible_glyphs.iter().all(|g| text.glyph_visibility(g.font).unwrap() == GlyphVisibility::Visible));
         }
     }
 }

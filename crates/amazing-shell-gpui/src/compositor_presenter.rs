@@ -28,6 +28,7 @@ enum GpuiDraw {
     Solid(SolidColorQuad),
 }
 
+#[derive(Clone)]
 pub struct GpuiFrame {
     /// Exact fallback image for rotations, grouped effects and complex clips.
     pub composed: Option<Arc<RenderImage>>,
@@ -220,7 +221,18 @@ fn clip_chain_is_rect_only(trees: &amazing_compositor::PropertyTrees, mut id: am
     true
 }
 
+#[cfg(test)]
+std::thread_local! {
+    // Count every actual GPUI presentation on the operation's thread, including
+    // an accidentally introduced second presenter. Reference-only validation
+    // does not present a GPUI frame and deliberately contributes no count.
+    static COMPLETED_PRESENTATIONS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
 impl GpuiPresenter {
+    #[cfg(test)]
+    pub(crate) fn completed_presentations(&self) -> u64 { COMPLETED_PRESENTATIONS.with(std::cell::Cell::get) }
+
     /// Recursively flattens render pass `pass_id` into direct-tile draws when
     /// every draw it contains (or a pass it in turn references) is provably
     /// safe to place with GPUI's own `opacity`/absolute-bounds API instead of
@@ -411,6 +423,8 @@ impl Presenter for GpuiPresenter {
             self.last_composed = Some(image.clone());
             Some(image)
         };
+        #[cfg(test)]
+        { COMPLETED_PRESENTATIONS.with(|count| count.set(count.get().saturating_add(1))); }
         Ok(GpuiFrame {
             composed,
             tiles,

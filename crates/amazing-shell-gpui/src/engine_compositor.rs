@@ -111,6 +111,30 @@ impl EngineCompositor {
     /// Rebuilds from the same scene after property or item changes. Returns
     /// whether GPUI needs a notification for pixel damage.
     pub fn update(&mut self, view: &DisplayListView<'_>) -> Result<bool, String> {
+        self.update_frame(view, false)
+    }
+
+    /// A missing scroll tile or changed page resource requires one complete
+    /// viewport presentation. Reuse this owner's existing resource table and
+    /// finished frame instead of composing again through a second presenter.
+    pub fn update_viewport_frame(&mut self, view: &DisplayListView<'_>) -> Result<bool, String> {
+        self.update_frame(view, true)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn completed_presentations(&self) -> u64 { self.presenter.completed_presentations() }
+
+    pub fn present_cached_viewport_frame(&mut self, mut frame: amazing_compositor::CompositorFrame, first: bool) -> Result<(), String> {
+        amazing_compositor::add_paint_view_canvas_background(self.mode, &mut frame);
+        if first { frame.damage.push(amazing_compositor::Rect::new(0., 0., self.width as f32, self.height as f32)); }
+        self.work = FrameWork::from_frame(&frame, 0);
+        #[cfg(test)]
+        { self.reference_pixels = self.reference.present(&frame).map_err(|e| format!("{e:?}"))?; }
+        self.frame = self.presenter.present(&frame).map_err(|e| format!("{e:?}"))?;
+        Ok(())
+    }
+
+    fn update_frame(&mut self, view: &DisplayListView<'_>, complete: bool) -> Result<bool, String> {
         if view.raster_viewport() != self.raster_viewport {
             return Err("raster viewport changed; rebuild the scene".into());
         }
@@ -119,9 +143,10 @@ impl EngineCompositor {
             return Err("paint-view raster mode changed; rebuild the scene".into());
         }
         let raster_tiles = self.compositor.dirty_tiles();
-        let frame = source
+        let mut frame = source
             .build_frame(&mut self.compositor, self.width, self.height)
             .map_err(|e| e.to_string())?;
+        if complete { frame.damage.push(amazing_compositor::Rect::new(0., 0., self.width as f32, self.height as f32)); }
         let damaged = !frame.damage.is_empty();
         self.work = FrameWork::from_frame(&frame, raster_tiles);
         #[cfg(test)]

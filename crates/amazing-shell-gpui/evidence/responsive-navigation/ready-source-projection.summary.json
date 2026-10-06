@@ -1,0 +1,235 @@
+{
+  "schema": 1,
+  "recorded_origin_dev_base": "a077a0455f747eacdc651364fba3ff9fe11a244d",
+  "qualification_source": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+  "qualification_published_base": "68bc5a1c304c68b6fa59c5fcb671c027707b9079",
+  "qualification_composed_producer_base": "f37da705964d526920cea09dd2d9efad9c3e2e98",
+  "qualified_sampler_ready": "9d373827ec50e2c5ea0b5304ab6dcc86e1a7a8e1",
+  "published_sampler": "a077a0455f747eacdc651364fba3ff9fe11a244d",
+  "owned_shipping_files": [
+    {
+      "path": "crates/amazing-paint/src/paint.rs",
+      "bytes": 141164,
+      "sha256": "00d7ca799fc604e0a22ed9b7bb77d45b66dcb064b485e973b77e4af4e4dd3d2c",
+      "qualified_blob": "18e243ad2d909f167deb3046964359b596682c56"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/smoke/continuation.actions",
+      "bytes": 2288,
+      "sha256": "e2a850e7d0dfccf55f142257d189134af27d8450d62653db2e62fa2e574193f6",
+      "qualified_blob": "ecdfbb143ab247deb43e42f57491cb85ac4a4d52"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/smoke/font-display.actions",
+      "bytes": 1622,
+      "sha256": "16566c7e50c35303abbcbb97f2af9307647534ee41129ab1a179304ade51eda5",
+      "qualified_blob": "7c9a3906ff8b3b6f271e97ce130087a9995d56dc"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/smoke/navigation.actions",
+      "bytes": 3589,
+      "sha256": "d4409ba25e0f663ae31ae31772dcf43b24e86430cb10ed905c2dd2d74422a66e",
+      "qualified_blob": "1f95c3ab70d9aebbef90a61e5af8bd8b891750be"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/smoke/navigation_actions.py",
+      "bytes": 13025,
+      "sha256": "5c67b948e07c0f9059334d00797cd63d0acab118b5622179b78510600c1ccc8c",
+      "qualified_blob": "8de101c42a245288c1b9de5f60b23ecfc133932a"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/smoke/navigation_atspi.py",
+      "bytes": 2797,
+      "sha256": "9c0740b3e468fb296a1aaec9e62acf765887e555854810ebc9fdf40b3a3428fc",
+      "qualified_blob": "8800d3f523d806c78a2c1ced4efc216e2a714e7d"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/smoke/navigation_fixture.py",
+      "bytes": 7153,
+      "sha256": "2162c06b557c4bdcdfa7c9cad6a7af8d631b98e01ffa45c55417ef31a48662f6",
+      "qualified_blob": "2d643c6a45baec91b362d99500b7164d3ae83950"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/smoke/navigation_gate.sh",
+      "bytes": 2943,
+      "sha256": "962a4f858e1cecb5673f65dfd1282fdf8a33e10aebc3e0caa0651b1a9db27274",
+      "qualified_blob": "901b921df3ddafb7cb8846122557e05953e3fb5a"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/smoke/navigation_windows.sh",
+      "bytes": 4720,
+      "sha256": "6fbd36b8474f9220ec629706ad070facb5ea5b2fb37e15fe4abe2564a1758caa",
+      "qualified_blob": "a1ebd155e1ce43e684239289201dde0afe667b3e"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/compositor_presenter.rs",
+      "bytes": 36131,
+      "sha256": "8105e78f4e8c73c6324824b936ea22a23f9cfe9ab23f0c805d67bd672e04e54f",
+      "qualified_blob": "bef9e5b789dc24c8aaa64914b9cbea9ceb9ba6c8"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/engine_compositor.rs",
+      "bytes": 14807,
+      "sha256": "6a77a45d32235a4094ff71d15d0db151401f4adbcf6992b654750f902a2b79e6",
+      "qualified_blob": "579fd249af9ceae3a28a9258c48f5cd5d2fd9dc4"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/engine_viewport.rs",
+      "bytes": 139334,
+      "sha256": "1c12a77be9583d6173c25dfd552192adcbdb389ff2bf8ff0067a68d2505f46a0",
+      "qualified_blob": "e2f0304308ba4a94d55c764cfdf52a1bbffb1444"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/engine_viewport/page_font_loader.rs",
+      "bytes": 43747,
+      "sha256": "e7880d681712635f1748ad62edbc5fc24575ab255f00a556cffe9f99ea39a98e",
+      "qualified_blob": "f7f42bcae63971cbb830a3dec8729007760fcc41"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/main.rs",
+      "bytes": 169885,
+      "sha256": "c9c03b2e4a8a51252fa0518fe452943b951109c5d2f67d0dd7aef8c0540c19d3",
+      "qualified_blob": "07362f955adc61f99a0a56c032a12cde2a770546"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/navigation_acquisition.rs",
+      "bytes": 10270,
+      "sha256": "047dbe7ed7b3b2b0fb7398a343a75e8f0d5c220203b1edfc2d993e30a582f41a",
+      "qualified_blob": "45aaab49de1ca28787f1a448354d32cdad70d45b"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/navigation_tests.rs",
+      "bytes": 23302,
+      "sha256": "976086e999131532d3773f41c662422c2a3099bc84f5d364d1d850cea5475ef2",
+      "qualified_blob": "8169360500730ebc29a4603fa0e3335ad5b9228d"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/product_navigation.rs",
+      "bytes": 13623,
+      "sha256": "245ba7dc56a4d0461444c372ca2757ef1fb012f47957fe1449588c022115f0cd",
+      "qualified_blob": "add26578e1a9f4f71df77a3e441cb19a0386a6ea"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/product_navigation/workers.rs",
+      "bytes": 8403,
+      "sha256": "cb72ecb4b0f1ca2547163c8a54728081cb66f919be303f76b39e60e2c7048a53",
+      "qualified_blob": "ab1b66576938eff59b3dbf49c0731a3d2f148638"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/session_state.rs",
+      "bytes": 38618,
+      "sha256": "2f5606f9741eef99490459b22d304c248ce5e004000bd27b9ad8d3d234feb7a6",
+      "qualified_blob": "f5e0e3a225ffd3189042568a5b7b6cda12c89423"
+    }
+  ],
+  "owned_shipping_byte_equivalence": true,
+  "owned_base_shipping_drift": [],
+  "intervening_shipping_paths": [
+    "crates/amazing-text-provider/src/font_matching.rs",
+    "crates/amazing-text-provider/src/font_selection.rs",
+    "crates/amazing-text-provider/src/font_variations.rs",
+    "crates/amazing-text-provider/src/installed_font.rs",
+    "crates/amazing-text-provider/src/installed_font_tests.rs",
+    "crates/amazing-text-provider/src/lib.rs",
+    "crates/amazing-text-provider/src/tests.rs",
+    "crates/amazing/src/font_loader.rs"
+  ],
+  "intervening_all_paths": [
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/coordinator.result.summary.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/integration.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/pool-0/endpoint.manifest.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/pool-0/endpoint.manifest.json.observation.summary.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/pool-0/native.summary.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/pool-1/endpoint.manifest.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/pool-1/endpoint.manifest.json.observation.summary.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/pool-1/native.summary.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/pool-2/endpoint.manifest.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/pool-2/endpoint.manifest.json.observation.summary.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/pool-2/native.summary.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/pool-3/endpoint.manifest.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/pool-3/endpoint.manifest.json.observation.summary.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/pool-3/native.summary.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-0.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-1.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-10.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-11.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-12.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-13.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-14.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-15.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-2.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-3.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-4.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-5.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-6.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-7.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-8.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/shard-9.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/test262-comparison.compact.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/workspace/doctests.phase.manifest.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/workspace/endpoint.manifest.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/workspace/endpoint.manifest.json.observation.summary.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/workspace/nextest.phase.manifest.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/workspace/result.summary.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/workspace/storage.summary.json",
+    "crates/amazing-compositor/evidence/quad-sampler/root-integration/workspace/workspace.manifest.json",
+    "crates/amazing-text-provider/src/font_matching.rs",
+    "crates/amazing-text-provider/src/font_selection.rs",
+    "crates/amazing-text-provider/src/font_variations.rs",
+    "crates/amazing-text-provider/src/installed_font.rs",
+    "crates/amazing-text-provider/src/installed_font_tests.rs",
+    "crates/amazing-text-provider/src/lib.rs",
+    "crates/amazing-text-provider/src/tests.rs",
+    "crates/amazing/src/font_loader.rs",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/coordinator.result.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/font-corpus/before.endpoint.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/font-corpus/before.endpoint.json.observation.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/font-corpus/before.reference.manifest.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/font-corpus/css-css-fonts.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/font-corpus/gate.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/font-corpus/nextest.phase.manifest.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/font-corpus/qualification.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/font-corpus/storage.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/integration.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/pool-0/endpoint.manifest.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/pool-0/endpoint.manifest.json.observation.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/pool-0/native.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/pool-1/endpoint.manifest.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/pool-1/endpoint.manifest.json.observation.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/pool-1/native.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/pool-2/endpoint.manifest.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/pool-2/endpoint.manifest.json.observation.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/pool-2/native.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/pool-3/endpoint.manifest.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/pool-3/endpoint.manifest.json.observation.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/pool-3/native.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-0.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-1.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-10.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-11.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-12.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-13.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-14.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-15.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-2.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-3.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-4.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-5.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-6.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-7.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-8.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/shard-9.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/test262-comparison.compact.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/workspace/doctests.phase.manifest.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/workspace/endpoint.manifest.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/workspace/endpoint.manifest.json.observation.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/workspace/nextest.phase.manifest.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/workspace/result.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/workspace/storage.summary.json",
+    "docs/lanes/evidence/installed-face-matching-integration/root-integration/workspace/workspace.manifest.json",
+    "docs/lanes/text_installed_face_matching.json",
+    "docs/lanes/text_installed_face_matching.md"
+  ],
+  "entire_engine_byte_equivalence_claim": false,
+  "qualification_scope": "Q18 proves fixed-source e4 workspace/docs/GPUI/602 live assertions/original20 corpus. This ready commit carries exact19 owned shipping bytes onto recorded published a077. Intervening installed-font and other lower source/evidence drift is retained from published base, not included as ticket delta or covered by an invented e4 current-engine equivalence. Root owns current combined integration gate."
+}

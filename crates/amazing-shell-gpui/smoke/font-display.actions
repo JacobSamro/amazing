@@ -1,0 +1,31 @@
+# Native font-display clocks and actual ink; all requests are real barriers.
+nav /font-mode/block
+requested /slow-block/font.ttf
+expect block-pending t['pending'] and t['title']=='Fonts block' and s['fonts'] and s['fonts'][0]['phase']=='Block'
+shot 01-font-block
+expect block-fallback t['pending'] and s['fonts'][0]['phase']=='Swap' and s['fonts'][0]['metrics']=='Fallback'
+shot 02-font-block-fallback
+release slow-block
+expect block-loaded not t['pending'] and s['fonts'][0]['phase']=='Loaded'
+shot 03-font-block-loaded
+nav /font-mode/swap
+requested /slow-swap/font.ttf
+expect swap-visible t['pending'] and t['title']=='Fonts swap' and s['fonts'][0]['phase']=='Swap' and s['fonts'][0]['visibility']=='Visible'
+shot 04-font-swap
+release slow-swap
+expect swap-loaded not t['pending'] and s['fonts'][0]['phase']=='Loaded'
+nav /font-mode/fallback
+requested /slow-fallback/font.ttf
+expect fallback-loading t['pending'] and t['title']=='Fonts fallback'
+expect fallback-expired t['pending'] and s['fonts'][0]['phase']=='Expired' and s['fonts'][0]['metrics']=='Fallback'
+shot 05-font-fallback-expired
+release slow-fallback
+expect fallback-late not t['pending'] and s['fonts'][0]['phase']=='Expired' and s['fonts'][0]['metrics']=='Fallback'
+shot 06-font-fallback-late
+nav /font-mode/optional
+requested /slow-optional/font.ttf
+expect optional-expired t['pending'] and t['title']=='Fonts optional' and s['fonts'][0]['phase']=='Expired'
+shot 07-font-optional-expired
+release slow-optional
+expect optional-late not t['pending'] and s['fonts'][0]['phase']=='Expired' and s['fonts'][0]['metrics']=='Fallback'
+shot 08-font-optional-late

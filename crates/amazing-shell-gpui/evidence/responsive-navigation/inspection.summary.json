@@ -1,0 +1,526 @@
+{
+  "schema": 1,
+  "actual_window_inspected": [
+    {
+      "group": "product-smoke-scale2",
+      "image": "06-find-in-page-query-typed.png",
+      "sha256": "68d804c641f2caafb888ecb6e27c0bc3fd50ffb296de31c7ed7fc862fce75079",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 139816,
+      "fixture": "crates/amazing-shell-gpui/smoke/product-smoke.actions action=06-find-in-page-query-typed",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/product-smoke-scale2/actions/06-find-in-page-query-typed.png"
+    },
+    {
+      "group": "navigation-scale1",
+      "image": "01-delayed-document.png",
+      "sha256": "c2182a94c0a532505b339a5a0bffcaff1bfb2c38ab0b0ec76e39448f3b57c686",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 138303,
+      "fixture": "crates/amazing-shell-gpui/smoke/navigation.actions action=01-delayed-document",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "4194305",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/navigation-scale1/actions/01-delayed-document.png"
+    },
+    {
+      "group": "navigation-scale1",
+      "image": "03d-toolbar-loading.png",
+      "sha256": "25d94ff487beecde2919dd5c522b2ec72e36cf1ce67929853a3aac2bd365ef21",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 138303,
+      "fixture": "crates/amazing-shell-gpui/smoke/navigation.actions action=03d-toolbar-loading",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "4194305",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/navigation-scale1/actions/03d-toolbar-loading.png"
+    },
+    {
+      "group": "navigation-scale1",
+      "image": "03e-toolbar-stopped.png",
+      "sha256": "6588362b773cdcda738839de9b7500d5ddcc32d014d5b6f18e2f14f750b8fb04",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 138303,
+      "fixture": "crates/amazing-shell-gpui/smoke/navigation.actions action=03e-toolbar-stopped",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "4194305",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/navigation-scale1/actions/03e-toolbar-stopped.png"
+    },
+    {
+      "group": "navigation-scale2",
+      "image": "02-other-tab-usable.png",
+      "sha256": "77ed0b3996eb471c8e4b613889a03f12bf159de55916907c8fad04b71c1614f7",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 140391,
+      "fixture": "crates/amazing-shell-gpui/smoke/navigation.actions action=02-other-tab-usable",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/navigation-scale2/actions/02-other-tab-usable.png"
+    },
+    {
+      "group": "navigation-scale2",
+      "image": "03-author-once.png",
+      "sha256": "866c5fc10f593d83c56a317fe15852631af66db4496740220059359d10c4b399",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 140391,
+      "fixture": "crates/amazing-shell-gpui/smoke/navigation.actions action=03-author-once",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/navigation-scale2/actions/03-author-once.png"
+    },
+    {
+      "group": "navigation-scale2",
+      "image": "03d-toolbar-loading.png",
+      "sha256": "2ad161982f611ba7bfc7418d2dd79b7dc587ba1ba013c833d49617268c5092e7",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 140391,
+      "fixture": "crates/amazing-shell-gpui/smoke/navigation.actions action=03d-toolbar-loading",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/navigation-scale2/actions/03d-toolbar-loading.png"
+    },
+    {
+      "group": "navigation-scale2",
+      "image": "03e-toolbar-stopped.png",
+      "sha256": "b07d1df96e308681894a1d4fcbd6de80835cb8b9bbb788e5445e24387f3af133",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 140391,
+      "fixture": "crates/amazing-shell-gpui/smoke/navigation.actions action=03e-toolbar-stopped",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/navigation-scale2/actions/03e-toolbar-stopped.png"
+    },
+    {
+      "group": "navigation-scale2",
+      "image": "04-final-normal.png",
+      "sha256": "d0b93cdee45b84b31bf72a2b7a3e5e41db7fff448743e8a4e760486aa3ec420e",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 140391,
+      "fixture": "crates/amazing-shell-gpui/smoke/navigation.actions action=04-final-normal",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/navigation-scale2/actions/04-final-normal.png"
+    },
+    {
+      "group": "font-display-scale1",
+      "image": "01-font-block.png",
+      "sha256": "874ec158d7535a9bbb6ed8b9b06acbc0af245f958ddd159f49063cde7c310e5a",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 138881,
+      "fixture": "crates/amazing-shell-gpui/smoke/font-display.actions action=01-font-block",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/font-display-scale1/actions/01-font-block.png"
+    },
+    {
+      "group": "font-display-scale1",
+      "image": "02-font-block-fallback.png",
+      "sha256": "421d3f2a60077c0fa83f898d9e666008436e3f81802ee8b719a998710b40bed6",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 138881,
+      "fixture": "crates/amazing-shell-gpui/smoke/font-display.actions action=02-font-block-fallback",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/font-display-scale1/actions/02-font-block-fallback.png"
+    },
+    {
+      "group": "font-display-scale1",
+      "image": "03-font-block-loaded.png",
+      "sha256": "7055c1e8cbc1ffc39257d08f58340fca01d7b84659a1a6ab4f1134604050dc31",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 138881,
+      "fixture": "crates/amazing-shell-gpui/smoke/font-display.actions action=03-font-block-loaded",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/font-display-scale1/actions/03-font-block-loaded.png"
+    },
+    {
+      "group": "font-display-scale2",
+      "image": "01-font-block.png",
+      "sha256": "2ad161982f611ba7bfc7418d2dd79b7dc587ba1ba013c833d49617268c5092e7",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 141222,
+      "fixture": "crates/amazing-shell-gpui/smoke/font-display.actions action=01-font-block",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/font-display-scale2/actions/01-font-block.png"
+    },
+    {
+      "group": "font-display-scale2",
+      "image": "02-font-block-fallback.png",
+      "sha256": "63f7d0d1812a2c407393d0c5a40e816464a434d7e513c3d8cd9b41bde6da2fbd",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 141222,
+      "fixture": "crates/amazing-shell-gpui/smoke/font-display.actions action=02-font-block-fallback",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/font-display-scale2/actions/02-font-block-fallback.png"
+    },
+    {
+      "group": "font-display-scale2",
+      "image": "03-font-block-loaded.png",
+      "sha256": "8f1d3f5f779a350d81894d28f76cb33772086007dd1d6edf566b3c2e00722147",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 141222,
+      "fixture": "crates/amazing-shell-gpui/smoke/font-display.actions action=03-font-block-loaded",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/font-display-scale2/actions/03-font-block-loaded.png"
+    },
+    {
+      "group": "font-display-scale2",
+      "image": "06-font-fallback-late.png",
+      "sha256": "82b380128a000aeb8acec9291260e143f6cb264672d6aca000197cba4d5b4e07",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 141222,
+      "fixture": "crates/amazing-shell-gpui/smoke/font-display.actions action=06-font-fallback-late",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/font-display-scale2/actions/06-font-fallback-late.png"
+    },
+    {
+      "group": "font-display-scale2",
+      "image": "08-font-optional-late.png",
+      "sha256": "20a0546a4e549880305689097de1919dd66da3e3e5415a4743b534f59440718d",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 141222,
+      "fixture": "crates/amazing-shell-gpui/smoke/font-display.actions action=08-font-optional-late",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/font-display-scale2/actions/08-font-optional-late.png"
+    },
+    {
+      "group": "continuation-scale2",
+      "image": "01-image-before-font.png",
+      "sha256": "3a94462d05fc92af91ea71fed0224495a4d885e61cb0aecdee5ccbc17e013936",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 141598,
+      "fixture": "crates/amazing-shell-gpui/smoke/continuation.actions action=01-image-before-font",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/continuation-scale2/actions/01-image-before-font.png"
+    },
+    {
+      "group": "continuation-scale2",
+      "image": "02-stopped-continuation.png",
+      "sha256": "fbb113fa385edde15493659d191e22061f132392f24628d1ef42ef4caa6b1f99",
+      "source_commit": "e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea",
+      "exe": {
+        "path": "/tmp/amazing-product-navigation-whole-v18/product-responsive-navigation/e4cb44a2a6cc1d759dbaac2b74a65ce7a89b92ea/after/after-whole-v18/target/debug/amazing-shell",
+        "sha256": "85921a696af2cfd44ba8d0a419e82aa77548779a312291364dee3c73c1bbacf4"
+      },
+      "pid": 141598,
+      "fixture": "crates/amazing-shell-gpui/smoke/continuation.actions action=02-stopped-continuation",
+      "viewport": {
+        "display_size": [
+          1280,
+          800
+        ],
+        "window_size": [
+          1280,
+          800
+        ]
+      },
+      "window": {
+        "id": "2097153",
+        "title": ""
+      },
+      "capture_path": "/tmp/amazing-navigation-window-v18/product-navigation-after-whole-20261006-v17/continuation-scale2/actions/02-stopped-continuation.png"
+    }
+  ],
+  "observations": [
+    "DPR2 Find actual query Amazing,1/2 matches and highlighted page text; original8s assertion passes.",
+    "DPR1/2 pending font actual tab Loading caption and Stop icon with invisible block glyphs; real toolbar click clears Loading, restores Reload, and reveals fallback glyphs. Earlier timing-caption concern resolved on current source.",
+    "Both densities real block transition shows original serif fallback then decoded downloaded sans glyphs on same committed page; fallback/optional late faces remain fallback.",
+    "DPR2 decoded red image appears while Loading before font completion; stopped continuation clears Loading and cancelled image remains absent.",
+    "Delayed document keeps prior valid page visible with pending URL and Loading; other tab usable and successful final Normal page shown."
+  ],
+  "scope": "Actual Linux native-window visual proof complements controls; no complete-browser or physical OS DNS interruption claim."
+}

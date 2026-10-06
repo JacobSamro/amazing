@@ -1,0 +1,81 @@
+# Real input + source-state and server-lifecycle oracles, same suite at densities 1/2.
+nav /slow-document/page
+requested /slow-document/page
+expect delayed-document t['pending'] and s['committed']=='amazing://status'
+shot 01-delayed-document
+key Escape
+expect stopped not t['pending'] and s['committed']=='amazing://status' and t['history_len']==1
+cancelled /slow-document/page
+nav /slow-document/page
+requested /slow-document/page 2
+nav /normal
+expect superseded t['title']=='Normal' and not t['pending'] and t['history_len']==2
+cancelled /slow-document/page 2
+nav /resource
+requested /slow-style/page.css
+requested /slow-image/pixel.ppm
+key ctrl+t
+expect other-tab s['active']==6 and t['url']=='amazing://newtab'
+nav /normal
+expect other-tab-usable t['title']=='Normal' and not t['pending'] and s['tabs'][0]['pending']
+shot 02-other-tab-usable
+key ctrl+Tab
+expect original-tab s['active']==0 and t['pending']
+release slow-style
+release slow-image
+expect resources t['title']=='Resources' and not t['pending']
+nav /script
+requested /slow-script/page.js
+expect external-script-wait t['pending'] and t['title']=='Resources'
+release slow-script
+requested /slow-mutated/pixel.ppm
+key ctrl+Shift+Tab
+expect mutated-resource-responsive s['active']==6 and t['title']=='Normal' and s['tabs'][0]['pending']
+key ctrl+Tab
+release slow-mutated
+expect author-once t['title']=='Once 1' and not t['pending']
+shot 03-author-once
+nav /font
+requested /slow-font-style/page.css
+release slow-font-style
+requested /slow-import/page.css
+requested /slow-font/font.ttf
+expect font-wait t['pending']
+release slow-import
+expect font-block t['pending'] and t['title']=='Fonts' and s['committed'].endswith('/font') and s['fonts'] and s['fonts'][0]['phase']=='Block' and s['fonts'][0]['visibility']=='InvisibleFallback'
+shot 03a-font-block
+expect font-fallback t['pending'] and s['fonts'][0]['phase']=='Swap' and s['fonts'][0]['visibility']=='Visible' and s['fonts'][0]['metrics']=='Fallback'
+shot 03b-font-fallback
+release slow-font
+expect font-ready t['title']=='Fonts' and not t['pending'] and s['fonts'][0]['phase']=='Loaded' and s['fonts'][0]['metrics'].startswith('Downloaded')
+shot 03c-font-ready
+# Exercise the actual toolbar Stop at both densities while a font is held.
+nav /font-mode/block
+requested /slow-block/font.ttf
+expect toolbar-font-loading t['pending'] and t['title']=='Fonts block' and s['fonts'][0]['phase']=='Block'
+shot 03d-toolbar-loading
+clickcss 90 62
+expect toolbar-font-stopped not t['pending'] and t['title']=='Fonts block' and s['fonts'][0]['metrics']=='Fallback'
+cancelled /slow-block/font.ttf
+shot 03e-toolbar-stopped
+release slow-block
+expect toolbar-no-late-publication not t['pending'] and t['title']=='Fonts block' and s['fonts'][0]['metrics']=='Fallback'
+nav /redirect
+expect redirected t['title']=='Normal' and t['url'].endswith('/normal') and not t['pending']
+nav /failure
+expect error-recovery t['url'].endswith('/failure') and not t['pending']
+key alt+Left
+expect back-recovery t['url'].endswith('/normal') and t['title']=='Normal' and not t['pending']
+key alt+Right
+expect forward-recovery t['url'].endswith('/failure') and not t['pending']
+key ctrl+t
+nav /slow-document/page
+requested /slow-document/page 3
+key ctrl+w
+expect closed-tab not s['tabs'][7]['open'] and not s['tabs'][7]['pending'] and s['active']==6
+cancelled /slow-document/page 3
+key ctrl+Tab
+expect closed-no-publication s['active']==0 and t['url'].endswith('/failure') and s['tabs'][7]['url']=='amazing://newtab'
+nav /normal
+expect final-normal t['title']=='Normal' and not t['pending']
+shot 04-final-normal
