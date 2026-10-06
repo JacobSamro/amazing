@@ -1,0 +1,24 @@
+{
+  "files": {
+    "baseline.lossless-envelope.json": {
+      "bytes": 181068,
+      "sha256": "4639fc7cfbd5bd659c8bf07875eacd1b1c2d3096fa3072c8831ce897a95695ea"
+    },
+    "freeze.lossless-envelope.json": {
+      "bytes": 7388,
+      "sha256": "728b855bb5c10ff59f962be0054cfb1b1708e180c5d1e6ee28b943afe10154ac"
+    },
+    "initial-failure.lossless-envelope.json": {
+      "bytes": 182389,
+      "sha256": "6f80eeabce98e54d8b2962ced01ebb37841ac2ae6103ff68a9ad70ffb4e7d586"
+    },
+    "qualification.lossless-envelope.json": {
+      "bytes": 181068,
+      "sha256": "ec3147f814bb93b17166433502cf9059b9892e492f1c0973b2ce45249714c4a9"
+    },
+    "summary.compact.json": {
+      "bytes": 15254,
+      "sha256": "4169ece8272a16a458c2a4987570d912648568ed8e914b2cefce0f930e8534df"
+    }
+  }
+}

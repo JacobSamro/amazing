@@ -510,30 +510,24 @@ fn real_cross_origin_legacy_sends_post_without_cookies_or_cors_preflight() {
 
 #[test]
 fn admission_limit_rolls_back_every_legacy_wire_request() {
-    let url = HttpUrl::parse("http://127.0.0.1:23456/page").unwrap();
-    let mut limits = DispatchLimits::default();
-    limits.max_in_flight = 1;
-    let mut service = NetworkService::new(limits);
-    let handle = service
-        .register_reporting_response(url.clone(), &HeaderList::default(), context(&url))
-        .unwrap();
-    let mut v = violation(&url.serialize());
-    v.report_to = None;
-    v.report_uris = vec!["/one".into(), "/two".into()];
-    let now = Instant::now();
-    assert_eq!(
-        service.queue_csp_report(handle, &v, now, now),
-        Err(ReportError::Transport)
-    );
-    assert!(!service.has_pending_reporting_io());
-    assert_eq!(service.dispatcher.in_flight(), 0);
-    assert_eq!(service.reporting.retained_bytes, 0);
-    assert!(
-        service
-            .step(4096, now)
-            .into_iter()
-            .all(|event| !matches!(event, ServiceEvent::ReportFinished(_)))
-    );
+    // Historical test ID retained. CSP5.5 requires the first genuine sibling
+    // to survive a later submit failure; old atomic rollback was wrong.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = HttpUrl::parse(&format!("http://{}/page",listener.local_addr().unwrap())).unwrap();
+    let peer=thread::spawn(move|| { let(mut stream,_)=listener.accept().unwrap();
+        let request=read_request(&mut stream);stream.write_all(b"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n").unwrap();request });
+    let mut limits=DispatchLimits::default();limits.max_in_flight=1;
+    let mut service=NetworkService::new(limits);
+    let handle=service.register_reporting_response(url.clone(),&HeaderList::default(),context(&url)).unwrap();
+    let mut v=violation(&url.serialize());v.report_to=None;v.report_uris=vec!["/one".into(),"/two".into()];
+    let now=Instant::now();let ids=service.queue_csp_report(handle,&v,now,now).unwrap();
+    assert_eq!(ids.len(),1);assert!(service.has_pending_reporting_io());
+    assert_eq!(service.dispatcher.in_flight(),1);assert!(service.reporting.retained_bytes>0);
+    let finished=run(&mut service,1);assert_eq!(finished[0].id,ids[0]);
+    assert_eq!(finished[0].document,handle);
+    assert_eq!(finished[0].outcome,ReportOutcome::Response{status:204,accepted:true});
+    assert_eq!(service.reporting.retained_bytes,0);assert!(!service.has_pending_reporting_io());
+    assert!(peer.join().unwrap().starts_with("POST /one "));
 }
 
 fn receiving_client(url: &HttpUrl, creation: &str) -> crate::ReceivingDocumentClient<(u64, u64)> {
@@ -2094,3 +2088,6 @@ mod wire_context_tests;
 
 #[path = "retired_lifetime_tests.rs"]
 mod retired_lifetime_tests;
+
+#[path = "csp_admission_tests.rs"]
+mod csp_admission_tests;

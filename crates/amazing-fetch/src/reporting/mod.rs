@@ -10,6 +10,8 @@ use endpoint_lifetime::EndpointLifetime;
 mod native_report;
 pub use native_report::*;
 mod prepared;
+mod csp_admission;
+pub use csp_admission::{CspReportAdmissions,CspReportAttempt};
 mod script_csp;
 pub use script_csp::{ScriptCspGraphId,ScriptCspGraphReportSettings,ScriptCspRequestLoan};
 pub(crate) use script_csp::NativeScriptCspBinding;
@@ -335,7 +337,8 @@ impl NetworkService {
         !self.reporting.deliveries.is_empty()
     }
 
-    /// Admission is atomic and bounded across the service, not a delivery result.
+    /// Admission is bounded per token, not a delivery result. Partial admitted
+    /// IDs remain visible; a failed legacy sibling never cancels an earlier one.
     /// `queued_at` is the actual time the violation was queued by the embedding.
     pub fn queue_csp_report(
         &mut self,
@@ -347,144 +350,118 @@ impl NetworkService {
         let plan = self.prepare_csp_report(document, violation, queued_at)?;
         self.queue_prepared_csp_report(plan, now)
     }
-    fn queue_saved_csp_report(
-        &mut self,
-        document: ReportingDocument,
-        saved: Document,
-        violation: &CspInlineViolation,
-        queued_at: Instant,
-        now: Instant,
-    ) -> Result<Vec<ReportId>, ReportError> {
+    fn queue_saved_csp_report_admissions(
+        &mut self, document: ReportingDocument, saved: Document,
+        violation: &CspInlineViolation, queued_at: Instant, now: Instant,
+    ) -> Result<CspReportAdmissions, ReportError> {
         let modern = violation.report_to.is_some();
+        let mut attempts = Vec::new();
         let targets = if let Some(name) = &violation.report_to {
-            vec![(
-                Some(name.clone()),
-                saved.named_endpoint(name)?.0,
-            )]
+            vec![(0, Some(name.clone()), saved.named_endpoint(name).map(|value| value.0))]
         } else {
             let base = HttpUrl::parse(&violation.document_uri).ok();
-            violation
-                .report_uris
-                .iter()
-                .filter_map(|value| {
-                    base.as_ref()
-                        .and_then(|base| base.resolve(value).ok())
-                        .or_else(|| HttpUrl::parse(value).ok())
-                        .filter(|url| {
-                            matches!(url.as_parsed().scheme(), "http" | "https")
-                                && !url.includes_credentials()
-                        })
-                        .map(|url| (None, url))
-                })
-                .collect::<Vec<_>>()
+            violation.report_uris.iter().enumerate().map(|(index,value)| {
+                let endpoint = base.as_ref().and_then(|base|base.resolve(value).ok())
+                    .or_else(||HttpUrl::parse(value).ok())
+                    .filter(|url|matches!(url.as_parsed().scheme(),"http"|"https") && !url.includes_credentials())
+                    .ok_or(ReportError::InvalidEndpoint);
+                (index,None,endpoint)
+            }).collect::<Vec<_>>()
         };
-        if targets.is_empty() {
-            return Err(ReportError::NoEndpoint);
-        }
-        let body = serialize(
-            violation,
-            modern,
-            now.saturating_duration_since(queued_at).as_millis(),
-        );
+        let body = serialize(violation, modern, now.saturating_duration_since(queued_at).as_millis());
         let delivery_bytes = body.len().checked_add(violation.report_url.len())
-            .and_then(|bytes| bytes.checked_add(saved.origin.serialize().len()))
-            .ok_or(ReportError::Limit)?;
-        let retained = delivery_bytes
-            .checked_mul(targets.len())
-            .ok_or(ReportError::Limit)?;
-        if retained > MAX_REPORT_BYTES.saturating_sub(self.reporting.retained_bytes) {
-            return Err(ReportError::Limit);
-        }
-        let mut admitted = Vec::new();
-        for (endpoint_name, mut endpoint) in targets {
-            let registered_endpoint = endpoint.clone();
-            let endpoint_lifetime = endpoint_name.as_deref()
-                .map(|name| saved.named_endpoint(name).map(|(_, state)| state)).transpose()?;
-            if let Some(upgraded) = self.hsts.upgrade(&endpoint, saved.context.now_unix) {
-                endpoint = upgraded;
-            }
-            let (mut request, delivery_context) = if modern {
-                modern_request(endpoint.clone(), &violation.report_url, saved.context.now_unix)?
-            } else {
-                (Request::new(endpoint.clone(), saved.origin.clone()), DeliveryContext::Legacy(saved.context.clone()))
+            .and_then(|bytes|bytes.checked_add(saved.origin.serialize().len())).ok_or(ReportError::Limit)?;
+        for (token_index, endpoint_name, target) in targets {
+            let mut endpoint = match target {
+                Ok(endpoint)=>endpoint,
+                Err(error)=>{ attempts.push(CspReportAttempt{token_index,endpoint:None,outcome:Err(error)});continue; }
             };
-            request
-                .set_method_body("POST", Some(Body::Bytes(body.clone())))
-                .map_err(ReportError::Policy)?;
-            request
-                .headers
-                .append(
-                    "content-type",
-                    if modern {
-                        "application/reports+json"
-                    } else {
-                        "application/csp-report"
-                    },
-                )
-                .map_err(ReportError::Policy)?;
-            request.credentials = CredentialsMode::SameOrigin;
-            request.mode = if modern {
-                RequestMode::Cors
-            } else {
-                RequestMode::NoCors
-            };
-            request.redirect = if modern {
-                RedirectMode::Follow
-            } else {
-                RedirectMode::Error
-            };
-            if !modern {
-                request.referrer = HttpUrl::parse(&violation.document_uri)
-                    .ok()
-                    .filter(|url| matches!(url.as_parsed().scheme(), "http" | "https"));
-                request.referrer_policy = saved.referrer_policy;
-                request.security = saved.context.security;
-                request.security.destination = crate::Destination::Report;
-                request.security.top_level_navigation = false;
-            }
-            let id = ReportId(self.reporting.allocate());
-            let mut delivery = Delivery {
-                lifetime: saved.lifetime.clone(),
-                id,
-                document,
-                route: if modern {
-                    ReportRoute::ReportingApi
+            let observed_endpoint = endpoint.clone();
+            let outcome = (|| -> Result<ReportId,ReportError> {
+                // The same 64 KiB application queue credit is charged only for
+                // actual admitted deliveries. A rejected sibling consumes none.
+                if delivery_bytes > MAX_REPORT_BYTES.saturating_sub(self.reporting.retained_bytes) {
+                    return Err(ReportError::Limit);
+                }
+                let registered_endpoint = endpoint.clone();
+                let endpoint_lifetime = endpoint_name.as_deref()
+                    .map(|name| saved.named_endpoint(name).map(|(_, state)| state)).transpose()?;
+                if let Some(upgraded) = self.hsts.upgrade(&endpoint, saved.context.now_unix) {
+                    endpoint = upgraded;
+                }
+                let (mut request, delivery_context) = if modern {
+                    modern_request(endpoint.clone(), &violation.report_url, saved.context.now_unix)?
                 } else {
-                    ReportRoute::LegacyCsp
-                },
-                endpoint_name,
-                endpoint_lifetime,
-                endpoint: registered_endpoint,
-                report_url: violation.report_url.clone(),
-                owner_origin: saved.origin.clone(),
-                request,
-                context: delivery_context,
-                preflight: false,
-                request_includes_credentials: false,
-                last_transport: None,
-                main_ready: false,
-                deadline: now + std::time::Duration::from_secs(10),
-                head: None,
-                bytes: delivery_bytes,
-            };
-            match self.submit_reporting(&mut delivery, now) {
-                Ok(wire) => {
-                    self.reporting.retained_bytes += delivery.bytes;
-                    self.reporting.deliveries.insert(wire, delivery);
-                    admitted.push((id, wire));
+                    (Request::new(endpoint.clone(), saved.origin.clone()), DeliveryContext::Legacy(saved.context.clone()))
+                };
+                request
+                    .set_method_body("POST", Some(Body::Bytes(body.clone())))
+                    .map_err(ReportError::Policy)?;
+                request
+                    .headers
+                    .append(
+                        "content-type",
+                        if modern {
+                        "application/reports+json"
+                        } else {
+                        "application/csp-report"
+                        },
+                    )
+                    .map_err(ReportError::Policy)?;
+                request.credentials = CredentialsMode::SameOrigin;
+                request.mode = if modern {
+                    RequestMode::Cors
+                } else {
+                    RequestMode::NoCors
+                };
+                request.redirect = if modern {
+                    RedirectMode::Follow
+                } else {
+                    RedirectMode::Error
+                };
+                if !modern {
+                    request.referrer = HttpUrl::parse(&violation.document_uri)
+                        .ok()
+                        .filter(|url| matches!(url.as_parsed().scheme(), "http" | "https"));
+                    request.referrer_policy = saved.referrer_policy;
+                    request.security = saved.context.security;
+                    request.security.destination = crate::Destination::Report;
+                    request.security.top_level_navigation = false;
                 }
-                Err(error) => {
-                    for (_, wire) in admitted {
-                        self.dispatcher.cancel(wire);
-                        if let Some(delivery) = self.reporting.deliveries.remove(&wire) {
-                            self.reporting.retained_bytes -= delivery.bytes;
-                        }
-                    }
-                    return Err(error);
-                }
-            }
+                let id = ReportId(self.reporting.allocate());
+                let mut delivery = Delivery {
+                    lifetime: saved.lifetime.clone(),
+                    id,
+                    document,
+                    route: if modern {
+                        ReportRoute::ReportingApi
+                    } else {
+                        ReportRoute::LegacyCsp
+                    },
+                    endpoint_name,
+                    endpoint_lifetime,
+                    endpoint: registered_endpoint,
+                    report_url: violation.report_url.clone(),
+                    owner_origin: saved.origin.clone(),
+                    request,
+                    context: delivery_context,
+                    preflight: false,
+                    request_includes_credentials: false,
+                    last_transport: None,
+                    main_ready: false,
+                    deadline: now + std::time::Duration::from_secs(10),
+                    head: None,
+                    bytes: delivery_bytes,
+                };
+                let wire = self.submit_reporting(&mut delivery, now)?;
+                self.reporting.retained_bytes += delivery.bytes;
+                self.reporting.deliveries.insert(wire,delivery);
+                Ok(id)
+            })();
+            attempts.push(CspReportAttempt{token_index,endpoint:Some(observed_endpoint),outcome});
         }
-        Ok(admitted.into_iter().map(|(id, _)| id).collect())
+        Ok(CspReportAdmissions {document,route:if modern{ReportRoute::ReportingApi}else{ReportRoute::LegacyCsp},
+            attempts,_lifetime:saved.lifetime.clone(),credits:None})
     }
     fn submit_reporting(
         &mut self,

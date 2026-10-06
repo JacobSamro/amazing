@@ -81,6 +81,14 @@ impl NetworkService {
         plan: PreparedCspReportPlan,
         now: Instant,
     ) -> Result<Vec<ReportId>, ReportError> {
+        self.queue_prepared_csp_report_admissions(plan,now)?.into_compatible_ids()
+    }
+    /// Per-token native outcomes after original SPVE, including retirement.
+    /// Each admitted sibling retains its real lifecycle and ReportId regardless
+    /// of later rejection. The move-only result retains original snapshot credit.
+    pub fn queue_prepared_csp_report_admissions(
+        &mut self, plan: PreparedCspReportPlan, now: Instant,
+    ) -> Result<CspReportAdmissions, ReportError> {
         let PreparedCspReportPlan {
             service,
             document,
@@ -92,8 +100,9 @@ impl NetworkService {
         if service != self.reporting.service {
             return Err(ReportError::StaleDocument);
         }
-        drop(credits);
-        self.queue_saved_csp_report(document, settings, &violation, queued_at, now)
+        let mut admissions = self.queue_saved_csp_report_admissions(document, settings, &violation, queued_at, now)?;
+        admissions.credits = Some(credits);
+        Ok(admissions)
     }
 }
 /// Application snapshot content budget, separate from the existing serialized
