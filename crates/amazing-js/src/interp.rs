@@ -1884,6 +1884,7 @@ include!("interp_errors.rs");
 include!("interp_bound.rs");
 include!("interp_disposable.rs");
 include!("interp_coroutine.rs");
+include!("interp_async_iterator_dispose.rs");
 include!("interp_async_generator_return.rs");
 include!("interp_async_generator_yield.rs");
 include!("interp_stmt.rs");

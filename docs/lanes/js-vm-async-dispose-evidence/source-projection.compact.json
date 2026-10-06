@@ -1,0 +1,22 @@
+{
+  "recorded_base": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+  "tested_source": "194a016949cc8228f50b73ab7318206dc0616053",
+  "code_and_tests_byteexact": [
+    {
+      "path": "crates/amazing-js/src/interp.rs",
+      "bytes": 84929,
+      "sha256": "0aa23fb028ad760f1b0e2e97f77eee08e2ca12970f182846394b2a51ca53a60b"
+    },
+    {
+      "path": "crates/amazing-js/src/interp_async_iterator_dispose.rs",
+      "bytes": 10233,
+      "sha256": "d7bb5ee87de1dcbc1923f6f2c2d6d001765dab2c89bb328a88951030c94b9645"
+    },
+    {
+      "path": "crates/amazing-js/src/interp_coroutine.rs",
+      "bytes": 64175,
+      "sha256": "d227a88900fc9ea6f63649f2b8a5ae4cf4e22b73a89cfeccfabc84727d9a8ed7"
+    }
+  ],
+  "root_full16_pending": true
+}

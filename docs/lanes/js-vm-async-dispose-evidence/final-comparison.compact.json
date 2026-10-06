@@ -1,0 +1,719 @@
+{
+  "schema": 1,
+  "recorded_origin": "5efe03ecd6ebf0cbeacca0a4dc24aa55a06f8f58",
+  "before": "7a3450dc913aec3e170c4701dabe2a4d3c935301",
+  "tested_source": "194a016949cc8228f50b73ab7318206dc0616053",
+  "before_original_wrapper_exit": 255,
+  "before_authenticated_native_exit": 0,
+  "before_public_status_exit": 0,
+  "after_wrapper_and_native_exit": 0,
+  "before_and_after_public_fetch_exit": 0,
+  "pairs": [
+    {
+      "selector": "language/",
+      "mode": "default",
+      "before_files": 24535,
+      "after_files": 24535,
+      "before_variants": 45327,
+      "after_variants": 45327,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 14471946,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/default-0.json",
+        "sha256": "8eb3dd98730cfd2e36ba0e80ab3e7109e1f5683e7ec2d9099898f561d733f936"
+      },
+      "after_raw": {
+        "bytes": 14471946,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/default-0.json",
+        "sha256": "a5919c7ff3c34db83303047d376211ec65c4aaab418af019337166ccc5a9bf3e"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/AsyncIteratorPrototype/",
+      "mode": "default",
+      "before_files": 4,
+      "after_files": 13,
+      "before_variants": 8,
+      "after_variants": 26,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/invokes-return.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/is-function.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/length.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/name.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/prop-desc.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/return-val.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-rejected-return.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-return-getter.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-return.js"
+      ],
+      "gained_variants": [
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/invokes-return.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/invokes-return.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/is-function.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/is-function.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/length.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/length.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/name.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/name.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/prop-desc.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/prop-desc.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/return-val.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/return-val.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-rejected-return.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-rejected-return.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-return-getter.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-return-getter.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-return.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-return.js",
+          "strict"
+        ]
+      ],
+      "before_raw": {
+        "bytes": 7653119,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/default-1.json",
+        "sha256": "045671b586d7eecc7f981f37a6f10374884cccca93bb915466893494b9cd116e"
+      },
+      "after_raw": {
+        "bytes": 7648976,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/default-1.json",
+        "sha256": "8cc1d06db7687201494ac509ddcb1403d9b6752a280cd0d005e284633d4d6282"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/AsyncGeneratorPrototype/",
+      "mode": "default",
+      "before_files": 48,
+      "after_files": 48,
+      "before_variants": 96,
+      "after_variants": 96,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7656168,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/default-2.json",
+        "sha256": "2fb5ebb8f61c1584eda68888badefcc6e660302782fc313c267d0b34c8603601"
+      },
+      "after_raw": {
+        "bytes": 7656168,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/default-2.json",
+        "sha256": "dd04e72728c19e62dfb0e866873d64d13a5ea73bcc1898d980c9088219751dc3"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/AsyncGeneratorFunction/",
+      "mode": "default",
+      "before_files": 23,
+      "after_files": 23,
+      "before_variants": 46,
+      "after_variants": 46,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7650772,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/default-3.json",
+        "sha256": "828f6197801237c50e509d7cdf2da86891e7c97d75f0abc9893cad87d9d52f7c"
+      },
+      "after_raw": {
+        "bytes": 7650772,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/default-3.json",
+        "sha256": "d6824d7dc4e8f815d5c1f89de31805923a601e837cc21959f739426644dafd4e"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/AsyncDisposableStack/",
+      "mode": "default",
+      "before_files": 102,
+      "after_files": 102,
+      "before_variants": 204,
+      "after_variants": 204,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7672054,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/default-4.json",
+        "sha256": "cd9df5041d3d46d49aa3c545e7a30316b6183d3a0314be51a3a6ac199e23b6c8"
+      },
+      "after_raw": {
+        "bytes": 7672054,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/default-4.json",
+        "sha256": "1f8ab531366caf09bacd0fe35712f9932938e1ad913841c635efccd599ef8106"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/DisposableStack/",
+      "mode": "default",
+      "before_files": 93,
+      "after_files": 93,
+      "before_variants": 186,
+      "after_variants": 186,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7666533,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/default-5.json",
+        "sha256": "f8ca9a4baf9062cebd242ecfd6556fb9bc441d21873356d032db78b595d8695c"
+      },
+      "after_raw": {
+        "bytes": 7666533,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/default-5.json",
+        "sha256": "b12dab0558f41e604ec7addc1cf5b7c75913b63743e90ebba7d46f4bf2d3e744"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/Promise/",
+      "mode": "default",
+      "before_files": 732,
+      "after_files": 732,
+      "before_variants": 1458,
+      "after_variants": 1458,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7779878,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/default-6.json",
+        "sha256": "903e87f4a4d581adbe501fd957c16bd7740063181dca76a80c7c067e365e947f"
+      },
+      "after_raw": {
+        "bytes": 7779878,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/default-6.json",
+        "sha256": "d36f64c8f2d4bf0a51927dddebcff59e215c18586f1de0994474f8af8307dafc"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/Function/",
+      "mode": "default",
+      "before_files": 515,
+      "after_files": 515,
+      "before_variants": 905,
+      "after_variants": 905,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7716262,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/default-7.json",
+        "sha256": "8fcd48a5be1d667d87f5d1e850bf3596bee38086b1886c136e7abaab45d7ad55"
+      },
+      "after_raw": {
+        "bytes": 7716262,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/default-7.json",
+        "sha256": "13f29f8c2afb2f5a7653b51fbf30941628046e4562fe9f2944fe1136517e03e2"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/Proxy/",
+      "mode": "default",
+      "before_files": 311,
+      "after_files": 311,
+      "before_variants": 607,
+      "after_variants": 607,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7704568,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/default-8.json",
+        "sha256": "200dd6be64b453c5982ecca284a36168263c81771aa75607615b71c76f1eb948"
+      },
+      "after_raw": {
+        "bytes": 7704568,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/default-8.json",
+        "sha256": "91ee2d814ff1e0786e218a54c8da9fec99301958ded19f321110e6a1be7a67c2"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/Reflect/",
+      "mode": "default",
+      "before_files": 154,
+      "after_files": 154,
+      "before_variants": 308,
+      "after_variants": 308,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7672373,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/default-9.json",
+        "sha256": "7200c0992760b8910603ff7e58bb67a1b7d043de28b6ab87c1d5551d1748fb69"
+      },
+      "after_raw": {
+        "bytes": 7672373,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/default-9.json",
+        "sha256": "82507e2d9abdf7f9f2b9a9ead8c71d03813085d0ff2dcf337aacdd456063c35c"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "language/",
+      "mode": "vm",
+      "before_files": 24535,
+      "after_files": 24535,
+      "before_variants": 45327,
+      "after_variants": 45327,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 14471946,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/vm-0.json",
+        "sha256": "aa7e05dd0270122eb716d8b11ac076ea06a8d4d6055bdbe43fc4be0e9752bb0c"
+      },
+      "after_raw": {
+        "bytes": 14471946,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/vm-0.json",
+        "sha256": "7f3149f01ea3545aea7708c178f4864ab6dcb6bf32e275e9d5e6733df2b507b3"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/AsyncIteratorPrototype/",
+      "mode": "vm",
+      "before_files": 4,
+      "after_files": 13,
+      "before_variants": 8,
+      "after_variants": 26,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/invokes-return.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/is-function.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/length.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/name.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/prop-desc.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/return-val.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-rejected-return.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-return-getter.js",
+        "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-return.js"
+      ],
+      "gained_variants": [
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/invokes-return.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/invokes-return.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/is-function.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/is-function.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/length.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/length.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/name.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/name.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/prop-desc.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/prop-desc.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/return-val.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/return-val.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-rejected-return.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-rejected-return.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-return-getter.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-return-getter.js",
+          "strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-return.js",
+          "non-strict"
+        ],
+        [
+          "built-ins/AsyncIteratorPrototype/Symbol.asyncDispose/throw-return.js",
+          "strict"
+        ]
+      ],
+      "before_raw": {
+        "bytes": 7653118,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/vm-1.json",
+        "sha256": "e94f31e17eb62bce4ff620192c47e09a39f44e7d63e038d8d820ede0112623e0"
+      },
+      "after_raw": {
+        "bytes": 7648976,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/vm-1.json",
+        "sha256": "9a7a9d6e1b2de700d87af0c370a4d716ef74260bef7267aa52fe1d758c681508"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/AsyncGeneratorPrototype/",
+      "mode": "vm",
+      "before_files": 48,
+      "after_files": 48,
+      "before_variants": 96,
+      "after_variants": 96,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7656168,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/vm-2.json",
+        "sha256": "fe0be80fe5fb2e86258de71379c2a10635b7a3b57ed79402b03e7b8b9877154d"
+      },
+      "after_raw": {
+        "bytes": 7656168,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/vm-2.json",
+        "sha256": "b32164557755a5c6021a9e5bbd5bafa59ca4afd5bb500c6e607117d8534d4b58"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/AsyncGeneratorFunction/",
+      "mode": "vm",
+      "before_files": 23,
+      "after_files": 23,
+      "before_variants": 46,
+      "after_variants": 46,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7650772,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/vm-3.json",
+        "sha256": "36786f5240d0c7343c97dfc755d218b0acee2f028297a8315e315af08d6b3b91"
+      },
+      "after_raw": {
+        "bytes": 7650772,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/vm-3.json",
+        "sha256": "d8a4bab6384e582e66bbcbe95ea4a2b85d8ecfc107a12163d01808b7ee71c8e5"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/AsyncDisposableStack/",
+      "mode": "vm",
+      "before_files": 102,
+      "after_files": 102,
+      "before_variants": 204,
+      "after_variants": 204,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7672053,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/vm-4.json",
+        "sha256": "94d3eece8d974201cb0c2871312afdedcef301eeb3215fe9e626e1bfaa539c0b"
+      },
+      "after_raw": {
+        "bytes": 7672054,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/vm-4.json",
+        "sha256": "954ba51cce85abb27794186f8f0671afc2d0e8c1019e7c28942d757a93df4065"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/DisposableStack/",
+      "mode": "vm",
+      "before_files": 93,
+      "after_files": 93,
+      "before_variants": 186,
+      "after_variants": 186,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7666533,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/vm-5.json",
+        "sha256": "759602ec8a3ffc66fe03140afff1c3846db88583be9bd716600f16ce0f4a8025"
+      },
+      "after_raw": {
+        "bytes": 7666533,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/vm-5.json",
+        "sha256": "72ea5e7bfdd21d62af6c14df1036f8f371a4f84647d1b3ed33ff1732193d5bbb"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/Promise/",
+      "mode": "vm",
+      "before_files": 732,
+      "after_files": 732,
+      "before_variants": 1458,
+      "after_variants": 1458,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7779878,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/vm-6.json",
+        "sha256": "dcc79dfdb83d1ef15ae6e506239bf978bad446a06279c34959f9bada8fe58933"
+      },
+      "after_raw": {
+        "bytes": 7779878,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/vm-6.json",
+        "sha256": "f98d43c8e37b01b79c0f5f053ddbf99bf747a223e00c078f289311d8c52721ca"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/Function/",
+      "mode": "vm",
+      "before_files": 515,
+      "after_files": 515,
+      "before_variants": 905,
+      "after_variants": 905,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7716262,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/vm-7.json",
+        "sha256": "abc927b4d25062caa028d145dde0926f3dbf2be1117834eb0584395e4c0d1023"
+      },
+      "after_raw": {
+        "bytes": 7716262,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/vm-7.json",
+        "sha256": "5f341a94fc03b73baa3bfb6fab48d1b8545d9872efd8544d762508265aa9d667"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/Proxy/",
+      "mode": "vm",
+      "before_files": 311,
+      "after_files": 311,
+      "before_variants": 607,
+      "after_variants": 607,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7704568,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/vm-8.json",
+        "sha256": "5639239b135595ee4144096ff5871fcfdfb963e641545d590d86e9769f81d076"
+      },
+      "after_raw": {
+        "bytes": 7704568,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/vm-8.json",
+        "sha256": "49e1c3a9b2d40c5d89165127beb3f13a93497ed2dc68485e3fe940e9694c5737"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    },
+    {
+      "selector": "built-ins/Reflect/",
+      "mode": "vm",
+      "before_files": 154,
+      "after_files": 154,
+      "before_variants": 308,
+      "after_variants": 308,
+      "lost_files": [],
+      "lost_variants": [],
+      "gained_files": [],
+      "gained_variants": [],
+      "before_raw": {
+        "bytes": 7672373,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/vm-9.json",
+        "sha256": "21453cfeed4382e7ef286e6a19181d92184268dc5566d0c4084ef786df203ab2"
+      },
+      "after_raw": {
+        "bytes": 7672373,
+        "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/vm-9.json",
+        "sha256": "e33ff621385bac96992c76128798a12a5d2b30b34c0c023b20e339fe315aea5c"
+      },
+      "before_host_sha256": "8bdf788bd0d1da0656b34872016179607c09340647d57fbc98d13a301d2c7e7c",
+      "after_host_sha256": "8f16e7a41ae392ba621a313e42c4c8f56e7b008e81f136e293bc718a1d149d17"
+    }
+  ],
+  "union_each_mode": {
+    "default": {
+      "before_files": 26517,
+      "after_files": 26526,
+      "before_variants": 49145,
+      "after_variants": 49163
+    },
+    "vm": {
+      "before_files": 26517,
+      "after_files": 26526,
+      "before_variants": 49145,
+      "after_variants": 49163
+    }
+  },
+  "lost_files": [],
+  "lost_variants": [],
+  "workspace": {
+    "before_counts": {
+      "fail": 11,
+      "pass": 5263,
+      "skip": 17
+    },
+    "after_counts": {
+      "pass": 5275,
+      "skip": 17
+    },
+    "legacy_lost": [],
+    "gained_pass_ids": [
+      "amazing-js interp::async_iterator_dispose_tests::abrupt_getter_call_and_noncallable_reject_without_sync_throw",
+      "amazing-js interp::async_iterator_dispose_tests::absent_nullish_return_fulfills_undefined_for_generic_receivers",
+      "amazing-js interp::async_iterator_dispose_tests::actual_async_generator_return_runs_finally_after_suspension",
+      "amazing-js interp::async_iterator_dispose_tests::every_observable_reaction_settles_and_generator_disposal_completes",
+      "amazing-js interp::async_iterator_dispose_tests::foreign_builtin_uses_creation_realm_intrinsics_and_rejection_errors",
+      "amazing-js interp::async_iterator_dispose_tests::inherited_disposer_composes_with_await_using_and_generator_completion",
+      "amazing-js interp::async_iterator_dispose_tests::installed_metadata_and_nonconstructor_contract",
+      "amazing-js interp::async_iterator_dispose_tests::internal_reactions_ignore_author_then_species_and_mutable_global_promise",
+      "amazing-js interp::async_iterator_dispose_tests::pending_return_and_rejected_promise_preserve_reason_and_discard_result",
+      "amazing-js interp::async_iterator_dispose_tests::return_getter_once_receiver_and_zero_arguments",
+      "amazing-js interp::async_iterator_dispose_tests::return_thenable_getter_rejection_and_fulfillment_are_assimilated",
+      "amazing-js interp::async_iterator_dispose_tests::revoked_and_callable_proxies_preserve_get_call_and_rejection_order"
+    ],
+    "before_raw": {
+      "bytes": 772613,
+      "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/before-7a3450dc/raw/workspace.log",
+      "sha256": "065bf0c8b14bee62244576cd9ff0fb25f86a432ab9bdaed59f1573fbf302fe05"
+    },
+    "after_raw": {
+      "bytes": 762469,
+      "path": "/srv/amazing-proof/js-vm-async-iterator-dispose-20261006/after-194a0169/raw/workspace.log",
+      "sha256": "b3bc5d0f2658ffb5011f9092c96b7af33c53a10b639071ec010aff39d167a5d7"
+    }
+  },
+  "docs": {
+    "before_pass": 38,
+    "after_pass": 38,
+    "fail": 0
+  },
+  "shared_groups": 11,
+  "after_only_settlement_group": 1,
+  "scope": "Genuine actual inspected async-generator AST/Bytecode bodies; no general fallback count/VM completeness/GC claim. Root full16 merge gate remains required."
+}

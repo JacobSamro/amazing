@@ -1,0 +1,1 @@
+{"lane": "js-vm-async-dispose-after-20261006", "pool": "js-vm-async-dispose-after-20261006", "queried_at_epoch": 1791271434.171036, "sandbox": {"archiveAfter": "2026-10-06T09:22:41.789Z", "health": "ok", "id": "bx_b2syy9bn", "lastSnapshotStatus": "completed", "machineProvider": "baremetal", "memoryGB": 8, "state": "idle", "type": "default", "vcpu": 4}}

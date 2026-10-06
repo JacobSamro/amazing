@@ -1,0 +1,8 @@
+{
+  "actual_wrapper_exit": 255,
+  "authenticated_native_exit": 0,
+  "status_exit": 0,
+  "fetch_exit": 0,
+  "original_job": "1abd3358827c4f60970eab8ff2657c9b",
+  "note": "Public status authenticated completed command; no engine rerun. Initial compact fetch rejected basename paths outside job root (exit3); corrected full relative catalog paths fetched0. All original facts retained; no raw ferry."
+}

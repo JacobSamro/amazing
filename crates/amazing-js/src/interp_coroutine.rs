@@ -762,6 +762,9 @@ impl Interpreter {
         let async_iter_method = symbol_method(self, "[Symbol.asyncIterator]", async_iterator_prototype_async_iterator);
         async_iterator_proto.borrow_mut()
             .define(WellKnownSymbol::AsyncIterator.symbol(), symbol_data(async_iter_method, true, true)).unwrap();
+        let async_dispose = symbol_method(self, "[Symbol.asyncDispose]", native_async_iterator_dispose);
+        async_iterator_proto.borrow_mut()
+            .define(WellKnownSymbol::AsyncDispose.symbol(), symbol_data(async_dispose, true, true)).unwrap();
         self.async_generator_proto.borrow_mut().proto = Some(async_iterator_proto);
     }
 
