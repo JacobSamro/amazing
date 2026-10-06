@@ -32,6 +32,75 @@ pub fn decode_entity(bytes: &[u8]) -> Result<DecodedXml, XmlDecodeError> {
     decode_with_authority(bytes, None, ByteAuthority::DocumentEntity)
 }
 
+/// Decoded replacement text of a genuine external parsed entity. Its optional
+/// TextDecl is validated and removed, never imported as a processing instruction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedExternalXml {
+    pub text: String,
+    pub encoding: Encoding,
+    pub version: Option<String>,
+}
+pub fn decode_external_entity(bytes: &[u8], authority: &crate::xml_resources::XmlExternalEncoding)
+    -> Result<DecodedExternalXml, XmlDecodeError> {
+    use crate::xml_resources::XmlExternalEncoding;
+    let parse = |text: &str| crate::xml_text_declaration::parse(text)
+        .map_err(|error| XmlDecodeError(error.to_string()));
+    if [[0, 0, 0xfe, 0xff], [0xff, 0xfe, 0, 0], [0, 0, 0xff, 0xfe], [0xfe, 0xff, 0, 0]]
+        .iter().any(|marker| bytes.starts_with(marker)) {
+        return Err(XmlDecodeError("unsupported UCS-4 XML encoding".into()));
+    }
+    if [[0, 0, 0, b'<'], [b'<', 0, 0, 0], [0, 0, b'<', 0], [0, b'<', 0, 0], [0x4c, 0x6f, 0xa7, 0x94]]
+        .iter().any(|prefix| bytes.starts_with(prefix)) {
+        return Err(XmlDecodeError("unsupported XML byte encoding".into()));
+    }
+    let found = detect_encoding(bytes);
+    let bom = found.filter(|found| found.bom_len() != 0);
+    let transport = match authority { XmlExternalEncoding::Entity => None, XmlExternalEncoding::Mime { charset } => charset.as_deref() };
+    let selected = if let Some(found) = bom { found.encoding() }
+    else if let Some(label) = transport {
+        if label.trim().eq_ignore_ascii_case("utf-16") { return Err(XmlDecodeError("UTF-16 XML requires a byte order mark".into())); }
+        codec(label)?
+    } else {
+        let initial = found.map_or(Encoding::Utf8, |found| found.encoding());
+        if matches!(initial, Encoding::Utf16Le | Encoding::Utf16Be) {
+            let end = bytes.chunks_exact(2).position(|pair| match initial {
+                Encoding::Utf16Le => pair == [b'>', 0], _ => pair == [0, b'>'],
+            }).ok_or_else(|| XmlDecodeError("unterminated external text declaration".into()))?;
+            let prefix = decode_as(&bytes[..(end + 1) * 2], initial)?;
+            let decl = parse(&prefix.text)?.ok_or_else(|| XmlDecodeError("unmarked UTF-16 entity requires explicit endian text declaration".into()))?;
+            if decl.encoding.eq_ignore_ascii_case("utf-16") || codec(&decl.encoding)? != initial {
+                return Err(XmlDecodeError("external text declaration conflicts with byte signature".into()));
+            }
+            initial
+        } else if bytes.starts_with(b"<?xml") && bytes.get(5).is_some_and(|b| matches!(b, b' ' | b'\t' | b'\r' | b'\n')) {
+            let end = bytes.windows(2).position(|pair| pair == b"?>")
+                .ok_or_else(|| XmlDecodeError("unterminated external text declaration".into()))?;
+            let prefix = std::str::from_utf8(&bytes[..end + 2])
+                .map_err(|_| XmlDecodeError("non-ASCII external text declaration".into()))?;
+            let decl = parse(prefix)?.ok_or_else(|| XmlDecodeError("missing external text declaration".into()))?;
+            if decl.encoding.eq_ignore_ascii_case("utf-16") { return Err(XmlDecodeError("UTF-16 XML requires a byte order mark".into())); }
+            let selected = codec(&decl.encoding)?;
+            if matches!(selected, Encoding::Utf16Le | Encoding::Utf16Be) {
+                return Err(XmlDecodeError("external text declaration conflicts with byte signature".into()));
+            }
+            selected
+        } else { initial }
+    };
+    let decoded = decode_as(&bytes[bom.map_or(0, |found| found.bom_len())..], selected)?;
+    let declaration = parse(&decoded.text)?;
+    if matches!(authority, XmlExternalEncoding::Entity) && bom.is_some() {
+        if let Some(decl) = &declaration {
+            let matches = if decl.encoding.eq_ignore_ascii_case("utf-16") {
+                matches!(selected, Encoding::Utf16Le | Encoding::Utf16Be)
+            } else { codec(&decl.encoding)? == selected };
+            if !matches { return Err(XmlDecodeError("external text declaration conflicts with byte order mark".into())); }
+        }
+    }
+    let version = declaration.as_ref().and_then(|decl| decl.version.clone());
+    let start = declaration.map_or(0, |decl| decl.body_start);
+    Ok(DecodedExternalXml { text: decoded.text[start..].into(), encoding: selected, version })
+}
+
 fn decode_with_authority(bytes: &[u8], transport_label: Option<&str>, authority: ByteAuthority)
     -> Result<DecodedXml, XmlDecodeError> {
     if [[0, 0, 0xfe, 0xff], [0xff, 0xfe, 0, 0], [0, 0, 0xff, 0xfe], [0xfe, 0xff, 0, 0]]

@@ -15,6 +15,10 @@ use std::rc::Rc;
 use std::cell::RefCell;
 #[path = "xml_dtd.rs"]
 mod dtd;
+#[path = "xml_external_dtd.rs"]
+mod external_dtd;
+#[path = "xml_external_document.rs"]
+mod external_document;
 use dtd::{Dtd, ExpansionBudget, EntityPolicy};
 
 pub const HTML_NAMESPACE: &str = "http://www.w3.org/1999/xhtml";
@@ -104,6 +108,8 @@ struct Parser<'a> {
     budget: Rc<RefCell<ExpansionBudget>>,
     inherited_depth: usize,
     replacement: bool,
+    prepared_internal_end: Option<usize>,
+    document_version: String,
 }
 type ResultXml<T> = Result<T, XmlError>;
 
@@ -118,7 +124,7 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
 /// Reuses the document declaration grammar during byte encoding selection.
 pub(super) fn encoding_declaration(src: &str) -> Result<Option<String>, XmlError> {
     if !src.starts_with("<?xml") || !src[5..].starts_with(xml_space) { return Ok(None); }
-    let mut parser = Parser { src, pos: 0, external_subset: false, canonical_xhtml_subset: false, standalone: false, dtd: Rc::default(), budget: Rc::default(), inherited_depth: 0, replacement: false };
+    let mut parser = Parser { src, pos: 0, external_subset: false, canonical_xhtml_subset: false, standalone: false, dtd: Rc::default(), budget: Rc::default(), inherited_depth: 0, replacement: false, prepared_internal_end: None, document_version: "1.0".into() };
     parser.declaration().map(|declaration| declaration.encoding)
 }
 
@@ -128,13 +134,22 @@ pub fn parse_xml_decoded(src: &str) -> Result<Dom, XmlError> {
     parse_inner(src, None, false).map(|(dom, _)| dom)
 }
 
+/// Parses decoded document text with an explicit application resource policy.
+/// No default network or filesystem resolver is implied by the ordinary APIs.
+pub fn parse_xml_decoded_with_resolver(src: &str, source: &crate::xml_resources::XmlEntitySource,
+    resolver: &mut dyn crate::xml_resources::XmlExternalResolver) -> Result<Dom, XmlError> {
+    let normalized = src.replace("\r\n", "\n").replace('\r', "\n");
+    let prepared = external_document::prepare(&normalized, source, resolver)?;
+    parse_inner_with_entities(&normalized, None, false, None, prepared).map(|(dom, _)| dom)
+}
+
 fn parse_inner(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool) -> ResultXml<(Dom, Option<XmlDeclaration>)> {
-    parse_inner_with_entities(src, context, strip_bom, None)
+    parse_inner_with_entities(src, context, strip_bom, None, None)
 }
 struct EntityContext {
     dtd: Rc<Dtd>, budget: Rc<RefCell<ExpansionBudget>>, policy: EntityPolicy, depth: usize,
 }
-fn parse_inner_with_entities(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool, entity: Option<EntityContext>) -> ResultXml<(Dom, Option<XmlDeclaration>)> {
+fn parse_inner_with_entities(src: &str, context: Option<&XmlFragmentContext>, strip_bom: bool, entity: Option<EntityContext>, prepared: Option<external_document::Prepared>) -> ResultXml<(Dom, Option<XmlDeclaration>)> {
     let fragment = context.is_some();
     let replacement = entity.is_some();
     let mut dom = Dom::new();
@@ -154,10 +169,12 @@ fn parse_inner_with_entities(src: &str, context: Option<&XmlFragmentContext>, st
         external_subset: false,
         canonical_xhtml_subset: false,
         standalone: entity.as_ref().is_some_and(|e| e.policy.standalone),
-        dtd: entity.as_ref().map_or_else(Rc::default, |e| e.dtd.clone()),
-        budget: entity.as_ref().map_or_else(Rc::default, |e| e.budget.clone()),
+        dtd: prepared.as_ref().map(|p| p.dtd.clone()).unwrap_or_else(|| entity.as_ref().map_or_else(Rc::default, |e| e.dtd.clone())),
+        budget: prepared.as_ref().map(|p| p.budget.clone()).unwrap_or_else(|| entity.as_ref().map_or_else(Rc::default, |e| e.budget.clone())),
         inherited_depth: entity.as_ref().map_or(0, |e| e.depth),
         replacement,
+        prepared_internal_end: prepared.as_ref().and_then(|p| p.internal_end),
+        document_version: "1.0".into(),
     };
     if let Some(entity) = entity { p.external_subset = entity.policy.external_subset; p.canonical_xhtml_subset = entity.policy.canonical; }
     // This parser arena is XML even before a response/DOMParser caller installs
@@ -270,9 +287,13 @@ fn parse_inner_with_entities(src: &str, context: Option<&XmlFragmentContext>, st
                 p.space();
             }
             if p.take("[") {
-                let (environment, consumed) = dtd::read_subset(p.rest(), p.pos, p.policy(), &mut p.budget.borrow_mut())?;
-                p.dtd = Rc::new(environment);
-                p.pos += consumed;
+                if let Some(end) = p.prepared_internal_end {
+                    p.pos = end;
+                } else {
+                    let (environment, consumed) = dtd::read_subset(p.rest(), p.pos, p.policy(), &mut p.budget.borrow_mut())?;
+                    p.dtd = Rc::new(environment);
+                    p.pos += consumed;
+                }
                 p.space();
             }
             p.expect(">")?;
@@ -629,7 +650,7 @@ impl<'a> Parser<'a> {
                             (if prefix.is_empty() { None } else { Some(prefix.clone()) }, uri.clone())).collect(), ..Default::default() };
                         let source = parse_inner_with_entities(&body, Some(&context), false, Some(EntityContext {
                             dtd: self.dtd.clone(), budget: self.budget.clone(), policy: self.policy(), depth,
-                        }))?.0;
+                        }), None)?.0;
                         if dom.owner_document(parent).is_some() {
                             self.dom_result(dom.import_subtree_children(&source, NodeIdx(0), parent))?;
                         } else {
@@ -664,6 +685,7 @@ impl<'a> Parser<'a> {
         self.expect("=")?;
         self.space();
         let version = self.literal()?;
+        self.document_version = version.to_owned();
         // XML 1.0 Fifth Edition §2.8 VersionNum and forward compatibility:
         // 1.x declarations are processed with these XML 1.0 character rules.
         if !version.strip_prefix("1.").is_some_and(|minor| !minor.is_empty()
@@ -769,3 +791,7 @@ fn pubid_char(c: char) -> bool {
 #[cfg(test)]
 #[path = "xml_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "xml_external_tests.rs"]
+mod external_tests;

@@ -3,11 +3,13 @@
 use super::{XmlError, XmlErrorKind};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+use crate::xml_resources::XmlEntitySource;
 
 #[derive(Clone, Debug)]
 pub(super) enum EntityDefinition {
     Internal(Rc<str>),
-    External { public_id: Option<String>, system_id: String, notation: Option<String> },
+    ResolvedExternal(Rc<str>),
+    External { public_id: Option<String>, system_id: String, notation: Option<String>, source: Option<XmlEntitySource> },
 }
 #[derive(Clone, Debug)]
 pub(super) struct DeclaredEntity {
@@ -30,6 +32,7 @@ pub(super) struct Dtd {
     pub attributes: BTreeMap<String, Vec<AttributeDeclaration>>,
     pub has_parameter_references: bool,
     declaration_references: Vec<(String, bool)>,
+    pub sources: BTreeMap<(bool, String), XmlEntitySource>,
 }
 
 // Limits describe resource boundaries, not fictitious wellformedness failures.
@@ -90,7 +93,7 @@ pub(super) struct EntityPolicy {
     pub standalone: bool,
 }
 type ResultXml<T> = Result<T, XmlError>;
-struct Reader<'a> { src: &'a str, pos: usize, base: usize, parameter: bool }
+struct Reader<'a> { src: &'a str, pos: usize, base: usize, parameter: bool, source: Option<&'a XmlEntitySource>, apply: bool }
 impl<'a> Reader<'a> {
     fn rest(&self) -> &'a str { &self.src[self.pos..] }
     fn error(&self, message: &str) -> XmlError {
@@ -181,7 +184,7 @@ impl<'a> Reader<'a> {
                 budget.enter(true, &name, self.base + self.pos)?;
                 let result = (|| {
                     budget.charge_bytes(body.len(), self.base + self.pos)?;
-                    Reader { src: &body, pos: 0, base: self.base + self.pos, parameter: true }
+                    Reader { src: &body, pos: 0, base: self.base + self.pos, parameter: true, source: self.source, apply: self.apply }
                         .sequence(dtd, budget, policy, false)
                 })();
                 budget.leave();
@@ -204,9 +207,9 @@ impl<'a> Reader<'a> {
                     // replacement is included. CDATA/comment/PI contents
                     // remain literal then, including undeclared names.
                     for referenced in replacement_references(&body) {
-                        if !referenced.starts_with('#') { dtd.declaration_references.push((referenced.into(), !self.parameter)); }
+                        if self.apply && !referenced.starts_with('#') { dtd.declaration_references.push((referenced.into(), !self.parameter)); }
                     }
-                    if !parameter { validate_predefined(&name, &body, self.base + self.pos)?; }
+                    if self.apply && !parameter { validate_predefined(&name, &body, self.base + self.pos)?; }
                     EntityDefinition::Internal(body.into())
                 } else {
                     let (public_id, system_id) = self.external_id(false)?;
@@ -214,9 +217,11 @@ impl<'a> Reader<'a> {
                     let notation = if !parameter && spaced && self.take("NDATA") {
                         self.separated()?; Some(self.name(false, false)?)
                     } else { None };
-                    EntityDefinition::External { public_id, system_id, notation }
+                    EntityDefinition::External { public_id, system_id, notation, source: self.source.cloned() }
                 };
                 self.space(); self.expect(">")?;
+                if !self.apply { continue; }
+                if let Some(source) = self.source { dtd.sources.entry((parameter, name.clone())).or_insert(source.clone()); }
                 if parameter { dtd.parameter.entry(name).or_insert(definition); }
                 else {
                     let declaration = dtd.general.entry(name).or_insert(DeclaredEntity { definition, declared_directly: false });
@@ -252,9 +257,12 @@ impl<'a> Reader<'a> {
                     else {
                         if self.take("#FIXED") { self.separated()?; }
                         let raw = self.literal()?;
-                        let value = attribute_value(dtd, budget, policy, raw, self.base + self.pos, !self.parameter)?;
+                        if raw.contains('<') { return Err(self.error("literal < in attribute default")); }
+                        let value = if self.apply { attribute_value(dtd, budget, policy, raw, self.base + self.pos, !self.parameter)? }
+                            else { entity_value(dtd, budget, raw, self.base + self.pos)? };
                         Some(if tokenized { collapse_spaces(&value) } else { value })
                     };
+                    if !self.apply { continue; }
                     let attributes = dtd.attributes.entry(element.clone()).or_default();
                     if !attributes.iter().any(|attr| attr.name == name) { attributes.push(AttributeDeclaration { name, tokenized, default }); }
                 }
@@ -309,8 +317,12 @@ impl<'a> Reader<'a> {
 
 pub(super) fn read_subset(src: &str, base: usize, policy: EntityPolicy, budget: &mut ExpansionBudget) -> ResultXml<(Dtd, usize)> {
     let mut dtd = Dtd::default();
-    let mut reader = Reader { src, pos: 0, base, parameter: false };
+    let mut reader = Reader { src, pos: 0, base, parameter: false, source: None, apply: true };
     reader.sequence(&mut dtd, budget, policy, true)?;
+    validate(&dtd, policy, base)?;
+    Ok((dtd, reader.pos))
+}
+pub(super) fn validate(dtd: &Dtd, policy: EntityPolicy, base: usize) -> ResultXml<()> {
     for (name, direct) in &dtd.declaration_references {
         valid_reference_name(name, base)?;
         if predefined(name).is_some() { continue; }
@@ -325,14 +337,14 @@ pub(super) fn read_subset(src: &str, base: usize, policy: EntityPolicy, budget: 
     let mut visited = BTreeSet::new();
     let mut active = BTreeSet::new();
     for name in dtd.general.keys() { check_entity_graph(&dtd, name, &mut visited, &mut active, base)?; }
-    Ok((dtd, reader.pos))
+    Ok(())
 }
 fn check_entity_graph(dtd: &Dtd, name: &str, visited: &mut BTreeSet<String>, active: &mut BTreeSet<String>, offset: usize) -> ResultXml<()> {
     if visited.contains(name) { return Ok(()); }
     if active.contains(name) { return Err(ExpansionBudget::error(offset, XmlErrorKind::Malformed, "recursive entity declaration")); }
     if active.len() >= 32 { return Err(ExpansionBudget::error(offset, XmlErrorKind::Limit, "entity dependency depth exceeds 32")); }
     active.insert(name.into());
-    if let Some(DeclaredEntity { definition: EntityDefinition::Internal(body), .. }) = dtd.general.get(name) {
+    if let Some(DeclaredEntity { definition: EntityDefinition::Internal(body) | EntityDefinition::ResolvedExternal(body), .. }) = dtd.general.get(name) {
         for next in replacement_references(body) {
             if dtd.general.contains_key(next) && predefined(next).is_none() {
                 check_entity_graph(dtd, next, visited, active, offset)?;
@@ -360,7 +372,7 @@ fn replacement_references(mut rest: &str) -> Vec<&str> {
 }
 fn parameter_body(dtd: &Dtd, name: &str, offset: usize, external_subset: bool) -> ResultXml<Rc<str>> {
     match dtd.parameter.get(name) {
-        Some(EntityDefinition::Internal(body)) => Ok(body.clone()),
+        Some(EntityDefinition::Internal(body) | EntityDefinition::ResolvedExternal(body)) => Ok(body.clone()),
         Some(EntityDefinition::External { .. }) => Err(ExpansionBudget::error(offset, XmlErrorKind::Unsupported, "external parameter entity resources are not loaded")),
         None => Err(ExpansionBudget::error(offset, if external_subset { XmlErrorKind::Unsupported } else { XmlErrorKind::Malformed }, "undeclared parameter entity")),
     }
@@ -421,7 +433,7 @@ pub(super) fn attribute_value(dtd: &Dtd, budget: &mut ExpansionBudget, policy: E
                 let value = crate::entities::named_lookup(&tail[..=end]).ok_or_else(|| ExpansionBudget::error(offset, XmlErrorKind::Malformed, "undeclared entity in canonical XHTML subset"))?;
                 for c in value.chars() { result.push(if super::xml_space(c) { ' ' } else { c }); }
             } else {
-                if dtd.general.get(name).is_some_and(|entity| matches!(entity.definition, EntityDefinition::External { .. })) {
+                if dtd.general.get(name).is_some_and(|entity| matches!(entity.definition, EntityDefinition::External { .. } | EntityDefinition::ResolvedExternal(_))) {
                     return Err(ExpansionBudget::error(offset, XmlErrorKind::Malformed, "external entity in attribute value"));
                 }
                 let body = general_body(dtd, policy, name, offset, direct)?;
@@ -450,10 +462,16 @@ pub(super) fn general_body(dtd: &Dtd, policy: EntityPolicy, name: &str, offset: 
             return Err(ExpansionBudget::error(offset, XmlErrorKind::Malformed, "standalone entity requires a direct declaration"));
         }
         return match &declaration.definition {
-            EntityDefinition::Internal(body) => Ok(body.clone()),
+            EntityDefinition::Internal(body) | EntityDefinition::ResolvedExternal(body) => Ok(body.clone()),
             EntityDefinition::External { notation: Some(_), .. } => Err(ExpansionBudget::error(offset, XmlErrorKind::Malformed, "unparsed entity reference")),
             EntityDefinition::External { .. } => Err(ExpansionBudget::error(offset, XmlErrorKind::Unsupported, "external entity resources are not loaded")),
         };
     }
     Err(ExpansionBudget::error(offset, if !policy.standalone && (policy.external_subset || dtd.has_parameter_references) { XmlErrorKind::Unsupported } else { XmlErrorKind::Malformed }, "undeclared entity"))
+}
+
+pub(super) fn apply_declaration(src: &str, dtd: &mut Dtd, budget: &mut ExpansionBudget,
+    policy: EntityPolicy, source: &XmlEntitySource, direct: bool, apply: bool) -> ResultXml<()> {
+    Reader { src, pos: 0, base: 0, parameter: !direct, source: Some(source), apply }
+        .sequence(dtd, budget, policy, false)
 }
