@@ -359,9 +359,9 @@ $STORAGE_COMMAND"
     execution_file=$(mktemp) || { rm -f "$command_file"; exit 3; }
     printf '%s' "$CMD" > "$command_file"
     printf '%s' "$REMOTE" > "$execution_file"
-    PROOF_CAPTURE_ARGS=()
-    if [ -n "$CAPTURED_PROOF_ROOT" ]; then PROOF_CAPTURE_ARGS=(--captured-proof-root "$CAPTURED_PROOF_ROOT"); fi
-    JOB_ROW=$(python3 "$REPO/scripts/completed-job.py" capture "${PROOF_CAPTURE_ARGS[@]}" --receipt "$ENDPOINT_RECEIPT" --lane "$LANE" --source "$COMMIT" --box "$BOAT_ID" --host "$BOAT_HOST" --port "$BOAT_PORT" --root "$COMPACT_ROOT" --command-file "$command_file" --execution-file "$execution_file" --source-archive-sha256 "${SOURCE_ARCHIVE_SHA:-$MISSION_SHA256}")
+    PROOF_CAPTURE_ARGS=(capture)
+    if [ -n "$CAPTURED_PROOF_ROOT" ]; then PROOF_CAPTURE_ARGS+=(--captured-proof-root "$CAPTURED_PROOF_ROOT"); fi
+    JOB_ROW=$(python3 "$REPO/scripts/completed-job.py" "${PROOF_CAPTURE_ARGS[@]}" --receipt "$ENDPOINT_RECEIPT" --lane "$LANE" --source "$COMMIT" --box "$BOAT_ID" --host "$BOAT_HOST" --port "$BOAT_PORT" --root "$COMPACT_ROOT" --command-file "$command_file" --execution-file "$execution_file" --source-archive-sha256 "${SOURCE_ARCHIVE_SHA:-$MISSION_SHA256}")
     capture_rc=$?
     if [ "$capture_rc" = 0 ]; then
       REMOTE=$(python3 "$REPO/scripts/completed-job.py" launch "$JOB_ROW" --execution-file "$execution_file")
