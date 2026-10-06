@@ -125,8 +125,8 @@ impl Interpreter {
             prototype.borrow_mut().define("return", symbol_data(std_collection_method(self, "return", 0, ret), true, true)).unwrap();
         }
         helper.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(), symbol_data(JsValue::str("Iterator Helper"), false, true)).unwrap();
-        for (prototype, tag) in [(&array, "Array Iterator"), (&string, "String Iterator")] {
-            prototype.borrow_mut().define("next", symbol_data(std_collection_method(self, "next", 0, native_sequence_iterator_next), true, true)).unwrap();
+        for (prototype, tag, next) in [(&array, "Array Iterator", native_array_sequence_iterator_next as crate::value::NativeFn), (&string, "String Iterator", native_string_sequence_iterator_next as crate::value::NativeFn)] {
+            prototype.borrow_mut().define("next", symbol_data(std_collection_method(self, "next", 0, next), true, true)).unwrap();
             prototype.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(), symbol_data(JsValue::str(tag), false, true)).unwrap();
         }
         self.std_iterator_prototypes = Some(Rc::new(

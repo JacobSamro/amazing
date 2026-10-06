@@ -1,4 +1,6 @@
 // Portions ported from boa-dev/boa (core/engine/src/builtins/array/array_iterator.rs)
+// @ ef40c63283e1bb73f371d93372e9e95217a36945, MIT.
+// Portions ported from boa-dev/boa (core/engine/src/builtins/array/array_iterator.rs)
 // @ 39cd11214ecb366200157dab96b3919e61e9a391, MIT.
 // Array iterator length, index advancement and exhaustion adapted to our values.
 // Symbol constructor, registry, well-known identities, and prototype methods.
@@ -190,11 +192,20 @@ fn native_collection_iterator_next(i: &mut Interpreter, this: JsValue, _: Vec<Js
     };
     Ok(sequence_result(i, value, false))
 }
+fn native_array_sequence_iterator_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let valid = matches!(&this, JsValue::Object(object) if matches!(&object.borrow().exotic,
+        Exotic::SequenceIterator(state) if state.kind != SequenceIteratorKind::String));
+    if !valid { return Err(Throw::type_error("incompatible Array iterator receiver")); }
+    native_sequence_iterator_next(i, this, args)
+}
+fn native_string_sequence_iterator_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let valid = matches!(&this, JsValue::Object(object) if matches!(&object.borrow().exotic,
+        Exotic::SequenceIterator(state) if state.kind == SequenceIteratorKind::String));
+    if !valid { return Err(Throw::type_error("incompatible String iterator receiver")); }
+    native_sequence_iterator_next(i, this, args)
+}
 fn native_sequence_iterator_next(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let JsValue::Object(object) = this else { return Err(Throw::type_error("incompatible iterator receiver")); };
-    if binary_iterator_state(&object).is_some() {
-        return binary_typed_iterator_next(i, JsValue::Object(object), Vec::new());
-    }
     let state = {
         let object = object.borrow();
         let Exotic::SequenceIterator(state) = &object.exotic else { return Err(Throw::type_error("incompatible iterator receiver")); };
@@ -228,7 +239,7 @@ fn native_sequence_iterator_next(i: &mut Interpreter, this: JsValue, _: Vec<JsVa
                 SequenceIteratorKind::ArrayValues => i.get_prop(&state.target, index.to_string())?,
                 SequenceIteratorKind::ArrayEntries => {
                     let element = i.get_prop(&state.target, index.to_string())?;
-                    array_values(i, vec![JsValue::num(index as f64), element])?
+                    binary_array(i, vec![JsValue::num(index as f64), element])?
                 }
                 SequenceIteratorKind::String => return Err(Throw::type_error("invalid Array iterator kind")),
             };

@@ -2523,6 +2523,10 @@ impl Interpreter {
             };
         }
         if !new_target.is_object() { return Err(Throw::type_error("newTarget is not an object")); }
+        // Binary stores/DataView own the prescribed coercions before allocation.
+        if matches!(&fun.body, FunctionBody::Native(native) if binary_owns_constructor_allocation(*native)) {
+            return self.call_value_with_new_target(f, JsValue::Undefined, args, Some(new_target));
+        }
         // Error-family constructors own OrdinaryCreateFromConstructor before
         // message/cause/iterable evaluation. Generic allocation must not read
         // newTarget.prototype first or overwrite the returned Error's prototype.

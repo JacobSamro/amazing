@@ -1157,7 +1157,8 @@ impl JsObject {
         let mut o = Self::ordinary();
         // Native callbacks have [[Call]] only; spec constructors opt in
         // explicitly during installation. Host functions use their own policy.
-        o.constructible = !matches!(&func.body, FunctionBody::Native(_));
+        o.constructible = !func.is_arrow && !func.is_async && !func.is_generator
+            && !matches!(&func.body, FunctionBody::Native(_));
         o.realm = func.env.realm();
         let length = func.params.iter().take_while(|param| !param.rest && param.default.is_none()).count();
         o.define("length", Property {
