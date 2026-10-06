@@ -298,6 +298,60 @@ def verify(row,lane,source,paths):
         result[name]=dict(expected,payload=base64.b64encode(data).decode())
     return dict(job=identity(row),boot_id=final['boot_id'],actual_exit=final['actual_exit'],artifacts=result)
 
+def export_baseline(row, summary_name):
+    # Metadata-only authenticated remote reference. Never open or move ELF blobs.
+    fetched = verify(row, row['lane'], row['source_commit'], [summary_name])
+    if fetched['actual_exit'] != 0:
+        raise ValueError('remote baseline command must have genuine exit zero')
+    final = completion(row)
+    summary_bytes = base64.b64decode(fetched['artifacts'][summary_name]['payload'], validate=True)
+    summary = json.loads(summary_bytes)
+    if summary.get('state') != 'TERMINAL' or any(type(summary.get(k)) is not int or summary[k] != 0 for k in ('command_exit','storage_exit')):
+        raise ValueError('remote baseline storage must be terminal successful')
+    if summary.get('source') != row['source_commit'] or summary.get('phase') != 'before':
+        raise ValueError('remote baseline storage source/phase mismatch')
+    descriptor = summary['artifact_manifest']
+    manifest = pathlib.Path(descriptor['path'])
+    if not manifest.is_absolute() or manifest.resolve(strict=True) != manifest or not manifest.is_file():
+        raise ValueError('remote retention manifest must be a canonical regular file')
+    data = manifest.read_bytes()
+    if len(data) > 2097152 or descriptor != {'path':str(manifest),'bytes':len(data),'sha256':digest(data)}:
+        raise ValueError('remote retention manifest bytes/hash mismatch')
+    original = json.loads(data)
+    if original.get('source') != row['source_commit'] or original.get('phase') != 'before' or (type(original.get('command_exit')) is not int or original['command_exit'] != 0) or original.get('job') != summary['job'] or original.get('profile') != summary['profile']:
+        raise ValueError('remote retention manifest source/job/profile mismatch')
+    if not any(pathlib.PurePosixPath(r['path']) in pathlib.PurePosixPath(str(manifest)).parents and r['device']==manifest.stat().st_dev for r in summary['capacity']['filesystems']):
+        raise ValueError('remote retained manifest device differs from storage admission')
+    artifacts = original['artifacts']
+    elf_count = sum(a['kind'] == 'elf' for a in artifacts)
+    if not elf_count or len(artifacts) != summary['retained_files'] or elf_count != summary['retained_elf_files']:
+        raise ValueError('remote retention manifest artifact counts mismatch')
+    return {'schema':1,'mode':'remote-reference','job':row,'completed':final,
+            'catalog_sha256':digest(json.dumps(final['artifacts'],sort_keys=True,separators=(',',':')).encode()),
+            'storage_summary':dict(fetched['artifacts'][summary_name],path=summary_name),
+            'retention_manifest':dict(descriptor,metadata_readback=True,device=manifest.stat().st_dev,
+                source=original['source'],job=original['job'],phase=original['phase'],command_exit=original['command_exit'],
+                profile=original['profile'],artifact_count=len(artifacts),elf_count=elf_count,target=original['target']),
+            'local_elf_readback':False,'original_payload_retained_on_original_host':True}
+
+
+def export_reference(args):
+    row = receipt(args)
+    reference = remote(row, 'export-baseline', [args.storage_summary], seconds=60)
+    destination = pathlib.Path(args.destination)
+    if destination.exists() or destination.is_symlink():
+        raise ValueError('reference destination already exists')
+    data = (json.dumps(reference,sort_keys=True,separators=(',',':'))+'\n').encode()
+    if len(data) > 524288:
+        raise ValueError('remote baseline reference exceeds compact limit')
+    destination.parent.mkdir(parents=True,exist_ok=True)
+    with destination.open('xb') as stream:
+        stream.write(data);stream.flush();os.fsync(stream.fileno())
+    print(json.dumps({'path':str(destination),'bytes':len(data),'sha256':digest(data),'job':identity(row),
+                      'baseline_mode':'remote-reference','local_elf_readback':False},separators=(',',':')))
+    return 0
+
+
 def remote(row,action,tail=(),seconds=30):
     code=pathlib.Path(__file__).read_text()
     cmd='env -u PYTHONHOME -u PYTHONPATH -u PYTHONUSERBASE -u VIRTUAL_ENV /usr/bin/python3 -I -c '+shlex.quote(code)+' '+action+' '+shlex.quote(encoded(row))+' '+ ' '.join(shlex.quote(p) for p in tail)
@@ -365,6 +419,9 @@ def main():
         for key in ('receipt','lane','source'):a.add_argument('--'+key,required=True)
         a.add_argument('--output')
         if name=='wait':a.add_argument('--seconds',type=int,default=60)
+    a=subs.add_parser('export-baseline');a.add_argument('receipt');a.add_argument('storage_summary')
+    a=subs.add_parser('export-reference')
+    for name in ('receipt','lane','source','storage-summary','destination'):a.add_argument('--'+name,required=True)
     a=subs.add_parser('fetch')
     for name in ('receipt','lane','source','destination'):a.add_argument('--'+name,required=True)
     a.add_argument('paths',nargs='+');args=p.parse_args()
@@ -374,6 +431,8 @@ def main():
     if args.action=='run-base64stdin':return run(decode(args.receipt),base64.b64decode(sys.stdin.buffer.read().strip(),validate=True).decode())
     if args.action=='launch':print(launch(decode(args.receipt),pathlib.Path(args.execution_file).read_text()),end='');return 0
     if args.action=='observe':print(json.dumps(observe(decode(args.receipt))));return 0
+    if args.action=='export-reference':return export_reference(args)
+    if args.action=='export-baseline':print(json.dumps(export_baseline(decode(args.receipt),args.storage_summary)));return 0
     if args.action=='verify':print(json.dumps(verify(decode(args.receipt),args.lane,args.source,args.paths)));return 0
     if args.action in ('status','wait'):
         if args.action=='wait' and not 1<=args.seconds<=7200:raise ValueError('wait bound must be 1..7200 seconds')

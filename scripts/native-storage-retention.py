@@ -7,6 +7,7 @@ All ELF and generated-source bytes survive in verified executable blobs;
 only this helper's terminal fresh Cargo target is retired. OUT stays intact.
 """
 import argparse
+import base64
 import datetime
 import errno
 import fcntl
@@ -115,6 +116,70 @@ def validated_manifest(path, expected_source=None):
             raise StorageError('baseline retained executable/source bytes changed')
     return {'path': str(path), 'sha256': digest(path), 'source': data['source'],
             'artifact_count': len(data['artifacts'])}
+
+
+def validated_remote_reference(reference, expected_sha, expected_source):
+    # Exact authenticated public export bytes; metadata-only, no ELF ferry.
+    wire = (json.dumps(reference,sort_keys=True,separators=(',',':'))+'\n').encode()
+    if not re.fullmatch(r'[0-9a-f]{64}',str(expected_sha)) or hashlib.sha256(wire).hexdigest() != expected_sha:
+        raise StorageError('remote reference bytes/hash mismatch')
+    if reference.get('schema') != 1 or reference.get('mode') != 'remote-reference' or reference.get('local_elf_readback') is not False or reference.get('original_payload_retained_on_original_host') is not True:
+        raise StorageError('remote reference must explicitly retain remote payload ownership')
+    job, final = reference['job'], reference['completed']
+    fields = ('lane','source_commit','box_id','host','port','job_id','output_root','command_sha256')
+    if job.get('schema') == 2:fields += ('execution_sha256','source_archive_sha256')
+    if job.get('schema') not in (1,2) or job.get('source_commit') != expected_source or final.get('completed') is not True or type(final.get('actual_exit')) is not int or final['actual_exit'] != 0 or (type(final.get('runner_exit')) is not int or final['runner_exit'] != 0) or final.get('catalog_error'):
+        raise StorageError('remote reference requires genuine successful completed job/source/catalog')
+    if any(final.get(k) != job.get(k) for k in fields):
+        raise StorageError('remote completed job identity mismatch')
+    if not re.fullmatch(r'bx_[A-Za-z0-9]+',str(job.get('box_id'))) or not re.fullmatch(r'[0-9a-f]{32}',str(job.get('job_id'))) or type(job.get('port')) is not int or not 1 <= job['port'] <= 65535:
+        raise StorageError('remote baseline endpoint identity malformed')
+    for key in ('command_sha256',)+(('execution_sha256','source_archive_sha256') if job['schema']==2 else ()):
+        if not re.fullmatch(r'[0-9a-f]{64}',str(job.get(key))):raise StorageError('remote source/command identity malformed')
+    catalog = final['artifacts']
+    if reference['catalog_sha256'] != hashlib.sha256(json.dumps(catalog,sort_keys=True,separators=(',',':')).encode()).hexdigest():
+        raise StorageError('remote completed catalog identity mismatch')
+    descriptor = reference['storage_summary'];name = descriptor['path']
+    pure = pathlib.PurePosixPath(name)
+    if pure.is_absolute() or '..' in pure.parts or not pure.is_relative_to(job['output_root']):
+        raise StorageError('remote summary escapes completed job')
+    raw = base64.b64decode(descriptor['payload'],validate=True)
+    identity = {'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()}
+    if len(raw)>524288 or catalog.get(name) != identity or any(descriptor.get(k)!=v for k,v in identity.items()):
+        raise StorageError('remote summary differs from completed catalog')
+    summary = json.loads(raw)
+    if summary.get('source') != expected_source or summary.get('phase') != 'before' or summary.get('state') != 'TERMINAL' or any(type(summary.get(k)) is not int or summary[k]!=0 for k in ('command_exit','storage_exit')):
+        raise StorageError('remote storage baseline is not successful before')
+    manifest = reference['retention_manifest']
+    if {k:manifest.get(k) for k in ('path','bytes','sha256')} != summary['artifact_manifest'] or manifest.get('metadata_readback') is not True:
+        raise StorageError('remote retention manifest metadata/hash not authenticated')
+    path = pathlib.PurePosixPath(manifest['path'])
+    if not path.is_absolute() or '..' in path.parts or type(manifest.get('device')) is not int:
+        raise StorageError('remote manifest path/device invalid')
+    if manifest.get('source') != expected_source or manifest.get('job') != summary['job'] or manifest.get('phase') != 'before' or type(manifest.get('command_exit')) is not int or manifest['command_exit'] != 0 or manifest.get('profile') != summary['profile']:
+        raise StorageError('remote retention source/job/profile mismatch')
+    if type(manifest.get('elf_count')) is not int or manifest['elf_count'] <= 0 or manifest['elf_count'] != summary['retained_elf_files'] or manifest.get('artifact_count') != summary['retained_files']:
+        raise StorageError('remote retained ELF/artifact count mismatch')
+    if not any(pathlib.PurePosixPath(r['path']) in path.parents and r['device']==manifest['device'] for r in summary['capacity']['filesystems']):
+        raise StorageError('remote manifest device differs from original storage admission')
+    return {'mode':'remote-reference','reference_sha256':expected_sha,'source':expected_source,
+            'original_job':job,'path':manifest['path'],'sha256':manifest['sha256'],
+            'original_device':manifest['device'],'original_filesystems':summary['capacity']['filesystems'],
+            'artifact_count':manifest['artifact_count'],'elf_count':manifest['elf_count'],
+            'profile':manifest['profile'],'catalog_sha256':reference['catalog_sha256'],
+            'local_elf_readback':False,'original_payload_retained_on_original_host':True}
+
+
+def resolve_baseline(manifest, source, reference=None, reference_sha=None):
+    if reference is not None:
+        if manifest or not reference_sha:raise StorageError('remote reference and local manifest are exclusive')
+        return validated_remote_reference(reference,reference_sha,source_id(source))
+    if reference_sha or not manifest or not source:raise StorageError('explicit baseline manifest/source or remote reference required')
+    return validated_manifest(manifest,source_id(source))
+
+
+def baseline_profile(baseline):
+    return baseline['profile'] if baseline.get('mode') == 'remote-reference' else json.loads(pathlib.Path(baseline['path']).read_text())['profile']
 
 
 def elf_kind(path):
@@ -302,13 +367,12 @@ def run(args):
         raise StorageError('raw output must remain outside managed scratch')
     baseline = None
     if args.phase == 'after':
-        if not args.baseline_manifest or not args.baseline_source:
-            raise StorageError('after requires explicit frozen baseline manifest/source')
-        baseline = validated_manifest(args.baseline_manifest, source_id(args.baseline_source))
-    elif args.baseline_manifest or args.baseline_source:
+        if not args.baseline_source:raise StorageError('after requires exact baseline source')
+        baseline = resolve_baseline(args.baseline_manifest,args.baseline_source,args.baseline_reference,args.baseline_reference_sha256)
+    elif args.baseline_manifest or args.baseline_source or args.baseline_reference is not None or args.baseline_reference_sha256:
         raise StorageError('before cannot consume another baseline')
     profile = {key: os.environ.get(key, value) for key, value in PROFILE.items()}
-    if baseline and json.loads(pathlib.Path(baseline['path']).read_text())['profile'] != profile:
+    if baseline and baseline_profile(baseline) != profile:
         raise StorageError('before/after Cargo profile must match')
     if args.retention_method == 'hardlink' and filesystem(scratch)['device'] != filesystem(retained)['device']:
         raise StorageError('hardlink retention requires the same actual filesystem')
@@ -464,6 +528,8 @@ def main():
     run_parser.add_argument('--elf-policy', choices=('all', 'runnable'), default='all')
     run_parser.add_argument('--baseline-manifest')
     run_parser.add_argument('--baseline-source')
+    run_parser.add_argument('--baseline-reference',type=json.loads)
+    run_parser.add_argument('--baseline-reference-sha256')
     run_parser.add_argument('command', nargs=argparse.REMAINDER)
     retire_parser = modes.add_parser('retire')
     retire_parser.add_argument('--session', required=True)

@@ -13,8 +13,8 @@ retention = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(retention)
 FIELDS = {'schema', 'ticket', 'source', 'phase', 'job', 'scratch_parent', 'output_root',
           'retained_root', 'build_budget_bytes', 'retention_budget_bytes', 'bootstrap_budget_bytes',
-          'reserve_bytes', 'compact_root', 'summary_path', 'baseline_manifest', 'baseline_source', 'retention_method', 'elf_policy', 'retire_after_retention'}
-REQUIRED = FIELDS - {'baseline_manifest', 'baseline_source', 'summary_path', 'compact_root', 'retire_after_retention'}
+          'reserve_bytes', 'compact_root', 'summary_path', 'baseline_manifest', 'baseline_source', 'retention_method', 'elf_policy', 'retire_after_retention', 'baseline_reference', 'baseline_reference_sha256'}
+REQUIRED = FIELDS - {'baseline_manifest', 'baseline_source', 'summary_path', 'compact_root', 'retire_after_retention','baseline_reference','baseline_reference_sha256'}
 
 
 def validate(path, native=True):
@@ -59,12 +59,15 @@ def validate(path, native=True):
             raise retention.StorageError('storage summary must remain beneath explicit compact owner outside scratch')
     elif data.get('compact_root'):
         raise retention.StorageError('compact owner requires an explicit summary path')
-    if data['phase'] == 'before' and ('baseline_manifest' in data or 'baseline_source' in data):
+    if data['phase'] == 'before' and any(k in data for k in ('baseline_manifest','baseline_source','baseline_reference','baseline_reference_sha256')):
         raise retention.StorageError('before cannot consume a baseline')
     if data['phase'] == 'after':
-        if not data.get('baseline_manifest') or not data.get('baseline_source'):
-            raise retention.StorageError('after requires exact baseline manifest/source')
+        if not data.get('baseline_source'):raise retention.StorageError('after requires exact baseline source')
         retention.source_id(data['baseline_source'])
+        if 'baseline_reference' in data:
+            retention.resolve_baseline(data.get('baseline_manifest'),data['baseline_source'],data['baseline_reference'],data.get('baseline_reference_sha256'))
+        elif not data.get('baseline_manifest') or data.get('baseline_reference_sha256'):
+            raise retention.StorageError('after requires exact local baseline manifest or remote reference')
     return data
 
 
@@ -80,9 +83,9 @@ def main():
             print(json.dumps({'schema': 1, 'source': data['source'], 'phase': data['phase'], 'job': data['job']}))
             return 0
         if data['phase'] == 'after':
-            retention.validated_manifest(data['baseline_manifest'], data['baseline_source'])
+            baseline = retention.resolve_baseline(data.get('baseline_manifest'),data['baseline_source'],data.get('baseline_reference'),data.get('baseline_reference_sha256'))
             profile = {k: os.environ.get(k, v) for k, v in retention.PROFILE.items()}
-            if json.loads(pathlib.Path(data['baseline_manifest']).read_text())['profile'] != profile:
+            if retention.baseline_profile(baseline) != profile:
                 raise retention.StorageError('before/after Cargo profile must match')
         if data['retention_method'] == 'hardlink' and retention.filesystem(pathlib.Path(data['scratch_parent']))['device'] != retention.filesystem(pathlib.Path(data['retained_root']))['device']:
             raise retention.StorageError('hardlink retention requires the same actual filesystem')
@@ -105,7 +108,7 @@ def main():
                 if value: command += ['--retire-after-retention']
                 continue
             if key not in ('schema', 'bootstrap_budget_bytes', 'summary_path', 'compact_root'):
-                command += ['--' + key.replace('_', '-'), str(value)]
+                command += ['--' + key.replace('_', '-'), json.dumps(value,separators=(',',':')) if key == 'baseline_reference' else str(value)]
         command += ['--', 'bash', args.command_file]
         code = subprocess.run(command, check=False).returncode
         if data.get('summary_path'):
