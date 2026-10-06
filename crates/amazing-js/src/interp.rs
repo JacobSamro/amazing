@@ -56,6 +56,8 @@ mod event_handler;
 
 #[path = "interp_bindings.rs"]
 mod bindings;
+#[path = "interp_binding_prototype.rs"]
+mod binding_prototype;
 pub use bindings::BindingPropertyFlags;
 #[path = "interp_legacy.rs"]
 mod legacy;
