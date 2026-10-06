@@ -243,6 +243,7 @@ impl fmt::Debug for Obj {
             (Exotic::ThreadGenerator(_), _) => write!(f, "[generator]"),
             (Exotic::ModuleNamespace(_) | Exotic::DeferredModuleNamespace(_), _) => write!(f, "[module namespace]"),
             (Exotic::ModuleCallback(_), _) => write!(f, "[module continuation]"),
+            (Exotic::ShadowRealm(_), _) => write!(f, "[ShadowRealm]"),
             (Exotic::WindowProxy(_), _) => write!(f, "[WindowProxy]"),
             (Exotic::Proxy(_), _) => write!(f, "[proxy]"),
             (Exotic::DisposableStack(_), _) => write!(f, "[disposable stack]"),
@@ -804,6 +805,8 @@ pub type NativeFn =
 pub enum Exotic {
     #[default]
     Ordinary,
+    /// Private same-agent identity, never an authored property.
+    ShadowRealm(crate::interp::RealmHandle),
     WindowProxy(Rc<RefCell<crate::interp::WindowProxyState>>),
     Array,
     /// Cell-only aliases preserve escaped arguments without retaining a whole environment.

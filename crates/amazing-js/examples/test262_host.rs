@@ -202,40 +202,12 @@ fn emit_module(phase: &str, kind: &str, detail: &str, unsupported: Option<&str>)
     );
 }
 
-fn install_test262_module_loader(
-    i: &mut Interpreter, root: &str, path: &str,
-) -> io::Result<(Rc<RefCell<amazing_js::module::ModuleLinker<impl amazing_js::module::ModuleResolver + 'static + use<>>>>, String)> {
-    use amazing_js::module::{ModuleLinker, ModulePhase};
-    use std::path::Path;
-    let root_path = Path::new(&root).canonicalize()?;
-    let root_id = root_path.join(&path).canonicalize()?.to_string_lossy().into_owned();
-    let root_path_for_resolver = root_path.clone();
-    let path_for_resolver = path.to_owned();
-    let resolve_specifier = move |specifier: &str, referrer: &str| -> Result<(String, String), String> {
-        let referrer = if referrer == path_for_resolver { root_path_for_resolver.join(&path_for_resolver) }
-            else { Path::new(referrer).to_path_buf() };
-        let candidate = referrer.parent().unwrap_or(&root_path_for_resolver).join(specifier);
-        let canonical = candidate.canonicalize().map_err(|error| error.to_string())?;
-        if !canonical.starts_with(&root_path_for_resolver) {
-            return Err(format!("module specifier escapes Test262 checkout: {specifier}"));
-        }
-        let source = std::fs::read_to_string(&canonical).map_err(|error| error.to_string())?;
-        Ok((canonical.to_string_lossy().into_owned(), source))
-    };
-    let linker = Rc::new(RefCell::new(ModuleLinker::new(resolve_specifier)));
-    let loader_linker = Rc::clone(&linker);
-    i.binding_set_phase_module_loader_hook(Rc::new(move |interpreter, request, referrer| {
-        ModuleLinker::import_shared(&loader_linker, request, referrer, interpreter)
-            .map_err(|failure| {
-                if let Some(thrown) = failure.thrown { return thrown; }
-                match failure.phase {
-                    ModulePhase::Parse => Throw::syntax_error(failure.message),
-                    _ => Throw::type_error(failure.message),
-                }
-            })
-    }));
-    Ok((linker, root_id))
-}
+#[path = "test262_host_support/modules.rs"]
+mod realm_modules;
+use realm_modules::install_test262_module_loader;
+#[cfg(test)]
+#[path = "test262_host_support/module_tests.rs"]
+mod realm_module_tests;
 
 fn run_module_request() -> io::Result<()> {
     use amazing_js::module::{ModuleLinker, ModulePhase};

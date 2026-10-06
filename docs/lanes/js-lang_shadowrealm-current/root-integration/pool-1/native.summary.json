@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "source_commit": "f036763220ff3e00085e1fb6f73b794ca9af3f0a",
+  "lane": "shadow-html-current-pool-1",
+  "endpoint_receipt": "/Users/jMac/Projects/OpenSource/amazing/.agents/test262/runs/shadow-html-current-initial-20261006T013021-1791250221229534000/pool-1.endpoint.manifest.json",
+  "observer_exit": 0,
+  "state": "TERMINAL",
+  "actual_exit": 0,
+  "runner_exit": 0,
+  "compact_fetch_allowed": true,
+  "observations": 1,
+  "job": {
+    "schema": 2,
+    "lane": "shadow-html-current-pool-1",
+    "source_commit": "f036763220ff3e00085e1fb6f73b794ca9af3f0a",
+    "box_id": "bx_petjzgfs",
+    "host": "user@178.33.239.98",
+    "port": 19036,
+    "job_id": "a36806f478514a0db9126b00d6133179",
+    "output_root": "amazing/out/shadow-html-current-pool-1/test262-shadow-html-current-initial-20261006T013021-1791250221229534000/f036763220ff3e00085e1fb6f73b794ca9af3f0a",
+    "command_sha256": "9417c8b9bd2bedeb203ea2357c5a02bade7dc212a39ac879cdd712d8cceedd07",
+    "execution_sha256": "1901a0f5b36ee60c34a2530c35330d104f5e1cc61a84d9e0cb93bb757333feca",
+    "source_archive_sha256": "0f5146d01d31727a409c772cd8a2f018c1a2b37f8c50f05df524980192df628c"
+  },
+  "box_id": "bx_petjzgfs",
+  "remote_output_root": "amazing/out/shadow-html-current-pool-1/test262-shadow-html-current-initial-20261006T013021-1791250221229534000/f036763220ff3e00085e1fb6f73b794ca9af3f0a",
+  "boot_id": "e92665f6-0dc9-4c05-81ea-efec3be6e52f",
+  "reason": "authenticated actual command exit",
+  "owner": {
+    "pid": 34715,
+    "start_ticks": 67847,
+    "state": "R",
+    "parent_pid": 34682,
+    "cmdline_sha256": "ce98597539ade42429345ef22cd19728ab93275d24093c15ae525369735d251f"
+  },
+  "started_ns": 1791250765209282480,
+  "catalog_error": null,
+  "execution_raw": {
+    "path": "/tmp/amazing-job-a36806f478514a0db9126b00d6133179-r4cvsbzs/command.log",
+    "bytes": 21308,
+    "sha256": "27f7755832be81d9bc933e67317e0b12c26074e327da221d5c59ce1c804b0f6d"
+  },
+  "observer_pipe_closed": false,
+  "signals": [],
+  "command_returncode": 0,
+  "exited_ns": 1791251235643739604,
+  "diagnostic_error": null,
+  "native_diagnostics": {
+    "path": "/tmp/amazing-job-a36806f478514a0db9126b00d6133179-r4cvsbzs/command.log",
+    "device": 64769
+  }
+}

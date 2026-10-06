@@ -653,6 +653,7 @@ impl Interpreter {
         i.global_env.set_global_object(i.global_obj.clone());
         i.stamp_realm_objects();
         i.install_builtins();
+        i.install_shadow_realm();
         i.install_regexp();
         i.install_location();
         i.install_history();
@@ -1942,3 +1943,5 @@ mod tail_call_tests;
 #[cfg(test)]
 #[path = "interp_viewport_metrics_tests.rs"]
 mod viewport_metrics_tests;
+
+include!("interp_shadow_realm.rs");
