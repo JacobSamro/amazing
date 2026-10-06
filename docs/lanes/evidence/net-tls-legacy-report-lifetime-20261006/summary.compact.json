@@ -1,0 +1,425 @@
+{
+  "schema": 1,
+  "state": "qualified independent native ready; root merged-current workspace/full16 still required",
+  "recorded_ready_base": "0a3e13be78cfe90def638bd16f00257591f34ff1",
+  "source": "7e778e2714845885dcb8514787fbdc522678ddf1",
+  "compiled_context": "d29a2b32a34300f8905fde962d5f06f693f97a61",
+  "explicit_prerequisite": {
+    "ready": "0cbda045dbe06a796083aafc6d89900c2321e71a",
+    "published": "69819162b1a503e7efdd887b7ea103a7d1f1a9bf"
+  },
+  "controller": 8633,
+  "native": {
+    "job": {
+      "schema": 2,
+      "lane": "net-legacy-report-lifetime-sourcefix-clean1-20261006",
+      "source_commit": "7e778e2714845885dcb8514787fbdc522678ddf1",
+      "box_id": "bx_48sp4eee",
+      "host": "user@51.255.76.140",
+      "port": 19046,
+      "job_id": "e92accd2bc8748c8b66b34eafd672559",
+      "output_root": "amazing/out/net-legacy-report-lifetime-sourcefix-clean1-20261006/legacy-report-sourcefix-after-7e778e27-clean1/compact",
+      "command_sha256": "bee1ecc26f3896131904b4c210cd02dd8d1e4fdf1012d91db391621049d08ae1",
+      "execution_sha256": "215fde5c3d86f8b4d926ba4d49b7c3e972c879f2a3813f250adb304206b9bc5b",
+      "source_archive_sha256": "03ec9b97f9c92376129f2efd41056a0176e673141a0d92ea3808d874504cba85"
+    },
+    "state": "TERMINAL",
+    "actual_exit": 0,
+    "runner_exit": 0,
+    "boot_id": "7ba0de37-305b-497e-817c-23a39807e851",
+    "reason": "authenticated actual command exit",
+    "owner": {
+      "pid": 33213,
+      "start_ticks": 45192,
+      "state": "R",
+      "parent_pid": 33210,
+      "cmdline_sha256": "17eecb31756dc431bc8fad1d157bc2e9e2dc9eaf5fffd7b4702dce10994213b5"
+    },
+    "started_ns": 1791259562248179223,
+    "catalog_error": null,
+    "execution_raw": {
+      "path": "/tmp/amazing-job-e92accd2bc8748c8b66b34eafd672559-aq8giq05/command.log",
+      "bytes": 14127,
+      "sha256": "d6b02d4d318f2cc1c0cb826614cb861d8a388d4eba10db354d5a284c535c9fb3"
+    },
+    "observer_pipe_closed": false,
+    "signals": [],
+    "command_returncode": 0,
+    "exited_ns": 1791260027709508378,
+    "diagnostic_error": null,
+    "native_diagnostics": {
+      "path": "/tmp/amazing-job-e92accd2bc8748c8b66b34eafd672559-aq8giq05/command.log",
+      "device": 64769
+    }
+  },
+  "authenticated_fetch": {
+    "controller": 10633,
+    "actual_exit": 0,
+    "files": {
+      "after.summary.json": {
+        "bytes": 401526,
+        "sha256": "2dabf76eadda59e0d3a692535680236eed28aeb431991357cef27b78fe101568"
+      },
+      "network-corpus.compact.json": {
+        "bytes": 27260,
+        "sha256": "629e2465e587a3ce08ef6ebfd9431e8efa8500002c0605ef14683d3dfdb0e68f"
+      },
+      "workspace.compact.json": {
+        "bytes": 148568,
+        "sha256": "15db05b5ff5f9ae576f05f7ea496ec8bdffc89ea75177bc255761966e789b113"
+      },
+      "csp-wpt.compact.json": {
+        "bytes": 35936,
+        "sha256": "686bd7e56b283984c0bf6cf9a213922df3b7f8564e57b9a9d4beaec58c6e5a2f"
+      },
+      "storage.summary.json": {
+        "bytes": 4262,
+        "sha256": "4fbe843bc88fcd400f7bdbca7ec00d8d9cc711548d7d8f4093f0fd1ab37e6575"
+      }
+    }
+  },
+  "baseline_projection": {
+    "after_source": "7e778e2714845885dcb8514787fbdc522678ddf1",
+    "baseline_fact_scope": "distinct authenticated receipts; no synthesized/relabelled baseline engine summary",
+    "capacity": "freshdefault4/8 finite7200 canonical/tmp raw/source/allELF; publicprebootstrap guard +12GiB actual engine guard; no BEFORE engine rerun",
+    "compiled_context": "d29a2b32a34300f8905fde962d5f06f693f97a61",
+    "csp_actual_exit": 0,
+    "csp_fetch_exit": 0,
+    "csp_job": "fd41f1b8acb54e2580c88ac8d9c700f3",
+    "csp_pass_files": 32,
+    "csp_pass_subtests": 81,
+    "csp_source": "d29a2b32a34300f8905fde962d5f06f693f97a61",
+    "docs_pass": 36,
+    "engine_files_byteexact141": false,
+    "full_selector": "cargo nextest run -p amazing-net-tls -p amazing-net -p amazing-fetch -p amazing-process --features amazing-net-tls/test-support --locked --no-fail-fast --status-level all",
+    "native_fetch_exit": 0,
+    "native_job": "3d40e17790c94f64b85d4b3307f3f9c9",
+    "native_pass": 825,
+    "native_phase_actual_exit": 0,
+    "native_reuse_reason": "all four Net/TLS/Fetch/Process folders exact0cb on compiled context d29; selector byteexact original; observed CSP loss in this old job is retained and NOT reused as passing CSP",
+    "native_skip": 3,
+    "native_source": "0cbda045dbe06a796083aafc6d89900c2321e71a",
+    "native_whole_job_actual_exit": 1,
+    "profile": "DEV/TEST line-tables-only incremental0",
+    "published_base": "ae5b9863131a0e005a5c719647f69fe64fb84490",
+    "source_fix": "ONE reported E0433 test import; production and all original assertions byteexact6581",
+    "workspace_actual_exit": 0,
+    "workspace_fetch_exit": 0,
+    "workspace_job": "dd969d4b9e604ca383a08c8006cb110a",
+    "workspace_pass": 5180,
+    "workspace_skip": 17,
+    "workspace_source": "d29a2b32a34300f8905fde962d5f06f693f97a61"
+  },
+  "before": {
+    "workspace": 5180,
+    "skip": 17,
+    "doctests": 36,
+    "native": 825,
+    "native_skip": 3,
+    "csp_files": 32,
+    "csp_subtests": 81
+  },
+  "after": {
+    "workspace": 5190,
+    "skip": 17,
+    "doctests": 38,
+    "native": 835,
+    "native_skip": 3,
+    "csp_files": 32,
+    "csp_subtests": 81
+  },
+  "native_gained": [
+    "amazing-fetch reporting::tests::retired_lifetime_tests::actual_original_task_consumer_retains_settings_and_credit_until_same_service_closure",
+    "amazing-fetch reporting::tests::retired_lifetime_tests::completed_original_bookkeeping_recycles_without_raising_native_document_cap",
+    "amazing-fetch reporting::tests::retired_lifetime_tests::genuine_inline_legacy_report_uses_report_destination_original_client_and_rejects_all_redirects",
+    "amazing-fetch reporting::tests::retired_lifetime_tests::real_post_and_native_terminal_event_keep_original_custody_until_consumer_drop",
+    "amazing-fetch reporting::tests::retired_lifetime_tests::task_consumer_snapshot_obeys_existing_shared_prepared_credit_limit",
+    "amazing-process::receiving_registration foreign_scope_consumer_cannot_poll_ack_close_or_release_original_service",
+    "amazing-process::receiving_registration live_original_scopes_still_obey_64_global_and_realm_admission_limit",
+    "amazing-process::receiving_registration original_empty_scope_release_recycles_both_global_and_realm_slots_without_raising_64",
+    "amazing-process::receiving_registration real_original_csp_batches_survive_processing_error_and_keep_terminal_outcomes_until_ack",
+    "amazing-process::receiving_registration unused_genuine_embedding_plan_blocks_global_release_until_explicit_owner_cleanup"
+  ],
+  "native_lost": [],
+  "csp_lost_files": [],
+  "csp_lost_subtests": [],
+  "workspace_scope": "Authenticated root d29 whole workspace5180/docs36; no BEFORE identity map claimed. AFTER strict whole workspace native0 required.",
+  "whole_phases": {
+    "browser-build": 0,
+    "csp-wpt": 0,
+    "doctests": 0,
+    "network-corpus": 0,
+    "workspace": 0,
+    "wpt-setup": 0
+  },
+  "original_csp_selection": {
+    "selected_files": 220,
+    "directories": [
+      "default-src",
+      "script-src",
+      "script-src-attr-elem",
+      "unsafe-hashes",
+      "nonce-hiding",
+      "meta",
+      "parsing",
+      "securitypolicyviolation",
+      "navigation",
+      "style-src",
+      "style-src-attr-elem"
+    ],
+    "sha256": "827083295c0011e2fd1bfb1760fbf28b036cd6412e077d4ae2f016234e5ff0a0",
+    "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293"
+  },
+  "profile": {
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+  },
+  "storage": {
+    "actual_storage_exit": 0,
+    "artifact_manifest": {
+      "bytes": 542482,
+      "path": "/tmp/amazing-native-retained/net-legacy-report-lifetime-sourcefix-clean1-20261006/legacy-report-sourcefix-after-7e778e27-clean1/retained/manifests/legacy-report-sourcefix-after-7e778e27-clean1.json",
+      "sha256": "ac0a93d67fbf489467bad29a93096409097d2f7db8305aa9513205b7aa991592"
+    },
+    "baseline": {
+      "artifact_count": 391,
+      "catalog_sha256": "0652d2abb34f0785b6a4bb9bd4dcb5b51c7fffe75f14d14ecaf95ff4ca59bdd1",
+      "elf_count": 379,
+      "local_elf_readback": false,
+      "mode": "remote-reference",
+      "original_device": 64769,
+      "original_filesystems": [
+        {
+          "available_bytes": 32400838656,
+          "device": 64769,
+          "path": "/tmp/amazing-native-storage",
+          "required_bytes": 10737418240,
+          "total_bytes": 73635184640
+        },
+        {
+          "available_bytes": 32400838656,
+          "device": 64769,
+          "path": "/tmp/amazing-native-retained/net-legacy-csp-current-combined-20261006/legacy-csp-current-d29a2b32",
+          "required_bytes": 134217728,
+          "total_bytes": 73635184640
+        }
+      ],
+      "original_job": {
+        "box_id": "bx_trhtyg6f",
+        "command_sha256": "f2cd60ac39d56975cedfb101782217c421897be6ed8d204332477cdc5819115f",
+        "execution_sha256": "1ac57a81d3819a52bdbfe1bbf27033e00b33ff15d37e4e74acc674c574e8bd66",
+        "host": "user@178.33.122.193",
+        "job_id": "fd41f1b8acb54e2580c88ac8d9c700f3",
+        "lane": "net-legacy-csp-current-combined-20261006",
+        "output_root": "amazing/out/net-legacy-csp-current-combined-20261006/legacy-csp-current-d29a2b32/compact",
+        "port": 19037,
+        "schema": 2,
+        "source_archive_sha256": "746cdbf1fc373d318d2787b20cd3219fafd21253d3fb4e0aa9e4f45c1f4c97ff",
+        "source_commit": "d29a2b32a34300f8905fde962d5f06f693f97a61"
+      },
+      "original_payload_retained_on_original_host": true,
+      "path": "/tmp/amazing-native-retained/net-legacy-csp-current-combined-20261006/legacy-csp-current-d29a2b32/retained/manifests/legacy-csp-current-d29a2b32.json",
+      "profile": {
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+        "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+      },
+      "reference_sha256": "408e3c2ea493fd35e2be7f20861a195a4d3de08f6094dd077470ed6f7f488c71",
+      "sha256": "ca5bae7d070cdfaecbc3cc7a59dad577f31ba81f670e118fe7871f59b7eac3a9",
+      "source": "d29a2b32a34300f8905fde962d5f06f693f97a61"
+    },
+    "capacity": {
+      "admitted": true,
+      "filesystems": [
+        {
+          "available_bytes": 32400953344,
+          "device": 64769,
+          "path": "/tmp/amazing-native-storage",
+          "required_bytes": 10737418240,
+          "total_bytes": 73635184640
+        },
+        {
+          "available_bytes": 32400953344,
+          "device": 64769,
+          "path": "/tmp/amazing-native-retained/net-legacy-report-lifetime-sourcefix-clean1-20261006/legacy-report-sourcefix-after-7e778e27-clean1",
+          "required_bytes": 134217728,
+          "total_bytes": 73635184640
+        }
+      ],
+      "shared_device_requirements": [
+        {
+          "available_bytes": 32400953344,
+          "required_bytes": 13019119616
+        }
+      ]
+    },
+    "command_exit": 0,
+    "copied_unique_bytes": 0,
+    "free_after": [
+      {
+        "available_bytes": 21343662080,
+        "device": 64769,
+        "path": "/tmp/amazing-native-storage",
+        "total_bytes": 73635184640
+      },
+      {
+        "available_bytes": 21343662080,
+        "device": 64769,
+        "path": "/tmp/amazing-native-retained/net-legacy-report-lifetime-sourcefix-clean1-20261006/legacy-report-sourcefix-after-7e778e27-clean1",
+        "total_bytes": 73635184640
+      }
+    ],
+    "hardlink_capability": {
+      "failed_artifacts": 0,
+      "first_failures": [],
+      "probed_artifacts": 1133,
+      "raw": {
+        "bytes": 579057,
+        "path": "/tmp/amazing-native-storage/net-legacy-report-lifetime-sourcefix-clean1-20261006/7e778e2714845885dcb8514787fbdc522678ddf1/after/legacy-report-sourcefix-after-7e778e27-clean1/hardlink.probes.json",
+        "sha256": "38634576434f0224b3a905495f5204d64b661699d033ad441f1a834caffb3fbf"
+      },
+      "supported": true
+    },
+    "job": "legacy-report-sourcefix-after-7e778e27-clean1",
+    "phase": "after",
+    "profile": {
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_TEST_DEBUG": "line-tables-only"
+    },
+    "recoverable_bytes": 2980422896,
+    "recoverable_files": 7056,
+    "retained_elf_files": 1109,
+    "retained_files": 1133,
+    "retained_logical_bytes": 8827056322,
+    "retention_capacity_required_bytes": 4023296,
+    "retire_after_retention": false,
+    "schema": 1,
+    "selected_retention_method": "hardlink",
+    "session_raw": {
+      "bytes": 4843,
+      "path": "/tmp/amazing-native-storage/net-legacy-report-lifetime-sourcefix-clean1-20261006/7e778e2714845885dcb8514787fbdc522678ddf1/after/legacy-report-sourcefix-after-7e778e27-clean1/session.json",
+      "sha256": "f2980b2d0392773e21b2fe13d990a11e42bbdb073d3b2c81ff805be0ee62916a"
+    },
+    "source": "7e778e2714845885dcb8514787fbdc522678ddf1",
+    "state": "TERMINAL",
+    "storage_exit": 0,
+    "target_retired": false
+  },
+  "source_projection": [
+    {
+      "path": "crates/amazing-fetch/src/reporting/mod.rs",
+      "bytes": 37223,
+      "sha256": "d414a5fb18e5f37bd01a5e07b5ddce94cf823028bc66fdd5fc562d0557636cd4"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/native_report.rs",
+      "bytes": 8865,
+      "sha256": "6b0c6db75165de0a48cf28dec8750d1a0d7a156e7fd9f59c6d6b2511700fba43"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/retired_lifetime.rs",
+      "bytes": 3308,
+      "sha256": "8d500e82fde9761400572a4501e7abfbf534cd2ed4dcdeccdefb67d46925b7ec"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/retired_lifetime_tests.rs",
+      "bytes": 9890,
+      "sha256": "c213e339067fa4b3954b57ae535f36e69a05593822e4064535cfcd590ef5e81c"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/script_csp_tests.rs",
+      "bytes": 29494,
+      "sha256": "b42b9cd6f6469ae8102698f807030d01d872eed5de0635cf8cd2a6cdf31fbbfe"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/test_report.rs",
+      "bytes": 5366,
+      "sha256": "733947f0c3f5d21f3110c26b55d989c57871058734338ed8768fdbce73da06ec"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/tests.rs",
+      "bytes": 105493,
+      "sha256": "7dc6e21fb4212cf16ad6bd1a3ad3124ab402d3a20ba9d5e8f1a56d6aa35abc89"
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/wire_context_tests.rs",
+      "bytes": 32790,
+      "sha256": "8d12ab5c77de680c91531524b8e2012afc7eb0787631ece9fda7737e7f943337"
+    },
+    {
+      "path": "crates/amazing-process/src/network_v2.rs",
+      "bytes": 52604,
+      "sha256": "aa82e9a1ab62a166675a9e91b938d2a0d30d7caa50d8292538148a532a02f5f5"
+    },
+    {
+      "path": "crates/amazing-process/src/network_v2/receiving_endpoint.rs",
+      "bytes": 19031,
+      "sha256": "141239401e5cac335a94e38d47789bbda79e2488e6c918dfc205efffca542262"
+    },
+    {
+      "path": "crates/amazing-process/src/network_v2/receiving_registry.rs",
+      "bytes": 25615,
+      "sha256": "77fb8dd575637f93e714505686498e712435344c2b730b7498d68d0f78de58f1"
+    },
+    {
+      "path": "crates/amazing-process/src/network_v2/receiving_session.rs",
+      "bytes": 20396,
+      "sha256": "80cb9de62bb4d7272109c022bb2b832e25f22c99834ed48521d5387d512ae810"
+    },
+    {
+      "path": "crates/amazing-process/src/protocol_receiving.rs",
+      "bytes": 9792,
+      "sha256": "b126eef4e00f821f19834978ab2666d9b3a3bdb661b4095eba630cfaf5982060"
+    },
+    {
+      "path": "crates/amazing-process/tests/receiving_registration.rs",
+      "bytes": 58119,
+      "sha256": "534f8eda485a79f2471a85d9bce473f2d86a18d7a2d756b32f815c8567e6486c"
+    }
+  ],
+  "scope_limit": "Native service/registered-global consumer protocol only; no installed Window disposal/trusted SPVE/WorkerGlobal delivery claim. Genuine Runtime/HTML task owner and disposed identity invalidation required.",
+  "preserved_failures": [
+    {
+      "source": "0cbda045",
+      "actual_exit": 1,
+      "type": "observed eval-report-only CSP file/subtest loss retained; not relabelled passing"
+    },
+    {
+      "source": "6581b975",
+      "actual_exit": 1,
+      "type": "ONE E0433 test import; workspace/native comparisons UNMEASURED, not observed lost passes"
+    },
+    {
+      "controller": 29136,
+      "exit": 3,
+      "type": "Mac Bash3.2 pre-engine caller failure"
+    },
+    {
+      "controller": 32020,
+      "exit": 2,
+      "type": "preallocation storage metadata validation failure"
+    },
+    {
+      "controller": 67124,
+      "exit": 3,
+      "source_upload_exit": 255,
+      "type": "source transfer before verification/engine admission"
+    }
+  ],
+  "lossless_envelopes": [
+    {
+      "file": "qualification.lossless-envelope.json",
+      "bytes": 181265,
+      "sha256": "02be23472d8f3954b4393d2bca2def8daecc3a25e38c4c576af2dd13f55948db",
+      "decoded_sha256": "368169e9d3bd255ab96bf90309e6b4f57a8d5884b966285433cfa4e1a6c85f1a"
+    },
+    {
+      "file": "freeze-and-baselines.lossless-envelope.json",
+      "bytes": 78545,
+      "sha256": "035d64da2beab67dad34f4455b81304d36ba5c1ca9f5436b988353a58bfb2fb5",
+      "decoded_sha256": "75a17e7245b4371c1332bc32bca600d4d1b0a9dbea3639775ad6655f75a90cbc"
+    }
+  ]
+}

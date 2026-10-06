@@ -98,10 +98,12 @@ fn script_source_receipts_report_real_success_after_original_retirement_and_auth
     let mut request=script_request(&receiver,peer.url("/ok"));let mut loan=service.issue_script_csp_request_reporting(&mut graph,graph_id,&mut request).unwrap();
     let now=Instant::now();let id=service.start_subresource(request,receiver.context.clone(),Destination::Script);
     assert!(service.forget_reporting_document(handle));
+    assert_eq!(service.release_retired_reporting_document(handle),Ok(ReportingRelease::Pending));
     let outcome=script_outcome(&mut service,id).unwrap();let receipt=outcome.head.csp_provenance.as_ref().unwrap();
     assert!(!receipt.violations().is_empty());let count=plans(&mut service,&mut loan,receipt,now);assert!(count>0);deliver(&mut service,count,handle);
     service.release_script_csp_request_reporting(loan).unwrap();service.release_script_csp_graph_reporting(graph,graph_id).unwrap();drop(outcome);
     assert_eq!(service.reporting.prepared_bytes.load(Ordering::Acquire),0);
+    assert_eq!(service.release_retired_reporting_document(handle),Ok(ReportingRelease::Released));
     let requests=peer.close();assert_eq!(requests.iter().filter(|r|r.starts_with("POST /report ")).count(),count);
 }
 #[test]

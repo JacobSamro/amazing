@@ -141,7 +141,7 @@ fn actual_legacy_report_uri_preserves_original_opaque_origin_and_client_cookie_r
     let delivery=service.reporting.deliveries.values().next().unwrap();
     assert_eq!(delivery.request.origin,client.origin);assert!(matches!(&delivery.context,DeliveryContext::Legacy(_)));
     let mut expected_security=client.context.security;
-    expected_security.destination=crate::Destination::Other;
+    expected_security.destination=crate::Destination::Report;
     expected_security.top_level_navigation=false;
     assert_eq!(delivery.request.security,expected_security);
     assert_eq!(run(&mut service,1)[0].route,ReportRoute::LegacyCsp);

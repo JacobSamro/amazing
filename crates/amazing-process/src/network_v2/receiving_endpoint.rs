@@ -36,6 +36,12 @@ pub(super) enum ReceivingCommand {
         RegisteredReceivingGlobal,
         mpsc::Sender<Result<Vec<ReceivingReportEvent>, Error>>,
     ),
+    PrepareConsumer(RegisteredReceivingGlobal, mpsc::Sender<Result<RegisteredReceivingReportConsumer, Error>>),
+    ReportBatch(RegisteredReceivingReportConsumer, mpsc::Sender<Result<Option<ReceivingReportBatch>, Error>>),
+    AcknowledgeBatch(ReceivingReportBatchReceipt, mpsc::Sender<Result<bool, Error>>),
+    CloseConsumer(RegisteredReceivingReportConsumer, mpsc::Sender<Result<bool, Error>>),
+    ReleaseGlobal(RegisteredReceivingReportConsumer, mpsc::Sender<Result<ReceivingGlobalRelease, Error>>),
+
 }
 impl State {
     fn receiving_authorized(&self, client: u64, session: u128) -> Result<(), Error> {
@@ -309,6 +315,34 @@ impl State {
             ReceivingCommand::ReleaseNavigation(v, out) => {
                 let _ = out.send(self.receiving_release_navigation(v));
             }
+            ReceivingCommand::PrepareConsumer(v, out) => {
+                let result = self.receiving_authorized(v.client_id, v.session)
+                    .and_then(|()| self.receiving.prepare_report_consumer(&mut self.service, v));
+                let _ = out.send(result);
+            }
+            ReceivingCommand::ReportBatch(v, out) => {
+                let result = self.receiving_authorized(v.global.client_id, v.global.session)
+                    .and_then(|()| { self.collect(); self.receiving.poll_report_batch(v) });
+                let _ = out.send(result);
+            }
+            ReceivingCommand::AcknowledgeBatch(v, out) => {
+                let result = self.receiving_authorized(v.consumer.global.client_id, v.consumer.global.session)
+                    .and_then(|()| self.receiving.acknowledge_report_batch(v));
+                let _ = out.send(result);
+            }
+            ReceivingCommand::CloseConsumer(v, out) => {
+                let result = self.receiving_authorized(v.global.client_id, v.global.session)
+                    .and_then(|()| { self.collect(); self.receiving.close_report_consumer(&mut self.service, v) });
+                let _ = out.send(result);
+            }
+            ReceivingCommand::ReleaseGlobal(v, out) => {
+                let result = self.receiving_authorized(v.global.client_id, v.global.session)
+                    .and_then(|()| {
+                        self.collect();
+                        self.receiving.release_retired_global(&mut self.service, v)
+                    });
+                let _ = out.send(result);
+            }
             ReceivingCommand::Reports(v, out) => {
                 let result = self
                     .receiving_authorized(v.client_id, v.session)
@@ -376,6 +410,25 @@ impl ReceivingGlobals for NetworkEndpointV2 {
     ) -> Result<Vec<ReceivingReportEvent>, Error> {
         self.ask(|out| Command::Receiving(ReceivingCommand::Reports(v, out)))?
     }
+    fn prepare_report_consumer(&self, v: RegisteredReceivingGlobal)
+        -> Result<RegisteredReceivingReportConsumer, Error> {
+        self.ask(|out| Command::Receiving(ReceivingCommand::PrepareConsumer(v, out)))?
+    }
+    fn poll_report_batch(&self, v: RegisteredReceivingReportConsumer)
+        -> Result<Option<ReceivingReportBatch>, Error> {
+        self.ask(|out| Command::Receiving(ReceivingCommand::ReportBatch(v, out)))?
+    }
+    fn acknowledge_report_batch(&self, v: ReceivingReportBatchReceipt) -> Result<bool, Error> {
+        self.ask(|out| Command::Receiving(ReceivingCommand::AcknowledgeBatch(v, out)))?
+    }
+    fn close_report_consumer(&self, v: RegisteredReceivingReportConsumer) -> Result<bool, Error> {
+        self.ask(|out| Command::Receiving(ReceivingCommand::CloseConsumer(v, out)))?
+    }
+    fn release_retired_global(&self, v: RegisteredReceivingReportConsumer)
+        -> Result<ReceivingGlobalRelease, Error> {
+        self.ask(|out| Command::Receiving(ReceivingCommand::ReleaseGlobal(v, out)))?
+    }
+
 }
 /// Only the accepted browser bootstrap can install the receiving interface.
 /// Legacy network serving remains interface10-only when these captures are absent.

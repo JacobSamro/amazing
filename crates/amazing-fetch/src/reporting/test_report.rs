@@ -30,6 +30,7 @@ impl NetworkService {
             return Err(ReportError::InvalidEndpoint);
         }
         self.reporting.insert(Document {
+            lifetime: std::sync::Arc::new(()),
             creation_url: client.creation_url.clone(),
             origin: client.origin.clone(),
             context: client.context.clone(),
@@ -48,6 +49,7 @@ impl NetworkService {
         client: &ReceivingDocumentClient<Identity>,
     ) -> Result<ReportingDocument, ReportError> {
         self.reporting.insert(Document {
+            lifetime: std::sync::Arc::new(()),
             creation_url: client.creation_url.clone(),
             origin: client.origin.clone(),
             context: client.context.clone(),

@@ -1120,3 +1120,204 @@ fn report_completion_preserves_native_wire_observations_after_original_retiremen
         }
     }
 }
+
+// This is an authenticated native RPC consumer fixture. It processes actual
+// server snapshots/outcomes; it does not claim installed Window/SPVE callbacks.
+struct NativeReportTaskOwner<'a> {
+    session: &'a NetworkSession,
+    source: &'a ReceivingGlobalHandle,
+    observed: Vec<ReceivingReportEvent>,
+    fail_once: bool,
+    retired: bool,
+}
+impl ReceivingReportTaskOwner for NativeReportTaskOwner<'_> {
+    fn consume_original_report_batch(&mut self, original: &NativeReceivingIdentity,
+        _batch_id: u64, events: &[ReceivingReportEvent]) -> Result<(), amazing_ipc::Error>
+    {
+        assert_eq!(original, self.source.identity());
+        if self.fail_once {
+            self.fail_once = false;
+            return Err(amazing_ipc::Error::Remote("native fixture infrastructure failure before processing".into()));
+        }
+        for event in events {
+            if let ReceivingReportEvent::Csp(report) = event {
+                assert!(report.prepared_report.is_some());
+                assert_eq!(String::from_utf16(&report.report_type).unwrap(), "csp-violation");
+                let delivery = self.session.finish_receiving_csp_report(self.source, report.prepared_report.unwrap())?;
+                assert!(delivery.error.is_none());
+                assert!(!delivery.ids.is_empty());
+            }
+            self.observed.push(event.clone());
+        }
+        Ok(())
+    }
+    fn retire_original_report_tasks(&mut self, original: &NativeReceivingIdentity)
+        -> Result<(), amazing_ipc::Error>
+    {
+        assert_eq!(original, self.source.identity());
+        if !self.retired {
+            return Err(amazing_ipc::Error::Remote("original native fixture task scope not retired/drained".into()));
+        }
+        Ok(())
+    }
+}
+fn empty_container() -> EmbedderPolicyContainer {
+    EmbedderPolicyContainer { value: EmbedderPolicy::UnsafeNone, reporting_endpoint: None,
+        report_only_value: EmbedderPolicy::UnsafeNone, report_only_reporting_endpoint: None }
+}
+#[test]
+fn original_empty_scope_release_recycles_both_global_and_realm_slots_without_raising_64() {
+    let session = session(3100);
+    let mut original: Option<ReceivingGlobalHandle> = None;
+    for index in 0..80 {
+        let origin = Origin::opaque();
+        let receiver = client(4100 + index, "about:blank", origin, Vec::new(), EmbedderPolicy::UnsafeNone);
+        let global = session.register_receiving_global(&receiver, &empty_container(), true, None).unwrap();
+        let mut consumer = session.prepare_receiving_report_consumer(&global).unwrap();
+        assert!(session.prepare_receiving_report_consumer(&global).is_err());
+        assert!(session.poll_receiving_reports(&global).is_err());
+        assert!(session.release_retired_receiving_global(&mut consumer).is_err());
+        let mut owner = NativeReportTaskOwner { session: &session, source: &global,
+            observed: Vec::new(), fail_once: false, retired: false };
+        assert!(session.close_receiving_report_consumer_with_owner(&mut consumer, &mut owner).is_err());
+        assert!(session.retire_receiving_global(&global).unwrap());
+        owner.retired = true;
+        assert!(session.poll_receiving_report_batch(&mut consumer).unwrap().is_none());
+        assert!(session.close_receiving_report_consumer_with_owner(&mut consumer, &mut owner).unwrap());
+        assert_eq!(session.release_retired_receiving_global(&mut consumer).unwrap(), ReceivingGlobalRelease::Released(()));
+        assert!(session.poll_receiving_report_batch(&mut consumer).is_err());
+        assert!(session.poll_receiving_reports(&global).is_err());
+        assert!(session.retire_receiving_global(&global).is_err());
+        if let Some(old) = &original { assert_ne!(old.identity(), global.identity()); }
+        original = Some(global);
+    }
+}
+
+#[test]
+fn live_original_scopes_still_obey_64_global_and_realm_admission_limit() {
+    let session = session(3101);
+    let mut globals = Vec::new();
+    for index in 0..64 {
+        let receiver = client(4300 + index, "about:blank", Origin::opaque(), Vec::new(), EmbedderPolicy::UnsafeNone);
+        globals.push(session.register_receiving_global(&receiver, &empty_container(), true, None).unwrap());
+    }
+    let extra = client(4400, "about:blank", Origin::opaque(), Vec::new(), EmbedderPolicy::UnsafeNone);
+    assert!(session.register_receiving_global(&extra, &empty_container(), true, None).is_err());
+    // Retirement alone does not evict a queued/possibly unconsumed owner.
+    assert!(session.retire_receiving_global(&globals[0]).unwrap());
+    assert!(session.register_receiving_global(&extra, &empty_container(), true, None).is_err());
+    assert!(session.prepare_receiving_report_consumer(&globals[0]).is_err());
+}
+
+#[test]
+fn foreign_scope_consumer_cannot_poll_ack_close_or_release_original_service() {
+    let session = session(3102);
+    let foreign = self::session(3103);
+    let receiver = client(4500, "about:blank", Origin::opaque(), Vec::new(), EmbedderPolicy::UnsafeNone);
+    let global = session.register_receiving_global(&receiver, &empty_container(), true, None).unwrap();
+    let mut consumer = session.prepare_receiving_report_consumer(&global).unwrap();
+    assert!(foreign.poll_receiving_report_batch(&mut consumer).is_err());
+    let mut owner = NativeReportTaskOwner { session: &session, source: &global,
+        observed: Vec::new(), fail_once: false, retired: true };
+    assert!(foreign.close_receiving_report_consumer_with_owner(&mut consumer, &mut owner).is_err());
+    assert!(foreign.release_retired_receiving_global(&mut consumer).is_err());
+    assert!(session.retire_receiving_global(&global).unwrap());
+    assert!(session.close_receiving_report_consumer_with_owner(&mut consumer, &mut owner).unwrap());
+    assert_eq!(session.release_retired_receiving_global(&mut consumer).unwrap(), ReceivingGlobalRelease::Released(()));
+}
+
+#[test]
+fn real_original_csp_batches_survive_processing_error_and_keep_terminal_outcomes_until_ack() {
+    for modern in [false, true] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let policy = if modern { "frame-src 'none'; report-to reports" } else { "frame-src 'none'; report-uri /collector" };
+        let fields = format!("Content-Security-Policy: {policy}\r\nReporting-Endpoints: reports=\"/collector\"\r\n");
+        let head = response(&fields);
+        let peer = std::thread::spawn(move || {
+            let mut received = Vec::new();
+            for bytes in [head, b"HTTP/1.1 410 Gone\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec()] {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+                let mut headers = Vec::new();
+                while !headers.ends_with(b"\r\n\r\n") {
+                    assert!(headers.len() < 64*1024); let mut b = [0]; stream.read_exact(&mut b).unwrap(); headers.push(b[0]);
+                }
+                let headers = String::from_utf8(headers).unwrap();
+                let length = headers.lines().find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length").then(|| value.trim().parse::<usize>().unwrap())
+                }).unwrap_or(0);
+                let mut body = vec![0; length]; stream.read_exact(&mut body).unwrap();
+                received.push((headers, body)); stream.write_all(&bytes).unwrap();
+            }
+            received
+        });
+        let session = session(3200 + u64::from(modern));
+        let url = format!("{base}/original");
+        let origin = HttpUrl::parse(&base).unwrap().origin().clone();
+        let admitted = session.capture_receiving_navigation(navigation(&url, &origin)).unwrap();
+        assert!(complete(&session, &admitted).1.is_none());
+        let mut receiver = client(4600 + u64::from(modern), &url, origin.clone(), Vec::new(), EmbedderPolicy::UnsafeNone);
+        let mut fields = amazing_fetch::HeaderList::default(); fields.append("content-security-policy", policy).unwrap();
+        receiver.context.csp = CspPolicyList::from_headers(&fields).unwrap();
+        let global = session.register_receiving_global(&receiver, &empty_container(), true, Some(&admitted)).unwrap();
+        let mut consumer = session.prepare_receiving_report_consumer(&global).unwrap();
+        let target = HttpUrl::parse(&format!("{base}/blocked")).unwrap();
+        let blocked = session.start_receiving_navigation_outcome(&global,
+            csp_owner(&session, &global, &origin, 3200), &target, 1024).unwrap();
+        assert!(matches!(blocked, ReceivingNavigationOutcome::Failed(_)));
+        assert!(session.retire_receiving_global(&global).unwrap());
+        let mut owner = NativeReportTaskOwner { session: &session, source: &global,
+            observed: Vec::new(), fail_once: true, retired: true };
+        let mut batch = session.poll_receiving_report_batch(&mut consumer).unwrap().unwrap();
+        assert_eq!(batch.events().len(), 1);
+        assert!(session.poll_receiving_report_batch(&mut consumer).is_err());
+        assert!(session.consume_receiving_report_batch(&mut consumer, &mut batch, &mut owner).is_err());
+        assert!(owner.observed.is_empty());
+        assert!(session.close_receiving_report_consumer_with_owner(&mut consumer, &mut owner).is_err());
+        assert!(session.consume_receiving_report_batch(&mut consumer, &mut batch, &mut owner).unwrap());
+        assert!(!session.consume_receiving_report_batch(&mut consumer, &mut batch, &mut owner).unwrap());
+        assert_eq!(owner.observed.len(), 1);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut terminal = loop {
+            assert!(Instant::now() < deadline);
+            if let Some(batch) = session.poll_receiving_report_batch(&mut consumer).unwrap() { break batch; }
+            std::thread::yield_now();
+        };
+        assert_eq!(terminal.events().len(), 1);
+        let completion = match &terminal.events()[0] { ReceivingReportEvent::Completion(value) => value, _ => panic!("missing actual terminal outcome") };
+        assert_eq!(completion.status, Some(410));
+        assert_eq!(completion.accepted, !modern);
+        assert_eq!(completion.wire.report_url, url);
+        assert_eq!(completion.wire.registered_endpoint, format!("{base}/collector"));
+        assert!(session.close_receiving_report_consumer_with_owner(&mut consumer, &mut owner).is_err());
+        assert!(session.consume_receiving_report_batch(&mut consumer, &mut terminal, &mut owner).unwrap());
+        assert_eq!(owner.observed.len(), 2);
+        assert!(session.close_receiving_report_consumer_with_owner(&mut consumer, &mut owner).unwrap());
+        assert_eq!(session.release_retired_receiving_global(&mut consumer).unwrap(), ReceivingGlobalRelease::Released(()));
+        assert!(session.poll_receiving_reports(&global).is_err());
+        assert!(session.release_receiving_navigation(&admitted).unwrap());
+        let requests = peer.join().unwrap(); assert_eq!(requests.len(), 2);
+        assert!(requests[1].0.starts_with("POST /collector "));
+        assert!(!requests[1].1.is_empty());
+    }
+}
+
+#[test]
+fn unused_genuine_embedding_plan_blocks_global_release_until_explicit_owner_cleanup() {
+    let session = session(3300);
+    let origin = Origin::opaque();
+    let receiver = client(4700,"about:blank",origin.clone(),Vec::new(),EmbedderPolicy::UnsafeNone);
+    let global = session.register_receiving_global(&receiver,&empty_container(),true,None).unwrap();
+    let mut consumer = session.prepare_receiving_report_consumer(&global).unwrap();
+    let mut navigable = parent(&origin); navigable.referrer="about:blank".into();
+    let plan = session.prepare_receiving_owner(&global,ReceivingFrameIdentity{frame:3300,generation:1},
+        &navigable,NavigationEmbeddingElement::Iframe).unwrap();
+    assert!(session.retire_receiving_global(&global).unwrap());
+    let mut owner = NativeReportTaskOwner {session:&session,source:&global,observed:Vec::new(),fail_once:false,retired:true};
+    assert!(session.close_receiving_report_consumer_with_owner(&mut consumer,&mut owner).unwrap());
+    assert_eq!(session.release_retired_receiving_global(&mut consumer).unwrap(),ReceivingGlobalRelease::Pending(()));
+    assert!(session.release_receiving_owner(plan).unwrap());
+    assert_eq!(session.release_retired_receiving_global(&mut consumer).unwrap(),ReceivingGlobalRelease::Released(()));
+}

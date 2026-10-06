@@ -22,6 +22,18 @@ pub(super) struct RetainedNavigation {
     pub source: Option<RegisteredReceivingGlobal>,
     pub continuation_used: bool,
 }
+struct RetainedReportBatch {
+    receipt: ReceivingReportBatchReceipt,
+    events: Vec<ReceivingReportEvent>,
+    bytes: usize,
+}
+struct ReportConsumer {
+    native: Option<amazing_fetch::reporting::ReportingTaskConsumer>,
+    receipt: RegisteredReceivingReportConsumer,
+    closed: bool,
+    batch: Option<RetainedReportBatch>,
+    last_ack: Option<u64>,
+}
 struct RegisteredGlobal {
     receipt: RegisteredReceivingGlobal,
     client: ReceivingDocumentClient<ReceivingGlobalIdentity>,
@@ -32,6 +44,7 @@ struct RegisteredGlobal {
     reports: VecDeque<ReceivingReportEvent>,
     report_overflow: bool,
     report_bytes: usize,
+    consumer: Option<ReportConsumer>,
 }
 struct OwnerPlan {
     receipt: PreparedReceivingOwner,
@@ -179,6 +192,7 @@ impl ReceivingRegistry {
                 reports: VecDeque::new(),
                 report_overflow: false,
                 report_bytes: 0,
+                consumer: None,
             },
         );
         Ok(receipt)
@@ -397,10 +411,14 @@ impl ReceivingRegistry {
                         + 256
                 }
             };
-            if saved.reports.len() >= 256
+            let batch = saved.consumer.as_ref().and_then(|consumer| consumer.batch.as_ref());
+            let held_count = batch.map_or(0, |batch| batch.events.len());
+            let held_bytes = batch.map_or(0, |batch| batch.bytes);
+            if saved.reports.len() + held_count >= 256
                 || saved
                     .report_bytes
-                    .checked_add(bytes)
+                    .checked_add(held_bytes)
+                    .and_then(|total| total.checked_add(bytes))
                     .is_none_or(|n| n > 512 * 1024)
             {
                 saved.report_overflow = true;
@@ -421,6 +439,9 @@ impl ReceivingRegistry {
         if saved.receipt != receipt {
             return Err(invalid("receiving report ownership"));
         }
+        if saved.consumer.is_some() {
+            return Err(invalid("receiving scoped report consumer required"));
+        }
         if saved.report_overflow {
             return Err(invalid("receiving report queue quota"));
         }
@@ -428,6 +449,100 @@ impl ReceivingRegistry {
         // remain consumable; this never admits a new owner/global capability.
         saved.report_bytes = 0;
         Ok(saved.reports.drain(..).collect())
+    }
+    /// Capture exactly one task-consumer lease while the real global is live.
+    pub fn prepare_report_consumer(&mut self, service: &mut NetworkService, global: RegisteredReceivingGlobal)
+        -> Result<RegisteredReceivingReportConsumer, Error>
+    {
+        if self.global(&global)?.consumer.is_some() {
+            return Err(invalid("receiving report consumer already captured"));
+        }
+        let document = self.global(&global)?.reporting;
+        let native = service.prepare_reporting_task_consumer(document)
+            .map_err(|error| invalid(&format!("native original task consumer: {error:?}")))?;
+        let receipt = RegisteredReceivingReportConsumer { id: self.next_id()?, global };
+        self.globals.get_mut(&receipt.global.id).unwrap().consumer = Some(ReportConsumer {
+            native: Some(native), receipt: receipt.clone(), closed: false, batch: None, last_ack: None,
+        });
+        Ok(receipt)
+    }
+    fn consumer_global(&mut self, receipt: &RegisteredReceivingReportConsumer)
+        -> Result<&mut RegisteredGlobal, Error>
+    {
+        let saved = self.globals.get_mut(&receipt.global.id)
+            .ok_or_else(|| invalid("unknown receiving report consumer global"))?;
+        if saved.receipt != receipt.global
+            || saved.consumer.as_ref().is_none_or(|consumer| consumer.receipt != *receipt)
+        { return Err(invalid("receiving report consumer ownership")); }
+        Ok(saved)
+    }
+    pub fn poll_report_batch(&mut self, receipt: RegisteredReceivingReportConsumer)
+        -> Result<Option<ReceivingReportBatch>, Error>
+    {
+        {
+            let saved = self.consumer_global(&receipt)?;
+            if saved.report_overflow { return Err(invalid("receiving report queue quota")); }
+            if let Some(batch) = &saved.consumer.as_ref().unwrap().batch {
+                return Ok(Some(ReceivingReportBatch { receipt: batch.receipt.clone(), events: batch.events.clone() }));
+            }
+            if saved.reports.is_empty() { return Ok(None); }
+        }
+        let id = self.next_id()?;
+        let saved = self.consumer_global(&receipt)?;
+        let events = saved.reports.drain(..).collect::<Vec<_>>();
+        let bytes = std::mem::replace(&mut saved.report_bytes, 0);
+        let receipt = ReceivingReportBatchReceipt { consumer: receipt, batch: id };
+        saved.consumer.as_mut().unwrap().batch = Some(RetainedReportBatch {
+            receipt: receipt.clone(), events: events.clone(), bytes,
+        });
+        Ok(Some(ReceivingReportBatch { receipt, events }))
+    }
+    pub fn acknowledge_report_batch(&mut self, receipt: ReceivingReportBatchReceipt)
+        -> Result<bool, Error>
+    {
+        let consumer = self.consumer_global(&receipt.consumer)?.consumer.as_mut().unwrap();
+        // A lost ACK response can retry the exact batch without redispatching
+        // its already processed author/terminal tasks or returning new credit.
+        if consumer.last_ack == Some(receipt.batch) { return Ok(false); }
+        if consumer.batch.as_ref().is_none_or(|batch| batch.receipt != receipt) {
+            return Err(invalid("stale or foreign receiving report batch"));
+        }
+        consumer.batch = None;
+        consumer.last_ack = Some(receipt.batch);
+        Ok(true)
+    }
+    pub fn close_report_consumer(&mut self, service: &mut NetworkService, receipt: RegisteredReceivingReportConsumer)
+        -> Result<bool, Error>
+    {
+        let saved = self.consumer_global(&receipt)?;
+        if !saved.retired { return Err(invalid("receiving consumer task scope still live")); }
+        if saved.report_overflow || !saved.reports.is_empty()
+            || saved.consumer.as_ref().unwrap().batch.is_some()
+        { return Err(invalid("receiving original report tasks not drained")); }
+        let consumer = saved.consumer.as_mut().unwrap();
+        if consumer.closed { return Ok(false); }
+        service.close_reporting_task_consumer(&mut consumer.native)
+            .map_err(|error| invalid(&format!("native task consumer closure: {error:?}")))?;
+        consumer.closed = true;
+        Ok(true)
+    }
+    pub fn release_retired_global(&mut self, service: &mut NetworkService,
+        receipt: RegisteredReceivingReportConsumer) -> Result<ReceivingGlobalRelease, Error>
+    {
+        let saved = self.consumer_global(&receipt)?;
+        if !saved.retired || !saved.consumer.as_ref().unwrap().closed {
+            return Err(invalid("receiving original task consumer not retired and closed"));
+        }
+        if saved.report_overflow || !saved.reports.is_empty()
+            || saved.consumer.as_ref().unwrap().batch.is_some()
+        { return Ok(ReceivingGlobalRelease::Pending(())); }
+        let released = service.release_retired_reporting_document(saved.reporting)
+            .map_err(|error| invalid(&format!("native receiving release: {error:?}")))?;
+        if released != amazing_fetch::reporting::ReportingRelease::Released {
+            return Ok(ReceivingGlobalRelease::Pending(()));
+        }
+        self.globals.remove(&receipt.global.id);
+        Ok(ReceivingGlobalRelease::Released(()))
     }
     pub fn release(&mut self, receipt: PreparedReceivingOwner) -> Result<bool, Error> {
         let Some(plan) = self.plans.get(&receipt.id) else {

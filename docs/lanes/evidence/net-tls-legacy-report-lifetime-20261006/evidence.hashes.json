@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "files": {
+    "freeze-and-baselines.lossless-envelope.json": {
+      "bytes": 78545,
+      "sha256": "035d64da2beab67dad34f4455b81304d36ba5c1ca9f5436b988353a58bfb2fb5"
+    },
+    "history.lossless-envelope.json": {
+      "bytes": 215010,
+      "sha256": "859c30227438f87009a32ba33af1609ae0b72544628d5a4a0a92c845a12536e5"
+    },
+    "qualification.lossless-envelope.json": {
+      "bytes": 181265,
+      "sha256": "02be23472d8f3954b4393d2bca2def8daecc3a25e38c4c576af2dd13f55948db"
+    },
+    "summary.compact.json": {
+      "bytes": 17211,
+      "sha256": "4f18d3dd6423ab60a74ff44b63a3f402808b6956606489866342fdba98a6b357"
+    }
+  }
+}

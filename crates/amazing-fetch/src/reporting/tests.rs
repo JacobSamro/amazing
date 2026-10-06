@@ -2091,3 +2091,6 @@ fn cross_origin_410_requires_real_cors_acceptance_before_endpoint_removal() {
 
 #[path = "wire_context_tests.rs"]
 mod wire_context_tests;
+
+#[path = "retired_lifetime_tests.rs"]
+mod retired_lifetime_tests;

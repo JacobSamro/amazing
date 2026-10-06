@@ -184,6 +184,7 @@ impl NetworkService {
         request.redirect = RedirectMode::Follow;
         let id = ReportId(self.reporting.allocate());
         let mut delivery = Delivery {
+            lifetime: saved.lifetime.clone(),
             id,
             document,
             route: ReportRoute::ReportingApi,

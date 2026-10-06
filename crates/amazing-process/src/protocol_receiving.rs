@@ -86,6 +86,11 @@ interface! {pub interface ReceivingGlobals(16) => ReceivingGlobalsProxy, Receivi
     fn start_navigation_outcome(request:StartReceivingNavigation) -> ReceivingNavigationOutcome = 10;
     fn continue_navigation_outcome(request:ContinueReceivingNavigation) -> ReceivingNavigationOutcome = 11;
     fn finish_csp_report(request:FinishReceivingCspReport) -> ReceivingCspDelivery = 12;
+    fn prepare_report_consumer(request:RegisteredReceivingGlobal) -> RegisteredReceivingReportConsumer = 13;
+    fn poll_report_batch(request:RegisteredReceivingReportConsumer) -> Option<ReceivingReportBatch> = 14;
+    fn acknowledge_report_batch(request:ReceivingReportBatchReceipt) -> bool = 15;
+    fn close_report_consumer(request:RegisteredReceivingReportConsumer) -> bool = 16;
+    fn release_retired_global(request:RegisteredReceivingReportConsumer) -> ReceivingGlobalRelease = 17;
 }}
 wire_struct! {#[derive(Debug,Clone,PartialEq,Eq)] pub struct ReceivingReportField {name:Vec<u16>,value:Vec<u16>}}
 wire_struct! {#[derive(Debug,Clone,PartialEq,Eq)] pub struct ReceivingObserverReport {
@@ -144,4 +149,19 @@ wire_struct! {#[derive(Debug,Clone,PartialEq,Eq)] pub struct FinishReceivingCspR
 }}
 wire_struct! {#[derive(Debug,Clone,PartialEq,Eq)] pub struct ReceivingCspDelivery {
     ids:Vec<u64>, error:Option<String>
+}}
+
+/// Server-issued original-scope consumer; not a new receiving/settings capability.
+wire_struct! {#[derive(Debug,Clone,PartialEq,Eq)] pub struct RegisteredReceivingReportConsumer {
+    id:u64, global:RegisteredReceivingGlobal
+}}
+wire_struct! {#[derive(Debug,Clone,PartialEq,Eq)] pub struct ReceivingReportBatchReceipt {
+    consumer:RegisteredReceivingReportConsumer, batch:u64
+}}
+/// The server retains and charges these outcomes until exact consumer ACK.
+wire_struct! {#[derive(Debug,Clone,PartialEq,Eq)] pub struct ReceivingReportBatch {
+    receipt:ReceivingReportBatchReceipt, events:Vec<ReceivingReportEvent>
+}}
+wire_enum! {#[derive(Debug,Clone,PartialEq,Eq)] pub enum ReceivingGlobalRelease {
+    Pending(())=1, Released(())=2
 }}

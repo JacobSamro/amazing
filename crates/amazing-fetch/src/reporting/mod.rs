@@ -2,6 +2,8 @@
 //! The embedding supplies accepted response headers and binds each capability
 //! to its actual Document lifetime. A URL is never a document identity.
 mod endpoint_lifetime;
+mod retired_lifetime;
+pub use retired_lifetime::{ReportingRelease,ReportingTaskConsumer};
 mod wire_context;
 use wire_context::{DeliveryContext, modern_request};
 use endpoint_lifetime::EndpointLifetime;
@@ -83,6 +85,8 @@ pub struct ReportFinished {
     pub route: ReportRoute,
     pub outcome: ReportOutcome,
     wire: ReportWireProvenance,
+    // Genuine native completion custody survives until its consumer drops it.
+    _lifetime: std::sync::Arc<()>,
 }
 impl ReportFinished {
     /// Native completion custody; no public constructor or authority adoption.
@@ -118,6 +122,7 @@ impl ReportWireProvenance {
 }
 #[derive(Clone)]
 struct Document {
+    lifetime: std::sync::Arc<()>,
     creation_url: ParsedUrl,
     origin: Origin,
     context: ClientContext,
@@ -127,6 +132,7 @@ struct Document {
     referrer_policy: crate::ReferrerPolicy,
 }
 struct Delivery {
+    lifetime: std::sync::Arc<()>,
     id: ReportId,
     document: ReportingDocument,
     route: ReportRoute,
@@ -150,6 +156,7 @@ pub(crate) struct ReportingState {
     next: u64,
     next_graph: u64,
     documents: BTreeMap<u64, Document>,
+    lifetimes: BTreeMap<u64, std::sync::Weak<()>>,
     deliveries: BTreeMap<RequestId, Delivery>,
     retained_bytes: usize,
     prepared_bytes: std::sync::Arc<std::sync::atomic::AtomicUsize>,
@@ -161,6 +168,7 @@ impl Default for ReportingState {
             next: 1,
             next_graph: 1,
             documents: BTreeMap::new(),
+            lifetimes: BTreeMap::new(),
             deliveries: BTreeMap::new(),
             retained_bytes: 0,
             prepared_bytes: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
@@ -183,7 +191,11 @@ impl ReportingState {
             .ok_or(ReportError::StaleDocument)
     }
     fn insert(&mut self, mut document: Document) -> Result<ReportingDocument, ReportError> {
-        if self.documents.len() >= MAX_DOCUMENTS {
+        // Completed weak bookkeeping can retire; a live settings/delivery/task
+        // or completion lease is never evicted to admit another global.
+        let live = &self.documents;
+        self.lifetimes.retain(|id, lifetime| live.contains_key(id) || lifetime.strong_count() != 0);
+        if self.documents.len() >= MAX_DOCUMENTS || self.lifetimes.len() >= MAX_DOCUMENTS {
             return Err(ReportError::Limit);
         }
         // A new native global always gets new endpoint objects, including fresh
@@ -191,6 +203,7 @@ impl ReportingState {
         document.endpoint_lifetimes = std::sync::Arc::new(document.endpoints.iter()
             .map(|(name, url)| (name.clone(), std::sync::Arc::new(EndpointLifetime::new(url.clone())))).collect());
         let id = self.allocate();
+        self.lifetimes.insert(id, std::sync::Arc::downgrade(&document.lifetime));
         self.documents.insert(id, document);
         Ok(ReportingDocument {
             service: self.service,
@@ -260,6 +273,7 @@ impl NetworkService {
             return Err(ReportError::InvalidEndpoint);
         }
         self.reporting.insert(Document {
+            lifetime: std::sync::Arc::new(()),
             creation_url: final_url.as_parsed().clone(),
             origin: final_url.origin().clone(),
             endpoints: endpoints(&final_url, headers),
@@ -425,11 +439,12 @@ impl NetworkService {
                     .filter(|url| matches!(url.as_parsed().scheme(), "http" | "https"));
                 request.referrer_policy = saved.referrer_policy;
                 request.security = saved.context.security;
-                request.security.destination = crate::Destination::Other;
+                request.security.destination = crate::Destination::Report;
                 request.security.top_level_navigation = false;
             }
             let id = ReportId(self.reporting.allocate());
             let mut delivery = Delivery {
+                lifetime: saved.lifetime.clone(),
                 id,
                 document,
                 route: if modern {
@@ -686,6 +701,7 @@ impl NetworkService {
             let (terminal_url, terminal_is_preflight, terminal_includes_credentials) =
                 delivery.last_transport.expect("native completed report has admitted transport");
             output.push(ServiceEvent::ReportFinished(ReportFinished {
+                _lifetime: delivery.lifetime,
                 id: delivery.id,
                 document: delivery.document,
                 route: delivery.route,
@@ -779,6 +795,7 @@ impl NetworkService {
         match self.submit_reporting(delivery, now) {
             Ok(wire) => {
                 let next = Delivery {
+                    lifetime: delivery.lifetime.clone(),
                     id: delivery.id,
                     document: delivery.document,
                     route: delivery.route,

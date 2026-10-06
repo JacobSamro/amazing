@@ -4,7 +4,7 @@ mod receiving_registry;
 mod receiving_endpoint;
 mod receiving_session;
 mod receiving_csp;
-pub use receiving_session::{NativeReceivingIdentity,ReceivingGlobalHandle,ReceivingOwnerHandle};
+pub use receiving_session::{NativeReceivingIdentity,ReceivingGlobalHandle,ReceivingOwnerHandle,ReceivingReportConsumerHandle,ReceivingReportBatchHandle,ReceivingReportTaskOwner};
 pub use receiving_endpoint::serve_with_receiving_client;
 use crate::protocol::*;
 use amazing_fetch::api::{
@@ -904,7 +904,7 @@ pub struct NetworkSession {
     client_id: u64,
     epoch: u64,
     receiving_session:u128,
-    receiving_realms:std::sync::Mutex<std::collections::HashMap<amazing_js::interp::RealmHandle,u64>>,
+    receiving_realms:std::sync::Mutex<receiving_session::ReceivingRealmAssociations>,
     timeout: Duration,
 }
 pub struct NetworkResponse {
