@@ -160,3 +160,28 @@ fn data_font_obeys_caller_bound() {
     let mut result = fetch("data:font/woff;base64,Zm9udA==", &sheet, &sheet, 4).unwrap();
     assert_eq!(result.body.bytes().unwrap(), b"font");
 }
+
+
+#[test]
+fn pending_native_service_fonts_preserve_cors_body_limits_and_cancel_delivery() {
+    let sheet=HttpUrl::parse("http://127.0.0.1:39821/style.css").unwrap();
+    for (headers,max,allowed) in [("Access-Control-Allow-Origin: *\r\n",4,true),("",4,false),("Access-Control-Allow-Origin: *\r\n",3,false)] {
+        let (target,peer)=server(response(headers,"font"));
+        let font=FontRequest::new(&target.resolve("font.woff2").unwrap().serialize(),&sheet,sheet.origin().clone(),max).unwrap();
+        let mut service=NetworkService::new_pending_io(DispatchLimits::default()).unwrap();
+        assert!(service.pending_io_snapshot().is_some());
+        let id=service.start_font(font,ClientContext::default()).unwrap();
+        let result=finish(&mut service,id);
+        if allowed {let mut result=result.unwrap();assert_eq!(result.body.bytes().unwrap(),b"font");}
+        else if headers.is_empty() {assert!(matches!(result,Err(ApiError::Network(FetchError::Cors))));}
+        else {assert!(matches!(result,Err(ApiError::Network(FetchError::ResponseTooLarge))));}
+        let request=peer.join().unwrap();assert!(request.starts_with("GET /font.woff2 "));assert!(request.to_ascii_lowercase().contains("origin: http://127.0.0.1:39821"));
+    }
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();listener.set_nonblocking(true).unwrap();
+    let target=format!("http://{}/cancel.woff2",listener.local_addr().unwrap());
+    let font=FontRequest::new(&target,&sheet,sheet.origin().clone(),4).unwrap();
+    let mut service=NetworkService::new_pending_io(DispatchLimits::default()).unwrap();
+    let id=service.start_font(font,ClientContext::default()).unwrap();assert!(service.abort(id));
+    for _ in 0..20 {for event in service.step(128,Instant::now()) {if let ServiceEvent::Finished{id:got,result}=event {assert_eq!(got,id);assert!(result.is_err());}}thread::sleep(Duration::from_millis(1));}
+    assert_eq!(listener.accept().unwrap_err().kind(),std::io::ErrorKind::WouldBlock,"aborted font opened a socket");
+}

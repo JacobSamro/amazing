@@ -441,8 +441,19 @@ impl NetworkService {
     /// Immutable per-instance trust policy; normal certificate verification and
     /// the full bounded PendingTls handshake remain mandatory for every socket.
     pub fn with_tls_policy(limits: DispatchLimits, policy: amazing_net::dispatch::ClientPolicy) -> Self {
+        Self::with_dispatcher(Dispatcher::with_tls_policy(limits,policy))
+    }
+    /// Same Fetch/cookie/CORS/security service with opt-in pending native IO.
+    pub fn new_pending_io(limits:DispatchLimits)->std::io::Result<Self> {
+        Self::with_tls_policy_pending_io(limits, amazing_net::dispatch::ClientPolicy::default())
+    }
+    pub fn with_tls_policy_pending_io(limits:DispatchLimits,policy:amazing_net::dispatch::ClientPolicy)->std::io::Result<Self> {
+        Ok(Self::with_dispatcher(Dispatcher::with_tls_policy_pending_io(limits,policy)?))
+    }
+    pub fn pending_io_snapshot(&self)->Option<amazing_net::dispatch::PendingIoSnapshot> {self.dispatcher.pending_io_snapshot()}
+    fn with_dispatcher(dispatcher:Dispatcher)->Self {
         Self {
-            dispatcher: Dispatcher::with_tls_policy(limits, policy),
+            dispatcher,
             cookies: CookieStore::new(crate::psl::PublicSuffixList, Default::default())
                 .expect("valid cookie limits"),
             cookie_persistence: None,

@@ -101,9 +101,32 @@ pub enum NetEvent {
 /// block during DNS; a future resolver can supply ready addresses instead.
 pub trait Resolver {
     fn resolve(&mut self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>>;
+    /// Compatibility default is synchronous. Native providers may use the
+    /// actual bounded context to return unfinished work without blocking.
+    fn begin_resolve(&mut self, host: &str, port: u16, _: &PendingIoContext) -> ResolveStep {
+        ResolveStep::Ready(self.resolve(host, port))
+    }
 }
+mod pending_io;
+pub use pending_io::{PendingIoContext, PendingIoOperation, PendingIoSnapshot};
+use pending_io::{PendingIoMode, Value as IoValue};
+pub enum ResolveStep { Ready(io::Result<Vec<SocketAddr>>), Pending(PendingIoOperation), Busy }
+pub enum ConnectStep { Ready(io::Result<TcpStream>), Pending(PendingIoOperation), Busy }
 pub struct StdResolver;
 impl Resolver for StdResolver {
+    fn begin_resolve(&mut self, host: &str, port: u16, context: &PendingIoContext) -> ResolveStep {
+        if let Ok(ip) = host.parse::<std::net::IpAddr>() {return ResolveStep::Ready(Ok(vec![SocketAddr::new(ip,port)]));}
+        if (host == "web-platform.test" || host.ends_with(".web-platform.test"))
+            && std::env::var_os("AMAZING_WPT_SHIM_ADDR").is_some() {
+            return ResolveStep::Ready(self.resolve(host,port));
+        }
+        let host=host.to_owned();
+        match context.resolve(move||StdResolver.resolve(&host,port)) {
+            Ok(operation)=>ResolveStep::Pending(operation),
+            Err(e) if e.kind()==io::ErrorKind::WouldBlock=>ResolveStep::Busy,
+            Err(e)=>ResolveStep::Ready(Err(e)),
+        }
+    }
     fn resolve(&mut self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
         // The pinned WPT harness runs its std-only resource server on an
         // ephemeral loopback port. Preserve URL origins and Host headers while
@@ -124,9 +147,20 @@ impl Resolver for StdResolver {
 /// Connect seam. The std implementation has a caller-set short blocking bound.
 pub trait Connector {
     fn connect(&mut self, address: SocketAddr, timeout: Duration) -> io::Result<TcpStream>;
+    fn begin_connect(&mut self, address: SocketAddr, timeout: Duration, _: &PendingIoContext) -> ConnectStep {
+        ConnectStep::Ready(self.connect(address,timeout))
+    }
 }
 pub struct StdConnector;
 impl Connector for StdConnector {
+    fn begin_connect(&mut self, address: SocketAddr, timeout: Duration, context: &PendingIoContext) -> ConnectStep {
+        let deadline=context.deadline();
+        match context.connect(move||TcpStream::connect_timeout(&address,pending_io::remaining_connect_timeout(deadline,timeout)?)) {
+            Ok(operation)=>ConnectStep::Pending(operation),
+            Err(e) if e.kind()==io::ErrorKind::WouldBlock=>ConnectStep::Busy,
+            Err(e)=>ConnectStep::Ready(Err(e)),
+        }
+    }
     fn connect(&mut self, address: SocketAddr, timeout: Duration) -> io::Result<TcpStream> {
         TcpStream::connect_timeout(&address, timeout)
     }
@@ -201,6 +235,8 @@ fn connect_timeout(deadline: Instant, now: Instant, cap: Duration) -> io::Result
 
 enum State {
     Resolve,
+    Resolving(PendingIoOperation),
+    Connecting(Vec<SocketAddr>, PendingIoOperation),
     WaitForOrigin,
     Connect(Vec<SocketAddr>),
     Handshake(amazing_net_tls::PendingTls),
@@ -336,6 +372,7 @@ enum Framing {
     Eof,
 }
 struct Entry {
+    io_generation: u64,
     url: ParsedUrl,
     origin: String,
     options: FetchOptions,
@@ -362,6 +399,7 @@ pub struct Dispatcher<R = StdResolver, C = StdConnector> {
     resolver: R,
     connector: C,
     limits: DispatchLimits,
+    pending_io: Option<PendingIoMode>,
     tls_policy: ClientPolicy,
     next_id: u64,
     active: BTreeMap<RequestId, Entry>,
@@ -371,6 +409,16 @@ pub struct Dispatcher<R = StdResolver, C = StdConnector> {
     websockets: BTreeMap<WebSocketId, WebSocketConnection>,
 }
 impl Dispatcher<StdResolver, StdConnector> {
+    /// Opt-in native work; existing constructors/custom providers keep their
+    /// synchronous contract. The physical pool is bounded across instances.
+    pub fn new_pending_io(limits: DispatchLimits) -> io::Result<Self> {
+        Self::with_tls_policy_pending_io(limits, ClientPolicy::default())
+    }
+    pub fn with_tls_policy_pending_io(limits: DispatchLimits, policy: ClientPolicy) -> io::Result<Self> {
+        let mode=PendingIoMode::new()?;
+        let mut dispatcher=Self::with_io_and_tls_policy(limits,StdResolver,StdConnector,policy);
+        dispatcher.pending_io=Some(mode);Ok(dispatcher)
+    }
     pub fn new(limits: DispatchLimits) -> Self {
         Self::with_io(limits, StdResolver, StdConnector)
     }
@@ -379,6 +427,11 @@ impl Dispatcher<StdResolver, StdConnector> {
     }
 }
 impl<R: Resolver, C: Connector> Dispatcher<R, C> {
+    pub fn with_io_pending(limits:DispatchLimits,resolver:R,connector:C)->io::Result<Self> {
+        let mode=PendingIoMode::new()?;let mut dispatcher=Self::with_io(limits,resolver,connector);
+        dispatcher.pending_io=Some(mode);Ok(dispatcher)
+    }
+
     pub fn with_io(limits: DispatchLimits, resolver: R, connector: C) -> Self {
         Self::with_io_and_tls_policy(limits, resolver, connector, ClientPolicy::default())
     }
@@ -392,6 +445,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
             resolver,
             connector,
             limits,
+            pending_io: None,
             tls_policy,
             next_id: 1,
             active: BTreeMap::new(),
@@ -522,6 +576,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         self.active.insert(
             id,
             Entry {
+                io_generation: 0,
                 url,
                 origin,
                 options: options.clone(),
@@ -555,6 +610,16 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
             false
         }
     }
+    fn install_socket(&self,e:&mut Entry,socket:TcpStream)->Result<(),DispatchError> {
+        socket.set_nonblocking(true)?;
+        if e.url.scheme()=="https" {
+            let hostname=e.url.hostname();let host=hostname.trim_start_matches('[').trim_end_matches(']');
+            let tls=amazing_net_tls::PendingTls::new_with_policy(host,socket,&self.tls_policy).map_err(|x|NetError::Tls(x.to_string()))?;
+            e.state=State::Handshake(tls);
+        } else {e.transport=Some(Transport::Plain(socket));e.state=State::Write;}
+        Ok(())
+    }
+    pub fn pending_io_snapshot(&self)->Option<PendingIoSnapshot> {self.pending_io.as_ref().map(PendingIoMode::snapshot)}
     fn retire_h2_stream(&mut self, entry: &Entry) {
         if let Some(stream) = entry.h2_stream {
             if let Some(conn) = self.h2.get_mut(&entry.origin) {
@@ -687,51 +752,46 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 Ok(false)
             }
             State::Resolve => {
-                let hostname = e.url.hostname();
-                let host = hostname.trim_start_matches('[').trim_end_matches(']');
-                let port = e
-                    .url
-                    .effective_port()
-                    .ok_or_else(|| NetError::MalformedResponse("missing port".into()))?;
-                let addresses = self.resolver.resolve(host, port)?;
-                if addresses.is_empty() {
-                    return Err(
-                        io::Error::new(io::ErrorKind::AddrNotAvailable, "no address").into(),
-                    );
-                }
-                e.state = State::Connect(addresses);
-                Ok(false)
+                let hostname=e.url.hostname();let host=hostname.trim_start_matches('[').trim_end_matches(']');
+                let port=e.url.effective_port().ok_or_else(||NetError::MalformedResponse("missing port".into()))?;
+                let result=if let Some(mode)=&self.pending_io {
+                    e.io_generation=e.io_generation.checked_add(1).ok_or_else(||io::Error::other("IO generation exhausted"))?;
+                    self.resolver.begin_resolve(host,port,&mode.context(id.0,e.io_generation,false,e.deadline))
+                } else {ResolveStep::Ready(self.resolver.resolve(host,port))};
+                match result {
+                    ResolveStep::Busy=>{},
+                    ResolveStep::Pending(operation)=>e.state=State::Resolving(operation),
+                    ResolveStep::Ready(result)=>{let addresses=result?;if addresses.is_empty(){return Err(io::Error::new(io::ErrorKind::AddrNotAvailable,"no address").into());}e.state=State::Connect(addresses);}
+                }Ok(false)
+            }
+            State::Resolving(operation) => {
+                let mode=self.pending_io.as_ref().ok_or_else(||io::Error::other("missing pending IO mode"))?;
+                if let Some(result)=operation.poll(&mode.context(id.0,e.io_generation,false,e.deadline)) {
+                    match result? {IoValue::Addresses(addresses)=>{if addresses.is_empty(){return Err(io::Error::new(io::ErrorKind::AddrNotAvailable,"no address").into());}e.state=State::Connect(addresses);},IoValue::Socket(_)=>return Err(io::Error::new(io::ErrorKind::InvalidData,"connect result used as resolution").into())}
+                }Ok(false)
             }
             State::Connect(addresses) => {
-                let address = addresses.remove(0);
-                match self.connector.connect(
-                    address,
-                    connect_timeout(e.deadline, now, self.limits.connect_timeout)?,
-                ) {
-                    Ok(socket) => {
-                        socket.set_nonblocking(true)?;
-                        if e.url.scheme() == "https" {
-                            let hostname = e.url.hostname();
-                            let host = hostname.trim_start_matches('[').trim_end_matches(']');
-                            let tls = amazing_net_tls::PendingTls::new_with_policy(
-                                host,
-                                socket,
-                                &self.tls_policy,
-                            )
-                            .map_err(|x| NetError::Tls(x.to_string()))?;
-                            e.state = State::Handshake(tls);
-                        } else {
-                            e.transport = Some(Transport::Plain(socket));
-                            e.state = State::Write;
-                        }
-                        return Ok(false);
+                let address=addresses[0];let timeout=connect_timeout(e.deadline,now,self.limits.connect_timeout)?;
+                let result=if let Some(mode)=&self.pending_io {
+                    e.io_generation=e.io_generation.checked_add(1).ok_or_else(||io::Error::other("IO generation exhausted"))?;
+                    self.connector.begin_connect(address,timeout,&mode.context(id.0,e.io_generation,false,e.deadline))
+                } else {ConnectStep::Ready(self.connector.connect(address,timeout))};
+                match result {
+                    ConnectStep::Busy=>{},
+                    ConnectStep::Pending(operation)=>{addresses.remove(0);let rest=std::mem::take(addresses);e.state=State::Connecting(rest,operation);},
+                    ConnectStep::Ready(result)=>{addresses.remove(0);match result {Ok(socket)=>self.install_socket(e,socket)?,Err(_)if !addresses.is_empty()=>{},Err(error)=>return Err(error.into())}}
+                }Ok(false)
+            }
+            State::Connecting(addresses,operation) => {
+                let mode=self.pending_io.as_ref().ok_or_else(||io::Error::other("missing pending IO mode"))?;
+                if let Some(result)=operation.poll(&mode.context(id.0,e.io_generation,false,e.deadline)) {
+                    match result {
+                        Ok(IoValue::Socket(socket))=>self.install_socket(e,socket)?,
+                        Ok(IoValue::Addresses(_))=>return Err(io::Error::new(io::ErrorKind::InvalidData,"resolution used as connect result").into()),
+                        Err(_)if !addresses.is_empty()=>{let rest=std::mem::take(addresses);e.state=State::Connect(rest);},
+                        Err(error)=>return Err(error.into()),
                     }
-                    Err(error) if !addresses.is_empty() => {
-                        let _ = error;
-                        Ok(false)
-                    }
-                    Err(error) => Err(error.into()),
-                }
+                }Ok(false)
             }
             State::Handshake(tls) => {
                 if *remaining == 0 {
@@ -1907,3 +1967,6 @@ mod tests {
         assert_eq!(server.accepted, 1);
     }
 }
+
+#[cfg(test)]
+mod pending_io_tests;

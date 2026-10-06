@@ -36,6 +36,8 @@ pub enum WebSocketEvent {
 
 enum Phase {
     Resolve,
+    Resolving(PendingIoOperation),
+    Connecting(Vec<SocketAddr>,PendingIoOperation),
     Connect(Vec<SocketAddr>),
     Tls(amazing_net_tls::PendingTls),
     Request,
@@ -44,6 +46,7 @@ enum Phase {
 }
 
 pub(super) struct WebSocketConnection {
+    io_generation:u64,
     url: ParsedUrl,
     options: ws::Options,
     phase: Phase,
@@ -167,6 +170,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         self.websockets.insert(
             id,
             WebSocketConnection {
+                io_generation:0,
                 url,
                 options: options.clone(),
                 phase: Phase::Resolve,
@@ -260,6 +264,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 &mut self.resolver,
                 &mut self.connector,
                 &self.tls_policy,
+                self.pending_io.as_ref(),
                 limits,
                 &mut remaining,
                 now,
@@ -278,6 +283,15 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
 }
 
 impl WebSocketConnection {
+    fn install_socket(&mut self,socket:TcpStream,tls_policy:&ClientPolicy)->Result<(),ws::Error> {
+        socket.set_nonblocking(true)?;
+        if self.url.scheme()=="wss" {
+            let hostname=self.url.hostname();let host=hostname.trim_start_matches('[').trim_end_matches(']');
+            self.phase=Phase::Tls(amazing_net_tls::PendingTls::new_http1_with_policy(host,socket,tls_policy).map_err(|e|ws::Error::Tls(e.to_string()))?);
+        } else {self.transport=Some(Transport::Plain(socket));self.phase=Phase::Request;}
+        Ok(())
+    }
+
     pub(super) fn has_pending_output(&self) -> bool {
         !self.outgoing.is_empty()
     }
@@ -400,6 +414,7 @@ impl WebSocketConnection {
         resolver: &mut R,
         connector: &mut C,
         tls_policy: &ClientPolicy,
+        pending_io: Option<&PendingIoMode>,
         limits: DispatchLimits,
         remaining: &mut usize,
         now: Instant,
@@ -410,46 +425,35 @@ impl WebSocketConnection {
         }
         match &mut self.phase {
             Phase::Resolve => {
-                let hostname = self.url.hostname();
-                let host = hostname.trim_start_matches('[').trim_end_matches(']');
-                let addresses = resolver.resolve(
-                    host,
-                    self.url.effective_port().ok_or(ws::Error::InvalidInput)?,
-                )?;
-                if addresses.is_empty() {
-                    return Err(ws::Error::Io(io::Error::new(
-                        io::ErrorKind::AddrNotAvailable,
-                        "WebSocket address",
-                    )));
+                let hostname=self.url.hostname();let host=hostname.trim_start_matches('[').trim_end_matches(']');let port=self.url.effective_port().ok_or(ws::Error::InvalidInput)?;
+                let result=if let Some(mode)=pending_io {
+                    self.io_generation=self.io_generation.checked_add(1).ok_or(ws::Error::Limit)?;
+                    resolver.begin_resolve(host,port,&mode.context(id.0,self.io_generation,true,self.deadline))
+                } else {ResolveStep::Ready(resolver.resolve(host,port))};
+                match result {ResolveStep::Busy=>{},ResolveStep::Pending(operation)=>self.phase=Phase::Resolving(operation),ResolveStep::Ready(result)=>{let addresses=result?;if addresses.is_empty(){return Err(io::Error::new(io::ErrorKind::AddrNotAvailable,"WebSocket address").into());}self.phase=Phase::Connect(addresses);}}
+            }
+            Phase::Resolving(operation) => {
+                let mode=pending_io.ok_or(ws::Error::InvalidInput)?;
+                if let Some(result)=operation.poll(&mode.context(id.0,self.io_generation,true,self.deadline)) {
+                    match result? {IoValue::Addresses(addresses)=>{if addresses.is_empty(){return Err(io::Error::new(io::ErrorKind::AddrNotAvailable,"WebSocket address").into());}self.phase=Phase::Connect(addresses);},IoValue::Socket(_)=>return Err(ws::Error::InvalidInput)}
                 }
-                self.phase = Phase::Connect(addresses);
             }
             Phase::Connect(addresses) => {
-                let address = addresses.remove(0);
-                match connector.connect(
-                    address,
-                    super::connect_timeout(self.deadline, now, limits.connect_timeout)?,
-                ) {
-                    Ok(socket) => {
-                        socket.set_nonblocking(true)?;
-                        if self.url.scheme() == "wss" {
-                            let hostname = self.url.hostname();
-                            let host = hostname.trim_start_matches('[').trim_end_matches(']');
-                            self.phase = Phase::Tls(
-                                amazing_net_tls::PendingTls::new_http1_with_policy(
-                                    host, socket, tls_policy,
-                                )
-                                .map_err(|e| ws::Error::Tls(e.to_string()))?,
-                            );
-                        } else {
-                            self.transport = Some(Transport::Plain(socket));
-                            self.phase = Phase::Request;
-                        }
-                    }
-                    Err(e) if !addresses.is_empty() => {
-                        let _ = e;
-                    }
-                    Err(e) => return Err(e.into()),
+                let address=addresses[0];let timeout=super::connect_timeout(self.deadline,now,limits.connect_timeout)?;
+                let result=if let Some(mode)=pending_io {
+                    self.io_generation=self.io_generation.checked_add(1).ok_or(ws::Error::Limit)?;
+                    connector.begin_connect(address,timeout,&mode.context(id.0,self.io_generation,true,self.deadline))
+                } else {ConnectStep::Ready(connector.connect(address,timeout))};
+                match result {
+                    ConnectStep::Busy=>{},
+                    ConnectStep::Pending(operation)=>{addresses.remove(0);let rest=std::mem::take(addresses);self.phase=Phase::Connecting(rest,operation);},
+                    ConnectStep::Ready(result)=>{addresses.remove(0);match result {Ok(socket)=>self.install_socket(socket,tls_policy)?,Err(_)if !addresses.is_empty()=>{},Err(e)=>return Err(e.into())}}
+                }
+            }
+            Phase::Connecting(addresses,operation) => {
+                let mode=pending_io.ok_or(ws::Error::InvalidInput)?;
+                if let Some(result)=operation.poll(&mode.context(id.0,self.io_generation,true,self.deadline)) {
+                    match result {Ok(IoValue::Socket(socket))=>self.install_socket(socket,tls_policy)?,Ok(IoValue::Addresses(_))=>return Err(ws::Error::InvalidInput),Err(_)if !addresses.is_empty()=>{let rest=std::mem::take(addresses);self.phase=Phase::Connect(rest);},Err(e)=>return Err(e.into())}
                 }
             }
             Phase::Tls(tls) => {
