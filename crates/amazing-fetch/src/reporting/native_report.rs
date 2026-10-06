@@ -161,14 +161,17 @@ impl NetworkService {
             body_json,
         )
         .into_bytes();
-        if body.len() > MAX_REPORT_BYTES.saturating_sub(self.reporting.retained_bytes) {
+        let delivery_bytes = body.len().checked_add(report_url.len())
+            .and_then(|bytes| bytes.checked_add(saved.origin.serialize().len()))
+            .ok_or(ReportError::Limit)?;
+        if delivery_bytes > MAX_REPORT_BYTES.saturating_sub(self.reporting.retained_bytes) {
             return Err(ReportError::Limit);
         }
         let endpoint = self
             .hsts
             .upgrade(&registered_endpoint, saved.context.now_unix)
             .unwrap_or_else(|| registered_endpoint.clone());
-        let mut request = Request::new(endpoint, saved.origin.clone());
+        let (mut request, delivery_context) = modern_request(endpoint, report_url, saved.context.now_unix)?;
         request
             .set_method_body("POST", Some(Body::Bytes(body.clone())))
             .map_err(ReportError::Policy)?;
@@ -176,9 +179,6 @@ impl NetworkService {
             .headers
             .append("content-type", "application/reports+json")
             .map_err(ReportError::Policy)?;
-        request.security = saved.context.security;
-        request.security.destination = crate::Destination::Other;
-        request.security.top_level_navigation = false;
         request.credentials = CredentialsMode::SameOrigin;
         request.mode = RequestMode::Cors;
         request.redirect = RedirectMode::Follow;
@@ -190,14 +190,17 @@ impl NetworkService {
             endpoint_name: Some(name),
             endpoint_lifetime: Some(endpoint_lifetime),
             endpoint: registered_endpoint,
+            report_url: report_url.to_owned(),
+            owner_origin: saved.origin.clone(),
             request,
-            context: saved.context.clone(),
+            context: delivery_context,
             preflight: false,
             request_includes_credentials: false,
+            last_transport: None,
             main_ready: false,
             deadline: now + std::time::Duration::from_secs(10),
             head: None,
-            bytes: body.len(),
+            bytes: delivery_bytes,
         };
         let wire = self.submit_reporting(&mut delivery, now)?;
         self.reporting.retained_bytes += delivery.bytes;

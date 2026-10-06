@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "recorded_dev_base": "973bdec5345bbbf768acd1fa3ef8220d0274b153",
+  "qualified_source": "d7625e00d94b094780714dfa261e3a6ab83d20d8",
+  "native_baseline": "98fa6bf7e13d55add6b314cb3a8ae23b76843d2e",
+  "dependency_ready": "615887ada2a6d75e48a29b0e787dc0e4e72c6d83",
+  "dependency_rule": "cherry-pick complete protocol first; this ticket ONLY fiveFetch shipping+ownDoc, no prerequisite source/history",
+  "baseline_actual_job": "5988e3900a714c408640551ef8c35b19",
+  "after_actual_job": "d64cba862a9f489291b2cd911d2cbaf8",
+  "actual_native_exits": {
+    "baseline": 0,
+    "after": 0
+  },
+  "actual_compact_fetch_exits": {
+    "baseline": 0,
+    "after": 0
+  },
+  "workspace": {
+    "baseline": 5058,
+    "after": 5070,
+    "skipped": 17,
+    "lost": [],
+    "gained": [
+      "amazing-fetch reporting::tests::wire_context_tests::actual_cross_origin_bounce_never_restores_modern_credentials_or_global_authority",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_cross_origin_report_families_preflight_immutable_report_origin_and_omit_credentials",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_fresh_non_http_global_has_observer_report_without_modern_upload_authority",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_legacy_report_uri_preserves_original_opaque_origin_and_client_cookie_rules",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_modern_preflight_denial_retains_observer_snapshot_and_original_endpoint_failure",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_modern_redirect_recomputes_credentials_without_changing_report_origin_or_endpoint_owner",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_opaque_global_modern_report_families_use_creation_origin_and_null_client_cookies",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_redirect_status_family_keeps_report_provenance_through_method_rewrite",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_rejected_redirect_hop_does_not_relabel_last_transport_credentials",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_retired_csp_plan_keeps_endpoint_owner_but_uses_saved_report_url_wire_origin",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_stalled_report_deadline_keeps_original_custody_after_global_retirement",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_terminal_transport_failure_preserves_retired_original_report_wire_custody"
+    ]
+  },
+  "doctests": {
+    "baseline": 36,
+    "after": 36,
+    "failures": 0
+  },
+  "native_tls_net_fetch_process": {
+    "baseline": 806,
+    "after": 818,
+    "skipped": 3,
+    "lost": [],
+    "gained": [
+      "amazing-fetch reporting::tests::wire_context_tests::actual_cross_origin_bounce_never_restores_modern_credentials_or_global_authority",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_cross_origin_report_families_preflight_immutable_report_origin_and_omit_credentials",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_fresh_non_http_global_has_observer_report_without_modern_upload_authority",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_legacy_report_uri_preserves_original_opaque_origin_and_client_cookie_rules",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_modern_preflight_denial_retains_observer_snapshot_and_original_endpoint_failure",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_modern_redirect_recomputes_credentials_without_changing_report_origin_or_endpoint_owner",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_opaque_global_modern_report_families_use_creation_origin_and_null_client_cookies",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_redirect_status_family_keeps_report_provenance_through_method_rewrite",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_rejected_redirect_hop_does_not_relabel_last_transport_credentials",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_retired_csp_plan_keeps_endpoint_owner_but_uses_saved_report_url_wire_origin",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_stalled_report_deadline_keeps_original_custody_after_global_retirement",
+      "amazing-fetch reporting::tests::wire_context_tests::actual_terminal_transport_failure_preserves_retired_original_report_wire_custody"
+    ]
+  },
+  "csp": {
+    "baseline_files": 32,
+    "after_files": 32,
+    "baseline_subtests": 81,
+    "after_subtests": 81,
+    "lost_files": [],
+    "lost_subtests": [],
+    "selection_sha256": "827083295c0011e2fd1bfb1760fbf28b036cd6412e077d4ae2f016234e5ff0a0"
+  },
+  "all_phases": {
+    "browser-build": 0,
+    "csp-wpt": 0,
+    "doctests": 0,
+    "network-corpus": 0,
+    "workspace": 0,
+    "wpt-setup": 0
+  },
+  "physical_storage_phase": "before is first cold placement; actual engine comparisonafter. No baseline engine/ELF fabricated or rerun",
+  "child_metadata_base_note": "CSP child preserves legacy68 display base label; actual authenticated source/baseline98fa/classification input/raw/binary hashes recorded, original bytes unchanged",
+  "scope": "Native whole wire +original installed CSP subset, not actual installed Window/SPVE/worker or browser Report completion consumer qualification",
+  "decode_recipe": "base64.b85decode(payload_xz_base85), lzma.decompress(memlimit=16777216), verify payload and part bytes/SHA"
+}

@@ -2,6 +2,8 @@
 //! The embedding supplies accepted response headers and binds each capability
 //! to its actual Document lifetime. A URL is never a document identity.
 mod endpoint_lifetime;
+mod wire_context;
+use wire_context::{DeliveryContext, modern_request};
 use endpoint_lifetime::EndpointLifetime;
 mod native_report;
 pub use native_report::*;
@@ -80,6 +82,39 @@ pub struct ReportFinished {
     pub document: ReportingDocument,
     pub route: ReportRoute,
     pub outcome: ReportOutcome,
+    wire: ReportWireProvenance,
+}
+impl ReportFinished {
+    /// Native completion custody; no public constructor or authority adoption.
+    pub fn wire(&self) -> &ReportWireProvenance { &self.wire }
+}
+/// Immutable upload facts minted only by the native delivery state machine.
+/// The owner is `ReportFinished::document`, independent of upload origin.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReportWireProvenance {
+    report_url: String,
+    owner_origin: Origin,
+    request_origin: Origin,
+    registered_endpoint: HttpUrl,
+    url_list: Vec<HttpUrl>,
+    terminal_url: HttpUrl,
+    terminal_is_preflight: bool,
+    terminal_includes_credentials: bool,
+}
+impl ReportWireProvenance {
+    pub fn report_url(&self) -> &str { &self.report_url }
+    pub fn owner_origin(&self) -> &Origin { &self.owner_origin }
+    pub fn request_origin(&self) -> &Origin { &self.request_origin }
+    pub fn registered_endpoint(&self) -> &HttpUrl { &self.registered_endpoint }
+    /// Actual request lineage, including HSTS upgrades and redirects. OPTIONS
+    /// does not invent another main-request URL.
+    pub fn url_list(&self) -> &[HttpUrl] { &self.url_list }
+    /// URL of the last native dispatcher-admitted request, which can differ
+    /// from a later rejected redirect target in url_list(). Admission does not
+    /// establish connection, transmission, response acceptance, or completion.
+    pub fn terminal_url(&self) -> &HttpUrl { &self.terminal_url }
+    pub fn terminal_is_preflight(&self) -> bool { self.terminal_is_preflight }
+    pub fn terminal_includes_credentials(&self) -> bool { self.terminal_includes_credentials }
 }
 #[derive(Clone)]
 struct Document {
@@ -98,10 +133,13 @@ struct Delivery {
     endpoint_name: Option<String>,
     endpoint_lifetime: Option<std::sync::Arc<EndpointLifetime>>,
     endpoint: HttpUrl,
+    report_url: String,
+    owner_origin: Origin,
     request: Request,
-    context: ClientContext,
+    context: DeliveryContext,
     preflight: bool,
     request_includes_credentials: bool,
+    last_transport: Option<(HttpUrl, bool, bool)>,
     main_ready: bool,
     deadline: Instant,
     head: Option<InternalResponse>,
@@ -334,8 +372,10 @@ impl NetworkService {
             modern,
             now.saturating_duration_since(queued_at).as_millis(),
         );
-        let retained = body
-            .len()
+        let delivery_bytes = body.len().checked_add(violation.report_url.len())
+            .and_then(|bytes| bytes.checked_add(saved.origin.serialize().len()))
+            .ok_or(ReportError::Limit)?;
+        let retained = delivery_bytes
             .checked_mul(targets.len())
             .ok_or(ReportError::Limit)?;
         if retained > MAX_REPORT_BYTES.saturating_sub(self.reporting.retained_bytes) {
@@ -349,7 +389,11 @@ impl NetworkService {
             if let Some(upgraded) = self.hsts.upgrade(&endpoint, saved.context.now_unix) {
                 endpoint = upgraded;
             }
-            let mut request = Request::new(endpoint.clone(), saved.origin.clone());
+            let (mut request, delivery_context) = if modern {
+                modern_request(endpoint.clone(), &violation.report_url, saved.context.now_unix)?
+            } else {
+                (Request::new(endpoint.clone(), saved.origin.clone()), DeliveryContext::Legacy(saved.context.clone()))
+            };
             request
                 .set_method_body("POST", Some(Body::Bytes(body.clone())))
                 .map_err(ReportError::Policy)?;
@@ -375,9 +419,6 @@ impl NetworkService {
             } else {
                 RedirectMode::Error
             };
-            request.security = saved.context.security;
-            request.security.destination = crate::Destination::Other;
-            request.security.top_level_navigation = false;
             if !modern {
                 request.referrer = HttpUrl::parse(&violation.document_uri)
                     .ok()
@@ -399,14 +440,17 @@ impl NetworkService {
                 endpoint_name,
                 endpoint_lifetime,
                 endpoint: registered_endpoint,
+                report_url: violation.report_url.clone(),
+                owner_origin: saved.origin.clone(),
                 request,
-                context: saved.context.clone(),
+                context: delivery_context,
                 preflight: false,
                 request_includes_credentials: false,
+                last_transport: None,
                 main_ready: false,
                 deadline: now + std::time::Duration::from_secs(10),
                 head: None,
-                bytes: body.len(),
+                bytes: delivery_bytes,
             };
             match self.submit_reporting(&mut delivery, now) {
                 Ok(wire) => {
@@ -434,7 +478,7 @@ impl NetworkService {
     ) -> Result<RequestId, ReportError> {
         if let Some(upgraded) = self
             .hsts
-            .upgrade(delivery.request.url(), delivery.context.now_unix)
+            .upgrade(delivery.request.url(), delivery.context.now_unix())
         {
             *delivery
                 .request
@@ -469,10 +513,15 @@ impl NetworkService {
             None
         };
         delivery.preflight = preflight.is_some();
-        // Both native Reporting routes use same-origin credentials; preflight
-        // never accesses credentials. Capture the actual transport decision.
+        // Preflight never accesses credentials. Modern uploads use Fetch
+        // includeCredentials, including sticky redirect taint; legacy CSP
+        // retains its original same-origin credential behavior.
         delivery.request_includes_credentials = !delivery.preflight
-            && delivery.request.url().origin() == &delivery.request.origin;
+            && if delivery.route == ReportRoute::ReportingApi {
+                delivery.request.credentials_allowed()
+            } else {
+                delivery.request.url().origin() == &delivery.request.origin
+            };
         delivery.main_ready = false;
         delivery.head = None;
         if let Some(preflight) = preflight {
@@ -512,15 +561,15 @@ impl NetworkService {
             if delivery.request_includes_credentials {
                 let access = crate::cookies::CookieAccess {
                     url: delivery.request.url(),
-                    site_for_cookies: delivery.context.cookie_site.clone(),
+                    site_for_cookies: delivery.context.cookie_site(),
                     http_api: true,
                     top_level_navigation: false,
                     method: delivery.request.method(),
-                    partition_key: delivery.context.partition_key.clone(),
+                    partition_key: delivery.context.partition_key(),
                 };
                 let cookie = self
                     .cookies
-                    .cookie_header(&access, delivery.context.now_unix)
+                    .cookie_header(&access, delivery.context.now_unix())
                     .map_err(|_| ReportError::Transport)?;
                 if !cookie.is_empty() {
                     options.request_headers.push((
@@ -530,9 +579,14 @@ impl NetworkService {
                 }
             }
         }
-        self.dispatcher
+        let wire = self.dispatcher
             .submit(&delivery.request.url().serialize(), options, now)
-            .map_err(|_| ReportError::Transport)
+            .map_err(|_| ReportError::Transport)?;
+        // Capture only successful transport admission. A rejected next-hop
+        // preparation must not relabel the previous admitted request's credentials/URL.
+        delivery.last_transport = Some((delivery.request.url().clone(),
+            delivery.preflight, delivery.request_includes_credentials));
+        Ok(wire)
     }
     pub(crate) fn on_reporting_event(
         &mut self,
@@ -566,25 +620,25 @@ impl NetworkService {
                     {
                         let access = crate::cookies::CookieAccess {
                             url: delivery.request.url(),
-                            site_for_cookies: delivery.context.cookie_site.clone(),
+                            site_for_cookies: delivery.context.cookie_site(),
                             http_api: true,
                             top_level_navigation: false,
                             method: delivery.request.method(),
-                            partition_key: delivery.context.partition_key.clone(),
+                            partition_key: delivery.context.partition_key(),
                         };
                         for cookie in headers.get_all("set-cookie") {
                             let _ = self.cookies.set_cookie(
                                 cookie.as_bytes(),
                                 &access,
-                                delivery.context.now_unix,
+                                delivery.context.now_unix(),
                             );
                         }
-                        self.persist_cookies(delivery.context.now_unix);
+                        self.persist_cookies(delivery.context.now_unix());
                     }
                     self.observe_reporting_hsts(
                         delivery.request.url(),
                         &fields,
-                        delivery.context.now_unix,
+                        delivery.context.now_unix(),
                     );
                     delivery.head = Some(InternalResponse {
                         request_includes_credentials: delivery.request_includes_credentials,
@@ -629,11 +683,23 @@ impl NetworkService {
                     }
                 }
             }
+            let (terminal_url, terminal_is_preflight, terminal_includes_credentials) =
+                delivery.last_transport.expect("native completed report has admitted transport");
             output.push(ServiceEvent::ReportFinished(ReportFinished {
                 id: delivery.id,
                 document: delivery.document,
                 route: delivery.route,
                 outcome,
+                wire: ReportWireProvenance {
+                    report_url: delivery.report_url,
+                    owner_origin: delivery.owner_origin,
+                    request_origin: delivery.request.origin.clone(),
+                    registered_endpoint: delivery.endpoint,
+                    url_list: delivery.request.url_list.clone(),
+                    terminal_url,
+                    terminal_is_preflight,
+                    terminal_includes_credentials,
+                },
             }));
         } else {
             self.reporting.deliveries.insert(wire, delivery);
@@ -672,7 +738,7 @@ impl NetworkService {
                 response.headers.get("location").as_deref(),
                 |url| {
                     self.hsts
-                        .upgrade(&url, delivery.context.now_unix)
+                        .upgrade(&url, delivery.context.now_unix())
                         .unwrap_or(url)
                 },
             ) {
@@ -719,10 +785,13 @@ impl NetworkService {
                     endpoint_name: delivery.endpoint_name.clone(),
                     endpoint_lifetime: delivery.endpoint_lifetime.clone(),
                     endpoint: delivery.endpoint.clone(),
+                    report_url: delivery.report_url.clone(),
+                    owner_origin: delivery.owner_origin.clone(),
                     request: delivery.request.clone(),
                     context: delivery.context.clone(),
                     preflight: delivery.preflight,
                     request_includes_credentials: delivery.request_includes_credentials,
+                    last_transport: delivery.last_transport.clone(),
                     main_ready: false,
                     deadline: delivery.deadline,
                     head: None,

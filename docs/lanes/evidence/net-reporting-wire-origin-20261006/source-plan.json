@@ -1,0 +1,88 @@
+{
+  "schema": 1,
+  "state": "whole residual/source+AFTER-only command/capacity frozen, unallocated",
+  "source": "d7625e00d94b094780714dfa261e3a6ab83d20d8",
+  "recorded_dev_base": "ab19e359edbab188e1881addb0001f8febdc1d15",
+  "native_comparison_baseline": "98fa6bf7e13d55add6b314cb3a8ae23b76843d2e",
+  "dependency_ready": "615887ada2a6d75e48a29b0e787dc0e4e72c6d83",
+  "baseline_job": "5988e3900a714c408640551ef8c35b19",
+  "baseline_actual_exit": 0,
+  "baseline_compact_fetch_exit": 0,
+  "baseline_counts": {
+    "workspace": 5058,
+    "docs": 36,
+    "native_tls_net_fetch_process": 806,
+    "csp_files": 32,
+    "csp_subtests": 81
+  },
+  "baseline_compacts": {
+    "after.summary.json": {
+      "bytes": 386281,
+      "sha256": "3e10fa8d280a51ea2408f3ad3900e7d2de6a677b4ae4330972a23d012c78b8ea"
+    },
+    "network-corpus.compact.json": {
+      "bytes": 25215,
+      "sha256": "479026eb1a7c8ca724b5dd7a9ec0dc6eddc901b134db5770de1d5fc2b7a4ae01"
+    },
+    "workspace.compact.json": {
+      "bytes": 144219,
+      "sha256": "082d5563d93d11e660f9dfa801af6003594124d1420b875579c507203d485ab7"
+    },
+    "csp-wpt.compact.json": {
+      "bytes": 35917,
+      "sha256": "acb95d0a14aa54236a8fd75df56665735a5eed2ae9e4cf4e0241b30c6a375305"
+    }
+  },
+  "scope": "AFTER-only whole workspace/docs/browser/whole TLS-net-fetch-process/original11CSP/original13 receiving +3protocol controls +12 wire server groups; zeroLost required; no fresh unchanged BEFORE",
+  "storage": "first physical cold placement uses public phasebefore, genuine comparisonphaseafter; actual public native same-device14.125GiB guard +12GiB engine guard, fresh native/tmp source/target/raw/generated/allELF retained; HOME bounded compact; no fake baselineELFs",
+  "profile": "DEV/TEST line-tables-only incremental0 default4/8finite7200 normalensure",
+  "public_source": "c2942529f9c2df4dfc8f1fa3b4494d4d42878e50",
+  "command_sha256": "4e3646df7dd844217c1204120e902ad1d8d8306481956a343ce40a1b39853a4f",
+  "body_sha256": "ff11e584d55d4417a3009a9c3b8222561a5ab49a73f9a0ea481caf1c240b6ef9",
+  "launch_sha256": "ca41ca0225151882ad5775d25955cc5b8837cb13049f6b8d7ae2090037aa20c2",
+  "storage_sha256": "6429321bc6d2f143c1f16fd83486d2de8af28b77640046bc32ba80725ef04c11",
+  "native_claim": false,
+  "installed_claim": false,
+  "consumer_gaps": "questions.md genuine Runtime/process completion DTO; no RuntimeWire symbol or fake enum/defaultGlobal",
+  "tooling_policy": "initial+ONE clean tooling rerun only; compiler/test issue genuine whole source correction; previous sources/ELF/raw preserved",
+  "shipping": [
+    {
+      "path": "crates/amazing-fetch/src/reporting/mod.rs",
+      "bytes": 36246,
+      "sha256": "f8879ffebbd84124c106ec7d3df00af02f7aba0abb08093a4c2908a3fb7b5bce",
+      "lines": 897
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/native_report.rs",
+      "bytes": 8819,
+      "sha256": "278fa8fbd19f423a9366effea7bec8f35878c02f2568c1583999024f697673db",
+      "lines": 242
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/tests.rs",
+      "bytes": 105426,
+      "sha256": "156e85a57ede15c8fc41a5f3b7cfbb9bb5c6fbeaa0a1801af12370dcd17dbee8",
+      "lines": 2093
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/wire_context.rs",
+      "bytes": 2422,
+      "sha256": "26168e79a01cd29e8ec0f580d644ca3b0ca7e4da0925914b202448ea0da9f1b8",
+      "lines": 50
+    },
+    {
+      "path": "crates/amazing-fetch/src/reporting/wire_context_tests.rs",
+      "bytes": 31475,
+      "sha256": "e856e84fbd470f9c647cc735fc5fd5e05d3f29fa408f12d22579099bfaec64d3",
+      "lines": 467
+    },
+    {
+      "path": "docs/lanes/net-tls-reporting-wire-context.md",
+      "bytes": 7947,
+      "sha256": "9e98efe772dc0b82e89d905023bdbd60fd6994f88a06ef8af47dcacb54cba8ca",
+      "lines": 122
+    }
+  ],
+  "preserved_reference": "027b93f4197a97d2da17a5330eebca1ee351a02f; five Fetch shipping paths exact, service arm ordering stayspure4c",
+  "source_closure": "allNet/TLS/Process unchanged qualified98fa; onlyfiveFetch+ownDoc residual; no CurrentURL/defaultContext/foreignhandle"
+}

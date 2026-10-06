@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "controller": 73334,
+  "source": "d7625e00d94b094780714dfa261e3a6ab83d20d8",
+  "endpoint": {
+    "schema": 2,
+    "lane": "net-reporting-wire-origin-20261006",
+    "source_commit": "d7625e00d94b094780714dfa261e3a6ab83d20d8",
+    "box_id": "bx_az6h4z4e",
+    "host": "user@147.135.130.239",
+    "port": 19042,
+    "job_id": "d64cba862a9f489291b2cd911d2cbaf8",
+    "output_root": "amazing/out/net-reporting-wire-origin-20261006/wire-d7625e00-after-initial/compact",
+    "command_sha256": "4e3646df7dd844217c1204120e902ad1d8d8306481956a343ce40a1b39853a4f",
+    "execution_sha256": "c470e6c608f256b6ac63b85b190c503d1b498b431f6c03f653be69861184498e",
+    "source_archive_sha256": "5c4cf11113d7dfd3eb6cd474f14a01e5473599247412b0da33f9213cd2d83463"
+  },
+  "state": "TERMINAL",
+  "actual_exit": 0,
+  "controller_exit": 0,
+  "compact_fetch_exit": 0,
+  "workspace": 5070,
+  "docs": 36,
+  "native": 818,
+  "csp_files": 32,
+  "csp_subtests": 81
+}

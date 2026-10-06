@@ -2088,3 +2088,6 @@ fn cross_origin_410_requires_real_cors_acceptance_before_endpoint_removal() {
     assert!(state.is_active());assert_eq!(state.failures(),1);assert!(saved.named_endpoint("csp").is_ok());
     assert!(!service.has_pending_reporting_io());peer.join().unwrap();
 }
+
+#[path = "wire_context_tests.rs"]
+mod wire_context_tests;

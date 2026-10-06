@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "native_actual_exit": 0,
+  "actual_fetch_exit": 0,
+  "job": "d64cba862a9f489291b2cd911d2cbaf8",
+  "files": {
+    "after.summary.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/reporting-wire-origin-protocol/after.compact/after.summary.json",
+      "bytes": 391346,
+      "sha256": "2f995e1bcdb1617e0e322eaa166f0b5494431a60b45539fdea8a565ab50ca4ad"
+    },
+    "network-corpus.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/reporting-wire-origin-protocol/after.compact/network-corpus.compact.json",
+      "bytes": 26806,
+      "sha256": "ca0ae6fdbc046ae2b89bbd7bfa6e0557ce6e46b5e764fb37d9e2b102cb6891aa"
+    },
+    "workspace.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/reporting-wire-origin-protocol/after.compact/workspace.compact.json",
+      "bytes": 144572,
+      "sha256": "acf106b8c98704e3ed2c0da21efb81d7ff53a8df5272338fb8525556c40bd04d"
+    },
+    "csp-wpt.compact.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/reporting-wire-origin-protocol/after.compact/csp-wpt.compact.json",
+      "bytes": 35900,
+      "sha256": "a101ab2f0edee2cdb58accbde4267790227ef9244eddbc7cac21a66307b1d920"
+    },
+    "storage.summary.json": {
+      "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/net-tls/reporting-wire-origin-protocol/after.compact/storage.summary.json",
+      "bytes": 2321,
+      "sha256": "bbc45f1661bacd8039f96efa8bc6951e650d1dde3bd6cbb806bc066e86fa2510"
+    }
+  }
+}
