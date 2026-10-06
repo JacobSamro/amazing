@@ -1,0 +1,74 @@
+{
+  "state": "QUALIFIED_NATIVE0",
+  "recorded_origin_dev_base": "7d6a4c9009be3e936ffc89bd868ad5b533846084",
+  "qualified_source": "9c975dbf9d1ceb0307cf2f828b4361d109808fe3",
+  "caller_source": "44c84812972f81439440eb61a57e8932bafbd531",
+  "controller": 88804,
+  "actual_exit": 0,
+  "fetch_controller": 57547,
+  "fetch_actual_exit": 0,
+  "initial_fetch60740": {
+    "exit": 3,
+    "reason": "basename-only paths rejected outside job; no bytes transferred/native rerun"
+  },
+  "controls": {
+    "passed": 27,
+    "failed": 0
+  },
+  "authentic_css17_comparison": {
+    "before_source": "1c682ab64702a48ebf775b6240004eda74899bdf",
+    "after_source": "e66d8b335d1a965351d1b9964fcb9f8b10a2c94e",
+    "before_passed": 4350,
+    "after_passed": 4365,
+    "gained": 15,
+    "lost": 0,
+    "changed_failed_diagnostics": 2,
+    "original_outer_exit": 1,
+    "all_original13_engine_phase_exits": 0
+  },
+  "source_and_input_files": {
+    "css-parsing-comparison.py": {
+      "sha256": "4a53bde5732a222c746860caba7a8d9f082fdba9ae26ca51bcb558ac8558de59",
+      "bytes": 6156
+    },
+    "css-parsing-comparison-controls.py": {
+      "sha256": "01a78e16c76d628b8b512c93ca324d4580a3bdb2ef71fa78b867a5b19b678daf",
+      "bytes": 7189
+    },
+    "before.parsing.json": {
+      "sha256": "96aa8f085c97f3a7df6dc237ab45c5f62875f116727dcd22e5759df17cee35b3",
+      "bytes": 142578
+    },
+    "after.parsing.json": {
+      "sha256": "088c0b57c129c04233d7de297c501f70d2a178f60d0513e3b653f82fb5089ea4",
+      "bytes": 140917
+    },
+    "original.terminal.json": {
+      "sha256": "7d59255bb7bb3666976a4f8983bc2492afaea4f2f9fcc53bdcaedb5ede8c5ce5",
+      "bytes": 1364
+    },
+    "original.gate.summary.json": {
+      "sha256": "03cdb1b65baa6373814ec4b71d6b982f88659bcf752363e322086afc29d1fcd9",
+      "bytes": 47005
+    }
+  },
+  "command": {
+    "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/css-parsing-identity-tool/command.sh",
+    "bytes": 1750,
+    "sha256": "846d392d51abd9b11de12027bf001edbebb59ad067c2baf6f2ed65ebea321764"
+  },
+  "mission": {
+    "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/css-parsing-identity-tool/mission.tar.gz",
+    "bytes": 33149,
+    "sha256": "c9bd2d2fdab8c8dc45d55d61529e49aff526db2395156eeb108609d7dbab1939"
+  },
+  "no_engine_rerun": true,
+  "no_new_box": true,
+  "no_lifecycle": true,
+  "no_raw_transfer": true,
+  "production_paths": [
+    "scripts/css-parsing-comparison.py",
+    "scripts/css-parsing-comparison-controls.py"
+  ],
+  "usage": "Future bulk collectors invoke public comparison CLI on authenticated before/after compact summaries; changed actual diagnostics remain failed."
+}
