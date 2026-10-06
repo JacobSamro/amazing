@@ -5,6 +5,10 @@
 mod font_display;
 mod font_display_provider;
 mod font_matching;
+mod installed_font;
+#[cfg(test)]
+mod installed_font_tests;
+pub use installed_font::{InstalledFontProfile, inspect_installed_font};
 mod font_relative_metrics;
 mod font_variant_synthesis;
 mod font_variations;
@@ -292,6 +296,8 @@ struct FontFaceMetadata {
 
 #[derive(Debug)]
 struct FontRecord {
+    installed_aliases: BTreeSet<String>,
+    installed_face: Option<InstalledFontProfile>,
     key: FontKey,
     family: String,
     weight: u16,
@@ -302,6 +308,11 @@ struct FontRecord {
 }
 
 impl FontRecord {
+    // Caller supplies the same canonical ASCII-folded key as existing
+    // author-family registration; the immutable native association is indexed.
+    fn matches_family(&self, family: &str) -> bool {
+        self.family == family || self.installed_aliases.contains(family)
+    }
     fn attributes_for(&self, style: &TextStyle) -> FontAttributes {
         if let Some(face) = &self.author_face {
             FontAttributes {
@@ -311,6 +322,12 @@ impl FontRecord {
                     .nearest(font_matching::requested_width(style))
                     .round() as u16,
                 slant: face.style.slant(),
+            }
+        } else if let Some(face) = &self.installed_face {
+            FontAttributes {
+                weight: face.weight_range.nearest(style.weight as f32).round() as u16,
+                stretch: face.stretch_range.nearest(font_matching::requested_width(style)).round() as u16,
+                slant: face.style_descriptor(style).slant(),
             }
         } else {
             FontAttributes {
@@ -588,6 +605,8 @@ impl TextProvider {
         self.next_font_key.set(key.0.checked_add(1).ok_or(TextError::ResourceLimit)?);
         self.font_set_bytes += decoded.len();
         self.fonts.push(FontRecord {
+            installed_aliases: BTreeSet::new(),
+            installed_face: None,
             key,
             family: family.to_ascii_lowercase(),
             weight: font.weight,

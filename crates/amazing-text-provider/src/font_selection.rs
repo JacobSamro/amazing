@@ -58,12 +58,13 @@ impl TextProvider {
                 continue;
             }
             let family = unquote_family(family);
-            let author_only = self.author_families.contains(&family.to_ascii_lowercase());
+            let family = family.to_ascii_lowercase();
+            let author_only = self.author_families.contains(&family);
             let mut best_rank = None;
             let mut candidates = Vec::new();
             for (index, font) in self.fonts.iter().enumerate() {
                 if !self.font_display_available(font.key)
-                    || !font.family.eq_ignore_ascii_case(family)
+                    || !font.matches_family(&family)
                     || (author_only && font.author_face.is_none())
                 {
                     continue;
@@ -112,7 +113,7 @@ impl TextProvider {
                 .iter()
                 .enumerate()
                 .filter(|(_, font)| {
-                    font.family == *family
+                    font.matches_family(family)
                         && font.author_face.is_none()
                         && text.is_none_or(|value| font_covers(font, value))
                         && (!require_space || font_covers_space(font))

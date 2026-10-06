@@ -1,0 +1,34 @@
+{
+  "measured_corpus_source": "5e712b201b3d412e229217e387b5ed8d5b99bf94",
+  "root_font_source_byteexact": "bd30e74019a17c3ceadc064128ad8dcc1536117c",
+  "merged_workspace_test262_source": "5cf9d75c3b7232679bf6d380b4629002e2ed86e3",
+  "actual_native_and_all_phase_exits": 0,
+  "original_cohort_cases": 32,
+  "passing": 26,
+  "lost_from_qualified_lane_after": [],
+  "original_lane_after_sha256": "cd61d087593bdeae39ddb11d22247430b4398df87f01b43fd9312d94ac18de62",
+  "captured_file_hashes_verified": [
+    {
+      "path": "css-css-fonts.compact.json",
+      "bytes": 2430,
+      "sha256": "776c78cd24f72c71549b25f79985d383670fe19f7b91a0f0f34b67f6eebe9e26"
+    },
+    {
+      "path": "gate.summary.json",
+      "bytes": 11688,
+      "sha256": "73f04803320f27139f9f513105aa182d96d660622a8d5fedc5baea5b8fa08821"
+    },
+    {
+      "path": "nextest.phase.manifest.json",
+      "bytes": 2668,
+      "sha256": "e1afde5a77c0147a30e2593d6afa8373abfb7622e2a8c6e8358270380bcb7848"
+    },
+    {
+      "path": "storage.summary.json",
+      "bytes": 2181,
+      "sha256": "44d89abee504cb22d239b0b43cc02cb74a4c552365723f5283b3573aa637b32e"
+    }
+  ],
+  "scope": "Entire lane font32 corpus on exact font integration code (5e byteequal bd30); merged workspace/doctests/full16 on exact shipping5cf. Optional23directory broader sweep remains running, not merge requirement.",
+  "retention_boundary": "Older box stopped after user-approved temporary raw discard; captured compact/reference bytes retained"
+}

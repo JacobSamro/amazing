@@ -52,6 +52,19 @@ pub(super) fn for_face(font: &FontRecord, style: &TextStyle) -> Vec<VariationSet
             _ => {}
         }
     }
+    if let Some(face) = &font.installed_face {
+        if face.registered_axes.contains(b"wght") { axes.push(VariationSetting { tag: *b"wght", value: face.weight_range.nearest(style.weight as f32) }); }
+        if face.registered_axes.contains(b"wdth") { axes.push(VariationSetting { tag: *b"wdth", value: face.stretch_range.nearest(super::font_matching::requested_width(style)) }); }
+        if let Some(range) = face.italic_range {
+            axes.push(VariationSetting { tag: *b"ital", value: range.nearest(if style.slant == FontSlant::Italic { 1.0 } else { 0.0 }) });
+        }
+        if let Some(range) = face.oblique_range
+            && !(style.slant == FontSlant::Italic && face.italic_range.is_some_and(|range| range.min <= 1.0 && range.max >= 1.0))
+        {
+            let requested = match style.slant { FontSlant::Normal => 0.0, FontSlant::Italic => 11.0, FontSlant::Oblique => super::font_matching::requested_oblique_angle(style) };
+            axes.push(VariationSetting { tag: *b"slnt", value: -range.nearest(requested) });
+        }
+    }
     for requested in &style.variations {
         if let Some(axis) = axes.iter_mut().find(|axis| axis.tag == requested.tag) {
             *axis = requested.clone();
@@ -69,6 +82,8 @@ mod tests {
 
     fn plain_record() -> FontRecord {
         FontRecord {
+            installed_aliases: std::collections::BTreeSet::new(),
+            installed_face: None,
             key: FontKey(1),
             family: "test".into(),
             weight: 400,
@@ -129,6 +144,8 @@ mod tests {
         style.size = 48.0;
         style.weight = 700;
         let record = FontRecord {
+            installed_aliases: std::collections::BTreeSet::new(),
+            installed_face: None,
             key: FontKey(2),
             family: "variable-test".into(),
             weight: 400,

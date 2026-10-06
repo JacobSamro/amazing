@@ -122,6 +122,8 @@ fn style_rank(style: &TextStyle, descriptor: FontStyleDescriptor) -> (u8, u32) {
 pub(super) fn rank(style: &TextStyle, font: &FontRecord) -> (u8, u32, u8, u32, u8, u32) {
     let (width, slant, weight) = if let Some(face) = &font.author_face {
         (face.stretch, face.style, face.weight)
+    } else if let Some(face) = &font.installed_face {
+        (face.stretch_range, face.style_descriptor(style), face.weight_range)
     } else {
         let slant = match font.slant {
             FontSlant::Normal => FontStyleDescriptor::Normal,

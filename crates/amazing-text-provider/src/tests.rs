@@ -17,7 +17,7 @@ fn be32(value: u32) -> Vec<u8> {
     value.to_be_bytes().to_vec()
 }
 
-fn assemble_sfnt(tables: &[(&[u8; 4], Vec<u8>)]) -> Vec<u8> {
+pub(super) fn assemble_sfnt(tables: &[(&[u8; 4], Vec<u8>)]) -> Vec<u8> {
     let mut tables = tables.to_vec();
     tables.sort_by_key(|(tag, _)| **tag);
     let mut bytes = Vec::new();
