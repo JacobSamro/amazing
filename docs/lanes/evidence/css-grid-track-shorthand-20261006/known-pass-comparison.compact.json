@@ -1,0 +1,357 @@
+{
+  "actual_summary": {
+    "bytes": 47860,
+    "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/gate.summary.json",
+    "sha256": "98729a2bd9fc8b817085d3a323eda12045b32cb7ee1a53d7bb91bf08d264a6b5"
+  },
+  "actual_terminal_exit": 1,
+  "baselines": [
+    {
+      "baseline_source": "c220413d7778de7a70ed56c8bf5adc81858fa744",
+      "comparisons": [
+        {
+          "after": {
+            "bytes": 26589,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-contain.compact.json",
+            "sha256": "8e9e5fa5a60b7d2e62345d050427e2b0bc9e4f69e9d7555d7acab8c7b6f4fd9a"
+          },
+          "after_cases": 229,
+          "before": {
+            "bytes": 14302,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-contain.compact.json",
+            "sha256": "d081504652fb106d54c06e97a96214a8cde97b421efc13bce6efb0bc8c56ecb9"
+          },
+          "before_cases": 229,
+          "cohort": "css/css-contain",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 4863,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-display.compact.json",
+            "sha256": "2fb7e27af2c566b426a62cdb377fc101493ef871926427c18ddf2f8eb3df6d7f"
+          },
+          "after_cases": 35,
+          "before": {
+            "bytes": 2625,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-display.compact.json",
+            "sha256": "1a4d1c044f9a954154063020006d4157abf78f58ce94d1b3070511cf9ffa1b31"
+          },
+          "before_cases": 35,
+          "cohort": "css/css-display",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 59560,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-flexbox.compact.json",
+            "sha256": "c7fc2d63c1e0a271e0b2fe6935e27597c1312385d5be96bf6b253e5f56eb7029"
+          },
+          "after_cases": 523,
+          "before": {
+            "bytes": 32017,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-flexbox.compact.json",
+            "sha256": "c1a723159d8c57f80ea55c2494a7962b7e1a6f23198097a66a4c912cac7258ef"
+          },
+          "before_cases": 523,
+          "cohort": "css/css-flexbox",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 167698,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-grid.compact.json",
+            "sha256": "e77c1d026a07b9dcbd87b7585edb4fdf06e6004994c9e24d346cfc5bdd4e74eb"
+          },
+          "after_cases": 945,
+          "before": {
+            "bytes": 88279,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-grid.compact.json",
+            "sha256": "701fc2d94520cbe29f1029cc6cdca3d8628e79996c90ae81db5103648a630cbd"
+          },
+          "before_cases": 945,
+          "cohort": "css/css-grid",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 45483,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-overflow.compact.json",
+            "sha256": "22a69d92e74fb89d3d01fc288e00814751f0bd7d32b1c93214e14720a57c4b0f"
+          },
+          "after_cases": 343,
+          "before": {
+            "bytes": 24520,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-overflow.compact.json",
+            "sha256": "9bc665ac4cd9a44fc9b815bc652fc6d02c880a6834567a1dbac194e657152723"
+          },
+          "before_cases": 343,
+          "cohort": "css/css-overflow",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 8594,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-position.compact.json",
+            "sha256": "c7703ababf805f500903217c8b28c3c2dd71ed7bd3c80bd853acdabef11d93c8"
+          },
+          "after_cases": 54,
+          "before": {
+            "bytes": 4561,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-position.compact.json",
+            "sha256": "3b57ce0acb71daf0a1e2219c32c93f7b887bb6c121e23f65ab5d71190fdc9bf5"
+          },
+          "before_cases": 54,
+          "cohort": "css/css-position",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 19409,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-sizing.compact.json",
+            "sha256": "f3247cc918265128f29d843c857acd8d5fea40009f2896f8024c8f9d3ee866fc"
+          },
+          "after_cases": 138,
+          "before": {
+            "bytes": 10323,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-sizing.compact.json",
+            "sha256": "eb050450ba26aa1f5cadcfd117c021d0d4f2d8c1659c9044ba0bbcffe5330a43"
+          },
+          "before_cases": 138,
+          "cohort": "css/css-sizing",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 22855,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-writing-modes.compact.json",
+            "sha256": "3f8ff272660763c57e81c50ede77fe34e4eea68cb82591a73b25a658912375c5"
+          },
+          "after_cases": 154,
+          "before": {
+            "bytes": 12244,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/intrinsic-current/prepared-gate/before/compact/css-css-writing-modes.compact.json",
+            "sha256": "a61790d26e083c932e52f063d5dbcc4d6c4c78240734d6d0062215158d081485"
+          },
+          "before_cases": 154,
+          "cohort": "css/css-writing-modes",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        }
+      ],
+      "counts_after": {
+        "mismatch": 1204,
+        "pass": 1216,
+        "timeout": 1
+      },
+      "counts_before": {
+        "mismatch": 1204,
+        "pass": 1216,
+        "timeout": 1
+      },
+      "gained": [],
+      "lost": [],
+      "name": "c220-before",
+      "original_baseline_role": "before"
+    },
+    {
+      "baseline_source": "e8a2a7cf5c16e02d56ce260d4884e177cd4f92f0",
+      "comparisons": [
+        {
+          "after": {
+            "bytes": 26589,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-contain.compact.json",
+            "sha256": "8e9e5fa5a60b7d2e62345d050427e2b0bc9e4f69e9d7555d7acab8c7b6f4fd9a"
+          },
+          "after_cases": 229,
+          "before": {
+            "bytes": 26589,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-contain.compact.json",
+            "sha256": "400e5694f923262685ea94eec2c59ddbf963fc84313e5f0997fe1e7f1ec9dabb"
+          },
+          "before_cases": 229,
+          "cohort": "css/css-contain",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 4863,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-display.compact.json",
+            "sha256": "2fb7e27af2c566b426a62cdb377fc101493ef871926427c18ddf2f8eb3df6d7f"
+          },
+          "after_cases": 35,
+          "before": {
+            "bytes": 4863,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-display.compact.json",
+            "sha256": "9ea88cc2726be5ccb736d8874da1a1bb69a04b03474cb6c09c531eaafd41f8f1"
+          },
+          "before_cases": 35,
+          "cohort": "css/css-display",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 59560,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-flexbox.compact.json",
+            "sha256": "c7fc2d63c1e0a271e0b2fe6935e27597c1312385d5be96bf6b253e5f56eb7029"
+          },
+          "after_cases": 523,
+          "before": {
+            "bytes": 59560,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-flexbox.compact.json",
+            "sha256": "76fa05dc7a678f59067dd2e458d14602ca1c8e3cfcacd97772f7672a6213dc50"
+          },
+          "before_cases": 523,
+          "cohort": "css/css-flexbox",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 167698,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-grid.compact.json",
+            "sha256": "e77c1d026a07b9dcbd87b7585edb4fdf06e6004994c9e24d346cfc5bdd4e74eb"
+          },
+          "after_cases": 945,
+          "before": {
+            "bytes": 167698,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-grid.compact.json",
+            "sha256": "5ff57a958ed54c4d9c2f4ed07399a8b8161d985d4ee11e2af28ddaa0c5cec8f6"
+          },
+          "before_cases": 945,
+          "cohort": "css/css-grid",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 45483,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-overflow.compact.json",
+            "sha256": "22a69d92e74fb89d3d01fc288e00814751f0bd7d32b1c93214e14720a57c4b0f"
+          },
+          "after_cases": 343,
+          "before": {
+            "bytes": 45483,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-overflow.compact.json",
+            "sha256": "438fd4e966b389348c032ecae3202ccd07c021c899bcbe875e5e34d1f8e63f7f"
+          },
+          "before_cases": 343,
+          "cohort": "css/css-overflow",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 8594,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-position.compact.json",
+            "sha256": "c7703ababf805f500903217c8b28c3c2dd71ed7bd3c80bd853acdabef11d93c8"
+          },
+          "after_cases": 54,
+          "before": {
+            "bytes": 8594,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-position.compact.json",
+            "sha256": "8f3dacc7559f670b8ff0ddfdc4950581f827027e23c90adf5782209405143e88"
+          },
+          "before_cases": 54,
+          "cohort": "css/css-position",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 19409,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-sizing.compact.json",
+            "sha256": "f3247cc918265128f29d843c857acd8d5fea40009f2896f8024c8f9d3ee866fc"
+          },
+          "after_cases": 138,
+          "before": {
+            "bytes": 19409,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-sizing.compact.json",
+            "sha256": "c76f9012ad6eecfa7264494ee09257e0148c5212b4514baac472d3cac543d2ad"
+          },
+          "before_cases": 138,
+          "cohort": "css/css-sizing",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        },
+        {
+          "after": {
+            "bytes": 22855,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/css_contain/grid-shorthand-classification/compact/css-css-writing-modes.compact.json",
+            "sha256": "3f8ff272660763c57e81c50ede77fe34e4eea68cb82591a73b25a658912375c5"
+          },
+          "after_cases": 154,
+          "before": {
+            "bytes": 22855,
+            "path": "/Users/jMac/Projects/OpenSource/amazing/.agents/layout-grid/auto-repeat-current/after/compact/css-css-writing-modes.compact.json",
+            "sha256": "f028fa3cd7396bc115829fc28ca1baac7973937758e4f85b498aa6bf7519b3ec"
+          },
+          "before_cases": 154,
+          "cohort": "css/css-writing-modes",
+          "gained": [],
+          "lost": [],
+          "new": [],
+          "removed": []
+        }
+      ],
+      "counts_after": {
+        "mismatch": 1204,
+        "pass": 1216,
+        "timeout": 1
+      },
+      "counts_before": {
+        "mismatch": 1204,
+        "pass": 1216,
+        "timeout": 1
+      },
+      "gained": [],
+      "lost": [],
+      "name": "e8-authentic-after",
+      "original_baseline_role": "after"
+    }
+  ],
+  "classifications_changed": false,
+  "counts_from_authentic_maps_only": true,
+  "native_receipts_reconstructed": false,
+  "source_commit": "564767767be437d2a499cd167ac3309183500173",
+  "zero_lost": true
+}
